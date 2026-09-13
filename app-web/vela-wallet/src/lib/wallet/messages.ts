@@ -15,6 +15,8 @@ export interface WalletMessages {
 		liveIndicator: string;
 		stale: string;
 		unpriced: string;
+		/** Spec 038: nothing could be read and nothing is known. */
+		unreachable: string;
 		noPrice: string;
 		a11yHide: string;
 		a11yShow: string;
@@ -43,7 +45,7 @@ export interface WalletMessages {
 		rpcUnavailableMultiple: string;
 	};
 	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
-	sidebar: { networks: string; searchPlaceholder: string };
+	sidebar: { networks: string };
 	receive: {
 		title: string;
 		addressLabel: string;
@@ -135,11 +137,12 @@ export const WALLET_KEYS = [
 	'assets.emptySubtext',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',
+	// Spec 038: the home's sentence for a first launch with no network.
+	'onboarding.common.networkBody',
 	'componentsUi.networkFilter.pillAll',
 	'componentsUi.networkFilter.selectChain',
 	'componentsUi.networkFilter.allNetworks',
 	'settingsModals.network.modalTitle',
-	'componentsUi.commandBar.placeholder',
 	'receive.title',
 	'receive.addressLabel',
 	'componentsUi.identiconViewer.copyAddress',

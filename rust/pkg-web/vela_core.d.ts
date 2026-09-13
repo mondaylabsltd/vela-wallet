@@ -573,6 +573,19 @@ export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 export function abiEncodeUint256(value_hex: string): Uint8Array;
 
 /**
+ * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
+ * under the Safe's own domain) — the core's reading, for comparison.
+ */
+export function attestSafeMessageHash(original_hash: Uint8Array, chain_id: bigint, safe_address: string): Uint8Array;
+
+/**
+ * The SafeOp hash of `op_json`, on `chain_id` — after checking that its
+ * calldata is exactly what `calls_json` describes (pass `""` to skip the
+ * calldata check and attest the hash alone).
+ */
+export function attestSafeOpHash(op_json: string, calls_json: string, chain_id: bigint): Uint8Array;
+
+/**
  * The deepest pool across ALL stable quotes — `best_native_dex_price`, which
  * folds `best_group_price` over each group.
  */
@@ -700,14 +713,17 @@ export function parsePublicKey(hex: string): P256PublicKey;
  * that was asked about and carries a usable name; `iconUrl` is present only
  * when the path is the service's own shape.
  */
-export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolean): any;
+export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolean, origin?: string | null): any;
 
 /**
  * **Where to ask about a model the compiled catalog cannot name**, or
  * `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
  * one the catalog already answers offline.
+ *
+ * `origin` is the directory node the person's service-endpoint settings
+ * name (spec 038 #E4); absent, the crate's default.
  */
-export function passkeyDirectoryUrl(aaguid: string): string | undefined;
+export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): string | undefined;
 
 /**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
@@ -802,6 +818,8 @@ export interface InitOutput {
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
+    readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
+    readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;
     readonly balancedashboardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -908,8 +926,8 @@ export interface InitOutput {
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
-    readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly passkeyDirectoryUrl: (a: number, b: number) => [number, number];
+    readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+    readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];

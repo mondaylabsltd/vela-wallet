@@ -8,6 +8,7 @@
 	 * construction rather than by discipline — there is no second code path for
 	 * either to drift down.
 	 */
+	import type { Snippet } from 'svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import FlowScreen from './ui/FlowScreen.svelte';
 	import ScanSurface from './ui/ScanSurface.svelte';
@@ -44,14 +45,63 @@
 		addRecipient(): void;
 		removeRecipient(index: number): void;
 		pickFeeToken(index: number): void;
+		/** 最大 — the core's `tap_max`: the whole balance, net of the fee it estimates. */
+		max(): void;
 		done(): void;
+		/**
+		 * The picker's two sweep affordances (spec 028 T440): the master tick,
+		 * and the CTA that either opens the multi-select or confirms it. Which
+		 * of the two the CTA is right now is the route's to say — it knows
+		 * whether the checkboxes are showing.
+		 */
+		selectAll(): void;
+		pickCta(): void;
+		/**
+		 * The recipient picker's two answers (spec 028 US5): one person from
+		 * the book, or a whole group as split-mode recipients. Indices into the
+		 * live `ContactPickModel`'s lists.
+		 */
+		pickContact?(index: number): void;
+		pickGroup?(index: number): void;
+		/**
+		 * The split rows (spec 028 Phase 10): a row typed into, the book opened
+		 * for one row — or for a NEW row when `index` is null — and the
+		 * picker's class chips.
+		 */
+		recipientRowChanged?(index: number, patch: { address?: string; amount?: string }): void;
+		pickContactFor?(index: number | null): void;
+		filterClass?(id: string): void;
 		/** The core's gates — `can_continue` / `can_confirm`. */
 		continueDisabled: boolean;
 		confirmDisabled: boolean;
 	}
 
+	/** The add-token sheet's handlers, when the `manage_tokens` core is live. */
+	interface AddTokenActions {
+		input(value: string): void;
+		submit(): void;
+		/** The ERC-20 / native toggle, and a chain picked on the native tab (Phase 10). */
+		tab?(id: string): void;
+		pick?(id: string): void;
+	}
+
+	/**
+	 * The scanner's live half (spec 028 T422). Absent — in the gallery — the
+	 * surface draws the inert frame it has always drawn; present, `feed` is the
+	 * `<video>` the camera writes into and `notice` is why there is nothing in
+	 * it.
+	 */
+	interface ScanActions {
+		feed: Snippet;
+		notice?: string;
+		tool(id: 'gallery' | 'torch' | 'flip'): void;
+	}
+
 	/** The batch importer's handlers, when its own core is live. */
 	interface BatchActions {
+	/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
+	rate: (text: string) => void;
+	resetRate: () => void;
 		unit(id: string): void;
 		paste(text: string): void;
 		pickFile(): void;
@@ -66,9 +116,36 @@
 		onnavigate?: (to: string, index?: number) => void;
 		send?: SendActions;
 		batch?: BatchActions;
+		scan?: ScanActions;
+		addToken?: AddTokenActions;
+		/**
+		 * The person dismissed the sheet (spec 028 T442). A sheet is a pushed
+		 * step on the route's stack, and a route that does not hear the
+		 * dismissal keeps the step — so the next `go()` to the same sheet is a
+		 * no-op and nothing opens. Absent in the gallery.
+		 */
+		onsheetclose?: () => void;
+		/** The open transaction's delete (spec 028 Phase 8). Absent in the gallery. */
+		ondeletetx?: () => void;
+		/**
+		 * The header pill (spec 028 Phase 10): the network filter, which on the
+		 * phone is a sheet the route raises. Absent in the gallery.
+		 */
+		onchains?: () => void;
 	}
 
-	let { model, onback, onnavigate, send, batch }: Props = $props();
+	let {
+		model,
+		onback,
+		onnavigate,
+		send,
+		batch,
+		scan,
+		addToken,
+		onsheetclose,
+		ondeletetx,
+		onchains
+	}: Props = $props();
 
 	const base = $derived(model.base);
 	const sheet = $derived(model.sheet);
@@ -88,7 +165,13 @@
 
 <div class="host" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
 	{#if base.kind === 'scan'}
-		<ScanSurface model={base.model} onclose={onback} />
+		<ScanSurface
+			model={base.model}
+			feed={scan?.feed}
+			notice={scan?.notice}
+			ontool={scan ? (id) => scan.tool(id) : undefined}
+			onclose={onback}
+		/>
 	{:else if base.kind === 'share-card'}
 		<!-- Not a screen: the saved image, shown on its own so the gallery and
 		     the save path render the very same artwork. -->
@@ -98,7 +181,7 @@
 			<ReceiveList model={base.model} onqr={(i) => go('receive-qr', i)} />
 		</FlowScreen>
 	{:else if base.kind === 'history'}
-		<FlowScreen header={base.model.header} {onback} onpill={() => go('chains')}>
+		<FlowScreen header={base.model.header} {onback} onpill={onchains}>
 			<History model={base.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
 		</FlowScreen>
 	{:else if base.kind === 'assets'}
@@ -106,7 +189,7 @@
 			header={base.model.header}
 			{onback}
 			onaction={() => go('add-token')}
-			onpill={() => go('chains')}
+			onpill={onchains}
 		>
 			<Assets
 				model={base.model}
@@ -116,11 +199,13 @@
 			/>
 		</FlowScreen>
 	{:else if base.kind === 'send-pick'}
-		<FlowScreen header={base.model.header} {onback} onpill={() => go('chains')}>
+		<FlowScreen header={base.model.header} {onback} onpill={onchains}>
 			<SendPick
 				model={base.model}
+				onfilter={send?.filterClass ? (id) => send.filterClass?.(id) : undefined}
 				onselect={(i) => (send ? send.selectToken(i) : go('send-form', i))}
-				oncta={() => (send ? undefined : go('send-multi'))}
+				onselectall={send ? () => send.selectAll() : undefined}
+				oncta={() => (send ? send.pickCta() : go('send-multi'))}
 			/>
 		</FlowScreen>
 	{:else if base.kind === 'send-form'}
@@ -130,13 +215,29 @@
 				onpickRecipient={() => go('contact-pick')}
 				onscan={() => go('scan')}
 				onfee={() => go('fee-token')}
-				onrecipientAction={(id) =>
-					go(
-						id === 'import' ? 'batch-import' : id === 'contacts' ? 'contact-pick' : 'add-recipient'
-					)}
+				onmax={send ? () => send.max() : undefined}
+				onrecipientAction={(id) => {
+					// The split form's three pills (Phase 10): a blank row, the book
+					// into a new row, the importer sheet. Live, the first two are the
+					// session's; the gallery keeps the drawn navigation.
+					if (id === 'add' && send) send.addRecipient();
+					else if (id === 'contacts' && send?.pickContactFor) send.pickContactFor(null);
+					else
+						go(
+							id === 'import'
+								? 'batch-import'
+								: id === 'contacts'
+									? 'contact-pick'
+									: 'add-recipient'
+						);
+				}}
 				oncontinue={() => (send ? send.advance() : go('send-confirm'))}
 				onaddRecipient={send ? () => send.addRecipient() : undefined}
 				onremoveRecipient={send ? (i) => send.removeRecipient(i) : undefined}
+				onrecipientRow={send?.recipientRowChanged
+					? (i, patch) => send.recipientRowChanged?.(i, patch)
+					: undefined}
+				onpickRecipientRow={send?.pickContactFor ? (i) => send.pickContactFor?.(i) : undefined}
 				onamount={send ? (value) => send.amountChanged(value) : undefined}
 				onrecipient={send ? (value) => send.recipientChanged(value) : undefined}
 				ctaDisabled={send?.continueDisabled ?? false}
@@ -174,7 +275,7 @@
 				hideTitle
 				onclose={() => (sheetClosed = true)}
 			>
-				<TxDetail model={sheet.model} />
+				<TxDetail model={sheet.model} ondelete={ondeletetx} />
 			</BottomSheet>
 		{:else if sheet.kind === 'token-detail'}
 			<BottomSheet
@@ -184,16 +285,33 @@
 				hideTitle
 				onclose={() => (sheetClosed = true)}
 			>
-				<TokenDetail model={sheet.model} />
+				<TokenDetail
+					model={sheet.model}
+					onselect={(i) => {
+						const target = sheet.model.rowTargets?.[i];
+						if (target !== undefined) go('tx-detail', target);
+					}}
+					onsend={() => go('send-token')}
+					onreceive={() => go('receive-token')}
+				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'add-token'}
 			<BottomSheet
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				onclose={() => (sheetClosed = true)}
+				onclose={() => {
+					sheetClosed = true;
+					onsheetclose?.();
+				}}
 			>
-				<AddToken model={sheet.model} />
+				<AddToken
+					model={sheet.model}
+					oninput={addToken ? (value) => addToken.input(value) : undefined}
+					onsubmit={addToken ? () => addToken.submit() : undefined}
+					ontab={addToken?.tab ? (id) => addToken.tab?.(id) : undefined}
+					onpick={addToken?.pick ? (id) => addToken.pick?.(id) : undefined}
+				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'contact-pick'}
 			<BottomSheet
@@ -202,7 +320,12 @@
 				height="tall"
 				onclose={() => (sheetClosed = true)}
 			>
-				<ContactPick model={sheet.model} onscan={() => go('scan')} />
+				<ContactPick
+					model={sheet.model}
+					onscan={() => go('scan')}
+					onselect={send?.pickContact ? (i) => send.pickContact?.(i) : undefined}
+					ongroup={send?.pickGroup ? (i) => send.pickGroup?.(i) : undefined}
+				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'fee-token'}
 			<BottomSheet
@@ -226,6 +349,8 @@
 					model={sheet.model}
 					onunit={batch ? (id) => batch.unit(id) : undefined}
 					onpaste={batch ? (text) => batch.paste(text) : undefined}
+					onrate={batch ? (text) => batch.rate(text) : undefined}
+					onresetrate={batch ? () => batch.resetRate() : undefined}
 					onfile={batch ? () => batch.pickFile() : undefined}
 					ontemplate={batch ? () => batch.saveTemplate() : undefined}
 					onapply={batch ? () => batch.apply() : undefined}

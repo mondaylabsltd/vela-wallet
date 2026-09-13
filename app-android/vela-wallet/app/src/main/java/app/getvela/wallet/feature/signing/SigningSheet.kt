@@ -55,6 +55,9 @@ fun SigningSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit = onDismiss,
+    /** Spec 044: the guard's chips and custom amount reach the machine. */
+    onChip: (String) -> Unit = {},
+    onCustomAmount: (String) -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -62,7 +65,7 @@ fun SigningSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = modifier,
     ) {
-        SigningSheetContent(model = model, onConfirm = onConfirm)
+        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount)
     }
 }
 
@@ -72,6 +75,8 @@ fun SigningSheetContent(
     model: SigningScreenModel,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
+    onChip: (String) -> Unit = {},
+    onCustomAmount: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -109,6 +114,7 @@ fun SigningSheetContent(
                 is SigningBlock.Allowance -> AllowanceEditor(
                     block.label, block.value, block.valueTone, block.chips,
                     block.note, block.resultingTotal,
+                    custom = block.custom, onChip = onChip, onCustomAmount = onCustomAmount,
                 )
 
                 is SigningBlock.Party ->

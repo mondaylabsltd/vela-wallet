@@ -1,6 +1,6 @@
 /**
  * Canonical wallet-flow fixtures (spec 021 — the single canon all four
- * platforms port). Content is verbatim from `design/wallet-2/`; builders merge
+ * platforms port). Content is verbatim from `docs/design/wallet-2/`; builders merge
  * it with resolved messages into display-ready view models.
  *
  * Pure data plus assembly. Nothing here fetches, signs, formats a number or
@@ -399,7 +399,8 @@ function txDetail(
 			value: kind === 'received' ? ALICE.addressDisplay : 'hold on',
 			lead: {
 				kind: 'identicon',
-				svg: identicon(kind === 'received' ? ALICE.addressFull : CONTACTS[6].addressFull)
+				svg: identicon(kind === 'received' ? ALICE.addressFull : CONTACTS[6].addressFull),
+				address: kind === 'received' ? ALICE.addressFull : CONTACTS[6].addressFull
 			},
 			mono: kind === 'received',
 			copy: m['componentsUi.identiconViewer.copyAddress']
@@ -727,6 +728,7 @@ function sendForm(
 			recipient: {
 				label: m['send.recipientLabel'],
 				lines: [ALICE.addressDisplay, ''],
+				address: ALICE.addressFull,
 				identiconSvg: identicon(ALICE.addressFull),
 				pickLabel: m['send.recipientPickAria'],
 				scanLabel: m['send.scanAria'],
@@ -754,6 +756,7 @@ function sendForm(
 					ordinal: fill(m['send.recipientN'], { n: 1 }),
 					name: ALICE.addressDisplay,
 					identiconSvg: identicon(ALICE.addressFull),
+					address: ALICE.addressFull,
 					amount: '50',
 					removeLabel: m['send.removeRecipient']
 				},
@@ -761,6 +764,7 @@ function sendForm(
 					ordinal: fill(m['send.recipientN'], { n: 2 }),
 					name: 'Alice',
 					identiconSvg: identicon(CONTACTS[1].addressFull),
+					address: CONTACTS[1].addressFull,
 					amount: '30',
 					removeLabel: m['send.removeRecipient']
 				},
@@ -768,6 +772,7 @@ function sendForm(
 					ordinal: fill(m['send.recipientN'], { n: 3 }),
 					name: 'hold on',
 					identiconSvg: identicon(CONTACTS[6].addressFull),
+					address: CONTACTS[6].addressFull,
 					amount: '40',
 					removeLabel: m['send.removeRecipient']
 				}
@@ -794,6 +799,7 @@ function sendForm(
 		recipient: {
 			label: m['send.recipientLabel'],
 			lines: addressLines(ALICE.addressFull),
+			address: ALICE.addressFull,
 			identiconSvg: identicon(ALICE.addressFull),
 			pickLabel: m['send.recipientPickAria']
 		},
@@ -822,6 +828,7 @@ function contactPick(m: WalletFlowMessages, identicon: Identicon): ContactPickMo
 			name: c.name,
 			group: c.groups[0],
 			addressDisplay: c.addressDisplay,
+			addressFull: c.addressFull,
 			identiconSvg: identicon(c.addressFull)
 		}))
 	};
@@ -898,7 +905,11 @@ function sendConfirm(
 		{
 			label: m['send.fromLabel'],
 			value: IDENTITY.name,
-			lead: { kind: 'identicon', svg: identicon(IDENTITY.addressFull) }
+			lead: {
+				kind: 'identicon',
+				svg: identicon(IDENTITY.addressFull),
+				address: IDENTITY.addressFull
+			}
 		},
 		{
 			label: m['send.toLabel'],
@@ -907,7 +918,9 @@ function sendConfirm(
 					? fill(m['send.recipientCount_other'], { count: 3 })
 					: ALICE.addressDisplay,
 			lead:
-				variant === 'split' ? undefined : { kind: 'identicon', svg: identicon(ALICE.addressFull) },
+				variant === 'split'
+					? undefined
+					: { kind: 'identicon', svg: identicon(ALICE.addressFull), address: ALICE.addressFull },
 			mono: variant !== 'split'
 		},
 		{
@@ -965,11 +978,22 @@ function sendConfirm(
 				? [
 						{
 							identiconSvg: identicon(ALICE.addressFull),
+							address: ALICE.addressFull,
 							label: ALICE.addressDisplay,
 							value: '50 USDT'
 						},
-						{ identiconSvg: identicon(CONTACTS[1].addressFull), label: 'Alice', value: '30 USDT' },
-						{ identiconSvg: identicon(CONTACTS[6].addressFull), label: 'hold on', value: '40 USDT' }
+						{
+							identiconSvg: identicon(CONTACTS[1].addressFull),
+							address: CONTACTS[1].addressFull,
+							label: 'Alice',
+							value: '30 USDT'
+						},
+						{
+							identiconSvg: identicon(CONTACTS[6].addressFull),
+							address: CONTACTS[6].addressFull,
+							label: 'hold on',
+							value: '40 USDT'
+						}
 					]
 				: undefined,
 		cta: m['send.confirmSendBtn']

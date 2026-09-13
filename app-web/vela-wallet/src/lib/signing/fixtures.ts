@@ -69,7 +69,9 @@ export const ALL_STATES: SigningStateId[] = [
 	'cs30',
 	'cs31',
 	'cs32',
-	'cs33'
+	'cs33',
+	'cs34',
+	'cs35'
 ];
 
 const NETWORK = { name: 'Ethereum', dot: '#627EEA' };
@@ -1212,6 +1214,90 @@ const CATALOGUE: Record<SigningStateId, Scenario> = {
 				]
 			}
 		}
+	}),
+
+	// -- cs34 / cs35: the cap being TYPED (spec 032 phase 39) --
+	//
+	// cs5 is where this starts: an unlimited request with its Requested chip
+	// dead. These are what the card becomes once somebody picks Custom — the
+	// field under the chips, the big number above counting what has been
+	// typed, and the slide shut until the core says the amount is finite.
+	cs34: (m) => ({
+		dapp: D.oneinch,
+		network: NETWORK,
+		blocks: [
+			{ kind: 'intent', text: m.intentApprove, tone: 'neutral' },
+			{
+				kind: 'allowance',
+				label: m.labelSpendingCap,
+				value: '500 USDC',
+				valueTone: 'neutral',
+				chips: [
+					chip('requested', m.chipRequested, 'disabled'),
+					chip('balance', m.chipBalance, 'idle'),
+					chip('custom', m.chipCustom, 'selected'),
+					chip('revoke', m.chipRevoke, 'idle')
+				],
+				custom: { value: '500', symbol: 'USDC', placeholder: '0' }
+			},
+			{
+				kind: 'party',
+				label: m.labelSpender,
+				name: '1inch Router',
+				address: ADDR.oneinchRouter,
+				badge: { text: m.tagVerified, tone: 'success' }
+			}
+		],
+		tech: tech(m),
+		techOpen: false,
+		fee: onchainFee(m),
+		signer: signer(m),
+		// A finite cap is a cap: the slide may arm.
+		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: true },
+		panelTitle: m.panelTitle
+	}),
+
+	cs35: (m) => ({
+		dapp: D.oneinch,
+		network: NETWORK,
+		blocks: [
+			{ kind: 'intent', text: m.intentApprove, tone: 'neutral' },
+			{
+				kind: 'allowance',
+				label: m.labelSpendingCap,
+				// What is still true while the field holds nonsense: the
+				// REQUEST is unlimited, and it is drawn as the danger it is.
+				value: m.valueUnlimited,
+				valueTone: 'danger',
+				chips: [
+					chip('requested', m.chipRequested, 'disabled'),
+					chip('balance', m.chipBalance, 'idle'),
+					chip('custom', m.chipCustom, 'selected'),
+					chip('revoke', m.chipRevoke, 'idle')
+				],
+				custom: {
+					value: '12.3.4',
+					symbol: 'USDC',
+					placeholder: '0',
+					error: m.invalidAmount
+				},
+				note: `${m.unlimitedDisabled}\n${m.choosePrompt}`
+			},
+			{
+				kind: 'party',
+				label: m.labelSpender,
+				name: '1inch Router',
+				address: ADDR.oneinchRouter,
+				badge: { text: m.tagVerified, tone: 'success' }
+			}
+		],
+		tech: tech(m),
+		techOpen: false,
+		fee: onchainFee(m),
+		signer: signer(m),
+		// A cap nobody could parse is not a cap.
+		confirm: { hint: m.slideToConfirm, action: m.intentApprove, enabled: false },
+		panelTitle: m.panelTitle
 	})
 };
 

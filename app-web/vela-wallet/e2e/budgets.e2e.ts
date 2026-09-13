@@ -18,8 +18,9 @@
  */
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import QRCode from 'qrcode';
 import { expect, test } from '@playwright/test';
-import { chunksCarrying, collectScripts, en } from './live-helpers';
+import { chunkSource, chunksCarrying, collectScripts, en } from './live-helpers';
 import { denyOffOrigin } from './stub-chain';
 
 const APP_ROOT = join(import.meta.dirname, '..');
@@ -93,4 +94,85 @@ test('the money routes load ONE core artifact, and the build ships exactly one',
 	);
 	expect(artifacts).toHaveLength(1);
 	expect('/' + artifacts[0]).toBe(new URL([...wasmUrls][0]).pathname);
+});
+
+/**
+ * Spec 028 T460: the QR decoders are lazy, and stay lazy.
+ *
+ * 028 added the first wasm that is not the core — `@undecaf/zbar-wasm` (239 KB)
+ * — and `jsqr` (a 130 KB chunk). The promise D45 made is that both exist only
+ * while a scanner is open: nothing on Welcome, nothing on the wallet's startup
+ * path, and the moment someone opens the scanner they arrive. The third part
+ * is the control — an assertion about absence is only worth something if the
+ * markers would have fired.
+ *
+ * The markers are the decoders' OWN literals: `onlyInvert` is a jsqr option
+ * value that `qr-decode.ts` never spells (it says `attemptBoth`), and the zbar
+ * glue is the one chunk that names the `zbar.<hash>.wasm` asset.
+ */
+const JSQR = /onlyInvert/;
+const ZBAR_GLUE = /zbar\.[A-Za-z0-9_-]+\.wasm/;
+
+test('the QR decoders reach neither Welcome nor the wallet’s startup path — and do reach the scanner', async ({
+	page
+}) => {
+	const scripts = collectScripts(page);
+	const wasm: string[] = [];
+	page.on('request', (request) => {
+		if (request.url().endsWith('.wasm')) wasm.push(new URL(request.url()).pathname);
+	});
+	await denyOffOrigin(page);
+
+	// 1. Welcome: no decoder, no wasm of any kind.
+	await page.addInitScript(() => localStorage.setItem('vela.intro.seen', String(Date.now())));
+	await page.goto('/en');
+	await page.waitForLoadState('networkidle');
+	// An absence assertion is only worth something if the chunks can be read
+	// at all: a URL that maps to no file reads as '' and "carries" nothing.
+	expect(
+		scripts.filter((url) => chunkSource(url) !== '').length,
+		'no served chunk could be read from the build output — every budget below would pass vacuously'
+	).toBeGreaterThan(0);
+	expect(chunksCarrying(scripts, JSQR), 'jsqr reached Welcome').toEqual([]);
+	expect(chunksCarrying(scripts, ZBAR_GLUE), 'the zbar glue reached Welcome').toEqual([]);
+	expect(wasm, 'Welcome fetched wasm').toEqual([]);
+
+	// 2. The wallet's startup path: the core, and only the core.
+	await page.goto('/en/parallel');
+	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+	await page.waitForURL(/\/en\/wallet$/);
+	await expect(page.getByTestId('parallel-space-badge')).toBeVisible();
+	await page.waitForLoadState('networkidle');
+	expect(chunksCarrying(scripts, JSQR), 'jsqr reached the wallet home').toEqual([]);
+	expect(chunksCarrying(scripts, ZBAR_GLUE), 'the zbar glue reached the wallet home').toEqual([]);
+	expect(
+		wasm.filter((path) => !/vela_core_bg\./.test(path)),
+		'a second wasm on startup'
+	).toEqual([]);
+
+	// 3. The control: open the scanner and both decoders' CODE arrives; decode
+	//    something and the zbar BINARY arrives. Two steps on purpose — the
+	//    239 KB wasm is fetched on the first decode, not when the scanner
+	//    opens, and a budget nobody can trip is not a budget.
+	await page
+		.getByRole('button', { name: en('componentsUi.dock.scan') })
+		.first()
+		.click();
+	await expect(page.getByText(en('componentsUi.scanner.gallery')).first()).toBeVisible();
+	await expect
+		.poll(() => chunksCarrying(scripts, JSQR).length + chunksCarrying(scripts, ZBAR_GLUE).length, {
+			timeout: 20_000
+		})
+		.toBeGreaterThanOrEqual(2);
+	expect(
+		wasm.some((path) => /zbar\./.test(path)),
+		'the zbar binary arrived before any decode'
+	).toBe(false);
+
+	await page.locator('input[type="file"]').setInputFiles({
+		name: 'code.png',
+		mimeType: 'image/png',
+		buffer: await QRCode.toBuffer('0x' + 'a1'.repeat(20), { margin: 4, width: 600, type: 'png' })
+	});
+	await expect.poll(() => wasm.some((path) => /zbar\./.test(path)), { timeout: 20_000 }).toBe(true);
 });

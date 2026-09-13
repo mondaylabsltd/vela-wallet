@@ -79,8 +79,9 @@ test.describe('the injected provider', () => {
 		expect(seen.announced).toHaveLength(1);
 		expect(seen.announced[0].name).toBe('Vela Wallet');
 		expect(seen.announced[0].rdns).toBe('app.getvela');
-		// A data URI, not a URL: a remote icon would leak every dApp visit.
-		expect(seen.announced[0].iconScheme).toContain('data:image/png');
+		// A data URI, not a URL: a remote icon would leak every dApp visit. SVG —
+		// the canonical mark from docs/design/icon/app-icon.svg, crisp at any size.
+		expect(seen.announced[0].iconScheme).toContain('data:image/svg');
 		expect(seen.announced[0].sameAsWindowEthereum).toBe(true);
 		expect(seen.announced[0].frozenInfo).toBe(true);
 

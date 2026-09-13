@@ -27,7 +27,7 @@ struct VelaButton: View {
     /// waiting on. Deliberately NOT the same as `enabled: false`: a dimmed
     /// button reads as "unavailable", and the one state it must never be
     /// confused with is "working". Busy keeps full emphasis and turns a
-    /// spinner where its label was (DESIGN_SYSTEM.md — "Loading state:
+    /// spinner where its label was (docs/design-system.md — "Loading state:
     /// ActivityIndicator replacing text").
     var loading: Bool = false
     let action: () -> Void
@@ -103,7 +103,7 @@ private struct VelaButtonStyle: ButtonStyle {
             // makes the 52pt control height a real 52pt target.
             .contentShape(Capsule())
             .opacity(pressed ? Interaction.pressedOpacity : 1)
-            // The scale the other three platforms already draw (DESIGN_SYSTEM.md
+            // The scale the other three platforms already draw (docs/design-system.md
             // "spring scale 0.97 on press"); opacity alone was iOS reading the
             // rule as half of itself.
             .scaleEffect(pressed ? Interaction.pressScaleButton : 1)
@@ -112,14 +112,14 @@ private struct VelaButtonStyle: ButtonStyle {
 }
 
 /// Interaction-state constants the export does not name — licensed by
-/// design-system.md (`opacity.*` engineering tokens; web's opacity-hover
+/// docs/design-system.md (`opacity.*` engineering tokens; web's opacity-hover
 /// addition is the same move).
 enum Interaction {
     static let pressedOpacity: Double = 0.8
-    /// DESIGN_SYSTEM.md motion table: button press scales to 0.97.
+    /// docs/design-system.md motion table: button press scales to 0.97.
     static let pressScaleButton: CGFloat = 0.97
     /// Never a timing curve for interactive feedback — always a spring
-    /// (DESIGN_SYSTEM.md). The damping mirrors Android's `VelaMotion.pressSpring`.
+    /// (docs/design-system.md). The damping mirrors Android's `VelaMotion.pressSpring`.
     static let pressSpring: Animation = .interactiveSpring(response: 0.2, dampingFraction: 0.75)
     /// A confirmation, not a jolt: the CTA is a tap, not a transaction.
     static let pressHapticIntensity: Double = 0.7

@@ -4,6 +4,8 @@ members = [
   "crates/vela-core",
   "crates/vela-core-uniffi",
   "crates/vela-core-wasm",
+  # Debug Android only: the parallel space's fixed keyset (spec 043, D2).
+  "crates/vela-dev-fixtures-uniffi",
 ]
 
 [workspace.package]

@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文是 2026-07 的审计/进度快照，写于 Expo / React Native 应用仍在仓库内的时期。该应用及其工具链已退役并删除；文中的 `src/**` 路径与 `tsc` / `expo lint` / `jest` / `build:web` / `playwright` / `npm audit`（Expo 基线）/ config plugin 等根目录命令已不存在，现行门禁见 `.github/workflows/ci.yml` 与 `02-local-development.md`。正文按原样保留，作为历史记录。
+
 # 04 — 生产就绪审计 (Production Readiness Audit)
 
 > 审计日期 2026-07-02。方法:源码/配置全面探查 + 全部检查命令实际执行 + 关键声明逐条亲自复核(含证伪一例:子代理称 `.dev.vars` 密钥"已提交入库",经 `git log --all` 验证从未提交)。

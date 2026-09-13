@@ -1,9 +1,13 @@
 /**
  * On-device storage for the wallet's account list, in the browser.
  *
- * Keys and record shapes are byte-compatible with the shipping Expo client
- * (which reads the same names out of AsyncStorage), so a person who created a
- * wallet there is not stranded here.
+ * Keys are the retired Expo client's, so a person who created a wallet there
+ * is not stranded here — but that client wrote its records in camelCase
+ * (`publicKeyHex`, `createdAt`, `keys[].credentialId`), and the core reads
+ * snake_case. Spec 048: `loadAccounts` normalises either spelling and, the
+ * first time it meets the old one, writes the list back in the current one.
+ * (Device-found 2026-09-12: after the hostname moved to this shell, sign-in
+ * signed and then did nothing, because the core refused the old records.)
  *
  * ONE invariant governs every function below. `Account` carries both the legacy
  * scalar key fields and the full `keys` array, and the core derives the address
@@ -68,7 +72,61 @@ function writeList(key: string, value: unknown): void {
 }
 
 export function loadAccounts(): Account[] {
-	return readList<Account>(STORAGE_KEYS.accounts);
+	const raw = readList<Record<string, unknown>>(STORAGE_KEYS.accounts);
+	let rewrite = false;
+	const accounts: Account[] = [];
+	for (const record of raw) {
+		const normalised = normaliseAccount(record);
+		if (normalised === null) continue;
+		if (normalised !== record) rewrite = true;
+		accounts.push(normalised);
+	}
+	if (rewrite) {
+		try {
+			writeList(STORAGE_KEYS.accounts, accounts);
+		} catch {
+			// A read-only store still gets the normalised list in memory.
+		}
+	}
+	return accounts;
+}
+
+/**
+ * One record in the current spelling, whatever spelling it was written in.
+ * Returns the SAME object when nothing had to change (so the caller can tell a
+ * rewrite is due), `null` for a record that is not an account at all.
+ */
+export function normaliseAccount(record: unknown): Account | null {
+	if (!record || typeof record !== 'object') return null;
+	const r = record as Record<string, unknown>;
+	const str = (a: unknown, b?: unknown): string | undefined =>
+		typeof a === 'string' ? a : typeof b === 'string' ? b : undefined;
+	const id = str(r.id);
+	const address = str(r.address);
+	if (id === undefined || address === undefined) return null;
+	const old =
+		'publicKeyHex' in r ||
+		'createdAt' in r ||
+		(Array.isArray(r.keys) && r.keys.some((k) => k && typeof k === 'object' && 'credentialId' in k)) ||
+		!Array.isArray(r.keys);
+	if (!old) return record as Account;
+	const keys = Array.isArray(r.keys) ? r.keys : [];
+	return {
+		id,
+		name: str(r.name) ?? '',
+		address,
+		public_key_hex: str(r.public_key_hex, r.publicKeyHex) ?? '',
+		created_at_iso: str(r.created_at_iso, r.createdAt) ?? '',
+		keys: keys
+			.filter((k): k is Record<string, unknown> => !!k && typeof k === 'object')
+			.map((k) => ({
+				credential_id: str(k.credential_id, k.credentialId) ?? '',
+				public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
+				name: str(k.name) ?? '',
+				// Where the credential lives; the old client never recorded it.
+				transports: str(k.transports) ?? ''
+			}))
+	};
 }
 
 /** Upsert by id. The whole record is written — see the invariant above. */
@@ -151,6 +209,8 @@ export type ServiceEndpoints = {
 	passkeyIndexURL?: string;
 	bundlerServiceURL?: string;
 	fiatRatesURL?: string;
+	/** Spec 038 #E4 — where an unknown AAGUID is looked up; absent = the default node. */
+	aaguidDirectoryURL?: string;
 };
 
 export function loadServiceEndpoints(): ServiceEndpoints {

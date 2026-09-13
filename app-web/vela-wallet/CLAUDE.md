@@ -1,7 +1,8 @@
 # Vela Wallet Web — agent notes
 
-- **Package manager**: pnpm (this app is its own workspace; the repo root is a
-  separate npm project).
+- **Package manager**: pnpm (this app is its own workspace; the repository
+  root carries no npm state — the generators and gates are the npm package in
+  `../../scripts/`, run as `npm --prefix scripts run <name>` from the root).
 - **Stack**: SvelteKit 2 + Svelte 5 (runes forced), TypeScript strict,
   Cloudflare adapter (`wrangler.jsonc`), vitest (server + browser projects),
   Playwright e2e.
@@ -24,7 +25,8 @@
    and never add a JS-side translation library.
 3. `[locale]` routes stay prerendered. New keys: edit all 15 locale namespace
    files, bump the path-count pin in `../../scripts/gen-i18n.mjs`, run
-   `npm run gen:i18n` (repo root), then `lint:i18n` + `verify:i18n` must pass.
+   `npm --prefix scripts run gen:i18n` (repo root; it writes the Rust catalogs
+   and `../../assets/i18n/`), then `lint:i18n` + `verify:i18n` must pass.
 4. Accent color (`--color-accent-base`) only on the primary value-moving
    action. AA contrast is test-enforced (`contrast.test.ts`).
 
@@ -32,7 +34,7 @@
 
 `pnpm check` → `pnpm lint` → `pnpm test:unit` → `pnpm build` → `pnpm test:e2e`
 (e2e builds and serves the real worker; screenshots land in
-`e2e/__screenshots__/` for comparison against `../../design/onboarding/`).
+`e2e/__screenshots__/` for comparison against `../../docs/design/onboarding/`).
 
 ## Svelte MCP
 

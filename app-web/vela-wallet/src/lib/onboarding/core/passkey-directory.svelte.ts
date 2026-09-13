@@ -14,6 +14,8 @@
  * only the transport and the memory.
  */
 import { browser } from '$app/environment';
+import { getAaguidDirectoryURL } from '$lib/services/endpoints';
+import { NET_TIMEOUTS, fetchWithTimeout } from '$lib/services/net';
 import { passkeyDirectoryEntry, passkeyDirectoryUrl } from './wasm-client';
 
 export interface DirectoryEntry {
@@ -51,15 +53,24 @@ export function directoryEntry(aaguid: string, dark: boolean): Slot {
 }
 
 async function lookup(aaguid: string, dark: boolean, key: string): Promise<void> {
-	const url = passkeyDirectoryUrl(aaguid);
+	// Which node: the person's service-endpoint settings (spec 038 #E4). The
+	// core still decides WHETHER to ask and what counts as an answer.
+	const origin = getAaguidDirectoryURL();
+	const url = passkeyDirectoryUrl(aaguid, origin);
 	if (url === undefined) {
 		entries[key] = null;
 		return;
 	}
 	try {
-		const response = await fetch(url, { headers: { Accept: 'application/json' } });
+		// On the app's timeout table (spec 038): the one bare fetch left.
+		const response = await fetchWithTimeout(
+			url,
+			{ headers: { Accept: 'application/json' } },
+			{ timeoutMs: NET_TIMEOUTS.ethereumData }
+		);
 		entries[key] = response.ok
-			? ((passkeyDirectoryEntry(aaguid, await response.text(), dark) as DirectoryEntry) ?? null)
+			? ((passkeyDirectoryEntry(aaguid, await response.text(), dark, origin) as DirectoryEntry) ??
+				null)
 			: null;
 	} catch {
 		// Offline, blocked, or the service is down. The row keeps the honest

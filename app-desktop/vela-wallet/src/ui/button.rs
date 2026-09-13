@@ -14,7 +14,7 @@ use gpui::{
 /// `Busy` is NOT `Disabled`: the action is running and this button is what the
 /// person is waiting on. It keeps full emphasis and turns a spinner where its
 /// label was, because a dimmed control reads as "unavailable" — the one thing
-/// "working" must never look like (DESIGN_SYSTEM.md, "Loading state").
+/// "working" must never look like (docs/design-system.md, "Loading state").
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonState {
     Enabled,
@@ -62,7 +62,7 @@ pub fn vela_button(
 /// swap — with the pointer affordance and the click handler withheld.
 ///
 /// The shape is v2's: a 12px rectangle. **There is no capsule anywhere in
-/// design/onboarding-new** — every button in it, on every screen and in the
+/// docs/design/onboarding-new** — every button in it, on every screen and in the
 /// sheet, is `border-radius: 12px` — so the pill went with v1 rather than
 /// surviving as a second shape nothing calls for.
 pub fn vela_button_opts(
@@ -112,7 +112,9 @@ pub fn vela_button_state(
         .px(px(theme::BTN_PAD_X))
         .py(px(theme::BTN_PAD_Y))
         .text_size(theme::text_cta())
-        .font_weight(FontWeight::BOLD);
+        // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
+        // notch lighter than the BOLD this carried — spec 038 finding 8.
+        .font_weight(FontWeight::SEMIBOLD);
 
     finish(base, variant, label_block, state, theme, on_click)
 }
@@ -165,7 +167,9 @@ pub fn welcome_cta_state(
         .px(px(theme::CTA_PAD_X))
         .py(px(theme::BTN_PAD_Y))
         .text_size(theme::text_cta())
-        .font_weight(FontWeight::BOLD);
+        // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
+        // notch lighter than the BOLD this carried — spec 038 finding 8.
+        .font_weight(FontWeight::SEMIBOLD);
 
     finish(base, variant, label_block, state, theme, on_click)
 }

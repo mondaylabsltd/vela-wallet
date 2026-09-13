@@ -24,9 +24,11 @@
 		onnetwork?: () => void;
 		oninput?: (value: string) => void;
 		onsubmit?: () => void;
+		/** T3b live: one of the index's matches was chosen. */
+		onpick?: (id: string) => void;
 	}
 
-	let { model, ontab, onnetwork, oninput, onsubmit }: Props = $props();
+	let { model, ontab, onnetwork, oninput, onsubmit, onpick }: Props = $props();
 </script>
 
 <div class="add">
@@ -42,7 +44,13 @@
 
 	{#if model.network !== undefined}
 		<button type="button" class="network" onclick={onnetwork}>
-			<TokenIcon ticker={model.network.mark.ticker} badgeColor={model.network.mark.badgeColor} />
+			<TokenIcon
+				ticker={model.network.mark.ticker}
+				badgeColor={model.network.mark.badgeColor}
+				logoUrls={model.network.mark.logoUrls}
+				badgeLogoUrl={model.network.mark.badgeLogoUrl}
+				badgeHidden={model.network.mark.badgeHidden}
+			/>
 			<span class="network-name">{model.network.name}</span>
 			<Icon icon={UTILITY_ICONS['chevron-down']} size="md" label={model.network.pickLabel} />
 		</button>
@@ -62,17 +70,49 @@
 		<p class="note">{model.result.text}</p>
 	{:else if model.result.kind === 'token'}
 		<div class="card">
-			<TokenIcon ticker={model.result.mark.ticker} badgeColor={model.result.mark.badgeColor} />
+			<TokenIcon
+				ticker={model.result.mark.ticker}
+				badgeColor={model.result.mark.badgeColor}
+				logoUrls={model.result.mark.logoUrls}
+				badgeLogoUrl={model.result.mark.badgeLogoUrl}
+				badgeHidden={model.result.mark.badgeHidden}
+			/>
 			<span class="text">
 				<span class="name">{model.result.name}</span>
 				<span class="detail">{model.result.detail}</span>
 			</span>
 			{#if model.result.chip !== undefined}<StatusChip chip={model.result.chip} />{/if}
 		</div>
+	{:else if model.result.kind === 'suggestions'}
+		<ul class="suggestions">
+			{#each model.result.rows as row (row.id)}
+				<li>
+					<button type="button" class="suggestion" onclick={() => onpick?.(row.id)}>
+						<TokenIcon
+							ticker={row.mark.ticker}
+							badgeColor={row.mark.badgeColor}
+							logoUrls={row.mark.logoUrls}
+							badgeHidden={row.mark.badgeHidden}
+						/>
+						<span class="text">
+							<span class="name">{row.name}</span>
+							<span class="detail">{row.meta}</span>
+						</span>
+						<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+					</button>
+				</li>
+			{/each}
+		</ul>
 	{:else if model.result.kind === 'network'}
 		<div class="card column">
 			<div class="card-head">
-				<TokenIcon ticker={model.result.mark.ticker} badgeColor={model.result.mark.badgeColor} />
+				<TokenIcon
+					ticker={model.result.mark.ticker}
+					badgeColor={model.result.mark.badgeColor}
+					logoUrls={model.result.mark.logoUrls}
+					badgeLogoUrl={model.result.mark.badgeLogoUrl}
+					badgeHidden={model.result.mark.badgeHidden}
+				/>
 				<span class="name">{model.result.name}</span>
 				<StatusChip chip={model.result.chip} />
 			</div>
@@ -174,6 +214,31 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.suggestions {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.suggestions li + li {
+		border-top: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.suggestion {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		width: 100%;
+		padding-block: var(--space-md);
+		padding-inline: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		color: var(--color-fg-subtle);
+		text-align: start;
+		cursor: pointer;
 	}
 
 	.cta {

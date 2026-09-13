@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+
 # 03 — 核心用户流程 (Core Flows)
 
 > 每条流程列出:入口 → 关键代码 → 领域规则。行号为 2026-07-02 审计时状态。

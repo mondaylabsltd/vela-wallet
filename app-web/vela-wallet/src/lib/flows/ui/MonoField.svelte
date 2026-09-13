@@ -30,6 +30,7 @@
 		<textarea
 			class="field"
 			class:invalid
+			data-field
 			{rows}
 			{placeholder}
 			aria-label={label}
@@ -40,6 +41,7 @@
 		<input
 			class="field"
 			class:invalid
+			data-field
 			type="text"
 			{value}
 			{placeholder}
@@ -82,10 +84,7 @@
 		color: var(--color-fg-subtle);
 	}
 
-	.field:focus {
-		outline: none;
-		border-color: var(--color-fixed-focusRingOuter);
-	}
+	/* Focus: app.css's `data-field` edge. An invalid field keeps its red. */
 
 	.invalid {
 		border-color: var(--color-error-base);

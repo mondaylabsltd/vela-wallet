@@ -1,0 +1,1500 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "code": "CS1",
+      "title": {
+        "zh": "ERC-20 转账",
+        "en": "ERC-20 transfer"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0xa9059cbb000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000000000000000000000000000000000003b9aca00",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS2",
+      "title": {
+        "zh": "ETH 大额转账",
+        "en": "Large ETH transfer"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0x9A8b7C6d5E4F3a2B1c0D9e8F7a6B5c4D3e2F1a09",
+            "data": "0x",
+            "value": "0x22b1c8c1227a0000"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS3",
+      "title": {
+        "zh": "转给另一个地址",
+        "en": "Sending to another address"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0x031d7D5723F8a1c0e4B96f2d8A7c5e93b1042Fd6",
+            "data": "0x",
+            "value": "0x58d15e17628000"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS4",
+      "title": {
+        "zh": "ERC-20 代理转账 transferFrom",
+        "en": "ERC-20 transferFrom"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "data": "0x23b872dd00000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000000000000000000000000000000000000ee6b280",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        }
+      }
+    },
+    {
+      "code": "CS5",
+      "title": {
+        "zh": "授权 · 无限额（已拦截）",
+        "en": "Approval · unlimited (refused)"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0x095ea7b30000000000000000000000001111111254eeb25477b68fb85ed929f73a960582ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        }
+      }
+    },
+    {
+      "code": "CS6",
+      "title": {
+        "zh": "授权 · 已设上限（按余额）",
+        "en": "Approval · capped"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0x095ea7b30000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000000000000000000000000000000000001dcd6500",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        }
+      }
+    },
+    {
+      "code": "CS7",
+      "title": {
+        "zh": "increaseAllowance · 增量语义",
+        "en": "increaseAllowance · additive semantics"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0x395093510000000000000000000000001111111254eeb25477b68fb85ed929f73a9605820000000000000000000000000000000000000000000000000000000005f5e100",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        },
+        "currentAllowance": "50000000"
+      }
+    },
+    {
+      "code": "CS8",
+      "title": {
+        "zh": "撤销授权",
+        "en": "Revoke approval"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0x095ea7b30000000000000000000000001111111254eeb25477b68fb85ed929f73a9605820000000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        }
+      }
+    },
+    {
+      "code": "CS9",
+      "title": {
+        "zh": "NFT 转移",
+        "en": "NFT transfer"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://opensea.io",
+        "params": [
+          {
+            "to": "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D",
+            "data": "0x42842e0e00000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e10000000000000000000000000000000000000000000000000000000000000d54",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "OpenSea",
+          "tone": "#2081e2"
+        }
+      }
+    },
+    {
+      "code": "CS10",
+      "title": {
+        "zh": "NFT 全部授权 setApprovalForAll",
+        "en": "setApprovalForAll · whole collection"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://opensea.io",
+        "params": [
+          {
+            "to": "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D",
+            "data": "0xa22cb4650000000000000000000000009a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a090000000000000000000000000000000000000000000000000000000000000001",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "OpenSea",
+          "tone": "#2081e2"
+        }
+      }
+    },
+    {
+      "code": "CS11",
+      "title": {
+        "zh": "兑换 · 1inch 描述符",
+        "en": "Swap · 1inch descriptor"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "to": "0x1111111254EEB25477B68fb85Ed929f73A960582",
+            "data": "0x12aa3caf0000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000001111111254eeb25477b68fb85ed929f73a96058200000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b68940000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000000000000000000000000000006c00a3912c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        }
+      }
+    },
+    {
+      "code": "CS12",
+      "title": {
+        "zh": "原生币兑换 ETH → 代币",
+        "en": "Native swap ETH → token"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+            "data": "0x7ff36ab500000000000000000000000000000000000000000000000000000000c976b500000000000000000000000000000000000000000000000000000000000000008000000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894000000000000000000000000000000000000000000000000000000006a9e41b90000000000000000000000000000000000000000000000000000000000000002000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "value": "0xde0b6b3a7640000"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS13",
+      "title": {
+        "zh": "兑换 · 截止时间已过",
+        "en": "Swap · deadline already passed"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+            "data": "0x7ff36ab500000000000000000000000000000000000000000000000000000000c976b500000000000000000000000000000000000000000000000000000000000000008000000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894000000000000000000000000000000000000000000000000000000006a9e17890000000000000000000000000000000000000000000000000000000000000002000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "value": "0xde0b6b3a7640000"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS14",
+      "title": {
+        "zh": "金库存入 ERC-4626",
+        "en": "ERC-4626 vault deposit"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.sky.money",
+        "params": [
+          {
+            "to": "0x83F20F44975D03b1b09e64809B757c47f942BEeA",
+            "data": "0x6e553f6500000000000000000000000000000000000000000000003635c9adc5dea0000000000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Sky",
+          "tone": "#3fae74"
+        },
+        "vaultAsset": "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+      }
+    },
+    {
+      "code": "CS15",
+      "title": {
+        "zh": "金库取出",
+        "en": "Vault withdrawal"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.sky.money",
+        "params": [
+          {
+            "to": "0x83F20F44975D03b1b09e64809B757c47f942BEeA",
+            "data": "0xba08765200000000000000000000000000000000000000000000001b1ae4d6e2ef50000000000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b689400000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Sky",
+          "tone": "#3fae74"
+        }
+      }
+    },
+    {
+      "code": "CS16",
+      "title": {
+        "zh": "Permit2 授权签名 · 无限额",
+        "en": "Permit2 approval · unlimited"
+      },
+      "intent": {
+        "method": "eth_signTypedData_v4",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+          "{\"primaryType\":\"PermitSingle\",\"domain\":{\"name\":\"Permit2\",\"chainId\":1,\"verifyingContract\":\"0x000000000022D473030F116dDEE9F6B43aC78BA3\"},\"types\":{\"PermitSingle\":[{\"name\":\"details\",\"type\":\"PermitDetails\"},{\"name\":\"spender\",\"type\":\"address\"}]},\"message\":{\"details\":{\"token\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\",\"amount\":\"1461501637330902918203684832716283019655932542975\",\"expiration\":1788756409,\"nonce\":0},\"spender\":\"0x1111111254EEB25477B68fb85Ed929f73A960582\",\"sigDeadline\":1788756409}}"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS17",
+      "title": {
+        "zh": "EIP-712 Permit · 限额 + 期限",
+        "en": "EIP-712 Permit · cap + deadline"
+      },
+      "intent": {
+        "method": "eth_signTypedData_v4",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+          "{\"primaryType\":\"Permit\",\"domain\":{\"name\":\"USD Coin\",\"version\":\"2\",\"chainId\":1,\"verifyingContract\":\"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48\"},\"types\":{\"Permit\":[{\"name\":\"owner\",\"type\":\"address\"},{\"name\":\"spender\",\"type\":\"address\"}]},\"message\":{\"owner\":\"0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894\",\"spender\":\"0x1111111254EEB25477B68fb85Ed929f73A960582\",\"value\":\"500000000\",\"nonce\":3,\"deadline\":1788756409}}"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS18",
+      "title": {
+        "zh": "EIP-712 未知结构化数据",
+        "en": "EIP-712 unknown structured data"
+      },
+      "intent": {
+        "method": "eth_signTypedData_v4",
+        "origin": "https://mint.example.xyz",
+        "params": [
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+          "{\"primaryType\":\"BidOrder\",\"domain\":{\"name\":\"ExampleMarket\",\"chainId\":1,\"verifyingContract\":\"0x7F3d2A1b0C9e8D7f6A5b4C3d2E1f0A9b8C7d6E5f\"},\"types\":{\"BidOrder\":[{\"name\":\"maker\",\"type\":\"address\"}]},\"message\":{\"maker\":\"0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894\",\"collection\":\"0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D\",\"strategy\":\"0x0000000000000000000000000000000000000000\",\"price\":\"4200000000000000000\",\"endTime\":1788756409}}"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS19",
+      "title": {
+        "zh": "SIWE 登录 · 域名一致（补：设计稿未导出）",
+        "en": "SIWE sign-in · domain matches (added)"
+      },
+      "intent": {
+        "method": "personal_sign",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          "0x6170702e756e69737761702e6f72672077616e747320796f7520746f207369676e20696e207769746820796f757220457468657265756d206163636f756e743a0a3078383863434130663842344531463064433065374334663961324233643545366637413862363839340a0a5369676e20696e20746f20556e69737761702e0a0a5552493a2068747470733a2f2f6170702e756e69737761702e6f72670a56657273696f6e3a20310a436861696e2049443a20310a4e6f6e63653a2038613362396632630a4973737565642041743a20323032362d30392d30375430313a30303a30305a",
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    },
+    {
+      "code": "CS20",
+      "title": {
+        "zh": "SIWE 登录 · 域名不匹配（钓鱼）",
+        "en": "SIWE sign-in · domain mismatch (phishing)"
+      },
+      "intent": {
+        "method": "personal_sign",
+        "origin": "https://uniswap-airdrop.xyz",
+        "params": [
+          "0x6170702e756e69737761702e6f72672077616e747320796f7520746f207369676e20696e207769746820796f757220457468657265756d206163636f756e743a0a3078383863434130663842344531463064433065374334663961324233643545366637413862363839340a0a5369676e20696e20746f20636c61696d20796f7572207265776172642e0a0a5552493a2068747470733a2f2f756e69737761702d61697264726f702e78797a0a56657273696f6e3a20310a436861696e2049443a20310a4e6f6e63653a2030306666313165650a4973737565642041743a20323032362d30392d30375430313a30303a30305a",
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS21",
+      "title": {
+        "zh": "十六进制消息签名",
+        "en": "Hex message signature"
+      },
+      "intent": {
+        "method": "personal_sign",
+        "origin": "https://dapp.example.com",
+        "params": [
+          "0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658",
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS22",
+      "title": {
+        "zh": "eth_sign · 原始哈希（强警告）",
+        "en": "eth_sign · raw hash (hard warning)"
+      },
+      "intent": {
+        "method": "eth_sign",
+        "origin": "https://dapp.example.com",
+        "params": [
+          "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+          "0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658"
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS23",
+      "title": {
+        "zh": "盲签交易 · 模拟兜底",
+        "en": "Blind transaction · simulation fallback"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://router.example.com",
+        "params": [
+          {
+            "to": "0x7F3d2A1b0C9e8D7f6A5b4C3d2E1f0A9b8C7d6E5f",
+            "data": "0xe3d25ee1abababababababababababababababababababababababababababababababab0000000000000000000000000000000000000000000000000000000005f5e100",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "simulation": {
+          "summary": "-100 USDC · +0.0304 WETH",
+          "rows": [
+            {
+              "symbol": "USDC",
+              "delta": "-100"
+            },
+            {
+              "symbol": "WETH",
+              "delta": "+0.0304"
+            }
+          ],
+          "note": "模拟通过 — 没有其他资产变动"
+        }
+      }
+    },
+    {
+      "code": "CS24",
+      "title": {
+        "zh": "盗刷 · 模拟揭穿未声明流出",
+        "en": "Drainer · simulation exposes undeclared outflow"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://free-airdrop.example",
+        "params": [
+          {
+            "to": "0x7F3d2A1b0C9e8D7f6A5b4C3d2E1f0A9b8C7d6E5f",
+            "data": "0x0acbdb5f00000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b68940000000000000000000000000000000000000000000000000000000000000001",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "simulation": {
+          "undeclared": true,
+          "summary": "-4,820.55 USDC · -1.2 WETH",
+          "rows": [
+            {
+              "symbol": "USDC",
+              "delta": "-4,820.55"
+            },
+            {
+              "symbol": "WETH",
+              "delta": "-1.2"
+            }
+          ],
+          "note": "站点声称这是「领取空投」，模拟显示它把两种资产转走了"
+        }
+      }
+    },
+    {
+      "code": "CS25",
+      "title": {
+        "zh": "部署合约",
+        "en": "Contract deployment"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://remix.ethereum.org",
+        "params": [
+          {
+            "to": "",
+            "data": "0x60806040523480156100abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS26",
+      "title": {
+        "zh": "EIP-5792 批量 · 逐笔明细",
+        "en": "EIP-5792 batch · leg by leg"
+      },
+      "intent": {
+        "method": "wallet_sendCalls",
+        "origin": "https://app.1inch.io",
+        "params": [
+          {
+            "version": "1.0",
+            "chainId": "0x1",
+            "from": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+            "calls": [
+              {
+                "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                "data": "0x095ea7b30000000000000000000000001111111254eeb25477b68fb85ed929f73a9605820000000000000000000000000000000000000000000000000000000005f5e100",
+                "value": "0x0"
+              },
+              {
+                "to": "0x1111111254EEB25477B68fb85Ed929f73A960582",
+                "data": "0x12aa3caf0000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000001111111254eeb25477b68fb85ed929f73a96058200000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b68940000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000000000000000000000000000006c00a3912c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                "value": "0x0"
+              }
+            ]
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "1inch",
+          "tone": "#d82122"
+        },
+        "simulation": {
+          "rows": [
+            {
+              "symbol": "USDC",
+              "delta": "-100"
+            },
+            {
+              "symbol": "WETH",
+              "delta": "+0.0304"
+            }
+          ],
+          "note": "模拟通过 — 没有其他资产变动"
+        }
+      }
+    },
+    {
+      "code": "CS27",
+      "title": {
+        "zh": "Safe 执行 · 嵌套 calldata",
+        "en": "Safe execution · nested calldata"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.safe.global",
+        "params": [
+          {
+            "to": "0x2f0B23f53734Fa68559E1B1B3B9bC3fD9B1F0E5a",
+            "data": "0x6a761202000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000044a9059cbb0000000000000000000000009a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0900000000000000000000000000000000000000000000000000000005d21dba00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Safe",
+          "tone": "#12ff80"
+        }
+      }
+    },
+    {
+      "code": "CS28",
+      "title": {
+        "zh": "转入代币自身合约（烧毁拦截）",
+        "en": "Transfer into the token contract (burn, refused)"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://dapp.example.com",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0xa9059cbb000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000000000000000001dcd6500",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS29",
+      "title": {
+        "zh": "技术细节 · 展开全景",
+        "en": "Technical details · fully expanded"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0xa9059cbb000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000000000000000000000000000000000003b9aca00",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        },
+        "simulation": {
+          "summary": "-1,000 USDC · 无其他变动"
+        }
+      },
+      "options": {
+        "techOpen": true
+      }
+    },
+    {
+      "code": "CS30",
+      "title": {
+        "zh": "陌生调用 · 4byte 兜底",
+        "en": "Unfamiliar call · 4byte fallback"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://mint.example.xyz",
+        "params": [
+          {
+            "to": "0x7F3d2A1b0C9e8D7f6A5b4C3d2E1f0A9b8C7d6E5f",
+            "data": "0x40c10f1900000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b68940000000000000000000000000000000000000000000000000000000000000005",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS31",
+      "title": {
+        "zh": "陌生调用 · 验证 ABI 全解码",
+        "en": "Unfamiliar call · verified ABI, full decode"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://stake.example.com",
+        "params": [
+          {
+            "to": "0x5f2B8c3a9D1E4f6A7b8C9d0E1f2A3b4C5d6E7F80",
+            "data": "0x7628a37d00000000000000000000000000000000000000000000003635c9adc5dea000000000000000000000000000000000000000000000000000000000000000278d0000000000000000000000000088cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "simulation": {
+          "summary": "-1,000 DAI · 无其他变动"
+        }
+      }
+    },
+    {
+      "code": "CS32",
+      "title": {
+        "zh": "最深降级 · 无法解码且无法模拟",
+        "en": "Deepest fallback · neither decodable nor simulatable"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://router.example.com",
+        "params": [
+          {
+            "to": "0x7F3d2A1b0C9e8D7f6A5b4C3d2E1f0A9b8C7d6E5f",
+            "data": "0xe3d25ee1cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd0000000000000000000000000000000000000000000000000000000000000001",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$"
+      }
+    },
+    {
+      "code": "CS33",
+      "title": {
+        "zh": "网络费 · 只读，不可切换",
+        "en": "Network fee · read-only, not switchable"
+      },
+      "intent": {
+        "method": "eth_sendTransaction",
+        "origin": "https://app.uniswap.org",
+        "params": [
+          {
+            "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "data": "0xa9059cbb000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000000000000000000000000000000000003b9aca00",
+            "value": "0x0"
+          }
+        ]
+      },
+      "context": {
+        "seenAddresses": [
+          "0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1",
+          "0x031d7d5723f8a1c0e4b96f2d8a7c5e93b1042fd6",
+          "0x1111111254eeb25477b68fb85ed929f73a960582",
+          "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "0xdac17f958d2ee523a2206206994597c13d831ec7",
+          "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "0x6b175474e89094c44da98b954eedeac495271d0f"
+        ],
+        "now": 1788752809012,
+        "account": "0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894",
+        "chainId": 1,
+        "dataUrl": "https://ethereum-data.getvela.app",
+        "rates": {
+          "ETH": 3400,
+          "USDC": 1,
+          "USDT": 1,
+          "DAI": 1,
+          "WETH": 3400
+        },
+        "currency": "$",
+        "dapp": {
+          "name": "Uniswap",
+          "tone": "#ff007a",
+          "icon": "https://assets.getvela.app/dapps/uniswap.png"
+        }
+      }
+    }
+  ]
+}

@@ -8,9 +8,11 @@
 		onselect?: (group: string | undefined) => void;
 		/** Right-click on a group row (DC6 context menu). */
 		ongroupmenu?: (group: string, event: MouseEvent) => void;
+		/** 新建分组. Absent in the gallery. */
+		onnew?: () => void;
 	}
 
-	let { rail, onselect, ongroupmenu }: Props = $props();
+	let { rail, onselect, ongroupmenu, onnew }: Props = $props();
 </script>
 
 <nav class="rail" aria-label={rail.groupsTitle}>
@@ -46,7 +48,7 @@
 		</button>
 	{/each}
 
-	<button type="button" class="rail-row new">
+	<button type="button" class="rail-row new" onclick={onnew}>
 		<Icon icon={UTILITY_ICONS['folder-plus']} size="base" />
 		<span class="label">{rail.newGroup}</span>
 	</button>

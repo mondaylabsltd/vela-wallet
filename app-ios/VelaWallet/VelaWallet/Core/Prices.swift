@@ -7,8 +7,9 @@
 //  Ported from `app-web/vela-wallet/src/lib/services/price-service.ts` (the
 //  Ethereum-mainnet Chainlink batch and its alias table) and the per-chain
 //  `NATIVE_CHAINLINK_FEEDS` half of `wallet-api.ts`. The **ladder** is ported
-//  from nowhere: `chooseNativePrice` is the core's, exported for this cut in
-//  `vela-core-uniffi/src/prices.rs`.
+//  from nowhere: `chooseNativePrice` is the core's, exported by
+//  `vela-core-uniffi/src/lib.rs` (spec 041 promoted it for every native
+//  client; this cut's own copy was folded into that one).
 //
 //  ## Why the ladder is not in this file
 //

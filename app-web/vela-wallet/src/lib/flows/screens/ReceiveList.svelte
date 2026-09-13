@@ -11,6 +11,7 @@
 	import NetworkRow from '../ui/NetworkRow.svelte';
 	import type { ReceiveListModel } from '../model';
 	import { fill } from '$lib/wallet/messages';
+	import { copyText } from '$lib/services/clipboard';
 
 	interface Props {
 		model: ReceiveListModel;
@@ -39,6 +40,9 @@
 	 * never wonders which of the ticks is the live one.
 	 */
 	function copy(index: number) {
+		// The tick is this screen's; the write is the clipboard service's. A
+		// drawn row (the gallery) has no whole address and copies nothing.
+		void copyText(model.rows[index]?.addressFull ?? '');
 		copiedIndex = index;
 		clearTimeout(copyTimer);
 		copyTimer = setTimeout(() => (copiedIndex = -1), 150);

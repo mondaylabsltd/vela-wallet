@@ -214,7 +214,10 @@ The ladder — DEX preferred, but a DEX price outside ratio (0.5, 2.0) against t
 best Chainlink read means low liquidity, so Chainlink wins — has been in
 `balance_dashboard.rs` since spec 017 while **every platform re-decided around
 it** in `wallet-api.ts`. Web opened the door in 025; this is the same door on the
-uniffi side (`vela-core-uniffi/src/prices.rs`).
+uniffi side (`vela-core-uniffi/src/lib.rs` — spec 041's export, which this
+cut's `prices.rs` duplicated until the merge with main folded it in; the
+`source` rung is spelled `chainlink_local`, the bridge's spelling for every
+native client).
 
 It is not a style point. The band exists because one near-empty X Layer pool
 quoted WOKB at ~$5 against a real ~$81, and a shell that re-implements it is a

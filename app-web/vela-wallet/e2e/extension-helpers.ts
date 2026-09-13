@@ -33,9 +33,18 @@ export function extensionId(): string {
 	return [...digest.slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 }
 
-/** A browser with the packaged extension installed. */
-export function loadExtension(options: { viewport?: { width: number; height: number } } = {}) {
-	return chromium.launchPersistentContext('', {
+/**
+ * A browser with the packaged extension installed.
+ *
+ * `surface` is where a dApp request is answered. The product's default is the
+ * asking tab's side panel; the harness's default is the WINDOW, because a
+ * side panel is not a Playwright `Page` (see `preferWindows`). A suite that
+ * proves the panel passes `'panel'` and drives it with `sidePanelView`.
+ */
+export async function loadExtension(
+	options: { viewport?: { width: number; height: number }; surface?: 'window' | 'panel' } = {}
+): Promise<BrowserContext> {
+	const context = await chromium.launchPersistentContext('', {
 		headless: false,
 		args: [
 			'--headless=new',
@@ -44,6 +53,15 @@ export function loadExtension(options: { viewport?: { width: number; height: num
 		],
 		...(options.viewport ? { viewport: options.viewport } : {})
 	});
+	if ((options.surface ?? 'window') === 'window') {
+		// Any document of the extension's origin can write its storage; the
+		// manifest is the cheapest one to open.
+		const page = await context.newPage();
+		await page.goto(`chrome-extension://${extensionId()}/manifest.json`);
+		await preferWindows(page);
+		await page.close();
+	}
+	return context;
 }
 
 /** Refuse every request that is not to the extension's own origin. */
@@ -52,6 +70,79 @@ export async function hermetic(context: BrowserContext): Promise<void> {
 		route.request().url().startsWith('chrome-extension://') ? route.continue() : route.abort()
 	);
 }
+
+type ChromeLocal = {
+	chrome: {
+		storage: { local: { set(items: Record<string, unknown>): Promise<void> } };
+		extension: { getViews(): Window[] };
+	};
+};
+
+/**
+ * Answer requests in a WINDOW rather than the side panel, for this browser.
+ *
+ * The side panel is the product's surface, and it opens on a user gesture —
+ * which Playwright's `evaluate` carries (CDP `userGesture: true`). But a side
+ * panel is not a Playwright `Page`: it is a CDP target the harness never
+ * attaches, so nothing here can click in it. The worker honours
+ * `vela.ext.surface = 'window'`, and every suite that drives the window sets
+ * it from an extension page right after seeding. The panel itself is proven
+ * by `sidePanelView` below, through the one door the harness has into it.
+ */
+export async function preferWindows(extensionPage: Page): Promise<void> {
+	await extensionPage.evaluate(() =>
+		(window as unknown as ChromeLocal).chrome.storage.local.set({ 'vela.ext.surface': 'window' })
+	);
+}
+
+/**
+ * Drive the open side panel from another extension page.
+ *
+ * `chrome.extension.getViews()` hands an extension page the `Window` of every
+ * other view of the extension in its process — the side panel included — so a
+ * test can read its heading and press its buttons without a Page of its own.
+ * Resolves with the panel's heading once it is showing something.
+ */
+export async function sidePanelView(
+	extensionPage: Page,
+	timeoutMs = 15_000
+): Promise<{ heading: string; click(buttonText: string): Promise<void> }> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const heading = await extensionPage.evaluate(() => {
+			const view = (window as unknown as ChromeLocal).chrome.extension
+				.getViews()
+				.find((w) => w.location.href.includes('/request.html') && !w.location.search);
+			return view?.document.querySelector('h1')?.textContent ?? null;
+		});
+		if (heading) {
+			return {
+				heading,
+				click: (buttonText: string) =>
+					extensionPage.evaluate((text) => {
+						const view = (window as unknown as ChromeLocal).chrome.extension
+							.getViews()
+							.find((w) => w.location.href.includes('/request.html') && !w.location.search);
+						const button = [...(view?.document.querySelectorAll('button') ?? [])].find(
+							(b) => b.textContent?.trim() === text
+						);
+						if (!button) throw new Error(`no "${text}" button in the side panel`);
+						button.click();
+					}, buttonText)
+			};
+		}
+		await new Promise((r) => setTimeout(r, 250));
+	}
+	throw new Error('no side panel showed a request');
+}
+
+/** Is a side panel showing a request right now? */
+export const sidePanelOpen = (extensionPage: Page): Promise<boolean> =>
+	extensionPage.evaluate(() =>
+		(window as unknown as ChromeLocal).chrome.extension
+			.getViews()
+			.some((w) => w.location.href.includes('/request.html') && !w.location.search)
+	);
 
 /** The request window this extension opened, once it is showing something. */
 export async function requestWindow(context: BrowserContext, timeoutMs = 15_000): Promise<Page> {

@@ -9,6 +9,7 @@
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
 	import type { NetworkRowModel } from '../model';
 
 	interface Props {
@@ -23,7 +24,13 @@
 </script>
 
 <div class="row">
-	<span class="badge" style:background={row.badgeColor} aria-hidden="true">{row.code}</span>
+	<!-- The chain's own logo over the lettered badge, the same way the asset
+	     rows wear theirs (spec 028 Phase 9, T492); the letters stand until it
+	     loads and stay when the endpoint has none. -->
+	<span class="badge" style:background={row.badgeColor} aria-hidden="true">
+		{row.code}
+		<RemoteLogo urls={row.logoUrl === undefined ? undefined : [row.logoUrl]} />
+	</span>
 	<span class="text">
 		<span class="name">{row.name}</span>
 		<span class="address">{row.addressDisplay}</span>
@@ -45,6 +52,7 @@
 	}
 
 	.badge {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;

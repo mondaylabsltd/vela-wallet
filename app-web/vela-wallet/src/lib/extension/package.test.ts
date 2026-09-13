@@ -58,6 +58,22 @@ describe('the manifest', () => {
 		// authenticator, mid-ceremony. The toolbar button opens a tab instead.
 		expect(manifest.action?.default_popup).toBeUndefined();
 	});
+
+	it('answers a request in the side panel, which survives that prompt', () => {
+		expect(manifest.permissions).toContain('sidePanel');
+		expect(manifest.side_panel?.default_path).toBe('panel.html');
+		expect(existsSync(join(APP_ROOT, 'extension', manifest.side_panel.default_path))).toBe(true);
+	});
+
+	it('wears the wallet mark, at every size Chrome asks for', () => {
+		// The mark is docs/design/icon/app-icon.svg, rendered; without `icons` Chrome
+		// shows a grey puzzle piece for the whole product.
+		for (const size of ['16', '32', '48', '128']) {
+			expect(manifest.icons?.[size], `icons.${size}`).toBeDefined();
+			expect(existsSync(join(APP_ROOT, 'extension', manifest.icons[size]))).toBe(true);
+			expect(manifest.action?.default_icon?.[size]).toBe(manifest.icons[size]);
+		}
+	});
 });
 
 describe('the packaged pages', () => {

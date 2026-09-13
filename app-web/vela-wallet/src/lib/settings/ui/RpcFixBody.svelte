@@ -19,9 +19,12 @@
 	interface Props {
 		panel: RpcFixModel;
 		onprimary?: () => void;
+		/** The URL being typed, and the leave that saves it (spec 028 Phase 8). Absent in the gallery. */
+		onfield?: (value: string) => void;
+		onfieldblur?: () => void;
 	}
 
-	let { panel, onprimary }: Props = $props();
+	let { panel, onprimary, onfield, onfieldblur }: Props = $props();
 </script>
 
 <div class="fix">
@@ -35,7 +38,7 @@
 	</div>
 
 	<Callout callout={panel.callout} />
-	<UrlField field={panel.field} />
+	<UrlField field={panel.field} oninput={onfield} onblur={onfieldblur} />
 
 	<Button variant="primary" shape="rounded" onclick={onprimary}>{panel.primary}</Button>
 

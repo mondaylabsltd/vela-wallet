@@ -4,8 +4,8 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, ElementId, Hsla, InteractiveElement as _, ParentElement, SharedString, Stateful, Styled,
-    div, px,
+    AnyElement, Div, ElementId, Hsla, InteractiveElement as _, IntoElement as _, ParentElement,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, div, px,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -57,11 +57,7 @@ pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div
         .items_center()
         .gap(px(8.))
         .cursor_pointer()
-        .child(letter_avatar(
-            site.letter.clone(),
-            site.tint,
-            TILE_AVATAR,
-        ))
+        .child(letter_avatar(site.letter.clone(), site.tint, TILE_AVATAR))
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -120,11 +116,7 @@ pub fn site_row(
         .gap(px(12.))
         .py(px(10.))
         .cursor_pointer()
-        .child(letter_avatar(
-            site.letter.clone(),
-            site.tint,
-            ROW_AVATAR,
-        ))
+        .child(letter_avatar(site.letter.clone(), site.tint, ROW_AVATAR))
         .child(
             div()
                 .flex()
@@ -160,12 +152,43 @@ pub fn site_row(
 
 /// The tab strip in the window's drag area (DE1–DE4). The selected tab is the
 /// same colour as the toolbar below it, so the two read as one surface.
+/// What a tab strip can DO, when a machine is behind it.
+///
+/// One entry per tab in the order they are drawn, plus the new-tab button.
+/// `None` throughout is the gallery's strip: drawn exactly as it always was,
+/// answering nothing (the rule the slide, the allowance chips and the site
+/// menu all follow).
+#[derive(Default)]
+pub struct TabActions {
+    pub select: Vec<Option<crate::flows::panels::Click>>,
+    pub close: Vec<Option<crate::flows::panels::Click>>,
+    pub new_tab: Option<crate::flows::panels::Click>,
+}
+
 pub fn tab_strip(
     theme: &Theme,
     icons: &mut IconCache,
     tabs: &[TabModel],
     new_tab_label: SharedString,
     close_label: SharedString,
+) -> Div {
+    tab_strip_with(
+        theme,
+        icons,
+        tabs,
+        new_tab_label,
+        close_label,
+        TabActions::default(),
+    )
+}
+
+pub fn tab_strip_with(
+    theme: &Theme,
+    icons: &mut IconCache,
+    tabs: &[TabModel],
+    new_tab_label: SharedString,
+    close_label: SharedString,
+    mut actions: TabActions,
 ) -> Div {
     let mut strip = div()
         .h(px(TAB_STRIP_H))
@@ -194,31 +217,59 @@ pub fn tab_strip(
         if let Some(site) = &tab.site {
             face = face.child(letter_avatar(site.letter.clone(), site.tint, 16.));
         }
-        face = face
-            .child(div().flex_1().min_w(px(0.)).truncate().child(tab.title.clone()))
-            .child(icon_img(icons, Icon::X, false, theme.fg_muted, 12.));
-        strip = strip.child(
-            div()
-                .id(ElementId::from(("tab", i)))
+        // The close glyph is its own control: a click on it must close the
+        // tab, never merely select it, and the two live one inside the other.
+        let close = actions.close.get_mut(i).and_then(Option::take);
+        let cross = icon_img(icons, Icon::X, false, theme.fg_muted, 12.);
+        let cross = match close {
+            Some(close) => div()
+                .id(ElementId::from(("tab-close", i)))
                 .cursor_pointer()
-                .child(face),
-        );
+                .child(cross)
+                .on_click(move |event, window, cx| close(event, window, cx))
+                .into_any_element(),
+            None => cross.into_any_element(),
+        };
+        face = face
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .truncate()
+                    .child(tab.title.clone()),
+            )
+            .child(cross);
+        let select = actions.select.get_mut(i).and_then(Option::take);
+        let mut tab_el = div()
+            .id(ElementId::from(("tab", i)))
+            .cursor_pointer()
+            .child(face);
+        if let Some(select) = select {
+            tab_el = tab_el.on_click(move |event, window, cx| select(event, window, cx));
+        }
+        strip = strip.child(tab_el);
         let _ = &close_label;
     }
 
-    strip.child(
+    let mut plus = div()
+        .id("new-tab")
+        .mb(px(6.))
+        .w(px(20.))
+        .h(px(20.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 14.));
+    if let Some(new_tab) = actions.new_tab.take() {
+        plus = plus.on_click(move |event, window, cx| new_tab(event, window, cx));
+    }
+    strip.child(plus).child(
         div()
-            .id("new-tab")
-            .mb(px(6.))
-            .w(px(20.))
-            .h(px(20.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 14.)),
+            .flex_1()
+            .child(div().h(px(1.)).child(new_tab_label.clone()))
+            .invisible(),
     )
-    .child(div().flex_1().child(div().h(px(1.)).child(new_tab_label.clone())).invisible())
 }
 
 /// One toolbar control — a 32 square with a tinted glyph.
@@ -275,6 +326,11 @@ pub fn account_chip(
 /// one control, two states, never two controls. `trailing` is built by the
 /// page, because its two affordances (⋯ and the account chip) each open a
 /// different thing and the listeners belong to the entity that owns that state.
+/// Back, forward and reload, in that order. `None` leaves them drawn and
+/// inert, which is what the mocks are — a live browser passes three listeners
+/// and the same three buttons start working.
+pub type NavActions = [crate::flows::panels::Click; 3];
+
 pub fn toolbar(
     theme: &Theme,
     icons: &mut IconCache,
@@ -282,6 +338,7 @@ pub fn toolbar(
     host: SharedString,
     search_placeholder: SharedString,
     trailing: Div,
+    nav: Option<NavActions>,
 ) -> Div {
     let address = if browsing {
         div()
@@ -320,14 +377,7 @@ pub fn toolbar(
         .bg(theme.bg_base)
         .border_b_1()
         .border_color(theme.divider)
-        .child(toolbar_control(theme, icons, Icon::ArrowLeft, theme.fg_base))
-        .child(toolbar_control(
-            theme,
-            icons,
-            Icon::ArrowRight,
-            theme.fg_subtle,
-        ))
-        .child(toolbar_control(theme, icons, Icon::RefreshCw, theme.fg_base))
+        .children(nav_controls(theme, icons, nav))
         .child(
             div()
                 .flex_1()
@@ -342,6 +392,32 @@ pub fn toolbar(
                 .child(address),
         )
         .child(trailing)
+}
+
+/// The three navigation buttons, live or drawn.
+fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -> Vec<AnyElement> {
+    let icons_and_tints = [
+        (Icon::ArrowLeft, theme.fg_base),
+        (Icon::ArrowRight, theme.fg_subtle),
+        (Icon::RefreshCw, theme.fg_base),
+    ];
+    let mut actions = nav.map(Vec::from).unwrap_or_default().into_iter();
+    icons_and_tints
+        .into_iter()
+        .enumerate()
+        .map(|(i, (icon, tint))| {
+            let control = toolbar_control(theme, icons, icon, tint);
+            match actions.next() {
+                Some(action) => crate::flows::panels::clickable(
+                    ElementId::from(("browser-nav", i)),
+                    Some(action),
+                    control,
+                )
+                .into_any_element(),
+                None => control.into_any_element(),
+            }
+        })
+        .collect()
 }
 
 /// A stand-in for whatever site is open (spec 022 §2). Deliberately NOT

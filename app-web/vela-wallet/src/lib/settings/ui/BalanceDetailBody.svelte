@@ -48,6 +48,21 @@
 	{/each}
 </ul>
 
+{#if panel.unpriced.length > 0}
+	<p class="section">{panel.sectionUnpriced}</p>
+	<ul>
+		{#each panel.unpriced as row (row.id)}
+			<li>
+				<ChainMark mark={row.mark} />
+				<span class="text">
+					<span class="name">{row.name}</span>
+					<span class="status neutral">{row.detail}</span>
+				</span>
+			</li>
+		{/each}
+	</ul>
+{/if}
+
 <style>
 	.summary {
 		margin: 0 0 var(--space-xl);

@@ -252,8 +252,8 @@ describe('desktop canon (zh DC mocks verbatim)', () => {
 		expect(m.initialPanel).toBe('contact-detail');
 		expect(m.panelTitle).toBe('联系人');
 		expect(m.selectedContact).toBe('Alice');
-		expect(m.detail.editLabel).toBe('编辑');
-		expect(m.detail.deleteLabel).toBe('删除联系人');
+		expect(m.detail?.editLabel).toBe('编辑');
+		expect(m.detail?.deleteLabel).toBe('删除联系人');
 		expect(m.forceOverlay).toBe(false);
 	});
 
@@ -343,7 +343,7 @@ describe('en resolves too (US4: no key leaks, locale switch re-renders)', () => 
 		expect(d.rail.allLabel).toBe('All contacts');
 		expect(d.title).not.toContain('.');
 		// Names and addresses are data — identical in every locale.
-		expect(d.detail.contact.name).toBe('Alice');
-		expect(d.detail.contact.addressFull).toBe(CONTACTS[0].addressFull);
+		expect(d.detail?.contact.name).toBe('Alice');
+		expect(d.detail?.contact.addressFull).toBe(CONTACTS[0].addressFull);
 	});
 });

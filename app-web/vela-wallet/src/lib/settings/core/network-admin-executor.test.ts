@@ -22,6 +22,12 @@ vi.mock('$lib/onboarding/core/storage', () => ({
 	})
 }));
 
+const indexRows: { rows: unknown[] } = { rows: [] };
+vi.mock('$lib/services/chain-registry', () => ({
+	loadSearchIndex: vi.fn(async () => indexRows.rows),
+	fetchRawChainData: vi.fn(async () => null)
+}));
+
 import {
 	executeNetworkAdminOperation,
 	networkAdminOperationFailure
@@ -182,5 +188,36 @@ describe('the failure twin', () => {
 			effect({ type: 'fetch_service_health', field: 'passkey_index', base_url: 'https://x' })
 		);
 		expect(result).toMatchObject({ type: 'service_health', body: { type: 'failed' } });
+	});
+});
+
+describe('fetch_search_index', () => {
+	it('drops a row whose chain id the core cannot represent instead of poisoning the whole index', async () => {
+		indexRows.rows = [
+			{
+				chainId: 1,
+				name: 'Ethereum',
+				shortName: 'eth',
+				nativeCurrencySymbol: 'ETH',
+				hasLogo: true
+			},
+			// The live index's first over-u32 id: one row, and serde used to refuse ALL of them.
+			{ chainId: 7078815900, name: 'Mezo Matsnet', shortName: 'mezo', nativeCurrencySymbol: 'BTC' },
+			{ chainId: '100', name: 'Gnosis', shortName: 'gno', nativeCurrencySymbol: 'XDAI' },
+			{ chainId: -5, name: 'Nope' },
+			{ chainId: 1.5, name: 'Nope' },
+			{ chainId: 'abc', name: 'Nope' }
+		];
+		const result = await executeNetworkAdminOperation(effect({ type: 'fetch_search_index' }));
+		expect(result.type).toBe('search_index');
+		if (result.type !== 'search_index') throw new Error('unreachable');
+		expect(result.chains.map((c) => c.chain_id)).toEqual([1, 100]);
+		expect(result.chains[0]).toEqual({
+			chain_id: 1,
+			name: 'Ethereum',
+			short_name: 'eth',
+			native_currency_symbol: 'ETH',
+			has_logo: true
+		});
 	});
 });

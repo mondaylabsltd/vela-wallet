@@ -43,10 +43,13 @@ pub mod batch_import;
 pub mod browser_history;
 pub mod clear_signing;
 pub mod contacts;
+pub mod contacts_initials;
+pub mod contacts_io;
 pub mod create_wallet;
 pub mod dapp_permissions;
 pub mod dapp_session;
 pub mod display_currency;
+pub mod explore_sites;
 pub mod ext_cache;
 pub mod fee_policy;
 pub mod login;
@@ -125,7 +128,7 @@ pub struct Assertion {
 /// One passkey of a wallet, in canonical founding order. `keys[0]` is the
 /// pinned key that signs through the shared `WEBAUTHN_SIGNER`; every later key
 /// signs through its own counterfactual signer proxy.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct AccountKey {
     pub credential_id: String,
@@ -149,8 +152,13 @@ pub struct AccountKey {
 /// of its first key, and a legacy record simply has no `keys` at all. Only
 /// [`Account::key_hexes`] / [`Account::matches_credential`] may interpret this
 /// duality — everything else asks them.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
+/// Spec 048: the retired client wrote these records in camelCase at the same
+/// web origin the current shell now serves (`publicKeyHex`, `createdAt`,
+/// `keys[].credentialId`). The hand-written reader below accepts that
+/// spelling; only snake_case is ever written, and the web rewrites an old list
+/// once it has read it.
 pub struct Account {
     pub id: String,
     pub name: String,
@@ -183,7 +191,7 @@ impl Account {
 }
 
 /// One draft key inside a multi-member [`PendingUpload`], founding order.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct PendingUploadMember {
     pub credential_id: String,
@@ -204,7 +212,7 @@ pub struct PendingUploadMember {
 /// `members` and the scalars are the whole story). A record with
 /// `members.len() > 1` must never be retried silently — replaying the publish
 /// takes one passkey prompt per member.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct PendingUpload {
     pub id: String,
@@ -222,6 +230,168 @@ pub struct PendingUpload {
     /// Full founding key set. Empty ⇒ legacy single-key record.
     #[serde(default)]
     pub members: Vec<PendingUploadMember>,
+}
+
+// ---------------------------------------------------------------------------
+// Spec 048: the retired client's spelling
+//
+// The retired client wrote these records in camelCase at the same web origin
+// the current shell now serves (`publicKeyHex`, `createdAt`,
+// `keys[].credentialId`). Each reader below accepts both spellings and the
+// writers above emit snake_case only. Written by hand rather than with
+// `#[serde(alias)]`, which ts-rs cannot parse and reports as a warning that
+// CI's clippy gate turns into an error.
+// ---------------------------------------------------------------------------
+
+fn either<E: serde::de::Error>(
+    snake: Option<String>,
+    camel: Option<String>,
+    field: &'static str,
+) -> Result<String, E> {
+    snake.or(camel).ok_or_else(|| E::missing_field(field))
+}
+
+impl<'de> Deserialize<'de> for AccountKey {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            credential_id: Option<String>,
+            #[serde(rename = "credentialId")]
+            credential_id_camel: Option<String>,
+            public_key_hex: Option<String>,
+            #[serde(rename = "publicKeyHex")]
+            public_key_hex_camel: Option<String>,
+            #[serde(default)]
+            name: String,
+            #[serde(default)]
+            transports: String,
+        }
+        let w = Wire::deserialize(d)?;
+        Ok(AccountKey {
+            credential_id: either(w.credential_id, w.credential_id_camel, "credential_id")?,
+            public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
+            name: w.name,
+            transports: w.transports,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Account {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            id: String,
+            #[serde(default)]
+            name: String,
+            address: String,
+            public_key_hex: Option<String>,
+            #[serde(rename = "publicKeyHex")]
+            public_key_hex_camel: Option<String>,
+            created_at_iso: Option<String>,
+            #[serde(rename = "createdAt")]
+            created_at_camel: Option<String>,
+            #[serde(default)]
+            keys: Vec<AccountKey>,
+        }
+        let w = Wire::deserialize(d)?;
+        Ok(Account {
+            id: w.id,
+            name: w.name,
+            address: w.address,
+            public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
+            created_at_iso: either(w.created_at_iso, w.created_at_camel, "created_at_iso")?,
+            keys: w.keys,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for PendingUploadMember {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            credential_id: Option<String>,
+            #[serde(rename = "credentialId")]
+            credential_id_camel: Option<String>,
+            #[serde(default)]
+            name: String,
+            public_key_hex: Option<String>,
+            #[serde(rename = "publicKeyHex")]
+            public_key_hex_camel: Option<String>,
+            attestation_object_hex: Option<String>,
+            #[serde(rename = "attestationObjectHex")]
+            attestation_object_hex_camel: Option<String>,
+            #[serde(default)]
+            authenticator_attachment: String,
+            #[serde(default, rename = "authenticatorAttachment")]
+            authenticator_attachment_camel: String,
+            #[serde(default)]
+            transports: String,
+        }
+        let w = Wire::deserialize(d)?;
+        Ok(PendingUploadMember {
+            credential_id: either(w.credential_id, w.credential_id_camel, "credential_id")?,
+            name: w.name,
+            public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
+            attestation_object_hex: either(
+                w.attestation_object_hex,
+                w.attestation_object_hex_camel,
+                "attestation_object_hex",
+            )?,
+            authenticator_attachment: if w.authenticator_attachment.is_empty() {
+                w.authenticator_attachment_camel
+            } else {
+                w.authenticator_attachment
+            },
+            transports: w.transports,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for PendingUpload {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Wire {
+            id: String,
+            #[serde(default)]
+            name: String,
+            public_key_hex: Option<String>,
+            #[serde(rename = "publicKeyHex")]
+            public_key_hex_camel: Option<String>,
+            attestation_object_hex: Option<String>,
+            #[serde(rename = "attestationObjectHex")]
+            attestation_object_hex_camel: Option<String>,
+            created_at_iso: Option<String>,
+            #[serde(rename = "createdAt")]
+            created_at_camel: Option<String>,
+            #[serde(default)]
+            authenticator_attachment: String,
+            #[serde(default, rename = "authenticatorAttachment")]
+            authenticator_attachment_camel: String,
+            #[serde(default)]
+            transports: String,
+            #[serde(default)]
+            members: Vec<PendingUploadMember>,
+        }
+        let w = Wire::deserialize(d)?;
+        Ok(PendingUpload {
+            id: w.id,
+            name: w.name,
+            public_key_hex: either(w.public_key_hex, w.public_key_hex_camel, "public_key_hex")?,
+            attestation_object_hex: either(
+                w.attestation_object_hex,
+                w.attestation_object_hex_camel,
+                "attestation_object_hex",
+            )?,
+            created_at_iso: either(w.created_at_iso, w.created_at_camel, "created_at_iso")?,
+            authenticator_attachment: if w.authenticator_attachment.is_empty() {
+                w.authenticator_attachment_camel
+            } else {
+                w.authenticator_attachment
+            },
+            transports: w.transports,
+            members: w.members,
+        })
+    }
 }
 
 /// One member passkey to include in a possession-proven registry publish, in

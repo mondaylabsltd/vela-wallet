@@ -10,7 +10,7 @@
  * and the vitest drift gate re-runs the pure generators for the same guarantee.
  *
  * Web additions (tokens the export lacks) live in WEB_ADDITIONS below with the
- * design-system.md rule that licenses each; nothing else may invent a value.
+ * docs/design-system.md rule that licenses each; nothing else may invent a value.
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -22,11 +22,11 @@ const SOURCE = join(APP_ROOT, '..', '..', 'docs', 'design-tokens.json');
 const OUT_CSS = join(APP_ROOT, 'src', 'lib', 'tokens', 'tokens.css');
 const OUT_TS = join(APP_ROOT, 'src', 'lib', 'tokens', 'tokens.ts');
 
-/** design-system.md §Layout names these; the DTCG export does not carry them. */
+/** docs/design-system.md §Layout names these; the DTCG export does not carry them. */
 const WEB_ADDITIONS = [
-	['size-control-sm', '36px', 'sizing.control.sm per design-system.md'],
-	['size-control-md', '44px', 'sizing.control.md per design-system.md'],
-	['size-control-lg', '52px', 'sizing.control.lg per design-system.md'],
+	['size-control-sm', '36px', 'sizing.control.sm per docs/design-system.md'],
+	['size-control-md', '44px', 'sizing.control.md per docs/design-system.md'],
+	['size-control-lg', '52px', 'sizing.control.lg per docs/design-system.md'],
 	['breakpoint-desktop', '1280px', 'feature 006 responsive contract'],
 	[
 		'breakpoint-contactsOverlay',
@@ -70,6 +70,11 @@ const WEB_ADDITIONS = [
 		'layout-onboardingColumn',
 		'520px',
 		'spec 019: the screen column beside the rail. Content ends where it ends there; the mobile layout anchors its CTA to the bottom of the viewport, which is a phone pattern and stays on phones'
+	],
+	[
+		'layout-frameMax',
+		'1920px',
+		'spec 038 T078: the widest the signed-in frame and the onboarding frame grow before centring on the page ground. The mocks were drawn at 1440 and every column in them is left-anchored; on a 4 K display that left three quarters of the screen empty. 1920 keeps the composition the mocks drew and lets it sit in the middle of anything wider'
 	],
 	[
 		'layout-onboardingFrameGutter',
@@ -136,6 +141,11 @@ const WEB_ADDITIONS = [
 		'layout-settingsDialogW',
 		'520px',
 		'spec 023: the centred desktop dialog (DST4b / DSR1), measured 520 — wide enough for a URL in the mono face without becoming a second page'
+	],
+	[
+		'layout-promptCard',
+		'440px',
+		'spec 019: the centred prompt card past the desktop breakpoint (PromptSheet, SignOutSheet, IdenticonViewer). Spec 019 recorded declaring it and never did, so every prompt card read `max-width: var(--layout-promptCard)` as invalid and spanned the whole window (founder-found 2026-09-05). 440 holds a 42-character address in the mono face on one line with the card padding, and stays a card rather than a page'
 	],
 	[
 		'layout-flowColumn',
@@ -226,7 +236,7 @@ const WEB_ADDITIONS = [
 	['opacity-hover', '0.92', 'pointer hover feedback; no export token exists for hover']
 ];
 
-/** Composite stacks: export families + design-system.md CJK/system fallbacks. */
+/** Composite stacks: export families + docs/design-system.md CJK/system fallbacks. */
 const FONT_UI = "'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif";
 const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -312,7 +322,7 @@ export function generateCss(tokens = loadTokens()) {
    is dark, and browsers without prefers-color-scheme support get dark. */
 :root {
 ${declsFor(core)}
-\t--font-ui: ${FONT_UI}; /* web addition: design-system.md CJK fallback */
+\t--font-ui: ${FONT_UI}; /* web addition: docs/design-system.md CJK fallback */
 \t--font-mono: ${FONT_MONO}; /* web addition: mono fallbacks */
 ${additions}
 ${declsFor(dark)}

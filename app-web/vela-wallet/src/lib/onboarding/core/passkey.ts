@@ -61,7 +61,10 @@ export type Assertion = {
 export function relyingPartyId(): string {
 	if (typeof window === 'undefined') return RELYING_PARTY_NATIVE;
 
-	// The WebAuthn proxy extension sets this so rpId stays consistent across
+	// A dev tool may set this global to pin the rpId (the WebAuthn proxy
+	// extension that used to live in this repo did; it was deleted in spec 039,
+	// the seam stays because it costs nothing and lets a future tool do the same)
+	// so rpId stays consistent across
 	// both the ceremony and the registry queries that look keys up by it.
 	const proxied = (window as unknown as { __VELA_WEBAUTHN_PROXY_RPID__?: string })
 		.__VELA_WEBAUTHN_PROXY_RPID__;

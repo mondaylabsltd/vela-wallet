@@ -1,9 +1,11 @@
 import { error } from '@sveltejs/kit';
 import {
+	resolveSettingsMessages,
 	resolveSigningMessages,
 	resolveWalletFlowMessages,
 	resolveWalletMessages
 } from '$lib/i18n/engine.server';
+import { pickRescueMessages } from '$lib/settings/live';
 import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
 import { buildDesktopState, buildMobileState } from '$lib/wallet/fixtures';
 import { buildDesktopFlowState, buildDesktopScan, buildFlowState } from '$lib/flows/fixtures';
@@ -31,6 +33,7 @@ export const load: PageServerLoad = ({ params }) => {
 	const locale = toLocale(params.locale ?? '');
 	if (locale === undefined) error(404, `unsupported locale "${params.locale}"`);
 	const messages = resolveWalletMessages(locale);
+	const settingsMessages = resolveSettingsMessages(locale);
 
 	const home = buildMobileState('h1', messages, identiconSvgFor);
 	const desktop = buildDesktopState('d1', messages, identiconSvgFor);
@@ -69,6 +72,13 @@ export const load: PageServerLoad = ({ params }) => {
 		// boards are built from, so a live sheet and its drawn twin cannot
 		// disagree about a word.
 		signingMessages: resolveSigningMessages(locale),
-		desktopScan: buildDesktopScan(flowMessages)
+		desktopScan: buildDesktopScan(flowMessages),
+		// The rescue sheets (spec 028 Phase 8) are settings components opened
+		// over the wallet and the send; they speak the settings corpus, and only
+		// the slice they need ships with this page.
+		rescueMessages: pickRescueMessages(settingsMessages),
+		// The account switcher behind the header's name (founder call,
+		// 2026-09-05) is the settings sheet, so it speaks that corpus too.
+		accountsMessages: settingsMessages.accounts
 	};
 };

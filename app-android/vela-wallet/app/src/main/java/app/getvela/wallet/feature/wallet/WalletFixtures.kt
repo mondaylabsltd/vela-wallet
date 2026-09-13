@@ -7,7 +7,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 /**
  * Canonical wallet-home fixtures (spec 015, data-model.md — the single canon
  * all four platforms port; Android port of the web's `fixtures.ts`). Content is
- * verbatim from the `design/wallet/` mocks (FR-012); builders merge it with
+ * verbatim from the `docs/design/wallet/` mocks (FR-012); builders merge it with
  * resolved corpus strings into display-ready view models. Pure data + assembly:
  * no fetching, no formatting rules, no business state.
  *

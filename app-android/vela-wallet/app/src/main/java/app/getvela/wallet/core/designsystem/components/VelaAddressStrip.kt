@@ -1,6 +1,8 @@
 package app.getvela.wallet.core.designsystem.components
 
 import androidx.compose.foundation.background
+import app.getvela.wallet.core.platform.Clipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,9 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -51,7 +51,7 @@ fun VelaAddressStrip(
     modifier: Modifier = Modifier,
 ) {
     val colors = VelaTheme.colors
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var copied by remember(address) { mutableStateOf(false) }
     LaunchedEffect(copied) {
         if (copied) {
@@ -66,8 +66,7 @@ fun VelaAddressStrip(
             .clip(RoundedCornerShape(VelaRadius.lg))
             .background(colors.bgSunken)
             .clickable(role = Role.Button, onClickLabel = copyLabel) {
-                clipboard.setText(AnnotatedString(address))
-                copied = true
+                if (Clipboard.copy(context, "address", address)) copied = true
             }
             .heightIn(min = VelaSizing.controlLg)
             .padding(horizontal = VelaSpacing.xl),

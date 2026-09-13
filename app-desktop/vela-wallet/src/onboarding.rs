@@ -41,12 +41,13 @@ use crate::executor::{
     registry, storage,
 };
 use crate::hardware;
-use crate::icons::IconCache;
 use crate::identicon::IdenticonCache;
+use crate::intro;
 use crate::loc::Loc;
 use crate::onboarding_flow::{self, FLOW_STEPS, FlowEvent, FlowHost, FlowSink, render_create_flow};
 use crate::outcome::{ActionId, Prompt, SHEET_PAD, SHEET_RADIUS, SHEET_W, outcome_sheet};
 use crate::passkey_directory::{self, PasskeyDirectory};
+use crate::passkey_icons::PasskeyIconCache;
 use crate::session;
 use crate::theme::{
     self, CONTENT_PAD_X, CONTENT_PAD_Y, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA,
@@ -110,12 +111,15 @@ pub struct OnboardingPage {
     launch: Option<LaunchAnimation>,
     /// The DONE card's avatar (spec 015 D1's rasterizer, reused).
     identicons: RefCell<IdenticonCache>,
-    /// The rail's settings glyph.
-    icons: IconCache,
+    /// The method rows' marks (spec 038).
+    passkey_icons: RefCell<PasskeyIconCache>,
     /// Names and marks for models the compiled catalog cannot name — asked
     /// once per AAGUID, from the render pass that first needs one.
     directory: RefCell<PasskeyDirectory>,
 
+    /// The first-run intro is up (spec 038). `None` once left — or on every
+    /// run after the first, unless `VELA_INTRO=1` asks for it.
+    intro: Option<intro::IntroState>,
     /// The create journey has taken over the page.
     creating: bool,
     create: CoreHost<CreateWallet>,
@@ -141,6 +145,13 @@ pub struct OnboardingPage {
     /// The key offered several wallets and one has to be chosen.
     pick: Option<Vec<CredentialChoice>>,
     endpoint: Option<EndpointSurface>,
+    /// The person closed the endpoint card the probe had opened. Recorded
+    /// HERE rather than as `endpoint == None`, because `None` is also the
+    /// state that makes the probe open it again — which is exactly what made
+    /// Close hand the card straight back (spec 038 finding 6). Cleared by a
+    /// re-probe (`save_endpoint` → `Event::Start`), so a new answer from the
+    /// index is allowed to raise it once more.
+    endpoint_dismissed: bool,
     /// Whether the ceremony-channel poll is running.
     ///
     /// A bool, NOT the `Task`. gpui cancels a task when its handle is dropped,
@@ -193,7 +204,13 @@ impl OnboardingPage {
         let login_view = login.view();
 
         let mut page = Self {
-            launch: if theme::launch_disabled() {
+            // Spec 038: the 7-day replay window the web has had since spec 012.
+            // Before this the desktop played it on EVERY start.
+            launch: if theme::launch_disabled()
+                || !theme::launch_due(
+                    storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
+                    crate::executor::now_ms(),
+                ) {
                 None
             } else {
                 Some(LaunchAnimation::new(mode, cx))
@@ -202,8 +219,15 @@ impl OnboardingPage {
             loc,
             focus_handle,
             identicons: RefCell::default(),
-            icons: IconCache::default(),
+            passkey_icons: RefCell::default(),
             directory: RefCell::default(),
+            intro: if std::env::var("VELA_INTRO").as_deref() == Ok("1")
+                || storage::read_epoch_ms(theme::INTRO_SEEN_KEY).is_none()
+            {
+                Some(intro::IntroState::default())
+            } else {
+                None
+            },
             creating: false,
             create,
             create_view,
@@ -213,6 +237,7 @@ impl OnboardingPage {
             signin_methods_open: false,
             login,
             login_view,
+            endpoint_dismissed: false,
             channel: CeremonyChannel::new(),
             window_handle: native_window_handle(window),
             prompt: None,
@@ -256,6 +281,31 @@ impl OnboardingPage {
             .login
             .dispatch(vela_core::app::login::Event::SignIn { method });
         self.pump_login(pending, cx);
+        cx.notify();
+    }
+
+    /// One intro event. The state decides; the page marks it seen and routes.
+    fn on_intro_event(
+        &mut self,
+        event: intro::IntroEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(state) = self.intro.as_mut() else {
+            return;
+        };
+        if let Some(exit) = state.apply(event) {
+            // Seen: whichever way this ends, they have read it. Marked on the
+            // press rather than on success, so a cancelled passkey prompt
+            // drops them on Welcome, not back into the introduction.
+            storage::write_epoch_ms(theme::INTRO_SEEN_KEY, crate::executor::now_ms());
+            self.intro = None;
+            match exit {
+                intro::IntroExit::Skip => {}
+                intro::IntroExit::Create => self.start_create(cx),
+                intro::IntroExit::SignIn => self.signin_methods_open = true,
+            }
+        }
         cx.notify();
     }
 
@@ -528,6 +578,9 @@ impl OnboardingPage {
         let Some(surface) = self.endpoint.take() else {
             return;
         };
+        // Pointing somewhere new is a fresh question to the index; its answer
+        // may open the card again.
+        self.endpoint_dismissed = false;
         registry::set_registry_url(&surface.url);
         // Persisted through the same file every other setting lives in. A write
         // failure is not fatal — the endpoint is already applied in memory —
@@ -562,7 +615,7 @@ impl OnboardingPage {
     /// The welcome, beside the rail. The brand is not here any more — it is in
     /// the rail, where it stays for the whole journey — so this is the hero,
     /// the line under it, and the two ways in.
-    fn welcome(&self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+    fn welcome(&self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
         let mut top = div()
             .flex()
             .flex_col()
@@ -599,7 +652,19 @@ impl OnboardingPage {
         // decides that, not this screen — so this only says so, and offers the
         // surface that can fix it. It belongs to the copy block: hung off the
         // buttons it would float in the middle of the page.
-        if self.login_view.endpoint_unreachable {
+        if self.login_view.transport_failed {
+            // This machine could not get out — the person's network, not our
+            // service. A different endpoint would not help, so no card and
+            // no click (spec 038 SC-421).
+            top = top.child(
+                div()
+                    .id("transport-warning")
+                    .text_size(theme::text_flow_caption())
+                    .line_height(theme::line_height_body())
+                    .text_color(theme.warning_base)
+                    .child(self.loc.t("onboarding.common.networkBody")),
+            );
+        } else if self.login_view.endpoint_unreachable {
             top = top.child(
                 div()
                     .id("endpoint-warning")
@@ -644,6 +709,7 @@ impl OnboardingPage {
                 }),
             ));
 
+        let endpoint = self.endpoint_surface(theme, window, cx);
         div()
             .w_full()
             .max_w(px(FLOW_COLUMN_W))
@@ -651,6 +717,7 @@ impl OnboardingPage {
             .flex_col()
             .child(top)
             .child(buttons.mt(px(GAP_HERO_CTA)))
+            .children(endpoint)
     }
 
     // -- overlays -----------------------------------------------------------
@@ -689,6 +756,7 @@ impl OnboardingPage {
         let card = hardware::signin_method_card(
             theme,
             &self.loc,
+            &self.passkey_icons,
             on_pick,
             cx.listener(|this, _, _, cx| {
                 this.signin_methods_open = false;
@@ -845,12 +913,16 @@ impl OnboardingPage {
                         theme,
                         cx.listener(|this, _, _, cx| {
                             this.endpoint = None;
+                            this.endpoint_dismissed = true;
                             cx.notify();
                         }),
                     )),
             );
 
-        Some(scrim(theme, "endpoint-scrim").child(card))
+        // A card under the two ways in, not a scrim over them: the endpoint
+        // is a setting, and a setting must never stand between a person and
+        // the front door (spec 038 SC-420).
+        Some(card.id("endpoint-card").mt(px(FLOW_GAP_LG)))
     }
 }
 
@@ -861,7 +933,7 @@ impl OnboardingPage {
 /// that dialog take focus and sit in the right place. gpui implements
 /// `raw_window_handle`, so this is a read rather than the 1×1 helper window a
 /// library without a window of its own has to invent.
-fn native_window_handle(window: &Window) -> WindowHandle {
+pub(crate) fn native_window_handle(window: &Window) -> WindowHandle {
     #[cfg(windows)]
     {
         use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -969,6 +1041,21 @@ impl OnboardingPage {
 impl Render for OnboardingPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::of(self.mode);
+        // A survived panic (spec 038): the ordinary failure sheet, "Something
+        // went wrong", with the report behind the disclosure. Effect id 0
+        // resolves nothing when the sheet closes — there is no effect.
+        if self.prompt.is_none()
+            && let Some(detail) = crate::panic_report::take()
+        {
+            self.prompt = Some((
+                Machine::Login,
+                Prompt::new(
+                    vela_core::app::PromptKind::CreateFailed { detail },
+                    false,
+                    0,
+                ),
+            ));
+        }
         let tiling = frame_tiling(window);
 
         // A modal takes the keyboard on the frame it appears, and only then:
@@ -985,8 +1072,14 @@ impl Render for OnboardingPage {
             }
         }
 
-        // Opened by the probe, once. A person who dismissed it has answered.
-        if self.login_view.endpoint_unreachable && self.endpoint.is_none() && !self.creating {
+        // Opened by the probe, once. A person who dismissed it has answered —
+        // and stays answered until the index is asked again.
+        if endpoint_should_auto_open(
+            self.login_view.endpoint_unreachable && !self.login_view.transport_failed,
+            self.endpoint.is_some(),
+            self.endpoint_dismissed,
+            self.creating,
+        ) {
             self.open_endpoint(true, cx);
         }
 
@@ -998,6 +1091,7 @@ impl Render for OnboardingPage {
             });
             let host = FlowHost {
                 theme: &theme,
+                passkey_icons: &self.passkey_icons,
                 loc: &self.loc,
                 view: &self.create_view,
                 name_focus: &self.name_focus,
@@ -1009,7 +1103,20 @@ impl Render for OnboardingPage {
             };
             render_create_flow(&host, window)
         } else {
-            self.welcome(&theme, cx)
+            if self.intro.is_some() {
+                let entity = cx.entity();
+                let sink: intro::IntroSink = Rc::new(move |event, window, cx| {
+                    entity.update(cx, |page, cx| page.on_intro_event(event, window, cx));
+                });
+                // Two disjoint fields borrowed at once — the state mutably
+                // (the art cache), the strings immutably.
+                match self.intro.as_mut() {
+                    Some(state) => intro::render_intro(state, &theme, &self.loc, sink),
+                    None => self.welcome(&theme, window, cx),
+                }
+            } else {
+                self.welcome(&theme, window, cx)
+            }
         };
 
         // The rail's slot. Inside the journey it names the step; outside it —
@@ -1027,13 +1134,7 @@ impl Render for OnboardingPage {
             },
             _ => RailSlot::Tagline(self.loc.t("onboarding.welcome.desktopTagline")),
         };
-        let rail = onboarding_rail(
-            &theme,
-            &mut self.icons,
-            slot,
-            self.loc.t("onboarding.settings.title"),
-            cx.listener(|this, _, _, cx| this.open_endpoint(false, cx)),
-        );
+        let rail = onboarding_rail(&theme, slot);
 
         // The screen column: left-aligned beside the rail, at its natural
         // height. The welcome is the one screen that centres — it is a cover,
@@ -1078,6 +1179,7 @@ impl Render for OnboardingPage {
         let mut root = div()
             .size_full()
             .relative()
+            .font_family(theme::font_ui())
             .bg(theme.bg_base)
             .child(page.opacity(page_opacity));
 
@@ -1110,9 +1212,6 @@ impl Render for OnboardingPage {
         if let Some(dialog) = self.pin_dialog(&theme, window, cx) {
             root = root.child(dialog);
         }
-        if let Some(surface) = self.endpoint_surface(&theme, window, cx) {
-            root = root.child(surface);
-        }
 
         let draws_titlebar = owns_titlebar(window);
         let root = match tiling {
@@ -1121,7 +1220,7 @@ impl Render for OnboardingPage {
         };
         let root = root
             .track_focus(&self.focus_handle)
-            .on_key_down(cx.listener(|_, event: &KeyDownEvent, window, _| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
                 let macos_chord = cfg!(target_os = "macos")
                     && ks.key == "f"
@@ -1129,6 +1228,17 @@ impl Render for OnboardingPage {
                     && ks.modifiers.platform;
                 if ks.key == "f11" || macos_chord {
                     window.toggle_fullscreen();
+                }
+                // The intro pages by keyboard too (spec 038 SC-416).
+                if this.intro.is_some() {
+                    let event = match ks.key.as_str() {
+                        "right" => Some(intro::IntroEvent::Next),
+                        "left" => Some(intro::IntroEvent::Prev),
+                        _ => None,
+                    };
+                    if let Some(event) = event {
+                        this.on_intro_event(event, window, cx);
+                    }
                 }
             }));
         let root = if draws_titlebar {
@@ -1139,7 +1249,11 @@ impl Render for OnboardingPage {
 
         let root = match overlay {
             None => {
-                self.launch = None;
+                // The animation has finished (or was never due). Record the
+                // finish ONCE — this arm runs every frame afterwards.
+                if self.launch.take().is_some() {
+                    storage::write_epoch_ms(theme::LAUNCH_PLAYED_KEY, crate::executor::now_ms());
+                }
                 root
             }
             Some(overlay) => {
@@ -1161,5 +1275,44 @@ impl Render for OnboardingPage {
         };
 
         window_frame(root, &theme, window)
+    }
+}
+
+/// Whether the probe's verdict should raise the endpoint card on this frame.
+///
+/// Pure, so the one rule that trapped the front door (spec 038 finding 6) is
+/// a unit test rather than a render pass: a dismissed card stays dismissed
+/// until a re-probe clears the flag, and the create journey never gets one.
+fn endpoint_should_auto_open(
+    unreachable: bool,
+    open: bool,
+    dismissed: bool,
+    creating: bool,
+) -> bool {
+    unreachable && !open && !dismissed && !creating
+}
+
+#[cfg(test)]
+mod endpoint_rule {
+    use super::endpoint_should_auto_open;
+
+    #[test]
+    fn opens_once_for_an_unreachable_index() {
+        assert!(endpoint_should_auto_open(true, false, false, false));
+        assert!(!endpoint_should_auto_open(false, false, false, false));
+        assert!(!endpoint_should_auto_open(true, true, false, false));
+    }
+
+    #[test]
+    fn close_means_closed_until_the_index_is_asked_again() {
+        // SC-419: the frame after Close must not re-open it …
+        assert!(!endpoint_should_auto_open(true, false, true, false));
+        // … and a re-probe (dismissed cleared) may.
+        assert!(endpoint_should_auto_open(true, false, false, false));
+    }
+
+    #[test]
+    fn never_during_the_create_journey() {
+        assert!(!endpoint_should_auto_open(true, false, false, true));
     }
 }

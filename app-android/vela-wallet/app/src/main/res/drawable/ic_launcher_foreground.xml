@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Adaptive-icon foreground layer: the Vela mark, transparent everywhere else.
-    Path data is verbatim from design/icon/app-mark.svg, whose viewBox is 68
+    Path data is verbatim from docs/design/icon/app-mark.svg, whose viewBox is 68
     units, mapped into Android's 108-unit viewport by the group below.
 
     THE GROUP TRANSFORM IS LOAD-BEARING. Mapping 68 units straight onto 108

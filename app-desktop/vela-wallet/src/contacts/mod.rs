@@ -7,6 +7,8 @@
 
 pub mod components;
 pub mod fixtures;
+pub mod live;
+pub mod model;
 
 use gpui::SharedString;
 
@@ -32,6 +34,24 @@ pub struct ContactsStrings {
     pub empty_hint: SharedString,
     pub import_file: SharedString,
     pub import_all: SharedString,
+    /// What an import actually did. Same four keys the RN screen alerts with —
+    /// an import that reports nothing is a feature that looks broken.
+    pub import_done_title: SharedString,
+    pub import_done_body: String,
+    pub import_fail_title: SharedString,
+    pub import_fail_body: SharedString,
+    /// The add/edit sheet. 030 called this "blocked on drawn UI that does not
+    /// exist" — the WORDS existed all along, and by 031 the app had a dialog
+    /// idiom and a text field to put them in.
+    pub add_title: SharedString,
+    pub edit_title: SharedString,
+    pub name_label: SharedString,
+    pub name_placeholder: SharedString,
+    pub address_placeholder: SharedString,
+    pub save: SharedString,
+    pub cancel: SharedString,
+    pub group_name_label: SharedString,
+    pub group_name_placeholder: SharedString,
     pub export_all: SharedString,
     pub import_group: SharedString,
     pub export_group: SharedString,
@@ -76,6 +96,19 @@ impl ContactsStrings {
             empty_hint: s("contacts.emptyHint"),
             import_file: s("contacts.importFile"),
             import_all: s("contacts.importAll"),
+            import_done_title: s("contacts.importDoneTitle"),
+            import_done_body: raw("contacts.importDoneBody"),
+            import_fail_title: s("contacts.importFailTitle"),
+            import_fail_body: s("contacts.importFailBody"),
+            add_title: s("contacts.addTitle"),
+            edit_title: s("contacts.editTitle"),
+            name_label: s("contacts.nameLabel"),
+            name_placeholder: s("contacts.namePlaceholder"),
+            address_placeholder: s("contacts.addressPlaceholder"),
+            save: s("contacts.save"),
+            cancel: s("contacts.cancel"),
+            group_name_label: s("contacts.groupNameLabel"),
+            group_name_placeholder: s("contacts.groupNamePlaceholder"),
             export_all: s("contacts.exportAll"),
             import_group: s("contacts.importGroup"),
             export_group: s("contacts.exportGroup"),
@@ -123,6 +156,16 @@ mod tests {
             (s.view_all_activity.as_ref(), "contacts.viewAllActivity"),
             (s.delete_contact.as_ref(), "contacts.deleteContact"),
             (s.action_qr.as_ref(), "contacts.actionQr"),
+            (s.import_done_title.as_ref(), "contacts.importDoneTitle"),
+            (s.import_done_body.as_str(), "contacts.importDoneBody"),
+            (s.import_fail_title.as_ref(), "contacts.importFailTitle"),
+            (s.import_fail_body.as_ref(), "contacts.importFailBody"),
+            (s.add_title.as_ref(), "contacts.addTitle"),
+            (s.edit_title.as_ref(), "contacts.editTitle"),
+            (s.name_label.as_ref(), "contacts.nameLabel"),
+            (s.save.as_ref(), "contacts.save"),
+            (s.cancel.as_ref(), "contacts.cancel"),
+            (s.group_name_label.as_ref(), "contacts.groupNameLabel"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
             assert!(!value.is_empty(), "`{key}` resolved empty");

@@ -478,12 +478,25 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
 
 // -- about --------------------------------------------------------------------
 
+/// The mock's version. NOT the app's — see [`about_version`].
 pub const APP_VERSION: &str = "1.0.0";
 pub const APP_COMMIT: &str = "6ab8f";
 
-pub fn about_version(s: &SettingsStrings) -> SharedString {
+/// The version line.
+///
+/// `live` reads `CARGO_PKG_VERSION`, because the panel said **v1.0.0 (6ab8f)**
+/// while the crate was 0.1.1 — and a bug report that quotes a version names one
+/// that does not exist. The COMMIT stays the mock's for now: there is no
+/// build-time git hash in this crate, and a made-up one is the half of that
+/// line that was already wrong.
+pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
+    let version = if live {
+        env!("CARGO_PKG_VERSION")
+    } else {
+        APP_VERSION
+    };
     SharedString::from(fill(
-        &fill(&s.about_version, "version", APP_VERSION),
+        &fill(&s.about_version, "version", version),
         "commit",
         APP_COMMIT,
     ))
@@ -561,4 +574,58 @@ pub fn network(id: &str) -> &'static NetworkFixture {
         .iter()
         .find(|n| n.id == id)
         .expect("settings fixture ids are internal constants")
+}
+
+/// The desktop 网络 rows as the mocks draw them.
+///
+/// An ADAPTER, not a new fixture: every value still comes from the constants
+/// above. It exists so the screen can take a `Vec<NetworkRowModel>` from either
+/// side of the seam and not know which.
+#[must_use]
+pub fn network_rows() -> Vec<crate::settings::model::NetworkRowModel> {
+    DESKTOP_NETWORK_IDS
+        .into_iter()
+        .map(|id| {
+            let n = network(id);
+            crate::settings::model::NetworkRowModel {
+                id: SharedString::from(n.id),
+                name: SharedString::from(n.name),
+                letter: SharedString::from(n.letter),
+                color: n.color,
+                chain_id: n.chain_id,
+                latency_ms: (!n.custom).then_some(n.latency_ms),
+                custom: n.custom,
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod row_adapter_tests {
+    use super::*;
+
+    /// The adapter must reproduce what `page.rs` drew before the seam existed,
+    /// value for value. If it does not, going live silently redrew a reviewed
+    /// screen — which is the failure spec 030 FR-003 is written against.
+    #[test]
+    fn the_row_adapter_reproduces_the_mock_exactly() {
+        let rows = network_rows();
+        assert_eq!(rows.len(), DESKTOP_NETWORK_IDS.len());
+        for (row, id) in rows.iter().zip(DESKTOP_NETWORK_IDS) {
+            let n = network(id);
+            assert_eq!(row.id, SharedString::from(n.id));
+            assert_eq!(row.name, SharedString::from(n.name));
+            assert_eq!(row.letter, SharedString::from(n.letter));
+            assert_eq!(row.color, n.color);
+            assert_eq!(row.chain_id, n.chain_id);
+            assert_eq!(row.custom, n.custom);
+            // The old code drew a badge for every non-custom row, and none for
+            // a custom one.
+            assert_eq!(
+                row.latency_ms,
+                (!n.custom).then_some(n.latency_ms),
+                "the badge rule moved"
+            );
+        }
+    }
 }

@@ -17,10 +17,11 @@
 		onclose?: () => void;
 		onconfirm?: () => void;
 		onchip?: (id: string) => void;
+		oncustom?: (text: string) => void;
 		onfee?: () => void;
 	}
 
-	let { model, onclose, onconfirm, onchip, onfee }: Props = $props();
+	let { model, onclose, onconfirm, onchip, oncustom, onfee }: Props = $props();
 </script>
 
 <svelte:window
@@ -34,7 +35,7 @@
 	<span class="handle" aria-hidden="true"></span>
 	<div class="scroll">
 		<SigningHeader dapp={model.dapp} network={model.network} />
-		<SigningBody {model} {onconfirm} {onchip} {onfee} />
+		<SigningBody {model} {onconfirm} {onchip} {oncustom} {onfee} />
 	</div>
 </div>
 

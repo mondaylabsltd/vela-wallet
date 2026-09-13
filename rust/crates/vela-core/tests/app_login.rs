@@ -46,6 +46,46 @@ fn authenticated() -> Sut {
 // Reachability probe (FR-023)
 // ---------------------------------------------------------------------------
 
+/// Spec 038: a probe that never left the machine is the person's network,
+/// not our service. The verdict carries that bit so the screen can say
+/// "check your network" and withhold the endpoint field.
+#[test]
+fn three_local_failures_say_this_machine_could_not_get_out() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    for _ in 0..3 {
+        if let [ShellOperation::Wait { .. }] =
+            sut.resolve(ShellResult::IndexTransportFailed).as_slice()
+        {
+            sut.resolve(ShellResult::Waited);
+        }
+    }
+    let view = sut.view();
+    assert!(view.endpoint_unreachable, "unreachable either way");
+    assert!(view.transport_failed, "and this time it is the machine");
+
+    // A remote failure on the LAST probe decides the sentence: the index was
+    // reached for by a route that existed, so no local claim.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexHealth { ok: false });
+    let view = sut.view();
+    assert!(view.endpoint_unreachable);
+    assert!(!view.transport_failed);
+
+    // Reachable clears both, as a re-probe after a fixed network would.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexHealth { ok: true });
+    assert!(!sut.view().transport_failed);
+}
+
 /// Three failed probes, spaced, before the endpoint settings are surfaced.
 #[test]
 fn three_failed_probes_declare_the_index_unreachable() {
@@ -837,5 +877,100 @@ fn an_uppercase_uuid_handle_still_yields_its_name() {
             );
         }
         other => panic!("expected a direct save, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spec 048: the retired client's records (camelCase, at the same web origin)
+// ---------------------------------------------------------------------------
+
+/// The same list `support::account` builds, re-spelt the way the retired
+/// client wrote it: `publicKeyHex`, `createdAt`, `keys[].credentialId`.
+/// `drop_keys` = a wallet from before the multi-key change (no `keys` at all).
+fn expo_spelling(accounts: Vec<vela_core::app::Account>, drop_keys: bool) -> ShellResult {
+    let mut value = serde_json::to_value(ShellResult::AccountsLoaded { accounts }).unwrap();
+    let list = value["accounts"].as_array_mut().unwrap();
+    for account in list.iter_mut() {
+        let object = account.as_object_mut().unwrap();
+        let pk = object.remove("public_key_hex").unwrap();
+        object.insert("publicKeyHex".into(), pk);
+        let created = object.remove("created_at_iso").unwrap();
+        object.insert("createdAt".into(), created);
+        let keys = object.remove("keys").unwrap();
+        if !drop_keys {
+            let keys: Vec<serde_json::Value> = keys
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|key| {
+                    let k = key.as_object().unwrap();
+                    serde_json::json!({
+                        "credentialId": k["credential_id"],
+                        "publicKeyHex": k["public_key_hex"],
+                        "name": k["name"],
+                    })
+                })
+                .collect();
+            object.insert("keys".into(), serde_json::Value::Array(keys));
+        }
+    }
+    let json = serde_json::to_string(&value).unwrap();
+    assert!(
+        json.contains("publicKeyHex") && !json.contains("public_key_hex"),
+        "{json}"
+    );
+    serde_json::from_str(&json).expect("the core reads the retired client's spelling")
+}
+
+#[test]
+fn an_expo_era_record_still_opens_the_wallet() {
+    let mut sut = authenticated();
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    let next = sut.resolve(expo_spelling(vec![stored.clone()], false));
+    match next.as_slice() {
+        [ShellOperation::CompleteOnboarding {
+            mode:
+                CompletionMode::SetWallet {
+                    accounts,
+                    active_index,
+                },
+        }] => {
+            assert_eq!(*active_index, 0);
+            assert_eq!(accounts[0].public_key_hex, stored.public_key_hex);
+            assert_eq!(accounts[0].created_at_iso, stored.created_at_iso);
+            assert_eq!(accounts[0].keys.len(), stored.keys.len());
+            if let Some(key) = accounts[0].keys.first() {
+                assert_eq!(key.credential_id, CRED);
+                assert_eq!(
+                    key.transports, "",
+                    "the old client never recorded where the key lives"
+                );
+            }
+        }
+        other => panic!("expected the wallet to open, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_expo_era_record_without_keys_still_opens_the_wallet() {
+    let mut sut = authenticated();
+    let stored = support::account(CRED, "Ann", "0x2222222222222222222222222222222222222222");
+    let next = sut.resolve(expo_spelling(vec![stored.clone()], true));
+    match next.as_slice() {
+        [ShellOperation::CompleteOnboarding {
+            mode:
+                CompletionMode::SetWallet {
+                    accounts,
+                    active_index,
+                },
+        }] => {
+            assert_eq!(*active_index, 0);
+            assert!(
+                accounts[0].keys.is_empty(),
+                "no keys list: the scalar fields are the key"
+            );
+            assert_eq!(accounts[0].public_key_hex, stored.public_key_hex);
+        }
+        other => panic!("expected the wallet to open, got {other:?}"),
     }
 }

@@ -199,7 +199,9 @@ pub fn group_members(group: usize) -> Vec<ContactFixture> {
 /// Third-column detail content: display-ready, straight from the canon.
 pub struct ContactDetailModel {
     pub name: SharedString,
-    pub seed: &'static str,
+    /// The identicon seed — the ADDRESS, always. Owned since 031, because a
+    /// live detail's seed is a real address rather than a `'static` literal.
+    pub seed: SharedString,
     /// Group-membership chips (家人); empty for ungrouped contacts.
     pub chips: Vec<SharedString>,
     pub address_full: SharedString,
@@ -209,7 +211,7 @@ pub struct ContactDetailModel {
 pub fn contact_detail(s: &ContactsStrings, c: &ContactFixture) -> ContactDetailModel {
     ContactDetailModel {
         name: c.name.into(),
-        seed: c.address_full,
+        seed: c.address_full.into(),
         chips: c.group.iter().map(|g| SharedString::from(*g)).collect(),
         address_full: c.address_full.into(),
         activity: if c.has_activity {
@@ -316,6 +318,41 @@ pub fn contact_context(s: &ContactsStrings) -> MenuModel {
             destructive(Icon::Trash2, s.delete.clone()),
         ],
         divider_after: Some(4),
+    }
+}
+
+/// Which groups this contact is in — the answer visible on every row.
+///
+/// A menu rather than a dialog with a Save button, for the reason the explore
+/// one is a menu: the question is "which of these", and a tick per row is the
+/// shortest way to both ask it and show the current answer. Every tap sends
+/// the WHOLE membership back (`SetContactGroups`), which is the event the core
+/// offers and the shape it normalises.
+pub fn contact_group_pick(groups: &[(SharedString, bool)]) -> MenuModel {
+    pick_menu(groups, Icon::UsersRound)
+}
+
+/// Which contacts this group holds — the same menu the other way round.
+///
+/// One shape for both directions, because they are one question asked from two
+/// screens, and two shapes would be two places to get the tick wrong.
+pub fn group_member_pick(contacts: &[(SharedString, bool)]) -> MenuModel {
+    pick_menu(contacts, Icon::UserRoundPlus)
+}
+
+fn pick_menu(rows: &[(SharedString, bool)], unpicked: Icon) -> MenuModel {
+    MenuModel {
+        divider_after: None,
+        items: rows
+            .iter()
+            .map(|(name, member)| MenuItemModel {
+                // The tick IS the state: `Check` for a row that is in the set,
+                // the neutral glyph for one that is not.
+                icon: if *member { Icon::Check } else { unpicked },
+                label: name.clone(),
+                destructive: false,
+            })
+            .collect(),
     }
 }
 
@@ -505,5 +542,79 @@ mod tests {
         let charlie = contact_detail(&s, &CONTACTS[4]);
         assert!(charlie.chips.is_empty());
         assert!(charlie.activity.is_empty());
+    }
+}
+
+/// The A–Z roster as the mocks draw it, in model form.
+///
+/// An ADAPTER, not a new fixture: every value comes from `CONTACTS` above. It
+/// exists so the screen takes the same shape from either side of the seam.
+#[must_use]
+pub fn sections_model() -> Vec<(SharedString, Vec<crate::contacts::model::ContactRowModel>)> {
+    sections()
+        .into_iter()
+        .map(|(letter, rows)| {
+            (
+                SharedString::from(letter),
+                rows.into_iter()
+                    .map(|c| crate::contacts::model::ContactRowModel {
+                        name: SharedString::from(c.name),
+                        address_display: SharedString::from(c.address_display),
+                        address_full: SharedString::from(c.address_full),
+                        section: SharedString::from(c.section),
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// One fixture contact in model form — for the gallery boards, which pick
+/// individual mocks rather than a whole roster.
+#[must_use]
+pub fn row_model(c: ContactFixture) -> crate::contacts::model::ContactRowModel {
+    crate::contacts::model::ContactRowModel {
+        name: SharedString::from(c.name),
+        address_display: SharedString::from(c.address_display),
+        address_full: SharedString::from(c.address_full),
+        section: SharedString::from(c.section),
+    }
+}
+
+/// A group's members in model form. The group screen stays fixture-driven in
+/// spec 030 — the core carries groups, but wiring the member list is the
+/// interaction work US2 scopes to the roster first.
+#[must_use]
+pub fn group_members_model(group: usize) -> Vec<crate::contacts::model::ContactRowModel> {
+    group_members(group)
+        .into_iter()
+        .map(|c| crate::contacts::model::ContactRowModel {
+            name: SharedString::from(c.name),
+            address_display: SharedString::from(c.address_display),
+            address_full: SharedString::from(c.address_full),
+            section: SharedString::from(c.section),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod row_adapter_tests {
+    use super::*;
+
+    /// The adapter must reproduce what the screen drew before the seam existed.
+    #[test]
+    fn the_roster_adapter_reproduces_the_mock_exactly() {
+        let plain = sections();
+        let model = sections_model();
+        assert_eq!(model.len(), plain.len());
+        for ((letter, rows), (m_letter, m_rows)) in plain.iter().zip(&model) {
+            assert_eq!(m_letter.as_ref(), *letter);
+            assert_eq!(m_rows.len(), rows.len());
+            for (c, m) in rows.iter().zip(m_rows) {
+                assert_eq!(m.name.as_ref(), c.name);
+                assert_eq!(m.address_display.as_ref(), c.address_display);
+                assert_eq!(m.address_full.as_ref(), c.address_full);
+            }
+        }
     }
 }

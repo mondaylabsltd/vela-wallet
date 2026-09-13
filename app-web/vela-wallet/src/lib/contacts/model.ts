@@ -122,6 +122,8 @@ export interface ContactDetailModel {
 	/** Desktop link below the rows (查看全部往来). */
 	activityLink: string;
 	rows: ActivityRowModel[];
+	/** Live only: the reused history empty state when the feed has no row for this contact. */
+	emptyActivity?: string;
 	editLabel: string;
 	deleteLabel: string;
 }
@@ -202,7 +204,6 @@ export interface ContactsDesktopModel {
 		nav: { id: 'wallet' | 'contacts' | 'explore' | 'settings'; label: string; selected: boolean }[];
 		networksTitle: string;
 		networks: ChainRowModel[];
-		searchPlaceholder: string;
 	};
 	title: string;
 	search: SearchModel;
@@ -214,7 +215,8 @@ export interface ContactsDesktopModel {
 	/** Present for the group view (dc4, dc6). */
 	group?: GroupDetailModel;
 	empty?: EmptyCtaModel;
-	detail: ContactDetailModel;
+	/** The third column's body — absent on a live page until a contact is chosen. */
+	detail?: ContactDetailModel;
 	panelTitle: string;
 	initialPanel: ContactsPanelId;
 	/** Which list row renders selected (the one the third column shows). */

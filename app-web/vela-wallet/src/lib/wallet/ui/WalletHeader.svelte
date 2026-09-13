@@ -6,32 +6,24 @@
 
 	interface Props {
 		header: WalletHeaderModel;
-		onclick?: () => void;
 		/**
-		 * Open the identicon viewer. The artwork is its own control, not part
-		 * of the name button: it answers a different question ("is this the
-		 * account I think it is?") and the founder's call is that it answers it
-		 * everywhere the artwork appears.
+		 * The name-and-chevron button: the account switcher (founder call,
+		 * 2026-09-05). Every signed-in account, and the two ways to add one.
+		 * Absent in the gallery, where the header is a picture.
 		 */
-		onidenticon?: () => void;
-		/** Accessible name for the artwork button; required to make it one. */
-		identiconLabel?: string;
+		onclick?: () => void;
 	}
 
-	let { header, onclick, onidenticon, identiconLabel }: Props = $props();
+	let { header, onclick }: Props = $props();
 </script>
 
 <div class="header">
 	<!-- Nested buttons are invalid, so the artwork and the name are siblings.
-	     Without a handler it stays a picture, which is what the gallery wants. -->
-	{#if onidenticon}
-		<button type="button" class="avatar" aria-label={identiconLabel} onclick={onidenticon}>
-			<Identicon svg={header.identiconSvg} size="header" />
-		</button>
-	{:else}
-		<Identicon svg={header.identiconSvg} size="header" />
-	{/if}
-	<button type="button" class="text" {onclick}>
+	     The artwork answers a different question ("is this the account I
+	     think it is?") and answers it through the resident viewer, wherever
+	     it is drawn; a header with no address yet stays a picture. -->
+	<Identicon svg={header.identiconSvg} size="header" address={header.addressFull} />
+	<button type="button" class="text" aria-haspopup="dialog" {onclick}>
 		<span class="name-row">
 			<span class="name">{header.name}</span>
 			<Icon icon={UTILITY_ICONS['chevron-down']} size="sm" />
@@ -46,15 +38,6 @@
 		align-items: center;
 		gap: var(--space-lg);
 		min-width: 0;
-	}
-
-	.avatar {
-		display: flex;
-		padding: 0;
-		border: none;
-		background: none;
-		cursor: pointer;
-		flex: none;
 	}
 
 	.text {

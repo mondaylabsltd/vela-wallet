@@ -38,6 +38,7 @@ import {
 	toHex
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
+import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import {
 	isFeeHold,
 	pollUserOpStatus,
@@ -1368,11 +1369,19 @@ async function sendUserOp(
 		maxFeePerGas: userOp.maxFeePerGas.toString()
 	});
 
-	// 8. Calculate SafeOp hash (EIP-712)
-	const safeOpHash = calculateSafeOpHash(userOp, chainId);
+	// 8. Calculate SafeOp hash (EIP-712) — and have the core attest it (spec 028
+	//    Phase 8). This path is handed finished calldata, so the core checks the
+	//    hash alone.
+	const safeOpHash = attestedSafeOpHash(
+		userOp,
+		chainId,
+		null,
+		calculateSafeOpHash(userOp, chainId)
+	);
 
-	// 9. Sign with passkey
+	// 9. Sign with passkey — and refuse an assertion over any other challenge.
 	const assertion = await signFn(safeOpHash);
+	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
 
 	// 10. Build real signature
 	const rawSig = derSignatureToRaw(assertion.signature);
@@ -1592,9 +1601,21 @@ async function sendUserOpTempo(
 	);
 
 	// Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
-	// stablecoin to charge for the outer 0x76.
-	const safeOpHash = calculateSafeOpHash(userOp, chainId);
+	// stablecoin to charge for the outer 0x76. The core rebuilds the batch from the
+	// calls and the reimbursement it was shown and attests the hash first (spec 028
+	// Phase 8); an assertion over any other challenge is discarded.
+	const safeOpHash = attestedSafeOpHash(
+		userOp,
+		chainId,
+		{
+			inner: innerCalls,
+			fee: { gasFeeToken: feeToken, recipient: feeCollector, amount: reimbursement },
+			alwaysMultiSend: true
+		},
+		calculateSafeOpHash(userOp, chainId)
+	);
 	const assertion = await signFn(safeOpHash);
+	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
 	const rawSig = derSignatureToRaw(assertion.signature);
 	if (!rawSig) {
 		throw new Error('Failed to create signature: DER to raw conversion failed');
@@ -1843,9 +1864,21 @@ async function sendUserOpInBand(
 	userOp.callData = buildBatch(feeAmount, feeRecipient);
 
 	// Sign the SafeOp (over the FINAL callData) and submit. No feeToken extension — that
-	// is Tempo-envelope-specific; the generic outer tx is a native raw tx.
-	const safeOpHash = calculateSafeOpHash(userOp, chainId);
+	// is Tempo-envelope-specific; the generic outer tx is a native raw tx. The core
+	// rebuilds the batch from the calls and the displayed fee and attests the hash
+	// first (spec 028 Phase 8); an assertion over any other challenge is discarded.
+	const safeOpHash = attestedSafeOpHash(
+		userOp,
+		chainId,
+		{
+			inner: innerCalls,
+			fee: { gasFeeToken, recipient: feeRecipient, amount: feeAmount },
+			alwaysMultiSend: true
+		},
+		calculateSafeOpHash(userOp, chainId)
+	);
 	const assertion = await signFn(safeOpHash);
+	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
 	const rawSig = derSignatureToRaw(assertion.signature);
 	if (!rawSig) {
 		throw new Error('Failed to create signature: DER to raw conversion failed');
@@ -2040,7 +2073,7 @@ export function buildInitCodeFor(signer: WalletSigner): Uint8Array {
 // SafeOp Hash (EIP-712)
 // ---------------------------------------------------------------------------
 
-function calculateSafeOpHash(userOp: UserOperation, chainId: number): Uint8Array {
+export function calculateSafeOpHash(userOp: UserOperation, chainId: number): Uint8Array {
 	const encoder = new TextEncoder();
 
 	const typeHash = keccak256(

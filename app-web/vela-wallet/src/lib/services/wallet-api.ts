@@ -295,6 +295,22 @@ interface TokenSlot {
 	knownDecimals: number | null;
 }
 
+/**
+ * Chains whose native asset is itself an ERC-20 — the chain data names that
+ * contract as the "wrapped" native, but nothing is wrapped: `balanceOf` and
+ * the native balance are one balance. Listing both doubles the holding.
+ */
+const NATIVE_TOKEN_AS_ERC20: Readonly<Record<number, string>> = {
+	// Celo mainnet — the GoldToken.
+	42220: '0x471ece3750da237f93b8e339c536989b8978a438',
+	// Celo Alfajores.
+	44787: '0xf194afdf50b03e69bd7d057c1aa9e10c9954e4c9'
+};
+
+export function wrappedNativeIsTheNative(chainId: number, wrappedNative: string): boolean {
+	return NATIVE_TOKEN_AS_ERC20[chainId] === wrappedNative.toLowerCase();
+}
+
 async function queryChainAssets(
 	address: string,
 	chainId: number,
@@ -334,7 +350,12 @@ async function queryChainAssets(
 	}
 
 	// --- Wrapped native token ---
-	if (wrappedNative) {
+	// Not on a chain whose "wrapped" native IS the native (spec 038, the
+	// founder's Celo report): CELO is an ERC-20 at the GoldToken address, so
+	// the native balance call and the token's balanceOf return the SAME
+	// coins, and the list read CELO 6.96 + WCELO 6.96 — counted twice in the
+	// total. The address still quotes the native price below.
+	if (wrappedNative && !wrappedNativeIsTheNative(chainId, wrappedNative)) {
 		addSlot(
 			'wrapped',
 			'W' + nativeCurrency.symbol,

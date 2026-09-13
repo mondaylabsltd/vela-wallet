@@ -275,6 +275,13 @@ object I18nKeys {
         const val LIVE_INDICATOR = "home.liveIndicator"
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
+        /**
+         * The hero's reason when a first load could read nothing and nothing is
+         * cached (#188, spec 038 finding 15). Borrowed from the onboarding
+         * flow's network line — the same key the web and desktop shells bind
+         * for this state, so one corpus string serves three heroes.
+         */
+        const val BALANCE_UNREACHABLE = "onboarding.common.networkBody"
         const val NO_PRICE = "home.balanceDetailNoPrice"
         const val A11Y_HIDE_BALANCE = "home.a11yHideBalance"
         const val A11Y_SHOW_BALANCE = "home.a11yShowBalance"
@@ -378,6 +385,24 @@ object I18nKeys {
         const val DELETE_BODY = "contacts.deleteBody"
         const val DELETE = "contacts.delete"
         const val CANCEL = "contacts.cancel"
+        // Spec 045: the add/edit form (018's vocabulary), the favourite control, inspection, the book's travel.
+        const val EDIT_TITLE = "contacts.editTitle"
+        const val NAME_LABEL = "contacts.nameLabel"
+        const val NAME_PLACEHOLDER = "contacts.namePlaceholder"
+        const val ADDRESS_PLACEHOLDER = "contacts.addressPlaceholder"
+        const val SAVE = "contacts.save"
+        const val INVALID_ADDRESS = "contacts.invalidAddress"
+        const val SECTION_FAVORITES = "contacts.sectionFavorites"
+        const val CONTRACT_TAG = "componentsUi.signing.contractTag"
+        const val WALLET_TAG = "componentsUi.signing.walletTag"
+        const val FIRST_TIME_TAG = "componentsUi.signing.firstTimeTagNeutral"
+        const val IMPORT_BTN = "contacts.importBtn"
+        const val EXPORT_BTN = "contacts.exportBtn"
+        const val IMPORT_DONE_TITLE = "contacts.importDoneTitle"
+        const val IMPORT_DONE_BODY = "contacts.importDoneBody"
+        const val IMPORT_DONE_INVALID = "contacts.importDoneInvalid"
+        const val IMPORT_FAIL_TITLE = "contacts.importFailTitle"
+        const val IMPORT_FAIL_BODY = "contacts.importFailBody"
 
         // Reused from the spec-015 map (same keys, no corpus change).
         const val ACTION_SEND = "componentsUi.dock.send"
@@ -393,7 +418,7 @@ object I18nKeys {
     }
 
     /**
-     * Receive / Send / Activity / Assets (spec 021, design/wallet-2).
+     * Receive / Send / Activity / Assets (spec 021, docs/design/wallet-2).
      *
      * Most of this vocabulary already existed: the legacy React Native app left
      * `receive.*`, `send.*`, `history.*`, `assets.*`, `addToken.*`,
@@ -402,6 +427,8 @@ object I18nKeys {
      * already there. Only the thirty-three the mocks genuinely added are new.
      */
     object Flows {
+        /** Spec 048: the toast after 保存图片 put the card in the gallery. */
+        const val SAVED_BODY = "receive.request.savedBody"
         // Chrome shared by every flow screen.
         const val BACK = "receive.a11yBack"
         const val CLOSE = "componentsUi.identiconViewer.close"
@@ -432,6 +459,11 @@ object I18nKeys {
         const val SCAN_FROM_GALLERY = "componentsUi.scanner.fromGallery"
         const val SCAN_TORCH = "componentsUi.scanner.torch"
         const val SCAN_FLIP = "componentsUi.scanner.flipCamera"
+        const val SCAN_PERMISSION_TEXT = "componentsUi.scanner.permissionText"
+        const val SCAN_GRANT = "componentsUi.scanner.grantPermission"
+        const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
+        const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
+        const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"
 
         // Activity.
         const val HISTORY_TITLE = "history.navTitle"
@@ -491,6 +523,9 @@ object I18nKeys {
         const val ADD_NOT_COMPATIBLE = "addToken.notCompatible"
         const val ADD_NETWORK_ADDED = "addToken.networkAdded"
         const val ADD_NETWORK_BTN = "addToken.addNetworkBtn"
+        const val ADD_SEARCHING = "addToken.searchingNetworks"
+        const val ADD_ERROR_SAVE = "addToken.errorSaveToken"
+        const val ADD_LABEL_DECIMALS = "addToken.labelDecimals"
         const val ADD_DEPLOY_CONTRACTS = "addToken.deployContracts"
         const val ADD_ERROR_NOT_COMPATIBLE = "addToken.errorNotCompatible"
 
@@ -550,6 +585,16 @@ object I18nKeys {
         const val BATCH_BAD_ADDRESS = "send.batchBadAddress"
         const val BATCH_REJECTED_ONE = "send.batchRejected_one"
         const val BATCH_APPLY_OTHER = "send.batchApply_other"
+        const val BATCH_REJECTED_OTHER = "send.batchRejected_other"
+        const val BATCH_APPLY_ONE = "send.batchApply_one"
+        const val BATCH_APPLY_EMPTY = "send.batchApplyEmpty"
+        const val BATCH_RATE_LOADING = "send.batchRateLoading"
+        const val BATCH_RATE_FAILED = "send.batchRateFailed"
+        const val BATCH_RATE_RESET = "send.batchRateReset"
+        const val BATCH_OVER_CAP = "send.batchOverCap"
+        const val BATCH_OVER_BALANCE = "send.batchOverBalance"
+        const val BATCH_TEMPLATE_SAVED = "send.batchTemplateSaved"
+        const val FUNDING_CANCEL = "componentsUi.funding.cancel"
 
         // Send · confirm.
         const val CONFIRM_TITLE = "send.confirmTitle"
@@ -571,6 +616,47 @@ object I18nKeys {
         const val TX_TYPICAL_TIME = "send.txTypicalTime"
         const val TX_HASH = "componentsTx.receipt.txHash"
         const val DONE = "componentsTx.receipt.done"
+
+        // Spec 043: the live send's remaining words — every one already in
+        // the corpus; the fixture never needed them because it never failed.
+        const val FEE_ESTIMATING = "componentsUi.gas.estimating"
+        const val CANNOT_CONVERT = "send.warnCannotConvert"
+        const val TX_PREPARING = "send.txPreparing"
+        const val TX_SIGNING = "send.txSigning"
+        const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
+        const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
+        const val TX_HELD_FEES = "send.txHeldFees"
+        const val TX_REJECTED_FEES = "send.txRejectedFees"
+        const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
+        const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
+        const val ALERT_LOAD_TOKENS = "send.alertLoadTokensError"
+        const val TX_ERROR_GENERIC = "send.txErrorGeneric"
+        const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
+        const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
+        const val WARN_NEED_GAS = "send.warnNeedGas"
+        /** The notification when a verdict lands while the app is away (phase 4). */
+        const val TX_CONFIRMED_NOTICE = "componentsTx.receipt.statusConfirmed"
+        const val TX_CONFIRMED_NOTICE_BODY = "send.txSubmittedTitle"
+        // Phase 5: every refusal in the core's words.
+        const val ALERT_INVALID_ADDRESS_TITLE = "send.alertInvalidAddressTitle"
+        const val ALERT_INVALID_ADDRESS_BODY = "send.alertInvalidAddressBody"
+        const val ALERT_INVALID_AMOUNT_TITLE = "send.alertInvalidAmountTitle"
+        const val ALERT_INVALID_AMOUNT_BODY = "send.alertInvalidAmountBody"
+        const val ALERT_INSUFFICIENT_TITLE = "send.alertInsufficientBalanceTitle"
+        const val ALERT_INSUFFICIENT_BODY = "send.alertInsufficientBalanceBody"
+        const val ALERT_ACCOUNT_UNAVAILABLE_BODY = "send.alertAccountUnavailableBody"
+        const val SAME_FEE_TITLE = "send.sameFeeTokenTitle"
+        const val SAME_FEE_BODY = "send.sameFeeTokenBody"
+        const val SAME_FEE_MAX = "send.sameFeeTokenMax"
+        const val TREASURY_TITLE = "componentsUi.treasuryBootstrap.title"
+        const val TREASURY_LEAD = "componentsUi.treasuryBootstrap.lead"
+        const val TREASURY_AMOUNT_HINT = "componentsUi.treasuryBootstrap.amountHint"
+        const val TREASURY_RETRY = "componentsUi.treasuryBootstrap.retryBtn"
+        const val TX_ERROR_BUNDLER_FUND = "send.txErrorBundlerFund"
+        const val TX_RETRY = "send.txRetryBtn"
+        const val CANCEL = "home.cancel"
+        const val STATUS_PENDING = "componentsTx.detail.statusPending"
+        const val STATUS_SUCCEEDED = "componentsTx.detail.statusSucceeded"
     }
 
     /**

@@ -261,6 +261,12 @@
 			"pickTitle": "Welche Wallet?",
 			"pickBody": "Auf {{product}} liegt mehr als eine Vela-Wallet. Wählen Sie die aus, in der Sie sich anmelden möchten.",
 			"pickUnnamed": "Wallet ohne Namen"
+		},
+		"storage": {
+			"unreadableTitle": "Die Wallet-Daten dieses Browsers sind nicht lesbar",
+			"unreadableBody": "Die gespeicherte Wallet-Liste hat eine Form, die diese Version nicht lesen kann. Melde dich erneut an, um sie aus deinem Passkey neu aufzubauen, oder setze die Kopie dieses Browsers zurück. Die Wallet selbst ist unberührt: Sie liegt auf der Chain, hinter deinem Passkey.",
+			"signInAgain": "Erneut anmelden",
+			"resetCopy": "Kopie dieses Browsers zurücksetzen"
 		}
 	}
 }

@@ -1,5 +1,18 @@
 package app.getvela.wallet.feature.flows.components
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -20,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -66,22 +80,26 @@ fun NetworkRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(VelaSizing.chainBadge)
-                .background(row.badgeColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = row.code,
-                // The chain colours are brand fills, dark enough for white in
-                // both appearances — so the mode-invariant white, not fgInverse.
-                color = VelaOnAccent,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.bold,
-                fontSize = VelaTextSize.xs,
-                maxLines = 1,
-            )
+        // Spec 047: the network's logo from the chain-data endpoint; the code
+        // over the brand colour is the fallback (the web's RemoteLogo).
+        RemoteLogo(urls = listOfNotNull(row.logoUrl), size = VelaSizing.chainBadge) {
+            Box(
+                modifier = Modifier
+                    .size(VelaSizing.chainBadge)
+                    .background(row.badgeColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = row.code,
+                    // The chain colours are brand fills, dark enough for white in
+                    // both appearances — so the mode-invariant white, not fgInverse.
+                    color = VelaOnAccent,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.bold,
+                    fontSize = VelaTextSize.xs,
+                    maxLines = 1,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
@@ -178,15 +196,13 @@ fun FactRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             is FactLead.Token -> {
-                TokenIcon(
-                    ticker = lead.mark.ticker,
-                    badgeColor = lead.mark.badgeColor,
+                TokenIcon(mark = lead.mark,
                     inline = true,
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             is FactLead.Identicon -> {
-                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
+                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg, name = lead.name)
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             null -> Unit
@@ -261,6 +277,10 @@ fun RecipientCard(
     recipient: RecipientCardModel,
     modifier: Modifier = Modifier,
     onRemove: () -> Unit = {},
+    onAmountChange: ((String) -> Unit)? = null,
+    onAddressChange: ((String) -> Unit)? = null,
+    /** Spec 048: this row's own 通讯录 pick (the web's `pickContactFor(i)`). */
+    onPick: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -270,8 +290,19 @@ fun RecipientCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
+        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2, name = recipient.name)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
+        if (onPick != null) {
+            Icon(
+                imageVector = VelaIcons.NavContactsOutline,
+                contentDescription = "pick-contact-" + recipient.ordinal,
+                tint = colors.fgSubtle,
+                modifier = Modifier
+                    .size(VelaIconSize.md)
+                    .clickable(onClick = onPick),
+            )
+            Spacer(modifier = Modifier.width(VelaSpacing.md))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = recipient.ordinal,
@@ -280,24 +311,81 @@ fun RecipientCard(
                 fontSize = VelaTextSize.xs,
                 maxLines = 1,
             )
-            Text(
-                text = recipient.name,
-                color = colors.fgBase,
-                fontFamily = VelaMonoFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (onAddressChange != null) {
+                // A live row: the address is typed (or picked) in place. Local
+                // echo as the amount hero does — the machine's view lags fast typing.
+                val addressStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base)
+                var typedAddress by remember(recipient.id) { mutableStateOf(recipient.address) }
+                val sentAddress = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.address) } }
+                LaunchedEffect(recipient.address) { if (recipient.address !in sentAddress) typedAddress = recipient.address }
+                BasicTextField(
+                    value = typedAddress,
+                    onValueChange = { next ->
+                        typedAddress = next
+                        sentAddress.addLast(next)
+                        if (sentAddress.size > 256) sentAddress.removeFirst()
+                        onAddressChange(next)
+                    },
+                    singleLine = true,
+                    textStyle = addressStyle,
+                    cursorBrush = SolidColor(colors.accentBase),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "recipient-address-${recipient.ordinal}" },
+                    decorationBox = { inner ->
+                        if (typedAddress.isEmpty()) {
+                            Text(text = recipient.addressPlaceholder, style = addressStyle.copy(color = colors.fgSubtle), maxLines = 1)
+                        }
+                        inner()
+                    },
+                )
+                if (recipient.name.isNotEmpty() && recipient.name != recipient.address) {
+                    Text(text = recipient.name, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs, maxLines = 1)
+                }
+            } else {
+                Text(
+                    text = recipient.name,
+                    color = colors.fgBase,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        Text(
-            text = recipient.amount,
+        val amountStyle = TextStyle(
             color = colors.fgBase,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.lg,
-            maxLines = 1,
+            textAlign = TextAlign.End,
         )
+        if (onAmountChange != null && recipient.amountValue != null) {
+            var typed by remember(recipient.id) { mutableStateOf(recipient.amountValue) }
+            val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
+            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = recipient.amountValue }
+            BasicTextField(
+                value = typed,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onAmountChange(next)
+                },
+                singleLine = true,
+                textStyle = amountStyle,
+                cursorBrush = SolidColor(colors.accentBase),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.width(96.dp).semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterEnd) {
+                        if (typed.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
+                        inner()
+                    }
+                },
+            )
+        } else {
+            Text(text = recipient.amount, style = amountStyle, maxLines = 1)
+        }
         Spacer(modifier = Modifier.width(VelaSpacing.md))
         Icon(
             imageVector = VelaIcons.Close,
@@ -337,7 +425,7 @@ fun FeeTokenRow(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(ticker = row.mark.ticker, badgeColor = row.mark.badgeColor)
+        TokenIcon(mark = row.mark)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -414,7 +502,7 @@ fun ContactPickRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2)
+        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2, name = contact.name)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -186,13 +186,24 @@ pub struct DirectoryEntry {
 /// device is a request that should not be made.
 #[must_use]
 pub fn directory_lookup_url(aaguid: &str) -> Option<String> {
+    directory_lookup_url_at(AAGUID_DIRECTORY_ORIGIN, aaguid)
+}
+
+/// The same question, asked of a directory at `origin` — the one the person's
+/// service-endpoint settings name (spec 038 #E4: the lookup is meant to go to
+/// our own node, and which node is the shell's setting, not this crate's
+/// constant). A trailing slash on the origin is tolerated.
+#[must_use]
+pub fn directory_lookup_url_at(origin: &str, aaguid: &str) -> Option<String> {
     let key = canonical(aaguid)?;
     if provider(&key).is_some() {
         return None;
     }
-    Some(format!(
-        "{AAGUID_DIRECTORY_ORIGIN}/api/v1/authenticators/{key}"
-    ))
+    let origin = origin.trim().trim_end_matches('/');
+    if origin.is_empty() {
+        return None;
+    }
+    Some(format!("{origin}/api/v1/authenticators/{key}"))
 }
 
 /// Read a directory response for `aaguid`, choosing the mark for the theme.
@@ -204,6 +215,19 @@ pub fn directory_lookup_url(aaguid: &str) -> Option<String> {
 /// whatever a field says is a client that can be pointed anywhere.
 #[must_use]
 pub fn directory_entry(aaguid: &str, json: &str, dark: bool) -> Option<DirectoryEntry> {
+    directory_entry_at(AAGUID_DIRECTORY_ORIGIN, aaguid, json, dark)
+}
+
+/// [`directory_entry`] for an answer from the directory at `origin`: the mark's
+/// URL is built on the origin that was asked, never on the constant.
+#[must_use]
+pub fn directory_entry_at(
+    origin: &str,
+    aaguid: &str,
+    json: &str,
+    dark: bool,
+) -> Option<DirectoryEntry> {
+    let origin = origin.trim().trim_end_matches('/');
     let key = canonical(aaguid)?;
     let value: serde_json::Value = serde_json::from_str(json).ok()?;
     let id = value.get("id")?.as_str()?.trim().to_ascii_lowercase();
@@ -228,7 +252,7 @@ pub fn directory_entry(aaguid: &str, json: &str, dark: bool) -> Option<Directory
     } else {
         field("icon").or_else(|| field("iconDark"))
     }
-    .map(|path| format!("{AAGUID_DIRECTORY_ORIGIN}/data/{path}"));
+    .map(|path| format!("{origin}/data/{path}"));
     Some(DirectoryEntry { name, icon_url })
 }
 
@@ -475,6 +499,37 @@ mod tests {
             None
         );
         assert_eq!(directory_lookup_url("../../etc/passwd"), None);
+    }
+
+    /// Spec 038 #E4: the directory is whichever node the settings name.
+    #[test]
+    fn the_directory_can_be_our_own_node() {
+        let asked = "2fc0579f-8113-47ea-b116-bb5a8db9202a";
+        assert_eq!(
+            directory_lookup_url_at("https://aaguid.getvela.app/", asked).as_deref(),
+            Some("https://aaguid.getvela.app/api/v1/authenticators/2fc0579f-8113-47ea-b116-bb5a8db9202a")
+        );
+        // The catalog still answers first, whichever node is named.
+        assert_eq!(
+            directory_lookup_url_at(
+                "https://aaguid.getvela.app",
+                "fbfc3007-154e-4ecc-8c0b-6e020557d7bd"
+            ),
+            None
+        );
+        // An empty origin is nowhere to ask, not the constant.
+        assert_eq!(directory_lookup_url_at("  ", asked), None);
+        let entry = directory_entry_at(
+            "https://aaguid.getvela.app",
+            asked,
+            r#"{"id":"2fc0579f-8113-47ea-b116-bb5a8db9202a","name":"YubiKey 5 Series","icon":"icons/yubico.svg"}"#,
+            false,
+        )
+        .expect("a well-formed answer");
+        assert_eq!(
+            entry.icon_url.as_deref(),
+            Some("https://aaguid.getvela.app/data/icons/yubico.svg")
+        );
     }
 
     #[test]

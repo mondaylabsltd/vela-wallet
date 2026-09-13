@@ -7,7 +7,52 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 		<meta name="color-scheme" content="dark light" />
+		<!--
+			The wallet's mark, from docs/design/icon/app-icon.svg (the canonical source
+			every platform's icon is rendered from). The PNGs are for the tab strip
+			of browsers that will not rasterise an SVG favicon; the SVG is for the
+			rest, at any size.
+		-->
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 		<script>
+			/*
+			 * Spec 028: the chosen palette, applied BEFORE first paint — the same
+			 * argument the block below makes for the launch animation. A theme
+			 * applied in `onMount` means the page paints in the OS palette and then
+			 * flips to the chosen one, which on a wallet reads as a glitch rather
+			 * than a setting. `vela.theme` is written by
+			 * `services/preferences.svelte.ts` and read by `isDarkTheme()` off this
+			 * same attribute; `system` writes nothing, so the OS keeps deciding.
+			 */
+			try {
+				var theme = localStorage.getItem('vela.theme');
+				if (theme === 'dark' || theme === 'light') {
+					document.documentElement.dataset.theme = theme;
+				}
+			} catch (e) {
+				/* Blocked storage: the OS palette, which is the default anyway. */
+			}
+
+			/*
+			 * The chosen text size, for the same reason: applied in `onMount` it
+			 * would paint at the standard size and then jump. `vela.textScale` holds
+			 * a level NAME (Expo's record), and the table is `TEXT_SCALE_LEVELS` in
+			 * `services/preferences.svelte.ts` — duplicated here because nothing can
+			 * be imported yet; `preferences-store.test.ts` asserts the two agree.
+			 * `standard` writes nothing: `--text-scale` falls back to 1.
+			 */
+			try {
+				var scales = { compact: 0.82, small: 0.91, comfortable: 1.1, large: 1.22, xlarge: 1.35 };
+				var level = localStorage.getItem('vela.textScale');
+				if (level !== null && scales[level] !== undefined) {
+					document.documentElement.style.setProperty('--text-scale', String(scales[level]));
+				}
+			} catch (e) {
+				/* Blocked storage: the standard size. */
+			}
+
 			/*
 			 * Spec 012: decide BEFORE first paint whether the launch animation plays,
 			 * and if so hide the page in the same frame the document appears.
@@ -40,6 +85,38 @@
 				   wallet page fails. */
 				if (location.search.indexOf('skipLaunch') === -1) {
 					document.documentElement.dataset.launch = 'playing';
+				}
+			}
+
+			/*
+			 * Spec 038: decide BEFORE first paint whether the first-run intro is up,
+			 * for the same reason as the launch block above — decided in `onMount`
+			 * the prerendered landing page paints first and is then replaced, so a
+			 * first run saw Welcome → intro on every load (spec 038 finding 2).
+			 * `app.css` hides `[data-intro-page]` (the Welcome main) under this
+			 * attribute; the page removes it once the intro has mounted or the gate
+			 * has said no, so it never outlives the decision.
+			 *
+			 * The rule is duplicated from `$lib/intro/gate.ts` — it cannot be
+			 * imported here. `gate.test.ts` reads this file and asserts the storage
+			 * key and both query params agree with the module's constants.
+			 *
+			 *   STORAGE_KEY = 'vela.intro.seen'   FORCE_PARAM = 'intro'   SKIP_PARAM = 'skipIntro'
+			 */
+			try {
+				var introParams = new URLSearchParams(location.search);
+				var introDue = introParams.has('intro')
+					? true
+					: introParams.has('skipIntro')
+						? false
+						: localStorage.getItem('vela.intro.seen') === null;
+				if (introDue) {
+					document.documentElement.dataset.intro = 'pending';
+				}
+			} catch (e) {
+				/* Blocked storage: the module shows it too, so hide Welcome. */
+				if (location.search.indexOf('skipIntro') === -1) {
+					document.documentElement.dataset.intro = 'pending';
 				}
 			}
 		</script>

@@ -64,6 +64,24 @@ import app.getvela.wallet.feature.wallet.components.VelaTabBar
  * state layered over the model, so swapping the model (a locale change, the
  * preview gallery's state picker) still lands.
  */
+/** Spec 044: the taps that reach the browser controller when the tab is live. A site's id is its URL. */
+class ExploreCallbacks(
+    val onOpenSite: (String) -> Unit,
+    val onTabOpen: (String) -> Unit,
+    val onTabClose: (String) -> Unit,
+    val onTabNew: () -> Unit,
+    val onTabsCloseAll: () -> Unit,
+    val onGroupToggle: (String, Boolean) -> Unit,
+    val onGroupNew: () -> Unit,
+    val onSiteMenuPick: (String) -> Unit,
+    val onBookmark: () -> Unit,
+    val onRecentClear: () -> Unit,
+    /** The connection sheet's disconnect: the permissions machine's revoke (spec 044). */
+    val onDisconnect: () -> Unit = {},
+    /** The consent card's answer (spec 044). */
+    val onConsent: (approved: Boolean) -> Unit = {},
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExploreScreen(
@@ -71,18 +89,33 @@ fun ExploreScreen(
     modifier: Modifier = Modifier,
     signing: SigningScreenModel? = null,
     onSelectTab: (VelaTab) -> Unit = {},
+    /** Spec 044: the live page, drawn where the demo page is when present. */
+    page: (@Composable () -> Unit)? = null,
+    /** Spec 044: which view to open on when a live page exists. */
+    initialView: ExploreView? = null,
+    /** Spec 044: the address typed on the start page becomes a real navigation. */
+    onOpenUrl: ((String) -> Unit)? = null,
+    onClosePage: () -> Unit = {},
+    onPageBack: () -> Unit = {},
+    onPageForward: () -> Unit = {},
+    live: ExploreCallbacks? = null,
+    /** Spec 044: the core is asking whether this origin may connect; drawn as the connection sheet's not-yet-connected form. */
+    consent: ConnectionModel? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
 
-    var viewOverride by rememberSaveable(model.state) { mutableStateOf<ExploreView?>(null) }
+    var viewOverride by rememberSaveable(model.state, initialView) { mutableStateOf(initialView) }
     var sheet by remember(model.state) { mutableStateOf(model.sheet) }
     var signingUp by remember(model.state) { mutableStateOf(false) }
     /// Groups hidden HERE rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
     var hidden by rememberSaveable(model.state) { mutableStateOf(emptySet<String>()) }
 
-    val view = viewOverride ?: model.view
+    // Live (spec 044): the browsing view exists only while a page does. Without
+    // this the switcher's Done, with only the start tab left, drew the demo
+    // page — a fixture on a live route (device-found).
+    val view = (viewOverride ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null) ExploreView.Start else it }
 
     Column(
         modifier = modifier
@@ -97,11 +130,11 @@ fun ExploreScreen(
                     .navigationBarsPadding(),
                 tabs = model.tabs,
                 copy = model.tabsScreen,
-                onDone = { viewOverride = ExploreView.Browsing },
-                onOpen = { viewOverride = ExploreView.Browsing },
-                onClose = { viewOverride = ExploreView.Start },
-                onNew = { viewOverride = ExploreView.Start },
-                onCloseAll = { viewOverride = ExploreView.Start },
+                onDone = { viewOverride = if (live == null || page != null) ExploreView.Browsing else ExploreView.Start },
+                onOpen = { id -> live?.onTabOpen(id); viewOverride = ExploreView.Browsing },
+                onClose = { id -> live?.onTabClose(id) ?: run { viewOverride = ExploreView.Start } },
+                onNew = { live?.onTabNew(); viewOverride = ExploreView.Start },
+                onCloseAll = { live?.onTabsCloseAll(); viewOverride = ExploreView.Start },
             )
 
             ExploreView.Browsing -> {
@@ -112,11 +145,11 @@ fun ExploreScreen(
                     secureLabel = strings.t("explore.secureSite"),
                     closeLabel = strings.t("explore.closePage"),
                     menuLabel = strings.t("explore.siteMenu"),
-                    onClose = { viewOverride = ExploreView.Start },
+                    onClose = { onClosePage(); viewOverride = ExploreView.Start },
                     onMenu = { sheet = model.siteMenuSheet },
                 )
                 Box(Modifier.weight(1f)) {
-                    DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
+                    if (page != null) page() else DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
                 }
                 BrowserToolbar(
                     modifier = Modifier.navigationBarsPadding(),
@@ -129,6 +162,9 @@ fun ExploreScreen(
                     tabsLabel = strings.t("explore.tabs"),
                     onAccount = { sheet = ExploreSheet.Connection(model.connection) },
                     onTabs = { viewOverride = ExploreView.Tabs },
+                    onBack = onPageBack,
+                    onForward = onPageForward,
+                    onBookmark = { live?.onBookmark() },
                 )
             }
 
@@ -136,9 +172,12 @@ fun ExploreScreen(
                 StartPage(
                     model = model,
                     hidden = hidden,
+                    onOpenUrl = onOpenUrl?.let { open -> { text: String -> open(text); viewOverride = ExploreView.Browsing } },
                     onBrowse = { viewOverride = ExploreView.Browsing },
                     onTabs = { viewOverride = ExploreView.Tabs },
                     onManageGroups = { sheet = model.groupManageSheet },
+                    live = live,
+                    onOpenSite = { url -> live?.onOpenSite(url); viewOverride = ExploreView.Browsing },
                     modifier = Modifier.weight(1f),
                 )
                 // Device-found on the Xiaomi (2026-09-02): without this the bar
@@ -157,6 +196,22 @@ fun ExploreScreen(
         }
     }
 
+    consent?.let { card ->
+        ModalBottomSheet(
+            onDismissRequest = { live?.onConsent(false) },
+            containerColor = colors.bgBase,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                ConnectionPanel(
+                    connection = card,
+                    closeLabel = strings.t("connect.browser.cancel"),
+                    onClose = { live?.onConsent(false) },
+                    onDisconnect = { live?.onConsent(true) },
+                )
+            }
+        }
+    }
     sheet?.let { current ->
         ModalBottomSheet(
             onDismissRequest = { sheet = null },
@@ -165,8 +220,11 @@ fun ExploreScreen(
         ) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 when (current) {
+                    // Live: the rows are the core's and change under an open
+                    // sheet (a new group appeared only after reopening —
+                    // device-found); the drawn snapshot serves the gallery.
                     is ExploreSheet.GroupManage -> GroupManageSheetContent(
-                        sheet = current,
+                        sheet = if (live != null) model.groupManageSheet else current,
                         hidden = hidden,
                         closeLabel = strings.t("explore.close"),
                         hideLabel = strings.t("explore.hide"),
@@ -174,9 +232,14 @@ fun ExploreScreen(
                         deleteLabel = strings.t("explore.delete"),
                         onClose = { sheet = null },
                         onToggle = { id ->
-                            hidden = if (hidden.contains(id)) hidden - id else hidden + id
+                            val row = current.rows.firstOrNull { it.id == id }
+                            if (live != null && row != null) {
+                                live.onGroupToggle(id, !row.hidden)
+                            } else {
+                                hidden = if (hidden.contains(id)) hidden - id else hidden + id
+                            }
                         },
-                        onNew = {},
+                        onNew = { live?.onGroupNew() },
                     )
 
                     is ExploreSheet.SiteMenu -> SiteMenuSheetContent(
@@ -185,15 +248,16 @@ fun ExploreScreen(
                         onClose = { sheet = null },
                         onPick = { id ->
                             sheet = null
-                            if (id == "close") viewOverride = ExploreView.Start
+                            live?.onSiteMenuPick(id)
+                            if (id == "close") { onClosePage(); viewOverride = ExploreView.Start }
                         },
                     )
 
                     is ExploreSheet.Connection -> ConnectionPanel(
-                        connection = current.connection,
+                        connection = if (live != null) model.connection else current.connection,
                         closeLabel = strings.t("explore.close"),
                         onClose = { sheet = null },
-                        onDisconnect = { sheet = null },
+                        onDisconnect = { sheet = null; live?.onDisconnect() },
                     )
                 }
             }
@@ -210,9 +274,12 @@ private fun StartPage(
     model: ExploreScreenModel,
     hidden: Set<String>,
     onBrowse: () -> Unit,
+    onOpenUrl: ((String) -> Unit)? = null,
     onTabs: () -> Unit,
     onManageGroups: () -> Unit,
     modifier: Modifier = Modifier,
+    live: ExploreCallbacks? = null,
+    onOpenSite: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -266,7 +333,7 @@ private fun StartPage(
         ExploreSearchField(
             placeholder = model.searchPlaceholder,
             scanLabel = model.scanLabel,
-            onSubmit = { onBrowse() },
+            onSubmit = { text -> if (onOpenUrl != null && text.isNotBlank()) onOpenUrl(text) else onBrowse() },
         )
 
         model.empty?.let {
@@ -293,7 +360,7 @@ private fun StartPage(
                     row.forEach { tile ->
                         SiteTile(
                             tile = tile,
-                            onOpen = { onBrowse() },
+                            onOpen = { id -> if (onOpenSite != null && id != "add") onOpenSite(id) else onBrowse() },
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -310,10 +377,10 @@ private fun StartPage(
                 } else {
                     "⋯"
                 },
-                onAction = onManageGroups,
+                onAction = { if (group.action == GroupAction.Clear && live != null) live.onRecentClear() else onManageGroups() },
             )
             group.sites.forEach { site ->
-                SiteRow(site = site, onOpen = { onBrowse() })
+                SiteRow(site = site, onOpen = { id -> if (onOpenSite != null) onOpenSite(id) else onBrowse() })
             }
         }
 

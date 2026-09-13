@@ -7,6 +7,10 @@
 	 * a send count). This one PICKS one, so it carries a chevron and nothing
 	 * else — every affordance it doesn't have is one that can't fire by
 	 * accident while someone is halfway through a transfer.
+	 *
+	 * The one thing it shares: the artwork beside the button opens the
+	 * identicon viewer on this address (founder call, 2026-09-05) — the moment
+	 * before a transfer is exactly when "is this who I think it is?" is asked.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -21,17 +25,19 @@
 	let { contact, onselect }: Props = $props();
 </script>
 
-<button type="button" class="row" onclick={onselect}>
-	<Identicon svg={contact.identiconSvg} size="row" />
-	<span class="text">
-		<span class="top">
-			<span class="name">{contact.name}</span>
-			{#if contact.group !== undefined}<span class="tag">{contact.group}</span>{/if}
+<div class="row">
+	<Identicon svg={contact.identiconSvg} size="row" address={contact.addressFull} />
+	<button type="button" class="main" onclick={onselect}>
+		<span class="text">
+			<span class="top">
+				<span class="name">{contact.name}</span>
+				{#if contact.group !== undefined}<span class="tag">{contact.group}</span>{/if}
+			</span>
+			<span class="address">{contact.addressDisplay}</span>
 		</span>
-		<span class="address">{contact.addressDisplay}</span>
-	</span>
-	<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-</button>
+		<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+	</button>
+</div>
 
 <style>
 	.row {
@@ -39,6 +45,14 @@
 		align-items: center;
 		gap: var(--space-lg);
 		width: 100%;
+	}
+
+	.main {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		flex: 1;
+		min-width: 0;
 		padding-block: var(--space-lg);
 		padding-inline: 0;
 		border: none;
@@ -49,7 +63,7 @@
 		cursor: pointer;
 	}
 
-	.row:active {
+	.main:active {
 		transform: scale(var(--motion-press-row));
 	}
 

@@ -10,11 +10,15 @@ import { describe, expect, it } from 'vitest';
 import {
 	ERR,
 	MAX_REQUEST_BYTES,
+	chainEndpoints,
+	chainKnown,
 	classifyMethod,
 	hostLabel,
 	isWellFormedRequest,
+	originOfUrl,
 	parseChainId,
 	pickSignAddress,
+	switchChainParam,
 	toHexChainId
 } from '../../../extension/lib/protocol.js';
 
@@ -109,5 +113,51 @@ describe('the small things that are wrong everywhere else', () => {
 		// A stuck-but-submitted transaction must never look like a clean decline:
 		// a dApp that reads 4001 may safely retry, which is a double-spend.
 		expect(ERR.UNKNOWN_PENDING).not.toBe(ERR.USER_REJECTED);
+	});
+});
+
+describe('what the worker now routes itself (reads, switching)', () => {
+	it('gives chain switching and asset watching their own buckets', () => {
+		expect(classifyMethod('wallet_switchEthereumChain')).toBe('switch');
+		expect(classifyMethod('wallet_addEthereumChain')).toBe('addChain');
+		expect(classifyMethod('wallet_watchAsset')).toBe('watchAsset');
+		expect(classifyMethod('eth_estimateGas')).toBe('read');
+		expect(classifyMethod('eth_sendUserOperation')).toBe('read');
+	});
+
+	it('reads the chain a switch names, in either spelling, and refuses the rest', () => {
+		expect(switchChainParam([{ chainId: '0x64' }])).toBe(100);
+		expect(switchChainParam([{ chainId: '8453' }])).toBe(8453);
+		expect(switchChainParam([{ chainId: 1 }])).toBe(1);
+		expect(switchChainParam([])).toBe(0);
+		expect(switchChainParam([{ chainId: 'mainnet' }])).toBe(0);
+		expect(switchChainParam(null)).toBe(0);
+	});
+
+	it('keys a tab by its ORIGIN, and only for web pages', () => {
+		expect(originOfUrl('https://app.uniswap.org/swap?x=1')).toBe('https://app.uniswap.org');
+		expect(originOfUrl('http://localhost:8812/')).toBe('http://localhost:8812');
+		expect(originOfUrl('chrome-extension://abc/en/wallet.html')).toBeNull();
+		expect(originOfUrl('chrome://extensions')).toBeNull();
+		expect(originOfUrl(undefined)).toBeNull();
+	});
+
+	it('takes endpoints ONLY from the catalog the wallet published', () => {
+		const catalog = {
+			version: 1,
+			chains: {
+				'100': { rpc: ['https://a', 'https://b'], bundler: 'https://relay/100' },
+				'1': { rpc: [], bundler: '' }
+			}
+		};
+		expect(chainEndpoints(catalog, 100, false)).toEqual(['https://a', 'https://b']);
+		expect(chainEndpoints(catalog, 100, true)).toEqual(['https://relay/100']);
+		expect(chainEndpoints(catalog, 1, true)).toEqual([]);
+		// An unknown chain has NO endpoint — never a guess at a public node.
+		expect(chainEndpoints(catalog, 8453, false)).toEqual([]);
+		expect(chainEndpoints(null, 100, false)).toEqual([]);
+		expect(chainKnown(catalog, 100)).toBe(true);
+		expect(chainKnown(catalog, 8453)).toBe(false);
+		expect(chainKnown(undefined, 1)).toBe(false);
 	});
 });

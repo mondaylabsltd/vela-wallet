@@ -15,6 +15,8 @@
 	interface Props {
 		label: string;
 		lines: [string, string];
+		/** The whole address, when there is one: the artwork opens the viewer on it. */
+		address?: string;
 		identiconSvg: string;
 		pickLabel: string;
 		scanLabel?: string;
@@ -32,6 +34,7 @@
 	let {
 		label,
 		lines,
+		address,
 		identiconSvg,
 		pickLabel,
 		scanLabel,
@@ -45,8 +48,8 @@
 
 <div class="block">
 	<span class="label">{label}</span>
-	<div class="field">
-		<Identicon svg={identiconSvg} size="row" />
+	<div class="field" data-field>
+		<Identicon svg={identiconSvg} size="row" {address} />
 		{#if oninput}
 			<input
 				class="address entry"

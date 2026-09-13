@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+
 # 09 — 人类学习知识地图 (Human Learning Map)
 
 > 基线 commit: `73d7aac`（2026-07-02）。本图为人类接管训练服务，与审计文档 01–08 互补：01–08 回答"系统是什么"，本文回答"按什么顺序、学到什么深度"。文档与源码冲突时以源码为准。
@@ -6,7 +8,7 @@
 
 | # | 知识域 | 目标等级 | 核心证据文件 |
 |---|--------|---------|-------------|
-| D1 | 项目目的/商业模型/核心用户流程 | L4 | 01-system-overview.md, WHITEPAPER.md |
+| D1 | 项目目的/商业模型/核心用户流程 | L4 | 01-system-overview.md, docs/WHITEPAPER.md |
 | D2 | 代码结构与模块边界 | L4 | src/ 布局, 01 仓库布局节 |
 | D3 | 密码学身份链（passkey→P-256→Safe 地址） | L5 | src/modules/passkey/, services/attestation-parser.ts, safe-address.ts, public-key-upload.ts |
 | D4 | 交易提交链（sendUserOp / 4337 / bundler） | L5 | services/safe-transaction.ts, bundler-service.ts, tempo.ts |

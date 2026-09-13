@@ -1,6 +1,8 @@
 package app.getvela.wallet.core.designsystem.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,8 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
@@ -46,7 +46,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
  *
  * [loading] is the third state, and it is NOT disabled: the action is running
  * and this button is what the person is waiting on. It keeps full emphasis and
- * turns a spinner where its label was (DESIGN_SYSTEM.md — "Loading state:
+ * turns a spinner where its label was (docs/design-system.md — "Loading state:
  * ActivityIndicator replacing text"), because a dimmed button reads as
  * "unavailable", which is the one thing "working" must never look like.
  */
@@ -143,7 +143,7 @@ internal fun VelaButtonSurface(
     content: @Composable (Modifier) -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val haptics = LocalHapticFeedback.current
+    val haptic = rememberVelaHaptic()
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) VelaMotion.pressScaleButton else 1f,
@@ -170,7 +170,7 @@ internal fun VelaButtonSurface(
                 // what it started (a system passkey sheet, a network call) is
                 // several hundred ms from showing itself.
                 onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                    haptic(VelaHaptic.Press)
                     onClick()
                 },
             ),

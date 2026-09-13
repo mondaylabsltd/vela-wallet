@@ -1,0 +1,33 @@
+{
+  "name": "vela-wallet-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "The repository's tooling package: generators, gates and the npm oracles the shared corpus is replayed against. It lives in scripts/ so the repository root carries no npm state. Run a script as `npm --prefix scripts run <name>` from the root, or `npm run <name>` from here; every script changes to the repository root first. Builds no app.",
+  "scripts": {
+    "gen:i18n": "cd .. && node scripts/gen-i18n.mjs",
+    "lint:i18n": "cd .. && node scripts/lint-i18n-corpus.mjs",
+    "verify:i18n": "cd .. && node scripts/verify-i18n-parity.mjs",
+    "verify:identicon": "cd .. && node scripts/verify-identicon-parity.mjs",
+    "dump:vectors": "cd .. && node scripts/dump-vectors/identicon.dump.mjs && node scripts/dump-vectors/i18n.dump.mjs",
+    "gen:identicon-features": "cd .. && node scripts/gen-identicon-features.mjs",
+    "gen:passkey-providers": "cd .. && node scripts/gen-passkey-providers.mjs",
+    "lint:passkey-providers": "cd .. && node scripts/gen-passkey-providers.mjs --check",
+    "lint:lottie": "cd .. && node scripts/lint-lottie-assets.mjs",
+    "lint:lottie:self-test": "cd .. && node scripts/lint-lottie-assets.mjs --self-test",
+    "check:native-reachability": "cd .. && node scripts/check-native-reachability.mjs",
+    "check:expo-residue": "cd .. && node scripts/check-expo-residue.mjs --self-test && node scripts/check-expo-residue.mjs",
+    "build:wasm": "cd .. && node rust/scripts/build-web.mjs",
+    "verify:wasm": "cd .. && node rust/scripts/verify-web.mjs",
+    "bench:core": "cd .. && node rust/scripts/bench-web.mjs",
+    "gen:core-types": "cd .. && node rust/scripts/gen-core-types.mjs",
+    "gen:onboarding-types": "cd .. && node rust/scripts/gen-onboarding-types.mjs",
+    "test:core": "cd ../rust && cargo test -p vela-core --features crux,i18n-all"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
+    "i18next": "^26.3.1",
+    "identicons-esm": "1.0.1"
+  }
+}

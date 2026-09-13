@@ -33,6 +33,10 @@
 	import Button from '$lib/ui/Button.svelte';
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
+	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
+	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import SocialMeta from '$lib/ui/SocialMeta.svelte';
+	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -72,6 +76,37 @@
 	 * second login session.
 	 */
 	let starting = $state(false);
+	/**
+	 * Spec 048: the core refused this browser's stored records (the retired
+	 * client's spelling, or plain damage). The loop answered the machine with
+	 * its failure; this is the sentence and the two ways out.
+	 */
+	let storageFault = $state<string | null>(null);
+	const storageCopy: PromptCopy = $derived({
+		title: strings('onboarding.storage.unreadableTitle'),
+		message: strings('onboarding.storage.unreadableBody'),
+		confirm: {
+			confirmLabel: strings('onboarding.storage.resetCopy'),
+			cancelLabel: strings('onboarding.storage.signInAgain')
+		}
+	});
+	async function answerStorage(reset: boolean) {
+		storageFault = null;
+		session.fault = null;
+		login?.dispose();
+		login = null;
+		loginView = null;
+		starting = false;
+		if (reset) await session.resetLocalCopy();
+	}
+
+	/**
+	 * The sign-in method picker is open (spec 038 finding 20). The web used to
+	 * dispatch `platform` and let the browser's own sheet cover the rest; a
+	 * wallet living on a phone or a key deserves a row that says so — the same
+	 * three rows creating a wallet shows, and the desktop's sign-in shows.
+	 */
+	let methodsOpen = $state(false);
 
 	/**
 	 * The first-run intro is up. Starts false so the prerendered document is the
@@ -91,6 +126,12 @@
 	 * that, not this screen — so this only surfaces the warning.
 	 */
 	const endpointUnreachable = $derived(loginView?.endpoint_unreachable ?? false);
+	/**
+	 * The probe could not get out of THIS machine (spec 038). A browser cannot
+	 * usually tell this apart from the service being down — only the desktop
+	 * produces it today — but the sentence is different, so it is read here too.
+	 */
+	const transportFailed = $derived(loginView?.transport_failed ?? false);
 
 	function prompt(kind: PromptKind): Promise<boolean> {
 		return new Promise((settle) => {
@@ -111,19 +152,25 @@
 	 * prerendered and must stay wasm-free until someone commits. The health
 	 * probe the core starts is part of that commitment.
 	 */
-	async function signIn() {
+	async function signIn(method: KeyMethod) {
 		if (signingIn) return;
+		methodsOpen = false;
 		starting = true;
 		try {
 			if (!login) {
 				await loadOnboardingCore();
 				login = createLoginSession({
 					onView: (next) => (loginView = next),
-					deps: { prompt, complete }
+					deps: { prompt, complete },
+					onError: (error) => {
+						console.error('[login] core fault:', error);
+						storageFault = error instanceof Error ? error.message : String(error);
+						starting = false;
+					}
 				});
 				login.start({ type: 'start' });
 			}
-			login.dispatch({ type: 'sign_in', method: 'platform' });
+			login.dispatch({ type: 'sign_in', method });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never
 			// came up, so the button can be pressed again.
@@ -133,6 +180,10 @@
 
 	onMount(() => {
 		if (shouldShowIntro()) intro = true;
+		// The inline script in app.html hid Welcome before paint on the same
+		// rule; whichever way the gate went, the decision is now this
+		// component's, and the attribute must not outlive it.
+		delete document.documentElement.dataset.intro;
 		return () => {
 			login?.dispose();
 			login = null;
@@ -150,9 +201,17 @@
 	<link rel="alternate" hreflang="x-default" href="{SITE_ORIGIN}/{FALLBACK_LOCALE}" />
 </svelte:head>
 
+<SocialMeta
+	{locale}
+	title={m.metaTitle}
+	description={m.metaDescription}
+	url="{SITE_ORIGIN}/{locale}"
+/>
+
 {#if intro}
 	<IntroCarousel
 		strings={data.intro}
+		tagline={strings('onboarding.welcome.desktopTagline')}
 		{signingIn}
 		{createHref}
 		onSkip={leaveIntro}
@@ -160,13 +219,14 @@
 		onSignIn={() => {
 			// Seen: whichever way this ends, they have read it. Marking it on the
 			// press rather than on success means a cancelled passkey prompt drops
-			// them on Welcome, not back into the introduction they just read.
+			// them on Welcome, not back into the introduction they just read —
+			// where the method picker is waiting, open.
 			leaveIntro();
-			void signIn();
+			methodsOpen = true;
 		}}
 	/>
 {:else}
-	<main class="welcome">
+	<main class="welcome" data-intro-page>
 		<OnboardingRail
 			rail={{ kind: 'tagline', text: strings('onboarding.welcome.desktopTagline') }}
 		/>
@@ -190,18 +250,40 @@
 				<Button variant="primary" shape="rounded" disabled={signingIn} href={createHref}>
 					{m.createWallet}
 				</Button>
-				<Button variant="secondary" shape="rounded" loading={signingIn} onclick={signIn}>
+				<Button
+					variant="secondary"
+					shape="rounded"
+					loading={signingIn}
+					onclick={() => (methodsOpen = !methodsOpen)}
+				>
 					{m.alreadyHaveWallet}
 				</Button>
 			</div>
 
-			{#if endpointUnreachable}
+			{#if transportFailed}
+				<p class="endpointWarning" role="status">
+					{strings('onboarding.common.networkBody')}
+				</p>
+			{:else if endpointUnreachable}
 				<p class="endpointWarning" role="status">
 					{strings('onboarding.settings.warningText')}
 				</p>
 			{/if}
 		</div>
 	</main>
+{/if}
+
+{#if methodsOpen}
+	<!-- The three ways in, in a sheet (a dialog on desktop): a wallet on a
+	     phone or a security key is reachable by name, not only through
+	     whatever the browser's own sheet defaults to (spec 038 SC-428;
+	     founder: 弹框 on phone web and desktop web alike). -->
+	<Sheet label={strings('onboarding.login.header')} onClose={() => (methodsOpen = false)}>
+		<div class="methodsSheet">
+			<h2 class="methodsTitle">{strings('onboarding.login.header')}</h2>
+			<AddMethodPicker open={true} {strings} onPick={(method) => void signIn(method)} />
+		</div>
+	</Sheet>
 {/if}
 
 {#if pending}
@@ -212,6 +294,14 @@
 			pending?.resolve(accepted);
 			pending = null;
 		}}
+	/>
+{/if}
+
+{#if storageFault !== null || session.fault !== null}
+	<PromptSheet
+		copy={storageCopy}
+		dismissLabel={strings('onboarding.storage.signInAgain')}
+		onAnswer={(accepted) => void answerStorage(accepted)}
 	/>
 {/if}
 
@@ -230,6 +320,11 @@
 		.welcome {
 			justify-content: flex-start;
 			padding: 0;
+			/* Rail and column together, capped and centred past the widest the
+			   mocks were drawn for (spec 038 T078). */
+			width: 100%;
+			max-width: var(--layout-frameMax);
+			margin-inline: auto;
 		}
 	}
 
@@ -311,6 +406,17 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	.methodsSheet {
+		padding: var(--space-xl) var(--layout-screenPaddingX) var(--space-3xl);
+	}
+
+	.methodsTitle {
+		margin: 0 0 var(--space-lg);
+		color: var(--color-fg-base);
+		font-size: var(--text-xl);
+		font-weight: var(--weight-bold);
 	}
 
 	.endpointWarning {

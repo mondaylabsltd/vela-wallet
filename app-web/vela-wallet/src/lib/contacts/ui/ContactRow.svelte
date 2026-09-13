@@ -1,4 +1,10 @@
 <script lang="ts">
+	/**
+	 * One contact in the list. The artwork is its own control beside the row's
+	 * button — it opens the identicon viewer on this contact's address (founder
+	 * call, 2026-09-05), and a button inside a button is invalid HTML — so the
+	 * hover raise lives on the row that holds both.
+	 */
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import type { ContactModel } from '../model';
 
@@ -41,22 +47,21 @@
 			</button>
 		</div>
 	{/if}
-	<button
-		type="button"
-		class="row"
-		class:selected
-		class:hover
-		class:revealed
-		aria-current={selected ? 'true' : undefined}
-		{onclick}
-		{oncontextmenu}
-	>
-		<Identicon svg={contact.identiconSvg} size="row" />
-		<span class="text">
-			<span class="name">{contact.name}</span>
-			<span class="address">{contact.addressDisplay}</span>
-		</span>
-	</button>
+	<div class="row" class:selected class:hover class:revealed>
+		<Identicon svg={contact.identiconSvg} size="row" address={contact.addressFull} />
+		<button
+			type="button"
+			class="main"
+			aria-current={selected ? 'true' : undefined}
+			{onclick}
+			{oncontextmenu}
+		>
+			<span class="text">
+				<span class="name">{contact.name}</span>
+				<span class="address">{contact.addressDisplay}</span>
+			</span>
+		</button>
+	</div>
 </div>
 
 <style>
@@ -78,13 +83,9 @@
 		gap: var(--space-lg);
 		flex: 1;
 		min-width: 0;
-		padding: var(--space-md) var(--space-lg);
-		border: none;
+		padding-inline-start: var(--space-lg);
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-base);
-		font-family: var(--font-ui);
-		text-align: start;
-		cursor: pointer;
 		transition: background var(--motion-hover) ease-out;
 	}
 
@@ -95,6 +96,19 @@
 
 	.row.selected {
 		background: var(--color-bg-raised);
+	}
+
+	.main {
+		display: flex;
+		align-items: center;
+		flex: 1;
+		min-width: 0;
+		padding: var(--space-md) var(--space-lg) var(--space-md) 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		text-align: start;
+		cursor: pointer;
 	}
 
 	.text {

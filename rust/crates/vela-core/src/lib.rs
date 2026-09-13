@@ -26,6 +26,12 @@ pub mod cable;
 /// transport belongs to a platform shell; what is identical on every one of
 /// them lives here. See `specs/019-onboarding-live-wiring/research.md` D4.
 pub mod ctap;
+/// The parallel space's fixed keyset: a software P-256 signer that produces
+/// the exact WebAuthn bytes a real authenticator would. Feature-gated
+/// (`--features dev-fixtures`), DEFAULT OFF, never enabled by the uniffi or
+/// wasm crates — see the module note for why the scalars live here at all.
+#[cfg(feature = "dev-fixtures")]
+pub mod dev_fixtures;
 pub mod eip712;
 pub mod error;
 pub mod i18n;
@@ -42,6 +48,12 @@ pub mod registry_metadata;
 pub mod registry_proof;
 pub mod safe;
 pub mod types;
+/// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
+/// the WebAuthn signature envelope, the v0.7 wire shape. Pure assembly; the
+/// reads and the submit belong to a shell. Written for the desktop in spec
+/// 032; on the web (spec 028 Phase 8) it is the second implementation the
+/// shell's TypeScript assembly is checked against before a passkey signs.
+pub mod user_op;
 pub mod webauthn;
 
 pub use abi::AbiValue;

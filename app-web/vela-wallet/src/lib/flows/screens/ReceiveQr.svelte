@@ -11,6 +11,10 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import AddressCard from '../ui/AddressCard.svelte';
 	import QRCard from '../ui/QRCard.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import { copyText } from '$lib/services/clipboard';
+	import { saveShareImage } from '../share-image';
+	import { shortenAddress } from '$lib/wallet/identity';
 	import type { ReceiveQrModel } from '../model';
 
 	interface Props {
@@ -23,8 +27,29 @@
 
 	let copied = $state<'address' | 'contract' | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	let saving = $state(false);
+
+	/** 保存图片: the live card saves itself; the drawn one (the gallery) only reports the tap. */
+	async function save() {
+		if (model.share === undefined) {
+			onsave?.();
+			return;
+		}
+		saving = true;
+		try {
+			const address = model.account.lines.join('');
+			await saveShareImage(model.share, `vela-${shortenAddress(address)}.png`);
+		} finally {
+			saving = false;
+		}
+	}
 
 	function copy(what: 'address' | 'contract') {
+		void copyText(
+			what === 'address'
+				? model.account.lines.join('')
+				: (model.contract?.copyValue ?? model.contract?.value ?? '')
+		);
 		copied = what;
 		clearTimeout(timer);
 		timer = setTimeout(() => (copied = null), 150);
@@ -59,9 +84,21 @@
 	/>
 
 	<div class="code">
-		<QRCard label={model.title}>
+		<QRCard label={model.title} code={model.code}>
 			{#snippet centre()}
-				<span class="mark" style:background={model.centre.badgeColor}>{model.centre.ticker}</span>
+				{#if model.centre.logoUrls !== undefined}
+					<!-- Live: the chain's (R2) or the token's (R3) own logo, the same
+					     mark the asset rows draw; the lettered badge stands until it loads. -->
+					<TokenIcon
+						ticker={model.centre.ticker}
+						badgeColor={model.centre.badgeColor}
+						logoUrls={model.centre.logoUrls}
+						badgeLogoUrl={model.centre.badgeLogoUrl}
+						badgeHidden={model.centre.badgeHidden}
+					/>
+				{:else}
+					<span class="mark" style:background={model.centre.badgeColor}>{model.centre.ticker}</span>
+				{/if}
 			{/snippet}
 		</QRCard>
 	</div>
@@ -69,8 +106,12 @@
 	<p class="warning">{model.warning}</p>
 
 	<div class="actions">
-		<Button variant="secondary" onclick={onsave}>{model.saveImage}</Button>
-		<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
+		<Button variant="secondary" loading={saving} onclick={save}>{model.saveImage}</Button>
+		{#if model.explorerUrl !== undefined}
+			<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button>
+		{:else}
+			<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
+		{/if}
 	</div>
 </div>
 

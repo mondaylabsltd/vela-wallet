@@ -7,7 +7,16 @@
  * layer that builds these and nothing else.
  */
 
-export type ExploreStateId = 'e1' | 'e2' | 'e3' | 'e4' | 'e5' | 'e6' | 'e7';
+export type ExploreStateId =
+	| 'e1'
+	| 'e2'
+	| 'e3'
+	| 'e4'
+	| 'e5'
+	| 'e6'
+	| 'e7'
+	/** Spec 032 phase 40: the menu on a row in Recent. */
+	| 'e8';
 export type ExploreDesktopStateId = 'de1' | 'de2' | 'de3' | 'de4';
 
 /** A site as the browser home draws it — a lettermark, never a fetched icon. */
@@ -154,7 +163,13 @@ export interface ExploreHomeModel {
 	 * rather than built at the tap, so a screen never has to invent copy at
 	 * interaction time — the same reason the wallet's chain sheet is a fixture.
 	 */
-	menus: { groupManage: GroupManageSheet; siteMenu: SiteMenuSheet; connection: ConnectionSheet };
+	menus: {
+		groupManage: GroupManageSheet;
+		siteMenu: SiteMenuSheet;
+		/** The row menu in Recent — where `delete_origin` is reached from. */
+		recentMenu: SiteMenuSheet;
+		connection: ConnectionSheet;
+	};
 	/** The four-tab bar, reused from the wallet vocabulary. */
 	navLabels: { wallet: string; contacts: string; explore: string; settings: string };
 }

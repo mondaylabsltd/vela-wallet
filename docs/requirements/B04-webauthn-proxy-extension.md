@@ -1,3 +1,5 @@
+> **History (2026-09-11).** The WebAuthn proxy extension this requirement describes (`app-browser-extension/chrome-ext-webauthn-proxy/`) was deleted from the repository in spec 039 at the founder's request. The web shell keeps the `window.__VELA_WEBAUTHN_PROXY_RPID__` seam (`app-web/vela-wallet/src/lib/onboarding/core/passkey.ts`) so a future tool can pin the rpId the same way; nothing ships the extension today.
+
 # B04 · WebAuthn Proxy Extension (Domain-Loss / Dev Passkeys)
 
 | | |

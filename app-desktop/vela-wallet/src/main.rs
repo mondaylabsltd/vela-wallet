@@ -10,22 +10,37 @@ mod contacts;
 mod core_host;
 mod ctap;
 mod executor;
+mod explore;
 mod flows;
 mod gallery;
 mod hardware;
 mod icons;
 mod identicon;
+mod intro;
+mod intro_art;
 mod loc;
 mod onboarding;
 mod onboarding_flow;
 mod outcome;
+mod panic_report;
+mod parallel_space;
 mod passkey_directory;
+mod passkey_icons;
 mod raster;
+mod resident;
 mod session;
 mod settings;
+mod signing;
 mod theme;
 mod ui;
 mod wallet;
+#[cfg(not(target_os = "linux"))]
+mod webview;
+// Same name, no browser behind it: see the file's own header for why the Linux
+// build gets a module rather than a `cfg` in every caller.
+#[cfg(target_os = "linux")]
+#[path = "webview_absent.rs"]
+mod webview;
 mod window_frame;
 
 use gallery::GalleryView;
@@ -71,7 +86,7 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = session::view(cx);
         let root: Div = div().size_full();
-        match view.allowed_route {
+        let root = match view.allowed_route {
             // Storage unread. Paint the surface and nothing else — a splash
             // that lasts one frame is invisible, and a wrong screen is not.
             SessionRoute::Loading => {
@@ -81,6 +96,11 @@ impl Render for Root {
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
+                // And so do the resident machines. Contacts, networks and the
+                // chosen currency belong to the ACCOUNT; a resident that
+                // outlived a sign-out would show the previous person's address
+                // book to the next one.
+                resident::drop_all(cx);
                 let page = self
                     .onboarding
                     .get_or_insert_with(|| cx.new(|cx| OnboardingPage::new(window, cx)))
@@ -102,11 +122,16 @@ impl Render for Root {
                     .clone();
                 root.child(page)
             }
-        }
+        };
+        // The parallel space's marker, over whichever screen is up. It renders
+        // whenever the space is active and never behind a build flag alone —
+        // a test wallet must never wear the real one's face.
+        parallel_space::overlay(root, window)
     }
 }
 
-/// Which root the window hosts. `VELA_PAGE=wallet|contacts|settings|gallery`
+/// Which root the window hosts.
+/// `VELA_PAGE=wallet|contacts|explore|settings|gallery`
 /// (spec 015 research.md D4, extended by spec 018 research.md D1 and spec 023)
 /// — same env-pin family as `VELA_THEME`/`VELA_LANG`; the default remains the
 /// onboarding flow.
@@ -115,6 +140,8 @@ enum RootPage {
     Onboarding,
     Wallet,
     Contacts,
+    /// Spec 022 — the browser, for review without clicking through the wallet.
+    Explore,
     Settings,
     Gallery,
 }
@@ -124,6 +151,7 @@ impl RootPage {
         match std::env::var("VELA_PAGE").as_deref() {
             Ok("wallet") => Self::Wallet,
             Ok("contacts") => Self::Contacts,
+            Ok("explore") => Self::Explore,
             Ok("settings") => Self::Settings,
             Ok("gallery") => Self::Gallery,
             _ => Self::Onboarding,
@@ -152,6 +180,9 @@ fn open_main_window(cx: &mut App) {
         }),
         RootPage::Contacts => open_window_with(cx, |window, cx| {
             cx.new(|cx| WalletPage::contacts(window, cx))
+        }),
+        RootPage::Explore => open_window_with(cx, |window, cx| {
+            cx.new(|cx| WalletPage::explore(window, cx))
         }),
         RootPage::Settings => open_window_with(cx, |window, cx| {
             cx.new(|cx| WalletPage::settings(window, cx))
@@ -196,6 +227,9 @@ fn open_window_with<V: gpui::Render + 'static>(
 }
 
 fn main() {
+    // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
+    // window. Installed before anything can spawn.
+    panic_report::install();
     // LastWindowClosed instead of gpui's macOS default (keep running): a
     // keep-running single-window app must reopen its window from the Dock
     // icon, and that path is dead on macOS 26 — AppKit's TextInputUI panel
@@ -218,6 +252,16 @@ fn main() {
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
+        // The UI face, before any window: every page root names it, and a
+        // family named before it is loaded renders in the fallback face until
+        // the next frame — a visible flash on a wallet's first screen.
+        let fonts = theme::UI_FONT_FILES
+            .iter()
+            .map(|bytes| std::borrow::Cow::Borrowed(*bytes))
+            .collect();
+        if let Err(error) = cx.text_system().add_fonts(fonts) {
+            eprintln!("[vela-wallet] bundled fonts could not be loaded: {error}");
+        }
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

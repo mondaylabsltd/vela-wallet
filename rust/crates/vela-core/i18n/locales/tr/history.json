@@ -7,6 +7,7 @@
     "emptyTitle": "Henüz İşlem Yok",
     "emptyBody": "Gönderdiğiniz işlemler burada görünecek. Tüm geçmişi blok gezgininde de görüntüleyebilirsiniz.",
     "viewOnExplorer": "Blok Gezgininde Görüntüle",
+    "deleteRecord": "Kaydı sil",
     "emptyFilter": "Bu ağda işlem yok",
     "txLabelDappTx": "dApp İşlemi",
     "txLabelSignMessage": "Mesaj İmzala",

@@ -25,6 +25,9 @@
 		onfile?: () => void;
 		ontemplate?: () => void;
 		onapply?: () => void;
+		/** Present ⇒ the rate can be typed in place (spec 038 #E6). */
+		onrate?: (text: string) => void;
+		onresetrate?: () => void;
 		/**
 		 * Present ⇒ the table can be pasted here (spec 026). Absent, the field
 		 * stays the drawn picture the gallery renders.
@@ -32,7 +35,8 @@
 		onpaste?: (value: string) => void;
 	}
 
-	let { model, onunit, onfile, ontemplate, onapply, onpaste }: Props = $props();
+	let { model, onunit, onfile, ontemplate, onapply, onpaste, onrate, onresetrate }: Props =
+		$props();
 </script>
 
 <div class="batch">
@@ -64,7 +68,24 @@
 
 	<div class="rate">
 		<span class="rate-label">{model.rateSection}</span>
-		<span class="rate-value">{model.rateLabel} {model.rateValue}</span>
+		{#if onrate && model.rateInput !== undefined}
+			<span class="rate-edit">
+				<span class="rate-prefix">{model.rateLabel}</span>
+				<input
+					class="rate-input"
+					inputmode="decimal"
+					autocomplete="off"
+					aria-label={model.rateSection}
+					value={model.rateInput}
+					oninput={(event) => onrate(event.currentTarget.value)}
+				/>
+				{#if model.rateEdited && onresetrate}
+					<button type="button" class="rate-reset" onclick={onresetrate}>{model.rateReset}</button>
+				{/if}
+			</span>
+		{:else}
+			<span class="rate-value">{model.rateLabel} {model.rateValue}</span>
+		{/if}
 		<Icon icon={UTILITY_ICONS.pencil} size="sm" />
 	</div>
 	<p class="rate-hint">{model.rateHint}</p>
@@ -208,5 +229,41 @@
 
 	.cta {
 		padding-top: var(--space-md);
+	}
+	.rate-edit {
+		display: inline-flex;
+		align-items: baseline;
+		gap: var(--space-xs);
+		min-width: 0;
+		border-block-end: var(--border-hairline) solid var(--color-border-base);
+	}
+	.rate-edit:focus-within {
+		border-block-end-color: var(--color-fg-base);
+	}
+	.rate-prefix {
+		color: var(--color-fg-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.rate-input {
+		field-sizing: content;
+		min-width: 6ch;
+		max-width: 14ch;
+		padding: var(--space-xs) 0;
+		border: none;
+		background: none;
+		color: var(--color-fg-base);
+		font-variant-numeric: tabular-nums;
+		text-align: end;
+	}
+	.rate-input:focus {
+		outline: none;
+	}
+	.rate-reset {
+		border: none;
+		background: none;
+		padding: 0 var(--space-xs);
+		color: var(--color-fg-muted);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		cursor: pointer;
 	}
 </style>

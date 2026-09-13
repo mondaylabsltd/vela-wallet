@@ -6,7 +6,13 @@
 //! `asset_row`, `token_icon`, `identicon_avatar` and `empty_state` all come
 //! from next door. What is here is what those did not already cover.
 
-use gpui::{Div, Hsla, ParentElement, SharedString, Styled, div, px};
+use gpui::IntoElement as _;
+use gpui::prelude::FluentBuilder as _;
+use gpui::{
+    Div, Hsla, InteractiveElement as _, ParentElement, SharedString,
+    StatefulInteractiveElement as _, Styled, div, px,
+};
+use qrcode::{Color as QrColorModule, QrCode};
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
@@ -360,8 +366,11 @@ pub fn address_card(
     name: SharedString,
     seed: &str,
     lines: (SharedString, SharedString),
-) -> Div {
+    // The whole address, when there is a real one to copy. `None` in the mocks.
+    copy: Option<SharedString>,
+) -> gpui::Stateful<Div> {
     div()
+        .id("receive-address-card")
         .flex()
         .items_center()
         .gap(px(12.))
@@ -397,6 +406,12 @@ pub fn address_card(
                 ),
         )
         .child(icon_img(icons, Icon::Copy, false, theme.fg_muted, 16.))
+        .when_some(copy, |el, address| {
+            el.cursor_pointer()
+                .on_click(move |_, _, cx: &mut gpui::App| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(address.to_string()));
+                })
+        })
 }
 
 /// The receive QR card.
@@ -404,12 +419,23 @@ pub fn address_card(
 /// White in BOTH appearances and a fixed square: a code is read by a camera,
 /// inverting it in dark mode is the classic way to make one unscannable, and a
 /// code that shrinks to make room for its caption stops scanning.
-pub fn qr_card(theme: &Theme, centre: Option<Div>) -> Div {
-    const N: usize = 29;
+pub fn qr_card(theme: &Theme, centre: Option<Div>, payload: Option<&str>) -> Div {
     let ink = gpui::Hsla::from(gpui::rgb(0x1a1a18));
     let white = gpui::Hsla::from(gpui::rgb(0xffffff));
     let _ = theme;
 
+    // A REAL code when there is something to encode.
+    //
+    // Until 031 this card always drew the demo pattern, including on a live
+    // receive screen — a person pointed a phone at their own wallet and got
+    // nothing, or worse, believed they had. The mocks keep the pattern (a
+    // gallery has no address to encode and the drawing is what it is meant to
+    // show); a signed-in receive screen gets a code that scans.
+    if let Some(payload) = payload.filter(|text| !text.is_empty()) {
+        return encoded_qr_card(payload, centre, ink, white);
+    }
+
+    const N: usize = 29;
     // The deterministic demo pattern spec 015 established, denser because this
     // card draws large. Never encodes data.
     let cells: Vec<bool> = {
@@ -482,6 +508,74 @@ pub fn qr_card(theme: &Theme, centre: Option<Div>) -> Div {
     card
 }
 
+/// A scannable code for a real payload.
+///
+/// **Black on white, always — not themed.** A QR is not UI chrome; it is a
+/// target for a camera, and a camera needs dark modules on a light field
+/// whatever the app's palette is. The same rule the onboarding caBLE card
+/// states in its own words.
+///
+/// The module size is derived from the code's own width rather than fixed, so
+/// a longer payload (a bigger version) still fills the same card instead of
+/// overflowing it. An address is version 3-ish; an EIP-681 URI with an amount
+/// is larger, and both have to fit the drawing.
+fn encoded_qr_card(payload: &str, centre: Option<Div>, ink: gpui::Hsla, white: gpui::Hsla) -> Div {
+    let Ok(code) = QrCode::new(payload.as_bytes()) else {
+        // A payload too large to encode. Draw an empty card rather than a
+        // pattern: a decorative code on a screen that is supposed to be
+        // scannable is worse than an obvious blank.
+        return div()
+            .w(px(QR_CARD))
+            .h(px(QR_CARD))
+            .flex_none()
+            .rounded(px(16.))
+            .bg(white);
+    };
+    let width = code.width();
+    let colors = code.to_colors();
+    // The quiet zone is part of the spec, not padding: a code drawn edge to
+    // edge on a card is one a camera can fail to find.
+    #[allow(clippy::cast_precision_loss, reason = "a QR is at most 177 modules")]
+    let module = (QR_CARD - 40.) / width as f32;
+    let mut grid = div().flex().flex_col();
+    for row in 0..width {
+        let mut line = div().flex();
+        for col in 0..width {
+            let dark = matches!(colors.get(row * width + col), Some(QrColorModule::Dark));
+            line = line.child(
+                div()
+                    .w(px(module))
+                    .h(px(module))
+                    .bg(if dark { ink } else { white }),
+            );
+        }
+        grid = grid.child(line);
+    }
+
+    let mut card = div()
+        .w(px(QR_CARD))
+        .h(px(QR_CARD))
+        .flex_none()
+        .rounded(px(16.))
+        .bg(white)
+        .flex()
+        .items_center()
+        .justify_center()
+        .relative()
+        .child(grid);
+    if let Some(centre) = centre {
+        card = card.child(
+            div()
+                .absolute()
+                .p(px(3.))
+                .rounded(px(999.))
+                .bg(white)
+                .child(centre),
+        );
+    }
+    card
+}
+
 /// The network-fee row.
 ///
 /// A row and not a card: the fee is a fact about the transfer, and the only
@@ -519,12 +613,26 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
 }
 
 /// DSD2bL's split row: one of N people, what they get, and the way to drop them.
+/// One payee in a split, with the two things that make a split editable: the
+/// amount THIS row gets, and the way to drop it.
+///
+/// `None` for either draws the mock's read-only card — which is what the
+/// gallery gets, and what this screen was on the desktop until spec 033.
+pub struct RecipientRowActions {
+    pub amount: Option<crate::flows::panels::AddressField>,
+    pub remove: Option<crate::flows::panels::Click>,
+}
+
 pub fn recipient_card(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     recipient: &RecipientCard,
+    index: usize,
+    row: RecipientRowActions,
+    window: &gpui::Window,
 ) -> Div {
+    let RecipientRowActions { amount, remove } = row;
     div()
         .flex()
         .items_center()
@@ -553,13 +661,47 @@ pub fn recipient_card(
                         .child(recipient.name.clone()),
                 ),
         )
-        .child(
-            div()
+        .child(match amount {
+            // Live: this row's own amount, typed. A split whose rows cannot be
+            // given amounts is a screen that can be filled in and never sent.
+            Some(field) => div()
+                .w(px(120.))
+                .flex_none()
+                .child(crate::ui::text_field(
+                    gpui::ElementId::from(("split-amount", index)),
+                    theme,
+                    &crate::ui::NameFieldStrings {
+                        label: gpui::SharedString::from(""),
+                        placeholder: field.placeholder.clone(),
+                        helper: gpui::SharedString::from(""),
+                        too_long_hint: gpui::SharedString::from(""),
+                    },
+                    &field.value,
+                    false,
+                    false,
+                    &field.focus,
+                    window,
+                    field.on_change,
+                ))
+                .into_any_element(),
+            None => div()
                 .text_size(theme::text_row_title())
                 .text_color(theme.fg_base)
-                .child(recipient.amount.clone()),
-        )
-        .child(icon_img(icons, Icon::X, false, theme.fg_subtle, 14.))
+                .child(recipient.amount.clone())
+                .into_any_element(),
+        })
+        // The X has been drawn on this card since spec 021 and did nothing.
+        .child(crate::flows::panels::clickable(
+            gpui::ElementId::from(("split-remove", index)),
+            remove,
+            div().p(px(4.)).rounded(px(6.)).child(icon_img(
+                icons,
+                Icon::X,
+                false,
+                theme.fg_subtle,
+                14.,
+            )),
+        ))
 }
 
 /// The send form's token card: which token, off which chain, out of how much.
@@ -643,4 +785,43 @@ pub fn accent_button(theme: &Theme, label: SharedString) -> Div {
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
         .child(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The card encodes a payload that a camera could actually read back.
+    ///
+    /// Not a pixel comparison: what must hold is that a real payload produces a
+    /// DIFFERENT matrix per payload and the same one twice, which the demo
+    /// pattern — identical for every wallet on earth — cannot do.
+    #[test]
+    fn a_real_payload_produces_a_real_code() {
+        const ADDR: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let code =
+            QrCode::new(ADDR.as_bytes()).unwrap_or_else(|_| unreachable!("an address fits a QR"));
+        // Decoding is not something a QR encoder offers, so the check is the
+        // property that separates a code from a picture: the modules depend on
+        // the payload.
+        let other = QrCode::new("0x0000000000000000000000000000000000000001".as_bytes())
+            .unwrap_or_else(|_| unreachable!("also fits"));
+        assert_ne!(
+            code.to_colors(),
+            other.to_colors(),
+            "two addresses produced the same code"
+        );
+        let again = QrCode::new(ADDR.as_bytes()).unwrap_or_else(|_| unreachable!("deterministic"));
+        assert_eq!(code.to_colors(), again.to_colors());
+
+        // An EIP-681 URI with an amount is longer and must still encode.
+        assert!(
+            QrCode::new(
+                format!("ethereum:{ADDR}@100/transfer?address={ADDR}&uint256=1500000000000000000")
+                    .as_bytes()
+            )
+            .is_ok(),
+            "a payment URI must fit"
+        );
+    }
 }

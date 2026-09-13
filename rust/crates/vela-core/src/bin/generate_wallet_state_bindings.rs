@@ -39,6 +39,9 @@ use vela_core::app::dapp_session::{
 use vela_core::app::display_currency::{
     CurrencyOperation, CurrencyShellResult, CurrencyView, Event as CurrencyEvent,
 };
+use vela_core::app::explore_sites::{
+    Event as ExploreEvent, ExploreOperation, ExploreShellResult, ExploreView,
+};
 use vela_core::app::ext_cache::{
     Event as ExtCacheEvent, ExtCacheOperation, ExtCacheShellResult, ExtCacheView,
 };
@@ -69,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir = match env::args().nth(1) {
         Some(path) => PathBuf::from(path),
         None => PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
-            .join("../../../src/services/wallet-state-core/generated"),
+            .join("../../../app-web/vela-wallet/src/lib/core/generated"),
     };
     fs::create_dir_all(&out_dir)?;
 
@@ -153,6 +156,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     BhistOperation::export_all(&config)?;
     BhistShellResult::export_all(&config)?;
     BhistView::export_all(&config)?;
+    ExploreEvent::export_all(&config)?;
+    ExploreOperation::export_all(&config)?;
+    ExploreShellResult::export_all(&config)?;
+    ExploreView::export_all(&config)?;
     ExtCacheEvent::export_all(&config)?;
     ExtCacheOperation::export_all(&config)?;
     ExtCacheShellResult::export_all(&config)?;

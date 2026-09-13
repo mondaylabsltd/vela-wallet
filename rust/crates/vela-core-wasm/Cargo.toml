@@ -3,7 +3,7 @@ name = "vela-core-wasm"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "wasm-bindgen shell over vela-core for the web app (metro/Expo web, base64 initSync loading)."
+description = "wasm-bindgen shell over vela-core for the web shell (app-web/vela-wallet; base64 initSync loading)."
 
 [lib]
 crate-type = ["cdylib"]
@@ -25,7 +25,7 @@ crate-type = ["cdylib"]
 # compiled in costs +31,862 brotli'd bytes against 15,353 as plain JSON, because
 # base64-wrapping defeats compression on exactly the data type that compresses best.
 #
-# The web route therefore fetches `public/i18n/<lng>.json` on demand and hands it to
+# The web route therefore fetches `assets/i18n/<lng>.json` on demand and hands it to
 # `Catalog::from_json`. That is also the only shape that delivers the actual
 # requirement: a Japanese reader downloads ja + en, not all fifteen.
 # No feature list at all: vela-core's own `default = []` is already zero locales,

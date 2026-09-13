@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
+import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
@@ -43,6 +45,10 @@ fun TokenIcon(
     ticker: String,
     badgeColor: Color,
     modifier: Modifier = Modifier,
+    /** Spec 047: the web's logo rules — candidates in order, the badge's logo, the badge hidden when it repeats the token. */
+    logoUrls: List<String> = emptyList(),
+    badgeLogoUrl: String? = null,
+    badgeHidden: Boolean = false,
     /**
      * Spec 021: `inline` is the mark inside a line of text — the fee row's fee
      * token, a fact row's network, a notice banner's chain. A size PROP and not
@@ -52,30 +58,49 @@ fun TokenIcon(
     inline: Boolean = false,
 ) {
     val colors = VelaTheme.colors
+    val circle = if (inline) VelaIconSize.xl else WalletMetrics.avatarSize
     Box(modifier = modifier, contentAlignment = Alignment.BottomEnd) {
-        Box(
-            modifier = Modifier
-                .size(if (inline) VelaIconSize.xl else WalletMetrics.avatarSize)
-                .background(colors.bgSunken, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = ticker.take(3).uppercase(),
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.bold,
-                // Two thirds of the row glyph, which keeps a three-letter
-                // ticker inside the smaller circle.
-                fontSize = if (inline) VelaTextSize.xs * 0.66f else VelaTextSize.xs,
-                maxLines = 1,
-            )
+        // Spec 047: the logo from the chain-data endpoint when it answers; the
+        // drawn ticker glyph is the whole fallback (the web's TokenIcon).
+        RemoteLogo(urls = logoUrls, size = circle) {
+            Box(
+                modifier = Modifier
+                    .size(circle)
+                    .background(colors.bgSunken, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = ticker.take(3).uppercase(),
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.bold,
+                    // Two thirds of the row glyph, which keeps a three-letter
+                    // ticker inside the smaller circle.
+                    fontSize = if (inline) VelaTextSize.xs * 0.66f else VelaTextSize.xs,
+                    maxLines = 1,
+                )
+            }
         }
         // The inline mark carries no chain dot: at that diameter the dot is a
         // few pixels of colour on an already-crowded glyph, and the row it sits
-        // in has said which chain this is.
-        if (!inline) ChainBadge(color = badgeColor)
+        // in has said which chain this is. The badge is also hidden when it
+        // would repeat the token (ETH on Ethereum, XDAI on Gnosis) — the
+        // founder's ruling of 2026-09-05, the web's `balanceTokenBadgeChainId`.
+        if (!inline && !badgeHidden) ChainBadge(color = badgeColor, logoUrl = badgeLogoUrl)
     }
 }
+
+/** The same icon from a flow's mark model. */
+@Composable
+fun TokenIcon(mark: TokenMarkModel, modifier: Modifier = Modifier, inline: Boolean = false) = TokenIcon(
+    ticker = mark.ticker,
+    badgeColor = mark.badgeColor,
+    modifier = modifier,
+    logoUrls = mark.logoUrls,
+    badgeLogoUrl = mark.badgeLogoUrl,
+    badgeHidden = mark.badgeHidden,
+    inline = inline,
+)
 
 /**
  * Asset row (spec vocabulary #9): TokenIcon, ticker + chain name, trailing
@@ -122,7 +147,7 @@ fun AssetRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(ticker = model.ticker, badgeColor = model.badgeColor)
+        TokenIcon(ticker = model.ticker, badgeColor = model.badgeColor, logoUrls = model.logoUrls, badgeLogoUrl = model.badgeLogoUrl, badgeHidden = model.badgeHidden)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(

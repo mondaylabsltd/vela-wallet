@@ -83,6 +83,17 @@ use serde_json::Value;
 
 use alloy_primitives::U256;
 
+/// Re-exported for the shells.
+///
+/// [`format_token_amount`] takes the width the amounts in this machine are
+/// held at, and a shell that wanted to call it had to depend on
+/// `alloy-primitives` itself — which the desktop deliberately does not (its
+/// `executor/abi.rs` says so in as many words: the ABI crate lives here, not
+/// there). One re-export beside the function that needs it is cheaper than a
+/// second formatter in every shell, and a second formatter would be a second
+/// answer to "how much am I approving".
+pub use alloy_primitives::U256 as GuardAmount;
+
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 

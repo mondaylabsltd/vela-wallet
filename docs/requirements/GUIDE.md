@@ -119,7 +119,7 @@ Roadmap items that don't have their own PRD live as **forward-FRs** inside an ex
   "what to build."
 - **`getvela.app/`** holds the public whitepaper, roadmap, and site copy; treated as canonical over
   the stale root `README.md`.
-- **`agent-rules/`** defines the process these PRDs are built under (`O02`).
+- **`docs/agent-rules/`** defines the process these PRDs are built under (`O02`).
 
 ## Maintaining this set
 

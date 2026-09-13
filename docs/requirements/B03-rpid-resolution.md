@@ -31,7 +31,7 @@ recovery possible.
 
 - **FR-1** — Native resolves rpId to `getvela.app`.
 - **FR-2** — Web reduces the current host to the **registrable domain** so subdomains share passkeys (`wallet.getvela.app` ≡ `getvela.app`).
-- **FR-3** — If `window.__VELA_WEBAUTHN_PROXY_RPID__` is set (by the proxy extension B04), it overrides the resolved rpId.
+- **FR-3** — If `window.__VELA_WEBAUTHN_PROXY_RPID__` is set (by a dev tool; the proxy extension B04 that used to set it was deleted in spec 039, the seam stays), it overrides the resolved rpId.
 - **FR-4** — Registration (B01) and every signing `get()` (B02) use the *same* resolution logic.
 
 ## 5. Non-functional requirements

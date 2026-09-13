@@ -30,9 +30,11 @@ use gpui::{
 use vela_core::app::create_wallet::{CreateKeyRow, CreateStage, CreateView, SubmitLabel};
 use vela_core::app::{KeyMethod, StatusKey};
 
+use crate::hardware::METHOD_ICON_PX;
 use crate::identicon::IdenticonCache;
 use crate::loc::Loc;
 use crate::passkey_directory::PasskeyDirectory;
+use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::theme::{
     self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, HAIRLINE, OPACITY_DISABLED, RADIUS_FIELD, Theme,
 };
@@ -194,6 +196,8 @@ pub struct FlowHost<'a> {
     /// The DONE card's avatar. A `RefCell` because rasterizing needs `&mut`
     /// and the whole flow renders from a shared `&FlowHost`.
     pub identicons: &'a RefCell<IdenticonCache>,
+    /// The method rows' marks (spec 038).
+    pub passkey_icons: &'a RefCell<PasskeyIconCache>,
     /// Names and marks for models the compiled catalog cannot name. Read-only
     /// here: the page does the asking, from its own render pass.
     pub directory: &'a RefCell<PasskeyDirectory>,
@@ -909,6 +913,11 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
     // authenticator this shell can reach, and only when Hello is enrolled.
     let this_device = crate::executor::passkey::platform_supported();
 
+    let palette = Palette {
+        ink: theme.fg_muted,
+        muted: theme.fg_subtle,
+        paper: theme.bg_base,
+    };
     let entry = |method: KeyMethod, title_key: &str, body: SharedString, available: bool| {
         let sink = host.sink.clone();
         let event = if available {
@@ -916,6 +925,11 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         } else {
             FlowEvent::MethodUnavailable(method)
         };
+        let mark = host.passkey_icons.borrow_mut().image(
+            PasskeyIcon::for_method(method),
+            palette,
+            METHOD_ICON_PX,
+        );
         let row = div()
             .id(("flow-method", method as u64))
             .w_full()
@@ -925,6 +939,12 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
             .py(px(FLOW_GAP_MD))
             .border_b_1()
             .border_color(theme.divider)
+            .child(
+                img(ImageSource::Render(mark))
+                    .w(px(METHOD_ICON_PX as f32))
+                    .h(px(METHOD_ICON_PX as f32))
+                    .flex_none(),
+            )
             .child(
                 div()
                     .flex_1()

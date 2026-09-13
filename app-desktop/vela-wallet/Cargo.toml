@@ -3,6 +3,16 @@ name = "vela-wallet"
 version = "0.1.1"
 edition = "2024"
 
+[features]
+# The parallel space (spec 032 US0): the real app with ONE substitution — where
+# a passkey would sign, vela-core's fixed keyset signs. Compile-time here, and
+# ALSO gated at runtime (`VELA_PARALLEL_SPACE=1`, see `src/parallel_space.rs`)
+# with a badge that renders whenever the space is active. Default OFF: a
+# release build carries neither the test scalars nor any path to a software
+# signer, and `cargo test` alone does not turn it on — the seam's own tests
+# run under `cargo test --features dev-fixtures`.
+dev-fixtures = ["vela-core/dev-fixtures"]
+
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
 # `wayland` and `x11` are NOT optional extras. gpui_linux defaults to both, but
@@ -33,7 +43,17 @@ vela-core = { path = "../../rust/crates/vela-core", features = [
 # Icon rasterization (spec 015 research.md D2): the 24×24 corpus SVGs are tinted
 # by string substitution and rasterized per (icon, color, size). Same crate the
 # vela-core feature already brings in — no new renderer.
-resvg = { version = "0.45", default-features = false }
+#
+# `text` and `system-fonts` are on for ONE surface: the receive share card
+# (spec 032 phase 42), whose whole point is a picture carrying an address a
+# person can read. Without them usvg drops every `<text>` silently, which
+# would save a card with a code and no words on it — the failure nobody
+# notices until somebody has already shared one. Icons and identicons are
+# shapes and do not care either way.
+resvg = { version = "0.45", default-features = false, features = [
+    "text",
+    "system-fonts",
+] }
 
 # Lottie playback for the launch animation (spec 012). Three things about this
 # line are load-bearing — see specs/012-launch-animation-lottie/research.md D2:
@@ -113,6 +133,13 @@ ureq = { version = "3.4", features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# The batch importer's spreadsheet reader (spec 032 phase 5). The core parses
+# CSV/TSV text itself and takes a workbook only as a flattened cell matrix;
+# this is the one thing it cannot do — read an .xlsx — and it is pure Rust
+# with no system dependency, so the three desktops pay the same for it. Read
+# only: the template the importer saves is CSV text the core composes.
+calamine = "0.36"
+
 # The 32-byte software group-key seed, and CTAP2's PIN/UV key agreement. ALL
 # randomness in the flow lives in the shell — vela-core's ctap module takes the
 # shared secret as an input precisely so it can stay a pure function.
@@ -171,6 +198,12 @@ btleplug = "0.11"
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "net"] }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 qrcode = { version = "0.14", default-features = false }
+# The other direction: a QR code READ out of a picture. Pure Rust (no zbar, no
+# C toolchain), which is what keeps the Windows and Linux builds honest — the
+# scanner's file path has to work on every desktop even where the camera one
+# does not. `image` is already here for the identicon raster, and rqrr takes
+# its `GrayImage` directly.
+rqrr = "0.9"
 # btleplug keys its service-data map by `uuid::Uuid`; name the type to match
 # on the caBLE service UUIDs. Same major as btleplug pulls, so no second copy.
 uuid = "1"
@@ -191,12 +224,37 @@ uuid = "1"
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 pcsc = "2.9"
 
+# The web engine for the dApp browser (spec 032 phase 13 spike).
+#
+# NOT on Linux, deliberately and temporarily: wry's `os-webview` there pulls
+# gtk + webkit2gtk + soup3, which the CI `desktop` job and
+# desktop-linux-packages.yml do not install — adding it unconditionally turns
+# the Linux build red before anything is drawn. wry's child webview is also
+# X11-only on Linux and needs `gtk::init` plus a GTK loop pumped alongside
+# gpui's, while gpui prefers Wayland when it is there. So Linux is a separate
+# decision, recorded rather than smuggled in.
+#
+# It brings objc2 0.6 alongside the 0.5 this crate pins to match gpui. They
+# coexist because nothing objc2-typed crosses between them: wry takes a
+# `raw-window-handle` 0.6 handle, which is the ONE version both sides already
+# agree on (gpui pins 0.6 too — see the note by `raw-window-handle` below).
+wry = "0.56"
+
 # The CTAP 2.3 BLE-only data channel (spec 019 T174): once a BLE-capable
 # authenticator advertises an L2CAP PSM, the platform connects a CoC directly —
 # no tunnel server, no relay, no GFW. btleplug has NO L2CAP, so the connection
 # is CoreBluetooth via objc2 (macOS only). Pinned to the exact versions gpui
 # already pulls, so no second copy of any objc2 crate enters the tree.
 [target.'cfg(target_os = "macos")'.dependencies]
+# The camera, for the scanner's live half (spec 036 phase 2). macOS only ON
+# PURPOSE: the file path (phase 1) works on all three desktops and stays the
+# scanner's floor, so a platform without a capture backend loses the preview
+# and keeps the feature. `input-avfoundation` is the only backend named — the
+# v4l and Media Foundation ones would pull Linux and Windows system headers
+# into a target that does not build them.
+nokhwa = { version = "0.10", default-features = false, features = [
+    "input-avfoundation",
+] }
 objc2 = "0.5"
 objc2-foundation = { version = "0.2", features = [
     "NSStream",
@@ -255,6 +313,13 @@ objc2-core-bluetooth = { version = "0.2.2", features = [
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 
+# `localtime_r`, for the device's UTC offset — the one fact vela-core cannot
+# derive, because it deliberately ships no timezone database. Unix-wide rather
+# than Linux-only since spec 031: the activity feed groups by LOCAL day, and on
+# macOS that is just as true.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Reading the HWND out of the gpui window to parent the passkey dialog to it.
 # gpui already depends on this crate and re-exports the trait impl, but a trait
 # has to be in scope through a direct dependency to be usable, so it is named
@@ -262,6 +327,16 @@ libc = "0.2"
 # compiling a second copy whose `RawWindowHandle` would be a different type.
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
+
+# `GetTimeZoneInformation`, for the one fact the core cannot derive: which day
+# a timestamp belongs to. Bindings rather than a hand-rolled
+# `TIME_ZONE_INFORMATION`, because getting that struct's layout wrong is
+# undetectable from a machine that cannot compile this target — and this crate
+# cannot be cross-checked at all (its C dependencies die in their build
+# scripts), so the call was verified in an isolated crate against
+# x86_64-pc-windows-gnu instead. Note 0.59 exports only TIME_ZONE_ID_INVALID
+# of the four ids; the other three are matched by value.
+windows-sys = { version = "0.59", features = ["Win32_System_Time"] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than

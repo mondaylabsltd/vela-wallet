@@ -74,14 +74,70 @@ export function pickTable(): Promise<PickedTable | null> {
 	});
 }
 
+/** What a picked text file carries. */
+export interface PickedTextFile {
+	name: string;
+	text: string;
+}
+
+/**
+ * Ask for ONE text file of the given kinds (`accept` is the input's own
+ * grammar — `.json,.csv`). Resolves with the file, or `null` when the person
+ * cancelled. The same picker discipline as `pickTable` (spec 026): created,
+ * clicked, thrown away, and settled on focus-return so the caller is never
+ * left waiting on a dialog that closed without a word.
+ *
+ * The contacts book travels this way (spec 028 US5): the text goes to the
+ * core's `import_file`, which owns the format — JSON-or-CSV sniffing, the
+ * column heuristics — so what this returns is bytes, not rows.
+ */
+export function pickTextFile(accept: string): Promise<PickedTextFile | null> {
+	if (typeof document === 'undefined') return Promise.resolve(null);
+	return new Promise<PickedTextFile | null>((resolve) => {
+		const input = document.createElement('input');
+		input.type = 'file';
+		input.accept = accept;
+		input.style.display = 'none';
+		let settled = false;
+		const done = (value: PickedTextFile | null) => {
+			if (settled) return;
+			settled = true;
+			window.removeEventListener('focus', onFocus);
+			input.remove();
+			resolve(value);
+		};
+		const onFocus = () => {
+			setTimeout(() => done(null), 500);
+		};
+		input.addEventListener('change', async () => {
+			const file = input.files?.[0];
+			if (!file) return done(null);
+			try {
+				done({ name: file.name, text: await file.text() });
+			} catch {
+				done(null);
+			}
+		});
+		input.addEventListener('cancel', () => done(null));
+		document.body.appendChild(input);
+		window.addEventListener('focus', onFocus, { once: true });
+		input.click();
+	});
+}
+
 /**
  * Hand a file to the person. A Blob and an anchor — the web's share sheet.
  * Silent about failure for the same reason the native one is: a dismissed
  * share is not an error, and the core's own result variant says so.
  */
 export async function saveTextFile(name: string, contents: string, mime: string): Promise<void> {
+	await saveBlob(name, new Blob([contents], { type: mime }));
+}
+
+/** The same hand-over for bytes already in a Blob — the receive share image. */
+export async function saveBlob(name: string, blob: Blob): Promise<void> {
 	if (typeof document === 'undefined') return;
-	const url = URL.createObjectURL(new Blob([contents], { type: mime }));
+	const url = URL.createObjectURL(blob);
 	const anchor = document.createElement('a');
 	anchor.href = url;
 	anchor.download = name;

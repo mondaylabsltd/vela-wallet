@@ -2,10 +2,12 @@
 	import type { ChainRowModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
+	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {
 		rows: ChainRowModel[];
-		onselect?: (name: string) => void;
+		/** The row itself: a live row carries its `chainId`, a drawn one only a name. */
+		onselect?: (row: ChainRowModel) => void;
 	}
 
 	let { rows, onselect }: Props = $props();
@@ -14,13 +16,17 @@
 <ul class="chains">
 	{#each rows as row (row.name)}
 		<li>
-			<button type="button" aria-pressed={row.selected} onclick={() => onselect?.(row.name)}>
-				<span
-					class="dot"
-					class:all={row.dot === 'all'}
-					style:background={row.dot === 'all' ? undefined : row.dot}
-					aria-hidden="true"
-				></span>
+			<button type="button" aria-pressed={row.selected} onclick={() => onselect?.(row)}>
+				<span class="mark" aria-hidden="true">
+					<span
+						class="dot"
+						class:all={row.dot === 'all'}
+						style:background={row.dot === 'all' ? undefined : row.dot}
+					></span>
+					<!-- The chain's logo from the data endpoint, over the dot the
+					     boards draw; the dot shows until it loads and stays if it never does. -->
+					<RemoteLogo urls={row.logoUrl === undefined ? undefined : [row.logoUrl]} />
+				</span>
 				<span class="name">{row.name}</span>
 				{#if row.selected}
 					<span class="checked"><Icon icon={UTILITY_ICONS.check} size="sm" /></span>
@@ -56,11 +62,22 @@
 		border-radius: var(--radius-md);
 	}
 
+	/* A fixed slot the size of a logo, with the dot centred in it, so rows
+	   with and without a logo keep their names on one line. */
+	.mark {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: var(--icon-md);
+		height: var(--icon-md);
+		flex-shrink: 0;
+	}
+
 	.dot {
 		width: var(--icon-xs);
 		height: var(--icon-xs);
 		border-radius: var(--radius-full);
-		flex-shrink: 0;
 	}
 
 	.dot.all {

@@ -3,4 +3,4 @@
 /**
  * Which question an `RpcEthCall` asked. Echoed verbatim in the answer.
  */
-export type ClearProbe = "supports_erc721" | "supports_erc1155" | "decimals";
+export type ClearProbe = "supports_erc721" | "supports_erc1155" | "decimals" | "symbol";

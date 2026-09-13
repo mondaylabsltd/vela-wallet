@@ -4,13 +4,15 @@
 
 use gpui::{
     Div, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    SharedString, Stateful, Styled, canvas, div, fill as quad_fill, img, px,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled, canvas, div,
+    fill as quad_fill, img, px,
 };
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{
     self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_CONTROL_H, WALLET_NAV_ROW_H, WALLET_ROW_ICON,
+    WALLET_TOAST_DISC,
 };
 
 use super::fixtures::{
@@ -268,7 +270,36 @@ pub fn sidebar_search(theme: &Theme, icons: &mut IconCache, placeholder: SharedS
 
 /// Hero balance with its four states and optional status line (spec FR-008:
 /// masking is a render variant, not a separate screen).
-pub fn balance_display(theme: &Theme, icons: &mut IconCache, model: &BalanceModel) -> Div {
+/// The figure, with or without a press behind it.
+///
+/// One helper rather than a `when` at each state, because the hidden hero and
+/// the live one must be the SAME target: hiding is a toggle, and a gesture that
+/// only works in one direction is a trap.
+fn pressable(figure: Div, on_toggle: Option<BalanceToggle>) -> Div {
+    let Some(action) = on_toggle else {
+        return figure;
+    };
+    div().child(
+        figure
+            .id("balance-hero-toggle")
+            .cursor_pointer()
+            // No hover tint and no ripple: this is a 40-pixel numeral, and a
+            // box drawn around money to say "clickable" is the containerised
+            // look this design language spent its budget removing.
+            .on_click(move |event, window, cx| action(event, window, cx)),
+    )
+}
+
+/// What a tap on the figure does. `None` draws the same hero with nothing to
+/// press — the gallery, and any window with no session behind it.
+pub type BalanceToggle = Box<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App)>;
+
+pub fn balance_display(
+    theme: &Theme,
+    icons: &mut IconCache,
+    model: &BalanceModel,
+    on_toggle: Option<BalanceToggle>,
+) -> Div {
     let mut root = div().flex().flex_col().gap(px(8.)).child(
         div()
             .text_size(theme::text_label())
@@ -285,7 +316,7 @@ pub fn balance_display(theme: &Theme, icons: &mut IconCache, model: &BalanceMode
                 .rounded(px(8.))
                 .bg(theme.bg_sunken),
         ),
-        BalanceState::Hidden => root.child(
+        BalanceState::Hidden => root.child(pressable(
             div()
                 .flex()
                 .items_center()
@@ -297,8 +328,12 @@ pub fn balance_display(theme: &Theme, icons: &mut IconCache, model: &BalanceMode
                         .text_color(theme.fg_base)
                         .child(model.integer.clone()),
                 )
+                // The way back. The dots alone would be a screen with no
+                // affordance on it, which is how a person concludes the app
+                // has lost their money rather than that they hid it.
                 .child(icon_img(icons, Icon::EyeOff, false, theme.fg_subtle, 20.)),
-        ),
+            on_toggle,
+        )),
         BalanceState::Normal | BalanceState::ZeroLive => {
             let mut amount = div().flex().items_end().child(
                 div()
@@ -317,7 +352,7 @@ pub fn balance_display(theme: &Theme, icons: &mut IconCache, model: &BalanceMode
                         .child(SharedString::from(format!(".{decimals}"))),
                 );
             }
-            root.child(amount)
+            root.child(pressable(amount, on_toggle))
         }
     };
 
@@ -774,5 +809,60 @@ pub fn qr_placeholder(theme: &Theme, caption: SharedString, side: Pixels) -> Div
                 .text_size(theme::text_label())
                 .text_color(ink.opacity(0.5))
                 .child(caption),
+        )
+}
+
+/// The money-in celebration (D1b): a floating pill saying what landed.
+///
+/// The phone's version is a solid green banner with white words on it. This is
+/// not that, for a reason that is about the palette rather than about taste:
+/// the dark palette's success green (`#3da872`) under white text is a contrast
+/// ratio of about three to one, which passes for a 28-pixel glyph and fails for
+/// a sentence. So the colour lives in the disc — a small area, a shape rather
+/// than a word — and the sentence sits on the raised surface every other
+/// floating thing in this shell uses, at full contrast in both palettes.
+///
+/// Nothing here is interactive, and deliberately: it is over the middle of the
+/// window for 2.8 seconds and a person who reaches for what is underneath must
+/// get what is underneath. `menu_card`'s `occlude` is what a menu needs and
+/// what this must never have.
+pub fn receipt_toast(theme: &Theme, icons: &mut IconCache, text: SharedString) -> Div {
+    let height = WALLET_TOAST_DISC + 20.;
+    div()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .pl(px(10.))
+        .pr(px(18.))
+        .py(px(10.))
+        .rounded(px(height / 2.))
+        .bg(theme.bg_raised)
+        .border_1()
+        .border_color(theme.divider)
+        .shadow_lg()
+        .child(
+            div()
+                .w(px(WALLET_TOAST_DISC))
+                .h(px(WALLET_TOAST_DISC))
+                .flex_none()
+                .rounded(px(WALLET_TOAST_DISC / 2.))
+                .bg(theme.success)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon_img(
+                    icons,
+                    Icon::ArrowDownLeft,
+                    false,
+                    theme.fg_inverse,
+                    16.,
+                )),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(text),
         )
 }

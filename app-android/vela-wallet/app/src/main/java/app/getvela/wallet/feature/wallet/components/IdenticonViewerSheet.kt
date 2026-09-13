@@ -1,7 +1,6 @@
 package app.getvela.wallet.feature.wallet.components
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import app.getvela.wallet.core.platform.Clipboard
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +55,8 @@ fun IdenticonViewerSheet(
     /** The seed, verbatim: what the artwork was drawn from. */
     address: String,
     onDismiss: () -> Unit,
+    /** Spec 049: the name the opener showed, so the initials style draws the same disc big. */
+    name: String? = null,
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
@@ -82,9 +83,11 @@ fun IdenticonViewerSheet(
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
             IdenticonAvatar(
+                tappable = false,
                 seed = address,
                 size = WalletMetrics.identiconViewerSize,
                 contentDescription = null,
+                name = name,
             )
 
             Text(
@@ -140,7 +143,5 @@ fun IdenticonViewerSheet(
     }
 }
 
-private fun copyToClipboard(context: Context, address: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText(address, address))
-}
+private fun copyToClipboard(context: Context, address: String): Boolean =
+    Clipboard.copy(context, "address", address)

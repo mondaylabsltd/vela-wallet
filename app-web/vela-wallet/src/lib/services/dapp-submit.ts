@@ -42,6 +42,7 @@ import {
 	type WalletSigner
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
+import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
 import { findAccountByCredentialId } from './accounts';
 import { getAllNetworksSync } from './networks';
 
@@ -228,8 +229,32 @@ async function signSafeMessage(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 	const assertion = await signWithAny(safeHashHex, credentials);
+	// The authenticator signed the hash that was asked for, and nothing else
+	// (spec 028 Phase 8).
+	assertChallengeSigned(
+		fromHex(stripHexPrefix(assertion.clientDataJSONHex)),
+		fromHex(stripHexPrefix(safeHashHex))
+	);
 	const signerAddress = keySet ? signerAddressFor(keySet, assertion.credentialId) : undefined;
 	return { assertion, signerAddress };
+}
+
+/**
+ * The EIP-1271 hash the passkey signs, computed by the shell AND the core and
+ * refused if they differ (spec 028 Phase 8) — the message the sheet decoded
+ * and the bytes the passkey sees come from one reading.
+ */
+function attestedMessageHash(
+	originalHash: Uint8Array,
+	chainId: number,
+	safeAddress: string
+): Uint8Array {
+	return attestedSafeMessageHash(
+		originalHash,
+		chainId,
+		safeAddress,
+		computeSafeMessageHash(originalHash, chainId, safeAddress)
+	);
 }
 
 /**
@@ -276,7 +301,7 @@ export async function handlePersonalSign(
 	combined.set(msgBytes, prefix.length);
 	const originalHash = keccak256(combined);
 
-	const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
 	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }
@@ -302,7 +327,7 @@ export async function handleSignTypedData(
 	assertChainSupported(effectiveChainId);
 
 	const originalHash = hashTypedData(typedData);
-	const safeHash = computeSafeMessageHash(originalHash, effectiveChainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
 	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }
@@ -425,7 +450,7 @@ export async function handleGenericSign(
 	const jsonBytes = new TextEncoder().encode(jsonStr);
 	const originalHash = keccak256(jsonBytes);
 
-	const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
 	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }

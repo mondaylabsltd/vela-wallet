@@ -32,6 +32,7 @@ import type {
 	RpcBannerModel,
 	RpcFixModel,
 	RpcProvidersModel,
+	SelectRowModel,
 	SelectSheetModel,
 	SettingsDesktopModel,
 	SettingsHomeModel,
@@ -626,6 +627,7 @@ function accountsSheet(
 		rows: ACCOUNTS.map((a, i) => ({
 			name: a.name,
 			addressDisplay: a.display,
+			addressFull: a.address,
 			identiconSvg: identicon(a.address),
 			amount: a.amount,
 			selected: i === 0
@@ -647,20 +649,29 @@ function signOutSheet(m: SettingsMessages, warned: boolean): ConfirmSheetModel {
 	};
 }
 
-function languageSheet(m: SettingsMessages, current: string): SelectSheetModel {
+/**
+ * The language picker's rows: 跟随系统 first, with the locale that currently
+ * resolves to beside it, then every shipped locale by its endonym. Shared by
+ * the phone's sheet and the desktop's dropdown, which offer the same choice.
+ */
+export function languageRows(m: SettingsMessages, current: string): SelectRowModel[] {
 	const currentLabel = LOCALE_ENDONYMS.find((l) => l.id === current)?.label ?? current;
+	return [
+		{
+			id: 'system',
+			label: m.language.followSystem,
+			note: `${m.common.system} · ${currentLabel}`,
+			selected: true
+		},
+		...LOCALE_ENDONYMS.map((l) => ({ id: l.id, label: l.label }))
+	];
+}
+
+function languageSheet(m: SettingsMessages, current: string): SelectSheetModel {
 	return {
 		title: m.language.pickerTitle,
 		subtitle: m.language.pickerSubtitle,
-		rows: [
-			{
-				id: 'system',
-				label: m.language.followSystem,
-				note: `${m.common.system} · ${currentLabel}`,
-				selected: true
-			},
-			...LOCALE_ENDONYMS.map((l) => ({ id: l.id, label: l.label }))
-		],
+		rows: languageRows(m, current),
 		footerNote: m.language.contributeNote,
 		footerLink: m.language.contributeCta
 	};
@@ -828,7 +839,9 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 		done: [
 			{ id: 'ethereum', mark: MARKS.ethereum, name: 'Ethereum', amount: '$2,412.11' },
 			{ id: 'bnb', mark: MARKS.bnb, name: 'BNB Chain', amount: '$850.29' }
-		]
+		],
+		sectionUnpriced: 'Some tokens couldn’t be priced.',
+		unpriced: []
 	};
 }
 
@@ -934,6 +947,7 @@ export function buildMobileState(
 		account: {
 			name: ACCOUNT_NAME,
 			addressDisplay: ADDRESS_DISPLAY,
+			addressFull: ADDRESS_FULL,
 			identiconSvg: identicon(ADDRESS_FULL),
 			action: m.account.switch
 		},
@@ -956,7 +970,9 @@ export function buildMobileState(
 					{ id: 'identicon', label: m.appearance.avatarIdenticon }
 				]
 			},
-			textScale: { label: m.appearance.textScale, steps: 7, index: 3 }
+			// Six stops, standard in the third — `src/constants/text-scale.ts`, which
+			// the boards had rounded to seven.
+			textScale: { label: m.appearance.textScale, steps: 6, index: 2 }
 		},
 		signOut: { label: m.signOut.button },
 		erase: { title: m.erase.title, subtitle: m.erase.subtitle },
@@ -964,7 +980,8 @@ export function buildMobileState(
 			title: m.advanced.networksTitle,
 			subtitle: m.advanced.networksSubtitle,
 			rows: networkRows(m),
-			addLabel: m.advanced.addNetworkTitle
+			addLabel: m.advanced.addNetworkTitle,
+			removeLabel: m.networks.remove
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
@@ -1067,7 +1084,7 @@ export function buildDesktopState(
 				id: 'text-scale',
 				label: m.appearance.textScale,
 				kind: 'slider',
-				scale: { label: m.appearance.textScale, steps: 7, index: 3 }
+				scale: { label: m.appearance.textScale, steps: 6, index: 2 }
 			},
 			theme: {
 				id: 'theme',
@@ -1131,6 +1148,7 @@ export function buildDesktopState(
 			title: m.advanced.networksTitle,
 			subtitle: m.advanced.networksSubtitle,
 			addLabel: m.advanced.addNetworkTitle,
+			removeLabel: m.networks.remove,
 			// DST4 expands Ethereum in place and drops the built-ins below Base
 			// into the custom tail, which is what the mock shows.
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),
@@ -1139,6 +1157,7 @@ export function buildDesktopState(
 		rpcProviders: rpcProviders(m, true),
 		endpoints: endpoints(m, true),
 		storage: storage(m),
+		clearCachesSheet: clearCachesSheet(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

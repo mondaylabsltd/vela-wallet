@@ -78,5 +78,27 @@ class SessionExecutor(private val store: AccountStore) {
 
         private inline fun result(type: String, fill: JSONObject.() -> Unit): JSONObject =
             JSONObject().put("type", type).apply(fill)
+
+        /**
+         * The session's own failure for an operation whose answer the core
+         * refused (spec 048) — the web's `sessionFailure`, variant for variant:
+         * a list that cannot be read is `accounts_unavailable` (→ onboarding),
+         * never an onboarding-shaped `storage_failed` the session machine would
+         * refuse a second time and leave the route on `loading`.
+         */
+        fun escapedFailure(operation: JSONObject, error: Throwable): String {
+            val type = operation.optString("type")
+            val body = when (type) {
+                "load_accounts" -> JSONObject().put("type", "accounts_unavailable")
+                "load_active_index" -> JSONObject().put("type", "active_index_loaded").put("index", 0)
+                "check_pending_uploads" -> JSONObject().put("type", "pending_uploads_unavailable")
+                "save_account" -> JSONObject().put("type", "account_saved")
+                "save_active_index" -> JSONObject().put("type", "active_index_saved")
+                "clear_signed_in_wallet" -> JSONObject().put("type", "signed_in_wallet_cleared")
+                "clear_extension_cache" -> JSONObject().put("type", "extension_cache_cleared")
+                else -> JSONObject().put("type", "accounts_unavailable")
+            }
+            return body.toString()
+        }
     }
 }

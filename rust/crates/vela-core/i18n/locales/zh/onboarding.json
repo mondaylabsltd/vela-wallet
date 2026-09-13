@@ -261,6 +261,12 @@
 			"pickTitle": "登录哪个钱包？",
 			"pickBody": "{{product}} 上保存了多个 Vela 钱包，请选择要登录的那个。",
 			"pickUnnamed": "未命名钱包"
+		},
+		"storage": {
+			"unreadableTitle": "此浏览器里的钱包数据无法读取",
+			"unreadableBody": "保存的钱包列表格式是这个版本读不懂的。重新登录可以用你的 passkey 重建它，或者重置此浏览器里的副本。钱包本身不受影响：它在链上，由你的 passkey 保护。",
+			"signInAgain": "重新登录",
+			"resetCopy": "重置此浏览器里的副本"
 		}
 	}
 }

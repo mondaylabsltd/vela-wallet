@@ -796,11 +796,12 @@ fn the_scan_path_saves_a_compatible_chain_without_confirmation() {
     assert_eq!(view.wizard.phase, NetWizardPhase::Idle);
 }
 
-/// Ported verbatim from `add-network.ts:47`: the scan path flattens an
-/// inconclusive RPC failure into `not-compatible` (the wizard keeps the
-/// invariant-③ distinction; this caller never did).
+/// Spec 038 #E1: the scan path keeps invariant ③ too — an inconclusive RPC
+/// failure is "could not check", never "not compatible". (`add-network.ts:47`
+/// flattened them; a desktop whose proxy was refusing then called Celo
+/// incompatible, and Celo has every contract and RIP-7212.)
 #[test]
-fn the_scan_path_flattens_rpc_failure_into_not_compatible() {
+fn the_scan_path_keeps_rpc_failure_apart_from_not_compatible() {
     let mut sut = started();
     sut.dispatch(Event::AddByChainIdRequested {
         chain_id: NEW_CHAIN,
@@ -814,7 +815,7 @@ fn the_scan_path_flattens_rpc_failure_into_not_compatible() {
     assert!(sut.resolve(probe(RPC_FAST, None, 0.0)).is_empty());
     assert_eq!(
         sut.view().wizard.error,
-        Some(NetWizardErrorKind::NotCompatible {
+        Some(NetWizardErrorKind::CheckFailed {
             chain_id: NEW_CHAIN
         })
     );

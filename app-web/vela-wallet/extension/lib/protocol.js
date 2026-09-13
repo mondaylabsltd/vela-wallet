@@ -38,6 +38,32 @@ export const PERM_PREFIX = 'vela.perm.';
 /** A request in flight, written down the moment it arrives so an evicted
  *  service worker cannot lose it (spec 027 D37). */
 export const REQUEST_PREFIX = 'vela.req.';
+/**
+ * The chain an origin is on — `vela.chain.<origin>` → chain id (number).
+ *
+ * The wallet has no global "current network" (ext_cache invariant ⑤): each
+ * site picks and switches its own chain with `wallet_switchEthereumChain`, and
+ * this is where that pick is kept. Absent → the snapshot's default. A grant's
+ * own `chainId` is the chain the site was CONNECTED on — an audit fact the
+ * core wrote — and is never rewritten by a switch.
+ */
+export const CHAIN_PREFIX = 'vela.chain.';
+/**
+ * The network catalog the wallet publishes — `vela.ext.chains`. The service
+ * worker cannot run the core, and the catalog (built-in chains plus the custom
+ * networks a person added in Settings) is what says which chain ids exist and
+ * where their nodes and bundlers are. Absent → no read can be answered, and a
+ * switch to any chain is 4902.
+ */
+export const CHAINS_KEY = 'vela.ext.chains';
+/**
+ * Where a request is answered — `vela.ext.surface`: `'panel'` (the default:
+ * the asking tab's side panel, falling back to a window when there is no user
+ * gesture to open one on) or `'window'` (always the dedicated window). A
+ * preference the wallet may write; the e2e writes it because Playwright can
+ * drive a window and cannot drive a side panel.
+ */
+export const SURFACE_KEY = 'vela.ext.surface';
 
 // ---- EIP-1193 / EIP-1474 error codes ----------------------------------------
 export const ERR = {
@@ -162,9 +188,54 @@ export function classifyMethod(method) {
 		return 'state';
 	if (method === 'wallet_switchEthereumChain') return 'switch';
 	if (method === 'wallet_addEthereumChain') return 'addChain';
-	if (method === 'wallet_watchAsset') return 'addChain';
+	if (method === 'wallet_watchAsset') return 'watchAsset';
 	if (READ_PROXY_METHODS.has(method)) return 'read';
 	return 'unsupported';
+}
+
+// ---- chain switching and reads (routed in the worker) ----------------------
+
+/**
+ * The chain a `wallet_switchEthereumChain` / `wallet_addEthereumChain` names.
+ * Both take `[{ chainId: "0x…" }]` (EIP-3326 / EIP-3085). `0` = none named.
+ */
+export function switchChainParam(params) {
+	const first = Array.isArray(params) ? params[0] : null;
+	if (!first || typeof first !== 'object') return 0;
+	return parseChainId(first.chainId);
+}
+
+/** The origin of a tab's URL, or `null` for anything that is not a web page. */
+export function originOfUrl(url) {
+	if (typeof url !== 'string') return null;
+	try {
+		const parsed = new URL(url);
+		if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+		return parsed.origin;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Where a read for `chainId` goes, from the catalog the wallet published.
+ *
+ * Node reads try the chain's RPC list in order; bundler methods go to the
+ * chain's bundler alone. An empty list means the wallet knows no such chain,
+ * which is 4902 to the page — never a guess at a public node.
+ */
+export function chainEndpoints(catalog, chainId, bundler) {
+	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
+	const entry = chains && typeof chains === 'object' ? chains[String(chainId)] : null;
+	if (!entry || typeof entry !== 'object') return [];
+	if (bundler) return typeof entry.bundler === 'string' && entry.bundler ? [entry.bundler] : [];
+	return Array.isArray(entry.rpc) ? entry.rpc.filter((u) => typeof u === 'string' && u) : [];
+}
+
+/** Does the wallet's catalog know this chain at all? */
+export function chainKnown(catalog, chainId) {
+	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
+	return !!(chains && typeof chains === 'object' && chains[String(chainId)]);
 }
 
 // ---- param / value helpers --------------------------------------------------

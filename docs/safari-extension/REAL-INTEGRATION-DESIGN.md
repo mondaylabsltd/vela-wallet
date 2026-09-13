@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # Real Safari-extension sign path — integration design (for review, pre-implementation)
 
 **Status:** FUND-CRITICAL. Design reviewed 2026-07-06; verdict **FIX-FIRST** (see §Critic). Do not implement until F1–F4 are resolved and the founder approves the re-scoped plan (§Plan).

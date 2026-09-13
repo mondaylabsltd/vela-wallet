@@ -19,7 +19,7 @@
 </script>
 
 <div class="field">
-	<label class="box">
+	<label class="box" data-field>
 		<Icon icon={UTILITY_ICONS.search} size="base" />
 		<input
 			type="text"

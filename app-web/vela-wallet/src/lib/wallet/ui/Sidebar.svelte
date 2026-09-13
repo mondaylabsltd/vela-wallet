@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { SidebarModel } from '../model';
-	import { navIcon, UTILITY_ICONS } from '../icons';
+	import { navIcon } from '../icons';
 	import ChainFilterList from './ChainFilterList.svelte';
 	import Icon from './Icon.svelte';
 	import WalletHeader from './WalletHeader.svelte';
@@ -8,17 +8,21 @@
 	interface Props {
 		sidebar: SidebarModel;
 		onnav?: (id: SidebarModel['nav'][number]['id']) => void;
-		/** Open the identicon viewer; absent in the gallery. */
-		onidenticon?: () => void;
-		identiconLabel?: string;
+		/** The header's name button: the account switcher. Absent in the gallery. */
+		onaccounts?: () => void;
+		/** A network row was chosen. Absent in the gallery, where the list is a picture. */
+		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 	}
 
-	let { sidebar, onnav, onidenticon, identiconLabel }: Props = $props();
+	let { sidebar, onnav, onaccounts, onchainselect }: Props = $props();
 </script>
 
+<!-- No command bar. The drawn "search or run ⌘K" field ran nothing, and a
+     field that promises a command palette it does not have is a lie in the
+     corner of every screen (founder call, 2026-09-05). -->
 <aside class="sidebar">
 	<div class="top">
-		<WalletHeader header={sidebar.header} {onidenticon} {identiconLabel} />
+		<WalletHeader header={sidebar.header} onclick={onaccounts} />
 	</div>
 
 	<nav>
@@ -36,18 +40,17 @@
 		{/each}
 	</nav>
 
-	<hr />
+	<!-- The network list is the wallet's filter (spec 028 Phase 9, RULING 2):
+	     the routes that have nothing to filter pass none, and the rail ends
+	     at the nav. -->
+	{#if sidebar.networks.length > 0}
+		<hr />
 
-	<p class="networks-title">{sidebar.networksTitle}</p>
-	<div class="networks">
-		<ChainFilterList rows={sidebar.networks} />
-	</div>
-
-	<label class="search">
-		<Icon icon={UTILITY_ICONS.search} size="sm" />
-		<input type="text" placeholder={sidebar.searchPlaceholder} />
-		<kbd>⌘K</kbd>
-	</label>
+		<p class="networks-title">{sidebar.networksTitle}</p>
+		<div class="networks">
+			<ChainFilterList rows={sidebar.networks} onselect={onchainselect} />
+		</div>
+	{/if}
 </aside>
 
 <style>
@@ -123,38 +126,5 @@
 
 	.networks :global(button) {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-	}
-
-	.search {
-		display: flex;
-		align-items: center;
-		gap: var(--space-md);
-		height: var(--size-control-md);
-		padding-inline: var(--space-lg);
-		border: var(--border-hairline) solid var(--color-border-base);
-		border-radius: var(--radius-lg);
-		background: var(--color-bg-raised);
-		color: var(--color-fg-subtle);
-	}
-
-	input {
-		flex: 1;
-		min-width: 0;
-		border: none;
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-base);
-		outline: none;
-	}
-
-	input::placeholder {
-		color: var(--color-fg-subtle);
-	}
-
-	kbd {
-		font-family: var(--font-mono);
-		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
 	}
 </style>

@@ -13,7 +13,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaBrand
 
 /**
  * In-app sailboat mark, built from the three paths of
- * design/onboarding/logo-{dark,light}.svg (viewBox 258×260). Sails are identical
+ * docs/design/onboarding/logo-{dark,light}.svg (viewBox 258×260). Sails are identical
  * in both modes; the hull is themed (VelaBrand). Never given an app-icon
  * background (brand rule).
  */

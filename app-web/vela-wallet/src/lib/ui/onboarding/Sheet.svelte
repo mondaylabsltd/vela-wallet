@@ -366,4 +366,18 @@
 			opacity: 0;
 		}
 	}
+
+	/* Desktop: the same surface as a centred dialog — a bottom sheet is a
+	   phone's answer to a thumb, and on a desktop window it reads as one
+	   (spec 038, founder ruling: 弹框 on every width). */
+	@media (min-width: 1280px) {
+		.overlay {
+			align-items: center;
+		}
+		.panel {
+			width: min(100%, calc(var(--layout-flowColumn) + var(--space-4xl) * 2));
+			max-height: calc(100dvh - var(--space-5xl) * 2);
+			border-radius: var(--radius-xl);
+		}
+	}
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { WalletHomeModel } from './model';
+	import type { ActivityRowModel, AssetRowModel, WalletHomeModel } from './model';
 	import { UTILITY_ICONS } from './icons';
 	import ActionButtonRow from './ui/ActionButtonRow.svelte';
 	import ActivityRow from './ui/ActivityRow.svelte';
@@ -19,9 +19,8 @@
 		destinations?: readonly ('wallet' | 'contacts' | 'explore' | 'settings')[];
 		/** Tab selection. Absent in the gallery, where the bar is a picture. */
 		onselect?: (id: 'wallet' | 'contacts' | 'explore' | 'settings') => void;
-		/** Open the identicon viewer; absent in the gallery. */
-		onidenticon?: () => void;
-		identiconViewerLabel?: string;
+		/** The header's name button: the account switcher. Absent in the gallery. */
+		onaccounts?: () => void;
 		/**
 		 * Spec 021: the dock, the two section actions and the rows are the
 		 * entries into Receive / Send / Scan / Activity / Assets. Absent in the
@@ -32,16 +31,24 @@
 		) => void;
 		/** Spec 025: tap-to-hide. The core owns `hidden`; this only reports the tap. */
 		onbalancetoggle?: () => void;
+		/** The balance status line was tapped (spec 028 Phase 8): the rescue for what it says. */
+		onstatus?: () => void;
+		/** An activity row was tapped (live): which one, before the flow opens. */
+		onactivity?: (row: ActivityRowModel) => void;
+		/** An asset row was tapped (live): which one, before the token screen opens. */
+		onasset?: (row: AssetRowModel) => void;
 	}
 
 	let {
 		model,
 		destinations,
 		onselect,
-		onidenticon,
-		identiconViewerLabel,
+		onaccounts,
 		onflow,
-		onbalancetoggle
+		onbalancetoggle,
+		onactivity,
+		onasset,
+		onstatus
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -57,11 +64,11 @@
 		     needed — a wallet called "kimik3 · something" showed as "kimik3 ·…"
 		     next to a chip nobody was reading (founder call, 2026-08-26). -->
 		<header class="top">
-			<WalletHeader header={model.header} {onidenticon} identiconLabel={identiconViewerLabel} />
+			<WalletHeader header={model.header} onclick={onaccounts} />
 		</header>
 
 		<div class="balance">
-			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} />
+			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
 		</div>
 
 		<ActionButtonRow
@@ -92,7 +99,15 @@
 				<p class="day">{group.label}</p>
 				<ul>
 					{#each group.rows as row, i (i)}
-						<li><ActivityRow {row} onclick={() => onflow?.('tx-detail')} /></li>
+						<li>
+							<ActivityRow
+								{row}
+								onclick={() => {
+									onactivity?.(row);
+									onflow?.('tx-detail');
+								}}
+							/>
+						</li>
 					{/each}
 				</ul>
 			{/each}
@@ -116,7 +131,15 @@
 		{:else}
 			<ul>
 				{#each model.assetRows as row, i (i)}
-					<li><AssetRow {row} onclick={() => onflow?.('token-detail')} /></li>
+					<li>
+						<AssetRow
+							{row}
+							onclick={() => {
+								onasset?.(row);
+								onflow?.('token-detail');
+							}}
+						/>
+					</li>
 				{/each}
 			</ul>
 		{/if}

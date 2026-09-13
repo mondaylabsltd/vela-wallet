@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vela Clear Signing</title>
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="icons/32.png" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="head">
+        <img class="mark" src="icons/icon.svg" alt="" width="40" height="40" />
+        <div class="head-text">
+          <h1>Hello, world</h1>
+          <p class="sub">Vela Clear Signing</p>
+        </div>
+        <span class="badge" id="runtime-badge">…</span>
+      </header>
+
+      <section class="card">
+        <p class="lede">
+          One folder, two lives: a static page on the web, and an unpacked MV3
+          extension in Chrome. No build step, no dependencies — and signing is a
+          real WebAuthn passkey ceremony on both.
+        </p>
+        <dl class="facts">
+          <div class="fact"><dt>Surface</dt><dd id="fact-surface">—</dd></div>
+          <div class="fact"><dt>Origin</dt><dd id="fact-origin">—</dd></div>
+          <div class="fact"><dt>Relying party</dt><dd id="fact-rpid">—</dd></div>
+          <div class="fact"><dt>Passkey</dt><dd id="fact-credential">none yet</dd></div>
+        </dl>
+      </section>
+
+      <section class="signing">
+        <h2>What you are about to sign</h2>
+        <pre class="payload" id="payload">…</pre>
+
+        <div class="actions">
+          <button class="cta" id="create" type="button">Create passkey</button>
+          <button class="cta ghost" id="sign" type="button" disabled>
+            Sign with passkey
+          </button>
+        </div>
+
+        <p class="echo" id="status" role="status" aria-live="polite">…</p>
+
+        <dl class="facts checks" id="checks" hidden>
+          <div class="fact"><dt>Signature</dt><dd id="check-signature">—</dd></div>
+          <div class="fact"><dt>Relying party hash</dt><dd id="check-rpid">—</dd></div>
+          <div class="fact"><dt>User verified</dt><dd id="check-uv">—</dd></div>
+          <div class="fact"><dt>Challenge echoed</dt><dd id="check-challenge">—</dd></div>
+        </dl>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

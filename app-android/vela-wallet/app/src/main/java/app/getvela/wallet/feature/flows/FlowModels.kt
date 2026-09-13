@@ -52,14 +52,21 @@ data class FlowPillModel(val dots: List<Color>, val label: String)
 
 /** A token's circular mark: three-letter glyph plus its chain colour. */
 @Immutable
-data class TokenMarkModel(val ticker: String, val badgeColor: Color)
+data class TokenMarkModel(
+    val ticker: String,
+    val badgeColor: Color,
+    /** Spec 047: the web's `tokenMarkFor` — logo candidates in order, the chain badge's logo, and whether the badge is hidden because it would repeat the token. */
+    val logoUrls: List<String> = emptyList(),
+    val badgeLogoUrl: String? = null,
+    val badgeHidden: Boolean = false,
+)
 
 /** Leading art on a fact row's value side. */
 @Immutable
 sealed interface FactLead {
     data class Dot(val color: Color) : FactLead
     data class Token(val mark: TokenMarkModel) : FactLead
-    data class Identicon(val seed: String) : FactLead
+    data class Identicon(val seed: String, /** Spec 049: the name beside it — the initials style's letter. */ val name: String? = null) : FactLead
 }
 
 /**
@@ -76,6 +83,8 @@ data class FactRowModel(
     val mono: Boolean = false,
     /** Shows a copy affordance under this accessible name. */
     val copy: String? = null,
+    /** Spec 048: what the copy affordance puts on the clipboard when `value` is a shortened form. */
+    val copyValue: String? = null,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -94,6 +103,8 @@ data class NetworkRowModel(
     val addressDisplay: String,
     val copyLabel: String,
     val qrLabel: String,
+    /** Spec 047: the network's own logo from the chain-data endpoint; the drawn code stays the fallback. */
+    val logoUrl: String? = null,
 )
 
 @Immutable
@@ -105,6 +116,8 @@ data class ReceiveListModel(
     /** Shown in place of the rows when the search matches nothing. */
     val emptyText: String,
     val rows: List<NetworkRowModel>,
+    /** Spec 048: the full address every row's copy puts on the clipboard. */
+    val address: String = "",
 )
 
 /** The account card that sits above every QR: whose address this is. */
@@ -118,7 +131,7 @@ data class AddressCardModel(
 )
 
 @Immutable
-data class ContractLineModel(val label: String, val value: String, val copyLabel: String)
+data class ContractLineModel(val label: String, val value: String, val copyLabel: String, val copyValue: String? = null)
 
 @Immutable
 data class ReceiveQrModel(
@@ -132,6 +145,8 @@ data class ReceiveQrModel(
     val warning: String,
     val saveImage: String,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */
@@ -144,6 +159,10 @@ data class ShareCardModel(
     val networkMark: TokenMarkModel,
     val identiconSeed: String,
     val wordmark: String,
+    /** Spec 048: what the code encodes — the address; blank draws the gallery's placeholder pattern. */
+    val code: String = "",
+    /** Spec 048: the network pill's logo from the chain-data endpoint; the lettered disc is the fallback. */
+    val chainLogoUrl: String? = null,
 )
 
 /* -------------------------------------------------------------------- scan */
@@ -184,6 +203,8 @@ data class TxDetailModel(
     val positive: Boolean,
     val facts: List<FactRowModel>,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /* ------------------------------------------------------------------ assets */
@@ -223,6 +244,8 @@ data class TokenDetailModel(
     val transactionsTitle: String,
     val rows: List<ActivityRowModel>,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /* -------------------------------------------------------------- add token  */
@@ -327,6 +350,11 @@ data class RecipientCardModel(
     val identiconSeed: String,
     val amount: String,
     val removeLabel: String,
+    /** The core's row id, the address and the bare amount — set on a LIVE row, which is editable in place (spec 045). */
+    val id: String = "",
+    val address: String = "",
+    val amountValue: String? = null,
+    val addressPlaceholder: String = "",
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -348,18 +376,28 @@ data class FeeRowModel(
 )
 
 @Immutable
-data class AmountFieldModel(val value: String, val fiat: String, val denomLabel: String)
+data class AmountFieldModel(
+    val value: String,
+    val fiat: String,
+    val denomLabel: String,
+    /** Spec 043: the live figure as typed; `null` = a drawn, read-only field. */
+    val raw: String? = null,
+)
 
 @Immutable
 data class RecipientFieldModel(
     val label: String,
     val lines: Pair<String, String>,
     val identiconSeed: String,
+    /** Spec 049: the recipient's name when known — the initials disc's letter. */
+    val name: String? = null,
     val pickLabel: String,
     /** Sweep shows a scan button beside the picker; single does not. */
     val scanLabel: String? = null,
     /** Sweep's "every token goes to the same address". */
     val note: String? = null,
+    /** Spec 043: the live address as typed; `null` = a drawn, read-only field. */
+    val raw: String? = null,
 )
 
 enum class RecipientAction { Add, Contacts, Import }
@@ -389,6 +427,10 @@ data class SendFormModel(
     val summary: SummaryLineModel? = null,
     val fee: FeeRowModel,
     val cta: String,
+    /** Spec 043: the core's `can_continue`; a drawn form is always enabled. */
+    val ctaEnabled: Boolean = true,
+    /** Spec 043 phase 5: the core's amount warning or same-asset fee ceiling, as a sentence. */
+    val warning: String? = null,
 )
 
 /** SD2e — the contact picker. */
@@ -460,6 +502,11 @@ data class BatchImportModel(
     val rejectedText: String? = null,
     val cta: String,
     val ctaDisabled: Boolean,
+    /** Live only (spec 045): the editable rate, whether it was edited, the "auto" reset word, and one note (cap, balance, template). */
+    val rateInput: String? = null,
+    val rateEdited: Boolean = false,
+    val rateReset: String? = null,
+    val note: String? = null,
 )
 
 /** SD3 — the confirmation. */
@@ -481,12 +528,19 @@ data class SendConfirmModel(
     val facts: List<FactRowModel>,
     val breakdown: List<BreakdownRowModel> = emptyList(),
     val cta: String,
+    /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
+    val ctaEnabled: Boolean = true,
+    /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
+    val notice: String? = null,
+    val noticeAction: String? = null,
+    /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
+    val noticeSecondary: String? = null,
 )
 
 enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }
 
 @Immutable
-data class ReceiptHashModel(val label: String, val value: String, val copyLabel: String)
+data class ReceiptHashModel(val label: String, val value: String, val copyLabel: String, val copyValue: String? = null)
 
 /** SD4 — the receipt, in whichever of its states the transaction is in. */
 @Immutable

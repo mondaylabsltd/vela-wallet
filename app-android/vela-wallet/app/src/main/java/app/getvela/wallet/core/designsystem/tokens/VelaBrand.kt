@@ -3,7 +3,7 @@ package app.getvela.wallet.core.designsystem.tokens
 import androidx.compose.ui.graphics.Color
 
 /**
- * Brand constants for the in-app mark (design/onboarding/logo-{dark,light}.svg and
+ * Brand constants for the in-app mark (docs/design/onboarding/logo-{dark,light}.svg and
  * the design-system brief's brand-asset rules). The sails are identical in both
  * modes; only the hull is themed. These are brand values, not UI tokens — they do
  * not appear in the DTCG export.

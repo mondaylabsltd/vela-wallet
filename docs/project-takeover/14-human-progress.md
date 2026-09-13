@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文是 2026-07 的审计/进度快照，写于 Expo / React Native 应用仍在仓库内的时期。该应用及其工具链已退役并删除；文中的 `src/**` 路径与 `tsc` / `expo lint` / `jest` / `build:web` / `playwright` / `npm audit`（Expo 基线）/ config plugin 等根目录命令已不存在，现行门禁见 `.github/workflows/ci.yml` 与 `02-local-development.md`。正文按原样保留，作为历史记录。
+
 # 14 — 人类接管训练进度 (Human Progress)
 
 > 跨会话状态文件。每次训练开始先读本文件，结束必须更新。

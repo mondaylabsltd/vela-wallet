@@ -49,6 +49,8 @@ export interface ContactsMessages {
 	batchSendHint: string;
 	/** Template with `{{count}}`. */
 	batchSendHintTitled: string;
+	/** Why the group send is disabled: nobody to send to yet. */
+	batchSendNeedsMembers: string;
 	importFile: string;
 	importAll: string;
 	importGroup: string;
@@ -68,14 +70,35 @@ export interface ContactsMessages {
 	/** Template with `{{name}}`. */
 	deleteBody: string;
 	cancel: string;
-	activity: { sent: string; received: string; yesterday: string; all: string };
+	/** The book as a file (spec 028 US5): the import report and the refusals. */
+	importDoneTitle: string;
+	/** Template with `{{added}}` and `{{skipped}}`. */
+	importDoneBody: string;
+	/** Template with `{{invalid}}` — appended when rows had no valid address. */
+	importDoneInvalid: string;
+	importFailTitle: string;
+	importFailBody: string;
+	/** The export dialog's one line: choose a format. */
+	exportBody: string;
+	/** Template with `{{name}}` — deleting a group keeps its contacts, and says so. */
+	groupDeleteBody: string;
+	/** Members picker heading — the drawn 018 word for the group editor's list. */
+	groupMembersLabel: string;
+	/** Nothing saved yet, so nothing to pick. */
+	groupNoContacts: string;
+	/** "Copied" — the address copy's one-word acknowledgement. */
+	copied: string;
+	/** 最近往来 with nothing in it (the reused history empty state). */
+	noActivity: string;
+	/** "Done" — the report's dismiss. */
+	done: string;
+	activity: { sent: string; received: string; today: string; yesterday: string; all: string };
 	shell: {
 		navWallet: string;
 		navContacts: string;
 		navExplore: string;
 		navSettings: string;
 		networksTitle: string;
-		commandBarPlaceholder: string;
 		allNetworks: string;
 		close: string;
 	};
@@ -115,6 +138,7 @@ export const CONTACTS_KEYS = [
 	'contacts.batchSend',
 	'contacts.batchSendHint',
 	'contacts.batchSendHintTitled',
+	'contacts.batchSendNeedsMembers',
 	'contacts.importFile',
 	'contacts.importAll',
 	'contacts.importGroup',
@@ -130,6 +154,19 @@ export const CONTACTS_KEYS = [
 	'contacts.deleteBody',
 	'contacts.cancel',
 	'contacts.actionQr',
+	'contacts.importDoneTitle',
+	'contacts.importDoneBody',
+	'contacts.importDoneInvalid',
+	'contacts.importFailTitle',
+	'contacts.importFailBody',
+	'contacts.exportBody',
+	'contacts.groupDeleteBody',
+	'contacts.groupMembersLabel',
+	'contacts.groupNoContacts',
+	'componentsUi.identiconViewer.copied',
+	'componentsUi.dayGroup.today',
+	'history.emptyTitle',
+	'common.done',
 	'componentsUi.identiconViewer.copyAddress',
 	'componentsUi.dock.send',
 	'componentsUi.dock.receive',
@@ -142,7 +179,6 @@ export const CONTACTS_KEYS = [
 	'componentsUi.mainNav.explore',
 	'componentsUi.mainNav.settings',
 	'settingsModals.network.modalTitle',
-	'componentsUi.commandBar.placeholder',
 	'componentsUi.networkFilter.allNetworks',
 	'componentsUi.identiconViewer.close'
 ] as const;

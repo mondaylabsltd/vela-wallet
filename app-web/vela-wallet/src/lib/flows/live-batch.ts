@@ -43,17 +43,33 @@ export function liveBatchImport(
 	inputs: BatchLiveInputs
 ): BatchImportModel {
 	const { batch, m, symbol } = inputs;
+	const count = batch.recipient_count;
 	return {
 		...model,
+		// The tabs, the rate label and the hint name the currency in force and
+		// the token being split — the fixture's CNY/USDT were a picture.
+		units: {
+			fiat: fill(m['send.batchUnitFiat'], { code: batch.fiat_code }),
+			token: fill(m['send.batchUnitToken'], { sym: symbol })
+		},
+		rateLabel: fill(m['send.batchRateLabel'], { sym: symbol }),
+		rateHint: fill(m['send.batchRateHint'], { code: batch.fiat_code, sym: symbol }),
 		unit: batch.unit,
 		pasteValue: batch.raw_text,
 		rateValue:
 			batch.rate_status === 'ok'
 				? `${batch.rate_input} ${batch.fiat_code}`
 				: batch.rate_status === 'loading'
-					? '…'
-					: // Unknown, and said so. The core has already refused to apply.
-						m['send.batchRateHint'],
+					? m['send.batchRateLoading']
+					: // Unknown, and said so. The core has already refused to apply —
+						// and the field below is where a rate can be typed (spec 038 #E6).
+						m['send.batchRateFailed'],
+		// The rate is the screen's real subject and it is editable in place
+		// (`EditRate` / `ResetRateToAuto` have been the core's since 026; the
+		// web drew the rate as a read-only span — spec 038 #E6).
+		rateInput: batch.rate_input,
+		rateEdited: batch.rate_edited,
+		rateReset: m['send.batchRateReset'],
 		parsedLabel: fill(m['send.batchParsedCount'], { n: batch.recipient_count }),
 		rows: batch.preview.map((row) => previewRow(row, symbol)),
 		rejectedText:
@@ -62,6 +78,11 @@ export function liveBatchImport(
 						count: batch.rejected
 					})
 				: undefined,
+		// The button offers what parsed, never the fixture's two.
+		cta:
+			count === 0
+				? m['send.batchApplyEmpty']
+				: fill(count === 1 ? m['send.batchApply_one'] : m['send.batchApply_other'], { count }),
 		ctaDisabled: !batch.can_apply
 	};
 }

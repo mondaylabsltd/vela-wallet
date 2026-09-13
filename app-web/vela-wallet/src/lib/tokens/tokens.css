@@ -96,11 +96,11 @@
 	--shadow-sm: 0 1px 3px 0 rgba(26,26,24,0.04);
 	--shadow-md: 0 2px 8px 0 rgba(26,26,24,0.06);
 	--shadow-lg: 0 4px 16px 0 rgba(26,26,24,0.08);
-	--font-ui: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif; /* web addition: design-system.md CJK fallback */
+	--font-ui: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif; /* web addition: docs/design-system.md CJK fallback */
 	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace; /* web addition: mono fallbacks */
-	--size-control-sm: 36px; /* web addition: sizing.control.sm per design-system.md */
-	--size-control-md: 44px; /* web addition: sizing.control.md per design-system.md */
-	--size-control-lg: 52px; /* web addition: sizing.control.lg per design-system.md */
+	--size-control-sm: 36px; /* web addition: sizing.control.sm per docs/design-system.md */
+	--size-control-md: 44px; /* web addition: sizing.control.md per docs/design-system.md */
+	--size-control-lg: 52px; /* web addition: sizing.control.lg per docs/design-system.md */
 	--breakpoint-desktop: 1280px; /* web addition: feature 006 responsive contract */
 	--breakpoint-contactsOverlay: 1120px; /* web addition: spec 018 desktop SPEC sheet: below this width the third column overlays instead of squeezing the list */
 	--motion-panel-in: 240ms; /* web addition: spec 018 FR-011: third-column open */
@@ -117,6 +117,7 @@
 	--text-heroTight: 31px; /* web addition: spec 019 (2026-08-25): the third rung of the hero ladder, for locales whose headline is too wide for the second. 46/38/31 steps by ~0.82 each; measured at the shipped font the widest authored line runs 6.9em (zh) to 15.0em (id), and 31px is what fits ru's 10.88em in a 390pt phone's 342px column. 390 is the contract, not the floor: narrower frames are allowed to wrap (founder direction 2026-08-26) */
 	--layout-onboardingRail: 320px; /* web addition: spec 019: the onboarding rail, at and above the desktop breakpoint only. Below it the page keeps its single column — a rail is an answer to spare width, and a phone has none */
 	--layout-onboardingColumn: 520px; /* web addition: spec 019: the screen column beside the rail. Content ends where it ends there; the mobile layout anchors its CTA to the bottom of the viewport, which is a phone pattern and stays on phones */
+	--layout-frameMax: 1920px; /* web addition: spec 038 T078: the widest the signed-in frame and the onboarding frame grow before centring on the page ground. The mocks were drawn at 1440 and every column in them is left-anchored; on a 4 K display that left three quarters of the screen empty. 1920 keeps the composition the mocks drew and lets it sit in the middle of anything wider */
 	--layout-onboardingFrameGutter: 72px; /* web addition: spec 019: the desktop flow frame's horizontal breathing room — the column plus twice this is the frame's max width */
 	--text-stepOrdinal: 104px; /* web addition: spec 019: the rail step ordinal, set as display TYPE rather than drawn as a stepper widget */
 	--layout-railRuleW: 28px; /* web addition: spec 019: the accent rule under the rail's tagline — a mark, not a divider, so it has a width of its own */
@@ -131,6 +132,7 @@
 	--layout-settingsNavW: 216px; /* web addition: spec 023 desktop SPEC: the settings second-level nav column, measured 216 in DST1–DST8 (the app sidebar's 240 is a different column and keeps its own width) */
 	--layout-settingsControlW: 280px; /* web addition: spec 023: the desktop panel’s right-hand control column — measured 280 across DST2/DST3, so a dropdown, a segmented control and a slider all end on the same line */
 	--layout-settingsDialogW: 520px; /* web addition: spec 023: the centred desktop dialog (DST4b / DSR1), measured 520 — wide enough for a URL in the mono face without becoming a second page */
+	--layout-promptCard: 440px; /* web addition: spec 019: the centred prompt card past the desktop breakpoint (PromptSheet, SignOutSheet, IdenticonViewer). Spec 019 recorded declaring it and never did, so every prompt card read `max-width: var(--layout-promptCard)` as invalid and spanned the whole window (founder-found 2026-09-05). 440 holds a 42-character address in the mono face on one line with the card padding, and stays a card rather than a page */
 	--layout-flowColumn: 440px; /* web addition: spec 019: the v2 onboarding flow column. The design centres every step in one column of this width at every viewport; the Welcome hero is the only wider one */
 	--layout-welcomeColumn: 620px; /* web addition: spec 019: the v2 Welcome column, wider than the flow it starts */
 	--text-introTitle: 28px; /* web addition: spec 020: the intro slide headline. Measured 28 on the boards, and the DTCG scale steps 26 -> 32 straight past it */

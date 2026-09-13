@@ -21,12 +21,30 @@
 	}
 
 	let { value, label, open = false, rows, ontoggle, onselect }: Props = $props();
+
+	let host = $state<HTMLDivElement | undefined>();
+
+	/**
+	 * A way out that is not a choice. The menu opens OVER its trigger (the
+	 * macOS popup shape the SPEC asks for), so the trigger cannot be clicked
+	 * again to close it — Escape and a click anywhere else have to.
+	 */
+	function onkeydown(event: KeyboardEvent) {
+		if (open && event.key === 'Escape') ontoggle?.();
+	}
+
+	function onpointerdown(event: PointerEvent) {
+		if (open && host !== undefined && !host.contains(event.target as Node)) ontoggle?.();
+	}
 </script>
 
-<div class="dropdown">
+<svelte:window {onkeydown} {onpointerdown} />
+
+<div class="dropdown" bind:this={host}>
 	<button
 		type="button"
 		class="trigger"
+		data-field
 		aria-haspopup="listbox"
 		aria-expanded={open}
 		aria-label={label}
@@ -68,9 +86,8 @@
 		cursor: pointer;
 	}
 
-	.trigger:focus-visible {
-		outline: var(--border-emphasis) solid var(--color-accent-base);
-	}
+	/* Focus is app.css's `data-field` edge: a form control, quiet like the
+	   fields beside it, never the accent. */
 
 	.value {
 		overflow: hidden;

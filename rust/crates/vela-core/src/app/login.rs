@@ -125,6 +125,10 @@ enum AfterName {
 pub struct Health {
     probes_done: u8,
     unreachable: bool,
+    /// The LAST failed probe never left the machine (`IndexTransportFailed`).
+    /// Read only once `unreachable` is set, so a single local blip inside an
+    /// otherwise-remote failure does not change the sentence.
+    local: bool,
 }
 
 #[derive(Default)]
@@ -164,6 +168,11 @@ pub struct LoginView {
     /// The index server did not answer its health probe. The screen surfaces
     /// the endpoint settings so the user can point the app somewhere reachable.
     pub endpoint_unreachable: bool,
+    /// The probe could not get out of THIS MACHINE (spec 038): every route the
+    /// shell tried refused locally. Implies `endpoint_unreachable`. The screen
+    /// says "check your network" and does NOT offer the endpoint field — a
+    /// different URL cannot fix a machine that cannot reach any of them.
+    pub transport_failed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +210,7 @@ impl App for Login {
         LoginView {
             busy: model.stage != Stage::Idle,
             endpoint_unreachable: model.health.unreachable,
+            transport_failed: model.health.unreachable && model.health.local,
         }
     }
 }
@@ -216,20 +226,27 @@ fn accept_health(model: &mut Model, result: ShellResult) -> Command<Effect, Even
             model.health.probes_done = HEALTH_PROBES;
             Command::done()
         }
-        ShellResult::IndexHealth { ok: false } => {
-            model.health.probes_done += 1;
-            if model.health.probes_done >= HEALTH_PROBES {
-                model.health.unreachable = true;
-                render()
-            } else {
-                Command::request_from_shell(ShellOperation::Wait {
-                    ms: HEALTH_PROBE_GAP_MS,
-                })
-                .then_send(|result| Event::HealthCompleted { result })
-            }
-        }
+        ShellResult::IndexHealth { ok: false } => probe_failed(model, false),
+        ShellResult::IndexTransportFailed => probe_failed(model, true),
         ShellResult::Waited => probe_health(),
         _ => Command::done(),
+    }
+}
+
+/// One failed probe. `local` is what the shell said about THIS probe; it is
+/// what the verdict reports only if this probe is the one that made the index
+/// unreachable.
+fn probe_failed(model: &mut Model, local: bool) -> Command<Effect, Event> {
+    model.health.probes_done += 1;
+    model.health.local = local;
+    if model.health.probes_done >= HEALTH_PROBES {
+        model.health.unreachable = true;
+        render()
+    } else {
+        Command::request_from_shell(ShellOperation::Wait {
+            ms: HEALTH_PROBE_GAP_MS,
+        })
+        .then_send(|result| Event::HealthCompleted { result })
     }
 }
 

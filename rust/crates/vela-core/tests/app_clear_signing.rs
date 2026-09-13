@@ -690,6 +690,15 @@ fn erc165_unreachable_is_never_cached_as_a_verdict() {
         result: None,
         rpc_error: false,
     });
+    // The symbol probe rides beside the decimals one (spec 032 phase 23).
+    // This token has none to give, so the address fallback stands.
+    sut.resolve(Res::RpcAnswer {
+        probe: ClearProbe::Symbol,
+        chain_id: 1,
+        to: UNKNOWN_TOKEN.to_owned(),
+        result: None,
+        rpc_error: false,
+    });
     assert_eq!(sut.view().result.expect("approve").intent, "Approve");
     sut.resolve(Res::TimedOut { token }); // stale 3s timer
     sut.resolve(Res::TimedOut { token: warm_token }); // stale 4s timer
@@ -791,7 +800,11 @@ fn erc165_timeout_renders_erc20_without_caching() {
     let ops = sut.resolve(Res::TimedOut { token });
     // ERC-20 fallback → decimals warm for the unknown token.
     let warm_token = timer_token(&ops);
-    sut.drop_oldest(); // decimals call never answers either
+    // Neither warm call answers: the decimals probe and the symbol probe that
+    // now rides beside it (spec 032 phase 23). Dropping one would hand the
+    // timer's answer to the other.
+    sut.drop_oldest();
+    sut.drop_oldest();
     sut.resolve(Res::TimedOut { token: warm_token });
     let result = sut
         .view()
@@ -849,14 +862,30 @@ fn unknown_token_decimals_are_never_assumed_silently() {
         result: None,
         rpc_error: false,
     });
-    assert!(ops.is_empty());
+
+    assert!(
+        ops.is_empty(),
+        "decimals alone does not finish the warm step"
+    );
+
+    // The symbol probe rides the same round trip and gates with it (phase 25).
+    // This token has no symbol to give either, so the address fallback stands.
+    sut.resolve(Res::RpcAnswer {
+        probe: ClearProbe::Symbol,
+        chain_id: 1,
+        to: UNKNOWN_TOKEN.to_owned(),
+        result: None,
+        rpc_error: false,
+    });
     let result = sut.view().result.expect("transfer result");
     let amount = &result.fields[0];
     assert!(
         amount.unverified,
         "failed lookup ⇒ 18 + explicit unverified flag"
     );
-    assert_eq!(amount.value, format!("0.5 {}...", &UNKNOWN_TOKEN[..6]));
+    // NOT "0.5". Unknown decimals mean an unknown magnitude, and the sheet
+    // says so rather than printing a number scaled by a guess.
+    assert_eq!(amount.value, format!("— {}...", &UNKNOWN_TOKEN[..6]));
     assert_eq!(
         result.risk,
         ClearRisk::Caution,
@@ -884,6 +913,15 @@ fn onchain_decimals_resolve_scale_and_cache() {
         result: Some(format!("0x{}", pad("8"))),
         rpc_error: false,
     });
+    // The symbol probe rides beside the decimals one (spec 032 phase 23).
+    // This token has none to give, so the address fallback stands.
+    sut.resolve(Res::RpcAnswer {
+        probe: ClearProbe::Symbol,
+        chain_id: 1,
+        to: UNKNOWN_TOKEN.to_owned(),
+        result: None,
+        rpc_error: false,
+    });
     assert!(ops.is_empty());
     let result = sut.view().result.expect("transfer result");
     let amount = &result.fields[0];
@@ -896,6 +934,64 @@ fn onchain_decimals_resolve_scale_and_cache() {
     let ops = resolve_tx(&mut sut, UNKNOWN_TOKEN, &transfer, "0x0");
     assert!(ops.is_empty(), "decimals cached — no second eth_call");
     assert!(!sut.view().result.expect("result").fields[0].unverified);
+}
+
+/// A symbol that answers AFTER the decimals still reaches the sheet.
+///
+/// Phase 23 added the probe and did not gate on it, which running the desktop
+/// showed to be the same as not having it: both probes ride one round trip and
+/// land milliseconds apart (622ms and 642ms against Gnosis), so the sheet
+/// formatted on the decimals answer and the symbol only ever reached the cache
+/// — a token was shown as `0x2a22…` on every first sight. The warm step now
+/// waits for both. The 4s cap still bounds the wait; only the common case moved.
+#[test]
+fn a_symbol_arriving_after_the_decimals_is_still_on_the_sheet() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(500_000_000));
+    resolve_tx(&mut sut, UNKNOWN_TOKEN, &transfer, "0x0");
+    let ops = sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{UNKNOWN_TOKEN}.json"),
+        json: None,
+    });
+    let warm_token = timer_token(&ops);
+
+    let ops = sut.resolve(Res::RpcAnswer {
+        probe: ClearProbe::Decimals,
+        chain_id: 1,
+        to: UNKNOWN_TOKEN.to_owned(),
+        result: Some(format!("0x{}", pad("6"))),
+        rpc_error: false,
+    });
+    assert!(ops.is_empty());
+    assert!(
+        sut.view().result.is_none(),
+        "the decimals answer alone must not conclude the run — the symbol is \
+         still in flight, and concluding here is what threw it away"
+    );
+
+    // "USDC.e", the dynamic layout.
+    sut.resolve(Res::RpcAnswer {
+        probe: ClearProbe::Symbol,
+        chain_id: 1,
+        to: UNKNOWN_TOKEN.to_owned(),
+        result: Some(
+            "0x\
+             0000000000000000000000000000000000000000000000000000000000000020\
+             0000000000000000000000000000000000000000000000000000000000000006\
+             555344432e650000000000000000000000000000000000000000000000000000"
+                .to_owned(),
+        ),
+        rpc_error: false,
+    });
+
+    let result = sut.view().result.expect("transfer result");
+    let amount = &result.fields[0];
+    assert!(!amount.unverified);
+    assert_eq!(
+        amount.value, "500 USDC.e",
+        "the chain answered what this token is called and the sheet says it"
+    );
+    sut.resolve(Res::TimedOut { token: warm_token });
 }
 
 /// The 4s warm cap: on timeout the sheet shows the SAFE fallback (18 +
@@ -928,6 +1024,17 @@ fn decimals_timeout_shows_safe_fallback_and_late_answer_caches() {
             chain_id: 1,
             to: UNKNOWN_TOKEN.to_owned(),
             result: Some(format!("0x{}", pad("8"))),
+            rpc_error: false,
+        })
+        .is_empty());
+    // Its symbol twin, in issue order — this driver answers the queue from the
+    // front, so skipping one hands the NEXT answer to the wrong question.
+    assert!(sut
+        .resolve(Res::RpcAnswer {
+            probe: ClearProbe::Symbol,
+            chain_id: 1,
+            to: UNKNOWN_TOKEN.to_owned(),
+            result: None,
             rpc_error: false,
         })
         .is_empty());

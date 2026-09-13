@@ -394,6 +394,13 @@ where
         self.pending.pop_front();
     }
 
+    /// Drop every outstanding operation the predicate names, unanswered — a
+    /// timer the run never lets fire, whatever else is queued around it.
+    pub fn drop_matching(&mut self, predicate: impl Fn(&<A::Effect as SplitEffect>::Op) -> bool) {
+        self.pending
+            .retain(|request| !predicate(&request.operation));
+    }
+
     fn collect(&mut self, effects: Vec<A::Effect>) -> Vec<<A::Effect as SplitEffect>::Op> {
         let mut operations = Vec::new();
         for effect in effects {

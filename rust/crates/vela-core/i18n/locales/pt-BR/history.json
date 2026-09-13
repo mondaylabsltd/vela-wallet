@@ -7,6 +7,7 @@
     "emptyTitle": "Nenhuma transação ainda",
     "emptyBody": "Suas transações enviadas vão aparecer aqui. Você também pode ver o histórico completo no block explorer.",
     "viewOnExplorer": "Ver no Explorer",
+    "deleteRecord": "Excluir registro",
     "emptyFilter": "Nenhuma transação nesta rede",
     "txLabelDappTx": "Transação de dApp",
     "txLabelSignMessage": "Assinar mensagem",

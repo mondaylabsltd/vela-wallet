@@ -3,13 +3,13 @@
 	// SvelteKit writes its include/exclude inside `.svelte-kit/`, so the globs
 	// read `../src/**/*.ts`. TypeScript resolves those against the file that
 	// declares them; rolldown's tsconfig reader resolves them against THIS
-	// file, concludes `src/` is not covered, and keeps walking up — landing on
-	// the repo-root Expo tsconfig, whose `extends: expo/tsconfig.base` only
-	// resolves once the RN app's node_modules exists. Cloudflare Workers builds
-	// install this app alone, so the build died with "Tsconfig not found
-	// expo/tsconfig.base" on every one of its own .ts modules. Restating the
-	// same globs relative to this file stops the walk here, and has the
-	// transform read these compilerOptions rather than React Native's.
+	// file, concludes `src/` is not covered, and keeps walking up the tree
+	// looking for a tsconfig that does. Restating the same globs relative to
+	// this file stops the walk here and has the transform read these
+	// compilerOptions. (Found when the walk used to land on the repo-root
+	// tsconfig of the retired Expo app, whose `extends` could not resolve in
+	// a Cloudflare build that installs this app alone — that file is gone
+	// since spec 039, but a walk that ends anywhere but here is still wrong.)
 	// Listing an explicit `exclude` overrides the default, so node_modules must
 	// be re-listed.
 	"include": [

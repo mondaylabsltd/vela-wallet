@@ -73,6 +73,12 @@ pub const BATCH_MAX_RECIPIENTS: usize = 60;
 /// a fabricated preview (invariant ②).
 pub const ESTIMATE_TIMEOUT_MS: u32 = 15_000;
 
+/// How long a complete form sits still before it asks for a quote (spec 028
+/// Phase 9, T490). Long enough that a person typing an amount is not quoted on
+/// every digit; short enough that the fee is on the row before their thumb
+/// reaches Continue.
+pub const FORM_ESTIMATE_DEBOUNCE_MS: u32 = 400;
+
 /// The literal fallback in `t('send.warnNeedGas', { sym: ... ?? 'gas token' })`
 /// stays in the shell: the core reports `symbol: None` and the shell words it.
 const _DOC_NEED_GAS_FALLBACK: () = ();
@@ -594,6 +600,8 @@ pub enum SendReceiptOutcome {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SendTimerTag {
     EstimateTimeout,
+    /// The form's own quote, debounced (spec 028 Phase 9, T490).
+    FormEstimate,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1092,6 +1100,17 @@ enum Pipeline {
     MaxEstimate {
         id: u64,
     },
+    /// The form's quote, waiting for the typing to stop (T490). Re-armed on
+    /// every change; only the newest timer is answered.
+    FormDebounce {
+        timer_id: u64,
+    },
+    /// The form's quote in flight. `key` names what it is about (token, payee,
+    /// fee coin), so the same form is not quoted twice.
+    FormEstimate {
+        id: u64,
+        key: String,
+    },
     /// `confirmSelection` / `preselectedMulti` warm-up: credential, then a
     /// best-effort background estimate whose failure is swallowed.
     WarmCredential {
@@ -1226,6 +1245,8 @@ pub struct Model {
     receipt_signed: Option<SendLine>,
     receipt_failed: bool,
     fee_held: bool,
+    /// The submit result's clock (#D3); `None` until the relay accepted.
+    submitted_at_ms: Option<f64>,
     fee_rejected: bool,
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
@@ -1236,6 +1257,9 @@ pub struct Model {
     flights: Flights,
     /// Monotonic per-request id source (every request gets a fresh one).
     attempt: u64,
+    /// What the quote on the form is about (see [`form_estimate_key`]), once
+    /// one has landed — the same form is not quoted again until it changes.
+    form_quote_key: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,6 +1341,13 @@ pub struct SendReceiptView {
     /// The single-send scalar amount (token units, resolved).
     pub amount: String,
     pub usd_value: f64,
+    /// When the relay accepted the op (the submit result's clock), so the
+    /// shell can show how long the wait has been (spec 038 #D3). The core is
+    /// clockless: elapsed is the shell's subtraction, with its own clock.
+    pub submitted_at_ms: Option<f64>,
+    /// The chain's usual time to land, from the builtin table; `None` for a
+    /// custom network, where the shell says nothing rather than guess.
+    pub typical_inclusion_s: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1505,7 +1536,11 @@ impl App for Send {
                     return Command::done();
                 }
                 model.recipient = recipient;
-                Command::all([sync_identity(model), render()])
+                Command::all([
+                    sync_identity(model),
+                    schedule_form_estimate(model),
+                    render(),
+                ])
             }
             Event::SetAmount { amount } => {
                 if view_amount_locked(model) {
@@ -1514,7 +1549,7 @@ impl App for Send {
                 // The text field edits the figure; the unit is whatever the
                 // ⇄ toggle last established and only `convert` may change it.
                 model.amount = model.amount.with_value(amount);
-                render()
+                Command::all([schedule_form_estimate(model), render()])
             }
             Event::ToggleFiatInput => toggle_fiat_input(model),
             Event::TapMax => tap_max(model),
@@ -1554,7 +1589,8 @@ impl App for Send {
             Event::EditAmount => edit_amount(model),
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
-                render()
+                // On the form the fee coin is part of what the quote is about.
+                Command::all([schedule_form_estimate(model), render()])
             }
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
@@ -1843,6 +1879,12 @@ fn open(
         SendStep::SelectToken
     };
     model.resolving_lock = params.locked;
+    // A prefilled recipient IS the recipient from the first frame (spec 028
+    // US5): a hand-off from the address book, or a scanned address, must not
+    // wait on the token list to show who the money is for — and a fetch that
+    // fails must not leave the form open on nobody. `tokens_fetched` still
+    // restates it beside the token it picks.
+    model.recipient = params.prefilled_recipient.clone().unwrap_or_default();
     model.params = params;
     model.loading = true;
     boot_fetch(model)
@@ -1966,6 +2008,9 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
         {
             model.selected_token = Some(found);
             model.step = SendStep::EnterDetails;
+            // A token's own 转账 door lands on the form: warm its quote as a
+            // picked row would (spec 028 Phase 10).
+            return warm_estimate_start(model);
         }
         return render();
     }
@@ -1976,7 +2021,9 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             model.selected_token = Some(first);
             model.recipient = prefilled;
             model.step = SendStep::EnterDetails;
-            return Command::all([sync_identity(model), render()]);
+            // The warm quote first; the form's own (payee-aware) quote is
+            // armed by its landing, once an amount is typed.
+            return Command::all([sync_identity(model), warm_estimate_start(model)]);
         }
     }
     render()
@@ -2084,7 +2131,11 @@ fn finish_lock_resolution(model: &mut Model, token: SendToken) -> Cmd {
     model.selected_token = Some(token);
     model.step = SendStep::EnterDetails;
     model.resolving_lock = false;
-    Command::all([sync_identity(model), render()])
+    Command::all([
+        sync_identity(model),
+        schedule_form_estimate(model),
+        render(),
+    ])
 }
 
 fn lock_meta_resolved(model: &mut Model, meta: Option<SendTokenMeta>) -> Cmd {
@@ -2168,21 +2219,16 @@ fn select_token(model: &mut Model, token_id: &str) -> Cmd {
     model.fee_estimate = None; // a prior network's quote must never gate this token
     model.selected_token = Some(token);
     model.step = SendStep::EnterDetails;
-    prefetch_credential(model)
-}
-
-/// The token-select prefetch (`useSendController.ts:643-648`); the shell warms
-/// its RPC caches on its own.
-fn prefetch_credential(model: &mut Model) -> Cmd {
-    let Some(account_id) = model.account.as_ref().map(|a| a.id.clone()) else {
-        return render();
-    };
-    let id = next(model);
-    model.flights.prefetch_credential = Some(id);
-    Command::all([
-        issue(id, SendOperation::LoadAccountCredential { account_id }),
-        render(),
-    ])
+    // The credential prefetch (`useSendController.ts:643-648`) AND a warm
+    // quote (spec 028 Phase 10): the form's fee row and its Max used to wait
+    // for the whole estimate pipeline — deployment read, gas signals, relay
+    // quote, in-band rows, simulation — which the founder measured at five to
+    // six seconds on the web, and only once the form was complete. The sweep
+    // path has warmed a transfer-sized quote since 026; the single-token path
+    // now does the same, so the fee is usually in hand before the person has
+    // finished typing. Best-effort: a failed warm-up is swallowed, and the
+    // form's own debounced quote re-asks with the real payee once it lands.
+    warm_estimate_start(model)
 }
 
 /// One tap on one row. Deselecting is ALWAYS allowed — a row that somehow got
@@ -2519,6 +2565,96 @@ fn tap_max(model: &mut Model) -> Cmd {
     ])
 }
 
+// ---------------------------------------------------------------------------
+// The form's own quote (spec 028 Phase 9, T490)
+// ---------------------------------------------------------------------------
+//
+// Until this phase the machine asked for a fee only on Continue (the
+// pre-check) and for a sweep's warm-up, so the form's fee row read "—" and
+// the fee-coin picker had nothing to list until the person had already
+// committed. Expo estimated on the form as it was typed. This is that rule,
+// in the machine: a complete form asks once it has sat still, the answer is
+// the same chain-guarded `fee_estimate` every surface reads, and Continue's
+// pre-check still re-quotes the exact amount and refuses on failure — this
+// quote is best-effort and never a gate.
+
+/// What the form's quote is about: the token, the payee and the fee coin. The
+/// amount is deliberately not part of it — a transfer's gas does not move with
+/// the figure, and the pre-check re-quotes the exact amount anyway. `None`
+/// when the form is not complete, or is not the single-transfer form.
+fn form_estimate_key(model: &Model) -> Option<String> {
+    if model.step != SendStep::EnterDetails || model.multi_select_mode || model.split_mode {
+        return None;
+    }
+    let token = model.selected_token.as_ref()?;
+    model.account.as_ref()?;
+    if !is_valid_address(&model.recipient) {
+        return None;
+    }
+    let amount = js_parse_float(&model_token_amount(model, token));
+    if amount.is_nan() || amount <= 0.0 {
+        return None;
+    }
+    Some(format!(
+        "{}|{}|{}",
+        token.id(),
+        model.recipient.trim().to_lowercase(),
+        model.gas_fee_token.as_deref().unwrap_or("")
+    ))
+}
+
+/// Arm — or re-arm — the debounce, when the form is complete, nothing heavier
+/// is in flight, and the quote in hand (if any) is not already about this.
+fn schedule_form_estimate(model: &mut Model) -> Cmd {
+    let Some(key) = form_estimate_key(model) else {
+        return Command::done();
+    };
+    if model.form_quote_key.as_deref() == Some(key.as_str()) && selected_fee(model).is_some() {
+        return Command::done();
+    }
+    match model.pipeline {
+        Pipeline::Idle | Pipeline::FormDebounce { .. } => {}
+        // A pre-check, a Max, a warm-up or a submit owns the slot: they all
+        // produce a quote of their own, or leave the form.
+        _ => return Command::done(),
+    }
+    let timer_id = next(model);
+    model.pipeline = Pipeline::FormDebounce { timer_id };
+    issue(
+        timer_id,
+        SendOperation::StartTimer {
+            ms: FORM_ESTIMATE_DEBOUNCE_MS,
+            tag: SendTimerTag::FormEstimate,
+        },
+    )
+}
+
+/// The debounce elapsed on a form that is still complete: ask.
+fn form_estimate_fire(model: &mut Model) -> Cmd {
+    let (Some(key), Some(token), Some(account)) = (
+        form_estimate_key(model),
+        model.selected_token.clone(),
+        model.account.clone(),
+    ) else {
+        model.pipeline = Pipeline::Idle;
+        return Command::done();
+    };
+    let (tx, batch) = build_estimate_shape(model, &token);
+    let id = next(model);
+    model.pipeline = Pipeline::FormEstimate { id, key };
+    issue(
+        id,
+        SendOperation::EstimateFee {
+            chain_id: token.chain_id,
+            account: account.address,
+            tx,
+            batch,
+            gas_fee_token: model.gas_fee_token.clone(),
+            public_key_hex: model.public_key_hex.clone(),
+        },
+    )
+}
+
 fn full_balance(token: &SendToken) -> String {
     if token.balance.is_empty() {
         "0".to_owned()
@@ -2658,7 +2794,11 @@ fn recipients_changed(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
             DenominatedAmount::token(rows.first().map(|r| r.amount.clone()).unwrap_or_default());
         model.split_mode = false;
         model.recipients.clear();
-        return Command::all([sync_identity(model), render()]);
+        return Command::all([
+            sync_identity(model),
+            schedule_form_estimate(model),
+            render(),
+        ]);
     }
     let mut rows = assign_ids(model, rows);
     rows.truncate(BATCH_MAX_RECIPIENTS);
@@ -2666,7 +2806,12 @@ fn recipients_changed(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
     render()
 }
 
+/// A pick from the book lands in its row and closes the picker — the same
+/// way `seed_split` does for a whole group. Leaving the sheet up after the
+/// person chose would make the shell dispatch a second event to say what the
+/// first one already meant (spec 028 US5).
 fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
+    model.show_contact_picker = false;
     match model.picker_target.clone() {
         Some(target) => {
             for row in &mut model.recipients {
@@ -2678,7 +2823,11 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
         }
         None => {
             model.recipient = address;
-            Command::all([sync_identity(model), render()])
+            Command::all([
+                sync_identity(model),
+                schedule_form_estimate(model),
+                render(),
+            ])
         }
     }
 }
@@ -2716,11 +2865,19 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
         }
         SendScan::Request { recipient, .. } => {
             model.recipient = recipient;
-            Command::all([sync_identity(model), render()])
+            Command::all([
+                sync_identity(model),
+                schedule_form_estimate(model),
+                render(),
+            ])
         }
         SendScan::Text { data } => {
             model.recipient = data;
-            Command::all([sync_identity(model), render()])
+            Command::all([
+                sync_identity(model),
+                schedule_form_estimate(model),
+                render(),
+            ])
         }
     }
 }
@@ -3220,7 +3377,7 @@ fn edit_amount(model: &mut Model) -> Cmd {
     model.tx_error = None;
     leave_confirm(model);
     model.step = SendStep::EnterDetails;
-    render()
+    Command::all([schedule_form_estimate(model), render()])
 }
 
 /// Leaving confirm resets the fee-asset choice and clears a stale erc20
@@ -3275,6 +3432,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.user_op_hash = None;
     model.tx_error = None;
     model.receipt_failed = false;
+    model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
     model.fee_rejected = false;
@@ -3531,7 +3689,7 @@ fn handle_back(model: &mut Model) -> Cmd {
             model.tx_error = None;
             leave_confirm(model);
             model.step = SendStep::EnterDetails;
-            render()
+            Command::all([schedule_form_estimate(model), render()])
         }
         SendStep::EnterDetails => {
             if model.multi_select_mode {
@@ -3813,10 +3971,28 @@ fn accept_fee(model: &mut Model, id: u64, outcome: SendFeeOutcome) -> Cmd {
             if let SendFeeOutcome::Ok { estimate } = outcome {
                 if let Some(fee) = parse_fee_view(&estimate) {
                     model.fee_estimate = Some(fee);
+                    // The warm quote knows no payee. A form that became
+                    // complete while it was in flight could not arm its own
+                    // quote (the pipeline slot was taken); it is armed now,
+                    // and the warm figure stays on screen until it answers.
+                    return Command::all([schedule_form_estimate(model), render()]);
+                }
+            }
+            // Warm-up failure swallowed — and the form's quote gets its turn.
+            Command::all([schedule_form_estimate(model), render()])
+        }
+        Pipeline::FormEstimate { id: expect, key } if expect == id => {
+            model.pipeline = Pipeline::Idle;
+            if let SendFeeOutcome::Ok { estimate } = outcome {
+                if let Some(fee) = parse_fee_view(&estimate) {
+                    model.fee_estimate = Some(fee);
+                    model.form_quote_key = Some(key);
                     return render();
                 }
             }
-            Command::done() // warm-up failure swallowed
+            // Best-effort: a failed form quote is not a refusal. Continue's
+            // pre-check asks again and says so if it must (invariant ②).
+            Command::done()
         }
         _ => Command::done(),
     }
@@ -3832,6 +4008,15 @@ fn precheck_fail(model: &mut Model, kind: SendEstimateFailure) -> Cmd {
 }
 
 fn accept_timer(model: &mut Model, id: u64) -> Cmd {
+    if let Pipeline::FormDebounce { timer_id } = model.pipeline {
+        // Only the newest debounce is answered; an older timer firing late is
+        // a keystroke that was typed past.
+        return if timer_id == id {
+            form_estimate_fire(model)
+        } else {
+            Command::done()
+        };
+    }
     let Pipeline::PreCheck {
         timer_id,
         fee_id,
@@ -3972,6 +4157,7 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
     // receipt reads THIS and never converts again.
     model.receipt_signed = lines.first().cloned();
     model.user_op_hash = Some(user_op_hash.clone());
+    model.submitted_at_ms = Some(now_ms);
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
 
@@ -4210,6 +4396,13 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         transfers,
         amount,
         usd_value: if usd_value.is_nan() { 0.0 } else { usd_value },
+        submitted_at_ms: model.submitted_at_ms,
+        typical_inclusion_s: model.selected_token.as_ref().and_then(|token| {
+            super::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == token.chain_id)
+                .map(|chain| chain.typical_inclusion_s)
+        }),
     })
 }
 

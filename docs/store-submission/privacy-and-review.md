@@ -189,14 +189,7 @@ Bluetooth was dropped entirely (dApp Connect now runs over the WalletPair HTTPS/
 - ✅ Deleted legacy BLE code: `DAppScreen.tsx`, `(tabs)/dapps.tsx`, `src/modules/ble`, `walletpair-ble-transport.ts`, and native modules `modules/vela-ble` + `modules/walletpair-ble`; removed the BLE branch from `walletpair-transport.ts`.
 - ✅ Deletion-request channel set to **hello@mondaylabs.ltd** across both forms (also add it to the privacy policy).
 
-**Required follow-up to make the committed native projects fully BLE-free:** run a clean prebuild so the Xcode/Gradle projects regenerate without the deleted native modules:
-
-```
-npx expo prebuild --clean
-(cd ios && pod install)
-```
-
-After prebuild, re-verify the binary: `Info.plist` has no `NSBluetooth*`/`UIBackgroundModes`/`NSMicrophoneUsageDescription`, and `AndroidManifest.xml` has no `BLUETOOTH*`/`ACCESS_FINE_LOCATION`/`RECORD_AUDIO`/`SYSTEM_ALERT_WINDOW`. Note: a production prebuild should also exclude `expo-dev-client` so the `exp+vela-wallet` scheme, `_expo._tcp` Bonjour, and the "Expo Dev Launcher" local-network string don't ship.
+**Follow-up, restated for the native shells (2026-09-11, spec 039):** the Expo app and its config plugins are gone, so there is no prebuild step any more — the Xcode and Gradle projects under `app-ios/` and `app-android/` are hand-maintained. Before a store build, verify the binary directly: `Info.plist` has no `NSBluetooth*` / `UIBackgroundModes` / `NSMicrophoneUsageDescription` beyond what the shell actually uses, and `AndroidManifest.xml` has no `BLUETOOTH*` / `ACCESS_FINE_LOCATION` / `RECORD_AUDIO` / `SYSTEM_ALERT_WINDOW` beyond what the passkey transports need (the caBLE path on Android does use Bluetooth and location — see spec 019 and the OnePlus device notes before deciding what to declare). The `exp+vela-wallet` scheme, `_expo._tcp` Bonjour and the "Expo Dev Launcher" strings no longer exist in any build.
 
 ```
 

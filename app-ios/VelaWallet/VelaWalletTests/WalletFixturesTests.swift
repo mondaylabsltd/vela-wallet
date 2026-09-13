@@ -4,7 +4,7 @@
 //
 //  Spec 015 fixture canon (data-model.md, FR-012): the builders must
 //  reproduce the mock content verbatim so visual diffing against
-//  design/wallet/ stays meaningful.
+//  docs/design/wallet/ stays meaningful.
 //
 
 import CoreGraphics

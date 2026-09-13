@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.flows
 
 import androidx.compose.runtime.Composable
+import app.getvela.wallet.core.diagnostics.VelaLog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,11 +65,30 @@ class FlowNavState internal constructor() {
     var stack by mutableStateOf<List<FlowState>>(emptyList())
         private set
 
+    /**
+     * Which row opened the detail on top of the stack.
+     *
+     * A transaction id, or a token's `chainId:contract`. Carried here because a
+     * detail screen is ABOUT something, and the stack alone cannot say what:
+     * every row was opening the same screen, so tapping this person's own POL
+     * showed somebody else's transaction. The desktop shipped the same shape
+     * once — a page that displayed contact A while its delete acted on contact
+     * B — and the fix there was the same: look the target up ONCE, from an id
+     * the navigation carries.
+     *
+     * Cleared whenever the stack changes without one, so a stale id can never
+     * be read by the next screen.
+     */
+    var selected by mutableStateOf<String?>(null)
+        private set
+
     val top: FlowState? get() = stack.lastOrNull()
     val isOpen: Boolean get() = stack.isNotEmpty()
 
-    fun enter(entry: WalletFlowEntry) {
+    fun enter(entry: WalletFlowEntry, id: String? = null) {
+        VelaLog.event("flows", "enter", "entry" to entry.name, "id" to id?.take(24))
         stack = ENTRIES.getValue(entry)
+        selected = id
     }
 
     /**
@@ -76,22 +96,37 @@ class FlowNavState internal constructor() {
      * navigation intents generously (`Done`, `Chains`, …) and a flow that has
      * nowhere to put one should do nothing, not crash a wallet.
      */
-    fun push(step: FlowStep) {
+    fun push(step: FlowStep, id: String? = null) {
         if (step == FlowStep.Done) {
             close()
             return
         }
+        // Spec 048: a detail step without an item is not a screen — pushing it
+        // showed nothing and left a phantom Back (device-found 2026-09-12).
+        if (id == null && (step == FlowStep.TxDetail || step == FlowStep.TokenDetail)) {
+            VelaLog.event("flows", "detail step refused without an id", "step" to step.name)
+            return
+        }
         val next = STEPS[step] ?: return
-        if (top != next) stack = stack + next
+        if (top != next) {
+            stack = stack + next
+            selected = id
+        }
     }
 
     /** One level up. At the root this leaves the flow and shows the wallet. */
     fun back() {
+        VelaLog.event("flows", "back", "top" to top?.name, "depth" to stack.size)
         stack = stack.dropLast(1)
+        // The id belonged to the screen just left. Keeping it would let the
+        // screen underneath read a target it was never opened for.
+        selected = null
     }
 
     fun close() {
+        VelaLog.event("flows", "close", "top" to top?.name)
         stack = emptyList()
+        selected = null
     }
 }
 

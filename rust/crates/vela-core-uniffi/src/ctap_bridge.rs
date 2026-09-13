@@ -611,8 +611,29 @@ pub struct QrMatrix {
     pub modules: Vec<bool>,
 }
 
-/// Encode any text (the `FIDO:/…` payload) as a QR matrix. `None` only when the
-/// text cannot fit a QR code at all.
+/// Encode any text as a QR matrix. `None` only when the text cannot fit a QR
+/// code at all.
+///
+/// The receive screen draws a wallet address with this, and the caBLE flow
+/// draws a `FIDO:/…` payload with it. Both are "a string somebody points a
+/// camera at", and both must be the SAME encoder as the other platforms — a
+/// wallet whose QR is drawn by four different encoders is a wallet where one
+/// platform's code scans and another's does not.
+#[uniffi::export]
+pub fn qr_matrix(text: String) -> Option<QrMatrix> {
+    let code = qrcode::QrCode::new(text.as_bytes()).ok()?;
+    let width = u32::try_from(code.width()).ok()?;
+    Some(QrMatrix {
+        width,
+        modules: code
+            .to_colors()
+            .into_iter()
+            .map(|color| color == qrcode::Color::Dark)
+            .collect(),
+    })
+}
+
+/// The caBLE flow's name for [`qr_matrix`], kept so onboarding does not move.
 #[uniffi::export]
 pub fn cable_qr_matrix(text: String) -> Option<QrMatrix> {
     let code = qrcode::QrCode::new(text.as_bytes()).ok()?;

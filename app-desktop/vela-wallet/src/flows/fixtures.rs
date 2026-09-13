@@ -187,6 +187,33 @@ pub struct ReceiveList {
     pub rows: Vec<NetworkRow>,
 }
 
+/// One arrival, as the receive screen announces it.
+///
+/// Ported from `screens/wallet/ReceiveScreen.tsx` (the `depositBox` group): an
+/// open, de-boxed section under a hairline, a success dot beside a muted time,
+/// then one row per token with the amount in success ink and the network and
+/// value muted beside it.
+#[derive(Clone)]
+pub struct DepositEntry {
+    pub time: SharedString,
+    /// `(+1.5 xDAI, Gnosis  $1.50)` — the amount, then its context.
+    pub rows: Vec<(SharedString, SharedString)>,
+}
+
+/// The pre-receive warning, in the corpus's own words.
+#[derive(Clone)]
+pub struct ReceiveGate {
+    pub title: SharedString,
+    pub body: SharedString,
+    /// Why one address works everywhere — the sentence that stops somebody
+    /// hunting for a per-network address they do not need.
+    pub counterfactual: SharedString,
+    pub confirm: SharedString,
+    /// The flag is still being read: draw the cover, but not the button. A
+    /// button that appears a frame later is one somebody clicks twice.
+    pub loading: bool,
+}
+
 #[derive(Clone)]
 pub struct ReceiveQr {
     pub title: SharedString,
@@ -198,6 +225,30 @@ pub struct ReceiveQr {
     pub warning: SharedString,
     pub save_image: SharedString,
     pub view_on_explorer: SharedString,
+    /// What the code actually encodes.
+    ///
+    /// `None` in every mock, and that is why the gallery still draws the
+    /// designed pattern. A signed-in receive screen carries the real payload —
+    /// the core's `qr_value` — because a decorative code on a screen whose
+    /// whole job is to be scanned is a screen that does not work.
+    pub qr_payload: Option<SharedString>,
+    /// The warning a person must read before the code is shown.
+    ///
+    /// `Some` while `payment_request` says the account has not acknowledged it
+    /// (and while the flag is still being read, so a first visit never flashes
+    /// the code). The gate is the reason `can_copy` and `can_save` exist: a
+    /// screen whose whole job is to hand an address over must first say which
+    /// networks that address is safe on.
+    pub gate: Option<ReceiveGate>,
+    /// May the address be copied yet? The core's `can_copy`.
+    pub can_copy: bool,
+    /// Money that landed while this code was open, newest first.
+    ///
+    /// Empty in every mock, because the mocks draw the screen before anything
+    /// has arrived — this is a state only a live wallet reaches, like the
+    /// hero's real figure. A field, not a separate panel: the person is looking
+    /// at the code when it happens and must not have to go anywhere.
+    pub deposits: Vec<DepositEntry>,
 }
 
 #[derive(Clone)]
@@ -210,6 +261,9 @@ pub struct HistoryGroup {
 pub struct TxDetail {
     pub title: SharedString,
     pub status: StatusChip,
+    /// Spec 038 #D2 — a folded batch row: its parts, under the facts.
+    pub breakdown_title: Option<SharedString>,
+    pub breakdown: Vec<BreakdownRow>,
     pub amount: SharedString,
     pub fiat: SharedString,
     pub positive: bool,
@@ -262,6 +316,9 @@ pub struct AddToken {
     pub field_label: SharedString,
     pub field_value: SharedString,
     pub result: AddTokenResult,
+    /// Live only: the write itself failed. A CTA that does nothing and says
+    /// nothing is the same defect as a picker that silently drops a file.
+    pub notice: Option<SendNotice>,
     pub cta: SharedString,
 }
 
@@ -279,6 +336,26 @@ pub struct SendPick {
     pub filters: Vec<FilterChip>,
     pub rows: Vec<AssetRowModel>,
     pub cta: SharedString,
+    /// Spec 033 — the sweep picker (SD1b). `None` is the ordinary
+    /// one-token list, which is what the mock draws.
+    pub selection: Option<SendSelection>,
+    /// The sweep CTA carries a count and wears the accent; the plain one is a
+    /// quiet centred link. Two looks, one slot.
+    pub cta_accent: bool,
+}
+
+/// Which rows a sweep has ticked, and which are on the wrong chain.
+///
+/// Off-chain rows are DIMMED rather than removed: the person still owns them,
+/// and a list that silently shortened would read as a bug (SD1b's own note).
+#[derive(Clone)]
+pub struct SendSelection {
+    pub selected: Vec<bool>,
+    pub dimmed: Vec<bool>,
+    pub select_all: SharedString,
+    /// "Gnosis selected — a multi-token send stays on one network…", with the
+    /// chain's own mark beside it. `None` until the first pick names a chain.
+    pub notice: Option<(u32, SharedString, SharedString)>,
 }
 
 #[derive(Clone)]
@@ -298,6 +375,38 @@ pub struct FeeRow {
 
 /// DSD2L and DSD2bL. Split mode is `!recipients.is_empty()`: the mode IS the
 /// list of payees, and a flag beside it could disagree with it.
+/// What the core refused, said out loud (spec 032 phase 6).
+///
+/// One shape for every refusal on the send journey — a live amount warning,
+/// the same-asset fee ceiling, a split over balance, an unfulfillable locked
+/// request, and the relay's empty float. `action` is the way out the core
+/// offers (edit the amount, add the network, check the top-up again); a
+/// notice with no action is a statement, not a dead end.
+#[derive(Clone)]
+pub struct SendNotice {
+    pub title: Option<SharedString>,
+    pub body: SharedString,
+    /// A second line the notice needs: the ceiling's "you can send up to X",
+    /// or the top-up address.
+    pub detail: Option<SharedString>,
+    pub action: Option<SharedString>,
+    /// The way out of the notice itself, when it has one — today only the
+    /// relay-treasury stop, whose "Close" puts a person back on the form
+    /// instead of leaving them staring at a top-up address until it clears.
+    pub dismiss: Option<SharedString>,
+    /// Red rather than amber: the person cannot proceed as things stand.
+    pub error: bool,
+}
+
+/// A CTA's three states — the founder's rule: busy is not disabled, and a
+/// button the core shut is drawn shut rather than left looking live.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CtaState {
+    Enabled,
+    Disabled,
+    Busy,
+}
+
 #[derive(Clone)]
 pub struct SendForm {
     pub token: (TokenMark, SharedString, SharedString, Option<SharedString>),
@@ -307,8 +416,16 @@ pub struct SendForm {
     pub recipients: Vec<RecipientCard>,
     pub recipient_actions: Vec<SharedString>,
     pub summary: Option<(SharedString, SharedString)>,
+    /// Live only: the pill that opens the address book beside a typed field.
+    /// The mock's recipient card opens the picker itself, so it has none.
+    pub pick_contacts: Option<SharedString>,
+    /// Live only: what the core refused, and the way out.
+    pub notice: Option<SendNotice>,
     pub fee: FeeRow,
     pub cta: SharedString,
+    /// The core's `can_continue`, plus the pre-check's busy state. The mock's
+    /// button is always armed.
+    pub cta_state: CtaState,
 }
 
 #[derive(Clone)]
@@ -336,6 +453,9 @@ pub struct FeeTokenRow {
     pub balance: SharedString,
     pub fee: SharedString,
     pub selected: bool,
+    /// The core's balance<fee gate (invariant ⑧): shown for context, NOT
+    /// selectable — paying gas in it would only produce a doomed operation.
+    pub insufficient: bool,
 }
 
 #[derive(Clone)]
@@ -356,6 +476,8 @@ pub struct BatchRow {
 pub struct BatchImport {
     pub unit_fiat: SharedString,
     pub unit_token: SharedString,
+    /// Which half of the unit toggle is on. The mock shows fiat.
+    pub fiat_on: bool,
     pub paste: SharedString,
     pub import_file: SharedString,
     pub template: SharedString,
@@ -365,11 +487,21 @@ pub struct BatchImport {
     pub parsed: SharedString,
     pub rows: Vec<BatchRow>,
     pub rejected: SharedString,
+    /// Live only: the over-cap / over-balance / unreadable-file notice,
+    /// beside `rejected` (the two never hide each other).
+    pub notice: Option<SendNotice>,
+    /// Live only: the "Auto" affordance once the rate was edited by hand.
+    pub rate_reset: Option<SharedString>,
+    /// The apply gate is the core's; the mock's button is always armed.
+    pub cta_enabled: bool,
     pub cta: SharedString,
 }
 
 #[derive(Clone)]
 pub struct BreakdownRow {
+    /// A recipient's address, for the avatar beside the name (spec 038 #D2);
+    /// `None` for an asset row, which carries no person.
+    pub seed: Option<SharedString>,
     pub label: SharedString,
     pub value: SharedString,
 }
@@ -380,13 +512,21 @@ pub struct SendConfirm {
     pub subline: SharedString,
     pub facts: Vec<FactRow>,
     pub breakdown: Vec<BreakdownRow>,
+    /// Live only: why the slide is disarmed, when something disarmed it.
+    pub notice: Option<SendNotice>,
     pub cta: SharedString,
+    /// The core's `can_confirm`, plus signing / submitting.
+    pub cta_state: CtaState,
 }
 
 #[derive(Clone)]
 pub struct SendReceipt {
     pub title: SharedString,
     pub captions: Vec<SharedString>,
+    /// Spec 038 #D2 — a split: "N recipients", then every one of them, on
+    /// the receipt as on the confirm.
+    pub breakdown_title: Option<SharedString>,
+    pub breakdown: Vec<BreakdownRow>,
     pub hash: Option<(SharedString, SharedString)>,
     pub cta: SharedString,
 }
@@ -522,6 +662,16 @@ fn receive_qr(s: &FlowStrings, asset_mode: bool) -> ReceiveQr {
         warning: s.warning_reminder.clone(),
         save_image: s.save_image.clone(),
         view_on_explorer: s.view_on_explorer.clone(),
+        // The mocks draw the design, not a wallet: no payload, so the card
+        // keeps the pattern the drawing shows.
+        qr_payload: None,
+        // The gallery draws the code, not the cover: the drawn scenarios are
+        // reviewed for the code's own composition, and a live screen shows
+        // the warning first (spec 032 phase 38).
+        gate: None,
+        can_copy: false,
+        // The mocks draw the screen before anything has arrived.
+        deposits: Vec::new(),
     }
 }
 
@@ -667,6 +817,8 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
     });
 
     TxDetail {
+        breakdown_title: None,
+        breakdown: Vec::new(),
         title: if received {
             fill(&s.tx_label_received, "symbol", "USDT").into()
         } else {
@@ -754,6 +906,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
                 detail: format!("USDT · {} 6 · Ethereum", s.label_decimals).into(),
             }
         },
+        notice: None,
         cta: if native {
             s.add_network_btn.clone()
         } else {
@@ -764,6 +917,9 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
 
 fn send_pick(s: &FlowStrings) -> SendPick {
     SendPick {
+        // The mock is the one-token list; the sweep is a live-only state.
+        selection: None,
+        cta_accent: false,
         search_placeholder: s.send_search.clone(),
         filters: vec![
             FilterChip {
@@ -851,8 +1007,11 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 .into(),
                 "120 USDT · ≈$120.00".into(),
             )),
+            pick_contacts: None,
+            notice: None,
             fee,
             cta: s.continue_btn.clone(),
+            cta_state: CtaState::Enabled,
         };
     }
 
@@ -868,8 +1027,11 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         recipients: Vec::new(),
         recipient_actions: Vec::new(),
         summary: None,
+        pick_contacts: None,
+        notice: None,
         fee,
         cta: s.continue_btn.clone(),
+        cta_state: CtaState::Enabled,
     }
 }
 
@@ -923,6 +1085,7 @@ fn fee_token(s: &FlowStrings) -> FeeTokenPick {
         balance: fill(&s.balance_label, "amount", amount).into(),
         fee: fee.into(),
         selected,
+        insufficient: false,
     };
     FeeTokenPick {
         hint: s.fee_token_hint.clone(),
@@ -939,6 +1102,7 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
     BatchImport {
         unit_fiat: fill(&s.batch_unit_fiat, "code", "CNY").into(),
         unit_token: fill(&s.batch_unit_token, "sym", "USDT").into(),
+        fiat_on: true,
         paste: "0xabc… , 5000\n0xdef… , 8000".into(),
         import_file: format!("{} (xlsx / csv / txt)", s.batch_import_file).into(),
         template: s.batch_template.clone(),
@@ -965,6 +1129,9 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
         ],
         rejected: fill(&s.batch_rejected_one, "count", "1").into(),
         // Two of three rows parsed, so the button offers two — never three.
+        notice: None,
+        rate_reset: None,
+        cta_enabled: true,
         cta: fill(&s.batch_apply, "count", "2").into(),
     }
 }
@@ -998,12 +1165,16 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),
         ],
         breakdown: Vec::new(),
+        notice: None,
         cta: s.confirm_send.clone(),
+        cta_state: CtaState::Enabled,
     }
 }
 
 fn send_receipt(s: &FlowStrings) -> SendReceipt {
     SendReceipt {
+        breakdown_title: None,
+        breakdown: Vec::new(),
         title: s.tx_submitted_title.clone(),
         captions: vec![
             s.tx_waiting_confirm.clone(),

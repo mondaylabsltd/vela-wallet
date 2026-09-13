@@ -7,6 +7,7 @@
     "emptyTitle": "Belum Ada Transaksi",
     "emptyBody": "Transaksi yang Anda kirim akan muncul di sini. Anda juga dapat melihat riwayat lengkap di block explorer.",
     "viewOnExplorer": "Lihat di Explorer",
+    "deleteRecord": "Hapus catatan",
     "emptyFilter": "Tidak ada transaksi di jaringan ini",
     "txLabelDappTx": "Transaksi dApp",
     "txLabelSignMessage": "Tanda Tangani Pesan",

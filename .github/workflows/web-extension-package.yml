@@ -1,0 +1,137 @@
+# The Chrome extension build of the web wallet (app-web/vela-wallet, spec 027):
+# a zip Chrome loads unpacked or the Web Store takes as an upload.
+#
+# Same shape as the desktop release triad (desktop-*-packages.yml): a tag cuts
+# a release and attaches the package, a manual run builds without releasing,
+# and a pull request that touches the extension runs the cheap checks — here
+# the build itself is cheap (a Linux runner, a few minutes), so a PR runs it
+# too; only the release step is tag-gated.
+#
+# What the metadata job guards is the list in extension/README.md, "Five
+# measured constraints": each one fails SILENTLY at install time if lost —
+# the extension simply does not load, or loads as a different, empty wallet.
+name: Web extension package
+
+on:
+  # Cutting an extension release: `git tag extension-v0.1.0 && git push --tags`.
+  # The tag's version must equal `version` in extension/manifest.json; the
+  # metadata job checks that so the Web Store never sees a mismatched upload.
+  push:
+    tags: ['extension-v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app-web/vela-wallet/extension/**'
+      - 'app-web/vela-wallet/vite.config.ts'
+      - '.github/workflows/web-extension-package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate the manifest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The manifest must parse and keep its measured constraints
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const m = JSON.parse(fs.readFileSync('app-web/vela-wallet/extension/manifest.json', 'utf8'));
+          const fail = (msg) => { console.error(`::error::${msg}`); process.exit(1); };
+          if (m.manifest_version !== 3) fail('manifest_version must be 3');
+          const csp = m.content_security_policy?.extension_pages ?? '';
+          if (!csp.includes("'wasm-unsafe-eval'")) fail("extension_pages CSP lost 'wasm-unsafe-eval' — WebAssembly.compile fails under MV3 without it (README constraint 1)");
+          if (!(m.host_permissions ?? []).includes('https://getvela.app/*')) fail("host_permissions lost https://getvela.app/* — the passkey ceremony would run under a different relying party and the extension would be a different, empty wallet (README constraint 3)");
+          if (!m.key) fail('the fixed `key` is missing — the extension ID would change on every load');
+          const js = (m.content_scripts ?? []).flatMap((s) => s.js ?? []);
+          for (const f of ['inpage.js', 'content.js']) if (!js.includes(f)) fail(`content_scripts no longer inject ${f}`);
+          if (!/^\d+\.\d+\.\d+$/.test(m.version)) fail(`version "${m.version}" is not x.y.z`);
+          if (!m.side_panel?.default_path) fail('side_panel.default_path is missing — requests must open in the side panel, never the action popup (README constraint 4)');
+          console.log(`manifest ok: ${m.name} ${m.version}`);
+          JS
+      - name: A release tag must name the manifest version
+        if: startsWith(github.ref, 'refs/tags/extension-v')
+        run: |
+          version=$(node -p "require('./app-web/vela-wallet/extension/manifest.json').version")
+          tag="${GITHUB_REF_NAME#extension-v}"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME names $tag but extension/manifest.json says $version — bump the manifest and re-tag"
+            exit 1
+          fi
+
+  package:
+    name: Build the extension
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app-web/vela-wallet
+    steps:
+      - uses: actions/checkout@v4
+      # Same pnpm/Node setup as the `web` job in ci.yml: pnpm first, so
+      # setup-node can resolve the store path for its cache.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # `build:extension` runs `vite build` itself (VELA_TARGET=extension) but
+      # not the two pre-steps `pnpm build` would run: the gitignored static/
+      # copy of the committed wasm, and the token drift check.
+      - name: Sync the committed wasm and check the tokens
+        run: |
+          pnpm run sync:wasm
+          node scripts/gen-tokens.mjs --check
+      - name: Build
+        run: pnpm run build:extension
+      - name: Package
+        id: package
+        run: |
+          version=$(node -p "require('./extension/manifest.json').version")
+          name="vela-wallet-extension-${version}"
+          # Zip the CONTENTS of dist/ (manifest.json at the zip root), which
+          # is what "Load unpacked" and the Web Store both expect.
+          (cd extension/dist && zip -qr "../../${name}.zip" .)
+          ls -l "${name}.zip"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: app-web/vela-wallet/${{ steps.package.outputs.name }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Attach the package to the release
+    if: startsWith(github.ref, 'refs/tags/extension-v')
+    needs: [metadata, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish checksums alongside the package
+        working-directory: artifacts
+        run: |
+          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-extension"
+          mv "$RUNNER_TEMP/SHA256SUMS-extension" SHA256SUMS-extension
+          cat SHA256SUMS-extension
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Vela Wallet Chrome extension $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            artifacts/* \
+          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" --clobber

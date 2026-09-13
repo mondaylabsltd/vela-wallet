@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import { preferences } from '$lib/services/preferences.svelte';
 import { dayLabel, liveActivityGroups, liveActivityRow } from './live';
 
 const m = resolveWalletMessages('en');
@@ -30,12 +31,18 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 }
 
 describe('dayLabel', () => {
-	it('today and yesterday from the corpus; older days as a short date', () => {
+	it('today and yesterday from the corpus; older days in the date preset', () => {
 		const now = new Date(2026, 8, 3, 12).getTime();
 		const today = new Date(2026, 8, 3).getTime();
-		expect(dayLabel(today, m, 'en', now)).toBe(m.activity.today);
-		expect(dayLabel(today - DAY, m, 'en', now)).toBe(m.activity.yesterday);
-		expect(dayLabel(today - 3 * DAY, m, 'en', now)).toMatch(/Aug\s*31/);
+		expect(dayLabel(today, m, now)).toBe(m.activity.today);
+		expect(dayLabel(today - DAY, m, now)).toBe(m.activity.yesterday);
+		// The preset, not the platform: the same history groups the same way on
+		// every machine the person opens this wallet on (spec 028 D47).
+		preferences.setDateFormat('iso');
+		expect(dayLabel(today - 3 * DAY, m, now)).toBe('2026-08-31');
+		preferences.setDateFormat('dmy_dot');
+		expect(dayLabel(today - 3 * DAY, m, now)).toBe('31.08.2026');
+		preferences.resetForTests();
 	});
 });
 

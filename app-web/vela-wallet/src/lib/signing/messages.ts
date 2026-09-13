@@ -86,6 +86,8 @@ export interface SigningMessages {
 	valueUnlimited: string;
 	valueAllNfts: string;
 	unlimitedDisabled: string;
+	/** What a typed cap that is not a number gets told. */
+	invalidAmount: string;
 	choosePrompt: string;
 	summarySend: string;
 	summarySendFrom: string;

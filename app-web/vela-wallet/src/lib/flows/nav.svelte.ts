@@ -18,7 +18,16 @@ import type { DesktopFlowStateId, FlowStateId } from './model';
 
 /** Where a flow can be entered from the wallet home. */
 export type FlowEntry =
-	'receive' | 'send' | 'scan' | 'activity' | 'assets' | 'add-token' | 'token-detail' | 'tx-detail';
+	| 'receive'
+	/** R3 / DR3L straight away: the code for one held token (spec 028 Phase 9, RULING 3). */
+	| 'receive-token'
+	| 'send'
+	| 'scan'
+	| 'activity'
+	| 'assets'
+	| 'add-token'
+	| 'token-detail'
+	| 'tx-detail';
 
 /**
  * The stack an entry opens, deepest last.
@@ -29,6 +38,7 @@ export type FlowEntry =
  */
 const MOBILE_ENTRIES: Record<FlowEntry, FlowStateId[]> = {
 	receive: ['r1'],
+	'receive-token': ['r1', 'r3'],
 	send: ['sd1'],
 	scan: ['s1'],
 	activity: ['a1'],
@@ -40,6 +50,7 @@ const MOBILE_ENTRIES: Record<FlowEntry, FlowStateId[]> = {
 
 const DESKTOP_ENTRIES: Record<FlowEntry, DesktopFlowStateId[]> = {
 	receive: ['dr1'],
+	'receive-token': ['dr1', 'dr3'],
 	send: ['dsd1'],
 	// The desktop scanner is a centred modal rather than a panel; the host
 	// watches for this id and draws it over the window instead.

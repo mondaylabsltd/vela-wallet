@@ -12,6 +12,7 @@
  */
 
 import { loadCore } from '$lib/core/client';
+import { ensureCustomNetworks } from '$lib/services/networks';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import {
 	balanceView,
@@ -30,7 +31,11 @@ class Balance {
 	boot(): Promise<void> {
 		if (this.#booted) return this.#booted;
 		this.#booted = (async () => {
-			await loadCore();
+			// The stored custom networks come first (spec 038 #E9): the first
+			// fetch walks `getAllNetworksSync()`, and a snapshot that has not
+			// read storage yet is the builtin table — an added network would be
+			// neither fetched nor listed until a Settings write.
+			await Promise.all([ensureCustomNetworks(), loadCore()]);
 			ensureBalanceDashboard();
 			subscribeBalanceDashboard((view) => {
 				this.view = view;
@@ -65,6 +70,28 @@ class Balance {
 	backgrounded(): void {
 		if (!this.#booted) return;
 		dispatchBalance({ type: 'app_backgrounded' });
+	}
+
+	/**
+	 * The account switcher is on screen (spec 028 Phase 8): the core refreshes
+	 * every listed account's total while it is, and `view.switcher.balances`
+	 * carries the answers — Expo's `AccountSwitcherModal` sourcing, in the one
+	 * machine that already owns the policy.
+	 */
+	openSwitcher(addresses: string[]): void {
+		if (!this.#booted) return;
+		dispatchBalance({ type: 'switcher_opened', addresses });
+	}
+
+	closeSwitcher(): void {
+		if (!this.#booted) return;
+		dispatchBalance({ type: 'switcher_closed' });
+	}
+
+	/** An RPC fix landed for one chain (spec 028 Phase 8): the core retries that chain alone. */
+	fixChainResolved(chainId: number): void {
+		if (!this.#booted) return;
+		dispatchBalance({ type: 'fix_chain_resolved', chain_id: chainId });
 	}
 }
 

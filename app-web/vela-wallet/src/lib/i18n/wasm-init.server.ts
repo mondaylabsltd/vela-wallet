@@ -4,7 +4,7 @@
  * makes this run exactly once per process; splitting it out keeps a second
  * consumer from calling `initSync` on an already-initialized module.
  *
- * The bytes come from the committed `public/vela_core_bg.<fingerprint>.wasm`
+ * The bytes come from the committed `assets/wasm/vela_core_bg.<fingerprint>.wasm`
  * asset named by `vela_core_wasm_url.js` — the D7 route that replaced the
  * base64 payload `rust/scripts/build-web.mjs` used to emit. Reading the file
  * (rather than importing it, which would inline 3.4 MB of base64 back into the
@@ -25,12 +25,12 @@ import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 function wasmPath(): string {
 	const asset = WASM_URL.replace(/^\//, '');
 	for (let dir = process.cwd(); ; dir = dirname(dir)) {
-		const candidate = join(dir, 'public', asset);
+		const candidate = join(dir, 'assets', 'wasm', asset);
 		if (existsSync(candidate)) return candidate;
 		if (dirname(dir) === dir) break;
 	}
 	throw new Error(
-		`public/${asset} not found above ${process.cwd()} — run \`npm run build:wasm\` at the repo root`
+		`assets/wasm/${asset} not found above ${process.cwd()} — run \`npm run build:wasm\` at the repo root`
 	);
 }
 

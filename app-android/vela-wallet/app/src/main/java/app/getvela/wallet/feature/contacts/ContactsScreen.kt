@@ -23,6 +23,8 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.contacts.components.ActionMenuSheet
+import app.getvela.wallet.feature.contacts.components.ContactFormSheet
+import app.getvela.wallet.feature.contacts.components.ContactNoticeSheet
 import app.getvela.wallet.feature.contacts.components.AlphaIndexRail
 import app.getvela.wallet.feature.contacts.components.AlphaSectionHeader
 import app.getvela.wallet.feature.contacts.components.ContactRow
@@ -48,6 +50,16 @@ data class ContactsActions(
     val onGroup: (GroupRowModel) -> Unit = {},
     val onDismissMenu: () -> Unit = {},
     val onTab: (VelaTab) -> Unit = {},
+    /**
+     * The search box, keystroke by keystroke.
+     *
+     * `null` leaves the box display-only, which is what the gallery wants: a
+     * fixture state pins its own query and must not be editable out of it.
+     */
+    val onQueryChange: ((String) -> Unit)? = null,
+    /** Spec 045 US5: the form's two fields (typed text, not an action id). */
+    val onFormName: (String) -> Unit = {},
+    val onFormAddress: (String) -> Unit = {},
 )
 
 /**
@@ -84,6 +96,19 @@ private fun ContactsRouteContent(
         model.detail != null -> ContactDetailScreen(model, modifier, actions)
         model.groupDetail != null -> GroupDetailScreen(model, modifier, actions)
         else -> ContactsScreen(model, modifier, actions)
+    }
+    // Spec 045: the form and the import notice sit over whichever page is showing.
+    model.notice?.let { notice ->
+        ContactNoticeSheet(model = notice, onDismiss = { actions.onAction("contacts.notice.close") })
+    }
+    model.form?.let { form ->
+        ContactFormSheet(
+            model = form,
+            onDismiss = { actions.onAction("contacts.form.cancel") },
+            onName = actions.onFormName,
+            onAddress = actions.onFormAddress,
+            onSave = { actions.onAction("contacts.form.save") },
+        )
     }
 }
 
@@ -137,6 +162,7 @@ fun ContactsScreen(
                             model = model.search,
                             onClick = { actions.onAction("contacts.search") },
                             onClear = { actions.onAction("contacts.searchClear") },
+                            onQueryChange = actions.onQueryChange,
                         )
                         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                     }
@@ -202,10 +228,10 @@ fun ContactsScreen(
                                         swipeSendLabel = model.swipeSendLabel,
                                         swipeDeleteLabel = model.swipeDeleteLabel,
                                         onClick = { actions.onContact(contact) },
-                                        onSwipeSend = { actions.onAction("contacts.swipeSend") },
+                                        onSwipeSend = { actions.onAction("contacts.swipeSend:" + contact.addressFull) },
                                         // Swipe-delete always raises the
                                         // destructive confirmation (FR-008).
-                                        onSwipeDelete = { actions.onAction("contacts.swipeDelete") },
+                                        onSwipeDelete = { actions.onAction("contacts.swipeDelete:" + contact.addressFull) },
                                     )
                                     Hairline()
                                 }

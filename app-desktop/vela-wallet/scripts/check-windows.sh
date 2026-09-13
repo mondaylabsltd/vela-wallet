@@ -18,6 +18,9 @@
 # `[target.'cfg(target_os = "macos")'.dependencies]` and left the Windows path
 # unlinked, with this gate green throughout.
 set -euo pipefail
+# Resolved BEFORE the cd below, while "$0" still points where it was invoked
+# from — the timezone lift near the bottom needs the app's own source.
+APP="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$(dirname "$0")/../../vela-passkey-win"
 
 TARGET=x86_64-pc-windows-gnu
@@ -33,4 +36,44 @@ fi
 
 echo "checking the Windows passkey path ($TARGET)"
 cargo clippy --target "$TARGET" --all-targets -- -D warnings
+
+# The app's OWN Windows-only code, which nothing above can see.
+#
+# `local_utc_offset_seconds` and its arithmetic live in the app crate, and the
+# app crate cannot be cross-checked at all — the reason this script exists in
+# the first place. So lift those functions verbatim into a throwaway crate that
+# has no C in it and check THEM. Text extraction is deliberately literal: if
+# somebody renames the function, this fails loudly rather than quietly checking
+# nothing.
+#
+# Found this way, before it could ship: windows-sys 0.59 exports only
+# TIME_ZONE_ID_INVALID of the four zone ids.
+MOD="$APP/src/executor/mod.rs"
+LIFTED=$(mktemp -d)
+trap 'rm -rf "$LIFTED"' EXIT
+mkdir -p "$LIFTED/src"
+cat > "$LIFTED/Cargo.toml" <<'TOML'
+[package]
+name = "vela-windows-lift"
+version = "0.0.0"
+edition = "2024"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Time"] }
+TOML
+awk '
+  /^#\[cfg\(windows\)\]$/ { hold = 1 }
+  /^\/\/\/ Local midnight for an instant/ { exit }
+  hold { print }
+' "$MOD" | sed 's/^#\[cfg(any(windows, test))\]$/#[cfg(windows)]/' \
+  > "$LIFTED/src/lib.rs.body"
+if ! grep -q "GetTimeZoneInformation" "$LIFTED/src/lib.rs.body"; then
+  echo "windows: could not lift the timezone functions out of src/executor/mod.rs" >&2
+  echo "         (renamed? re-cfg'd? fix this script rather than deleting it)" >&2
+  exit 1
+fi
+{ echo '#![allow(dead_code)]'; cat "$LIFTED/src/lib.rs.body"; } > "$LIFTED/src/lib.rs"
+( cd "$LIFTED" && cargo clippy --target "$TARGET" -- -D warnings )
+echo "windows: the app's timezone call type-checks too"
+
 echo "windows: type-checked (not run — see the crate docs)"

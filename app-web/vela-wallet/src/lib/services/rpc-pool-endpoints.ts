@@ -47,7 +47,7 @@ export function getBuiltinBundlerUrl(): string {
 }
 
 /** Reliable public RPCs per chain (curated, CORS-friendly; Expo table verbatim). */
-const PUBLIC_RPCS: Record<number, string[]> = {
+export const PUBLIC_RPCS: Record<number, string[]> = {
 	1: ['https://ethereum-rpc.publicnode.com', 'https://1rpc.io/eth'],
 	56: ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://bsc.meowrpc.com'],
 	137: ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'],

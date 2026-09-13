@@ -1,5 +1,5 @@
 //! The Vela mark, drawn with `PathBuilder` from the exact geometry of
-//! `design/onboarding/logo-*.svg` (viewBox 258×260).
+//! `docs/design/onboarding/logo-*.svg` (viewBox 258×260).
 //!
 //! Not `svg()`: the default AssetSource resolves nothing (silently), and gpui
 //! renders SVGs as monochrome masks anyway — the mark needs three fills
@@ -39,7 +39,7 @@ pub fn vela_mark(theme: &Theme, size: Pixels) -> Div {
 }
 
 /// The wordmark beside the mark: `VELA WALLET`, uppercase, `letter-spacing:
-/// .11em` (design/onboarding-new).
+/// .11em` (docs/design/onboarding-new).
 ///
 /// One element per glyph, because **gpui has no letter-spacing** — the string
 /// does not appear anywhere in its text system, so there is no property to set
@@ -68,7 +68,8 @@ pub fn vela_wordmark(theme: &Theme) -> Div {
         .items_center()
         .gap(word_gap)
         .text_size(size)
-        .font_weight(FontWeight::EXTRA_BOLD)
+        // BOLD, as the web's `.wordmark` (`--weight-bold`) — spec 038 finding 8.
+        .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
         .child(word("VELA"))
         .child(word("WALLET"))

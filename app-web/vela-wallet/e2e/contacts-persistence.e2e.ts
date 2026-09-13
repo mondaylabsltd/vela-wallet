@@ -20,10 +20,14 @@ async function openContacts(page: Page): Promise<void> {
 }
 
 async function addContact(page: Page, name: string, address: string): Promise<void> {
+	// The phone's "+" opens the drawn C5 sheet (new / import / export) since
+	// 028 US5; 新建联系人 is its first row. The empty state's own button still
+	// opens the form directly — this helper takes the header route on purpose.
 	await page
 		.getByRole('button', { name: en('contacts.addContact') })
 		.first()
 		.click();
+	await page.getByRole('menuitem', { name: en('contacts.addTitle') }).click();
 	await page.getByLabel(en('contacts.nameLabel')).fill(name);
 	await page.getByLabel(en('contacts.addressLabel')).fill(address);
 	await page.getByRole('button', { name: en('contacts.save') }).click();
@@ -68,6 +72,7 @@ test('the invalid-address gate holds the form shut', async ({ page }) => {
 		.getByRole('button', { name: en('contacts.addContact') })
 		.first()
 		.click();
+	await page.getByRole('menuitem', { name: en('contacts.addTitle') }).click();
 	await page.getByLabel(en('contacts.nameLabel')).fill('Mallory');
 	await page.getByLabel(en('contacts.addressLabel')).fill('not-an-address');
 	// The save button refuses; the corpus's own words say why.

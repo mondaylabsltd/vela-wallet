@@ -81,6 +81,6 @@
 		display: flex;
 		flex-direction: column;
 		min-height: 100dvh;
-		padding: var(--space-4xl) var(--layout-screenPaddingX) var(--space-4xl);
+		/* padding: var(--space-4xl) var(--layout-screenPaddingX) var(--space-4xl); */
 	}
 </style>

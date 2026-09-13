@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.wallet.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,9 +51,9 @@ fun BalanceDisplay(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         when (model.state) {
-            BalanceStateKind.Normal -> AmountRow(model)
+            BalanceStateKind.Normal -> AmountRow(model, onToggleVisibility)
             BalanceStateKind.ZeroLive -> {
-                AmountRow(model)
+                AmountRow(model, onToggleVisibility)
                 Spacer(modifier = Modifier.height(VelaSpacing.md))
                 LiveIndicatorRow(model.liveText.orEmpty())
             }
@@ -67,9 +68,10 @@ fun BalanceDisplay(
 }
 
 @Composable
-private fun AmountRow(model: BalanceModel) {
+private fun AmountRow(model: BalanceModel, onToggle: () -> Unit = {}) {
     val colors = VelaTheme.colors
-    Row {
+    // Spec 048: the amount itself hides the figures (the web's BalanceDisplay button).
+    Row(modifier = Modifier.clickable(onClick = onToggle)) {
         Text(
             text = model.integer.orEmpty(),
             color = colors.fgBase,
@@ -80,7 +82,7 @@ private fun AmountRow(model: BalanceModel) {
         )
         model.decimals?.let { decimals ->
             Text(
-                text = ".$decimals",
+                text = model.decimalMark + decimals,
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.bold,
@@ -117,7 +119,8 @@ private fun LiveIndicatorRow(text: String) {
 @Composable
 private fun HiddenRow(model: BalanceModel, onToggleVisibility: () -> Unit) {
     val colors = VelaTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.clickable(onClick = onToggleVisibility),verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = model.integer.orEmpty(),
             color = colors.fgBase,

@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. No shell ships an in-app dApp browser (spec 032 Part C, platform decision); the web's dApp path is the browser extension in `app-web/vela-wallet/extension/`.
+
 # In-App dApp Browser (`WalletWebView`) — Architecture
 
 Status: **design / proposal** · Author: design pass 2026-07-06 · Platforms: **iOS 16+ and Android 12 / API 31+ (both first-class)**

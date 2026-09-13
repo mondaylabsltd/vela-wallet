@@ -245,6 +245,20 @@ struct RootView: View {
             SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
         case .settingsGallery:
             SettingsGalleryScreen(loc: loc)
+        case .explore:
+            ExploreScreen(
+                model: ExploreFixtures.buildMobileState(
+                    ExploreStateId(rawValue: PageOverride.state ?? "e2") ?? .e2, loc: loc
+                ),
+                loc: loc,
+                signing: SigningFixtures.build(.cs12, loc: loc)
+            )
+        case .signing:
+            SigningSheet(
+                model: SigningFixtures.build(
+                    SigningStateId(rawValue: PageOverride.state ?? "cs1") ?? .cs1, loc: loc
+                )
+            )
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -414,6 +428,22 @@ struct RootView: View {
                     }
                 case .contacts:
                     contactsSection
+                case .explore:
+                    // Spec 022/029: 探索 is a real destination now rather than an
+                    // inert chip. Its body is a fixture layer exactly like the
+                    // wallet's, but the account it shows a site is the REAL one —
+                    // a connection panel naming a stranger's account would be the
+                    // wallet lying about what it just granted.
+                    ExploreScreen(
+                        model: ExploreFixtures.buildMobileState(.e2, loc: loc)
+                            .withIdentity(name: session.view.activeName,
+                                          address: session.view.address),
+                        loc: loc,
+                        signing: SigningFixtures.build(.cs12, loc: loc)
+                            .withIdentity(name: session.view.activeName,
+                                          address: session.view.address),
+                        onSelectTab: selectTab
+                    )
                 }
             }
         } else {
@@ -429,14 +459,15 @@ struct RootView: View {
     /// regression must not come back through this switch.
     ///
     /// 通讯录 became a real destination in spec 050; before it, the tab was
-    /// drawn, tappable, and did nothing at all. 探索 still does nothing, and
-    /// stays that way until its machines are wired.
+    /// drawn, tappable, and did nothing at all. 探索 opens the browser's
+    /// fixture layer (spec 022/029) over the real identity; its machines are
+    /// not wired yet.
     private func selectTab(_ tab: WalletTab) {
         switch tab {
         case .settings: router.path.append(.settings)
         case .wallet: section = .wallet
         case .contacts: section = .contacts
-        case .explore: break
+        case .explore: section = .explore
         }
     }
 
@@ -844,13 +875,14 @@ struct RootView: View {
     }
 }
 
-/// Which section of the signed-in shell is showing (spec 050).
+/// Which section of the signed-in shell is showing (spec 022 / spec 050).
 ///
-/// A section, not a route: `design/contacts/C1` draws the tab bar with 通讯录
-/// **selected**, so it is a peer of 钱包 rather than something pushed over it.
-/// 设置 is the opposite case — its drawing has a back affordance — and stays an
-/// `AppRoute`. 探索 joins this enum when its machines are wired.
-enum WalletSection { case wallet, contacts }
+/// A section, not a route: `docs/design/contacts/C1` draws the tab bar with
+/// 通讯录 **selected**, so it is a peer of 钱包 rather than something pushed
+/// over it, and a browser tab is not somewhere a person should be able to
+/// deep-link into before they have a wallet. 设置 is the opposite case — its
+/// drawing has a back affordance — and stays an `AppRoute`.
+enum WalletSection { case wallet, contacts, explore }
 
 /// Where the contacts section is, inside itself (spec 050).
 ///
@@ -871,7 +903,7 @@ enum ContactsRoute: Equatable {
 enum PageOverride {
     enum Page {
         case wallet, gallery, contacts, contactsLive, contactsGallery, flowsGallery
-        case settings, settingsLive, settingsGallery
+        case settings, settingsLive, settingsGallery, explore, signing
     }
 
     static let page: Page? = {
@@ -892,13 +924,18 @@ enum PageOverride {
         case "flows-gallery": .flowsGallery
         case "settings": .settings
         case "settings-gallery": .settingsGallery
+        case "explore": .explore
+        case "signing": .signing
         default: nil
         }
     }()
 
-    /// WHICH state the overridden page opens on — `VELA_STATE=st9` puts
-    /// `settings-live` straight on the networks page, which is otherwise two
-    /// taps inside a route and unreachable from a screenshot pass.
+    /// WHICH state the overridden page opens on — `VELA_STATE=e4`,
+    /// `VELA_STATE=cs5`, or `VELA_STATE=st9` to put `settings-live` straight
+    /// on the networks page, which is otherwise two taps inside a route. The
+    /// same env-pin family as `VELA_PAGE`, and the same reason the desktop grew
+    /// `VELA_SETTINGS_STATE`: without it a screenshot pass can only ever see
+    /// the first state.
     static let state: String? = ProcessInfo.processInfo.environment["VELA_STATE"]
 }
 

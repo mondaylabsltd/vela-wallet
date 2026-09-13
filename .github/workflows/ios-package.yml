@@ -1,0 +1,140 @@
+# Release build of the iOS shell (app-ios/VelaWallet): an UNSIGNED device
+# archive, packaged as an .ipa-shaped zip, attached to a GitHub release on an
+# `ios-v*` tag.
+#
+# Same shape as the desktop release triad and web-extension-package.yml: a tag
+# cuts a release, a manual run only builds, a pull request that touches the
+# packaging runs the cheap metadata check.
+#
+# Unsigned on purpose (founder, 2026-09-11: 不用考虑签名). The archive is built
+# with code signing disabled, so it installs on nothing as-is; signing it with
+# the team's certificate and profile (Xcode "Distribute" on the .xcarchive, or
+# `codesign` + a re-zip) is a local step — see docs/project-takeover/05. The
+# .xcarchive itself is attached too, because that is what Xcode's organizer
+# wants for a signed export.
+#
+# macos-15 minutes bill at ten times Linux, so the xcframework is cached on the
+# core's own sources exactly as the `ios` job in ci.yml does.
+name: iOS package
+
+on:
+  # Cutting an iOS release: `git tag ios-v1.0 && git push --tags`.
+  # The tag's version must equal MARKETING_VERSION in the Xcode project.
+  push:
+    tags: ['ios-v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj'
+      - 'rust/scripts/build-ios-xcframework.sh'
+      - '.github/workflows/ios-package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate the packaging metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: MARKETING_VERSION / bundle id / deployment target are set
+        run: |
+          f=app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj
+          for k in MARKETING_VERSION CURRENT_PROJECT_VERSION PRODUCT_BUNDLE_IDENTIFIER IPHONEOS_DEPLOYMENT_TARGET; do
+            grep -q "$k = " "$f" || { echo "::error::$f no longer sets $k"; exit 1; }
+          done
+          test -f app-ios/VelaWallet/VelaWallet.xcodeproj/xcshareddata/xcschemes/VelaWallet.xcscheme \
+            || { echo "::error::the VelaWallet scheme is not shared — xcodebuild on a runner cannot see it"; exit 1; }
+      - name: A release tag must name MARKETING_VERSION
+        if: startsWith(github.ref, 'refs/tags/ios-v')
+        run: |
+          version=$(grep -m1 -oE 'MARKETING_VERSION = [^;]+' app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj | sed 's/MARKETING_VERSION = //')
+          tag="${GITHUB_REF_NAME#ios-v}"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME names $tag but the project says MARKETING_VERSION $version — bump it and re-tag"
+            exit 1
+          fi
+
+  package:
+    name: Build the unsigned archive
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-apple-ios-sim,aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      # app-ios/VelaCoreKit/Artifacts/ is gitignored, so the xcframework must be
+      # built before Xcode can resolve the local package (same as ci.yml).
+      - name: Cache the xcframework
+        id: xcframework
+        uses: actions/cache@v4
+        with:
+          path: app-ios/VelaCoreKit/Artifacts
+          key: xcframework-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock') }}
+      - name: Build the xcframework
+        if: steps.xcframework.outputs.cache-hit != 'true'
+        run: ./rust/scripts/build-ios-xcframework.sh
+      - name: Archive (device, code signing disabled)
+        working-directory: app-ios/VelaWallet
+        run: |
+          xcodebuild archive \
+            -project VelaWallet.xcodeproj \
+            -scheme VelaWallet \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/VelaWallet.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tail -20
+          test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
+      - name: Package
+        working-directory: app-ios/VelaWallet
+        run: |
+          version=$(grep -m1 -oE 'MARKETING_VERSION = [^;]+' VelaWallet.xcodeproj/project.pbxproj | sed 's/MARKETING_VERSION = //')
+          mkdir -p out "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app" "$RUNNER_TEMP/Payload/"
+          # An .ipa is a zip with Payload/<App>.app at its root; unsigned here.
+          (cd "$RUNNER_TEMP" && zip -qry "$OLDPWD/out/vela-wallet-ios-${version}-unsigned.ipa" Payload)
+          (cd "$RUNNER_TEMP" && zip -qry "$OLDPWD/out/vela-wallet-ios-${version}.xcarchive.zip" VelaWallet.xcarchive)
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: app-ios/VelaWallet/out/*
+          if-no-files-found: error
+
+  release:
+    name: Attach the packages to the release
+    if: startsWith(github.ref, 'refs/tags/ios-v')
+    needs: [metadata, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish checksums alongside the packages
+        working-directory: artifacts
+        run: |
+          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-ios"
+          mv "$RUNNER_TEMP/SHA256SUMS-ios" SHA256SUMS-ios
+          cat SHA256SUMS-ios
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Vela Wallet iOS $GITHUB_REF_NAME (unsigned)" \
+            --generate-notes \
+            --verify-tag \
+            artifacts/* \
+          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" --clobber

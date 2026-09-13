@@ -13,34 +13,53 @@
 	 */
 	interface Props {
 		detail: ContactDetailModel;
+		/** The footer's two actions. Absent in the gallery, where they are drawn. */
+		onedit?: () => void;
+		ondelete?: () => void;
+		/** The three pills, the address copy, the chips' `+`, 查看全部往来 (spec 028 US5). */
+		onaction?: (id: 'send' | 'receive' | 'qr') => void;
+		oncopy?: () => void;
+		onaddgroup?: () => void;
+		onactivityall?: () => void;
 	}
 
-	let { detail }: Props = $props();
+	let { detail, onedit, ondelete, onaction, oncopy, onaddgroup, onactivityall }: Props = $props();
 </script>
 
 <div class="panel">
 	<div class="identity">
-		<Identicon svg={detail.contact.identiconSvg} size="detail" label={detail.contact.name} />
+		<Identicon
+			svg={detail.contact.identiconSvg}
+			size="detail"
+			label={detail.contact.name}
+			address={detail.contact.addressFull}
+		/>
 		<div class="who">
 			<p class="name">{detail.contact.name}</p>
 			<div class="chips">
 				{#each detail.chips as chip (chip)}
 					<span class="chip">{chip}</span>
 				{/each}
+				{#if onaddgroup !== undefined}
+					<button type="button" class="chip add" onclick={onaddgroup}>
+						<Icon icon={UTILITY_ICONS.plus} size="xs" />
+						<span>{detail.addChipLabel}</span>
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
 
 	<div class="actions">
-		<button type="button">
+		<button type="button" onclick={() => onaction?.('send')}>
 			<Icon icon={UTILITY_ICONS['arrow-up-right']} size="base" />
 			<span>{detail.actions.send}</span>
 		</button>
-		<button type="button">
+		<button type="button" onclick={() => onaction?.('receive')}>
 			<Icon icon={UTILITY_ICONS['arrow-down-left']} size="base" />
 			<span>{detail.actions.receive}</span>
 		</button>
-		<button type="button">
+		<button type="button" onclick={() => onaction?.('qr')}>
 			<Icon icon={UTILITY_ICONS['qr-code']} size="base" />
 			<span>{detail.actions.qr}</span>
 		</button>
@@ -48,7 +67,7 @@
 
 	<hr />
 
-	<AddressBlock address={detail.address} layout="desktop" />
+	<AddressBlock address={detail.address} layout="desktop" {oncopy} />
 
 	<hr />
 
@@ -59,15 +78,19 @@
 				<li><ActivityRow {row} /></li>
 			{/each}
 		</ul>
-		<button type="button" class="link">{detail.activityLink}</button>
+		{#if detail.rows.length === 0 && detail.emptyActivity !== undefined}
+			<p class="empty">{detail.emptyActivity}</p>
+		{:else}
+			<button type="button" class="link" onclick={onactivityall}>{detail.activityLink}</button>
+		{/if}
 	</section>
 
 	<footer>
-		<button type="button" class="foot">
+		<button type="button" class="foot" onclick={onedit}>
 			<Icon icon={UTILITY_ICONS.pencil} size="sm" />
 			<span>{detail.editLabel}</span>
 		</button>
-		<button type="button" class="foot destructive">{detail.deleteLabel}</button>
+		<button type="button" class="foot destructive" onclick={ondelete}>{detail.deleteLabel}</button>
 	</footer>
 </div>
 
@@ -113,6 +136,20 @@
 		background: var(--color-bg-raised);
 		color: var(--color-fg-muted);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.chip.add {
+		gap: var(--space-xs);
+		border: var(--border-hairline) dashed var(--color-border-base);
+		background: none;
+		font-family: var(--font-ui);
+		cursor: pointer;
+	}
+
+	.empty {
+		margin: var(--space-md) 0 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	.actions {

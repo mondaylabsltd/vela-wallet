@@ -89,6 +89,18 @@ export async function removeItem(key: string): Promise<void> {
 	await inStore('readwrite', (store) => store.delete(key));
 }
 
+/**
+ * Every key in the store (spec 028 T434).
+ *
+ * The erase is a NAMESPACE sweep, not a delete-list, and a sweep has to be able
+ * to ask what is actually here — a list of keys one module happens to own is
+ * exactly the thing that drifts out of date in silence.
+ */
+export async function getAllKeys(): Promise<string[]> {
+	const keys = await inStore<IDBValidKey[]>('readonly', (store) => store.getAllKeys());
+	return keys.filter((key): key is string => typeof key === 'string');
+}
+
 /** Test seam: drop the cached connection so a fresh open is observable. */
 export function resetStorageForTests(): void {
 	opening = null;

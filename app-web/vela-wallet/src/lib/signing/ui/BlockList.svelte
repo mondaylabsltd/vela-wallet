@@ -22,9 +22,11 @@
 	interface Props {
 		blocks: Block[];
 		onchip?: (id: string) => void;
+		/** The custom cap's keystrokes, on their way back to the guard. */
+		oncustom?: (text: string) => void;
 	}
 
-	let { blocks, onchip }: Props = $props();
+	let { blocks, onchip, oncustom }: Props = $props();
 </script>
 
 {#each blocks as block, i (i)}
@@ -46,7 +48,9 @@
 			chips={block.chips}
 			note={block.note}
 			resultingTotal={block.resultingTotal}
+			custom={block.custom}
 			{onchip}
+			{oncustom}
 		/>
 	{:else if block.kind === 'party'}
 		<PartyRow label={block.label} name={block.name} address={block.address} badge={block.badge} />

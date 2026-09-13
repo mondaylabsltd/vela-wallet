@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -551,6 +553,9 @@ fun AllowanceEditor(
     note: String?,
     resultingTotal: SigningRow?,
     modifier: Modifier = Modifier,
+    custom: app.getvela.wallet.feature.signing.AllowanceInput? = null,
+    onChip: (String) -> Unit = {},
+    onCustomAmount: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
@@ -600,6 +605,7 @@ fun AllowanceEditor(
                                 CircleShape,
                             )
                             .alpha(if (disabled) VelaOpacity.disabled else 1f)
+                            .clickable(enabled = !disabled) { onChip(chip.id) }
                             .padding(horizontal = VelaSpacing.lg),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -611,6 +617,34 @@ fun AllowanceEditor(
                         )
                     }
                 }
+            }
+            custom?.let { input ->
+                // Spec 044: the guard's custom amount — local echo, the core's
+                // text when it differs (the send form's rule).
+                var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(input.value) }
+                androidx.compose.runtime.LaunchedEffect(input.value) { if (input.value != typed && input.value.isEmpty()) typed = input.value }
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(VelaBorder.hairline, if (input.error != null) colors.errorBase else colors.borderStrong, RoundedCornerShape(VelaRadius.md))
+                        .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = typed,
+                        onValueChange = { next -> typed = next; onCustomAmount(next) },
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { inner ->
+                            if (typed.isEmpty()) Text(text = input.placeholder, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
+                            inner()
+                        },
+                    )
+                    Text(text = input.symbol, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+                }
+                input.error?.let { Text(text = it, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm) }
             }
             note?.let {
                 Text(
@@ -770,7 +804,7 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            IdenticonAvatar(seed = seed, size = VelaIconSize.base)
+            IdenticonAvatar(seed = seed, size = VelaIconSize.base, name = name)
             Text(
                 text = name,
                 color = colors.fgBase,

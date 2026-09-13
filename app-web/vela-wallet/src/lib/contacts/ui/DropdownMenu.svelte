@@ -17,6 +17,31 @@
 
 	let { menu, align = 'end', at, inline = false, onselect, onclose }: Props = $props();
 
+	/**
+	 * A floating menu is placed at the pointer (or under a button) — and a
+	 * pointer near the right or bottom edge of the window would put the card
+	 * half off-screen. The group view's ⋯ sits at the far right of its column,
+	 * so its menu opened rightwards into nothing and could not be read. The
+	 * card is measured once it exists and slid back inside the viewport, with
+	 * a margin, in whichever direction it overflowed.
+	 */
+	let card = $state<HTMLDivElement | undefined>();
+	let placed = $state<{ x: number; y: number } | undefined>(undefined);
+	const EDGE = 8;
+
+	$effect(() => {
+		if (at === undefined || inline || card === undefined) {
+			placed = undefined;
+			return;
+		}
+		const { width, height } = card.getBoundingClientRect();
+		const x = Math.max(EDGE, Math.min(at.x, window.innerWidth - width - EDGE));
+		const y = Math.max(EDGE, Math.min(at.y, window.innerHeight - height - EDGE));
+		placed = { x, y };
+	});
+
+	const position = $derived(placed ?? at);
+
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') onclose?.();
 	}
@@ -30,11 +55,12 @@
 {/if}
 
 <div
+	bind:this={card}
 	class="menu {align}"
 	class:inline
 	class:floating={at !== undefined && !inline}
-	style:left={at === undefined || inline ? undefined : `${at.x}px`}
-	style:top={at === undefined || inline ? undefined : `${at.y}px`}
+	style:left={position === undefined || inline ? undefined : `${position.x}px`}
+	style:top={position === undefined || inline ? undefined : `${position.y}px`}
 	role="menu"
 	aria-label={menu.label}
 	tabindex="-1"

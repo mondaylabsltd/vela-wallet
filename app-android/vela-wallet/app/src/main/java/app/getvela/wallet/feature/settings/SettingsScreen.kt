@@ -32,7 +32,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +93,66 @@ data class SettingsActions(
     val onSelectTab: (VelaTab) -> Unit = {},
     val onSignOut: () -> Unit = {},
     val onOpenContacts: () -> Unit = {},
+    /**
+     * A row picked in one of the select sheets — currency today, the language
+     * and format sheets when their machines arrive.
+     *
+     * The overlay says WHICH sheet, so one callback serves five of them and a
+     * new sheet does not widen this class. Returning is the host's business:
+     * the sheet closes here, and what the pick means is the core's.
+     */
+    val onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
+    /**
+     * A field changed, keystroke by keystroke, identified by the id its model
+     * carries.
+     *
+     * Per keystroke rather than on blur because the CORE holds the draft: it
+     * echoes the value back in its view, so the box a person types into is
+     * showing the core's state rather than a second copy that can disagree
+     * with it. The web shell does the same.
+     */
+    val onFieldEdited: (fieldId: String, value: String) -> Unit = { _, _ -> },
+    /** The field lost focus — the core's commit point, where it validates and saves. */
+    val onFieldCommitted: (fieldId: String) -> Unit = {},
+    /** The bin on a custom network row. */
+    val onRemoveNetwork: (id: String) -> Unit = {},
+    /**
+     * A network row was opened.
+     *
+     * This is what asks the core to check that endpoint — the row was drawn as
+     * tappable from the start and nothing was listening, so the probe arms
+     * landed with no caller. (Spec 041 phase 2.)
+     */
+    val onOpenNetwork: (id: String) -> Unit = {},
+    /** Typing in the add-network search. */
+    val onSearchNetwork: (String) -> Unit = {},
+    /** Choosing one of its results, by chain id. */
+    val onPickNetwork: (String) -> Unit = {},
+    /** Committing the chosen network, once the core's checks have passed. */
+    val onConfirmAddNetwork: () -> Unit = {},
+    /** 恢复默认 on the service-endpoints page. */
+    val onResetEndpoints: () -> Unit = {},
+    // Spec 047 US1: the rows that do what they say.
+    val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
+    val onTextScale: (Int) -> Unit = {},
+    val onStorageClear: (String) -> Unit = {},
+    val onClearCaches: () -> Unit = {},
+    val onErase: () -> Unit = {},
+    /** Spec 048: what the person typed goes into the report. */
+    val onFeedbackSend: (String) -> Unit = {},
+    /** Spec 048: the network detail's RPC / explorer overrides, and the add-network sheet's custom RPC + 重新检查. */
+    val onOverrideEdited: (chainId: Long, field: String, value: String) -> Unit = { _, _, _ -> },
+    val onOverrideCommitted: (chainId: Long) -> Unit = {},
+    val onCustomRpc: (String) -> Unit = {},
+    val onRecheckNetwork: () -> Unit = {},
+    /** Spec 048: a provider's 检查密钥 / 获取密钥. */
+    val onProviderTest: (String) -> Unit = {},
+    val onFeedbackGithub: () -> Unit = {},
+    val onOpenLink: (String) -> Unit = {},
+    val onRelayerRetry: () -> Unit = {},
+    val onAccountSelect: (Int) -> Unit = {},
+    val onAccountPrimary: () -> Unit = {},
+    val onAccountSecondary: () -> Unit = {},
 )
 
 @Composable
@@ -101,7 +163,8 @@ fun SettingsRoute(
 ) {
     // Seeds, not bindings: a gallery state pins where this opens, and a person
     // tapping owns it from then on.
-    var page by rememberSaveable(model.state) { mutableStateOf(model.page) }
+    // Spec 048: keyed on the model's page too, so a page another route asked for (the add-token 原生代币 tab) wins over a remembered one.
+    var page by rememberSaveable(model.state, model.page) { mutableStateOf(model.page) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
     var advancedOpen by rememberSaveable(model.state) {
         mutableStateOf(model.state == SettingsScreenState.ST1B)
@@ -135,8 +198,42 @@ fun SettingsRoute(
         onToggleAdvanced = { advancedOpen = !advancedOpen },
         onOpenOverlay = { overlay = it },
         onDismissOverlay = { overlay = SettingsOverlay.None },
+        onSheetSelect = { sheet, id ->
+            actions.onSheetSelect(sheet, id)
+            // The sheet closes on the pick, before the core has answered. The
+            // alternative — waiting for the view to come back — leaves a
+            // person tapping a row that visibly does nothing while a storage
+            // write completes.
+            overlay = SettingsOverlay.None
+        },
         onSelectTab = actions.onSelectTab,
         onSignOut = actions.onSignOut,
+        onFieldEdited = actions.onFieldEdited,
+        onFieldCommitted = actions.onFieldCommitted,
+        onRemoveNetwork = actions.onRemoveNetwork,
+        // Spec 048: a network row opens ITS detail page (the row only expanded the core's override before).
+        onOpenNetwork = { id -> actions.onOpenNetwork(id); page = SettingsPage.NetworkDetail },
+        onSearchNetwork = actions.onSearchNetwork,
+        onPickNetwork = actions.onPickNetwork,
+        onConfirmAddNetwork = actions.onConfirmAddNetwork,
+        onResetEndpoints = actions.onResetEndpoints,
+        onSegment = actions.onSegment,
+        onTextScale = actions.onTextScale,
+        onStorageClear = actions.onStorageClear,
+        onClearCaches = { actions.onClearCaches(); overlay = SettingsOverlay.None },
+        onErase = actions.onErase,
+        onFeedbackSend = actions.onFeedbackSend,
+        onOverrideEdited = actions.onOverrideEdited,
+        onOverrideCommitted = actions.onOverrideCommitted,
+        onCustomRpc = actions.onCustomRpc,
+        onRecheckNetwork = actions.onRecheckNetwork,
+        onProviderTest = actions.onProviderTest,
+        onFeedbackGithub = actions.onFeedbackGithub,
+        onOpenLink = actions.onOpenLink,
+        onRelayerRetry = actions.onRelayerRetry,
+        onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
+        onAccountPrimary = actions.onAccountPrimary,
+        onAccountSecondary = actions.onAccountSecondary,
     )
 }
 
@@ -153,8 +250,34 @@ fun SettingsScreen(
     onToggleAdvanced: () -> Unit = {},
     onOpenOverlay: (SettingsOverlay) -> Unit = {},
     onDismissOverlay: () -> Unit = {},
+    onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     onSelectTab: (VelaTab) -> Unit = {},
     onSignOut: () -> Unit = {},
+    onFieldEdited: (String, String) -> Unit = { _, _ -> },
+    onFieldCommitted: (String) -> Unit = {},
+    onRemoveNetwork: (String) -> Unit = {},
+    onOpenNetwork: (String) -> Unit = {},
+    onSearchNetwork: (String) -> Unit = {},
+    onPickNetwork: (String) -> Unit = {},
+    onConfirmAddNetwork: () -> Unit = {},
+    onResetEndpoints: () -> Unit = {},
+    onSegment: (String, String) -> Unit = { _, _ -> },
+    onTextScale: (Int) -> Unit = {},
+    onStorageClear: (String) -> Unit = {},
+    onClearCaches: () -> Unit = {},
+    onErase: () -> Unit = {},
+    onOverrideEdited: (Long, String, String) -> Unit = { _, _, _ -> },
+    onOverrideCommitted: (Long) -> Unit = {},
+    onCustomRpc: (String) -> Unit = {},
+    onRecheckNetwork: () -> Unit = {},
+    onProviderTest: (String) -> Unit = {},
+    onFeedbackSend: (String) -> Unit = {},
+    onFeedbackGithub: () -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
+    onRelayerRetry: () -> Unit = {},
+    onAccountSelect: (Int) -> Unit = {},
+    onAccountPrimary: () -> Unit = {},
+    onAccountSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -206,12 +329,34 @@ fun SettingsScreen(
                             onRow = onRow,
                             onToggleAdvanced = onToggleAdvanced,
                             onOpenOverlay = onOpenOverlay,
+                            onSegment = onSegment,
+                            onTextScale = onTextScale,
                         )
                     }
                     else -> {
                         val (title, subtitle) = pageHeader(model, page)
                         SettingsNavHeader(title, subtitle, model.closeLabel, onBack)
-                        SettingsPageBody(model, page, onOpenOverlay)
+                        SettingsPageBody(
+                            model = model,
+                            page = page,
+                            onOpenOverlay = onOpenOverlay,
+                            onFieldEdited = onFieldEdited,
+                            onFieldCommitted = onFieldCommitted,
+                            onRemoveNetwork = onRemoveNetwork,
+                            onOpenNetwork = onOpenNetwork,
+                            onSearchNetwork = onSearchNetwork,
+                            onPickNetwork = onPickNetwork,
+                            onConfirmAddNetwork = onConfirmAddNetwork,
+                            onResetEndpoints = onResetEndpoints,
+                            onStorageClear = onStorageClear,
+                            onOpenLink = onOpenLink,
+                            onOverrideEdited = onOverrideEdited,
+                            onOverrideCommitted = onOverrideCommitted,
+                            onCustomRpc = onCustomRpc,
+                            onRecheckNetwork = onRecheckNetwork,
+                            onProviderTest = onProviderTest,
+                            onAddNetwork = { onRow("add-network") },
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(VelaSpacing.xl4))
@@ -229,6 +374,16 @@ fun SettingsScreen(
                 overlay = overlay,
                 onDismiss = onDismissOverlay,
                 onSignOut = onSignOut,
+                onSheetSelect = onSheetSelect,
+                onClearCaches = onClearCaches,
+                onErase = onErase,
+                onFeedbackSend = onFeedbackSend,
+                onFeedbackGithub = onFeedbackGithub,
+                onOpenLink = onOpenLink,
+                onRelayerRetry = onRelayerRetry,
+                onAccountSelect = onAccountSelect,
+                onAccountPrimary = onAccountPrimary,
+                onAccountSecondary = onAccountSecondary,
             )
         }
     }
@@ -297,6 +452,8 @@ private fun SettingsHomeBody(
     onRow: (String) -> Unit,
     onToggleAdvanced: () -> Unit,
     onOpenOverlay: (SettingsOverlay) -> Unit,
+    onSegment: (String, String) -> Unit = { _, _ -> },
+    onTextScale: (Int) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
@@ -323,13 +480,14 @@ private fun SettingsHomeBody(
         // The three appearance controls are not rows: they are the control
         // itself, shown inline under 语言 (ST1).
         if (section.appearanceControls) {
-            VelaTextScaleSlider(model.textScale.steps, model.textScale.index)
+            VelaTextScaleSlider(model.textScale.steps, model.textScale.index, onChange = onTextScale)
             VelaSegmentedControl(
                 label = model.theme.label,
                 segments = model.theme.segments.map { seg ->
                     Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
                 },
                 selectedId = model.theme.selected,
+                onSelect = { onSegment("theme", it) },
             )
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             VelaSegmentedControl(
@@ -338,6 +496,7 @@ private fun SettingsHomeBody(
                     Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
                 },
                 selectedId = model.avatar.selected,
+                onSelect = { onSegment("avatar", it) },
             )
         }
     }
@@ -358,22 +517,78 @@ private fun SettingsHomeBody(
     }
 }
 
+/**
+ * A [VelaUrlField] wired to the core.
+ *
+ * Focus is what commits. The core validates and saves on blur — not on every
+ * keystroke — so a field that reported only its edits would let a person type a
+ * perfectly good RPC URL that never reached storage, with the box still showing
+ * it. Both halves or neither.
+ */
+@Composable
+private fun EditableUrlField(
+    field: UrlFieldModel,
+    onEdited: (String, String) -> Unit,
+    onCommitted: (String) -> Unit,
+    action: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    var focused by remember(field.id) { mutableStateOf(false) }
+    VelaUrlField(
+        label = field.label,
+        value = field.value,
+        placeholder = field.placeholder,
+        hint = field.hint,
+        badge = field.badge,
+        tone = field.tone,
+        action = action,
+        onAction = onAction,
+        onValueChange = { value -> onEdited(field.id, value) },
+        modifier = Modifier.onFocusChanged { state ->
+            if (focused && !state.isFocused) onCommitted(field.id)
+            focused = state.isFocused
+        },
+    )
+}
+
 @Composable
 @Suppress("LongMethod")
 private fun SettingsPageBody(
     model: SettingsScreenModel,
     page: SettingsPage,
     onOpenOverlay: (SettingsOverlay) -> Unit,
+    onFieldEdited: (String, String) -> Unit = { _, _ -> },
+    onFieldCommitted: (String) -> Unit = {},
+    onRemoveNetwork: (String) -> Unit = {},
+    onOpenNetwork: (String) -> Unit = {},
+    onSearchNetwork: (String) -> Unit = {},
+    onPickNetwork: (String) -> Unit = {},
+    onConfirmAddNetwork: () -> Unit = {},
+    onResetEndpoints: () -> Unit = {},
+    onStorageClear: (String) -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
+    onOverrideEdited: (Long, String, String) -> Unit = { _, _, _ -> },
+    onOverrideCommitted: (Long) -> Unit = {},
+    onCustomRpc: (String) -> Unit = {},
+    onRecheckNetwork: () -> Unit = {},
+    onProviderTest: (String) -> Unit = {},
+    onAddNetwork: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
         SettingsPage.Networks -> {
             model.networks.forEach { row ->
-                VelaNetworkRow(row, deleteLabel = model.addNetworkLabel)
+                VelaNetworkRow(
+                    row = row,
+                    deleteLabel = model.addNetworkLabel,
+                    onClick = onOpenNetwork,
+                    onDelete = onRemoveNetwork,
+                )
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(onClick = onAddNetwork)
                     .padding(top = VelaSpacing.xl3),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
@@ -422,27 +637,43 @@ private fun SettingsPageBody(
                 }
                 VelaStatusPill(detail.badge)
             }
-            VelaUrlField(
-                label = detail.rpc.label,
-                value = detail.rpc.value,
-                hint = detail.rpc.hint,
-                badge = detail.rpc.badge,
-                tone = detail.rpc.tone,
+            // Spec 048: the overrides are typed here (the web's NetworkDetailPanel);
+            // committed to the core when the field loses focus.
+            EditableUrlField(
+                field = detail.rpc,
+                onEdited = { id, value -> onOverrideEdited(detail.chainId, id, value) },
+                onCommitted = { onOverrideCommitted(detail.chainId) },
             )
             if (detail.callout != null) {
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 VelaCallout(detail.callout)
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-            VelaUrlField(label = detail.explorer.label, value = detail.explorer.value)
+            EditableUrlField(
+                field = detail.explorer,
+                onEdited = { id, value -> onOverrideEdited(detail.chainId, id, value) },
+                onCommitted = { onOverrideCommitted(detail.chainId) },
+            )
         }
 
         SettingsPage.AddNetwork -> {
             val add = model.addNetwork
             if (add.candidate == null) {
-                VelaUrlField(label = "", value = "", placeholder = add.searchPlaceholder)
+                // The box was drawn read-only with an empty value, so the
+                // fixture's three results sat under a search nobody could
+                // perform. `onValueChange` has been on this component all
+                // along; nothing was passing one.
+                VelaUrlField(
+                    label = "",
+                    value = add.query,
+                    placeholder = add.searchPlaceholder,
+                    onValueChange = onSearchNetwork,
+                    keyboard = KeyboardType.Text,
+                )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
-                add.results.forEach { VelaNetworkRow(it) }
+                add.results.forEach { row ->
+                    VelaNetworkRow(row = row, onClick = onPickNetwork)
+                }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = VelaSpacing.xl),
@@ -476,6 +707,7 @@ private fun SettingsPageBody(
                         label = add.customRpc.label,
                         value = add.customRpc.value,
                         placeholder = add.customRpc.placeholder,
+                        onValueChange = onCustomRpc,
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 }
@@ -487,7 +719,14 @@ private fun SettingsPageBody(
                 // an action you cannot take should not be dressed as the action
                 // you came for.
                 if (add.primary != null) {
-                    VelaPrimaryButton(add.primary, onClick = {}, modifier = Modifier.fillMaxWidth())
+                    // The button that writes a network somebody's money will be
+                    // read from. It was drawn with an empty handler; the core
+                    // only offers it when its own checks passed.
+                    VelaPrimaryButton(
+                        add.primary,
+                        onClick = onConfirmAddNetwork,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (add.secondary != null) {
                     VelaSecondaryButton(add.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
@@ -500,7 +739,7 @@ private fun SettingsPageBody(
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.base,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.xl),
+                        modifier = Modifier.clickable(onClick = onRecheckNetwork).fillMaxWidth().padding(top = VelaSpacing.xl),
                     )
                 }
             }
@@ -529,11 +768,12 @@ private fun SettingsPageBody(
                     )
                     VelaStatusPill(provider.badge)
                 }
-                VelaUrlField(
-                    label = "",
-                    value = provider.field.value,
-                    placeholder = provider.field.placeholder,
+                EditableUrlField(
+                    field = provider.field,
                     action = provider.action,
+                    onEdited = onFieldEdited,
+                    onCommitted = onFieldCommitted,
+                    onAction = { onProviderTest(provider.id) },
                 )
                 if (provider.support != null) {
                     Text(
@@ -550,7 +790,7 @@ private fun SettingsPageBody(
                         color = colors.infoBase,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
-                        modifier = Modifier.padding(top = VelaSpacing.md),
+                        modifier = Modifier.clickable { onOpenLink(provider.link) }.padding(top = VelaSpacing.md),
                     )
                 }
                 Spacer(modifier = Modifier.height(VelaSpacing.xl4))
@@ -566,16 +806,21 @@ private fun SettingsPageBody(
                 modifier = Modifier.padding(bottom = VelaSpacing.xl3),
             )
             model.endpoints.fields.forEach { field ->
-                VelaUrlField(
-                    label = field.label,
-                    value = field.value,
-                    hint = field.hint,
-                    badge = field.badge,
+                EditableUrlField(
+                    field = field,
+                    onEdited = onFieldEdited,
+                    onCommitted = onFieldCommitted,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             }
+            // Drawn as a label in spec 023 and never given a click — found on
+            // a device by tapping it and watching the store not change. The
+            // core has had `reset_endpoints_to_defaults` all along.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.xl),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onResetEndpoints)
+                    .padding(top = VelaSpacing.xl),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -626,6 +871,7 @@ private fun SettingsPageBody(
             model.storage.groups.forEach { group ->
                 VelaStorageGroup(
                     group = group,
+                    onClear = onStorageClear,
                     onGroupAction = { onOpenOverlay(SettingsOverlay.ClearCaches) },
                 )
             }
@@ -659,7 +905,7 @@ private fun SettingsPageBody(
             )
             model.about.rows.forEach { VelaKeyValueRow(it) }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-            model.about.links.forEach { VelaKeyValueRow(it) }
+            model.about.links.forEach { VelaKeyValueRow(it, modifier = Modifier.clickable { onOpenLink(it.value) }) }
             Text(
                 text = model.about.footer,
                 color = colors.fgSubtle,
@@ -800,6 +1046,16 @@ private fun SettingsSheet(
     overlay: SettingsOverlay,
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
+    onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
+    onClearCaches: () -> Unit = {},
+    onErase: () -> Unit = {},
+    onFeedbackSend: (String) -> Unit = {},
+    onFeedbackGithub: () -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
+    onRelayerRetry: () -> Unit = {},
+    onAccountSelect: (Int) -> Unit = {},
+    onAccountPrimary: () -> Unit = {},
+    onAccountSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -830,31 +1086,41 @@ private fun SettingsSheet(
                 .padding(bottom = VelaSpacing.xl3),
         ) {
             when (overlay) {
-                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet)
+                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
                 SettingsOverlay.SignOut -> ConfirmSheetBody(
                     model.signOutSheet,
                     onConfirm = onSignOut,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Language -> SelectSheetBody(model.languageSheet)
-                SettingsOverlay.Currency -> SelectSheetBody(model.currencySheet)
-                SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet)
-                SettingsOverlay.DateFormat -> SelectSheetBody(model.dateSheet)
-                SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet)
+                SettingsOverlay.Language -> SelectSheetBody(model.languageSheet, onFooterLink = { onOpenLink("https://github.com/mondaylabsltd/vela-wallet/issues") }) {
+                    onSheetSelect(SettingsOverlay.Language, it)
+                }
+                SettingsOverlay.Currency -> SelectSheetBody(model.currencySheet) {
+                    onSheetSelect(SettingsOverlay.Currency, it)
+                }
+                SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
+                    onSheetSelect(SettingsOverlay.NumberFormat, it)
+                }
+                SettingsOverlay.DateFormat -> SelectSheetBody(model.dateSheet) {
+                    onSheetSelect(SettingsOverlay.DateFormat, it)
+                }
+                SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet) {
+                    onSheetSelect(SettingsOverlay.TimeFormat, it)
+                }
                 SettingsOverlay.ClearCaches -> ConfirmSheetBody(
                     model.clearCachesSheet,
-                    onConfirm = onDismiss,
+                    onConfirm = onClearCaches,
                     onCancel = onDismiss,
                 )
                 SettingsOverlay.EraseDevice -> ConfirmSheetBody(
                     model.eraseSheet,
-                    onConfirm = onDismiss,
+                    onConfirm = onErase,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback)
+                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onDismiss)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail)
-                SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onDismiss)
+                SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
         }
@@ -908,14 +1174,14 @@ private fun SheetTitle(title: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun SelectSheetBody(sheet: SelectSheetModel) {
+private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)? = null, onSelect: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title, sheet.subtitle)
     if (sheet.searchPlaceholder != null) {
         VelaUrlField(label = "", value = "", placeholder = sheet.searchPlaceholder)
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
     }
-    sheet.rows.forEach { VelaSelectRow(it) }
+    sheet.rows.forEach { VelaSelectRow(it, onClick = onSelect) }
     if (sheet.footerNote != null) {
         Text(
             text = sheet.footerNote,
@@ -931,7 +1197,7 @@ private fun SelectSheetBody(sheet: SelectSheetModel) {
             color = colors.infoBase,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
-            modifier = Modifier.padding(top = VelaSpacing.md),
+            modifier = Modifier.clickable(enabled = onFooterLink != null) { onFooterLink?.invoke() }.padding(top = VelaSpacing.md),
         )
     }
 }
@@ -976,7 +1242,7 @@ private fun ConfirmSheetBody(
 }
 
 @Composable
-private fun AccountsSheetBody(sheet: AccountsSheetModel) {
+internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title)
     Text(
@@ -994,7 +1260,7 @@ private fun AccountsSheetBody(sheet: AccountsSheetModel) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {}
+                .clickable { onSelect(index) }
                 .padding(vertical = VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
@@ -1003,6 +1269,7 @@ private fun AccountsSheetBody(sheet: AccountsSheetModel) {
                 seed = row.addressFull,
                 size = VelaSpacing.xl4,
                 contentDescription = row.name,
+                name = row.name,
             )
             Column(
                 modifier = Modifier.weight(1f),
@@ -1042,16 +1309,18 @@ private fun AccountsSheetBody(sheet: AccountsSheetModel) {
         }
     }
     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-    VelaPrimaryButton(sheet.primary, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaPrimaryButton(sheet.primary, onClick = onPrimary, modifier = Modifier.fillMaxWidth())
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
-    VelaSecondaryButton(sheet.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaSecondaryButton(sheet.secondary, onClick = onSecondary, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
-private fun FeedbackSheetBody(model: FeedbackModel) {
+private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {}, onGithub: () -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title, model.subtitle)
-    VelaUrlField(label = "", value = "", placeholder = model.placeholder)
+    // Spec 048: the box is typed into; what is typed goes into the report.
+    var feedbackText by rememberSaveable { mutableStateOf("") }
+    VelaUrlField(label = "", value = feedbackText, placeholder = model.placeholder, onValueChange = { feedbackText = it }, keyboard = KeyboardType.Text)
     Text(
         text = model.addSteps,
         color = colors.infoBase,
@@ -1084,14 +1353,14 @@ private fun FeedbackSheetBody(model: FeedbackModel) {
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
     VelaCallout(CalloutModel(CalloutTone.Info, model.consent))
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
-    VelaPrimaryButton(model.send, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaPrimaryButton(model.send, onClick = { onSend(feedbackText) }, modifier = Modifier.fillMaxWidth())
     Text(
         text = model.githubLink,
         color = colors.infoBase,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.lg),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onGithub).padding(top = VelaSpacing.lg),
     )
 }
 

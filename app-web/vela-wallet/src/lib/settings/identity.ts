@@ -16,6 +16,7 @@ import { IDENTICON_PLACEHOLDER_SVG } from '$lib/wallet/identicon-placeholder';
 export const EMPTY_ACCOUNT = {
 	name: '',
 	addressDisplay: '',
+	addressFull: '',
 	identiconSvg: IDENTICON_PLACEHOLDER_SVG
 };
 
@@ -27,7 +28,13 @@ export const EMPTY_ACCOUNT = {
  * Marking just the active one is the smallest true statement available.
  */
 function switcherRows<
-	T extends { name: string; addressDisplay: string; identiconSvg: string; selected: boolean }
+	T extends {
+		name: string;
+		addressDisplay: string;
+		addressFull: string;
+		identiconSvg: string;
+		selected: boolean;
+	}
 >(rows: T[], identity: WalletIdentity): T[] {
 	return rows.map((row) =>
 		row.selected
@@ -35,6 +42,7 @@ function switcherRows<
 					...row,
 					name: identity.name,
 					addressDisplay: shortenAddress(identity.address),
+					addressFull: identity.address,
 					identiconSvg: identity.identiconSvg
 				}
 			: row
@@ -51,6 +59,7 @@ export function homeWithIdentity(
 			...model.account,
 			name: identity.name,
 			addressDisplay: shortenAddress(identity.address),
+			addressFull: identity.address,
 			identiconSvg: identity.identiconSvg
 		},
 		accountsSheet: {

@@ -117,7 +117,10 @@ struct PriceTests {
     /// change announces itself.
     @Test func theDexRungIsAbsentNotApproximated() {
         let chosen = chooseNativePrice(dex: nil, chainlinkLocal: 1.0, chainlinkEth: nil)
-        #expect(chosen.source == "chainlinkLocal")
+        // The rung is spelled the way the bridge spells it for every native
+        // client (`chainlink_local`), so a price log reads the same on
+        // Android and here.
+        #expect(chosen.source == "chainlink_local")
         #expect(Prices.choose(local: 1.0, mainnet: nil) == chosen.price)
     }
 }

@@ -42,7 +42,7 @@
 			>
 			<a
 				class="cta"
-				href="https://wallet.getvela.app/onboarding?mode=create"
+				href="https://wallet.getvela.app/"
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"

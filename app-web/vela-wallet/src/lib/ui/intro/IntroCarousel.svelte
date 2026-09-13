@@ -16,6 +16,7 @@
 	 * instant and the drag still works.
 	 */
 	import Button from '$lib/ui/Button.svelte';
+	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroSlide from './IntroSlide.svelte';
 	import PageDots from './PageDots.svelte';
 	import { INTRO_SLIDES } from '$lib/intro/slides';
@@ -24,6 +25,12 @@
 	interface Props {
 		/** Resolved corpus strings, dotted key → text. */
 		strings: Readonly<Record<string, string>>;
+		/**
+		 * The rail's line at desktop widths — Welcome's own tagline, so the
+		 * intro, Welcome and the create journey read as three screens of one
+		 * app (spec 038). Below the breakpoint the rail is not drawn.
+		 */
+		tagline: string;
 		/** Sign-in is running: the last slide's secondary button IS the spinner. */
 		signingIn?: boolean;
 		/** Href for "create a wallet" — a journey with a URL, so it stays a link. */
@@ -35,7 +42,15 @@
 		onCreate: () => void;
 	}
 
-	let { strings, signingIn = false, createHref, onSkip, onSignIn, onCreate }: Props = $props();
+	let {
+		strings,
+		tagline,
+		signingIn = false,
+		createHref,
+		onSkip,
+		onSignIn,
+		onCreate
+	}: Props = $props();
 
 	const t = (key: string) => strings[key] ?? key;
 
@@ -101,60 +116,67 @@
 <svelte:window onkeydown={key} />
 
 <main class="intro">
-	<!-- The escape hatch sits where a phone's thumb does not: this is the one
+	<!-- Desktop widths only (the rail hides itself below 1280): the same rail
+	     Welcome and the create journey stand beside, so the first screen a
+	     desktop visitor meets is composed like the second (spec 038 SC-411). -->
+	<OnboardingRail rail={{ kind: 'tagline', text: tagline }} />
+
+	<div class="column">
+		<!-- The escape hatch sits where a phone's thumb does not: this is the one
 	     control on the screen that must not be pressed by accident. It goes
 	     with the last slide, whose two buttons ARE the way out. -->
-	<div class="header">
-		{#if !last}
-			<button class="skip" type="button" onclick={onSkip}>{t('onboarding.intro.skip')}</button>
-		{/if}
-	</div>
+		<div class="header">
+			{#if !last}
+				<button class="skip" type="button" onclick={onSkip}>{t('onboarding.intro.skip')}</button>
+			{/if}
+		</div>
 
-	<!-- `role="group"`: the drag is a redundant affordance — the button and the
+		<!-- `role="group"`: the drag is a redundant affordance — the button and the
 	     arrow keys turn the page too — but a listener still owes the machine a
 	     role, and this box really is one group of related content. -->
-	<div
-		class="viewport"
-		role="group"
-		bind:this={viewport}
-		onpointerdown={down}
-		onpointermove={move}
-		onpointerup={up}
-		onpointercancel={up}
-	>
 		<div
-			class="track"
-			class:dragging
-			style:transform="translateX(calc({-index * 100}% + {drag}px))"
+			class="viewport"
+			role="group"
+			bind:this={viewport}
+			onpointerdown={down}
+			onpointermove={move}
+			onpointerup={up}
+			onpointercancel={up}
 		>
-			{#each INTRO_SLIDES as slide (slide.art)}
-				<div class="cell">
-					<IntroSlide art={slide.art} title={t(slide.titleKey)} body={t(slide.bodyKey)} />
-				</div>
-			{/each}
+			<div
+				class="track"
+				class:dragging
+				style:transform="translateX(calc({-index * 100}% + {drag}px))"
+			>
+				{#each INTRO_SLIDES as slide (slide.art)}
+					<div class="cell">
+						<IntroSlide art={slide.art} title={t(slide.titleKey)} body={t(slide.bodyKey)} />
+					</div>
+				{/each}
+			</div>
 		</div>
-	</div>
 
-	<div class="footer">
-		<PageDots
-			{total}
-			current={index}
-			label={fillTemplate(t('onboarding.intro.pageOf'), { current: index + 1, total })}
-		/>
+		<div class="footer">
+			<PageDots
+				{total}
+				current={index}
+				label={fillTemplate(t('onboarding.intro.pageOf'), { current: index + 1, total })}
+			/>
 
-		<div class="actions">
-			{#if last}
-				<Button variant="primary" shape="rounded" href={createHref} onclick={onCreate}>
-					{t('onboarding.welcome.createWallet')}
-				</Button>
-				<Button variant="secondary" shape="rounded" loading={signingIn} onclick={onSignIn}>
-					{t('onboarding.welcome.alreadyHaveWallet')}
-				</Button>
-			{:else}
-				<Button variant="secondary" shape="rounded" onclick={() => go(index + 1)}>
-					{t('onboarding.intro.next')}
-				</Button>
-			{/if}
+			<div class="actions">
+				{#if last}
+					<Button variant="primary" shape="rounded" href={createHref} onclick={onCreate}>
+						{t('onboarding.welcome.createWallet')}
+					</Button>
+					<Button variant="secondary" shape="rounded" loading={signingIn} onclick={onSignIn}>
+						{t('onboarding.welcome.alreadyHaveWallet')}
+					</Button>
+				{:else}
+					<Button variant="secondary" shape="rounded" onclick={() => go(index + 1)}>
+						{t('onboarding.intro.next')}
+					</Button>
+				{/if}
+			</div>
 		</div>
 	</div>
 </main>
@@ -162,10 +184,27 @@
 <style>
 	.intro {
 		display: flex;
-		flex-direction: column;
 		min-height: 100dvh;
-		padding: var(--space-md) var(--layout-screenPaddingX) var(--space-3xl);
+		/* Rail and column together are capped and centred past the widest
+		   the mocks were drawn for (spec 038 T078). */
+		width: 100%;
+		max-width: var(--layout-frameMax);
+		margin-inline: auto;
 		background: var(--color-bg-base);
+	}
+
+	/*
+	 * PHONE WIDTHS: the column fills the height so the slides ride the middle
+	 * and the dots and buttons ride the bottom, within a thumb — the layout
+	 * spec 020 drew. Below the breakpoint the rail is not drawn, so this IS the
+	 * page.
+	 */
+	.column {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-width: 0;
+		padding: var(--space-md) var(--layout-screenPaddingX) var(--space-3xl);
 	}
 
 	.header {
@@ -247,13 +286,54 @@
 		}
 	}
 
-	/* Desktop: the same one column, at the flow's measure, centred. There is no
-	   second pane to fill — the intro is a cover, and a cover stretched to the
-	   width of a desktop window is a banner. */
+	/* ------------------------------------------------------------------ */
+	/* Desktop: the rail on the left, the column beside it at its NATURAL   */
+	/* height — the same composition as Welcome and the create journey.    */
+	/* Stretching the phone layout to a desktop window is what opened the  */
+	/* hole in the middle of the page and made it read as a phone screen   */
+	/* pulled tall (spec 038 finding 1).                                    */
+	/* ------------------------------------------------------------------ */
 	@media (min-width: 1280px) {
-		.intro {
-			max-width: calc(var(--layout-flowColumn) + var(--layout-screenPaddingX) * 2);
-			margin-inline: auto;
+		.column {
+			flex: 0 1 auto;
+			/* Centred beside the rail at its NATURAL height. The flex default
+			   (`stretch`) is what pulled the column to the viewport's bottom in
+			   the first pass — the hole, again. */
+			align-self: center;
+			justify-content: center;
+			/* box-sizing is border-box globally, so the measure carries its own
+			   padding — the onboarding column plus a gutter a side, exactly as
+			   Welcome and FlowShell size theirs. */
+			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
+			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
+		}
+
+		/* The slides no longer need to bleed to the screen edge: the column
+		   has a gutter, and the outgoing slide leaves at the column's edge. */
+		.viewport {
+			flex: 0 0 auto;
+			margin-inline: 0;
+		}
+
+		.cell {
+			padding-inline: 0;
+		}
+
+		.footer {
+			margin-block-start: var(--space-4xl);
+		}
+
+		/* Side by side, each at ITS LABEL'S width — a desktop dialog sizes a
+		   button to what it says; a full-width button is a phone's answer to
+		   a thumb. */
+		.actions {
+			flex-direction: row;
+		}
+
+		.actions :global(.button) {
+			flex: 0 0 auto;
+			width: auto;
+			min-width: var(--layout-welcomeCtaMin);
 		}
 	}
 </style>

@@ -4,6 +4,10 @@
 	 * truncated address and that account's balance; the active one is checked
 	 * and named in accent. Two buttons close it: create, or sign in to one you
 	 * already have.
+	 *
+	 * The artwork sits BESIDE the row's button, not inside it: it opens the
+	 * identicon viewer on that account's address (founder call, 2026-09-05),
+	 * and a button inside a button is invalid HTML.
 	 */
 	import type { AccountsSheetModel } from '../model';
 	import Button from '$lib/ui/Button.svelte';
@@ -27,13 +31,13 @@
 
 <ul class="accounts">
 	{#each sheet.rows as row, i (row.addressDisplay)}
-		<li>
+		<li class="account">
+			<Identicon svg={row.identiconSvg} size="row" label={row.name} address={row.addressFull} />
 			<button
 				type="button"
 				aria-current={row.selected ? 'true' : undefined}
 				onclick={() => onselect?.(i)}
 			>
-				<Identicon svg={row.identiconSvg} size="row" label={row.name} />
 				<span class="text">
 					<span class="name" class:active={row.selected}>{row.name}</span>
 					<span class="address">{row.addressDisplay}</span>
@@ -65,15 +69,22 @@
 		padding: 0;
 	}
 
+	.account {
+		display: flex;
+		align-items: center;
+		gap: var(--space-lg);
+		border-bottom: var(--border-hairline) solid var(--color-border-base);
+	}
+
 	button {
 		display: flex;
 		align-items: center;
 		gap: var(--space-lg);
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		padding-block: var(--space-lg);
 		padding-inline: 0;
 		border: none;
-		border-bottom: var(--border-hairline) solid var(--color-border-base);
 		background: none;
 		font-family: var(--font-ui);
 		text-align: start;

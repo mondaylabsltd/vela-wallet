@@ -51,7 +51,7 @@ import app.getvela.wallet.core.i18n.LocalVelaStrings
  * the two ways in. Long-press on the mark opens the theme settings sheet (RN
  * precedent, FR-006).
  *
- * The v2 design (design/onboarding-new, founder direction 2026-08-25), which
+ * The v2 design (docs/design/onboarding-new, founder direction 2026-08-25), which
  * the web and the desktop already draw. The six-card carousel is gone: the
  * design is one column that says what the wallet IS before it says what to do
  * about it, and a deck of feature cards nobody swipes past the first of was the

@@ -1,6 +1,6 @@
 /**
  * Canonical wallet-home fixtures (spec 015, data-model.md — the single canon
- * all four platforms port). Content is verbatim from `design/wallet/` mocks;
+ * all four platforms port). Content is verbatim from `docs/design/wallet/` mocks;
  * builders merge it with resolved messages into display-ready view models.
  * Pure data + assembly: no fetching, no formatting rules, no business state.
  */
@@ -582,8 +582,7 @@ export function buildDesktopState(
 				{ id: 'settings', label: m.nav.settings, selected: false }
 			],
 			networksTitle: m.sidebar.networks,
-			networks: chainRows(m),
-			searchPlaceholder: m.sidebar.searchPlaceholder
+			networks: chainRows(m)
 		},
 		balance: balance(m, 'normal', DEFAULT_BALANCE),
 		actions: { receive: m.actions.receive, send: m.actions.send, scan: m.actions.scan },

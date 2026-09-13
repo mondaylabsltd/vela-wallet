@@ -224,74 +224,154 @@ bridge_object!(
     vela_core::app::session::Session
 );
 
-// The wallet-state machines, added per cut rather than all at once (spec 050
-// research D10). `vela-core-wasm` exports twenty-two of them because the web
-// client drives twenty-two; every one exported here lands a class in the
-// committed `vela_core_uniffi.swift` and in the signed binary, so an export
-// arrives with the code that calls it.
+// The wallet-state machines, in the order the shells wire them. Each line is
+// a machine the native clients can drive; the same set has been exported to
+// the web since spec 016 (`vela-core-wasm/src/wallet_state.rs`), and the names
+// are deliberately identical so a reader can follow one machine across four
+// clients without a translation table.
+//
+// The cost is measured, not assumed (spec 040 research D6): a machine is
+// ~357 KB stripped on arm64-v8a and the uniffi object around it is 5,920
+// bytes, so the price of this list is the rules themselves. Add machines as
+// their shell arrives — an exported machine nothing drives is dead weight in
+// three ABIs.
 
 bridge_object!(
-    /// The address book: saved ⊕ history-derived, tombstoned, grouped.
+    /// The address book: manual + history-derived merge, tombstones, groups.
     ContactsCore,
     vela_core::app::contacts::Contacts
 );
 
 bridge_object!(
-    /// Networks, the add-network wizard, service endpoints and RPC providers.
+    /// Network & endpoint configuration: add-network wizard, overrides,
+    /// service endpoints, provider keys.
     NetworkAdminCore,
     vela_core::app::network_admin::NetworkAdmin
 );
 
 bridge_object!(
-    /// Which currency amounts are shown in, and whether one can be priced.
+    /// The display currency: atomic code+rate pair, first-launch region seed,
+    /// user-choice-wins.
     DisplayCurrencyCore,
     vela_core::app::display_currency::DisplayCurrency
 );
 
-// The read path (spec 051). Seven at once, against 050's one-per-cut rule,
-// because this cut wires all seven — the rule is "an export arrives with the
-// code that calls it", and the alternative here is seven `.xcframework`
-// rebuilds at five to eight minutes each for the same end state.
+// The read path (spec 041). `RpcPool` is the base every other one reads
+// through — endpoint scoring, bans, cooldowns and the fastest-endpoint race
+// are its decisions, and the shell contributes only fetch, clock and jitter.
 
 bridge_object!(
-    /// Which endpoint a chain read goes to: scoring, bans, races, self-rescue.
-    /// **The routing authority** — no other machine talks to a chain.
+    /// RPC/bundler endpoint pool decisions: scoring, cooldowns, bans.
     RpcPoolCore,
     vela_core::app::rpc_pool::RpcPool
 );
 
 bridge_object!(
-    /// The home screen's money: balances across chains, cached and priced.
+    /// Balance aggregation & display policy (per active account).
     BalanceDashboardCore,
     vela_core::app::balance_dashboard::BalanceDashboard
 );
 
 bridge_object!(
-    /// Transfers and dApp activity, grouped by day.
+    /// The activity feed: dedupe, batch folding, tombstones, celebrations.
     ActivityFeedCore,
     vela_core::app::activity_feed::ActivityFeed
 );
 
 bridge_object!(
-    /// The token list: custom tokens, metadata from the chain, caches.
+    /// The send flow: token, recipient, amount, quote, confirm, sign, submit,
+    /// persist, hand off to the tracker. Three modes; Android drives single
+    /// in spec 043, split/sweep in 045.
+    SendCore,
+    vela_core::app::send::Send
+);
+
+bridge_object!(
+    /// Fee quotes: gas signals, the relay's quote, in-band fee assets, the
+    /// fee recipient, the gas estimate, the quote's TTL.
+    FeePolicyCore,
+    vela_core::app::fee_policy::FeePolicy
+);
+
+bridge_object!(
+    /// Post-submit lifecycle: receipt and status polling, record patches,
+    /// the confirmation notice. Owns the cadence; the shell supplies a clock.
+    TxTrackerCore,
+    vela_core::app::tx_tracker::TxTracker
+);
+
+bridge_object!(
+    /// Manual custom-token management.
     ManageTokensCore,
     vela_core::app::manage_tokens::ManageTokens
 );
 
 bridge_object!(
-    /// Whether a token that arrived by transfer may be shown as an asset.
+    /// The token trust model: transfer allowlists, auto-add admission,
+    /// asymmetric simulation trust.
     TokenTrustCore,
     vela_core::app::token_trust::TokenTrust
 );
 
 bridge_object!(
-    /// Watching a receive address for the deposit that just landed.
+    /// Deposit detection on the Receive screen: phased polling, baseline
+    /// diff, false-positive guards.
     ReceiveWatchCore,
     vela_core::app::receive_watch::ReceiveWatch
 );
 
 bridge_object!(
-    /// A receive request, and whether it has been acknowledged.
+    /// Payment requests: the acknowledge gate, the EIP-681/pay-link builder,
+    /// and the strict `/pay` validator.
     PaymentRequestCore,
     vela_core::app::payment_request::PaymentRequest
+);
+
+// -- spec 044: the in-app browser and what it signs ---------------------------
+
+bridge_object!(
+    /// Per-origin dApp permissions and the in-app browser's consent flow:
+    /// the reads it answers itself, the grants it keeps, the requests it
+    /// forwards to signing, the events the page hears.
+    DappPermissionsCore,
+    vela_core::app::dapp_permissions::DappPermissions
+);
+
+bridge_object!(
+    /// The browser's own memory: favourites, groups and open tabs.
+    ExploreSitesCore,
+    vela_core::app::explore_sites::ExploreSites
+);
+
+bridge_object!(
+    /// Recently-opened dApps, deduped by origin.
+    BrowserHistoryCore,
+    vela_core::app::browser_history::BrowserHistory
+);
+
+bridge_object!(
+    /// A dApp signing request's lifecycle: arrival, review, the gas
+    /// pre-check, the ceremony, the response, the record.
+    SignRequestCore,
+    vela_core::app::sign_request::SignRequest
+);
+
+bridge_object!(
+    /// Clear signing: what a transaction or message DOES, and how
+    /// dangerous it is — the never-blind ladder.
+    ClearSigningCore,
+    vela_core::app::clear_signing::ClearSigning
+);
+
+bridge_object!(
+    /// The approval guard: an unlimited approval never leaves the wallet.
+    ApprovalGuardCore,
+    vela_core::app::approval_guard::ApprovalGuard
+);
+
+bridge_object!(
+    /// The payroll batch: pasted or picked rows, the rate, the preview and
+    /// the recipients the send machine seeds its split from (spec 045).
+    BatchImportCore,
+    vela_core::app::batch_import::BatchImport
 );

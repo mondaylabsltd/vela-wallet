@@ -2,7 +2,7 @@
 #
 # Xcode build phase: Bundle launch animations  (spec 012-launch-animation-lottie)
 #
-# Copies the shipped launch animations (design/onboarding/launch/*-core-*.json)
+# Copies the shipped launch animations (docs/design/onboarding/launch/*-core-*.json)
 # into VelaWallet.app at build time, so the repository keeps exactly one copy of
 # them — the arrangement spec 010 established for locale catalogs and spec 008
 # established for Android.
@@ -59,7 +59,7 @@ IFS=$'\n' read -r -d '' -a targets < <(strip "$output_list" && printf '\0')
 # would simply not appear for whichever appearance or form factor is missing.
 source_dir="$(dirname "${sources[0]}")"
 [ -d "$source_dir" ] ||
-	fail "launch animation directory not found: $source_dir (expected design/onboarding/launch)"
+	fail "launch animation directory not found: $source_dir (expected docs/design/onboarding/launch)"
 
 for candidate in "$source_dir"/*-core-*.json; do
 	[ -e "$candidate" ] || fail "no shipped (-core-) animations found in $source_dir"

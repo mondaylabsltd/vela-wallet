@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
@@ -69,14 +70,18 @@ internal fun ChainDot(color: Color?, size: Dp, modifier: Modifier = Modifier) {
  * screen background so it reads as an overlay (mock H1 row icons).
  */
 @Composable
-internal fun ChainBadge(color: Color, modifier: Modifier = Modifier) {
+internal fun ChainBadge(color: Color, modifier: Modifier = Modifier, logoUrl: String? = null) {
     Box(
         modifier = modifier
             .size(WalletMetrics.badgeRingSize)
             .background(VelaTheme.colors.bgBase, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        ChainDot(color = color, size = WalletMetrics.badgeDotSize)
+        // Spec 047: the chain's logo when the chain-data endpoint has one; the
+        // coloured dot stays the fallback.
+        RemoteLogo(urls = listOfNotNull(logoUrl), size = WalletMetrics.badgeDotSize) {
+            ChainDot(color = color, size = WalletMetrics.badgeDotSize)
+        }
     }
 }
 

@@ -144,10 +144,7 @@ mod tests {
                 DynSolValue::Bytes(vec![1, 2, 3]),
             ]),
             DynSolValue::Tuple(vec![DynSolValue::Bool(false), DynSolValue::Bytes(vec![])]),
-            DynSolValue::Tuple(vec![
-                DynSolValue::Bool(true),
-                DynSolValue::Bytes(vec![9]),
-            ]),
+            DynSolValue::Tuple(vec![DynSolValue::Bool(true), DynSolValue::Bytes(vec![9])]),
         ])
         .abi_encode_params();
 

@@ -27,12 +27,47 @@
 //! here at all — `Prompt` and `CompleteOnboarding` belong to the screen, which
 //! is why [`Performed`] exists.
 
+pub mod abi;
+pub mod activity_feed;
+pub mod approval_guard;
+pub mod balance_dashboard;
+pub mod balances;
+pub mod batch;
+pub mod browser_history;
+pub mod camera;
+pub mod chain;
+pub mod chain_tokens;
+pub mod chainlink;
+pub mod clear_signing;
+pub mod contacts;
+pub mod custom_tokens;
+pub mod dapp_rpc;
+pub mod display_currency;
+pub mod explore_sites;
+pub mod fee;
+pub mod format_prefs;
+pub mod identity;
+pub mod manage_tokens;
+pub mod network_admin;
 pub mod passkey;
+pub mod payment_request;
 #[cfg(target_os = "macos")]
 mod platform_macos;
+pub mod pool;
 pub mod proxy;
+pub mod qr;
+pub mod receive_watch;
 pub mod registry;
+pub mod relay;
+pub mod send;
+/// The signing panel's seven operations.
+///
+pub mod sign_request;
+pub mod sim;
 pub mod storage;
+pub mod token_trust;
+pub mod tracker;
+pub mod user_op;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -246,8 +281,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             Err(error) => index_failed(error),
         },
 
-        ShellOperation::ProbeIndexHealth => ShellResult::IndexHealth {
-            ok: registry::probe_health(),
+        ShellOperation::ProbeIndexHealth => match registry::probe_health() {
+            registry::Probe::Reachable => ShellResult::IndexHealth { ok: true },
+            registry::Probe::Down => ShellResult::IndexHealth { ok: false },
+            // Every route out of this machine refused: the person's network,
+            // not our service, and the screen says so (spec 038).
+            registry::Probe::Local => ShellResult::IndexTransportFailed,
         },
 
         ShellOperation::Wait { ms } => {
@@ -336,8 +375,8 @@ fn index_failed(error: registry::RegistryError) -> ShellResult {
     // publish that fails after three signatures vanishes without a trace (the
     // recovery flow deliberately enters the wallet anyway).
     eprintln!(
-        "[vela-registry] index operation failed (network={}): {}",
-        error.network, error.message
+        "[vela-registry] index operation failed (network={}, local={}): {}",
+        error.network, error.local, error.message
     );
     ShellResult::IndexFailed {
         message: error.message,
@@ -362,6 +401,134 @@ fn challenge_for(purpose: ProofPurpose) -> Vec<u8> {
     format!("{label}{}", unix_millis()).into_bytes()
 }
 
+/// The device's UTC offset, in seconds, right now.
+///
+/// The core hands the shell every date decision that depends on where the
+/// machine is — `day_start_ms` is its words: "computed by the shell, which owns
+/// the device timezone". `vela-core` deliberately ships **no timezone
+/// database**, so this is the one fact it cannot derive and must be told.
+///
+/// `localtime_r` rather than a crate: the offset must include daylight saving
+/// *as of this instant*, which a fixed offset read once at startup would get
+/// wrong twice a year.
+#[cfg(unix)]
+fn local_utc_offset_seconds() -> i64 {
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let time = unix_millis() / 1000;
+    let time: libc::time_t = time;
+    // SAFETY: `localtime_r` writes into a `tm` this call owns and reads a
+    // `time_t` it owns. It is the reentrant form precisely so it needs no
+    // global state and is safe to call from any thread.
+    let filled = unsafe { libc::localtime_r(&raw const time, &raw mut tm) };
+    if filled.is_null() {
+        return 0;
+    }
+    tm.tm_gmtoff
+}
+
+/// Windows has no `localtime_r`; `GetTimeZoneInformation` is the equivalent.
+///
+/// Until spec 032 phase 11 this returned `0`, so the activity feed grouped by
+/// UTC day on Windows and a late-evening transaction filed under tomorrow —
+/// somebody's feed reading wrong for part of every day.
+///
+/// **This call cannot be compiled here.** The app's dependency tree builds C
+/// (ThorVG, resvg, hidapi), so `--target x86_64-pc-windows-gnu` dies in a
+/// build script long before it reaches Rust — the reason `check-windows.sh`
+/// checks a separate crate. It was verified by lifting exactly these lines
+/// into an isolated crate and cross-checking them, which is how the missing
+/// `TIME_ZONE_ID_UNKNOWN` export was found. The ARITHMETIC is a separate,
+/// unsafe-free function below with tests that run on every platform.
+// `windows` rather than `not(unix)`: the body needs `windows-sys`, which is a
+// dependency only under that same cfg. A target that is neither would now fail
+// to find this function at all — louder, and better, than silently grouping a
+// third platform by UTC.
+#[cfg(windows)]
+fn local_utc_offset_seconds() -> i64 {
+    use windows_sys::Win32::System::Time::{
+        GetTimeZoneInformation, TIME_ZONE_ID_INVALID, TIME_ZONE_INFORMATION,
+    };
+    // windows-sys 0.59 exports only this one of the four ids; the other three
+    // are matched by value in `windows_offset_seconds`. Pin what is exported,
+    // so a version that renumbered them would fail to build rather than
+    // quietly shift everyone's day boundary.
+    const _: () = assert!(TIME_ZONE_ID_INVALID == u32::MAX);
+
+    let mut info: TIME_ZONE_INFORMATION = unsafe { std::mem::zeroed() };
+    // SAFETY: `GetTimeZoneInformation` fills a struct this call owns and reads
+    // no global state of ours. A failure returns TIME_ZONE_ID_INVALID and
+    // leaves the struct meaningless, which the arithmetic below refuses rather
+    // than computes.
+    let id = unsafe { GetTimeZoneInformation(&raw mut info) };
+    windows_offset_seconds(id, info.Bias, info.StandardBias, info.DaylightBias)
+}
+
+/// Win32's three biases as one UTC offset in seconds.
+///
+/// The sign is the trap: Win32 defines **UTC = local + bias**, so the offset a
+/// person east of Greenwich lives at is the NEGATIVE of their bias. Berlin's
+/// winter bias is −60 and its offset is +3600.
+///
+/// Which seasonal bias applies is the id's to say, and the two must not be
+/// crossed: adding `StandardBias` while the zone is on daylight time is an
+/// hour's error in the direction that looks plausible.
+///
+/// Split out and free of `unsafe` on purpose — this half is compiled and
+/// tested on every platform, so the part of the Windows path that can be
+/// wrong arithmetically is the part that is not Windows-only.
+#[cfg(any(windows, test))]
+fn windows_offset_seconds(id: u32, bias: i32, standard_bias: i32, daylight_bias: i32) -> i64 {
+    let seasonal = match id {
+        // TIME_ZONE_ID_STANDARD
+        1 => standard_bias,
+        // TIME_ZONE_ID_DAYLIGHT
+        2 => daylight_bias,
+        // TIME_ZONE_ID_UNKNOWN — the zone has no seasonal rule at all.
+        0 => 0,
+        // TIME_ZONE_ID_INVALID, or anything undocumented: the struct was never
+        // filled, so every field is garbage. Fall back to UTC rather than
+        // compute a day boundary out of it.
+        _ => return 0,
+    };
+    -(i64::from(bias) + i64::from(seasonal)) * 60
+}
+
+/// Local midnight for an instant, as epoch milliseconds.
+///
+/// The activity feed groups by DAY, and a day is a local idea. Computing this
+/// in UTC would put a 20:00 transaction in Tokyo under tomorrow's heading for
+/// anybody east of Greenwich, and under yesterday's for anybody west — visibly
+/// wrong for part of every day rather than subtly wrong all of it.
+pub fn day_start_ms(timestamp_ms: f64) -> f64 {
+    const DAY_MS: f64 = 86_400_000.0;
+    #[allow(clippy::cast_precision_loss, reason = "an offset is at most 14 hours")]
+    let offset_ms = (local_utc_offset_seconds() * 1000) as f64;
+    let local = timestamp_ms + offset_ms;
+    (local / DAY_MS).floor() * DAY_MS - offset_ms
+}
+
+/// An epoch stamp as the wall clock the person is actually reading.
+///
+/// The offset comes from the same `localtime_r` [`day_start_ms`] uses, so a
+/// timestamp and the day heading it files under can never disagree about which
+/// zone this machine is in — and it includes daylight saving as of that
+/// instant, which a value read once at startup would be wrong about twice a
+/// year.
+#[must_use]
+pub fn local_civil(epoch_ms: f64) -> Civil {
+    #[allow(clippy::cast_possible_truncation, reason = "an epoch in milliseconds")]
+    let ms = epoch_ms as i64;
+    let offset_minutes = i32::try_from(local_utc_offset_seconds() / 60).unwrap_or(0);
+    Civil::from_unix_millis(ms, offset_minutes)
+}
+
+/// The same wall clock, as epoch milliseconds — what the wallet-state machines
+/// stamp their mutations with. Public since spec 030: an event carries the time
+/// the SHELL observed, so the core stays a pure function of its inputs.
+pub fn now_ms() -> f64 {
+    unix_millis() as f64
+}
+
 fn unix_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -376,7 +543,7 @@ fn unix_millis() -> i64 {
 /// and no clock in any core test. UTC, because a stored `created_at_iso` that
 /// carries a local offset is a record that means something different when the
 /// laptop moves.
-fn now_iso() -> String {
+pub fn now_iso() -> String {
     let civil = Civil::from_unix_millis(unix_millis(), 0);
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
@@ -388,4 +555,50 @@ fn now_iso() -> String {
         civil.second,
         unix_millis().rem_euclid(1_000)
     )
+}
+
+#[cfg(test)]
+mod timezone_tests {
+    use super::windows_offset_seconds;
+
+    /// Win32 defines UTC = local + bias, so the offset is the bias NEGATED.
+    /// Getting this backwards puts Berlin at UTC−1 and New York at UTC+5,
+    /// which is the whole day-boundary bug in the other direction.
+    #[test]
+    fn the_offset_is_the_bias_negated() {
+        // Berlin in winter: bias −60, on standard time.
+        assert_eq!(windows_offset_seconds(1, -60, 0, -60), 3_600);
+        // New York in winter: bias 300, on standard time.
+        assert_eq!(windows_offset_seconds(1, 300, 0, -60), -18_000);
+    }
+
+    /// Daylight time takes the DAYLIGHT bias. Reaching for the standard one
+    /// while the zone is on summer time is an hour out, in the direction that
+    /// looks entirely plausible on screen.
+    #[test]
+    fn summer_time_uses_its_own_bias() {
+        // Berlin in summer: −60 base, −60 more for daylight ⇒ UTC+2.
+        assert_eq!(windows_offset_seconds(2, -60, 0, -60), 7_200);
+        // New York in summer ⇒ UTC−4, not UTC−5.
+        assert_eq!(windows_offset_seconds(2, 300, 0, -60), -14_400);
+    }
+
+    /// A zone with no seasonal rule reports UNKNOWN and carries only a bias.
+    /// India is the half-hour case, which a whole-hour assumption would lose.
+    #[test]
+    fn a_zone_without_a_season_uses_its_bias_alone() {
+        assert_eq!(windows_offset_seconds(0, -330, 0, 0), 19_800);
+        // Even if the struct carries seasonal biases, UNKNOWN ignores them.
+        assert_eq!(windows_offset_seconds(0, -60, -30, -90), 3_600);
+    }
+
+    /// The call FAILED and the struct is meaningless. Computing a day boundary
+    /// out of uninitialised fields would be worse than the UTC grouping this
+    /// replaces, because it would be wrong unpredictably rather than
+    /// consistently.
+    #[test]
+    fn a_failed_call_falls_back_to_utc_rather_than_to_garbage() {
+        assert_eq!(windows_offset_seconds(u32::MAX, 999, 999, 999), 0);
+        assert_eq!(windows_offset_seconds(7, -60, 0, -60), 0);
+    }
 }
