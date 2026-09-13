@@ -9,6 +9,11 @@ import type { AccountKey } from "./AccountKey";
  * of its first key, and a legacy record simply has no `keys` at all. Only
  * [`Account::key_hexes`] / [`Account::matches_credential`] may interpret this
  * duality — everything else asks them.
+ * Spec 048: the retired client wrote these records in camelCase at the same
+ * web origin the current shell now serves (`publicKeyHex`, `createdAt`,
+ * `keys[].credentialId`). The hand-written reader below accepts that
+ * spelling; only snake_case is ever written, and the web rewrites an old list
+ * once it has read it.
  */
 export type Account = { id: string, name: string, address: string, public_key_hex: string, created_at_iso: string, 
 /**
