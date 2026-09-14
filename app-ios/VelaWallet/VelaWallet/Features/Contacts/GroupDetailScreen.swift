@@ -34,8 +34,24 @@ struct GroupDetailScreen: View {
     var onImportIntoGroup: () -> Void = {}
     var onExportGroup: () -> Void = {}
 
-    @State private var sheetShown = false
-    @State private var membersShown = false
+    /// Whether the ⋯ menu is up. The picker's presence is the core's answer.
+    @State private var menuShown = false
+
+    private enum Presented {
+        case menu(ActionMenuModel)
+        case members(MultiPickModel)
+    }
+
+    private var presented: Presented? {
+        if let pick = model.memberPick { return .members(pick) }
+        if menuShown, let sheet = model.sheet { return .menu(sheet) }
+        return nil
+    }
+
+    private func dismissSheet() {
+        if model.memberPick != nil { onCancelMembers() }
+        menuShown = false
+    }
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -59,15 +75,21 @@ struct GroupDetailScreen: View {
         }
         .background(theme.bgBase.ignoresSafeArea())
         .environment(\.walletTextScale, model.textScale)
-        .sheet(isPresented: $sheetShown) {
-            if let sheet = model.sheet {
+        // ONE sheet, whose content changes — the rule the contacts list paid
+        // for in dead taps.
+        .sheet(isPresented: Binding(
+            get: { presented != nil },
+            set: { if !$0 { dismissSheet() } }
+        )) {
+            switch presented {
+            case .menu(let sheet):
                 ActionMenuSheet(
                     model: sheet,
-                    // 编辑分组 · 导入到本组 · 导出本组 · 删除分组, in the
-                    // drawn order. The first still has no form drawn for it and
+                    // 编辑分组 · 导入到本组 · 导出本组 · 删除分组, in the drawn
+                    // order. The first still has no form drawn for it and
                     // dismisses; the other three now act.
                     onItem: { item in
-                        sheetShown = false
+                        menuShown = false
                         if item.destructive {
                             onDeleteGroup()
                         } else if let index = sheet.items.firstIndex(where: { $0.id == item.id }) {
@@ -75,35 +97,24 @@ struct GroupDetailScreen: View {
                             if index == 2 { onExportGroup() }
                         }
                     },
-                    onCancel: { sheetShown = false }
+                    onCancel: { menuShown = false }
                 )
-                    .environment(\.walletTextScale, model.textScale)
-            }
-        }
-        // C6 is the state that opens WITH the menu up; every other state has
-        // the same menu available behind ⋯ and starts with it closed. Keying on
-        // the state rather than on `sheet != nil` is what lets a live group
-        // carry the menu without it popping open on arrival — and it is
-        // frame-identical for the fixtures, where only C6 has a sheet.
-        .sheet(isPresented: $membersShown) {
-            if let pick = model.memberPick {
+                .environment(\.walletTextScale, model.textScale)
+            case .members(let pick):
                 MultiPickSheet(
                     model: pick,
                     onToggle: onToggleMember,
                     onSave: onSaveMembers,
-                    onCancel: {
-                        membersShown = false
-                        onCancelMembers()
-                    }
+                    onCancel: { onCancelMembers() }
                 )
                 .environment(\.walletTextScale, model.textScale)
+            case nil:
+                EmptyView()
             }
         }
-        .onAppear {
-            sheetShown = model.state == .c6
-            membersShown = model.memberPick != nil
-        }
-        .onChange(of: model.memberPick != nil) { _, shown in membersShown = shown }
+        // C6 is the state that opens WITH the menu up; every other state has
+        // the same menu behind ⋯ and starts with it closed.
+        .onAppear { menuShown = model.state == .c6 }
     }
 
     private var navBar: some View {
@@ -118,7 +129,7 @@ struct GroupDetailScreen: View {
             .accessibilityLabel(model.backLabel)
             Spacer(minLength: Tokens.Space.s12)
             Button {
-                sheetShown = true
+                menuShown = true
             } label: {
                 LucideIcon(.ellipsis, size: LucideIconSize.action)
                     .foregroundStyle(theme.fgMuted)

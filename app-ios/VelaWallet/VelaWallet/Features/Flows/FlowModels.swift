@@ -499,6 +499,10 @@ struct BatchImportModel {
     /// their own, because until then there is nothing to go back from.
     var rateReset: String = ""
     var rateEdited = false
+    /// Whether the amounts are being read as FIAT and converted. When they are
+    /// not, there is no rate — and the whole rate block goes away rather than
+    /// standing there saying "1 xDAI = " with nothing after it.
+    var priced = true
     let parsedLabel: String
     let rows: [BatchRowModel]
     var rejectedText: String?

@@ -182,6 +182,18 @@ struct FlowHost: View {
                         onNavigate: onNavigate,
                         onPickFeeToken: onPickFeeToken,
                         onPickContact: onPickContact,
+                        // The importer's fields and its four edges. Declaring
+                        // them on both hosts and forwarding NEITHER is what put
+                        // a read-only paste box on a live sheet — the drawn
+                        // field renders when the binding is absent, so the
+                        // omission looks exactly like the drawing.
+                        batchPaste: batchPaste,
+                        batchRate: batchRate,
+                        onBatchUnit: onBatchUnit,
+                        onBatchFile: onBatchFile,
+                        onBatchTemplate: onBatchTemplate,
+                        onBatchResetRate: onBatchResetRate,
+                        onBatchApply: onBatchApply,
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
                         addTokenError: addTokenError,

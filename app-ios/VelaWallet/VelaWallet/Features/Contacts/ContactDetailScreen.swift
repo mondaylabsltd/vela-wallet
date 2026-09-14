@@ -36,9 +36,30 @@ struct ContactDetailScreen: View {
     var onSaveGroups: () -> Void = {}
     var onCancelGroups: () -> Void = {}
 
-    @State private var sheetShown = false
-    @State private var formShown = false
-    @State private var groupsShown = false
+    /// Whether the delete confirmation is up. The form's and the picker's
+    /// presence are the CORE's answers and need no flags of their own.
+    @State private var confirmShown = false
+
+    /// What the one sheet is showing, in order of precedence: a form or a
+    /// picker is open because somebody asked for it just now.
+    private enum Presented {
+        case confirm(ActionMenuModel)
+        case form(ContactFormModel)
+        case groups(MultiPickModel)
+    }
+
+    private var presented: Presented? {
+        if let form = model.form { return .form(form) }
+        if let pick = model.groupPick { return .groups(pick) }
+        if confirmShown, let sheet = model.sheet { return .confirm(sheet) }
+        return nil
+    }
+
+    private func dismissSheet() {
+        if model.form != nil { onCancelForm() }
+        if model.groupPick != nil { onCancelGroups() }
+        confirmShown = false
+    }
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -78,51 +99,53 @@ struct ContactDetailScreen: View {
         }
         .background(theme.bgBase.ignoresSafeArea())
         .environment(\.walletTextScale, model.textScale)
-        .sheet(isPresented: $sheetShown) {
-            if let sheet = model.sheet {
-                ActionMenuSheet(model: sheet, onItem: { _ in }, onCancel: { sheetShown = false })
-                    .environment(\.walletTextScale, model.textScale)
-            }
-        }
-        .sheet(isPresented: $formShown) {
-            if let form = model.form {
+        // ONE sheet, whose CONTENT changes. Three `.sheet` modifiers on one
+        // view is what stopped the contacts list responding to taps at all
+        // (the same defect, on the screen before this one).
+        .sheet(isPresented: Binding(
+            get: { presented != nil },
+            set: { if !$0 { dismissSheet() } }
+        )) {
+            switch presented {
+            case .confirm(let menu):
+                ActionMenuSheet(
+                    model: menu,
+                    // The one item this sheet has is the destructive one: it is
+                    // the second confirmation on 删除联系人, and until spec 054
+                    // it went nowhere — the button raised a sheet the live
+                    // builder left empty, which is a confirmation dialog for a
+                    // deletion that never happened.
+                    onItem: { item in
+                        confirmShown = false
+                        if item.destructive { onDelete() }
+                    },
+                    onCancel: { confirmShown = false }
+                )
+                .environment(\.walletTextScale, model.textScale)
+            case .form(let form):
                 ContactFormSheet(
                     model: form,
                     nameText: formName,
                     addressText: formAddress,
                     onSave: onSaveForm,
-                    onCancel: {
-                        formShown = false
-                        onCancelForm()
-                    }
+                    onCancel: { onCancelForm() }
                 )
                 .environment(\.walletTextScale, model.textScale)
-            }
-        }
-        .onAppear {
-            sheetShown = model.sheet != nil
-            formShown = model.form != nil
-            groupsShown = model.groupPick != nil
-        }
-        // The FORM's presence is the core's answer, so the sheet follows it
-        // rather than a flag of its own: a save that succeeds closes the form
-        // by removing it, and the screen must notice.
-        .onChange(of: model.form != nil) { _, shown in formShown = shown }
-        .sheet(isPresented: $groupsShown) {
-            if let pick = model.groupPick {
+            case .groups(let pick):
                 MultiPickSheet(
                     model: pick,
                     onToggle: onToggleGroup,
                     onSave: onSaveGroups,
-                    onCancel: {
-                        groupsShown = false
-                        onCancelGroups()
-                    }
+                    onCancel: { onCancelGroups() }
                 )
                 .environment(\.walletTextScale, model.textScale)
+            case nil:
+                EmptyView()
             }
         }
-        .onChange(of: model.groupPick != nil) { _, shown in groupsShown = shown }
+        // C2s is the state that opens WITH the confirm up; every other one has
+        // it behind 删除联系人 and starts closed.
+        .onAppear { confirmShown = model.state == .c2s }
     }
 
     private func inspectionTag(_ text: String) -> some View {
@@ -221,7 +244,7 @@ struct ContactDetailScreen: View {
 
     private var deleteAction: some View {
         Button {
-            sheetShown = true
+            confirmShown = true
         } label: {
             Text(verbatim: model.deleteLabel)
                 .typeRole(Typography.button.scaled(model.textScale))

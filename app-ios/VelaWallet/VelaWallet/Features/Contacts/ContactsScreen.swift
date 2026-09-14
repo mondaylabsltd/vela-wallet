@@ -46,9 +46,29 @@ struct ContactsScreen: View {
     var onSaveForm: () -> Void = {}
     var onCancelForm: () -> Void = {}
 
-    @State private var sheetShown = false
-    @State private var formShown = false
+    /// Whether the + menu (or a row's delete confirm) is up. The FORM's
+    /// presence is the core's answer and needs no flag of its own.
+    @State private var menuShown = false
     @State private var confirming: ContactModel?
+
+    /// What the one sheet is showing. The form outranks the menu: a form is
+    /// open because somebody chose something in the menu.
+    private enum Presented {
+        case menu(ActionMenuModel)
+        case form(ContactFormModel)
+    }
+
+    private var presented: Presented? {
+        if let form = model.form { return .form(form) }
+        if menuShown, let menu = presentedSheet { return .menu(menu) }
+        return nil
+    }
+
+    private func dismissSheet() {
+        menuShown = false
+        confirming = nil
+        if model.form != nil { onCancelForm() }
+    }
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -65,36 +85,46 @@ struct ContactsScreen: View {
         }
         .background(theme.bgBase.ignoresSafeArea())
         .environment(\.walletTextScale, model.textScale)
-        .sheet(isPresented: $sheetShown) {
-            if let sheet = presentedSheet {
-                ActionMenuSheet(model: sheet, onItem: { item in confirm(item) },
-                                onCancel: { sheetShown = false })
+        // ONE sheet, whose CONTENT changes — never two `.sheet` modifiers on
+        // one view.
+        //
+        // Adding a second one is what stopped the contact rows responding to
+        // taps at all: the + button still worked, the list did not, and the
+        // screen looked exactly like a list whose rows were never wired. iOS
+        // has punished stacked modals in this app before (2026-07-06, the
+        // invisible funding sheet); the rule is the same both times.
+        .sheet(isPresented: Binding(
+            get: { presented != nil },
+            set: { if !$0 { dismissSheet() } }
+        )) {
+            switch presented {
+            case .menu(let menu):
+                ActionMenuSheet(model: menu, onItem: { item in confirm(item) },
+                                onCancel: { dismissSheet() })
                     .environment(\.walletTextScale, model.textScale)
-            }
-        }
-        .sheet(isPresented: $formShown) {
-            if let form = model.form {
+            case .form(let form):
                 ContactFormSheet(
                     model: form,
                     nameText: formName,
                     addressText: formAddress,
                     onSave: onSaveForm,
-                    onCancel: {
-                        formShown = false
-                        onCancelForm()
-                    }
+                    onCancel: { dismissSheet() }
                 )
                 .environment(\.walletTextScale, model.textScale)
+            case nil:
+                EmptyView()
             }
         }
         .onAppear {
-            sheetShown = model.sheet != nil
-            formShown = model.form != nil
+            // C5 is the state that opens WITH the menu up. Every other state
+            // has the same menu available behind +, and starts with it closed.
+            //
+            // Keying on `sheet != nil` was right while only the C5 FIXTURE
+            // carried one; the moment the live home carried the menu too, the
+            // address book opened with a sheet nobody had asked for.
+            menuShown = model.state == .c5
         }
-        .onChange(of: confirming?.id) { _, _ in sheetShown = presentedSheet != nil }
-        // The form's PRESENCE is the core's answer, so the sheet follows it: a
-        // save that succeeds closes the form by removing it.
-        .onChange(of: model.form != nil) { _, shown in formShown = shown }
+        .onChange(of: confirming?.id) { _, _ in menuShown = confirming != nil || menuShown }
         .alert(
             model.notice?.title ?? "",
             isPresented: Binding(
@@ -123,7 +153,7 @@ struct ContactsScreen: View {
     /// so its items dismiss rather than pretending to act. Routing them
     /// somewhere invented would be worse than the honest nothing.
     private func confirm(_ item: MenuItemModel) {
-        defer { sheetShown = false; confirming = nil }
+        defer { menuShown = false; confirming = nil }
         if let target = confirming {
             guard item.destructive else { return }
             onDelete(target.addressFull)
@@ -151,7 +181,7 @@ struct ContactsScreen: View {
                 .lineLimit(1)
             Spacer(minLength: Tokens.Space.s12)
             Button {
-                sheetShown = true
+                menuShown = true
             } label: {
                 LucideIcon(.userRoundPlus, size: LucideIconSize.action)
                     .foregroundStyle(theme.fgBase)
@@ -160,6 +190,9 @@ struct ContactsScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(model.addLabel)
+            // The empty state's CTA carries the same WORD, so the identifier is
+            // what tells the two apart for a test driving this screen.
+            .accessibilityIdentifier("contacts.add")
         }
     }
 
@@ -225,7 +258,10 @@ struct ContactsScreen: View {
                         swipe: model.reveal,
                         forceRevealed: model.reveal?.contactId == contact.id,
                         onTap: { onOpenContact(contact) },
-                        onDelete: { confirming = contact }
+                        onDelete: {
+                            confirming = contact
+                            menuShown = true
+                        }
                     )
                 }
             }

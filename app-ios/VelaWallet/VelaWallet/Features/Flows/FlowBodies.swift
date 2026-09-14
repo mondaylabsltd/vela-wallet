@@ -943,6 +943,7 @@ struct BatchImportBody: View {
                 Spacer(minLength: Tokens.Space.s0)
             }
 
+            if model.priced {
             FlowDivider()
             HStack(spacing: Tokens.Space.s4) {
                 Text(verbatim: model.rateSection)
@@ -985,6 +986,7 @@ struct BatchImportBody: View {
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
                 .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text(verbatim: model.parsedLabel)
                 .typeRole(Typography.rowSub.scaled(textScale))

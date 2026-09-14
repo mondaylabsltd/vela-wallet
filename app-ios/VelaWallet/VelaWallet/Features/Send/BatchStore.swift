@@ -46,7 +46,16 @@ final class BatchStore {
         )
     }
 
-    private func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }
+    /// This machine has no boot event of its own: its first event IS `Open`,
+    /// which is a full reset. `CoreStore` DROPS everything sent before boot —
+    /// so a store that only ever dispatched would silently discard every
+    /// event, and the sheet would render the empty view forever. That is
+    /// exactly what the device showed: "解析结果 · 0 条" over a paste box with
+    /// two perfectly good lines in it.
+    private func dispatch(_ event: [String: Any]) {
+        let json = CoreJSON.string(event)
+        if !core.boot(json) { core.dispatch(json) }
+    }
 
     /// The sheet opened on a token. A FULL reset — the core's rule, not a
     /// convenience: an old paste priced at an old rate would otherwise be

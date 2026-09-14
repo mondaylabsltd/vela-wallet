@@ -127,7 +127,15 @@ struct RootView: View {
     @State private var contactsRoute: ContactsRoute?
     /// The add/edit form, while it is open. `nil` means no form — the presence
     /// of the draft IS the presence of the sheet, so one state answers both.
+    ///
+    /// It carries the form's IDENTITY (new, or which contact is being edited)
+    /// and the core's refusal. The two typed strings live beside it as plain
+    /// state: a field bound through an optional chain into a struct loses
+    /// characters as they are typed, and the device showed exactly that —
+    /// "Vela 054 探针" arrived as "Va 054 探针" and an address lost its 0x.
     @State private var contactDraft: ContactsLive.ContactDraft?
+    @State private var contactName = ""
+    @State private var contactAddress = ""
     /// What is being typed into the address book's search field.
     @State private var contactQuery = ""
     /// The membership picker, while it is open. A SET, held here until 保存 —
@@ -1058,15 +1066,17 @@ struct RootView: View {
                                 // between the two of you — the same store the
                                 // feed reads, narrowed to one address.
                                 records: TxRecords.load(store: shelf), loc: loc,
-                                form: contactDraft, groupPick: groupPick
+                                form: contactForm(), groupPick: groupPick
                             ),
                             onBack: { contactsRoute = nil },
                             // The pencil shipped doing nothing (survey, 054).
                             onEdit: {
+                                contactName = contact.name ?? ""
+                                contactAddress = contact.address
                                 contactDraft = ContactsLive.ContactDraft(
                                     editing: contact.address,
-                                    name: contact.name ?? "",
-                                    address: contact.address
+                                    name: contactName,
+                                    address: contactAddress
                                 )
                             },
                             onFavourite: { contacts.toggleFavorite(address: contact.address) },
@@ -1076,14 +1086,8 @@ struct RootView: View {
                                 contacts.delete(address: contact.address)
                                 contactsRoute = nil
                             },
-                            formName: Binding(
-                                get: { contactDraft?.name ?? "" },
-                                set: { contactDraft?.name = $0 }
-                            ),
-                            formAddress: Binding(
-                                get: { contactDraft?.address ?? "" },
-                                set: { contactDraft?.address = $0 }
-                            ),
+                            formName: $contactName,
+                            formAddress: $contactAddress,
                             onSaveForm: { saveContactDraft() },
                             onCancelForm: { contactDraft = nil },
                             onOpenGroups: {
@@ -1195,7 +1199,7 @@ struct RootView: View {
             model: ContactsLive.home(
                 view, loc: loc,
                 query: contactQuery.isEmpty ? nil : contactQuery,
-                form: contactDraft
+                form: contactForm()
             ),
             onOpenContact: { contactsRoute = .detail(address: $0.addressFull) },
             onOpenGroup: { row in
@@ -1209,23 +1213,17 @@ struct RootView: View {
             onSelectTab: selectTab,
             onDelete: { contacts.delete(address: $0) },
             onAdd: {
-                contactDraft = ContactsLive.ContactDraft(
-                    editing: nil, name: "", address: ""
-                )
+                contactName = ""
+                contactAddress = ""
+                contactDraft = ContactsLive.ContactDraft(editing: nil, name: "", address: "")
             },
             onImport: { importContacts() },
             onExport: { exportContacts() },
             searchText: $contactQuery,
             onClearSearch: { contactQuery = "" },
             onAcknowledge: { contacts.importAcknowledged() },
-            formName: Binding(
-                get: { contactDraft?.name ?? "" },
-                set: { contactDraft?.name = $0 }
-            ),
-            formAddress: Binding(
-                get: { contactDraft?.address ?? "" },
-                set: { contactDraft?.address = $0 }
-            ),
+            formName: $contactName,
+            formAddress: $contactAddress,
             onSaveForm: { saveContactDraft() },
             onCancelForm: { contactDraft = nil }
         )
@@ -1237,11 +1235,20 @@ struct RootView: View {
     /// only if the book actually gained or changed the contact — so a refusal
     /// leaves the form open with the words still in it, rather than swallowing
     /// somebody's typing and showing them an unchanged list.
+    /// The form as it stands: its identity and refusal from the draft, its two
+    /// values from the fields being typed into.
+    private func contactForm() -> ContactsLive.ContactDraft? {
+        guard var draft = contactDraft else { return nil }
+        draft.name = contactName
+        draft.address = contactAddress
+        return draft
+    }
+
     private func saveContactDraft() {
         guard let draft = contactDraft else { return }
-        let address = draft.editing ?? draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = draft.editing ?? contactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !address.isEmpty else { return }
-        contacts.save(address: address, name: draft.name)
+        contacts.save(address: address, name: contactName)
         // The core is synchronous through the bridge: by the time this returns
         // the view has the contact, or it does not.
         if contacts.contact(at: address.lowercased()) != nil

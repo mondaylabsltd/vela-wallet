@@ -218,7 +218,9 @@ enum ContactsLive {
             // asked about this one: a projection left over from the previous
             // recipient would tag the wrong person.
             inspection: inspection(view.recipient, of: contact.address, loc: loc),
-            sheet: nil,
+            // 删除联系人's second confirmation. Drawn as C2s; live it was `nil`,
+            // so the button raised an empty sheet and the contact stayed.
+            sheet: ContactsFixtures.deleteConfirm(loc: loc, name: displayName(contact)),
             form: form.map { formModel($0, loc: loc) },
             groupPick: groupPick.map { picked in
                 MultiPickModel(

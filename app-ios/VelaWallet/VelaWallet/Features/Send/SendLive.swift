@@ -232,9 +232,17 @@ enum SendLive {
         // A split's sweep-style summary: how many people, and the sum.
         live.summary = view.splitMode
             ? SummaryLineModel(
-                label: loc.t("send.recipientCount", vars: [
-                    "count": String(view.recipients.count),
-                ]),
+                // The PLURAL key. `send.recipientCount` on its own does not
+                // exist in the corpus — only `_one` and `_other` — so asking
+                // for the bare name printed the literal string
+                // "send.recipientCount" on the confirm summary, which is what
+                // the device's accessibility dump showed.
+                label: loc.t(
+                    view.recipients.count == 1
+                        ? "send.recipientCount_one"
+                        : "send.recipientCount_other",
+                    vars: ["count": String(view.recipients.count)]
+                ),
                 value: "\(trim(view.confirmAmount)) \(symbol)"
             )
             : live.summary
@@ -683,6 +691,10 @@ enum SendLive {
             rateHint: loc.t("send.batchRateHint", vars: ["code": batch.fiatCode, "sym": symbol]),
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
+            // The core's own flag. In 按 xDAI 数量 the figures in the file ARE
+            // the token amounts and no rate is applied, so a rate row there is
+            // a control for a conversion that is not happening.
+            priced: batch.priced,
             parsedLabel: loc.t("send.batchParsedCount", vars: ["n": String(count)]),
             rows: batch.preview.map { row in
                 BatchRowModel(

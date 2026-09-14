@@ -54,7 +54,14 @@ struct ContactRow: View {
             }
             content
                 .offset(x: offset)
-                .gesture(dragGesture, including: swipe == nil ? .none : .all)
+                // `GestureMask.none` disables EVERY gesture in the subtree,
+                // not just the one being attached — including the row's own
+                // button. With no swipe model (which is every row on every
+                // screen but C1s) the whole list was inert: taps landed, the
+                // element reported itself hittable, and nothing happened.
+                //
+                // So the gesture is attached only when there IS one.
+                .gesture(swipe == nil ? nil : dragGesture)
         }
         .frame(minHeight: minHeight)
         .clipped()
