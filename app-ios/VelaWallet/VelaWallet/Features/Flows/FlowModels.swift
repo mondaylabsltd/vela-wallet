@@ -457,7 +457,13 @@ struct FeeTokenPickModel {
 }
 
 /// SD2c — the recipient importer.
-enum BatchUnit: String {
+///
+/// `Decodable` since 054: the core's `BatchUnit` has these two cases with
+/// these two spellings, and a second identical type would be two places to
+/// change and one of them forgotten. The house rule that keeps wire types
+/// apart from display models is about shapes that can drift; this one cannot
+/// without the drift test failing first.
+enum BatchUnit: String, Decodable {
     case fiat, token
 }
 

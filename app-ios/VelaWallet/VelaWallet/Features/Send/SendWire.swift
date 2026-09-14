@@ -57,6 +57,15 @@ struct SendRecipientDraftWire: Decodable, Equatable {
     let name: String?
 }
 
+/// One ticked token, and what the core says will leave.
+struct SendMultiSpecWire: Decodable, Equatable {
+    /// `nil` is the native coin.
+    let tokenAddress: String?
+    let decimals: Int
+    /// Base units, decimal string.
+    let amount: String
+}
+
 /// Why the amount cannot be what was typed.
 enum SendAmountWarningWire: Equatable {
     case notEnoughToken(symbol: String)
@@ -198,6 +207,11 @@ struct SendViewWire: Decodable, Equatable {
     let multiSelectedIds: [String]
     let multiValuableIds: [String]
     let multiChainId: Int?
+    /// **How much of each ticked token actually moves.** A sweep is not "the
+    /// whole balance" — the core reserves what the fee needs on the asset that
+    /// pays it, so the sweep form and its confirm page must read these rather
+    /// than the balances the picker showed.
+    let multiSpecs: [SendMultiSpecWire]
 
     let showScanner: Bool
     let showContactPicker: Bool
