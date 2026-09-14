@@ -7,7 +7,7 @@
 | hermetic test run | 356 | 558 in 72 suites | **564 in 74 suites** |
 | XCUITest methods | 15 | 35 | 35 |
 | literal-audit violations | 35 | 35 | **35** |
-| `vela_core_uniffi.swift` bytes | 353,772 | 353,772 | **untouched, all seven cuts** |
+| `vela_core_uniffi.swift` bytes | 353,772 | 353,772 | **untouched since 051's merge of main** |
 | event-parity strong diffs | — | 2 | **2** |
 
 ## What this cut did
@@ -87,8 +87,12 @@ payroll paste, the sweep pick, and both scanner cases.
 | 057 | login recovery, the audit, the inventory |
 
 **Zero lines under `rust/crates/vela-core/src/app/` across all seven.** Zero
-corpus delta. Zero lines in the other four clients. `vela_core_uniffi.swift`
-untouched — 353,772 bytes at 050's start and at 057's end.
+corpus delta. Zero lines in the other four clients.
+
+`vela_core_uniffi.swift` is **untouched since `6e693b26`** — 051's merge of
+`main`, which regenerated it — and is 353,772 bytes now. So: unchanged across
+052–057, the six cuts this branch chain carries. 051 itself did regenerate it,
+through `rust/scripts/build-ios-xcframework.sh`, which is the only sanctioned way.
 
 ## Recorded for the PR
 
