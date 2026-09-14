@@ -26,34 +26,57 @@ Baselines in [results.md](./results.md).
 
 ---
 
-## Next — Phase 0 code: the wires, the drift, the provider bundle
+### Phase 0 code ✅ `31cee508`
 
-- [ ] **T001** `Features/Explore/Core/{ExploreWire,BhistWire,DpermWire}.swift`
-      and `Features/Signing/Core/{SignWire,ClearWire,GuardWire}.swift`. Views
-      `Decodable` through `CoreJSON.decoder`; **operations and results stay
-      dictionaries** — the house rule in every existing Wire header.
-- [ ] **T002** Read numeric types from the **Rust struct**, not a TS mirror.
-      `u32 → Int`, `f64 → Double`, error codes `i32`. 051 lost a chain index to
-      a `u32` overflow doing this the other way.
-- [ ] **T003** Six `CoreWireDriftTests` cases, one per machine: instantiate the
-      `*Core()`, round-trip `core.view()` through the wire.
-- [ ] **T004** `app-ios/scripts/bundle-provider.sh` + the two `.xcfilelist`s +
-      the `PBXShellScriptBuildPhase`. Model it on `bundle-animations.sh`;
-      `bundle-catalogs.sh` cannot be reused (its corpus rule aborts on an empty
-      match).
-- [ ] **T005** `ProviderBundleTests`: the bundled bytes equal the web tree's,
-      read through `#filePath`.
-- [ ] **T006** `Features/Explore/Core/DappRpc.swift` + `DappRpcParityTest`
-      reading `extension/lib/protocol.js`. **Ship 4900 for unsupported**, not
-      the 4200 the contract docs say — the code is the authority and three
-      clients agree.
+Nine wire files, six executors, the routing table, the provider bundle. Two
+findings: Android's "an untold machine refuses every chain" is wider than the
+truth, and a parity test passed against a set it had never read.
 
-### Then
+### Phase 1 — the engine ✅ `83ea6f6b`
 
-Phase 1 the engine · 2 memory · 3 connect · **4 sign (the gate)** · 5 guard and
-message · 6 closeout.
+探索 runs a real page and the page finds the wallet. The defect: a page that
+loaded, ran, and was **invisible**, because the screen took its view from the
+fixture.
+
+### Phase 2 — memory ✅ `a5c239c7`
+
+Favourites, the visit and the tab survive a force-quit — and the tab comes back
+**with its page**, which the test had to learn is what a browser does.
+
+### Phase 3 — connect ✅ `6db89403`
+
+Consent, the instant answer for a granted origin, the pool-backed reads, and
+`eth_sign` refused 4900. The defect: sheets carried their **contents** and so
+showed what was true when they opened. `ExploreSheetKind` makes that
+unspellable.
+
+### Phase 4 — **the gate** ✅ `1e39ea2d`
+
+Dust left the golden Safe because a page asked: 0.50067 → 0.48967 xDAI.
+
+### Phase 5 — the guard and the signature ✅ `660440f5`
+
+An unlimited approval is stopped and capped; `personal_sign` verifies on-chain
+as `0x1626ba7e`. Four defects, and one of them was a **product** fix: an inert
+slide that told assistive technology it was enabled.
 
 ---
+
+## 053 is closed. Next is 054.
+
+`specs/054-ios-send-contacts-parity/` — split and sweep, the payroll importer,
+and contacts I/O. **Draw C7/C8/C9 first** (founder ruling 2026-09-14).
+
+**What 054 inherits, and must not re-derive:**
+
+- `SigningController` is the shape for a per-request host: four machines born
+  with a request and dying with it. 054's batch importer is app-resident
+  instead, and the difference is deliberate.
+- `DocumentPorts` does not exist yet. 054 writes it (research D5 of the
+  program plan) and 056 reuses it for the share sheet.
+- The device-harness lessons are in `BrowserAcceptanceTests`: drag a slide
+  rather than tapping it, tap the **hittable** match inside a `ViewThatFits`,
+  and read the wallet's own surface before the page's.
 
 ## The traps, inherited and new
 
@@ -75,7 +98,16 @@ Android defect that will recur here. The iOS-specific ones:
    over loopback.
 5. **A `UIViewRepresentable` that outlives its container leaks the web view
    onto another screen.** FR-013.
-6. Everything 052 learned still applies: `CoreStore.onFault` is silent without
+7. **`ViewThatFits` duplicates every candidate layout in the accessibility
+   tree.** `firstMatch` can be a measured, unrendered copy: it exists, reports
+   itself enabled, and a tap on it goes nowhere. Take the first `isHittable`.
+8. **`tap()` does not invoke an `accessibilityAction`.** It synthesises a touch
+   at the element's centre. A slide-to-confirm must be dragged.
+9. **`allowsHitTesting(false)` is invisible to assistive technology.** Use
+   `.disabled()` as well, or a shut control announces itself as available.
+10. **A UI test's resources go stale where its code does not.**
+   `test-without-building` can leave an old bundled page inside the runner.
+11. Everything 052 learned still applies: `CoreStore.onFault` is silent without
    a logger; an event before `boot()` is dropped; a `var onRefresh: (() async
    -> Void)?` stored in a `View` segfaults AttributeGraph; one automation
    session at a time.
