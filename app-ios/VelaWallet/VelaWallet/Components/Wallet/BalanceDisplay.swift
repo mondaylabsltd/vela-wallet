@@ -16,6 +16,9 @@ struct BalanceDisplay: View {
     @Environment(\.walletTextScale) private var textScale
 
     let model: BalanceModel
+    /// Where the status line goes. Absent in the gallery, where the line is a
+    /// picture of a state rather than a way out of one.
+    var onStatusTap: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -27,7 +30,7 @@ struct BalanceDisplay: View {
                 liveRow(live)
             }
             if let status = model.status {
-                statusRow(status)
+                statusDoor(status)
             }
         }
     }
@@ -70,6 +73,22 @@ struct BalanceDisplay: View {
             Text(verbatim: text)
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.successBase)
+        }
+    }
+
+    /// The line, as a control where there is somewhere to go.
+    ///
+    /// It has always drawn a chevron — a promise of a destination — and had
+    /// none behind it (row 12 of 057's audit). Android and the web agree on
+    /// what it opens: a failed chain's RPC fix, anything else the breakdown.
+    @ViewBuilder private func statusDoor(_ status: BalanceStatusModel) -> some View {
+        if let onStatusTap {
+            Button(action: onStatusTap) {
+                statusRow(status).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            statusRow(status)
         }
     }
 

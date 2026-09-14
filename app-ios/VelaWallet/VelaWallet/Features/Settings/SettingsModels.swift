@@ -450,8 +450,10 @@ struct SettingsScreenModel {
     let eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
-    let rpcFix: RpcFixModel
-    let balanceDetail: BalanceDetailModel
+    /// `var` since 058: the hero's status line opens these, and what they show
+    /// is this device's chains rather than the drawing's two.
+    var rpcFix: RpcFixModel
+    var balanceDetail: BalanceDetailModel
     let relayer: RelayerModel
     let indexDown: IndexDownModel
     /// Scrim title behind a rescue sheet — "钱包", "转账", "设备存储".

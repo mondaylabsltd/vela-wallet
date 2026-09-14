@@ -43,6 +43,9 @@ struct WalletScreen: View {
     /// state since phase 2b — this is the gesture that was missing between
     /// them. Absent in the gallery, where a tap would mutate a picture.
     var onToggleBalance: (() -> Void)?
+    /// The hero's status line — where it goes when something is wrong with the
+    /// numbers above it. Absent in the gallery.
+    var onStatusTap: (() -> Void)?
     /// Pull to refresh. Also absent in the gallery: a fixture cannot refresh,
     /// and a spinner over one would be a promise nothing keeps.
     ///
@@ -111,7 +114,7 @@ struct WalletScreen: View {
     /// REMOVES the thing you were looking at needs a confirmation you can feel.
     @ViewBuilder private var balanceDisplay: some View {
         if let onToggleBalance {
-            BalanceDisplay(model: model.balance)
+            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -121,7 +124,7 @@ struct WalletScreen: View {
                 .accessibilityHint(Text(verbatim: model.balance.state == .hidden
                                         ? model.balance.a11yShow : model.balance.a11yHide))
         } else {
-            BalanceDisplay(model: model.balance)
+            BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
         }
     }
 

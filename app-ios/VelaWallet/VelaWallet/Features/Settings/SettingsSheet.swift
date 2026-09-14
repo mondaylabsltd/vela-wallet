@@ -25,6 +25,12 @@ struct SettingsSheet: View {
     var onErase: (() -> Void)?
     /// An account row tapped in the switcher.
     var onSelectAccount: ((String) -> Void)?
+    /// SR2's field and its commit (058). Absent in the gallery, where the
+    /// endpoint is a picture of one already typed.
+    var rpcDraft: Binding<String>?
+    var onCommitRpc: (() -> Void)?
+    /// SR3's 立即重试, per chain id.
+    var onRetryChain: ((String) -> Void)?
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -87,9 +93,18 @@ struct SettingsSheet: View {
                 case .feedback:
                     FeedbackSheetBody(model: model.feedback)
                 case .rpcFix:
-                    RpcFixSheetBody(model: model.rpcFix, onPrimary: onDismiss)
+                    RpcFixSheetBody(
+                        model: model.rpcFix,
+                        draft: rpcDraft,
+                        onPrimary: {
+                            // Save, THEN close: the primary is 保存 while the
+                            // endpoint is unproven and 完成 once it answered.
+                            onCommitRpc?()
+                            onDismiss()
+                        }
+                    )
                 case .balanceDetail:
-                    BalanceDetailSheetBody(model: model.balanceDetail)
+                    BalanceDetailSheetBody(model: model.balanceDetail, onRetry: onRetryChain)
                 case .relayer:
                     RelayerSheetBody(model: model.relayer, onPrimary: onDismiss)
                 case .none:
@@ -295,6 +310,8 @@ private struct FeedbackSheetBody: View {
 private struct RpcFixSheetBody: View {
     @Environment(\.theme) private var theme
     let model: RpcFixModel
+    /// The URL being typed. `nil` keeps the drawn, uneditable box.
+    var draft: Binding<String>?
     let onPrimary: () -> Void
 
     var body: some View {
@@ -315,7 +332,7 @@ private struct RpcFixSheetBody: View {
         .padding(.bottom, Tokens.Space.s16)
         SettingsCallout(callout: model.callout)
             .padding(.bottom, Tokens.Space.s16)
-        SettingsUrlField(field: model.field)
+        SettingsUrlField(field: model.field, text: draft, onCommit: onPrimary)
             .padding(.bottom, Tokens.Space.s16)
         VelaButton(title: model.primary, kind: .primary, action: onPrimary)
         if let label = model.providersLabel {
@@ -348,6 +365,8 @@ private struct RpcFixSheetBody: View {
 private struct BalanceDetailSheetBody: View {
     @Environment(\.theme) private var theme
     let model: BalanceDetailModel
+    /// 立即重试 on an unreachable chain. Absent in the gallery.
+    var onRetry: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: model.title)
@@ -388,7 +407,15 @@ private struct BalanceDetailSheetBody: View {
                 }
             }
             Spacer(minLength: Tokens.Space.s8)
-            if let action = row.action {
+            if let action = row.action, let onRetry {
+                Button { onRetry(row.id) } label: {
+                    Text(action)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.infoBase)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else if let action = row.action {
                 Text(action)
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.infoBase)

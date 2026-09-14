@@ -512,6 +512,123 @@ enum SettingsLive {
         )
     }
 
+    // MARK: - The rescues the hero's status line opens (spec 058)
+
+    /// SR3 — the balance by network: the chains still being read or
+    /// unreachable, then the ones that settled, largest first.
+    ///
+    /// The web's `liveBalanceDetail`, ported. Two rules from it that matter:
+    /// a rate-limited chain gets a grey line and NO button because it resolves
+    /// itself, while an unreachable one gets a red line and 立即重试 because it
+    /// does not; and a hidden balance stays hidden here — a person who hid the
+    /// figure did not agree to have it broken out per chain.
+    static func withBalanceDetail(
+        _ balance: BalanceViewWire,
+        display: WalletLive.Display,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let mask = "••••"
+        // The same figure the hero prints, through the same two decisions: the
+        // display currency's glyph and `Formats`' number shape. A second
+        // formatter here would eventually disagree with the total above it.
+        func money(_ usd: Double) -> String {
+            display.glyph + Formats.number(usd * display.rate,
+                                           minimumFractionDigits: 2,
+                                           maximumFractionDigits: 2)
+        }
+
+        func chainName(_ id: Int) -> String {
+            ChainCatalog.meta(id)?.displayName ?? chainMeta(loc, id)
+        }
+        func row(_ id: Int) -> ChainMarkModel {
+            mark(chainId: id, name: chainName(id))
+        }
+
+        var pending: [BalanceDetailRowModel] = balance.rateLimitedChainIds.map { id in
+            BalanceDetailRowModel(id: String(id), mark: row(id), name: chainName(id),
+                                  status: loc.t(k.balanceDetailRetrying), tone: .neutral)
+        }
+        for id in balance.bannerChainIds where !pending.contains(where: { $0.id == String(id) }) {
+            pending.append(BalanceDetailRowModel(
+                id: String(id), mark: row(id), name: chainName(id),
+                status: loc.t(k.balanceDetailFailed), tone: .error,
+                action: loc.t(k.balanceDetailRetry)
+            ))
+        }
+
+        var perChain: [Int: Double] = [:]
+        for token in balance.tokens {
+            guard let price = token.priceUsd, let amount = Double(token.balance) else { continue }
+            let usd = amount * price
+            guard usd.isFinite else { continue }
+            perChain[token.chainId, default: 0] += usd
+        }
+        let done = perChain
+            .filter { id, _ in !pending.contains(where: { $0.id == String(id) }) }
+            .sorted { $0.value > $1.value }
+            .map { id, usd in
+                BalanceDetailRowModel(
+                    id: String(id), mark: row(id), name: chainName(id),
+                    amount: balance.hidden ? mask : money(usd)
+                )
+            }
+
+        var live = model
+        live.balanceDetail = BalanceDetailModel(
+            title: model.balanceDetail.title,
+            summary: loc.t(k.balanceDetailTotal, vars: [
+                "amount": balance.hidden || balance.displayTotalUsd == nil
+                    ? mask
+                    : money(balance.displayTotalUsd ?? 0),
+            ]),
+            sectionPending: model.balanceDetail.sectionPending,
+            pendingNote: model.balanceDetail.pendingNote,
+            pending: pending,
+            sectionDone: model.balanceDetail.sectionDone,
+            done: done
+        )
+        return live
+    }
+
+    /// SR2 — the fix for ONE unreachable chain: which chain, what is stored for
+    /// it now, and the field that replaces it.
+    ///
+    /// The chain is the first that failed. Per-chain rather than one global
+    /// button because the fix IS per chain, which is the same argument the
+    /// drawn banner makes.
+    static func withRpcFix(
+        chainId: Int,
+        endpoint: String,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let name = ChainCatalog.meta(chainId)?.displayName ?? chainMeta(loc, chainId)
+        var live = model
+        live.rpcFix = RpcFixModel(
+            title: model.rpcFix.title,
+            mark: mark(chainId: chainId, name: name),
+            name: name,
+            meta: chainMeta(loc, chainId),
+            badge: model.rpcFix.badge,
+            callout: model.rpcFix.callout,
+            field: UrlFieldModel(
+                id: "rpc",
+                label: loc.t(k.rpcFixLabel),
+                value: endpoint,
+                placeholder: model.rpcFix.field.placeholder,
+                tone: model.rpcFix.field.tone
+            ),
+            primary: model.rpcFix.primary,
+            providersLabel: model.rpcFix.providersLabel,
+            providers: model.rpcFix.providers,
+            report: model.rpcFix.report
+        )
+        return live
+    }
+
     // MARK: - 存储 and 关于 (spec 058)
 
     /// The storage page, measured.

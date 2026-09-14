@@ -57,6 +57,10 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
+    /// The rescue the hero's status line opened, and what it is about.
+    @State private var rescue: SettingsOverlay?
+    @State private var rescueChain: Int?
+    @State private var rpcDraft = ""
     /// Which history row opened the transaction sheet, and which assets row
     /// opened the token sheet. The drawn sheets show ONE of each; without the
     /// tap travelling with the navigation they would show the first.
@@ -857,6 +861,7 @@ struct RootView: View {
                         onSelectTab: selectTab,
                         onFlow: { flows.enter($0) },
                         onToggleBalance: { wallet.togglePrivacy() },
+                        onStatusTap: { openRescue() },
                         onRefresh: RefreshAction {
                             // `pull: true` is carried so the core can tell a
                             // person's own gesture from the 30-second tick and
@@ -866,6 +871,22 @@ struct RootView: View {
                             await wallet.settled()
                         }
                     )
+                    // The hero's status line, as a sheet over the wallet —
+                    // which is what SR2 and SR3 are drawn as. The settings
+                    // route would put the settings list behind a sentence
+                    // about the screen somebody was actually on.
+                    .sheet(item: $rescue) { overlay in
+                        SettingsSheet(
+                            model: rescueModel(overlay),
+                            overlay: overlay,
+                            onDismiss: { rescue = nil },
+                            onSignOut: {},
+                            rpcDraft: $rpcDraft,
+                            onCommitRpc: { commitRescueRpc() },
+                            onRetryChain: { _ in wallet.refresh(pull: true) }
+                        )
+                        .themed(scheme)
+                    }
                     // The two machines have to agree about hiding: the balance
                     // core owns the state, and the feed core suppresses its
                     // receipt toast on it. Forwarding the COMMITTED value
@@ -1393,6 +1414,60 @@ struct RootView: View {
             }) else { return }
             send.selectToken(id: match.id)
         }
+    }
+
+    // MARK: - The hero's status line (spec 058, row 12)
+
+    /// What the line opens.
+    ///
+    /// Android and the web agree on the rule and it is not arbitrary: a chain
+    /// that FAILED needs a different endpoint, which is a thing a person can
+    /// do; anything else — rate limiting, a partial read — resolves itself,
+    /// and the honest answer is the breakdown showing which chains are still
+    /// out. Reaching for the RPC sheet there would offer a fix for a problem
+    /// that is not the person's to fix (invariant ④).
+    private func openRescue() {
+        let failed = wallet.balance?.bannerChainIds ?? []
+        if let chainId = failed.first {
+            rescueChain = chainId
+            // By CHAIN ID, not by row id: a row's id is a slug ("gnosis") and
+            // what failed is a chain number.
+            rpcDraft = settings.networkAdmin?.networks
+                .first { $0.chainId == chainId }?.rpcUrl ?? ""
+            rescue = .rpcFix
+        } else {
+            rescueChain = nil
+            rescue = .balanceDetail
+        }
+    }
+
+    /// The rescue sheet's model: the settings page's, with this device's chains
+    /// swapped into whichever rescue is up.
+    private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
+        var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
+        if let balance = wallet.balance {
+            model = SettingsLive.withBalanceDetail(
+                balance,
+                display: WalletLive.Display.from(settings.currency),
+                on: model, loc: loc
+            )
+        }
+        if let chainId = rescueChain {
+            model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
+                                            on: model, loc: loc)
+        }
+        return model
+    }
+
+    /// The typed endpoint, saved for the chain the sheet is about.
+    ///
+    /// Through `network_admin`'s own per-chain override — the same operation
+    /// the networks page uses — so one endpoint store has one writer.
+    private func commitRescueRpc() {
+        guard let chainId = rescueChain else { return }
+        settings.editOverride(chainId: chainId, value: rpcDraft)
+        settings.blurOverride(chainId: chainId)
+        wallet.refresh(pull: true)
     }
 
     /// 删除记录 on the open transaction.

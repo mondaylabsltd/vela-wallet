@@ -62,7 +62,17 @@ const EXEMPT = {
 	// documents (045): the platform's picker/creator/share sheet, an Activity-bound
 	// port with no screen of its own — reached from the batch sheet and the contacts menu.
 	android: new Set(['send', 'browser', 'documents']),
-	ios: new Set([])
+	// The same three shapes as Android's, found red on this branch's parent and
+	// red since they were written (spec 058 checked 057's tip):
+	// `Send` draws no screen — the send journey's pages are the `Flows` family's
+	// (`SendFormBody`, `SendConfirmBody`, `SendReceiptBody`) and `Features/Send`
+	// holds the stores, executors and wires that build their models (052).
+	// `Scan` is the camera itself — a session, a decoder and a photo picker
+	// (055); the viewfinder is `Flows`' `ScanSurfaceView`.
+	// `Documents` is the platform's picker/share sheet, a `UIDocumentPicker`
+	// port with no screen of its own (054), reached from the batch sheet and
+	// the contacts menu.
+	ios: new Set(['Send', 'Scan', 'Documents'])
 };
 
 const failures = [];
