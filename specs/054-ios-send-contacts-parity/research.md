@@ -87,3 +87,101 @@ gallery states from the **018 vocabulary only** — `addTitle`, `editTitle`,
 change: every word is already there in fourteen languages.
 
 They go through the screenshot sweep before a single event is dispatched.
+
+## D4 — Split rows: one whole-list event, three pure helpers
+
+`RecipientsChanged { recipients }` carries the **whole list**. Three pure
+functions rebuild it:
+
+| | |
+|---|---|
+| `amountEdited(rows, id, amount)` | guarded on `!=`, so an untouched row is the **same value** |
+| `addressEdited(rows, id, address)` | **nulls the name** — it belonged to the old address |
+| `removed(rows, id)` / `appended(rows)` | append with an **empty id**; the core mints `rcpt_{n}` |
+
+Seeding — from a group, from a batch — goes through `SeedSplitRecipients`.
+
+## D5 — The sweep's picking flag is the shell's, and nothing else is
+
+The core's `multi_select_mode` flips only at **confirm**, so "are the tick
+boxes showing" cannot come from it. One `@State` flag owns that; every other
+question is the core's.
+
+The tap rules, ported verbatim:
+
+```
+selected && only one selected  → ToggleMultiToken, then SetMultiNetwork(nil)
+selected                       → ToggleMultiToken
+nothing pinned                 → SetMultiNetwork(chain), then ToggleMultiToken
+pinned ≠ this row's chain      → nothing at all
+otherwise                      → ToggleMultiToken
+```
+
+The first arm is the one worth naming: **unticking the last ticked token
+releases the chain**, so the next tick can pin a different one. Without it a
+person who mis-picks is stuck on that chain until they leave the screen.
+
+Dimmed rows are **not tappable**. A tappable row is an invitation the wallet
+will not honour.
+
+## D6 — The batch executor's three arms
+
+| operation | answer | cannot find out |
+|---|---|---|
+| `fetch_usd_fiat_rate { code }` | `rate_resolved { code, rate }` | `rate_resolved { rate: null }` |
+| `pick_file` | `file_picked { name, content }` · `file_pick_cancelled` | `file_pick_failed` |
+| `save_template_file { name, contents, mime }` | `template_saved` | `template_save_failed` |
+
+Three rules that are not obvious:
+
+1. **The rate is `nil` unless it is finite and above zero.** The display
+   currency's `?? 1` is a presentation fallback and would arrive here as "the
+   rate really is 1" — which is the exact thing the core's guard exists to
+   refuse.
+2. **The file's extension decides text or matrix**, not the MIME the system
+   guessed. A CSV exported from Excel is routinely typed
+   `application/vnd.ms-excel`.
+3. **A missing document layer is a failure, not a cancel.** A cancel means a
+   person changed their mind; if the ports were never attached, nobody was
+   asked anything.
+
+## D7 — The book travels, and the file is released either way
+
+Export: `ExportRequested { scope, format, exported_at_iso }` → wait for the
+view's `export` → hand it to the share sheet → **`ExportTaken` regardless**.
+The share sheet reports only that it was presented; leaving the file pinned on
+the view because a person tapped Cancel would strand the next export.
+
+Import: pick → `ImportFile { content, filename, into_group, now_ms }` → the
+core parses (JSON or CSV, **existing wins**) → `last_import` or
+`import_failure` → shown → `ImportAcknowledged`.
+
+**An imported group does not gain contacts that already existed.** The core
+creates a group only for the members it newly added. Android found this on a
+device and recorded it as the core's rule; it will look like a bug to whoever
+meets it next, so it is in the spec's edge cases too.
+
+## D8 — Numbers, and the drift gate's blind spot
+
+`tx_count` is `u32` → `Int`; `last_used_ms` and `first_seen_ms` are `f64` →
+`Double`. `ts-rs` writes both as TypeScript `number`, so a generated-types
+check cannot see the difference — **serde can**: a `0.0` sent for a `u32` fails
+with *"invalid type: floating point `0.0`, expected u32"*. Read the Rust
+struct, not the TS mirror.
+
+## D9 — Two device lessons that are about driving, not about the product
+
+- **The confirm CTA is a button, not a slider.** A swipe along it registers as
+  a tap and the test proves nothing. (053 met the mirror image: a
+  slide-to-confirm that must be dragged.)
+- **A freshly saved contact must not inherit the fixture's activity rows.**
+  Android showed a brand-new contact "+50 USDC received yesterday" for a
+  payment that never happened, because the fallback model's rows were left
+  alone. 052 fixed the same class of thing in `ContactsLive.detail`.
+
+## D10 — Typing is echoed locally
+
+A text field bound straight to a machine drops characters on the round trip —
+found on a device in 043 and again in 045. The field owns what is on screen;
+the value still goes to the core, and a core value the field did not send
+replaces it.
