@@ -22,7 +22,9 @@ struct AllowanceEditorView: View {
     let chips: [AllowanceChip]
     var note: String?
     var resultingTotal: SigningRow?
+    var custom: AllowanceInput?
     var onChip: (String) -> Void = { _ in }
+    var onCustomAmount: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -39,6 +41,10 @@ struct AllowanceEditorView: View {
                 }
 
                 FlowChips(chips: chips, onChip: onChip)
+
+                if let custom {
+                    CustomCapField(input: custom, onChange: onCustomAmount)
+                }
 
                 if let note {
                     Text(verbatim: note)
@@ -57,6 +63,52 @@ struct AllowanceEditorView: View {
                 SigningRowsView(rows: [resultingTotal])
             }
         }
+    }
+}
+
+/// The person's own figure.
+///
+/// A decimal pad, because a spending cap is a number — and the core is the one
+/// that decides whether what was typed is a valid one, so every keystroke goes
+/// straight to it and the error comes back from there.
+private struct CustomCapField: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let input: AllowanceInput
+    let onChange: (String) -> Void
+
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            HStack(spacing: Tokens.Space.s8) {
+                TextField(input.placeholder, text: $text)
+                    .keyboardType(.decimalPad)
+                    .font(Typography.title.scaled(textScale).font)
+                    .foregroundStyle(theme.fgBase)
+                    .onChange(of: text) { _, value in onChange(value) }
+                Text(verbatim: input.symbol)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
+            .padding(.horizontal, Tokens.Space.s12)
+            .frame(height: Tokens.Control.md)
+            .overlay(
+                RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                    .stroke(input.error == nil ? theme.borderBase : theme.errorBase,
+                            lineWidth: Tokens.BorderWidth.hairline)
+            )
+            if let error = input.error {
+                Text(verbatim: error)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
+            }
+        }
+        // The core owns the value. A field bound straight to a machine loses
+        // characters on the round trip (052's lesson), so the local echo is
+        // authoritative while typing and the core's text seeds it.
+        .onAppear { if text.isEmpty { text = input.value } }
     }
 }
 

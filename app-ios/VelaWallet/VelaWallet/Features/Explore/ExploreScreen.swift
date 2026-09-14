@@ -26,6 +26,10 @@ struct ExploreScreen: View {
     /// signature right now, and the sheet is up.
     var signingLive: SigningModel?
     var onSigningConfirm: () -> Void = {}
+    /// The spending-cap chips and the person's own figure. The core decides
+    /// what each means; the sheet only reports the tap.
+    var onAllowanceChip: (String) -> Void = { _ in }
+    var onAllowanceAmount: (String) -> Void = { _ in }
     /// The sheet went away without a tap. The core routes what that means by
     /// phase — a refusal before the commitment, a dismissal after it — so the
     /// shell reports the gesture and decides nothing.
@@ -246,7 +250,12 @@ struct ExploreScreen: View {
             set: { open in if !open { onSigningDismissed() } }
         )) {
             if let signingLive {
-                SigningSheet(model: signingLive, onConfirm: onSigningConfirm)
+                SigningSheet(
+                    model: signingLive,
+                    onConfirm: onSigningConfirm,
+                    onAllowanceChip: onAllowanceChip,
+                    onAllowanceAmount: onAllowanceAmount
+                )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])
                     .presentationCornerRadius(Tokens.Radius.r20)

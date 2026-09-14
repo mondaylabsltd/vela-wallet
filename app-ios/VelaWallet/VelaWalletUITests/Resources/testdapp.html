@@ -10,6 +10,7 @@
 <body>
   <h1>Vela test dApp</h1>
   <p>Spec 053's device harness. Every action prints a <code>#verdict</code> line, because XCUITest reads a WKWebView's RENDERED text and cannot see JavaScript state that was never painted.</p>
+  <pre id="verdicts">#verdict boot waiting</pre>
   <button id="connect" type="button">Connect</button>
   <button id="chain" type="button">Chain</button>
   <button id="block" type="button">Block number</button>
@@ -21,7 +22,6 @@
   <button id="siwe" type="button">SIWE</button>
   <button id="siwe-bad" type="button">SIWE (other domain)</button>
   <button id="ethsign" type="button">eth_sign</button>
-  <pre id="verdicts">#verdict boot waiting</pre>
   <pre id="out">waiting…</pre>
   <script>
 // Keccak-256, vendored.

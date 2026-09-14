@@ -357,6 +357,98 @@ struct SigningAssemblyTests {
     }
 }
 
+// MARK: - Displayed is signed (FR-017)
+
+/// Captures the bytes the ceremony was asked to sign.
+@MainActor
+final class ChallengeCapturingSigner: UserOpSigner {
+    private(set) var challenge: Data?
+
+    func sign(
+        challenge: Data, credentialIdHex: String?, transports: String, method: KeyMethod
+    ) async throws -> Assertion {
+        self.challenge = challenge
+        throw PasskeyFailure(kind: .cancelled, message: "")
+    }
+}
+
+@MainActor
+struct DisplayedIsSignedTests {
+
+    private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private let token = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+    private let spender = "0x1111111111111111111111111111111111111111"
+
+    /// `approve(spender, amount)` calldata.
+    private func approve(_ amountWord: String) -> String {
+        "0x095ea7b3" + String(repeating: "0", count: 24) + String(spender.dropFirst(2)) + amountWord
+    }
+
+    private func challenge(forParams paramsJson: String) async -> Data? {
+        let port = ScriptedRelayPort()
+        port.rpc["eth_getCode"] = .ok("0x")
+        let signer = ChallengeCapturingSigner()
+        let spine = UserOpSpine(
+            relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
+            accounts: ScriptedAccounts(),
+            signer: { signer }
+        )
+        guard let calls = SignExecutor.callsOf(method: "eth_sendTransaction", paramsJson: paramsJson)
+        else { return nil }
+        _ = try? await spine.submit(
+            chainId: 100, account: golden, calls: calls,
+            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "0", recipient: "")
+        )
+        return signer.challenge
+    }
+
+    /// **What is displayed is what is signed.**
+    ///
+    /// The guard rewrites an unlimited approval to a finite cap, and the
+    /// person is shown the cap. If the signature were computed over anything
+    /// but those exact bytes — a cached draft, the original params, a
+    /// re-derivation — this passes and somebody grants a stranger their whole
+    /// balance while reading "100 USDC".
+    ///
+    /// The property is checked the only way that cannot be faked: the same
+    /// pipeline, two calldatas, two different challenges. A challenge that did
+    /// not depend on the calldata would be identical for both.
+    @Test func theChallengeFollowsTheCalldataThatWasShown() async {
+        let unlimited = #"[{"to":"\#(token)","value":"0x0","data":"\#(approve(String(repeating: "f", count: 64)))"}]"#
+        // 100 USDC at six decimals.
+        let capped = #"[{"to":"\#(token)","value":"0x0","data":"\#(approve(String(format: "%064x", 100_000_000)))"}]"#
+
+        let unlimitedChallenge = await challenge(forParams: unlimited)
+        let cappedChallenge = await challenge(forParams: capped)
+
+        #expect(unlimitedChallenge?.count == 32)
+        #expect(cappedChallenge?.count == 32)
+        #expect(unlimitedChallenge != cappedChallenge,
+                "the ceremony signed the same bytes for two different approvals — the challenge is not a function of the calldata")
+    }
+
+    /// And the capped calldata is what the approve hands on: the guard's
+    /// rewrite reaches the spine, not the request the page sent.
+    @Test func theGuardsRewriteIsWhatTheSubmitReads() {
+        let capped = #"[{"to":"\#(token)","value":"0x0","data":"\#(approve(String(format: "%064x", 100_000_000)))"}]"#
+        var guardView = GuardViewWire.empty
+        guardView = GuardViewWire(
+            surface: .approvalEditor, detected: nil, meta: guardView.meta, editor: nil,
+            confirmAllowed: true, rewrittenParamsJson: capped, increaseTotal: nil,
+            decimalsUnverified: false, expired: false, batch: nil
+        )
+        let override = SigningController.approveOpts(
+            fee: nil, clear: .empty, guard: guardView
+        )["params_override_json"] as? String
+
+        #expect(override == capped)
+        let calls = SignExecutor.callsOf(method: "eth_sendTransaction", paramsJson: override ?? "[]")
+        #expect(calls?.first?.data == approve(String(format: "%064x", 100_000_000)))
+        #expect(calls?.first?.data.hasSuffix(String(repeating: "f", count: 64)) == false,
+                "the unlimited word must not survive into the call")
+    }
+}
+
 // MARK: - The sheet
 
 @MainActor
@@ -416,19 +508,36 @@ struct SigningLiveTests {
         }, "the byte count is the only honest measure of what nobody could read")
     }
 
-    /// **The slide's verb is never a raw intent id.**
+    /// **The slide's verb is a corpus string, never a raw intent id.**
     ///
-    /// Android shipped a button reading 确认send.
+    /// Android shipped a button reading 确认send — the id concatenated onto a
+    /// prefix. Asserting the absence of the id would be wrong in English,
+    /// where "Confirm send" legitimately contains "send"; the honest check is
+    /// that the label IS the corpus value for that intent. Driven in Chinese,
+    /// where an id that leaked through would be unmistakable.
     @Test func theConfirmVerbIsAlwaysCorpusWords() {
-        for intent in ["send", "swap", "deposit", "withdraw", "something_new"] {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        let expected = [
+            "send": "confirmSend", "swap": "confirmSwap",
+            "deposit": "confirmDeposit", "withdraw": "confirmWithdraw",
+        ]
+        for (intent, key) in expected {
             let label = SigningLive.confirmLabel(
-                clear: clear(surface: .clearSign, confirm: .confirmIntent(intent)), loc: loc
+                clear: clear(surface: .clearSign, confirm: .confirmIntent(intent)), loc: zh
             )
-            #expect(!label.contains(intent), "the verb printed the id: \(label)")
-            #expect(!label.isEmpty)
+            #expect(label == zh.t("componentsUi.signing.\(key)"), "\(intent) → \(label)")
+            #expect(!label.contains(intent), "the id leaked into the verb: \(label)")
         }
-        #expect(SigningLive.confirmLabel(clear: clear(surface: .messageSign, confirm: .sign), loc: loc)
-                == loc.t("componentsUi.signing.signLabel"))
+        // An intent nobody has drawn a verb for falls back to the neutral one
+        // rather than printing itself.
+        let unknown = SigningLive.confirmLabel(
+            clear: clear(surface: .clearSign, confirm: .confirmIntent("teleport")), loc: zh
+        )
+        #expect(unknown == zh.t("componentsUi.signing.confirmLabel"))
+        #expect(!unknown.contains("teleport"))
+
+        #expect(SigningLive.confirmLabel(clear: clear(surface: .messageSign, confirm: .sign), loc: zh)
+                == zh.t("componentsUi.signing.signLabel"))
     }
 
     /// The slide is three machines ANDed — and an **off-chain** signature has
@@ -489,7 +598,7 @@ struct SigningLiveTests {
             increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
         )
         let blocks = SigningLive.guardBlocks(guardView, loc: loc)
-        guard case .allowance(_, let value, let tone, let chips, _, _)? = blocks.first else {
+        guard case .allowance(_, let value, let tone, let chips, _, _, _)? = blocks.first else {
             Issue.record("the editor block is missing")
             return
         }

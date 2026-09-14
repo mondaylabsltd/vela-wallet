@@ -18,6 +18,10 @@ struct SigningSheet: View {
 
     let model: SigningModel
     var onConfirm: () -> Void = {}
+    /// An allowance chip was tapped: `requested`, `balance`, `custom`,
+    /// `revoke`. The core decides what each means.
+    var onAllowanceChip: (String) -> Void = { _ in }
+    var onAllowanceAmount: (String) -> Void = { _ in }
 
     @State private var techOverride: Bool?
 
@@ -69,9 +73,11 @@ struct SigningSheet: View {
             SigningNftHero(id: id, collection: collection)
         case .sentence(let text, let tone):
             SigningSentence(text: text, tone: tone)
-        case .allowance(let label, let value, let valueTone, let chips, let note, let total):
+        case .allowance(let label, let value, let valueTone, let chips, let note, let total, let custom):
             AllowanceEditorView(label: label, value: value, valueTone: valueTone,
-                                chips: chips, note: note, resultingTotal: total)
+                                chips: chips, note: note, resultingTotal: total,
+                                custom: custom,
+                                onChip: onAllowanceChip, onCustomAmount: onAllowanceAmount)
         case .party(let label, let name, let address, let badge):
             SigningPartyRow(label: label, name: name, address: address, badge: badge)
         case .rows(let rows):

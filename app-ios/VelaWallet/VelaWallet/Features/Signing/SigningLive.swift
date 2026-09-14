@@ -449,7 +449,18 @@ enum SigningLive {
                     label: a(loc, "resultingTotal"),
                     value: total.total ?? a(loc, "resultingTotalUnknown", ["amount": total.increment])
                 )
-            }
+            },
+            custom: editor.mode == .custom ? AllowanceInput(
+                value: editor.customText,
+                symbol: meta.symbol,
+                placeholder: "0",
+                error: editor.error.map { error in
+                    switch error {
+                    case .invalidAmount: a(loc, "invalidAmount")
+                    case .unlimitedDisabled: a(loc, "unlimitedDisabled")
+                    }
+                }
+            ) : nil
         )
     }
 

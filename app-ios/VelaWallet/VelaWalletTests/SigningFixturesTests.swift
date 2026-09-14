@@ -39,10 +39,11 @@ struct SigningFixturesTests {
                 out += [pay.caption, receive.caption, pay.fiat, receive.fiat].compactMap { $0 }
             case .nft(let id, let collection): out += [id, collection]
             case .sentence(let text, _): out.append(text)
-            case .allowance(let label, let value, _, let chips, let note, let total):
+            case .allowance(let label, let value, _, let chips, let note, let total, let custom):
                 out += [label, value] + chips.map(\.label)
                 if let note { out.append(note) }
                 if let total { out += [total.label, total.value] }
+                if let custom { out += [custom.placeholder, custom.symbol] + [custom.error].compactMap { $0 } }
             case .party(let label, let name, let address, let badge):
                 out += [label, name] + [address, badge?.text].compactMap { $0 }
             case .rows(let rows): out += rows.flatMap { [$0.label, $0.value] }
@@ -103,7 +104,7 @@ struct SigningFixturesTests {
     @Test func unlimitedApprovalCannotBeConfirmedAsRequested() {
         let m = model(.cs5)
         #expect(!m.confirm.enabled, "cs5 must not be confirmable")
-        guard case .allowance(_, _, _, let chips, _, _) = m.blocks.first(where: {
+        guard case .allowance(_, _, _, let chips, _, _, _) = m.blocks.first(where: {
             if case .allowance = $0 { return true } else { return false }
         }) else { Issue.record("cs5 has no allowance editor"); return }
         #expect(chips.first { $0.id == "requested" }?.state == .disabled)
@@ -116,7 +117,7 @@ struct SigningFixturesTests {
     }
 
     @Test func aFiniteRequestMayBeSignedAsAsked() {
-        guard case .allowance(_, _, _, let chips, _, let total) = model(.cs7).blocks.first(where: {
+        guard case .allowance(_, _, _, let chips, _, let total, _) = model(.cs7).blocks.first(where: {
             if case .allowance = $0 { return true } else { return false }
         }) else { Issue.record("cs7 has no allowance editor"); return }
         #expect(chips.first { $0.id == "requested" }?.state == .selected)

@@ -122,3 +122,81 @@ by the absence of the padlock rather than by a phrase invented in the shell —
 a security claim in a language nobody translated is worse than no claim. The
 padlock's absence is asserted on the device
 (`testTheAddressBarShowsThePagesOwnHost`). For 056.
+
+## Phases 2–5 — memory, consent, the sheet
+
+`ExploreLive` builds the start page, the tab strip, the groups and the recents
+from `explore_sites` + `browser_history` + `dapp_permissions`.
+`SigningController` hosts the four machines one request needs and dies with it.
+`SigningLive` turns their views into the drawn sheet. Hermetic tests **371 →
+423** (25 new across `BrowserMemoryTests`, `RequestRouterTests`,
+`SignRequestReadingTests`, `SigningAssemblyTests`, `SigningLiveTests`).
+
+### Two deviations from the drawing, both recorded rather than hidden
+
+**① 新建分组 has no field to type into.** The drawn manage sheet has the row and
+no input. The name is asked for with the platform's own prompt — the same class
+of call the document picker and the share sheet are elsewhere — rather than a
+screen invented here.
+
+**② The spending-cap editor had a 自定义 chip and nowhere to type.** Choosing it
+selected a mode that could not be completed, and FR-010 requires an unlimited
+approval to be cappable **to the person's own figure**, not only to their
+balance or to zero. `AllowanceInput` adds the field; every word in it comes
+from the existing corpus. For whoever redraws this card.
+
+### A test that passed against a set it had never read — the second kind
+
+Fixing the confirm-verb test surfaced the mirror image of phase 0's parity bug.
+The first version asserted the slide's label does **not contain** the intent id,
+which is simply false in English: "Confirm send" contains "send". It would have
+failed honestly — but the temptation was to weaken it. The assertion is now
+that the label **equals** the corpus value for that intent, driven in Chinese
+where a leaked id would be unmistakable, plus an unknown intent falling back to
+the neutral verb rather than printing itself.
+
+### Phase 2 device pass — 3 of 3 on the iPhone 11
+
+After a force-quit and a relaunch with no URL, 探索 comes back with the tab
+**and its page**, and behind it the start page holds the pinned site and the
+recent visit. Two documents, two machines, one screenshot.
+
+Two defects the device found, both in the tests rather than in the app:
+
+**① The page was served stale.** `test-without-building` left the simulator
+running an old copy of the harness inside the test runner — the *Android*
+wording, no `#verdict` log at all — so the announcement assertion failed
+against a page that could not have printed it. An uninstall and a full `test`
+fixed it. Worth remembering: a UI test's own **resources** can go stale in a
+way its code cannot.
+
+**② The test assumed a browser forgets its tabs.** It relaunched without a URL
+and expected the start page, then looked for the recents there. What actually
+happens — correctly — is that `explore_sites` restored the tab, the engine was
+rebuilt and the page reloaded on its own. The test now asserts that first, as
+the stronger half of the memory, and then closes the page to check the start
+page. **The app was right and the test was wrong**, which is the same shape as
+052's "a bad test that passes", inverted: a bad test that fails costs a person
+an afternoon hunting a defect that is not there.
+
+### The device blocker, while it lasted
+
+Midway through phase 2 the iPhone began refusing to launch the development
+build:
+
+```
+Unable to launch app.getvela.VelaWallet because it has an invalid code
+signature, inadequate entitlements or its profile has not been explicitly
+trusted by the user
+```
+
+The app **installs**; it will not start. The signature is a valid Apple
+Development certificate and the profile runs to 2027 — checked, both — so this
+is the device's trust of the developer certificate, which only a person
+standing at the phone can restore (Settings ▸ 通用 ▸ VPN 与设备管理 ▸ trust the
+developer).
+
+**Resolved by the founder at 15:28**, and phases 1 and 2 are device-verified.
+Recorded because it will happen again, and because the symptom — "invalid code
+signature, inadequate entitlements" — reads like a build problem and is not
+one. Check the certificate's trust on the phone before touching the project.

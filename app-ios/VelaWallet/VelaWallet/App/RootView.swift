@@ -731,6 +731,14 @@ struct RootView: View {
                             )
                         },
                         onSigningConfirm: { signing?.approve() },
+                        onAllowanceChip: { chip in
+                            switch chip {
+                            case "revoke": signing?.guardRevoke()
+                            case "grant": signing?.guardGrant()
+                            default: signing?.guardPreset(chip)
+                            }
+                        },
+                        onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         onSelectTab: selectTab

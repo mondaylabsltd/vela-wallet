@@ -157,8 +157,7 @@ final class BrowserAcceptanceTests: XCTestCase {
 
         app.terminate()
 
-        // Relaunch WITHOUT a URL: nothing reopens the page, so anything on the
-        // start page came off the disk.
+        // Relaunch WITHOUT a URL. Anything that comes back came off the disk.
         let again = XCUIApplication()
         again.launchEnvironment["VELA_LANG"] = "zh"
         again.launchEnvironment["VELA_THEME"] = "dark"
@@ -169,10 +168,25 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(again.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
         again.buttons["探索"].firstMatch.tap()
 
-        XCTAssertTrue(again.staticTexts["最近"].waitForExistence(timeout: 20)
-                        || again.staticTexts["最近的 dApp"].waitForExistence(timeout: 5),
-                      "the recents section is missing — the visit was never recorded, or it was recorded before the store answered and dropped")
-        XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 20),
+        // **The tab came back, with its page.** That is what a browser does,
+        // and it is the first half of the memory: the strip is in
+        // `explore_sites`' document, so the engine is rebuilt and the URL
+        // reloaded with nothing asking it to.
+        XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 30),
+                      "the open tab did not survive the relaunch")
+        attach(again.screenshot(), named: "device-browser-tab-restored")
+
+        // Leave the page for the start page. The tab stays; only the view
+        // changes.
+        again.buttons["关闭网页"].firstMatch.tap()
+
+        XCTAssertTrue(again.staticTexts["最近的 dApp"].waitForExistence(timeout: 20),
+                      "the recents section is missing — the visit was never recorded, or it was recorded before the history store answered and was dropped")
+        XCTAssertTrue(again.staticTexts["收藏"].waitForExistence(timeout: 10),
+                      "the favourites section is missing — nothing was pinned")
+        // The host appears in BOTH sections; one match is enough to prove the
+        // two documents came back.
+        XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].firstMatch.waitForExistence(timeout: 10),
                       "neither the favourite nor the recent survived the relaunch")
         attach(again.screenshot(), named: "device-browser-remembered")
     }
