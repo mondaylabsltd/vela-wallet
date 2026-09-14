@@ -55,6 +55,137 @@ enum SettingsLive {
     ///
     /// Two surfaces: the 货币 row's value on the home page, and which row of the
     /// picker reads as selected.
+    /// The four preference surfaces the settings page draws and has never
+    /// read: language, the three formats, the theme, the avatar and the size.
+    ///
+    /// Every row's VALUE is what is actually in force, and every sheet's
+    /// selection is the same fact — a page that showed one thing in the row and
+    /// another in the sheet would be two answers to one question.
+    static func withPreferences(
+        _ preferences: Preferences,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+
+        // The rows' right-aligned values.
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                var changed = row
+                switch row.id {
+                case "language":
+                    changed.value = languageName(preferences.language, loc: loc)
+                case "number-format":
+                    changed.value = Formats.example(preferences.numberFormat)
+                case "date-format":
+                    changed.value = Formats.example(preferences.dateFormat)
+                case "time-format":
+                    changed.value = Formats.example(preferences.timeFormat)
+                default:
+                    return row
+                }
+                return changed
+            }
+            return updated
+        }
+
+        // The three format sheets are REBUILT from the presets themselves.
+        //
+        // The drawn sheets key their rows by position ("0", "1", …) over
+        // hardcoded sample strings, which is fine for a picture and useless
+        // for a choice: a tap has to name a preset, and the sample beside it
+        // has to be what that preset would actually print. So each row's id is
+        // the key, and its LABEL is a live example.
+        let autoNote = "\(loc.t(I18nKeys.SettingsUi.commonAutomatic)) · "
+            + loc.t(I18nKeys.SettingsUi.commonSystem)
+        copy.numberSheet = formatSheet(
+            model.numberSheet, chosen: preferences.numberFormat.rawValue, autoNote: autoNote,
+            options: NumberFormatKey.allCases.map { ($0.rawValue, Formats.example($0)) }
+        )
+        copy.dateSheet = formatSheet(
+            model.dateSheet, chosen: preferences.dateFormat.rawValue, autoNote: autoNote,
+            options: DateFormatKey.allCases.map { ($0.rawValue, Formats.example($0)) }
+        )
+        copy.timeSheet = formatSheet(
+            model.timeSheet, chosen: preferences.timeFormat.rawValue, autoNote: autoNote,
+            options: TimeFormatKey.allCases.map { ($0.rawValue, Formats.example($0)) }
+        )
+        // The drawn sheet calls "follow the device" `system`; the STORED value
+        // is `auto`, because that is what web and Android write. One mapping,
+        // in one place.
+        copy.languageSheet = picked(
+            model.languageSheet,
+            id: preferences.language == "auto" ? "system" : preferences.language
+        ) { $0 }
+
+        copy.theme = SegmentedModel(
+            label: model.theme.label, segments: model.theme.segments,
+            selected: preferences.theme.rawValue
+        )
+        copy.avatar = SegmentedModel(
+            label: model.avatar.label, segments: model.avatar.segments,
+            selected: preferences.avatarStyle.rawValue
+        )
+        copy.textScale = TextScaleModel(
+            label: model.textScale.label,
+            steps: TextScaleLevel.allCases.count,
+            index: TextScaleLevel.allCases.firstIndex(of: preferences.textScale) ?? 2
+        )
+        return copy
+    }
+
+    /// One format sheet: a row per preset, labelled with what it would print.
+    ///
+    /// `auto` shows the sample it RESOLVES to, plus the "自动 · 系统" note —
+    /// a row reading "automatic" and nothing else tells somebody nothing about
+    /// what they would get.
+    private static func formatSheet(
+        _ sheet: SelectSheetModel, chosen: String, autoNote: String,
+        options: [(id: String, example: String)]
+    ) -> SelectSheetModel {
+        SelectSheetModel(
+            title: sheet.title,
+            rows: options.map { option in
+                SelectRowModel(
+                    id: option.id,
+                    label: option.example,
+                    note: option.id == "auto" ? autoNote : nil,
+                    selected: option.id == chosen,
+                    mono: true
+                )
+            },
+            subtitle: sheet.subtitle
+        )
+    }
+
+    /// One sheet with exactly one row selected, and each row given whatever
+    /// else it needs.
+    private static func picked(
+        _ sheet: SelectSheetModel, id: String, decorate: (SelectRowModel) -> SelectRowModel
+    ) -> SelectSheetModel {
+        SelectSheetModel(
+            title: sheet.title,
+            rows: sheet.rows.map { row in
+                var changed = decorate(row)
+                changed.selected = row.id == id
+                return changed
+            },
+            subtitle: sheet.subtitle,
+            searchPlaceholder: sheet.searchPlaceholder,
+            footerNote: sheet.footerNote,
+            footerLink: sheet.footerLink
+        )
+    }
+
+    /// What a language tag is CALLED — in its own language, which is how the
+    /// drawn sheet lists them, so the row's value and the sheet's label agree.
+    static func languageName(_ tag: String, loc: Loc) -> String {
+        guard tag != "auto" else { return loc.t(I18nKeys.SettingsUi.commonSystem) }
+        let locale = Locale(identifier: tag)
+        return locale.localizedString(forIdentifier: tag)?.capitalized ?? tag
+    }
+
     static func withCurrency(
         _ view: CurrencyViewWire,
         on model: SettingsScreenModel,

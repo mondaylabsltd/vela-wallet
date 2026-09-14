@@ -286,6 +286,9 @@ struct SettingsSegmentedControl: View {
 struct TextScaleSlider: View {
     @Environment(\.theme) private var theme
     let model: TextScaleModel
+    /// Which stop was chosen. Absent in the gallery, where the slider is a
+    /// picture of a size already set.
+    var onSelect: ((Int) -> Void)?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
@@ -298,6 +301,13 @@ struct TextScaleSlider: View {
                         .fill(index == model.index ? theme.fgMuted : theme.borderStrong)
                         .frame(width: index == model.index ? 18 : 4,
                                height: index == model.index ? 18 : 4)
+                        // A 4pt dot is not a target. The tappable area is the
+                        // whole stop's share of the track, which is what a
+                        // finger aims at anyway.
+                        .frame(minWidth: Tokens.Layout.hitTarget,
+                               minHeight: Tokens.Layout.hitTarget)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onSelect?(index) }
                     if index < model.steps - 1 { Spacer() }
                 }
             }
@@ -308,5 +318,13 @@ struct TextScaleSlider: View {
         .padding(.vertical, Tokens.Space.s12)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(model.label)
+        // The stop, spoken and adjustable — a slider that only sighted fingers
+        // can move is not a slider.
+        .accessibilityValue(Text(verbatim: String(model.index + 1)))
+        .accessibilityAdjustableAction { direction in
+            let next = direction == .increment ? model.index + 1 : model.index - 1
+            guard next >= 0, next < model.steps else { return }
+            onSelect?(next)
+        }
     }
 }

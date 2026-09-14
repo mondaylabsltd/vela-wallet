@@ -18,6 +18,13 @@
 
 import SwiftUI
 
+/// The three appearance controls' live half.
+struct SettingsAppearanceActions {
+    var onTheme: ((String) -> Void)?
+    var onAvatar: ((String) -> Void)?
+    var onTextScale: ((Int) -> Void)?
+}
+
 struct SettingsScreen: View {
     @Environment(\.theme) private var theme
     let model: SettingsScreenModel
@@ -25,6 +32,13 @@ struct SettingsScreen: View {
     var onSelectTab: (WalletTab) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenContacts: () -> Void = {}
+    /// The live half. Every closure absent in the gallery, where the page is a
+    /// picture of choices already made.
+    var appearance = SettingsAppearanceActions()
+    var onPick: ((SettingsOverlay, String) -> Void)?
+    var onClearCaches: (() -> Void)?
+    var onErase: (() -> Void)?
+    var onSelectAccount: ((String) -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -44,7 +58,12 @@ struct SettingsScreen: View {
         onSelectTab: @escaping (WalletTab) -> Void = { _ in },
         onSignOut: @escaping () -> Void = {},
         onOpenContacts: @escaping () -> Void = {},
-        networkActions: SettingsNetworkActions = SettingsNetworkActions()
+        networkActions: SettingsNetworkActions = SettingsNetworkActions(),
+        appearance: SettingsAppearanceActions = SettingsAppearanceActions(),
+        onPick: ((SettingsOverlay, String) -> Void)? = nil,
+        onClearCaches: (() -> Void)? = nil,
+        onErase: (() -> Void)? = nil,
+        onSelectAccount: ((String) -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -52,6 +71,11 @@ struct SettingsScreen: View {
         self.onSignOut = onSignOut
         self.onOpenContacts = onOpenContacts
         self.networkActions = networkActions
+        self.appearance = appearance
+        self.onPick = onPick
+        self.onClearCaches = onClearCaches
+        self.onErase = onErase
+        self.onSelectAccount = onSelectAccount
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -82,9 +106,28 @@ struct SettingsScreen: View {
             }
             .background(theme.bgBase.ignoresSafeArea())
             .sheet(item: sheetBinding) { overlay in
-                SettingsSheet(model: model, overlay: overlay,
-                              onDismiss: { self.overlay = .none },
-                              onSignOut: onSignOut)
+                SettingsSheet(
+                    model: model, overlay: overlay,
+                    onDismiss: { self.overlay = .none },
+                    onSignOut: onSignOut,
+                    onPick: onPick.map { pick in
+                        { kind, id in
+                            pick(kind, id)
+                            // A pick closes the sheet. Every one of these is a
+                            // single choice, and a sheet that stayed open after
+                            // it reads as a choice that did not take.
+                            self.overlay = .none
+                        }
+                    },
+                    onClearCaches: onClearCaches,
+                    onErase: onErase,
+                    onSelectAccount: onSelectAccount.map { select in
+                        { address in
+                            select(address)
+                            self.overlay = .none
+                        }
+                    }
+                )
                     .themed(theme.scheme)
             }
         }
@@ -176,10 +219,10 @@ struct SettingsScreen: View {
             // The three appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
-                TextScaleSlider(model: model.textScale)
-                SettingsSegmentedControl(model: model.theme)
+                TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
+                SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
                     .padding(.bottom, Tokens.Space.s12)
-                SettingsSegmentedControl(model: model.avatar)
+                SettingsSegmentedControl(model: model.avatar, onSelect: { appearance.onAvatar?($0) })
             }
         }
 

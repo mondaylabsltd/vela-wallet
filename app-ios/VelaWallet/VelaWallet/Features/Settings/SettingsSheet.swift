@@ -17,6 +17,14 @@ struct SettingsSheet: View {
     let overlay: SettingsOverlay
     let onDismiss: () -> Void
     let onSignOut: () -> Void
+    /// A row picked in one of the five select sheets. Absent in the gallery,
+    /// where the sheets are pictures of a choice already made.
+    var onPick: ((SettingsOverlay, String) -> Void)?
+    /// 全部清除, and the erase this app will not run without a person.
+    var onClearCaches: (() -> Void)?
+    var onErase: (() -> Void)?
+    /// An account row tapped in the switcher.
+    var onSelectAccount: ((String) -> Void)?
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -28,26 +36,54 @@ struct SettingsSheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 switch overlay {
                 case .accounts:
-                    AccountsSheetBody(sheet: model.accountsSheet)
+                    AccountsSheetBody(
+                        sheet: model.accountsSheet,
+                        onSelect: { address in onSelectAccount?(address) }
+                    )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
                                      onConfirm: onSignOut, onCancel: onDismiss)
                 case .language:
-                    SelectSheetBody(sheet: model.languageSheet)
+                    SelectSheetBody(
+                        sheet: model.languageSheet,
+                        onPick: { id in onPick?(.language, id) }
+                    )
                 case .currency:
-                    SelectSheetBody(sheet: model.currencySheet)
+                    SelectSheetBody(
+                        sheet: model.currencySheet,
+                        onPick: { id in onPick?(.currency, id) }
+                    )
                 case .numberFormat:
-                    SelectSheetBody(sheet: model.numberSheet)
+                    SelectSheetBody(
+                        sheet: model.numberSheet,
+                        onPick: { id in onPick?(.numberFormat, id) }
+                    )
                 case .dateFormat:
-                    SelectSheetBody(sheet: model.dateSheet)
+                    SelectSheetBody(
+                        sheet: model.dateSheet,
+                        onPick: { id in onPick?(.dateFormat, id) }
+                    )
                 case .timeFormat:
-                    SelectSheetBody(sheet: model.timeSheet)
+                    SelectSheetBody(
+                        sheet: model.timeSheet,
+                        onPick: { id in onPick?(.timeFormat, id) }
+                    )
                 case .clearCaches:
-                    ConfirmSheetBody(sheet: model.clearCachesSheet,
-                                     onConfirm: onDismiss, onCancel: onDismiss)
+                    ConfirmSheetBody(
+                        sheet: model.clearCachesSheet,
+                        onConfirm: { onClearCaches?(); onDismiss() },
+                        onCancel: onDismiss
+                    )
                 case .eraseDevice:
-                    ConfirmSheetBody(sheet: model.eraseSheet,
-                                     onConfirm: onDismiss, onCancel: onDismiss)
+                    ConfirmSheetBody(
+                        sheet: model.eraseSheet,
+                        // Wired, and **never run on the founder's phone**. The
+                        // confirm is drawn and the action exists; verifying it
+                        // means reading the code, not erasing a device with a
+                        // real wallet on it.
+                        onConfirm: { onErase?(); onDismiss() },
+                        onCancel: onDismiss
+                    )
                 case .feedback:
                     FeedbackSheetBody(model: model.feedback)
                 case .rpcFix:
@@ -105,6 +141,7 @@ private struct SheetTitle: View {
 private struct SelectSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: SelectSheetModel
+    var onPick: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title, subtitle: sheet.subtitle)
@@ -113,7 +150,14 @@ private struct SelectSheetBody: View {
                                                   placeholder: placeholder))
                 .padding(.bottom, Tokens.Space.s12)
         }
-        ForEach(sheet.rows) { SelectRow(row: $0) }
+        ForEach(sheet.rows) { row in
+            if let onPick {
+                Button { onPick(row.id) } label: { SelectRow(row: row) }
+                    .buttonStyle(.plain)
+            } else {
+                SelectRow(row: row)
+            }
+        }
         if let note = sheet.footerNote {
             Text(note)
                 .typeRole(Typography.label)
@@ -163,6 +207,7 @@ private struct ConfirmSheetBody: View {
 private struct AccountsSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: AccountsSheetModel
+    var onSelect: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title)
@@ -171,6 +216,7 @@ private struct AccountsSheetBody: View {
             .foregroundStyle(theme.fgSubtle)
             .padding(.bottom, Tokens.Space.s12)
         ForEach(sheet.rows) { row in
+            Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
                     IdenticonAvatar(seed: row.addressFull, size: 40)
@@ -195,6 +241,10 @@ private struct AccountsSheetBody: View {
                 .padding(.vertical, Tokens.Space.s12)
                 SettingsDivider()
             }
+            .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelect == nil)
         }
         VelaButton(title: sheet.primary, kind: .primary) {}
             .padding(.top, Tokens.Space.s24)

@@ -1895,7 +1895,26 @@ struct RootView: View {
                 onEditCustomRpc: { settings.editCustomRpc($0) },
                 onConfirmAdd: { settings.confirmAdd() },
                 isLive: true
-            )
+            ),
+            appearance: SettingsAppearanceActions(
+                onTheme: { id in
+                    guard let choice = ThemeChoice(rawValue: id) else { return }
+                    preferences.setTheme(choice)
+                },
+                onAvatar: { id in
+                    guard let style = AvatarStyle(rawValue: id) else { return }
+                    preferences.setAvatarStyle(style)
+                },
+                onTextScale: { index in
+                    guard let level = TextScaleLevel.allCases[safe: index] else { return }
+                    preferences.setTextScale(level)
+                    UiScale.apply(preferences)
+                }
+            ),
+            onPick: { overlay, id in settingsPicked(overlay, id) },
+            onClearCaches: { clearSettingsCaches() },
+            onErase: { eraseThisDevice() },
+            onSelectAccount: { address in switchToAccount(address) }
         )
         .task { settings.open() }
     }
@@ -1918,7 +1937,103 @@ struct RootView: View {
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
         }
+        // The preferences last: they have no machine to wait for, and every
+        // surface they touch is one this page draws.
+        model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
         return model
+    }
+
+    /// 全部清除 — the caches this app can rebuild, and nothing it cannot.
+    ///
+    /// Balances, prices, rates and the bundler's quotes. NOT the address book,
+    /// the custom networks, the transaction history or anything an account is
+    /// made of: "clear caches" is an offer to make the app forget what it can
+    /// look up again, and a person who taps it is not asking to lose data.
+    private func clearSettingsCaches() {
+        for key in [
+            VelaStore.Key.balanceCache,
+            VelaStore.Key.fiatRates,
+            VelaStore.Key.fiatFeedAddrs,
+            VelaStore.Key.fxRates,
+        ] {
+            shelf.writeString(key, nil)
+        }
+        relayClient.clearCaches()
+        wallet.refresh(pull: true)
+    }
+
+    /// 抹除此设备 — every key this app owns, and then the door.
+    ///
+    /// **Never run on the founder's phone.** It is wired because a drawn
+    /// destructive action that does nothing is worse than one that works;
+    /// verifying it means reading this code, not erasing a device with a real
+    /// wallet on it.
+    private func eraseThisDevice() {
+        // Everything this app owns, by the keys it owns them under. The
+        // signed-in wallet goes through `AccountStore`, which is the one writer
+        // of those two keys.
+        for key in [
+            VelaStore.Key.contacts, VelaStore.Key.contactsDismissed,
+            VelaStore.Key.contactGroups, VelaStore.Key.customNetworks,
+            VelaStore.Key.networkConfig, VelaStore.Key.rpcProviders,
+            VelaStore.Key.displayCurrency, VelaStore.Key.balanceCache,
+            VelaStore.Key.customTokens, VelaStore.Key.transactionHistory,
+            VelaStore.Key.fiatRates, VelaStore.Key.fiatFeedAddrs, VelaStore.Key.fxRates,
+            VelaStore.Key.theme, VelaStore.Key.language, VelaStore.Key.localePrefs,
+            VelaStore.Key.avatarStyle, VelaStore.Key.textScale,
+        ] {
+            shelf.writeString(key, nil)
+        }
+        accounts.clearSignedInWallet()
+        session.signOut()
+    }
+
+    /// An account row in the switcher.
+    private func switchToAccount(_ address: String) {
+        Task {
+            let records = await accounts.loadAccounts()
+            guard let index = records.firstIndex(where: {
+                ($0["address"] as? String)?.lowercased() == address.lowercased()
+            }) else { return }
+            session.switchAccount(index: index)
+            // Everything account-scoped starts again: the book, the balances,
+            // the feed. A switch that left the previous account's money on
+            // screen would be the worst thing this control could do.
+            contacts.open(myAddress: address)
+            wallet.refresh(pull: true)
+        }
+    }
+
+    /// A row picked in one of the five select sheets.
+    ///
+    /// The three FORMATS take effect immediately — `Formats.current` is what
+    /// every renderer reads, and a preset that waited for a relaunch would be a
+    /// choice a person could not see themselves make.
+    private func settingsPicked(_ overlay: SettingsOverlay, _ id: String) {
+        switch overlay {
+        case .currency:
+            // The core owns the display currency: it re-resolves the rate, and
+            // a shell that wrote the code itself would show a figure converted
+            // at the previous one.
+            settings.chooseCurrency(id)
+        case .language:
+            // `system` is the drawn id; `auto` is what every client STORES.
+            preferences.setLanguage(id == "system" ? "auto" : id)
+        case .numberFormat:
+            guard let key = NumberFormatKey(rawValue: id) else { return }
+            preferences.setNumberFormat(key)
+            Formats.apply(preferences)
+        case .dateFormat:
+            guard let key = DateFormatKey(rawValue: id) else { return }
+            preferences.setDateFormat(key)
+            Formats.apply(preferences)
+        case .timeFormat:
+            guard let key = TimeFormatKey(rawValue: id) else { return }
+            preferences.setTimeFormat(key)
+            Formats.apply(preferences)
+        default:
+            break
+        }
     }
 
     /// `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's

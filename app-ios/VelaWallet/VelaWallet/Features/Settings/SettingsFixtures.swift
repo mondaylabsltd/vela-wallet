@@ -145,13 +145,13 @@ enum SettingsFixtures {
     private static func sections(_ loc: Loc, advancedOpen: Bool) -> [SettingsSectionModel] {
         let k = I18nKeys.SettingsUi.self
         return [
-            SettingsSectionModel(rows: [
-                SettingsRowModel(id: "contacts", title: loc.t(k.navContacts),
-                                 icon: .usersRound, subtitle: loc.t(k.contactsSubtitle)),
-                SettingsRowModel(id: "feedback", title: loc.t(k.feedbackTitle),
-                                 icon: .messageSquareText, subtitle: loc.t(k.feedbackSubtitle),
-                                 trailing: .external),
-            ]),
+            // 通讯录 and 反馈 are NOT on this page.
+            //
+            // The founder's ruling (2026-09-12, applied on Android in 047 and
+            // recorded again in 054's plan): the address book has its own tab
+            // and a settings row pointing at it is a second front door to one
+            // room; the feedback sheet stays drawn and reachable from the
+            // places that raise it, not from a list of preferences.
             SettingsSectionModel(
                 rows: [
                     SettingsRowModel(id: "language", title: loc.t(k.languageTitle), icon: .globe,

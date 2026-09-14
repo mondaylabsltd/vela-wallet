@@ -412,9 +412,9 @@ struct SettingsScreenModel {
     let tabs: TabsModel
     var account: SettingsAccountRowModel
     var sections: [SettingsSectionModel]
-    let theme: SegmentedModel
-    let avatar: SegmentedModel
-    let textScale: TextScaleModel
+    var theme: SegmentedModel
+    var avatar: SegmentedModel
+    var textScale: TextScaleModel
     let signOutLabel: String
     let eraseTitle: String
     let eraseSubtitle: String
@@ -436,11 +436,11 @@ struct SettingsScreenModel {
     let about: AboutModel
     var accountsSheet: AccountsSheetModel
     let signOutSheet: ConfirmSheetModel
-    let languageSheet: SelectSheetModel
+    var languageSheet: SelectSheetModel
     var currencySheet: SelectSheetModel
-    let numberSheet: SelectSheetModel
-    let dateSheet: SelectSheetModel
-    let timeSheet: SelectSheetModel
+    var numberSheet: SelectSheetModel
+    var dateSheet: SelectSheetModel
+    var timeSheet: SelectSheetModel
     let clearCachesSheet: ConfirmSheetModel
     let eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
