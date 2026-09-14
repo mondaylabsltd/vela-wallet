@@ -618,4 +618,76 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-send-form-live")
     }
 
+    /// The whole journey, in the parallel space: pick, fill, confirm, sign,
+    /// submit — and a receipt with a hash.
+    ///
+    /// **This test spends real money** (dust on Gnosis, from the golden Safe)
+    /// and is therefore not in the default acceptance sweep — it is run
+    /// deliberately, with `-DVELA_LIVE_SEND`. The founder authorised the same
+    /// thing on every other client for the same reason: a send that has never
+    /// left the machine is a send nobody has verified.
+    func testDustLeavesTheGoldenSafeAndComesBackAsAReceipt() throws {
+        #if !VELA_LIVE_SEND
+        throw XCTSkip("set -DVELA_LIVE_SEND to spend dust on Gnosis")
+        #else
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30))
+        tap(app.buttons["转账"], "转账")
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 30))
+        tap(app.staticTexts["xDAI"], "the xDAI row")
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20))
+
+        // BY IDENTIFIER, not by position. An earlier version took
+        // `element(boundBy: 0)` and typed the address into the AMOUNT field —
+        // the amount comes first in the layout — which the screenshot showed
+        // and the assertion did not.
+        //
+        // The second fixture Safe: a wallet this keyset also controls, so the
+        // dust stays inside the test environment.
+        // The form has exactly two fields, amount first. Neither the
+        // identifier nor the label matched from here — asserting the COUNT is
+        // what makes a positional lookup honest rather than a guess, and it
+        // fails loudly the day a third field appears.
+        XCTAssertEqual(app.textFields.count, 2, "the form's fields changed shape")
+        let recipient = app.textFields.element(boundBy: 1)
+        recipient.tap()
+        recipient.typeText("0x031d7D57c99CAF891e1C250554691Fd12D84772b")
+
+        let amount = app.textFields.element(boundBy: 0)
+        amount.tap()
+        amount.typeText("0.0001")
+
+        // What the form looks like once both fields are filled — the evidence
+        // for why the gate is or is not open.
+        attach(app.screenshot(), named: "device-send-form-filled")
+
+        // 继续 is the core's gate: it stays disabled until the fee has settled.
+        let cont = app.buttons["继续"]
+        XCTAssertTrue(cont.waitForExistence(timeout: 60))
+        let armed = NSPredicate(format: "isEnabled == true")
+        expectation(for: armed, evaluatedWith: cont, handler: nil)
+        waitForExpectations(timeout: 90)
+        tap(cont, "继续")
+
+        attach(app.screenshot(), named: "device-send-confirm-live")
+        let confirm = app.buttons["确认并发送"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30))
+        expectation(for: armed, evaluatedWith: confirm, handler: nil)
+        waitForExpectations(timeout: 90)
+        tap(confirm, "确认")
+
+        // No biometric prompt in the parallel space: the fixed keyset signs.
+        XCTAssertTrue(app.staticTexts["交易已提交至网络"].waitForExistence(timeout: 120),
+                      "the relay never accepted the operation")
+        attach(app.screenshot(), named: "device-send-receipt-live")
+        #endif
+    }
+
 }

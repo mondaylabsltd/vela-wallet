@@ -277,7 +277,7 @@ final class RpcPool {
             let rpcs = await RpcEndpoints.collect(
                 chainId: chainId, store: store, accounts: accounts
             )
-            let bundlers = await RpcEndpoints.collectBundlers(accounts: accounts)
+            let bundlers = await RpcEndpoints.collectBundlers(chainId: chainId, accounts: accounts)
             return CoreJSON.string([
                 "type": "pool_config",
                 "chain_id": chainId,

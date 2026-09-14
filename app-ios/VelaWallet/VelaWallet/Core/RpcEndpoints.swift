@@ -98,14 +98,25 @@ enum RpcEndpoints {
         return out
     }
 
-    /// The bundler candidates. One base today — the configurable service
-    /// endpoint, or its default — because Vela runs the relay itself.
-    static func collectBundlers(accounts: AccountStore) async -> [CollectedEndpoint] {
+    /// The bundler candidates for one chain. One base today — the configurable
+    /// service endpoint, or its default — because Vela runs the relay itself.
+    ///
+    /// **The URL carries `/{chainId}`, and that is the contract rather than a
+    /// convenience.** A bundler pool stores JSON-RPC URLs as `${base}/${chain}`
+    /// and the core strips the suffix when it needs the REST base
+    /// (`rpc_pool::strip_chain_suffix`). Handing it a bare base sends every
+    /// operation to the relay's root, which answers nothing — and because spec
+    /// 051 made no bundler calls at all, the bare list looked correct for a
+    /// whole cut. It surfaced in 052 as a fee quote that never settled, with no
+    /// error anywhere: the shell answered "no quotes", the core waited, and the
+    /// screen said 估算中… forever.
+    static func collectBundlers(chainId: Int, accounts: AccountStore) async -> [CollectedEndpoint] {
         let endpoints = await accounts.loadServiceEndpoints()
-        let base = (endpoints["bundlerServiceURL"] as? String)
+        var base = (endpoints["bundlerServiceURL"] as? String)
             .flatMap { $0.isEmpty ? nil : $0 }
             ?? NetDefaults.bundlerServiceURL
-        return [CollectedEndpoint(url: base, source: "default")]
+        while base.hasSuffix("/") { base.removeLast() }
+        return [CollectedEndpoint(url: "\(base)/\(chainId)", source: "default")]
     }
 
     // MARK: - Bans

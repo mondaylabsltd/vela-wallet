@@ -43,6 +43,9 @@ final class FeeStore {
     /// The last view's busy flag, so a settle can be recognised as an EDGE
     /// rather than as a level — a quote that was never busy still settles.
     private var requested = false
+    /// How long a quote may take before the shell calls it a failure. Generous:
+    /// the core's own TTL is 30 s and a cold pool sweeps three passes.
+    private static let settleDeadlineMs = 45_000
 
     init(relay: RelayClient, accounts: UserOpSpine.AccountPort) {
         let executor = FeeExecutor(relay: relay, accounts: accounts)
@@ -93,6 +96,20 @@ final class FeeStore {
         for entry in stale { entry.resume(nil) }
 
         requested = true
+        // A quote that never settles is a spinner nobody can explain, and the
+        // `await` behind it holds `estimate_fee` open forever — which holds the
+        // confirm gate shut forever. `RpcPool` learned the same lesson from the
+        // other direction (it refuses before boot rather than hanging); this is
+        // the deadline that makes a hung quote a FAILURE the core can act on.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.settleDeadlineMs) * 1_000_000)
+            guard let self, self.generation == mine, self.requested else { return }
+            print("[vela-wallet] fee_policy: quote did not settle in \(Self.settleDeadlineMs)ms")
+            self.requested = false
+            let waiting = self.waiting
+            self.waiting.removeAll()
+            for entry in waiting { entry.resume(nil) }
+        }
         return await withCheckedContinuation { continuation in
             var resumed = false
             waiting.append((mine, { view in

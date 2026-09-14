@@ -260,7 +260,7 @@ final class RelayClient {
     }
 
     private static func assetKind(_ quote: [String: Any]) -> String? {
-        (quote["asset"] as? [String: Any])?["type"] as? String
+        quote["asset"] as? String
     }
 
     /// One `vela_getInBandGasQuote` row, or nothing if it is not well-formed.
@@ -289,7 +289,11 @@ final class RelayClient {
         if kind == "erc20", feeToken == nil || usdPrice == nil { return nil }
         return [
             "recipient": recipient,
-            "asset": ["type": kind],
+            // A PLAIN STRING. `FeeAssetKind` is a fieldless enum, not a tagged
+            // union — `{"type":"native"}` is rejected by serde, and a rejected
+            // result means the fee machine waits for an answer that already
+            // came. It showed up as 估算中… forever, with no error anywhere.
+            "asset": kind,
             "fee_token": kind == "erc20" ? (feeToken.map { $0 as Any } ?? NSNull()) : NSNull(),
             "balance": decimalOfAny(row["balance"]) ?? "0",
             "decimals": decimals,
@@ -500,6 +504,13 @@ final class RelayClient {
             chainId: chainId, method: "eth_getCode", params: [address, "latest"]
         ) as? String, code.hasPrefix("0x") else { return nil }
         return code.count > 2
+    }
+
+    /// The bundler base this chain's REST calls would use. Test seam: the
+    /// live suite prints it, because "which relay did it ask" is the first
+    /// question when a quote does not come back.
+    func bundlerBaseForTest(chainId: Int) async -> String? {
+        await port.bundlerBase(chainId: chainId)
     }
 
     /// What `network_admin`'s `clear_bundler_cache` means on this client.

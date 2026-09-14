@@ -455,6 +455,10 @@ struct RecipientFieldView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .accessibilityLabel(field.label)
+                            // Named, so a test reaches THIS field rather than
+                            // whichever one happens to come first in the tree —
+                            // an earlier one typed an address into the amount.
+                            .accessibilityIdentifier("send.recipient")
                     } else {
                         ForEach(Array(field.lines.enumerated()), id: \.offset) { _, line in
                             Text(verbatim: line)

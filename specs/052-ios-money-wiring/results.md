@@ -336,6 +336,91 @@ reports their work as this cut's:
 
 ---
 
+## Phase 4 — sign and submit. Money moved.
+
+**SC-001 is met.** From the founder's iPhone, in the parallel space, dust left
+the golden Safe on Gnosis:
+
+| | |
+|---|---|
+| user operation | `0xcf9fcae68769c6d6a243427717ee871ac57c35710aa01d5764635032bd269195` |
+| transaction | `0x151d63c8f6c4c59e886e6305cec679f6f999781de8d3665f386c57d77ff557b9` |
+| block | `0x2e014dd` (Gnosis) |
+| sender | `0x88cCA0EeDbF2C4426110bbFc998F048689266894` |
+| receipt `status` | `0x1`, `success: true` |
+
+Signed by the fixed keyset, so **no biometric prompt** — which is what the
+parallel space exists to make possible. The founder's own passkey send
+(SC-002) still wants a finger and is owed.
+
+### Five defects between "wired" and "moved"
+
+Every one of them was invisible on the simulator or in a hermetic test, and
+each was found by looking at what the phone actually showed.
+
+1. **The bundler endpoint had no chain.** `RpcEndpoints.collectBundlers`
+   returned the bare relay base for every chain, but a bundler pool stores
+   JSON-RPC URLs as `${base}/${chainId}` — the core strips that suffix itself
+   when it wants the REST base (`rpc_pool::strip_chain_suffix`). So every
+   bundler call went to the relay's root and answered nothing.
+   **Spec 051 made no bundler calls at all**, so a list that was wrong for a
+   whole cut looked right. It surfaced here as a fee quote that never settled,
+   with no error anywhere: the shell answered "no quotes", the core waited, and
+   the screen said 估算中… forever. With the suffix, the same relay answers
+   three fee assets and a gas price.
+2. **The fee asset kind was encoded as a tagged object.** `FeeAssetKind` is a
+   fieldless enum — `"native"`, not `{"type":"native"}` — so serde rejected the
+   whole in-band result and the machine waited for an answer that had already
+   come. Found hermetically once the scripted relay was made to answer
+   everything: the test hung exactly as the device did.
+3. **`Continue` was never dispatched.** The form's CTA pushed a screen instead
+   of telling the machine, and the screen renders by the machine's stage — so
+   the button did nothing at all. A push that the core has not agreed to
+   renders the state it is still in, which looks precisely like a dead control.
+4. **The fee row showed the drawing's number while estimating.** `0.0021 ETH ·
+   ≈$0.55` on a Gnosis send: the fixture's fee, presented as this one's. A
+   number in the fee slot is a promise about what this costs. It now says
+   估算中… and then the real figure, and `—` when there is none.
+5. **`onDisappear` re-armed the flow's door mid-journey.** SwiftUI rebuilds a
+   view for reasons that have nothing to do with the journey; the rebuild sent
+   `Open` again and the form bounced back to the picker. Leaving is now the
+   CORE's leaving — the `close` port — not a view's disappearance.
+
+### A hang is not an answer
+
+`FeeStore.quote` now has a deadline. A quote that does not settle in 45 seconds
+is reported as a failure rather than held open, because the `await` behind it
+holds `estimate_fee` open, which holds the confirm gate shut, and nothing on
+screen says why. `RpcPool` learned the same lesson from the other side in 051
+(it refuses before boot rather than hanging); this is that rule applied to the
+second facade in the client.
+
+### What is tested rather than watched
+
+- **One prompt per attempt** (FR-009), counted on the signer, with a cancel
+  reported as a cancel — the core routes that back to confirm rather than
+  raising an error surface over a ceremony the person stopped themselves.
+- **Persist before track** (FR-006): the store is read from *inside* the
+  tracker handoff, which is where an asynchronous write would still be empty.
+  The row is `pending`, carries a user-operation hash, has no transaction hash
+  yet, and its timestamp is in **seconds**.
+
+### Gates
+
+Hermetic tests 359 → **362**; live (flagged) grew by `RelayLiveTests`, which
+prints what the real relay answers — the suite that found defect 1. Device UI
+13. Literal violations 35. Against 052's branch point:
+`rust/crates/vela-core/src/app/`, the corpus and `vela_core_uniffi.swift` are
+all unchanged.
+
+### Owed
+
+SC-002 (the founder's own passkey, one prompt), SC-003 (force-quit and resume —
+phase 5's tracker), SC-005 (each refusal driven and read), SC-006 (change the
+fee token; the relay offers three on Gnosis, so this one is now drivable).
+
+---
+
 ## Two findings raised to the founder — one resolved, one open
 
 ### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved

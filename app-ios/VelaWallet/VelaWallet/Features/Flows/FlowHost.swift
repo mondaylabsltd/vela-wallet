@@ -81,6 +81,14 @@ struct FlowHost: View {
     /// it tapped opens the first one.
     var onSelectToken: ((Int) -> Void)?
     var onMax: (() -> Void)?
+    /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
+    /// a picture, where the CTA still just navigates.
+    var onConfirm: (() -> Void)?
+    var onReceiptDone: (() -> Void)?
+    /// The form's 继续. The CORE owns the step, so this dispatches rather than
+    /// navigates — pushing a screen the machine has not moved to renders the
+    /// one it is still on, which looks exactly like a dead button.
+    var onContinueSend: (() -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -212,7 +220,10 @@ struct FlowHost: View {
                     onFee: { onNavigate(.feeToken) },
                     onMax: { _ in onMax?() },
                     onAddRecipient: { onNavigate(.addRecipient) },
-                    onContinue: { onNavigate(.sendConfirm) },
+                    onContinue: {
+                        if let onContinueSend { onContinueSend() }
+                        else { onNavigate(.sendConfirm) }
+                    },
                     amountText: sendAmount,
                     recipientText: sendRecipient,
                     warning: sendWarning,
@@ -227,9 +238,11 @@ struct FlowHost: View {
                     // A BUTTON, not a slider: the slider belongs to the signing
                     // sheet, and Android 045 recorded the difference after
                     // building the wrong one.
-                    VelaButton(title: m.cta, kind: .primary) { onNavigate(.sendReceipt) }
-                        .disabled(sendCtaDisabled)
-                        .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
+                    VelaButton(title: m.cta, kind: .primary) {
+                        if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
+                    }
+                    .disabled(sendCtaDisabled)
+                    .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
                 }
             }
         case .sendReceipt(let m):
@@ -240,7 +253,13 @@ struct FlowHost: View {
                     VelaButton(
                         title: m.cta,
                         kind: m.ctaAccent ? .primary : .secondary
-                    ) { onNavigate(.done) }
+                    ) {
+                        // 关闭 · 后台继续 and 完成 are the same button in two
+                        // states, and both mean "I am done looking". The core
+                        // decides what that does to a send still in flight.
+                        onReceiptDone?()
+                        onNavigate(.done)
+                    }
                 }
             }
         }

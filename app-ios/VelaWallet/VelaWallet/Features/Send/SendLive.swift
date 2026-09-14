@@ -161,6 +161,11 @@ enum SendLive {
     ) -> String {
         guard let price = token?.priceUsd, let typed = Double(view.tokenAmount) else { return "" }
         let converted = typed * price * display.rate
+        // A figure this large is not a price, it is a parse going wrong
+        // somewhere upstream — a device run typed an address into the amount
+        // field and this line rendered ¥1.9e49. A fiat line nobody could read
+        // is worse than none, and printing it lends the garbage authority.
+        guard converted.isFinite, converted < 1e15 else { return "" }
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
         return "≈ \(display.glyph)\(String(format: "%.2f", converted))"
@@ -171,6 +176,12 @@ enum SendLive {
     ) -> FeeRowModel {
         let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
         let text = view.fee.map { feeText($0) }
+        // With no estimate, the row says so — it does NOT fall back to the
+        // drawing's value. The fixture's "0.0021 ETH · ≈$0.55" appeared on a
+        // Gnosis send on the founder's iPhone while the quote was still in
+        // flight: a number in the fee slot is a promise about what this costs,
+        // and the drawing's number is a promise about somebody else's send.
+        let waiting = busy ? loc.t("send.estimatingFee") : "—"
         return FeeRowModel(
             label: fallback.label,
             // The fee is paid on THIS chain. The drawing's mark was ETH, which
@@ -181,7 +192,7 @@ enum SendLive {
                     badgeColor: chainColor(estimate.chainId)
                 )
             } ?? fallback.mark,
-            value: text ?? (busy ? fallback.value : "—"),
+            value: text ?? waiting,
             openLabel: fallback.openLabel
         )
     }
@@ -340,6 +351,103 @@ enum SendLive {
         default:
             return (loc.t("send.alertEstimateFailedTitle"), "")
         }
+    }
+
+    // MARK: - SD4, the receipt
+
+    /// Which drawn state the receipt is in. The core's status, never a guess
+    /// from whether a hash happens to be present.
+    static func receiptStage(_ view: SendViewWire) -> ReceiptStage {
+        switch view.receipt?.status {
+        case "confirmed": return .confirmed
+        case "failed": return .failed
+        case "submitted": return .submitted
+        default: return .submitting
+        }
+    }
+
+    /// The receipt, in whichever state the transaction is in.
+    ///
+    /// The hash shown is the **transaction** hash once there is one, and the
+    /// operation hash before that: a user operation has an id from the moment
+    /// the relay accepts it, and showing nothing until it lands would leave a
+    /// person with a submitted payment and no reference at all.
+    static func receipt(
+        _ view: SendViewWire,
+        display: WalletLive.Display,
+        on model: SendReceiptModel,
+        loc: Loc
+    ) -> SendReceiptModel {
+        let token = view.selectedToken
+        let symbol = token?.symbol ?? ""
+        let chain = token.map { ChainCatalog.meta($0.chainId)?.displayName ?? $0.network } ?? ""
+        let stage = receiptStage(view)
+        let hash = (view.txHash?.isEmpty == false ? view.txHash : view.userOpHash)
+            .flatMap { $0.isEmpty ? nil : $0 }
+
+        let title: String
+        var captions: [String]
+        switch stage {
+        case .submitting:
+            title = loc.t("send.txSubmitting")
+            captions = model.captions
+        case .submitted:
+            title = loc.t("send.txSubmittedTitle")
+            captions = [loc.t("send.txWaitingConfirm")]
+            if let seconds = view.receipt?.typicalInclusionS {
+                captions.append(loc.t("send.txTypicalTime", vars: [
+                    "chainName": chain, "estSecs": String(seconds),
+                ]))
+            }
+        case .confirmed:
+            title = loc.t("send.txConfirmedTitle", vars: [
+                "amount": trim(view.receipt?.amount ?? view.confirmAmount),
+                "symbol": symbol,
+            ])
+            let to = view.recipientIdentity?.name ?? AddressText.short(view.recipient)
+            captions = ["\(to) · \(chain)"]
+        case .failed:
+            title = loc.t("componentsTx.receipt.statusFailed")
+            // The core's reason, then the corpus's explanation of what a
+            // reverted transfer actually costs — the money did not move and the
+            // network fee may still have been taken, which is the one thing a
+            // person needs to know and a generic apology does not say.
+            captions = [
+                SendLive.confirmNotice(view, loc: loc) ?? loc.t("send.txErrorGeneric"),
+                loc.t("componentsTx.receipt.failedHint"),
+            ]
+        }
+
+        return SendReceiptModel(
+            header: FlowHeaderModel(
+                title: loc.t("send.sendTitle", vars: ["symbol": symbol]),
+                backLabel: model.header.backLabel,
+                action: model.header.action,
+                pill: model.header.pill
+            ),
+            stage: stage,
+            title: title,
+            captions: captions,
+            hash: hash.map { value in
+                ReceiptHashModel(
+                    label: loc.t(
+                        view.txHash?.isEmpty == false
+                            ? "componentsTx.receipt.txHash"
+                            : "componentsTx.receipt.userOpHash"
+                    ),
+                    value: value,
+                    copyLabel: model.hash?.copyLabel
+                        ?? loc.t("componentsUi.identiconViewer.copyAddress")
+                )
+            },
+            // A chain with no explorer gets no button — sending somebody to the
+            // wrong explorer is the misleading link 051 refused to port.
+            viewOnExplorer: view.txHash?.isEmpty == false ? model.viewOnExplorer : nil,
+            cta: stage == .confirmed || stage == .failed
+                ? loc.t("componentsTx.receipt.done")
+                : loc.t("send.txCloseBackground"),
+            ctaAccent: stage == .confirmed || stage == .failed
+        )
     }
 
     // MARK: - SD2F, the fee-token sheet

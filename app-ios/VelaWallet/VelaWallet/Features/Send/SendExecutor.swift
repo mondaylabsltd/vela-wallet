@@ -54,7 +54,9 @@ final class SendExecutor {
     /// The holdings the balance machine already read, and the person's chains.
     private let balances: () -> BalanceViewWire?
     private let networks: () -> NetViewWire?
-    private let ports: Ports
+    /// `var` because two of these close over the STORE, which is built after
+    /// this executor — the store installs them once it exists.
+    var ports: Ports
 
     /// The ceremony in flight, so `cancel_passkey_sign` can end it.
     private var signing: Task<String, Error>?

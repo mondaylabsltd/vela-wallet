@@ -26,6 +26,8 @@ final class SendStore {
 
     private var core: CoreStore<SendViewWire>!
     private let executor: SendExecutor
+    /// Whether `Open` has been sent for the journey currently on screen.
+    private var entered = false
 
     init(executor: SendExecutor) {
         self.executor = executor
@@ -35,6 +37,27 @@ final class SendStore {
             onView: { [weak self] view in self?.view = view },
             onFault: { print("[vela-wallet] send fault: \($0)") }
         )
+        // Two ports close over this store, so they are installed after it
+        // exists rather than passed into the executor's initialiser.
+        //
+        // `signingStarted` is a CHECKPOINT, not a notification: the core marks
+        // the attempt as signing and a `cancel_signing` after it ends that
+        // attempt. Without it, a cancel has nothing to cancel and the next tap
+        // raises a second prompt — the defect FR-009 counts.
+        executor.ports.signingStarted = { [weak self] in
+            self?.dispatch(["type": "signing_started"])
+        }
+        executor.ports.alert = { [weak self] kind in self?.alert = kind }
+        // Leaving re-arms `Open`, and it is the CORE's leaving that counts —
+        // not a view disappearing. SwiftUI tears a view down and rebuilds it
+        // for reasons that have nothing to do with the journey, and an
+        // `onDisappear` here re-armed the door mid-flow: the next rebuild sent
+        // `Open` again and the form bounced back to the picker.
+        let leaving = executor.ports.closed
+        executor.ports.closed = { [weak self] in
+            leaving()
+            self?.entered = false
+        }
     }
 
     /// Open the flow for an account. Idempotent — a second open re-reads the
@@ -43,6 +66,15 @@ final class SendStore {
     /// `params` is how a locked request arrives (a pay-link, a scanned code).
     /// Empty here: 052 opens the flow from the home's 转账 button and nothing
     /// else. The pay-link is 056 and the scanner is 055.
+    ///
+    /// **A second call is IGNORED until the flow is left.** `Open` means
+    /// "enter the flow" and resets the machine to the picker, so a caller that
+    /// fires it again mid-journey throws the person's work away. SwiftUI will
+    /// re-run a `.task` whenever the view it is attached to is rebuilt, which
+    /// is often — a device run watched the form appear and bounce straight back
+    /// to the picker, twice, before this guard existed. Idempotence belongs
+    /// here rather than in each call site, because every call site is one
+    /// rebuild away from being wrong.
     func open(
         accountId: String,
         address: String,
@@ -65,6 +97,8 @@ final class SendStore {
             ] as [String: Any],
             "display": Self.display(code: displayCode, rate: displayRate, decimals: fiatDecimals),
         ])
+        guard !entered else { return }
+        entered = true
         if !core.boot(event) { core.dispatch(event) }
     }
 

@@ -656,4 +656,179 @@ struct SendMachineTests {
         #expect(SendLive.flowState(view, feeSheetOpen: false) == .sd2)
     }
 
+    /// Confirming reaches the ceremony **once**, and a cancel ends the attempt.
+    ///
+    /// FR-009 counted, not asserted from a reading: the signer records every
+    /// call, and a second prompt after a cancel is the defect that test exists
+    /// for. The spine refuses this attempt before the relay is reachable
+    /// anyway, which is fine — what is under test is the checkpoint, not the
+    /// submission.
+    @Test func confirmingAsksTheSignerOnceAndACancelEndsTheAttempt() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        // A deployed wallet with a readable nonce, so the spine gets as far as
+        // the ceremony rather than refusing before it.
+        port.rpc["eth_getCode"] = .ok("0x6080604052")
+        port.rpc["eth_call"] = .ok("0x" + String(repeating: "0", count: 63) + "1")
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        let signer = CountingSigner()
+        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let pool = RpcPool(store: store, accounts: accounts)
+
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool,
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { signer }),
+            accounts: accountPort, fees: fees,
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
+            metadata: TokenMetadata(store: store, pool: pool),
+            accountStore: accounts,
+            balances: { try? balance() }, networks: { try? networks() },
+            ports: SendExecutor.Ports()
+        )
+
+        // Drive the submit arm directly: the screen's job is to raise it, and
+        // the core's gating is already its own tested business.
+        let answer = await executor.perform([
+            "type": "submit_user_op",
+            "chain_id": 100,
+            "account": golden,
+            "public_key_hex": "04" + String(repeating: "11", count: 64),
+            "calls": [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+            "gas_fee_token": NSNull(),
+            "quoted_fee": ["amount": "1000", "recipient": golden] as [String: Any],
+        ])
+        let reply = try CoreJSON.object(answer)
+        #expect(reply["type"] as? String == "submit_failed")
+        // Exactly one ceremony for the attempt.
+        #expect(signer.calls == 1)
+        // And a cancelled one is reported as a CANCEL, which the core routes
+        // back to confirm — not as an error surface over a ceremony the person
+        // themselves stopped.
+        let failure = reply["failure"] as? [String: Any] ?? [:]
+        #expect(failure["type"] as? String == "passkey_cancelled")
+    }
+
+    /// The pending row is written before anything tracks it.
+    ///
+    /// The core emits `persist_tx_records` and then `track_submitted`; a shell
+    /// that wrote asynchronously would let the tracker's patch land on nothing.
+    /// This asserts the write is DONE when the operation is answered.
+    @Test func aSubmittedSendIsOnDiskBeforeItIsTracked() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        let pool = RpcPool(store: store, accounts: accounts)
+        var tracked: [String] = []
+
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool,
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
+            accounts: accountPort, fees: FeeStore(relay: relay, accounts: accountPort),
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
+            metadata: TokenMetadata(store: store, pool: pool),
+            accountStore: accounts,
+            balances: { nil }, networks: { nil },
+            ports: SendExecutor.Ports(trackSubmitted: { _, ids, _ in
+                // Read the store from INSIDE the handoff: if the write were
+                // asynchronous, this is where it would still be empty.
+                tracked = TxRecords.pending(store: store).compactMap { $0["id"] as? String }
+                _ = ids
+            })
+        )
+
+        _ = await executor.perform([
+            "type": "persist_tx_records",
+            "records": [[
+                "id": "rec-1", "user_op_hash": "0xaa", "tx_hash": "",
+                "from": golden, "to": golden, "value": "1", "symbol": "XDAI",
+                "decimals": 18, "logo_urls": [String](), "chain_id": 100,
+                "timestamp_s": 1_700_000_000, "usd": NSNull(),
+            ] as [String: Any]],
+        ])
+        _ = await executor.perform([
+            "type": "track_submitted", "user_op_hash": "0xaa",
+            "record_ids": ["rec-1"], "chain_id": 100,
+        ])
+
+        #expect(tracked == ["rec-1"])
+        // And it is a PENDING row: status pending, an operation hash, no
+        // transaction hash yet — which is what makes it resumable.
+        let row = try #require(TxRecords.load(store: store).first)
+        #expect(row["status"] as? String == "pending")
+        #expect(row["userOpHash"] as? String == "0xaa")
+        #expect((row["txHash"] as? String ?? "").isEmpty)
+        // Seconds, not milliseconds.
+        #expect((row["timestamp"] as? NSNumber)?.doubleValue == 1_700_000_000)
+    }
+
+    /// The fee session settles, and the estimate it settles on is the core's.
+    ///
+    /// Written because the device showed 估算中… forever: a quote that never
+    /// settles holds `estimate_fee` open, which holds the confirm gate shut,
+    /// and nothing on screen says why.
+    @Test func theFeeSessionSettlesOnAQuote() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        // Everything the fee machine reads, answered.
+        port.rpc["eth_gasPrice"] = .ok("0x3b9aca00")
+        port.rpc["eth_getBlockByNumber"] = .ok(["baseFeePerGas": "0x3b9aca00"] as [String: Any])
+        port.rpc["eth_maxPriorityFeePerGas"] = .ok("0x3b9aca00")
+        port.rpc["pimlico_getUserOperationGasPrice"] = .ok([
+            "fast": ["maxFeePerGas": "0x77359400"] as [String: Any],
+        ] as [String: Any])
+        port.rpc["vela_getInBandGasQuote"] = .ok([
+            [
+                "recipient": golden, "asset": "native", "feeToken": NSNull(),
+                "balance": "0xde0b6b3a7640000", "decimals": 18, "symbol": "XDAI",
+                "usdBalance": "1", "usdPrice": "1",
+            ] as [String: Any],
+        ])
+        port.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x186a0",
+            "callGasLimit": "0x186a0",
+            "preVerificationGas": "0x186a0",
+        ] as [String: Any])
+        port.rpc["eth_getCode"] = .ok("0x6080604052")
+        port.rpc["eth_call"] = .ok("0x" + String(repeating: "0", count: 63) + "1")
+        port.rest["/v1/account/100/\(golden.lowercased())"] = .ok([
+            "activeDepositAddress": golden, "status": "ACTIVE",
+        ])
+
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let fees = FeeStore(relay: relay, accounts: ScriptedAccounts())
+        let settled = await fees.quote(
+            chainId: 100, account: golden, deployed: true, publicKeyAvailable: true,
+            calls: [["to": golden, "value": "1000", "data": "0x"] as [String: Any]],
+            feeToken: nil
+        )
+        // Before anything else: did a view ever decode? A wire that does not
+        // match leaves `view` nil and every settle check false, which looks
+        // exactly like a machine that is still working.
+        #expect(fees.view != nil, "no fee view ever decoded — the wire does not match")
+        if settled == nil, let stuck = fees.view {
+            Issue.record("""
+            the quote never settled — busy=\(stuck.busy) failed=\(stuck.failed ?? "nil") \
+            fee=\(stuck.fee == nil ? "nil" : "present") options=\(stuck.options.count) \
+            calls=\(port.calls.joined(separator: ","))
+            """)
+        }
+        let view = try #require(settled, "the quote never settled")
+        #expect(!view.busy)
+        // A settled quote either priced it or said why. Both are answers; a
+        // hang is not.
+        #expect(view.fee != nil || view.failed != nil)
+        if let fee = view.fee {
+            #expect(fee.chainId == 100)
+            #expect(!fee.totalWei.isEmpty)
+        }
+    }
+
 }

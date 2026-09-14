@@ -85,7 +85,7 @@ struct RootView: View {
     @State private var amountDraft = ""
     @State private var feeSheetOpen = false
     @State private var sendAlert: (title: String, body: String)?
-    @State private var flows = FlowNav()
+    @State private var flows: FlowNav
     /// Which section of the signed-in shell is showing (spec 050).
     @State private var section: WalletSection = .wallet
     /// Where the contacts section is, inside itself.
@@ -104,6 +104,8 @@ struct RootView: View {
         self.loc = loc
         let router = Router()
         _router = State(initialValue: router)
+        let flowNav = FlowNav()
+        _flows = State(initialValue: flowNav)
         let store = AccountStore()
         self.accounts = store
         let session = SessionController(store: store)
@@ -172,6 +174,12 @@ struct RootView: View {
             balances: { [weak wallet] in wallet?.balance },
             networks: { [weak settingsStore] in settingsStore?.networkAdmin },
             ports: SendExecutor.Ports(
+                // The core's own exit. `Done` on a receipt, and `close` on any
+                // refusal that ends the attempt, both land here.
+                closed: { [weak flowNav] in flowNav?.close() },
+                // Leaving is what re-arms `Open`. Without it a second visit to
+                // 转账 would render the machine's last state instead of a
+                // fresh picker.
                 refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) }
             )
         )
@@ -452,8 +460,13 @@ struct RootView: View {
                         { UIApplication.shared.open(url) }
                     },
                     onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
-                    alert: saveAlert,
-                    onDismissAlert: { saveOutcome = nil },
+                    // The core's refusal outranks the save alert: one is an
+                    // answer to something the person just did with money, the
+                    // other is about a picture.
+                    alert: sendRefusal ?? saveAlert,
+                    onDismissAlert: {
+                        if send.alert != nil { send.alert = nil } else { saveOutcome = nil }
+                    },
                     sendAmount: sendStates.contains(state) ? $amountDraft : nil,
                     sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
@@ -462,7 +475,10 @@ struct RootView: View {
                         guard let token = send.view?.tokens[safe: index] else { return }
                         send.selectToken(id: token.id)
                     },
-                    onMax: { send.tapMax() }
+                    onMax: { send.tapMax() },
+                    onConfirm: { send.slideConfirm() },
+                    onReceiptDone: { send.done() },
+                    onContinueSend: { send.advance() }
                 )
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
@@ -754,6 +770,11 @@ struct RootView: View {
                     view, fee: fees.view, display: display, on: form, loc: loc
                 ))
             }
+            if case .sendReceipt(let receipt) = model.base {
+                model.base = .sendReceipt(SendLive.receipt(
+                    view, display: display, on: receipt, loc: loc
+                ))
+            }
             if case .sendConfirm(let confirm) = model.base {
                 model.base = .sendConfirm(SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
@@ -848,6 +869,13 @@ struct RootView: View {
     }
 
     /// What the save had to say, if it has said anything yet.
+    /// The refusal the core raised, in the core's words.
+    private var sendRefusal: FlowAlertModel? {
+        guard let kind = send.alert else { return nil }
+        let text = SendLive.alertText(kind, loc: loc)
+        return FlowAlertModel(title: text.title, message: text.body)
+    }
+
     private var saveAlert: FlowAlertModel? {
         switch saveOutcome {
         case .saved:
