@@ -118,6 +118,14 @@ struct ConnectionModel {
     let explainer: String
     let disconnect: String
     let footnote: String
+    /// Whether the origin is on TLS. Drives the padlock, and nothing else may.
+    var secure: Bool = true
+    /// The panel's **not-yet-connected** form: a site is asking, and the two
+    /// answers replace 断开连接. Same panel, because the facts a person needs
+    /// in order to decide are exactly the facts they need in order to review
+    /// — who is asking, which account, which network — and a second sheet
+    /// would be a second chance to get one of them wrong.
+    var consent: (approve: String, reject: String)?
 }
 
 enum ExploreSheet: Identifiable {

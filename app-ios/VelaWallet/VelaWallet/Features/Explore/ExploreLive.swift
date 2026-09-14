@@ -31,6 +31,7 @@ enum ExploreLive {
         permissions: DpermViewWire,
         engine: BrowserEngine?,
         identity: (name: String, address: String),
+        chainId: Int = 100,
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -42,7 +43,8 @@ enum ExploreLive {
         if !explore.favoritesFull { tiles.append(.add(loc.t("explore.add"))) }
 
         let connection = connectionModel(
-            permissions: permissions, engine: engine, identity: identity, loc: loc
+            permissions: permissions, engine: engine, identity: identity,
+            chainId: chainId, loc: loc
         )
         let siteMenu = ExploreSheet.siteMenu(
             site: engine.map(currentSite) ?? ExploreFixtures.uniswap,
@@ -216,9 +218,15 @@ enum ExploreLive {
         permissions: DpermViewWire,
         engine: BrowserEngine?,
         identity: (name: String, address: String),
+        chainId: Int = 100,
         loc: Loc
     ) -> ConnectionModel {
-        let origin = permissions.currentOrigin ?? engine?.origin ?? ""
+        // The origin that is ASKING outranks the one in the address bar. They
+        // are normally the same; when a page navigates with a request still
+        // open they are not, and the sheet must name the asker.
+        let origin = permissions.consent?.origin
+            ?? permissions.currentOrigin
+            ?? engine?.origin ?? ""
         let host = BrowserEngine.hostOf(origin: origin)
         // The **origin** is the fact. A site's name and its icon are claims it
         // makes about itself, and a consent sheet that led with the claim
@@ -243,10 +251,22 @@ enum ExploreLive {
             ),
             switchLabel: loc.t("explore.switchAccount"),
             networkLabel: loc.t("explore.network"),
-            network: ExploreFixtures.network,
+            network: (
+                name: ChainCatalog.meta(chainId)?.displayName ?? String(chainId),
+                dot: SettingsLive.chainColor(chainId)
+            ),
             explainer: loc.t("explore.connectionExplainer"),
             disconnect: loc.t("explore.disconnect"),
-            footnote: loc.t("explore.autoRequestHint")
+            // When a site is ASKING, the explainer is the one written for
+            // exactly that moment: what a connection is, and what it is not.
+            footnote: permissions.consent == nil
+                ? loc.t("explore.autoRequestHint")
+                : loc.t("connect.browser.body"),
+            secure: origin.hasPrefix("https://"),
+            consent: permissions.consent == nil ? nil : (
+                approve: loc.t("connect.dapp.approve"),
+                reject: loc.t("connect.dapp.reject")
+            )
         )
     }
 

@@ -1,0 +1,490 @@
+//
+//  SigningLive.swift
+//  VelaWallet
+//
+//  The signing sheet, from the four machines' views.
+//
+//  The drawn model keeps only its labels. The dApp is the **host** — guessing
+//  a pretty name from a domain is exactly the counterfeit route — the blocks
+//  are the core's reading, the fee is the fee policy's, and the slide opens
+//  only when all three gating machines say it may.
+//
+//  Ported from `app-android/.../feature/signing/SigningLive.kt` (spec 044
+//  T033), which is the desktop's `signing/live.rs`.
+//
+
+import SwiftUI
+
+enum SigningLive {
+
+    struct Context {
+        let loc: Loc
+        let chainName: String
+        let chainDot: Color
+        let nativeSymbol: String
+        let walletName: String
+        let walletAddress: String
+        /// The page's host, for the sign-in verdict's words.
+        var origin: String?
+    }
+
+    private static func s(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
+        vars.isEmpty ? loc.t("componentsUi.signing.\(key)")
+                     : loc.t("componentsUi.signing.\(key)", vars: vars)
+    }
+
+    private static func a(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
+        vars.isEmpty ? loc.t("componentsUi.signingApprove.\(key)")
+                     : loc.t("componentsUi.signingApprove.\(key)", vars: vars)
+    }
+
+    static func model(
+        fallback: SigningModel,
+        request: SigningController.Incoming,
+        sign: SignViewWire,
+        clear: ClearSigningViewWire,
+        guard guardView: GuardViewWire,
+        fee: FeeViewWire?,
+        context: Context
+    ) -> SigningModel {
+        let loc = context.loc
+        let host = BrowserEngine.hostOf(origin: request.origin)
+        let facts = SigningController.firstCall(paramsJson: request.paramsJson)
+        let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
+
+        let blocks = statusBlocks(sign: sign, loc: loc)
+            + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
+                          dataBytes: dataBytes, context: context)
+            + guardBlocks(guardView, loc: loc)
+
+        return SigningModel(
+            id: fallback.id,
+            // The HOST, twice. A name a page supplies is a claim, and a
+            // signing sheet that leads with the claim is a sheet somebody can
+            // dress up as a bank.
+            dapp: (name: host.isEmpty ? request.origin : host,
+                   host: host.isEmpty ? request.origin : host,
+                   letter: ExploreLive.site(host: host, name: host, origin: request.origin).letter,
+                   tint: ExploreLive.tint(for: host)),
+            network: (name: context.chainName, dot: context.chainDot),
+            blocks: blocks,
+            tech: TechModel(
+                title: fallback.tech.title,
+                summary: clear.result?.contractName,
+                fn: clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
+                params: [],
+                identities: [],
+                simResult: nil,
+                raw: dataBytes > 0 ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil : nil,
+                copyLabel: fallback.tech.copyLabel,
+                explorerLabel: fallback.tech.explorerLabel
+            ),
+            techOpen: false,
+            fee: feeModel(clear: clear, fee: fee, context: context),
+            signer: (label: s(loc, "signingAccount"),
+                     name: context.walletName,
+                     seed: context.walletAddress),
+            confirm: (hint: s(loc, "slideToConfirm"),
+                      action: confirmLabel(clear: clear, loc: loc),
+                      enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear)),
+            panelTitle: s(loc, "signatureRequest")
+        )
+    }
+
+    // MARK: - The gate
+
+    /// The slide opens only when the request, the guard and the fee all say it
+    /// may — and only then.
+    ///
+    /// **An off-chain signature has no fee**, so the fee machine has nothing
+    /// to be ready about. Requiring its readiness there would make a
+    /// `personal_sign` unsignable forever.
+    static func confirmEnabled(
+        sign: SignViewWire, guard guardView: GuardViewWire, fee: FeeViewWire?,
+        clear: ClearSigningViewWire
+    ) -> Bool {
+        sign.confirmGateOpen
+            && guardView.confirmAllowed
+            && (isOffChain(clear) || (fee?.confirmFeeReady ?? false))
+            && !sign.isSigning
+            && !sign.isSubmitting
+    }
+
+    static func isOffChain(_ clear: ClearSigningViewWire) -> Bool {
+        clear.result?.signType == .signature
+            || clear.surface == .messageSign
+            || clear.surface == .ethSign
+            || clear.surface == .blindTypedData
+    }
+
+    // MARK: - Status
+
+    static func statusBlocks(sign: SignViewWire, loc: Loc) -> [SigningBlock] {
+        var blocks: [SigningBlock] = []
+
+        if let funding = sign.funding {
+            blocks.append(.warning(
+                tone: .caution,
+                text: loc.t("componentsUi.funding.lead", vars: ["symbol": funding.data.nativeSymbol])
+            ))
+        }
+        if let error = sign.error {
+            let text: String = switch error.kind {
+            case .unlimitedApproval: a(loc, "unlimitedDisabled")
+            case .unsupportedChain: loc.t("send.lock.netNotFound")
+            // Neither of these is an error a person needs to read: one is
+            // their own decision and the other is the wallet's.
+            case .userRejected, .walletSwitchedChains: ""
+            default: loc.t("send.txErrorGeneric")
+            }
+            if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
+        }
+        if sign.pendingOpHash != nil {
+            blocks.append(.positive(s(loc, "submitted")))
+        } else if sign.isSigning || sign.isSubmitting {
+            blocks.append(.sentence(text: s(loc, "signing"), tone: .neutral))
+        }
+        return blocks
+    }
+
+    // MARK: - What it does
+
+    static func blocks(
+        clear: ClearSigningViewWire, to: String?, valueHex: String?, dataBytes: Int,
+        context: Context
+    ) -> [SigningBlock] {
+        // A plain native transfer — no calldata — is the one transaction the
+        // core resolves **without** a descriptor: resolved, and no result.
+        // Drawing the blind "cannot decode (0 bytes)" card for it reads a dust
+        // send as a contract interaction, which is what Android shipped for
+        // one screenshot.
+        if clear.resolved, clear.result == nil, clear.message == nil, clear.blindTyped == nil,
+           dataBytes == 0, let to {
+            return plainTransferBlocks(to: to, valueHex: valueHex, context: context)
+        }
+        return blocksBySurface(clear: clear, to: to, dataBytes: dataBytes, context: context)
+    }
+
+    private static func plainTransferBlocks(
+        to: String, valueHex: String?, context: Context
+    ) -> [SigningBlock] {
+        let loc = context.loc
+        let wei = GuardExecutor.decimal(fromWordHex: padded(valueHex ?? "0x0")) ?? "0"
+        return [
+            .intent(text: s(loc, "intentSend"), tone: .neutral),
+            .amount(
+                line: AmountLine(sign: "−", value: SendLive.fromBase(wei, decimals: 18),
+                                 symbol: context.nativeSymbol),
+                card: true
+            ),
+            .party(label: s(loc, "recipientLabel"), name: AddressText.short(to), address: to),
+        ]
+    }
+
+    private static func padded(_ hex: String) -> String {
+        let digits = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
+        if digits.isEmpty { return "0x00" }
+        return digits.count % 2 == 0 ? "0x" + digits : "0x0" + digits
+    }
+
+    private static func blocksBySurface(
+        clear: ClearSigningViewWire, to: String?, dataBytes: Int, context: Context
+    ) -> [SigningBlock] {
+        let loc = context.loc
+        switch clear.surface {
+        case .none:
+            return []
+        case .loading:
+            // Holds the sheet. A blind view must never flash before the clear
+            // one.
+            return [.sentence(text: s(loc, "loading"), tone: .neutral)]
+        case .clearSign:
+            return clear.result.map { resultBlocks($0, loc: loc) } ?? []
+        case .ethSign, .messageSign:
+            return clear.message.map { messageBlocks($0, loc: loc, origin: context.origin) } ?? []
+        case .blindTypedData:
+            guard let typed = clear.blindTyped else { return [] }
+            var blocks: [SigningBlock] = [
+                .intent(text: typed.primaryType ?? s(loc, "signTypedData"), tone: .caution),
+                .warning(tone: .caution, text: s(loc, "blindTypedWarning")),
+            ]
+            if typed.hasDomain {
+                blocks.append(.party(
+                    label: s(loc, "signingFor"),
+                    name: typed.domainName ?? s(loc, "unverifiedLabel"),
+                    address: typed.verifyingContract
+                ))
+            }
+            if !typed.fields.isEmpty {
+                blocks.append(.rows(typed.fields.map {
+                    SigningRow(label: $0.key, value: $0.value, valueTone: .neutral, mono: true)
+                }))
+            }
+            return blocks
+        case .blindTransaction:
+            var blocks: [SigningBlock] = [
+                .intent(text: s(loc, "intentContractCall"), tone: .caution),
+                .warning(tone: .caution,
+                         text: s(loc, "blindDecodeWarning", ["bytes": String(dataBytes)])),
+            ]
+            if let to {
+                blocks.append(.party(
+                    label: s(loc, "interactingLabel"),
+                    name: s(loc, "unverifiedLabel"),
+                    address: to,
+                    badge: PartyBadge(text: s(loc, "unverifiedLabel"), tone: .caution)
+                ))
+            }
+            return blocks
+        }
+    }
+
+    private static func tone(of risk: ClearRisk) -> SigningTone {
+        switch risk {
+        case .safe: .success
+        case .normal: .neutral
+        case .caution: .caution
+        case .danger: .danger
+        }
+    }
+
+    private static func resultBlocks(_ result: ClearSignResultWire, loc: Loc) -> [SigningBlock] {
+        var blocks: [SigningBlock] = [.intent(text: result.intent, tone: tone(of: result.risk))]
+        blocks += warnings(result, loc: loc)
+        let rows = result.fields.filter { !$0.detail }.map { row(of: $0) }
+        if !rows.isEmpty { blocks.append(.rows(rows)) }
+        return blocks
+    }
+
+    private static func warnings(_ result: ClearSignResultWire, loc: Loc) -> [SigningBlock] {
+        var blocks: [SigningBlock] = []
+        // Irreversible, and the single most expensive mistake this screen can
+        // fail to mention.
+        if result.toOwnToken {
+            blocks.append(.warning(tone: .danger, text: s(loc, "tokenToContractWarning")))
+        }
+        if result.bestEffort { blocks.append(.warning(tone: .caution, text: s(loc, "bestEffortWarning"))) }
+        if result.partial { blocks.append(.warning(tone: .caution, text: s(loc, "partialWarning"))) }
+        if result.fields.contains(where: \.unverified) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))
+        }
+        if result.fields.contains(where: \.expired) {
+            blocks.append(.warning(tone: .caution, text: a(loc, "expired")))
+        }
+        return blocks
+    }
+
+    private static func row(of field: ClearSignFieldWire) -> SigningRow {
+        SigningRow(
+            label: field.label,
+            value: field.value,
+            valueTone: field.warning ? .danger : (field.unverified || field.expired ? .caution : .neutral),
+            mono: field.address != nil
+        )
+    }
+
+    private static func messageBlocks(
+        _ message: ClearMessageViewWire, loc: Loc, origin: String?
+    ) -> [SigningBlock] {
+        let signingIn = message.siwe != nil
+        let danger = message.dangerClass == .ethSign || message.dangerClass == .siwePhish
+        var blocks: [SigningBlock] = [
+            .intent(text: signingIn ? s(loc, "signInIntent") : s(loc, "signMessage"),
+                    tone: danger ? .danger : .neutral),
+        ]
+        if message.dangerClass == .ethSign {
+            blocks.append(.sentence(text: s(loc, "ethSignBody"), tone: .danger))
+        }
+        if let text = message.decodedText, !text.isEmpty {
+            blocks.append(.sentence(text: text, tone: .neutral))
+        }
+        if let preview = message.binaryPreview {
+            blocks.append(.code(lines: [preview]))
+        }
+        if message.nonPrintable {
+            blocks.append(.warning(tone: .caution, text: s(loc, "hexMessageWarning")))
+        }
+        if let siwe = message.siwe {
+            var rows = [SigningRow(label: s(loc, "siweDomain"), value: siwe.domainHost ?? siwe.domain)]
+            if let statement = siwe.statement {
+                rows.append(SigningRow(label: s(loc, "siweStatement"), value: statement))
+            }
+            if let uri = siwe.uri {
+                rows.append(SigningRow(label: s(loc, "siweOrigin"), value: uri))
+            }
+            blocks.append(.rows(rows))
+
+            // The string on screen is the string that was adjudicated.
+            let domain = siwe.domainHost ?? siwe.domain
+            switch message.binding {
+            case .ok:
+                blocks.append(.positive(s(loc, "siweOk", ["domain": domain])))
+            case .mismatch:
+                blocks.append(.warning(
+                    tone: .danger,
+                    text: s(loc, "siweMismatch", ["domain": domain, "origin": origin ?? ""])
+                ))
+            default:
+                break
+            }
+        }
+        if message.dangerClass == .ethSign {
+            blocks.append(.warning(tone: .danger, text: s(loc, "ethSignWarning")))
+        }
+        return blocks
+    }
+
+    // MARK: - The guard
+
+    /// The guard's verdict: the spending cap with the chips the core offers,
+    /// the custom amount when chosen, the notes, the resulting total for an
+    /// increase; an off-chain permit that cannot be capped; a batch's legs.
+    static func guardBlocks(_ guardView: GuardViewWire, loc: Loc) -> [SigningBlock] {
+        switch guardView.surface {
+        case .none:
+            return []
+
+        case .permitSign:
+            var blocks: [SigningBlock] = []
+            if let detected = guardView.detected {
+                blocks.append(.party(label: a(loc, "spenderLabel"),
+                                     name: AddressText.short(detected.spender),
+                                     address: detected.spender))
+            }
+            // The dApp submits its own amount on chain, so rewriting would
+            // desync the signature and revert their transaction. Saying so is
+            // the only honest move.
+            blocks.append(.warning(tone: .danger, text: a(loc, "permitCantCap")))
+            return blocks
+
+        case .approvalEditor:
+            var blocks: [SigningBlock] = []
+            if let editor = guardView.editor {
+                blocks.append(allowanceBlock(
+                    editor: editor, meta: guardView.meta, increase: guardView.increaseTotal,
+                    decimalsUnverified: guardView.decimalsUnverified, expired: guardView.expired,
+                    loc: loc
+                ))
+            }
+            if let detected = guardView.detected {
+                blocks.append(.party(label: a(loc, "spenderLabel"),
+                                     name: AddressText.short(detected.spender),
+                                     address: detected.spender))
+            }
+            if guardView.detected?.isUnbounded == true, guardView.editor?.choice == nil {
+                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+            }
+            return blocks
+
+        case .batch:
+            var blocks: [SigningBlock] = []
+            for (index, leg) in (guardView.batch?.legs ?? []).enumerated() {
+                if let editor = leg.editor {
+                    blocks.append(allowanceBlock(
+                        editor: editor, meta: leg.meta, increase: nil,
+                        decimalsUnverified: false, expired: false, loc: loc,
+                        prefix: "#\(index + 1) "
+                    ))
+                }
+                if let approval = leg.approval {
+                    blocks.append(.party(label: a(loc, "spenderLabel"),
+                                         name: AddressText.short(approval.spender),
+                                         address: approval.spender))
+                }
+            }
+            if guardView.batch?.anyUncapped == true {
+                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+            }
+            return blocks
+        }
+    }
+
+    private static func allowanceBlock(
+        editor: GuardEditorViewWire,
+        meta: GuardTokenMetaViewWire,
+        increase: GuardIncreaseTotalViewWire?,
+        decimalsUnverified: Bool,
+        expired: Bool,
+        loc: Loc,
+        prefix: String = ""
+    ) -> SigningBlock {
+        func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
+            AllowanceChip(
+                id: id, label: label,
+                // **Disabled, not merely unselected.** An unlimited request
+                // has no finite figure to offer, and a chip that looks
+                // available and refuses is worse than one that is plainly out.
+                state: !offered ? .disabled : (editor.mode == mode ? .selected : .idle)
+            )
+        }
+        let chips = [
+            chip("requested", a(loc, "requested"), .requested, offered: editor.requestedFinite),
+            chip("balance", a(loc, "balanceCap"), .balance, offered: editor.hasBalanceCap),
+            chip("custom", a(loc, "custom"), .custom, offered: true),
+            chip("revoke", a(loc, "revoke"), .revoke, offered: true),
+        ]
+
+        let value = editor.displayAmountRaw.map { raw in
+            "\(SendLive.fromBase(raw, decimals: meta.decimals)) \(meta.symbol)"
+                .trimmingCharacters(in: .whitespaces)
+        } ?? a(loc, "unlimitedValue")
+
+        var notes: [String] = []
+        if !editor.requestedFinite {
+            notes.append(a(loc, "unlimitedDisabled") + "\n" + a(loc, "choosePrompt"))
+        }
+        if decimalsUnverified { notes.append(a(loc, "decimalsUnverified")) }
+        if expired { notes.append(a(loc, "expired")) }
+
+        return .allowance(
+            label: prefix + a(loc, "spendingCap"),
+            value: value,
+            valueTone: editor.choice != nil ? .neutral : .danger,
+            chips: chips,
+            note: notes.isEmpty ? nil : notes.joined(separator: "\n"),
+            // "increase by 100" must never read as "cap at 100" — and when the
+            // read failed it still says the increment ADDS rather than hiding.
+            resultingTotal: increase.map { total in
+                SigningRow(
+                    label: a(loc, "resultingTotal"),
+                    value: total.total ?? a(loc, "resultingTotalUnknown", ["amount": total.increment])
+                )
+            }
+        )
+    }
+
+    // MARK: - The fee and the verb
+
+    static func feeModel(
+        clear: ClearSigningViewWire, fee: FeeViewWire?, context: Context
+    ) -> FeeModel {
+        if isOffChain(clear) { return .offchain(note: s(context.loc, "noNetworkFee")) }
+        let value: String
+        if let estimate = fee?.fee {
+            value = "~\(SendLive.fromBase(estimate.totalWei, decimals: 18)) \(context.nativeSymbol)"
+        } else if fee?.failed != nil {
+            value = context.loc.t("componentsUi.gas.estimateFailed")
+        } else {
+            value = context.loc.t("componentsUi.gas.estimating")
+        }
+        return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value, selector: nil)
+    }
+
+    /// The slide's verb: the core's intent id, **in the corpus's words**.
+    ///
+    /// Printing the id raw is how Android shipped a button reading 确认send.
+    static func confirmLabel(clear: ClearSigningViewWire, loc: Loc) -> String {
+        switch clear.confirm {
+        case .sign: s(loc, "signLabel")
+        case .confirm: s(loc, "confirmLabel")
+        case .confirmIntent(let intent):
+            switch intent {
+            case "send": s(loc, "confirmSend")
+            case "swap": s(loc, "confirmSwap")
+            case "deposit": s(loc, "confirmDeposit")
+            case "withdraw": s(loc, "confirmWithdraw")
+            default: s(loc, "confirmLabel")
+            }
+        }
+    }
+}

@@ -376,7 +376,11 @@ enum SettingsLive {
         return ChainMarkModel(letter: letter, color: chainColor(chainId))
     }
 
-    private static func chainColor(_ chainId: Int) -> Color {
+    /// One chain, one colour, for every surface that draws a dot. Internal
+    /// rather than private since 053: the browser's connection panel shows the
+    /// chain a site is connected on, and two mappings would eventually
+    /// disagree about which blue Base is.
+    static func chainColor(_ chainId: Int) -> Color {
         switch chainId {
         case 1: ChainPalette.ethereum
         case 10: ChainPalette.optimism

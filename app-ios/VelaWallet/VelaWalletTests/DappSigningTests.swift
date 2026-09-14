@@ -1,0 +1,556 @@
+//
+//  DappSigningTests.swift
+//  VelaWalletTests
+//
+//  What a page asks for, and what the wallet does about it.
+//
+//  The router's allowlist, the request executor's reading of a request, the
+//  signing controller's assembly, and the sheet the four machines produce.
+//  Hermetic: no network, no ceremony, no device.
+//
+
+import Foundation
+import SwiftUI
+import Testing
+import VelaCore
+@testable import VelaWallet
+
+// MARK: - The router
+
+@MainActor
+struct RequestRouterTests {
+
+    /// Records what the router did, so a test can assert on the ABSENCE of a
+    /// call as well as on an answer.
+    final class Recorder {
+        var answers: [(id: String, json: [String: Any])] = []
+        var poolCalls: [(chainId: Int, method: String, bundler: Bool)] = []
+        var signed: [String] = []
+        var switched: [Int] = []
+    }
+
+    private func router(
+        _ recorder: Recorder,
+        chain: Int = 100,
+        known: [Int] = [100, 1],
+        body: [String: Any]? = ["result": "0x2e014dd"],
+        receipt: RequestRouter.Receipt? = nil
+    ) -> RequestRouter {
+        RequestRouter(ports: RequestRouter.Ports(
+            browserChain: { chain },
+            knownChains: { known },
+            switchChain: { recorder.switched.append($0) },
+            poolCall: { chainId, method, _, bundler in
+                recorder.poolCalls.append((chainId, method, bundler))
+                return body
+            },
+            respond: { id, json in recorder.answers.append((id, json)) },
+            sign: { id, _, _, _ in recorder.signed.append(id) },
+            receiptFor: { _ in receipt }
+        ))
+    }
+
+    private func error(_ answer: [String: Any]) -> (code: Int, message: String)? {
+        guard let error = answer["error"] as? [String: Any] else { return nil }
+        return ((error["code"] as? NSNumber)?.intValue ?? 0, error["message"] as? String ?? "")
+    }
+
+    /// **`net_version` is decimal and `eth_chainId` is hex.**
+    ///
+    /// Not a nicety: a hex answer to `net_version` is a string comparison
+    /// every dApp fails, and it fails silently — the site simply believes it
+    /// is on a different network than the wallet.
+    @Test func theTwoChainQuestionsAnswerInTheirOwnNotations() async {
+        let recorder = Recorder()
+        await router(recorder).route(id: "a", method: "eth_chainId", paramsJson: "[]", origin: "https://x.test")
+        await router(recorder).route(id: "b", method: "net_version", paramsJson: "[]", origin: "https://x.test")
+
+        #expect(recorder.answers.first?.json["result"] as? String == "0x64")
+        #expect(recorder.answers.last?.json["result"] as? String == "100")
+        #expect(recorder.poolCalls.isEmpty, "the wallet answers these from itself")
+    }
+
+    /// A method outside the allowlist is refused **4900**, and nothing is
+    /// asked of any endpoint.
+    ///
+    /// 4900 rather than 4001 because the person did not decline. And
+    /// `eth_signTransaction` is the specific method a denylist would fail open
+    /// on: it is not caught by the signing predicate, so a catch-all read
+    /// bucket would proxy a signing request to a public node.
+    @Test func anUnknownMethodIsRefusedAndNeverForwarded() async {
+        for method in ["eth_signTransaction", "debug_traceTransaction", "wallet_invokeSnap"] {
+            let recorder = Recorder()
+            await router(recorder).route(id: "r", method: method, paramsJson: "[]", origin: "https://x.test")
+            #expect(error(recorder.answers.first?.json ?? [:])?.code == 4900, "\(method)")
+            #expect(recorder.poolCalls.isEmpty, "\(method) must not reach a node")
+            #expect(recorder.signed.isEmpty, "\(method) must not reach the sheet")
+        }
+    }
+
+    /// `eth_sign` is refused **before** the signing test that would catch it.
+    /// Policy, not a missing feature.
+    @Test func ethSignIsRefusedAsPolicy() async {
+        let recorder = Recorder()
+        await router(recorder).route(id: "r", method: "eth_sign", paramsJson: "[]", origin: "https://x.test")
+        #expect(error(recorder.answers.first?.json ?? [:])?.code == 4900)
+        #expect(recorder.signed.isEmpty)
+    }
+
+    @Test func aChainSwitchIsCheckedAgainstTheWalletsOwnNetworks() async {
+        let known = Recorder()
+        await router(known).route(id: "a", method: "wallet_switchEthereumChain",
+                                  paramsJson: #"[{"chainId":"0x1"}]"#, origin: "https://x.test")
+        #expect(known.switched == [1])
+        #expect(known.answers.first?.json["result"] is NSNull)
+
+        let unknown = Recorder()
+        await router(unknown).route(id: "b", method: "wallet_switchEthereumChain",
+                                    paramsJson: #"[{"chainId":"0x2105"}]"#, origin: "https://x.test")
+        #expect(error(unknown.answers.first?.json ?? [:])?.code == 4902)
+        #expect(unknown.switched.isEmpty)
+
+        let malformed = Recorder()
+        await router(malformed).route(id: "c", method: "wallet_switchEthereumChain",
+                                      paramsJson: "[{}]", origin: "https://x.test")
+        #expect(error(malformed.answers.first?.json ?? [:])?.code == -32602)
+    }
+
+    /// A receipt poll for a hash **this wallet minted** is translated to the
+    /// transaction that carried it.
+    ///
+    /// The page was answered with a transaction hash, so it polls for one; the
+    /// bundler knows only the user-operation hash. Spec 028 found this when a
+    /// real dApp's swap "submitted but never confirmed".
+    @Test func aReceiptPollForOurOwnOperationIsTranslated() async {
+        let landed = Recorder()
+        await router(landed, receipt: .landed(txHash: "0x151d63c8"))
+            .route(id: "a", method: "eth_getTransactionReceipt",
+                   paramsJson: #"["0xcf9fcae6"]"#, origin: "https://x.test")
+        #expect(landed.poolCalls.count == 1, "the node is still asked — for the TX hash")
+
+        let pending = Recorder()
+        await router(pending, receipt: .pending)
+            .route(id: "b", method: "eth_getTransactionReceipt",
+                   paramsJson: #"["0xcf9fcae6"]"#, origin: "https://x.test")
+        #expect(pending.answers.first?.json["result"] is NSNull,
+                "ours and not landed is exactly what a node says about a transaction it has not seen")
+        #expect(pending.poolCalls.isEmpty)
+    }
+
+    /// A bundler method is routed to the bundler, not the node.
+    @Test func bundlerMethodsAreRoutedToTheBundler() async {
+        let recorder = Recorder()
+        await router(recorder).route(id: "a", method: "eth_sendUserOperation",
+                                     paramsJson: "[]", origin: "https://x.test")
+        #expect(recorder.poolCalls.first?.bundler == true)
+    }
+
+    /// The node's own sentence reaches the page.
+    ///
+    /// A page that shows its user "execution reverted: insufficient allowance"
+    /// can be debugged; one that shows "-32603" cannot.
+    @Test func aNodesRefusalIsPassedOnVerbatim() async {
+        let recorder = Recorder()
+        await router(recorder, body: ["error": ["code": -32000, "message": "execution reverted: nope"]])
+            .route(id: "a", method: "eth_call", paramsJson: "[]", origin: "https://x.test")
+        #expect(error(recorder.answers.first?.json ?? [:])?.code == -32000)
+        #expect(error(recorder.answers.first?.json ?? [:])?.message == "execution reverted: nope")
+    }
+
+    @Test func noEndpointAtAllIsItsOwnAnswer() async {
+        let recorder = Recorder()
+        await router(recorder, body: nil)
+            .route(id: "a", method: "eth_blockNumber", paramsJson: "[]", origin: "https://x.test")
+        #expect(error(recorder.answers.first?.json ?? [:])?.code == -32603)
+        #expect(error(recorder.answers.first?.json ?? [:])?.message == "No endpoint answered")
+    }
+}
+
+// MARK: - Reading a request
+
+@MainActor
+struct SignRequestReadingTests {
+
+    /// `eth_sendTransaction` is one call; `wallet_sendCalls` is many — and an
+    /// **empty batch is not a batch**.
+    @Test func theCallsARequestCarries() {
+        let single = SignExecutor.callsOf(
+            method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0xabc","value":"0x38d7ea4c68000","data":"0x"}]"#
+        )
+        #expect(single?.count == 1)
+        // Hex on the wire, decimal to the core.
+        #expect(single?.first?.value == "1000000000000000")
+
+        let batch = SignExecutor.callsOf(
+            method: "wallet_sendCalls",
+            paramsJson: #"[{"calls":[{"to":"0xa","value":"0x1"},{"to":"0xb"}]}]"#
+        )
+        #expect(batch?.count == 2)
+        #expect(batch?.last?.value == "0", "an absent value is zero, not a failure")
+        #expect(batch?.last?.data == "0x")
+
+        #expect(SignExecutor.callsOf(method: "wallet_sendCalls", paramsJson: #"[{"calls":[]}]"#) == nil)
+        #expect(SignExecutor.callsOf(method: "eth_sendTransaction", paramsJson: "[]") == nil)
+        #expect(SignExecutor.callsOf(method: "eth_sendTransaction", paramsJson: "not json") == nil)
+    }
+
+    /// An odd-length hex value is still a number.
+    ///
+    /// A dApp writes `0x1`. A decoder that needs whole bytes and is handed one
+    /// nibble answers nothing, and the request dies with "carried no
+    /// transaction this wallet could read".
+    @Test func anOddLengthHexValueIsStillANumber() {
+        let call = SignExecutor.callsOf(
+            method: "eth_sendTransaction", paramsJson: #"[{"to":"0xabc","value":"0x1"}]"#
+        )
+        #expect(call?.first?.value == "1")
+    }
+
+    /// `personal_sign` signs `params[0]`; `eth_sign` signs `params[1]`.
+    ///
+    /// The params are swapped between the two, and signing the wrong one
+    /// produces a signature that verifies against nothing.
+    @Test func aMessageIsHashedTheWayThePagesVerifierWill() {
+        // "Hello, Vela" — the EIP-191 envelope over 11 bytes.
+        let personal = SignExecutor.messageHash(
+            method: "personal_sign", paramsJson: #"["0x48656c6c6f2c2056656c61","0xabc"]"#
+        )
+        let ethSign = SignExecutor.messageHash(
+            method: "eth_sign", paramsJson: #"["0xabc","0x48656c6c6f2c2056656c61"]"#
+        )
+        #expect(personal != nil)
+        #expect(personal == ethSign, "same payload, params swapped — the same digest")
+
+        let expected = keccak256(data: Data("\u{19}Ethereum Signed Message:\n11".utf8) + Data("Hello, Vela".utf8))
+        #expect(personal == expected)
+
+        // A non-hex payload is signed as its own UTF-8 bytes.
+        let text = SignExecutor.messageHash(method: "personal_sign", paramsJson: #"["hello","0xabc"]"#)
+        #expect(text == keccak256(data: Data("\u{19}Ethereum Signed Message:\n5".utf8) + Data("hello".utf8)))
+    }
+
+    /// A signature moves nothing, so its feed row claims no value and no
+    /// symbol. A row with a value shows up in the feed as money.
+    @Test func aSignatureRecordCarriesNoMoney() {
+        let row = SignExecutor.recordRow([
+            "record_id": "dapp-1-msg", "kind": "sign_message", "method": "personal_sign",
+            "params_json": "[]", "result": "", "from": "0xme", "chain_id": 100,
+            "now_ms": 1_757_000_000_000, "status": "pending", "user_op_hash": "",
+            "dapp_origin": "https://x.test",
+        ], nativeSymbol: "xDAI")
+        #expect(row["type"] as? String == "sign_message")
+        #expect(row["value"] as? String == "0")
+        #expect((row["symbol"] as? String)?.isEmpty == true)
+        // SECONDS. Milliseconds here puts every signature in the year 57000.
+        #expect(row["timestamp"] as? Int == 1_757_000_000)
+    }
+
+    @Test func aTransactionRecordCarriesTheCallAndClipsALongRequest() {
+        let long = String(repeating: "a", count: 9000)
+        let row = SignExecutor.recordRow([
+            "record_id": "dapp-1-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
+            "params_json": #"[{"to":"0x76875e","value":"0x38d7ea4c68000","data":"0x\#(long)"}]"#,
+            "result": "", "from": "0xme", "chain_id": 100, "now_ms": 1_757_000_000_000,
+            "status": "pending", "user_op_hash": "0xcf9f", "dapp_origin": "https://x.test",
+        ], nativeSymbol: "xDAI")
+        #expect(row["type"] as? String == "dapp_tx")
+        #expect(row["to"] as? String == "0x76875e")
+        #expect(row["symbol"] as? String == "xDAI")
+        #expect(row["requestTruncated"] as? Bool == true)
+        #expect((row["signedRequest"] as? String)?.count == 4096)
+    }
+}
+
+// MARK: - The controller's assembly
+
+@MainActor
+struct SigningAssemblyTests {
+
+    /// **Displayed is signed.** When the guard rewrote an approval, the
+    /// rewritten params are what the approve carries — never the original
+    /// request.
+    @Test func theApproveCarriesTheGuardsRewriteRatherThanTheRequest() {
+        let rewritten = #"[{"to":"0xtoken","data":"0x095ea7b3capped"}]"#
+        var guardView = GuardViewWire.empty
+        guardView = GuardViewWire(
+            surface: .approvalEditor, detected: nil, meta: guardView.meta, editor: nil,
+            confirmAllowed: true, rewrittenParamsJson: rewritten, increaseTotal: nil,
+            decimalsUnverified: false, expired: false, batch: nil
+        )
+        let opts = SigningController.approveOpts(fee: nil, clear: .empty, guard: guardView)
+        #expect(opts["params_override_json"] as? String == rewritten)
+
+        // Nothing rewritten is `null`, and that is NOT a green light: the
+        // untouched params still meet the core's own refusal at submit.
+        let untouched = SigningController.approveOpts(fee: nil, clear: .empty, guard: .empty)
+        #expect(untouched["params_override_json"] is NSNull)
+    }
+
+    /// The displayed fee travels verbatim into the signature.
+    @Test func theQuotedFeeTravelsWithTheApproval() {
+        let fee = FeeViewWire(
+            busy: false, failed: nil,
+            fee: FeeEstimateWire(
+                chainId: 100, totalWei: "2100000000000000", maxFeePerGas: "1500000000",
+                totalGas: "120000", deployed: true, quoted: true,
+                feeAsset: .native,
+                feeRecipient: "0xrelay"
+            ),
+            stale: false, feeToken: nil, options: [], confirmFeeReady: true
+        )
+        let opts = SigningController.approveOpts(fee: fee, clear: .empty, guard: .empty)
+        let quoted = opts["quoted_fee"] as? [String: Any]
+        #expect(quoted?["amount"] as? String == "2100000000000000")
+        #expect(quoted?["recipient"] as? String == "0xrelay")
+        #expect(opts["max_fee_per_gas"] as? String == "1500000000")
+    }
+
+    /// Each method reaches its own rung of the clear-signing ladder.
+    @Test func eachMethodStartsTheRightResolution() {
+        let tx = SigningController.clearKickoff(
+            method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0xabc","data":"0xdeadbeef","value":"0x1"}]"#,
+            chainId: 100, origin: "https://x.test"
+        )
+        #expect(tx?["type"] as? String == "resolve_transaction")
+        #expect(tx?["to"] as? String == "0xabc")
+        #expect(tx?["data"] as? String == "0xdeadbeef")
+
+        // A batch leads with its FIRST leg.
+        let batch = SigningController.clearKickoff(
+            method: "wallet_sendCalls",
+            paramsJson: #"[{"calls":[{"to":"0xfirst","data":"0x01"},{"to":"0xsecond"}]}]"#,
+            chainId: 100, origin: nil
+        )
+        #expect(batch?["to"] as? String == "0xfirst")
+
+        let typed = SigningController.clearKickoff(
+            method: "eth_signTypedData_v4",
+            paramsJson: #"["0xme","{\"primaryType\":\"Permit\"}"]"#,
+            chainId: 100, origin: nil
+        )
+        #expect(typed?["type"] as? String == "resolve_typed_data")
+
+        let message = SigningController.clearKickoff(
+            method: "personal_sign", paramsJson: #"["0x48","0xme"]"#,
+            chainId: 100, origin: "https://x.test"
+        )
+        #expect(message?["type"] as? String == "message_presented")
+        #expect(message?["request_origin"] as? String == "https://x.test")
+
+        #expect(SigningController.clearKickoff(
+            method: "eth_blockNumber", paramsJson: "[]", chainId: 100, origin: nil
+        ) == nil)
+    }
+
+    /// Typed data is the **second** parameter.
+    @Test func typedDataIsTheSecondParameter() {
+        #expect(SigningController.typedDataOf(
+            paramsJson: #"["0xme","{\"primaryType\":\"Permit\"}"]"#
+        ) == #"{"primaryType":"Permit"}"#)
+        // Some dApps send the object rather than a string.
+        #expect(SigningController.typedDataOf(
+            paramsJson: #"["0xme",{"primaryType":"Permit"}]"#
+        ).contains("Permit"))
+        #expect(SigningController.typedDataOf(paramsJson: "[]").isEmpty)
+    }
+}
+
+// MARK: - The sheet
+
+@MainActor
+struct SigningLiveTests {
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    private func context() -> SigningLive.Context {
+        SigningLive.Context(
+            loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "xDAI",
+            walletName: "Me", walletAddress: "0x88cca0eedbf2c4426110bbfc998f048689266894",
+            origin: "https://x.test"
+        )
+    }
+
+    private func clear(
+        surface: ClearSurface, resolved: Bool = true,
+        result: ClearSignResultWire? = nil, confirm: ClearConfirmWire = .confirm
+    ) -> ClearSigningViewWire {
+        ClearSigningViewWire(
+            resolving: false, resolved: resolved, result: result, message: nil,
+            surface: surface, confirm: confirm, blindTyped: nil, dangerHaptic: false
+        )
+    }
+
+    /// **A plain native transfer is not a contract interaction.**
+    ///
+    /// The core resolves it without a descriptor — resolved, and no result —
+    /// and the blind card's "cannot decode (0 bytes)" read a dust send as an
+    /// unknown contract call on Android's first pass.
+    @Test func aNoCalldataTransferIsDrawnAsASendRatherThanAsABlindCall() {
+        let blocks = SigningLive.blocks(
+            clear: clear(surface: .none),
+            to: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            valueHex: "0x38d7ea4c68000", dataBytes: 0, context: context()
+        )
+        let intents = blocks.compactMap { block -> String? in
+            if case .intent(let text, _) = block { return text }
+            return nil
+        }
+        #expect(intents.count == 1)
+        #expect(intents.first != loc.t("componentsUi.signing.intentContractCall"))
+        #expect(blocks.contains { if case .amount = $0 { true } else { false } },
+                "the amount is the first thing a person needs to see")
+        #expect(blocks.contains { if case .party = $0 { true } else { false } })
+    }
+
+    /// A real contract call with calldata gets the blind card, honestly.
+    @Test func anUndecodableCallSaysSoWithItsSize() {
+        let blocks = SigningLive.blocks(
+            clear: clear(surface: .blindTransaction), to: "0xrouter",
+            valueHex: "0x0", dataBytes: 412, context: context()
+        )
+        #expect(blocks.contains { block in
+            if case .warning(_, let text) = block { return text.contains("412") }
+            return false
+        }, "the byte count is the only honest measure of what nobody could read")
+    }
+
+    /// **The slide's verb is never a raw intent id.**
+    ///
+    /// Android shipped a button reading 确认send.
+    @Test func theConfirmVerbIsAlwaysCorpusWords() {
+        for intent in ["send", "swap", "deposit", "withdraw", "something_new"] {
+            let label = SigningLive.confirmLabel(
+                clear: clear(surface: .clearSign, confirm: .confirmIntent(intent)), loc: loc
+            )
+            #expect(!label.contains(intent), "the verb printed the id: \(label)")
+            #expect(!label.isEmpty)
+        }
+        #expect(SigningLive.confirmLabel(clear: clear(surface: .messageSign, confirm: .sign), loc: loc)
+                == loc.t("componentsUi.signing.signLabel"))
+    }
+
+    /// The slide is three machines ANDed — and an **off-chain** signature has
+    /// no fee to be ready about.
+    @Test func theSlideOpensOnlyWhenAllThreeMachinesAgree() {
+        let openGate = SignViewWire(
+            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
+            pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
+            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
+            notice: nil, globalChainId: 100
+        )
+        let readyFee = FeeViewWire(
+            busy: false, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [], confirmFeeReady: true
+        )
+        let unreadyFee = FeeViewWire(
+            busy: true, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [], confirmFeeReady: false
+        )
+        let blockingGuard = GuardViewWire(
+            surface: .approvalEditor, detected: nil, meta: GuardViewWire.empty.meta,
+            editor: nil, confirmAllowed: false, rewrittenParamsJson: nil,
+            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
+        )
+
+        #expect(SigningLive.confirmEnabled(
+            sign: openGate, guard: .empty, fee: readyFee, clear: clear(surface: .clearSign)
+        ))
+        #expect(!SigningLive.confirmEnabled(
+            sign: openGate, guard: blockingGuard, fee: readyFee, clear: clear(surface: .clearSign)
+        ), "an unlimited approval with no cap chosen must hold the slide shut")
+        #expect(!SigningLive.confirmEnabled(
+            sign: openGate, guard: .empty, fee: unreadyFee, clear: clear(surface: .clearSign)
+        ))
+        // No fee, no waiting for one.
+        #expect(SigningLive.confirmEnabled(
+            sign: openGate, guard: .empty, fee: unreadyFee, clear: clear(surface: .messageSign)
+        ), "a personal_sign has no network fee and must not wait for a quote")
+    }
+
+    /// The "as requested" chip is **disabled** for an unlimited approval, not
+    /// merely unselected — and the cap value reads as the danger it is.
+    @Test func anUnlimitedApprovalOffersNoAsRequestedChip() {
+        let editor = GuardEditorViewWire(
+            mode: nil, customText: "", error: nil, choice: nil, displayAmountRaw: nil,
+            requestedFinite: false, hasBalanceCap: false, balanceRaw: nil
+        )
+        let guardView = GuardViewWire(
+            surface: .approvalEditor,
+            detected: GuardDetectedApprovalWire(
+                kind: .erc20Approve, tokenAddress: "0xtoken", spender: "0xspender",
+                amountRaw: nil, amountBits: 256, isUnbounded: true, isBooleanGrant: false,
+                isReducing: false, editable: true, blockReason: nil, deadline: nil,
+                locus: .calldataWord(index: 1)
+            ),
+            meta: GuardTokenMetaViewWire(symbol: "USDC", decimals: 6, verified: true, loading: false),
+            editor: editor, confirmAllowed: false, rewrittenParamsJson: nil,
+            increaseTotal: nil, decimalsUnverified: false, expired: false, batch: nil
+        )
+        let blocks = SigningLive.guardBlocks(guardView, loc: loc)
+        guard case .allowance(_, let value, let tone, let chips, _, _)? = blocks.first else {
+            Issue.record("the editor block is missing")
+            return
+        }
+        #expect(tone == .danger)
+        #expect(value == loc.t("componentsUi.signingApprove.unlimitedValue"))
+        #expect(chips.first { $0.id == "requested" }?.state == .disabled)
+        #expect(chips.first { $0.id == "custom" }?.state == .idle)
+        #expect(blocks.contains { if case .warning(.danger, _) = $0 { true } else { false } })
+    }
+
+    /// An off-chain permit says plainly that the wallet cannot cap it, and
+    /// why. Rewriting one would desync the signature and revert the dApp's own
+    /// transaction.
+    @Test func anOffChainPermitSaysItCannotBeCapped() {
+        let guardView = GuardViewWire(
+            surface: .permitSign,
+            detected: GuardDetectedApprovalWire(
+                kind: .erc2612Permit, tokenAddress: "0xtoken", spender: "0xspender",
+                amountRaw: nil, amountBits: 256, isUnbounded: true, isBooleanGrant: false,
+                isReducing: false, editable: false, blockReason: .offChainPermit,
+                deadline: nil, locus: .typedPath(".message.value")
+            ),
+            meta: GuardViewWire.empty.meta, editor: nil, confirmAllowed: true,
+            rewrittenParamsJson: nil, increaseTotal: nil, decimalsUnverified: false,
+            expired: false, batch: nil
+        )
+        let blocks = SigningLive.guardBlocks(guardView, loc: loc)
+        #expect(blocks.contains { block in
+            if case .warning(.danger, let text) = block {
+                return text == loc.t("componentsUi.signingApprove.permitCantCap")
+            }
+            return false
+        })
+    }
+
+    /// A signature has no network fee, and the sheet says so instead of
+    /// showing a blank row.
+    @Test func anOffChainSignatureShowsNoFeeRow() {
+        if case .offchain = SigningLive.feeModel(
+            clear: clear(surface: .messageSign), fee: nil, context: context()
+        ) {} else {
+            Issue.record("a message signature must not draw a network-fee row")
+        }
+    }
+
+    /// The dApp's identity on the sheet is its **host**, twice. A name the
+    /// page supplies is a claim.
+    @Test func theSheetLeadsWithTheHostAndNotWithAName() {
+        let model = SigningLive.model(
+            fallback: SigningFixtures.build(.cs1, loc: loc),
+            request: SigningController.Incoming(
+                id: "r", method: "eth_sendTransaction",
+                paramsJson: #"[{"to":"0xabc","value":"0x1"}]"#,
+                origin: "https://app.uniswap.org", transportId: "t", chainId: 100
+            ),
+            sign: .empty, clear: clear(surface: .none, resolved: false),
+            guard: .empty, fee: nil, context: context()
+        )
+        #expect(model.dapp.host == "app.uniswap.org")
+        #expect(model.dapp.name == "app.uniswap.org")
+        #expect(model.network.name == "Gnosis")
+        #expect(model.signer.seed == "0x88cca0eedbf2c4426110bbfc998f048689266894")
+    }
+}

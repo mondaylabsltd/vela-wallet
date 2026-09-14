@@ -123,4 +123,57 @@ final class BrowserAcceptanceTests: XCTestCase {
 
         attach(app.screenshot(), named: "device-browser-address-bar")
     }
+
+    // MARK: - US2: the browser remembers
+
+    /// A pinned site and a visited one survive the app being killed.
+    ///
+    /// Both halves matter and they come from **different machines**:
+    /// `explore_sites` keeps the favourite and `browser_history` keeps the
+    /// visit, in two documents, with two different rules about what an
+    /// unreadable one means. A test that checked only one would pass while the
+    /// other silently wrote nothing.
+    ///
+    /// The visit half is also the proof that the controller's wait works: that
+    /// machine has no `ready` flag, and a visit recorded before its store
+    /// answers is dropped without a word.
+    func testFavouritesAndRecentsSurviveAForceQuit() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+
+        // The star in the browser toolbar.
+        let star = app.buttons["explore.addToFavorites"].firstMatch
+        if star.waitForExistence(timeout: 10) {
+            star.tap()
+        } else {
+            // Labelled by its corpus string rather than an identifier on this
+            // build — either is fine, and failing here would be failing on the
+            // wrong thing.
+            app.buttons["添加到收藏"].firstMatch.tap()
+        }
+        attach(app.screenshot(), named: "device-browser-favourited")
+
+        app.terminate()
+
+        // Relaunch WITHOUT a URL: nothing reopens the page, so anything on the
+        // start page came off the disk.
+        let again = XCUIApplication()
+        again.launchEnvironment["VELA_LANG"] = "zh"
+        again.launchEnvironment["VELA_THEME"] = "dark"
+        again.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        again.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        again.launchArguments += ["-AppleLanguages", "(zh)"]
+        again.launch()
+        XCTAssertTrue(again.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        again.buttons["探索"].firstMatch.tap()
+
+        XCTAssertTrue(again.staticTexts["最近"].waitForExistence(timeout: 20)
+                        || again.staticTexts["最近的 dApp"].waitForExistence(timeout: 5),
+                      "the recents section is missing — the visit was never recorded, or it was recorded before the store answered and dropped")
+        XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 20),
+                      "neither the favourite nor the recent survived the relaunch")
+        attach(again.screenshot(), named: "device-browser-remembered")
+    }
 }

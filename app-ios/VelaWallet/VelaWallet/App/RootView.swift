@@ -23,6 +23,12 @@ struct RootView: View {
     /// The `vela.*` shelf, for the reads that are not a machine's — the
     /// explorer bases of custom networks.
     private let shelf: VelaStore
+    /// The money path, shared with 053's dApp transactions: one relay client,
+    /// one account port, one submit spine. A second spine would be a second
+    /// set of rules about the same Safe.
+    private let relayClient: RelayClient
+    private let sendAccountPort: SendAccountPort
+    private let userOpSpine: UserOpSpine
     /// The account list, kept rather than passed and forgotten: the parallel
     /// space's door needs it at `.task` time, after `init` has finished.
     private let accounts: AccountStore
@@ -86,6 +92,10 @@ struct RootView: View {
     /// request stays in flight, and a dApp that reloaded every time somebody
     /// glanced at their balance would lose a half-finished swap.
     @State private var browser: BrowserController
+    /// The request a page is asking about right now. Born with the request
+    /// and dropped when the page has its answer — four machines that must not
+    /// outlive the question they were asked.
+    @State private var signing: SigningController?
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -139,12 +149,15 @@ struct RootView: View {
         // spine is shared with 053's dApp transactions, which is why it is
         // built here rather than inside the send store.
         let relay = RelayClient(port: PoolRelayPort(pool: pool))
+        self.relayClient = relay
         let port = SendAccountPort(accounts: store)
+        self.sendAccountPort = port
         let spine = UserOpSpine(
             relay: relay,
             accounts: port,
             signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) }
         )
+        self.userOpSpine = spine
         let feeStore = FeeStore(relay: relay, accounts: port)
         _fees = State(initialValue: feeStore)
         _contacts = State(initialValue: ContactsStore(
@@ -673,23 +686,80 @@ struct RootView: View {
                 case .contacts:
                     contactsSection
                 case .explore:
-                    // Spec 022/029: 探索 is a real destination now rather than an
-                    // inert chip. Its body is a fixture layer exactly like the
-                    // wallet's, but the account it shows a site is the REAL one —
-                    // a connection panel naming a stranger's account would be the
-                    // wallet lying about what it just granted.
+                    // Spec 053: 探索 is a browser. Its start page is this
+                    // person's own favourites, groups and recents, its tab
+                    // strip is the core's, and its pages are real. The
+                    // account a site is shown is the REAL one — a connection
+                    // panel naming a stranger's account would be the wallet
+                    // lying about what it just granted.
                     ExploreScreen(
-                        model: ExploreFixtures.buildMobileState(.e2, loc: loc)
-                            .withIdentity(name: session.view.activeName,
-                                          address: session.view.address),
+                        model: ExploreLive.home(
+                            explore: browser.explore,
+                            history: browser.history,
+                            permissions: browser.permissions,
+                            engine: browser.current,
+                            identity: (name: session.view.activeName,
+                                       address: session.view.address),
+                            chainId: browser.browserChain,
+                            loc: loc
+                        ),
                         loc: loc,
                         signing: SigningFixtures.build(.cs12, loc: loc)
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
+                        signingLive: signing.map { live in
+                            SigningLive.model(
+                                fallback: SigningFixtures.build(.cs1, loc: loc),
+                                request: live.request ?? SigningController.Incoming(
+                                    id: "", method: "", paramsJson: "[]", origin: "",
+                                    transportId: "", chainId: browser.browserChain
+                                ),
+                                sign: live.sign,
+                                clear: live.clear,
+                                guard: live.guardView,
+                                fee: live.fee,
+                                context: SigningLive.Context(
+                                    loc: loc,
+                                    chainName: ChainCatalog.meta(browser.browserChain)?.displayName
+                                        ?? String(browser.browserChain),
+                                    chainDot: SettingsLive.chainColor(browser.browserChain),
+                                    nativeSymbol: ChainCatalog.meta(browser.browserChain)?.nativeSymbol ?? "",
+                                    walletName: session.view.activeName,
+                                    walletAddress: session.view.address,
+                                    origin: live.request?.origin
+                                )
+                            )
+                        },
+                        onSigningConfirm: { signing?.approve() },
+                        onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         onSelectTab: selectTab
                     )
+                    .onChange(of: signing?.closed) { _, closed in
+                        // The page has its answer and the core cleared the
+                        // sheet. Dropping the controller is what makes the
+                        // next request start from nothing rather than
+                        // inheriting a decoded intent or a half-edited cap.
+                        if closed == true { signing = nil }
+                    }
+                    .onDisappear {
+                        // Leaving 探索 settles every request the page left
+                        // hanging — as **unknown-pending**, never as a
+                        // refusal: nobody declined anything, and a page told
+                        // 4001 would show its user "you rejected this" when
+                        // they did not.
+                        //
+                        // On the section change rather than on a view's
+                        // `onDisappear` alone would be safer still; this one
+                        // fires for the tab switch and nothing else, because
+                        // the signing sheet is presented OVER this screen and
+                        // leaves the section where it is.
+                        browser.close()
+                    }
                     .task {
+                        browser.ports.onSignRequest = { request in
+                            openSigning(request)
+                        }
                         browser.start()
                         browser.accountsChanged(
                             addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
@@ -718,6 +788,69 @@ struct RootView: View {
     /// drawn, tappable, and did nothing at all. 探索 opens the browser's
     /// fixture layer (spec 022/029) over the real identity; its machines are
     /// not wired yet.
+    /// A page asked for a signature.
+    ///
+    /// A **second** request while one is open is refused rather than queued —
+    /// the permissions machine's `consent_busy` rule, applied to signing. Two
+    /// sheets over one page is a person answering the wrong question.
+    private func openSigning(_ request: BrowserController.SignRequest) {
+        guard signing == nil else {
+            browser.answerFromSigning(
+                transportId: request.transportId,
+                id: request.id,
+                json: BrowserExecutor.errorJson(
+                    id: request.id, code: -32002, message: "Another request is open"
+                )
+            )
+            return
+        }
+        let record = accounts.loadAccounts().first {
+            ($0["address"] as? String)?.caseInsensitiveCompare(session.view.address) == .orderedSame
+        }
+        let credentialId = ((record?["keys"] as? [[String: Any]])?.first?["credential_id"] as? String)
+            ?? (record?["credential_id"] as? String) ?? ""
+
+        let controller = SigningController(
+            wallet: (address: session.view.address, credentialId: credentialId),
+            relay: relayClient,
+            accounts: sendAccountPort,
+            spine: userOpSpine,
+            store: shelf,
+            pool: pool,
+            ports: SigningController.Ports(
+                respond: { [browser] transportId, id, json in
+                    browser.answerFromSigning(transportId: transportId, id: id, json: json)
+                },
+                trackSubmitted: { [tracker, notifier] hash, ids, chain in
+                    notifier.askOnceIfNeeded()
+                    tracker.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                },
+                recordsPersisted: { [activity] in activity.reconciled() },
+                nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
+                knownChains: { [settings] in
+                    settings.networkAdmin?.networks.map(\.chainId) ?? []
+                },
+                // The base the settings machine names, with the shipped
+                // default behind it — the same resolution `ChainTokens` and
+                // `RpcEndpoints` use, so a person's own endpoint reaches the
+                // signing sheet's descriptors too.
+                dataBase: { [accounts] in
+                    (accounts.loadServiceEndpoints()["ethereumDataURL"] as? String)
+                        .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL
+                }
+            )
+        )
+        signing = controller
+        controller.open(SigningController.Incoming(
+            id: request.id,
+            method: request.method,
+            paramsJson: request.paramsJson,
+            origin: request.origin,
+            transportId: request.transportId,
+            chainId: request.chainId
+        ))
+    }
+
     private func selectTab(_ tab: WalletTab) {
         switch tab {
         case .settings: router.path.append(.settings)

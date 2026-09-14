@@ -18,6 +18,8 @@ struct ConnectionPanelView: View {
     var onClose: (() -> Void)?
     var onSwitch: () -> Void = {}
     var onDisconnect: () -> Void = {}
+    var onApprove: () -> Void = {}
+    var onReject: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -29,11 +31,16 @@ struct ConnectionPanelView: View {
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                     HStack(spacing: Tokens.Space.s4) {
-                        LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        // The padlock follows the SCHEME, not the layout. A
+                        // consent sheet that drew a lock over an http origin
+                        // would be the most dangerous pixel in this cut.
+                        if connection.secure {
+                            LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        }
                         Text(verbatim: connection.statusLine)
                             .typeRole(Typography.rowSub.scaled(textScale))
                     }
-                    .foregroundStyle(theme.successBase)
+                    .foregroundStyle(connection.secure ? theme.successBase : theme.fgMuted)
                 }
                 Spacer(minLength: Tokens.Space.s12)
                 if let onClose {
@@ -93,19 +100,50 @@ struct ConnectionPanelView: View {
                 .foregroundStyle(theme.fgMuted)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(action: onDisconnect) {
-                Text(verbatim: connection.disconnect)
-                    .typeRole(Typography.button.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Tokens.Control.lg)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Tokens.Radius.r12)
-                            .stroke(theme.borderStrong, lineWidth: Tokens.BorderWidth.hairline)
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+            if let consent = connection.consent {
+                // Asking, not connected. The refusal is the outline and the
+                // approval is the filled control, so the deliberate act is
+                // the one that grants.
+                HStack(spacing: Tokens.Space.s12) {
+                    Button(action: onReject) {
+                        Text(verbatim: consent.reject)
+                            .typeRole(Typography.button.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Tokens.Control.lg)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                                    .stroke(theme.borderStrong, lineWidth: Tokens.BorderWidth.hairline)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                    }
+                    .buttonStyle(.plain)
+                    Button(action: onApprove) {
+                        Text(verbatim: consent.approve)
+                            .typeRole(Typography.button.scaled(textScale))
+                            .foregroundStyle(theme.onAccent)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Tokens.Control.lg)
+                            .background(theme.accentBase, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                            .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(action: onDisconnect) {
+                    Text(verbatim: connection.disconnect)
+                        .typeRole(Typography.button.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Tokens.Control.lg)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                                .stroke(theme.borderStrong, lineWidth: Tokens.BorderWidth.hairline)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Text(verbatim: connection.footnote)
                 .typeRole(Typography.rowSub.scaled(textScale))

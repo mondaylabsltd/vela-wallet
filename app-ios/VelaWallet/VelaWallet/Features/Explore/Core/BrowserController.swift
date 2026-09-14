@@ -244,6 +244,24 @@ final class BrowserController {
         }
     }
 
+    /// Open a site the person tapped, by the id the tile or row carries.
+    ///
+    /// A favourite's `url` can be deeper than its origin, because that is
+    /// where the person actually works — opening the origin instead would
+    /// take somebody from their swap page to a marketing front door every
+    /// time. Recents carry the exact URL for the same reason.
+    func openSite(id: String) {
+        if let pinned = explore.favorites.first(where: { $0.origin == id }) {
+            open(pinned.url)
+            return
+        }
+        if let visited = history.entries.first(where: { $0.origin == id }) {
+            open(visited.url)
+            return
+        }
+        open(id)
+    }
+
     func newTab() {
         whenReady { [weak self] in
             guard let self else { return }
