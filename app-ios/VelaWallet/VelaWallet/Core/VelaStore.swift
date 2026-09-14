@@ -88,6 +88,18 @@ struct VelaStore {
         /// The configurable endpoint's USD-based rate map, keyed by the URL it
         /// came from so changing the endpoint refetches.
         static let fxRates = "vela.fxRates.v1"
+
+        // The preferences (spec 056). No machine owns these — they are storage
+        // keys with a reader, and the SPELLINGS are the contract: web and
+        // Android write exactly these, so a person's choices survive moving
+        // between their own devices through a backup.
+        //
+        // `localePrefs` is one JSON object; the rest are bare strings.
+        static let theme = "vela.theme"
+        static let language = "vela.language"
+        static let localePrefs = "vela.localePrefs"
+        static let avatarStyle = "vela.avatarStyle"
+        static let textScale = "vela.textScale"
     }
 
     private let defaults: UserDefaults
