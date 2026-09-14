@@ -410,6 +410,23 @@ enum SigningLive {
             if let uri = siwe.uri {
                 rows.append(SigningRow(label: s(loc, "siweOrigin"), value: uri))
             }
+            // The chain the MESSAGE names, and its nonce. Both are parsed by
+            // the core and were being dropped on the floor here — a sign-in
+            // for chain 1 presented on chain 100 looked identical to one that
+            // matched, because the number was never on screen.
+            //
+            // Shown as FACTS, not a verdict: the core binds on the domain and
+            // not on the chain, and a shell that decided "this chain is wrong"
+            // would be a second, disagreeing adjudicator. Recorded in results.
+            if let chainId = siwe.chainId {
+                rows.append(SigningRow(
+                    label: s(loc, "labelChain"),
+                    value: ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
+                ))
+            }
+            if let nonce = siwe.nonce, !nonce.isEmpty {
+                rows.append(SigningRow(label: s(loc, "labelNonce"), value: nonce, mono: true))
+            }
             blocks.append(.rows(rows))
 
             // The string on screen is the string that was adjudicated.
