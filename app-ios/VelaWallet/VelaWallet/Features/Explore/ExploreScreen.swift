@@ -41,7 +41,12 @@ struct ExploreScreen: View {
     var onSelectTab: (WalletTab) -> Void = { _ in }
 
     @State private var viewOverride: ExploreView?
-    @State private var sheet: ExploreSheet?
+    /// **Which** sheet is open — never a snapshot of what it said when it
+    /// opened. A sheet holding a captured model shows the group you deleted,
+    /// the site you unpinned, and — the one that matters — a CONNECTED panel
+    /// for a site that is still asking. Android found the same bug on its
+    /// group sheet; this one was device-found here.
+    @State private var sheet: ExploreSheetKind?
     @State private var signingUp = false
     /// Groups hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
@@ -184,7 +189,7 @@ struct ExploreScreen: View {
                     // (FR-013). The tab is still there, and the switcher
                     // brings it straight back.
                     onClose: { viewOverride = .start },
-                    onMenu: { sheet = model.menus.siteMenu }
+                    onMenu: { sheet = .siteMenu }
                 )
                 if let engine {
                     BrowserWebView(engine: engine)
@@ -206,7 +211,7 @@ struct ExploreScreen: View {
                     tabsLabel: loc.t("explore.tabs"),
                     onBack: { controller?.goBack() },
                     onForward: { controller?.goForward() },
-                    onAccount: { sheet = .connection(model.menus.connection) },
+                    onAccount: { sheet = .connection },
                     onBookmark: {
                         guard let engine, !engine.url.isEmpty else { return }
                         controller?.addFavorite(url: engine.url, title: engine.title)
@@ -281,9 +286,9 @@ struct ExploreScreen: View {
                 return
             }
             consentOpen = true
-            sheet = .connection(model.menus.connection)
+            sheet = .connection
         }
-        .onAppear { sheet = model.sheet }
+        .onAppear { sheet = model.sheet?.kind }
     }
 
     private var startPage: some View {
@@ -337,7 +342,7 @@ struct ExploreScreen: View {
                 if let favorites = model.favorites {
                     WalletSectionHeader(
                         title: favorites.title, action: favorites.action,
-                        onAction: { sheet = model.menus.groupManage }
+                        onAction: { sheet = .groupManage }
                     )
                     LazyVGrid(
                         columns: Array(repeating: GridItem(.flexible(), spacing: Tokens.Space.s8),
@@ -359,7 +364,7 @@ struct ExploreScreen: View {
                             if group.action == .clear {
                                 controller?.clearRecent()
                             } else {
-                                sheet = model.menus.groupManage
+                                sheet = .groupManage
                             }
                         }
                     )
@@ -374,8 +379,9 @@ struct ExploreScreen: View {
     }
 
     @ViewBuilder
-    private func sheetContent(_ sheet: ExploreSheet) -> some View {
-        switch sheet {
+    private func sheetContent(_ kind: ExploreSheetKind) -> some View {
+        // Read the CURRENT model, every render. See `sheet`'s own comment.
+        switch kind.resolved(in: model) {
         case .groupManage(let title, let rows, let newGroup):
             ScrollView {
                 GroupManageSheetView(

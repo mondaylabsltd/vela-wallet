@@ -200,3 +200,40 @@ developer).
 Recorded because it will happen again, and because the symptom — "invalid code
 signature, inadequate entitlements" — reads like a build problem and is not
 one. Check the certificate's trust on the phone before touching the project.
+
+## Phase 3 — a dApp connects
+
+Device-verified on the iPhone 11.
+
+| | |
+|---|---|
+| consent | the sheet opens itself, names the **origin** (twice — heading and subtitle), the account being granted, and the chain; 拒绝 / 批准 |
+| approve | the page is answered `0x88cCA0…6894`, the golden multi-key Safe |
+| `eth_chainId` | `0x64`, from the wallet's own state with no network |
+| `eth_blockNumber` | answered through this wallet's pool for the browser's chain |
+| `eth_sign` | **refused 4900**, and nothing was asked of any endpoint |
+| the padlock | **absent** over `http://127.0.0.1` |
+
+### The defect: a sheet that showed the wrong panel
+
+The consent sheet opened and drew the **connected** panel — 断开连接, and the
+explainer written for a site that already has an account — for a site that was
+still asking.
+
+`ExploreSheet` carried its *contents*: `sheet = .connection(model.menus.connection)`
+stored the panel as it read at the moment of the tap, one frame before the
+consent existed. So the sheet was correct about which sheet to open and stale
+about everything inside it.
+
+Android recorded the same bug on its group-manage sheet in its phase 2 ("the
+sheet held a snapshot"), and iOS had it on all three: the group sheet would
+have shown a group after it was deleted, the site menu a site after it was
+unpinned. The fix is structural rather than local — `ExploreSheetKind` stores
+**which** sheet, and `sheetContent` resolves the contents from the current
+model on every render. The type now makes the bug unspellable.
+
+Worth stating plainly: this one was found by *looking at the screenshot*, not
+by a failing assertion. The test failed on the button's label being English in
+a Chinese app; the panel behind it was wrong for a completely different reason,
+and an assertion on "Approve" alone would have been made to pass without ever
+seeing it.

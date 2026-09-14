@@ -143,16 +143,10 @@ final class BrowserAcceptanceTests: XCTestCase {
         app.buttons["探索"].firstMatch.tap()
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
-        // The star in the browser toolbar.
-        let star = app.buttons["explore.addToFavorites"].firstMatch
-        if star.waitForExistence(timeout: 10) {
-            star.tap()
-        } else {
-            // Labelled by its corpus string rather than an identifier on this
-            // build — either is fine, and failing here would be failing on the
-            // wrong thing.
-            app.buttons["添加到收藏"].firstMatch.tap()
-        }
+        // The star in the browser toolbar, by its corpus label.
+        let star = app.buttons["添加到收藏"].firstMatch
+        XCTAssertTrue(star.waitForExistence(timeout: 15), "the bookmark control is missing")
+        star.tap()
         attach(app.screenshot(), named: "device-browser-favourited")
 
         app.terminate()
@@ -189,5 +183,78 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(again.staticTexts["127.0.0.1:8137"].firstMatch.waitForExistence(timeout: 10),
                       "neither the favourite nor the recent survived the relaunch")
         attach(again.screenshot(), named: "device-browser-remembered")
+    }
+
+    // MARK: - US3: a dApp connects
+
+    /// A page taps its way to an account, and the wallet asks first.
+    ///
+    /// Four things in one pass, because they are one journey: the consent
+    /// surface opens itself, it names the **origin** rather than a name the
+    /// page supplied, approving returns the parallel space's own Safe, and a
+    /// second read is answered from the grant with no sheet at all.
+    func testASiteAsksForAnAccountAndIsAnsweredOnce() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+
+        app.webViews.buttons["Connect"].firstMatch.tap()
+
+        // The sheet opens ITSELF. A request that waited for somebody to find a
+        // menu is a request the page thinks is hanging.
+        XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 20),
+                      "the consent surface never opened, or it did not name the origin")
+        attach(app.screenshot(), named: "device-browser-consent")
+
+        app.buttons["批准"].firstMatch.tap()
+
+        // The golden multi-key Safe, which is a function of EVERY fixture key
+        // — so seeing it is also proof the whole key set was used.
+        XCTAssertTrue(
+            waitForVerdict(app, containing: "0x88cCA0EeDbF2C4426110bbFc998F048689266894")
+                || waitForVerdict(app, containing: "0x88cca0eedbf2c4426110bbfc998f048689266894"),
+            "the page was not given the wallet's address"
+        )
+        attach(app.screenshot(), named: "device-browser-connected")
+    }
+
+    /// A chain read from the page is answered by the wallet's own pool, and a
+    /// chain switch moves the wallet and tells the page.
+    func testThePageReadsAChainAndSwitchesIt() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+
+        // `eth_chainId` needs no permission: it is the wallet's own answer
+        // about itself, from the grant mirror, with no network at all.
+        app.webViews.buttons["Chain"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_chainId ok \"0x64\""),
+                      "the page was told the wrong chain, or told it in the wrong notation")
+
+        // A real read, through this wallet's endpoints for this chain.
+        app.webViews.buttons["Block number"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_blockNumber ok"),
+                      "the block read never came back — the pool did not answer for the browser's chain")
+        attach(app.screenshot(), named: "device-browser-reads")
+    }
+
+    /// **`eth_sign` is refused**, and the refusal is not a lie about a human
+    /// action.
+    ///
+    /// 4900 rather than 4001: nobody declined anything. The same answer the
+    /// extension, the desktop and Android give, checked here on the page's own
+    /// side of the channel.
+    func testEthSignIsRefusedWithoutReachingAnybody() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+
+        app.webViews.buttons["eth_sign"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sign err 4900"),
+                      "eth_sign was not refused as policy")
+        attach(app.screenshot(), named: "device-browser-ethsign-refused")
     }
 }

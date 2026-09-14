@@ -128,16 +128,36 @@ struct ConnectionModel {
     var consent: (approve: String, reject: String)?
 }
 
+/// Which of the three sheets is open.
+///
+/// Separate from `ExploreSheet` — its *contents* — because a screen must store
+/// the identity and resolve the contents at render time. Storing the contents
+/// is how a sheet ends up showing what was true when it opened.
+enum ExploreSheetKind: String, Identifiable {
+    case groupManage, siteMenu, connection
+    var id: String { rawValue }
+
+    func resolved(in model: ExploreHomeModel) -> ExploreSheet {
+        switch self {
+        case .groupManage: model.menus.groupManage
+        case .siteMenu: model.menus.siteMenu
+        case .connection: .connection(model.menus.connection)
+        }
+    }
+}
+
 enum ExploreSheet: Identifiable {
     case groupManage(title: String, rows: [GroupManageRow], newGroup: String)
     case siteMenu(site: SiteModel, statusLine: String, items: [SiteMenuItem])
     case connection(ConnectionModel)
 
-    var id: String {
+    var id: String { kind.rawValue }
+
+    var kind: ExploreSheetKind {
         switch self {
-        case .groupManage: "group-manage"
-        case .siteMenu: "site-menu"
-        case .connection: "connection"
+        case .groupManage: .groupManage
+        case .siteMenu: .siteMenu
+        case .connection: .connection
         }
     }
 }
