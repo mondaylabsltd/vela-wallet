@@ -131,30 +131,51 @@ The notification is wired and **not** claimed as device-verified.
 
 ---
 
-## Next — Phase 6: the refusals and the two sheets
+### Phase 6 — the refusals and the two sheets ✅ committed `da32132a` · `f7c8bf1b`
 
-- [ ] **T601** Every `SendAlertKind` driven and read on the phone (SC-005). The
-      alert surface already routes through `sendRefusal`; what is missing is
-      having provoked each one.
-- [ ] **T602** No sentence contains a raw unit. The same-asset ceiling is the
-      one that bit Android — every figure in it is base units and the shell
-      formats them.
-- [ ] **T603** The fee-token sheet: `SendLive.feeSheet` is written and the
-      sheet is reachable, but the row tap must dispatch `choose_fee_token` and
-      the quote must follow. **The relay offers three assets on Gnosis** (XDAI,
-      USDC, USDT), so SC-006 is drivable now — it was not before phase 4 fixed
-      the bundler endpoint.
-- [ ] **T604** The contact picker: `contacts` is resident, but Android's trap
-      is that the machine only opens on the contacts page. Boot it from the
-      picker too (`CoreStore.boot` is idempotent).
-- [ ] **T605** The treasury pause's two exits — the core's retry and 暂不
-      (`DismissTreasurySheet`), the facts kept.
+Every `SendAlertKind` has a sentence and a test that it carries no base unit;
+the ceiling refusal was **read off the phone**. The fee-token sheet shows this
+account's balance and this operation's estimate. The contact picker boots the
+`contacts` machine from the picker as well as the contacts page — Android's
+trap, avoided here.
 
-### Then
-
-Phase 7: the three `// live in 052` markers, the device pass, closeout.
+Four defects, all in results.md. The one to remember: **a refusal needs
+somewhere to appear**. 051 put the alert inside `FlowSheetHost`, and the send
+form is a base screen, so 继续 was armed and pressing it did nothing at all.
 
 ---
+
+### Phase 7 — the three inherited arms, and the closeout ✅ committed `07297840`
+
+`contacts::load_send_history` answers `TxRecords`, **send rows only**; the
+contact detail shows this device's own record of what passed between the two of
+you; `clear_bundler_cache` clears the caches phase 1 gave it.
+
+`grep 'live in 052'` returns nothing. **371** hermetic tests, **14 of 14**
+device acceptance on the iPhone 11, 35 literal violations, every invariant diff
+empty. The SC table is in [results.md](./results.md) — SC-002 and SC-004 are
+owed because they need a finger, and SC-006 is half device-verified because the
+golden Safe holds one payable fee asset.
+
+---
+
+## 052 is closed. Next is 053.
+
+`specs/053-ios-dapp-browser-signing/tasks.md` — the explore tab becomes a real
+browser, dApps connect, read, switch chains and sign, and the person can see
+what they are signing.
+
+**What 053 inherits from here, and must not re-derive:**
+
+- `UserOpSpine.signMessage` is written and reached by nothing. It is the
+  `personal_sign` path, ported alongside the transfer so the two cannot drift
+  into two opinions about the same Safe.
+- `UserOpSpine.submit` is the one submit. A dApp transaction is the same code
+  with `calls` from the page instead of from the send machine.
+- The parallel space is the only reason any of this was verifiable without a
+  finger. Every 053 device test opens it the same way.
+- `RelayLiveTests` is the suite that found the bundler-endpoint defect. Run it
+  first whenever a quote or a submit misbehaves.
 
 ## Phase 5's task list, for reference
 
