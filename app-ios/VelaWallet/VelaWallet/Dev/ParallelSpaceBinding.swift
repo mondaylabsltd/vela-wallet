@@ -93,16 +93,26 @@ final class ParallelSpaceBinding: ParallelSpaceProvider {
         // The address is a function of EVERY key, so the whole set is written.
         // A record carrying only the first would derive a different Safe — the
         // multi-passkey lesson, applied before it can bite.
+        //
+        // **snake_case, and that is the contract rather than a style.** The
+        // core's hand-written reader accepts `publicKeyHex` / `createdAt` too,
+        // but only to read a list the retired Expo client wrote; what every
+        // client WRITES is snake_case (`app/mod.rs:160`). A first attempt here
+        // used `createdAtISO` — which matches neither spelling — and the whole
+        // account list failed to deserialize, so the app opened on Welcome with
+        // the record sitting on disk. The failure is silent by design: a list
+        // the core cannot read is refused rather than half-adopted.
         let record: [String: Any] = [
             "id": first.credentialIdHex,
             "name": first.name,
             "address": address,
-            "publicKeyHex": first.publicKeyHex,
-            "createdAtISO": ISO8601DateFormatter().string(from: Date()),
+            "public_key_hex": first.publicKeyHex,
+            "created_at_iso": ISO8601DateFormatter().string(from: Date()),
             "keys": fixtures.map { account in
                 [
-                    "credentialId": account.credentialIdHex,
-                    "publicKeyHex": account.publicKeyHex,
+                    "credential_id": account.credentialIdHex,
+                    "public_key_hex": account.publicKeyHex,
+                    "name": account.name,
                     "transports": "internal",
                 ]
             },

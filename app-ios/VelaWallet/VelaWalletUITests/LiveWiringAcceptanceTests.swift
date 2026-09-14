@@ -45,6 +45,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
 
     private func launch(page: String, state: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_PAGE"] = page
         if let state { app.launchEnvironment["VELA_STATE"] = state }
         app.launchEnvironment["VELA_LANG"] = "zh"
@@ -209,6 +219,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// undone. The screenshot is what the number itself is for.
     func testHomeShowsRealMoneyRatherThanTheFixtureTotal() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
@@ -257,6 +277,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// `至 hold on` — a recipient that exists only in `WalletFlowFixtures`.
     func testHistoryAndItsTransactionAreTheAccountsOwn() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_ACCOUNT"] = "0x28C6c06298d514Db089934071355E5743bf21d60"
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
@@ -300,6 +330,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// the fixture address must be gone from both screens.
     func testReceiveShowsTheSignedInAddressAndARealCode() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
@@ -339,6 +379,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// whole path including the system's permission prompt.
     func testSavingTheReceiveCardReachesTheAlbum() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
@@ -383,6 +433,16 @@ final class LiveWiringAcceptanceTests: XCTestCase {
     /// 已添加 chip is recomputed by the core from what it read back.
     func testAddingATokenByContractFindsItAndKeepsIt() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_ACCOUNT"] = "0x28C6c06298d514Db089934071355E5743bf21d60"
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
@@ -457,4 +517,51 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         // Exactly one row may read as chosen.
         XCTAssertTrue(app.staticTexts["CNY"].exists, "the catalog is incomplete")
     }
+    // MARK: - The parallel space (spec 052 US0)
+
+    /// The door opens onto the wallet every other client derives, says so on
+    /// every screen, and closes again without touching anything else.
+    ///
+    /// Address and badge only — deliberately no balance. A phone with no reach
+    /// to a chain still has the right wallet open, and a test that asserted a
+    /// figure would fail for a reason that has nothing to do with the door.
+    ///
+    /// It runs on the founder's own phone, so what it must never do is disturb
+    /// the real wallet: the space UPSERTS one record and its exit removes
+    /// exactly that id (FR-003).
+    func testTheParallelSpaceOpensOnTheGoldenSafeAndClosesCleanly() throws {
+        let inside = XCUIApplication()
+        inside.launchEnvironment["VELA_LANG"] = "zh"
+        inside.launchEnvironment["VELA_THEME"] = "dark"
+        inside.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        inside.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        inside.launchArguments += ["-AppleLanguages", "(zh)"]
+        inside.launch()
+
+        XCTAssertTrue(inside.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 20),
+                      "the space must announce itself on screen")
+        // The golden multi-key Safe, shortened as the header draws it. Its
+        // address is a function of EVERY fixture key, so seeing it is also the
+        // proof that the whole key set was written rather than the first key.
+        XCTAssertTrue(inside.staticTexts["0x88cC…6894"].waitForExistence(timeout: 30),
+                      "the space must open on the Safe the other clients derive")
+        attach(inside.screenshot(), named: "device-parallel-space")
+        inside.terminate()
+
+        // Leaving: the badge is gone, and the app is back to whatever it was.
+        let outside = XCUIApplication()
+        outside.launchEnvironment["VELA_LANG"] = "zh"
+        outside.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        outside.launchEnvironment["VELA_PARALLEL_SPACE"] = "0"
+        outside.launchArguments += ["-AppleLanguages", "(zh)"]
+        outside.launch()
+
+        // `waitForExistence` would wait for something that should never appear;
+        // a short settle then a direct check is the honest shape.
+        XCTAssertTrue(outside.wait(for: .runningForeground, timeout: 20))
+        XCTAssertFalse(outside.staticTexts["PARALLEL SPACE"].exists,
+                       "the badge must be gone the moment the door is closed")
+        attach(outside.screenshot(), named: "device-parallel-space-left")
+    }
+
 }

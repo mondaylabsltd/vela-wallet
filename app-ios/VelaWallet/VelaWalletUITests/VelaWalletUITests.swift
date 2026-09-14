@@ -24,6 +24,16 @@ final class VelaWalletUITests: XCTestCase {
     /// every update and which resets playback each time.
     func testLaunchAnimationAdvances() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_LANG"] = "en"
         // Deliberately NOT skipping: this is the one test that watches it play.
         app.launch()
@@ -73,6 +83,16 @@ final class VelaWalletUITests: XCTestCase {
     /// TextKit precisely so that a tap on its plain words reaches the checkbox.
     func testEveryGateTicksFromItsSentence() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_LANG"] = "en"
         app.launch()
 

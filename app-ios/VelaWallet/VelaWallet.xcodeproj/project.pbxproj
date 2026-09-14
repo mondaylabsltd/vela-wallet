@@ -549,6 +549,8 @@
 		23ED5E603019A42500EA9C55 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -593,6 +595,8 @@
 		23ED5E633019A42500EA9C55 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;

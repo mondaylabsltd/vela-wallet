@@ -216,11 +216,17 @@ struct RootView: View {
                 )
             }
 
-            // Over everything, including the launch overlay: a screenshot taken
-            // in the parallel space must never be mistaken for one taken in the
-            // real app. It answers to neither gate — not the theme, not the
-            // launch animation — and it is absent from Release by construction.
+        }
+        // A screenshot taken in the parallel space must never be mistaken for
+        // one taken in the real app. As a `safeAreaInset` rather than an
+        // overlay it MOVES the content down instead of covering it — an
+        // overlay clipped the account name, which is the opposite of what a
+        // marker is for. It answers to neither gate (not the theme, not the
+        // launch animation) and is absent from Release by construction.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            #if DEBUG
             if parallelSpace { ParallelSpaceBadge() }
+            #endif
         }
         .themed(scheme)
         .preferredColorScheme(ThemeOverride.launchScheme)

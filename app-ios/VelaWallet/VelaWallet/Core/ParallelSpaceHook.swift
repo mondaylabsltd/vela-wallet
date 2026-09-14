@@ -71,6 +71,13 @@ enum ParallelSpaceHook {
 /// Deliberately **not a corpus string**: it is a developer marker, it must be
 /// conspicuous rather than localised, and it never ships. The desktop and
 /// Android made the same call.
+///
+/// `#if DEBUG` around the view rather than only around its caller, so the
+/// literal itself is absent from a Release binary. A dormant "PARALLEL SPACE"
+/// string in a shipped wallet is not key material and not a door — but it is
+/// the first thing a reviewer would ask about, and the answer should be that
+/// it is not there.
+#if DEBUG
 struct ParallelSpaceBadge: View {
     var body: some View {
         Text(verbatim: "PARALLEL SPACE")
@@ -83,3 +90,4 @@ struct ParallelSpaceBadge: View {
             .allowsHitTesting(false)
     }
 }
+#endif

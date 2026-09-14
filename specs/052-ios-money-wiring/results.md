@@ -177,6 +177,126 @@ waved through.
 
 ---
 
+## Phase 2 — the parallel space
+
+A second **static** xcframework (`vela-dev-fixtures-uniffi` gains a `staticlib`
+crate type), built by `rust/scripts/build-ios-dev-fixtures.sh`, linked only by
+the Debug configuration; `Dev/vela_dev_fixtures.swift` and
+`Dev/ParallelSpaceBinding.swift` are in `EXCLUDED_SOURCE_FILE_NAMES` for
+Release. `Core/ParallelSpaceHook.swift` is the always-compiled seam.
+
+### SC-010, measured with a control
+
+A measurement of an absence is worthless without proof the instrument can see a
+presence, so both configurations were built fresh and grepped the same way.
+The app's code lives in `VelaWallet.debug.dylib` inside the bundle, **not** in
+the 72 KB stub named `VelaWallet` — grepping the stub reports zero for
+everything and proves nothing.
+
+| | Release | Debug (device) |
+|---|---|---|
+| `vela_dev_fixtures` symbols | **0** | 567 |
+| `PARALLEL SPACE` strings | **0** | 1 |
+| `ParallelSpaceBinding` / `FixtureUserOpSigner` | **0** | 93 |
+
+The badge went behind `#if DEBUG` for the middle row. A dormant "PARALLEL
+SPACE" literal in a shipped wallet is neither key material nor a door — but it
+is the first thing a reviewer would ask about, and the answer should be that it
+is not there.
+
+### On the founder's iPhone
+
+`testTheParallelSpaceOpensOnTheGoldenSafeAndClosesCleanly` passed on the device
+in 12.4 s: the badge on screen, the header reading **Parallel One ·
+0x88cC…6894** — the golden multi-key Safe every other client derives — and the
+badge gone again after a launch with the door closed. Address and badge only,
+deliberately: a phone with no reach to a chain still has the right wallet open,
+and asserting a figure would fail for a reason that has nothing to do with the
+door.
+
+### Two defects of my own making, both found by running it
+
+1. **`createdAtISO` is not a spelling the core knows.** The record was
+   hand-built with camelCase field names. The core's hand-written reader accepts
+   `publicKeyHex` and `createdAt` — but only to read a list the retired Expo
+   client wrote; what every client WRITES is snake_case
+   (`app/mod.rs:160`). `createdAtISO` matches neither, so the whole account list
+   failed to deserialize and the app opened on **Welcome** with the record
+   sitting on disk. The failure is silent by design: a list the core cannot read
+   is refused rather than half-adopted. This is the field-by-field hazard
+   `AccountStore`'s own doc warns about, committed by the person who had just
+   read the warning.
+2. **A persisted door poisons every later run.** The space survives a relaunch
+   on purpose — a device test spanning a relaunch must not fall out of it
+   halfway — and the cost is that a session left inside it is inherited. Three
+   UI tests failed against a fixture wallet nobody had asked for. Every UI test
+   launch now states its own environment through the argument domain
+   (`-vela.parallelSpace "0"`), which outranks the persisted value without
+   writing anything. Proven by leaving the simulator **deliberately inside** the
+   space and running the whole suite: all green.
+
+### Recorded, not fixed
+
+The badge overlaps the wallet header's top edge, clipping the account name by a
+few points, because `WalletScreen` draws under the safe area. A `safeAreaInset`
+did not move it. Cosmetic, and only in a configuration that does not ship.
+
+### Gates
+
+Hermetic tests **357**; device UI 11 → **12** (the new one green on the phone).
+Literal violations 35. Zero lines under `rust/crates/vela-core/src/app/`; zero
+corpus delta; `vela_core_uniffi.swift` unchanged. The one Rust edit is a
+`crate-type` line, which adds no code and no export.
+
+---
+
+## Two things the founder has to settle
+
+### 1. That iPhone cannot reach the endpoints this app reads
+
+Measured by running 051's own live suites **on the phone** rather than through
+the UI:
+
+| | |
+|---|---|
+| Gnosis balance read (chain 100) | `failed: true` |
+| Ethereum mainnet Chainlink feeds | failed, 35.8 s |
+| The `vela-currency` HTTPS endpoint | **0 currencies quoted** |
+| The same suites on the simulator | all pass, seconds |
+
+The currency endpoint is a plain HTTPS GET, not a chain RPC, so this is not
+about RPC providers — the phone is not reaching these hosts at all. Wi-Fi, a
+VPN, Low Data Mode or a per-app data restriction are all candidates and only
+somebody holding the phone can tell which.
+
+**Why the acceptance suite still passes**: the home renders the **cached**
+total, which is 051 working exactly as designed. The device screenshot above
+shows it plainly — ¥3.56 in the hero with the 资产 list empty underneath. A
+suite that reads money can be green on a phone with no network, and that is
+worth knowing before any SC is read as proof of a chain read.
+
+### 2. A Release build cannot be compiled on this toolchain
+
+```
+While running pass #242738 SILFunctionTransform "EarlyPerfInliner"
+  on SILFunction "@$s10VelaWallet9CoreStoreCfD"
+  for 'deinit' (Core/CoreStore.swift:45)
+Apple Swift version 6.2.4 (swiftlang-6.2.4.1.4)
+```
+
+The optimiser crashes. **Not this cut's**: reproduced at `2bcdce54`, the 051
+code with only spec documents added. `xcodebuild archive -configuration Release`
+fails; `SWIFT_OPTIMIZATION_LEVEL=-Onone` builds, which is how SC-010 was
+measured.
+
+This is a **launch blocker** independent of 052 — an unoptimised wallet is not
+what should ship — and the fix is upstream's or a local workaround
+(`@inline(never)`, or restructuring that `deinit`). Recorded here because this
+cut is where it surfaced, and named separately so it is not read as a
+consequence of the parallel space.
+
+---
+
 ## Success criteria — verdicts
 
 Filled at closeout. Every row says **device-verified** or **test-only**; a
