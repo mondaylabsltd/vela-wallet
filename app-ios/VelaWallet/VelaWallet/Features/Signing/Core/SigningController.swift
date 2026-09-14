@@ -63,6 +63,10 @@ final class SigningController {
         var knownChains: () -> [Int] = { [] }
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
+        /// The simulated deltas, to the `token_trust` machine that judges them
+        /// — the ONE entrance that may never admit a token (spec 017 ⑤).
+        var simDeltas: (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) -> Void
+        = { _, _, _ in }
     }
 
     private(set) var sign: SignViewWire = .empty
@@ -91,6 +95,19 @@ final class SigningController {
     private var pendingHandoff: SignTrackerHandoffWire?
     private var handedOff = false
     private var answered = false
+    /// Where the simulation for the request on screen has got to.
+    ///
+    /// THREE states, because they are three different sentences and a boolean
+    /// could only carry two. "Not yet" is silence; "the node refused" is a
+    /// warning; "it ran" is the balance block.
+    enum Simulation { case pending, answered, unavailable }
+
+    private(set) var simulation: Simulation = .pending
+
+    /// The pool, kept for the simulation — the same endpoints, bans and
+    /// cooldowns the rest of the wallet uses, never one a page named.
+    private let pool: RpcPool
+
     /// The calls this request carries, kept for the re-quote.
     private var feeCalls: [[String: Any]] = []
     private var requoting = false
@@ -106,6 +123,7 @@ final class SigningController {
     ) {
         self.wallet = wallet
         self.relay = relay
+        self.pool = pool
         self.ports = ports
 
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
@@ -214,6 +232,50 @@ final class SigningController {
         else { return }
         feeCalls = calls.map { ["to": $0.to, "value": $0.value, "data": $0.data] }
         requestQuote(chainId: incoming.chainId)
+        simulate(chainId: incoming.chainId, calls: calls)
+    }
+
+    /// Ask the chain what these calls WOULD do, and hand the answer to the core
+    /// that judges it.
+    ///
+    /// Three outcomes and they are not the same fact:
+    ///
+    /// - deltas → the balance block;
+    /// - an empty list → "checked, nothing moves";
+    /// - no answer at all → `simulated` stays false, and the sheet says it
+    ///   could not look.
+    ///
+    /// The last one is the one that matters. A wallet that says nothing when it
+    /// could not check teaches people that silence means safe.
+    private func simulate(chainId: Int, calls: [UserOpCall]) {
+        simulation = .pending
+        let legs = calls.map {
+            SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
+        }
+        guard let payload = SimDeltas.payload(from: wallet.address, calls: legs) else {
+            simulation = .unavailable
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            let answer = await pool.call(
+                chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
+            )
+            guard case .ok(let body) = answer,
+                  let logs = SimDeltas.logsOf(["result": body ?? NSNull()])
+            else {
+                // The node has told us NOTHING — no `eth_simulateV1`, or it
+                // errored. Not the same as "nothing moves", and the sheet says
+                // which of the two this is.
+                simulation = .unavailable
+                return
+            }
+            simulation = .answered
+            ports.simDeltas(
+                wallet.address, chainId,
+                SimDeltas.deriveDeltas(logs: logs, user: wallet.address)
+            )
+        }
     }
 
     private func requestQuote(chainId: Int) {

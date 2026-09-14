@@ -38,17 +38,79 @@ struct TrustIncomingWire: Decodable, Equatable {
     let decimals: Int?
 }
 
-/// The scan half of the view.
+/// The core's verdict on ONE simulated balance change.
 ///
-/// `sim` — the sign-sheet's asymmetric judgment — is **deliberately absent**.
-/// Nothing in this cut simulates a transaction, its `TrustSimJudgment` is a
-/// tagged union with three arms, and a mirror written now would be an untested
-/// guess at a shape whose only reader arrives with the signing surface. Same
-/// rule as the bridge exports: it comes with the code that reads it.
+/// Asymmetric by design (`token_trust::judge_delta`), and the asymmetry is the
+/// point: an OUTFLOW renders whenever the token's metadata resolved, because
+/// the real token emits its own log and an outflow cannot be understated; an
+/// INFLOW renders a confident number only for a token already in the trusted
+/// set, because a `Transfer` log is something anybody can emit.
+enum TrustSimJudgmentWire: Decodable, Equatable {
+    /// A native value move. Always rendered — the chain's symbol and 18
+    /// decimals are the shell's vocabulary.
+    case native(delta: String)
+    /// Metadata resolved AND (an outflow, or a trusted-set inflow).
+    case erc20Trusted(token: String, delta: String, symbol: String, decimals: Int)
+    /// Direction and caution, and **no attacker-controlled amount**.
+    case erc20Unverified(token: String?, delta: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case type, token, delta, symbol, decimals
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        let delta = try container.decode(String.self, forKey: .delta)
+        switch type {
+        case "native":
+            self = .native(delta: delta)
+        case "erc20_trusted":
+            self = .erc20Trusted(
+                token: try container.decode(String.self, forKey: .token),
+                delta: delta,
+                symbol: try container.decode(String.self, forKey: .symbol),
+                decimals: try container.decode(Int.self, forKey: .decimals)
+            )
+        default:
+            self = .erc20Unverified(
+                token: try container.decodeIfPresent(String.self, forKey: .token),
+                delta: delta
+            )
+        }
+    }
+
+    /// Positive means the wallet RECEIVES. The sign lives in the core's
+    /// string, and reading it here is the shell's one arithmetic fact.
+    var incoming: Bool { !(delta.hasPrefix("-")) }
+
+    var delta: String {
+        switch self {
+        case .native(let delta): delta
+        case .erc20Trusted(_, let delta, _, _): delta
+        case .erc20Unverified(_, let delta): delta
+        }
+    }
+}
+
+/// The sign sheet's half: whether the simulation has answered, and its verdict
+/// per asset.
+///
+/// **`ready` is the gate.** Judgments read before it are a previous request's,
+/// and a balance block from the wrong transaction is worse than none.
+struct TrustSimViewWire: Decodable, Equatable {
+    let ready: Bool
+    let judgments: [TrustSimJudgmentWire]
+}
+
+/// The scan half of the view.
 struct TrustViewWire: Decodable, Equatable {
     let address: String?
     /// A poll is in progress. The scan facade waits for this to fall.
     let scanning: Bool
     /// Newest first — block descending, then log index.
     let incoming: [TrustIncomingWire]
+    /// The sign sheet's simulation verdict (spec 055). `nil` until something
+    /// has been simulated for this account.
+    let sim: TrustSimViewWire?
 }

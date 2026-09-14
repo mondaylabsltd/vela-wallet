@@ -821,29 +821,7 @@ struct RootView: View {
                         signing: SigningFixtures.build(.cs12, loc: loc)
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
-                        signingLive: signing.map { live in
-                            SigningLive.model(
-                                fallback: SigningFixtures.build(.cs1, loc: loc),
-                                request: live.request ?? SigningController.Incoming(
-                                    id: "", method: "", paramsJson: "[]", origin: "",
-                                    transportId: "", chainId: browser.browserChain
-                                ),
-                                sign: live.sign,
-                                clear: live.clear,
-                                guard: live.guardView,
-                                fee: live.fee,
-                                context: SigningLive.Context(
-                                    loc: loc,
-                                    chainName: ChainCatalog.meta(browser.browserChain)?.displayName
-                                        ?? String(browser.browserChain),
-                                    chainDot: SettingsLive.chainColor(browser.browserChain),
-                                    nativeSymbol: ChainCatalog.meta(browser.browserChain)?.nativeSymbol ?? "",
-                                    walletName: session.view.activeName,
-                                    walletAddress: session.view.address,
-                                    origin: live.request?.origin
-                                )
-                            )
-                        },
+                        signingLive: signing.map { signingModel(for: $0) },
                         onSigningConfirm: { signing?.approve() },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
@@ -963,6 +941,13 @@ struct RootView: View {
                 dataBase: { [accounts] in
                     (accounts.loadServiceEndpoints()["ethereumDataURL"] as? String)
                         .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL
+                },
+                // The simulated deltas, to the machine that JUDGES them. The
+                // same machine the confirmed receipts go to, and it keeps the
+                // two apart: a receipt may admit a token, a simulation never
+                // may (spec 017, invariant ⑤).
+                simDeltas: { [trust] address, chainId, deltas in
+                    trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
                 }
             )
         )
@@ -1560,6 +1545,41 @@ struct RootView: View {
             displayCode: display.code,
             displayRate: display.rate,
             fiatDecimals: 2
+        )
+    }
+
+    /// The signing sheet, from the four machines behind it.
+    ///
+    /// Extracted from the host's argument list because that list is one
+    /// expression away from a type-checker timeout — 052 hit it, 054 hit it
+    /// again, and this is the third.
+    private func signingModel(for live: SigningController) -> SigningModel {
+        let chain = browser.browserChain
+        let request = live.request ?? SigningController.Incoming(
+            id: "", method: "", paramsJson: "[]", origin: "",
+            transportId: "", chainId: chain
+        )
+        let context = SigningLive.Context(
+            loc: loc,
+            chainName: ChainCatalog.meta(chain)?.displayName ?? String(chain),
+            chainDot: SettingsLive.chainColor(chain),
+            nativeSymbol: ChainCatalog.meta(chain)?.nativeSymbol ?? "",
+            walletName: session.view.activeName,
+            walletAddress: session.view.address,
+            origin: live.request?.origin,
+            // What the chain said this transaction would do, and how far the
+            // asking got. The judgment is the CORE's; this only carries it.
+            sim: trust.trust?.sim,
+            simulation: live.simulation
+        )
+        return SigningLive.model(
+            fallback: SigningFixtures.build(.cs1, loc: loc),
+            request: request,
+            sign: live.sign,
+            clear: live.clear,
+            guard: live.guardView,
+            fee: live.fee,
+            context: context
         )
     }
 

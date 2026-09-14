@@ -163,6 +163,22 @@ final class TokenTrustStore {
         ])
     }
 
+    /// The sign sheet's simulated deltas (spec 055).
+    ///
+    /// **This path can never write a token.** The core enforces it (invariant
+    /// ⑤) and the reason is worth restating at the call site: a `Transfer` log
+    /// in a SIMULATION is something the site being signed for controls, and
+    /// admitting a token on that basis would let a page seed its own scam coin
+    /// into somebody's list by asking them to look at a transaction.
+    func simDeltasComputed(address: String, chainId: Int, deltas: [[String: Any]]) {
+        send([
+            "type": "sim_deltas_computed",
+            "address": address,
+            "chain_id": chainId,
+            "deltas": deltas,
+        ])
+    }
+
     private func send(_ event: [String: Any]) {
         let json = CoreJSON.string(event)
         if core.boot(json) { return }

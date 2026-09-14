@@ -26,6 +26,11 @@ enum SigningLive {
         let walletAddress: String
         /// The page's host, for the sign-in verdict's words.
         var origin: String?
+        /// What the chain said this transaction would do (spec 055). `nil`
+        /// when nothing has been simulated for this account yet.
+        var sim: TrustSimViewWire?
+        /// Where the simulation has got to. Three states, three sentences.
+        var simulation: SigningController.Simulation = .pending
     }
 
     private static func s(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
@@ -55,6 +60,10 @@ enum SigningLive {
         let blocks = statusBlocks(sign: sign, loc: loc)
             + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                           dataBytes: dataBytes, context: context)
+            // Only a TRANSACTION has balances to change. A message moves
+            // nothing, and a balance block on a signature would answer a
+            // question nobody asked.
+            + balanceBlocks(isTransaction: facts != nil, context: context)
             + guardBlocks(guardView, loc: loc)
 
         return SigningModel(
@@ -185,6 +194,95 @@ enum SigningLive {
         let digits = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
         if digits.isEmpty { return "0x00" }
         return digits.count % 2 == 0 ? "0x" + digits : "0x0" + digits
+    }
+
+    /// What the simulation found, or that it could not look.
+    ///
+    /// Three outcomes and they are three different sentences:
+    ///
+    /// - judgments → the rows, each one the CORE's verdict;
+    /// - answered, nothing moved → "checked, nothing moves";
+    /// - never answered → the danger-toned "Vela could not tell what this
+    ///   does", because a wallet that stays quiet when it could not check
+    ///   teaches people that silence means safe.
+    ///
+    /// Only for transactions: a message moves nothing, and a balance block on
+    /// a signature would be an answer to a question nobody asked.
+    static func balanceBlocks(isTransaction: Bool, context: Context) -> [SigningBlock] {
+        let loc = context.loc
+        guard isTransaction else { return [] }
+
+        if context.simulation == .unavailable {
+            return [.warning(tone: .danger, text: s(loc, "simUnavailableWarning"))]
+        }
+        // Still running, or a verdict for a previous request. Silence, because
+        // a block that appears and then changes its mind is worse than one that
+        // arrives late.
+        guard let sim = context.sim, sim.ready, context.simulation == .answered else { return [] }
+        guard !sim.judgments.isEmpty else {
+            return [.balances(
+                title: s(loc, "balanceChangesTitle"),
+                rows: [],
+                note: s(loc, "balanceNoAssetsMove"),
+                noteTone: .neutral
+            )]
+        }
+        let rows = sim.judgments.map { balanceRow($0, context: context) }
+        // One warning for the whole block, not one per row: the caution is
+        // about the same thing each time, and repeating it is how people stop
+        // reading it.
+        let unverified = sim.judgments.contains {
+            if case .erc20Unverified = $0 { return true }
+            return false
+        }
+        return [.balances(
+            title: s(loc, "balanceChangesTitle"),
+            rows: rows,
+            note: unverified ? s(loc, "unverifiedWarning") : nil,
+            noteTone: unverified ? .caution : .neutral
+        )]
+    }
+
+    /// One judgment, as a row.
+    ///
+    /// An unverified INFLOW shows its direction and the word "unverified
+    /// token" and **no number**: the amount in a simulated log is whatever the
+    /// site being signed for chose to emit, and printing it lends this wallet's
+    /// credibility to a stranger's arithmetic.
+    private static func balanceRow(
+        _ judgment: TrustSimJudgmentWire, context: Context
+    ) -> BalanceDeltaRow {
+        let loc = context.loc
+        let incoming = judgment.incoming
+        let sign = incoming ? "+" : "−"
+        let tone: SigningTone = incoming ? .success : .neutral
+        switch judgment {
+        case .native(let delta):
+            return BalanceDeltaRow(
+                symbol: context.nativeSymbol,
+                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: 18)))",
+                tone: tone
+            )
+        case .erc20Trusted(_, let delta, let symbol, let decimals):
+            return BalanceDeltaRow(
+                symbol: symbol,
+                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: decimals)))",
+                tone: tone
+            )
+        case .erc20Unverified:
+            return BalanceDeltaRow(
+                symbol: s(loc, "balanceUnverifiedToken"),
+                // Direction only. Never the site's own number.
+                delta: sign,
+                tone: .caution
+            )
+        }
+    }
+
+    /// The magnitude of a signed decimal string — the sign is already carried
+    /// by the row's own glyph.
+    private static func magnitude(_ delta: String) -> String {
+        delta.hasPrefix("-") ? String(delta.dropFirst()) : delta
     }
 
     private static func blocksBySurface(
