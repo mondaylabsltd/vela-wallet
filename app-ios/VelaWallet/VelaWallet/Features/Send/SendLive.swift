@@ -56,12 +56,21 @@ enum SendLive {
     // MARK: - SD1, the token picker
 
     static func pick(
-        _ view: SendViewWire, on model: SendPickModel, picking: Bool = false, loc: Loc
+        _ view: SendViewWire, on model: SendPickModel, picking: Bool = false,
+        classFilter: String = "all", loc: Loc
     ) -> SendPickModel {
-        SendPickModel(
+        // Which class of token is on screen. The CORE lists every holding —
+        // which subset a person is looking at is a render decision, like the
+        // sweep's picking flag, and the chips were drawn in 021 with nothing
+        // behind them.
+        let shown = view.tokens.filter { matches(classFilter, token: $0) }
+        return SendPickModel(
             header: model.header,
             searchPlaceholder: model.searchPlaceholder,
-            filters: model.filters,
+            // Exactly one chip lit, and it is the one in force.
+            filters: model.filters.map { chip in
+                FilterChipModel(id: chip.id, label: chip.label, selected: chip.id == classFilter)
+            },
             // Once a chain is pinned, say which — the dimmed rows are the
             // consequence and this is the reason. The corpus has no sentence
             // for "locked to", so the summary line's own words carry it:
@@ -86,13 +95,13 @@ enum SendLive {
                     ])
                 )
                 : nil),
-            rows: view.tokens.map(assetRow),
+            rows: shown.map(assetRow),
             selection: picking ? SendSelectionModel(
-                selected: view.tokens.map { view.multiSelectedIds.contains($0.id) },
+                selected: shown.map { view.multiSelectedIds.contains($0.id) },
                 // A row on a chain the pick has left behind is drawn dimmed and
                 // is not tappable: a tappable row is an invitation the wallet
                 // will not honour.
-                dimmed: view.tokens.map { SweepPick.dimmed(view: view, chainId: $0.chainId) },
+                dimmed: shown.map { SweepPick.dimmed(view: view, chainId: $0.chainId) },
                 selectAll: model.selection?.selectAll ?? loc.t("send.selectAllValuable")
             ) : nil,
             cta: picking
@@ -110,6 +119,35 @@ enum SendLive {
     }
 
 
+
+    /// Which class a holding belongs to.
+    ///
+    /// The same three the other clients use: a stablecoin by symbol, the
+    /// chain's own coin (what pays for gas), and everything else. A chip nobody
+    /// can act on would be worse than none, so `all` matches everything.
+    static func matches(_ filter: String, token: SendTokenWire) -> Bool {
+        // **Gas wins.** A chain's own coin can also be a stablecoin — xDAI on
+        // Gnosis is both — and a token in two classes means the chips are not a
+        // partition: tap 稳定币 then Gas and the same coin is in both lists,
+        // which reads as a filter that does not work. Being the coin that pays
+        // the fee is the more actionable fact on a send screen, so it is the
+        // class the coin gets.
+        let isNative = token.tokenAddress == nil
+        switch filter {
+        case "gas": return isNative
+        case "stable": return !isNative && stableSymbols.contains(token.symbol.uppercased())
+        case "other":
+            return !isNative && !stableSymbols.contains(token.symbol.uppercased())
+        default: return true
+        }
+    }
+
+    /// The symbols a wallet treats as dollars. Not a price judgement — a list,
+    /// so the chip means the same thing on every client.
+    private static let stableSymbols: Set<String> = [
+        "USDC", "USDT", "DAI", "XDAI", "USDC.E", "USDBC", "FDUSD", "TUSD",
+        "USDE", "PYUSD", "USDS", "PATHUSD",
+    ]
 
     /// Why a scanned request cannot be fulfilled, in the core's words.
     ///

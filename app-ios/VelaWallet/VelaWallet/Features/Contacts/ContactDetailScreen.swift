@@ -35,6 +35,11 @@ struct ContactDetailScreen: View {
     var onToggleGroup: (String) -> Void = { _ in }
     var onSaveGroups: () -> Void = {}
     var onCancelGroups: () -> Void = {}
+    /// 转账 — a send already addressed to this person.
+    var onSendTo: (() -> Void)?
+    /// 收款 and 二维码, which are about the wallet's OWN address.
+    var onReceive: (() -> Void)?
+    var onShowQr: (() -> Void)?
 
     /// Whether the delete confirmation is up. The form's and the picker's
     /// presence are the CORE's answers and need no flags of their own.
@@ -67,10 +72,17 @@ struct ContactDetailScreen: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Tokens.Space.s0) {
                     hero
+                    // Three cards that did nothing until 057. 转账 opens a
+                    // send already addressed to this person; 收款 and 二维码
+                    // are about the WALLET's own address, so they go where that
+                    // lives rather than pretending to be about the contact.
                     ActionButtonRow(items: [
-                        ActionCardItem(icon: .arrowUpRight, label: model.actions.send),
-                        ActionCardItem(icon: .arrowDownLeft, label: model.actions.receive),
-                        ActionCardItem(icon: .qrCode, label: model.actions.qr),
+                        ActionCardItem(icon: .arrowUpRight, label: model.actions.send,
+                                       action: onSendTo),
+                        ActionCardItem(icon: .arrowDownLeft, label: model.actions.receive,
+                                       action: onReceive),
+                        ActionCardItem(icon: .qrCode, label: model.actions.qr,
+                                       action: onShowQr),
                     ])
                     .padding(.top, Tokens.Space.s24)
 

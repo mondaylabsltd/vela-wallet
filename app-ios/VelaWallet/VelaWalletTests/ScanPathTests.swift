@@ -159,3 +159,70 @@ struct ScanLockTests {
         #expect(SendLive.lockNotice(view([:]), loc: loc) == nil)
     }
 }
+
+// MARK: - The controls the audit found dead (spec 057)
+
+/// Three of the forty affordances, asserted where the shell decides them.
+@MainActor
+struct DeadControlTests {
+
+    private func token(
+        symbol: String, address: String?, chain: Int = 100
+    ) -> SendTokenWire {
+        var object = try! CoreJSON.object(SendCore().view())
+        object["selected_token"] = [
+            "network": "gnosis", "chain_id": chain, "symbol": symbol, "balance": "1",
+            "decimals": 18, "token_address": address as Any? ?? NSNull(),
+            "price_usd": 1.0, "logo_urls": [], "spam": false,
+        ]
+        return try! CoreJSON.decode(SendViewWire.self, from: object).selectedToken!
+    }
+
+    /// The picker's class chips were drawn in 021 and filtered nothing.
+    ///
+    /// Three classes, and every holding lands in exactly one of them — a chip
+    /// that showed the same list as another would be a choice that changes
+    /// nothing.
+    @Test func theClassChipsPartitionTheHoldings() {
+        let native = token(symbol: "xDAI", address: nil)
+        let stable = token(symbol: "USDC", address: "0xdd")
+        let other = token(symbol: "GNO", address: "0x9c")
+
+        for candidate in [native, stable, other] {
+            #expect(SendLive.matches("all", token: candidate), "`all` hides nothing")
+        }
+        // The chain's own coin is what pays for gas.
+        #expect(SendLive.matches("gas", token: native))
+        #expect(!SendLive.matches("gas", token: stable))
+
+        #expect(SendLive.matches("stable", token: stable))
+        #expect(!SendLive.matches("stable", token: other))
+        // xDAI is a stablecoin AND Gnosis's gas coin. Gas wins, or the chips
+        // are not a partition and the same coin appears in two lists — which
+        // reads as a filter that does not work.
+        #expect(!SendLive.matches("stable", token: native),
+                "the native coin is in `gas`, not in two classes at once")
+
+        #expect(SendLive.matches("other", token: other))
+        #expect(!SendLive.matches("other", token: stable))
+        #expect(!SendLive.matches("other", token: native))
+
+        // Exactly one class each, which is what makes the chips a partition.
+        for candidate in [native, stable, other] {
+            let classes = ["stable", "gas", "other"].filter {
+                SendLive.matches($0, token: candidate)
+            }
+            #expect(classes.count == 1, "\(candidate.symbol) landed in \(classes)")
+        }
+    }
+
+    /// Lower case, mixed case, the bridged spelling — a stablecoin is a
+    /// stablecoin however its symbol is written.
+    @Test func stablecoinsAreRecognisedHoweverTheyAreSpelled() {
+        // Given a contract address — a NATIVE coin of any name is gas first.
+        for symbol in ["usdc", "USDC.e", "xDAI", "PathUSD"] {
+            #expect(SendLive.matches("stable", token: token(symbol: symbol, address: "0xdd")),
+                    "\(symbol) was not read as a stablecoin")
+        }
+    }
+}

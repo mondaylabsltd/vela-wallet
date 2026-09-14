@@ -120,6 +120,10 @@ struct RootView: View {
     /// picking". Every other question about a sweep — which rows are valuable,
     /// how much of each moves — goes to the core.
     @State private var sweepPicking = false
+    /// Which class of token the picker is showing: `all`, `stable`, `gas` or
+    /// `other`. The SHELL's, like the sweep's picking flag — the core lists
+    /// every holding and which subset is on screen is a render decision.
+    @State private var sendClassFilter = "all"
     @State private var sendAlert: (title: String, body: String)?
     @State private var flows: FlowNav
     /// Which section of the signed-in shell is showing (spec 050).
@@ -1136,7 +1140,21 @@ struct RootView: View {
                                 }
                                 groupPick = nil
                             },
-                            onCancelGroups: { groupPick = nil }
+                            onCancelGroups: { groupPick = nil },
+                            // 转账 to this person, with the recipient already
+                            // in — the card said so and did nothing until 057.
+                            onSendTo: { sendToContact(contact.address) },
+                            // 收款 and 二维码 are about the WALLET's own
+                            // address, so they go where that lives rather than
+                            // pretending to be about the contact.
+                            onReceive: {
+                                section = .wallet
+                                flows.enter(.receive)
+                            },
+                            onShowQr: {
+                                section = .wallet
+                                flows.enter(.receive)
+                            }
                         )
                         // Opening somebody's page asks the core about their
                         // address: is it a contract, and has this wallet ever
@@ -1303,6 +1321,46 @@ struct RootView: View {
         }
     }
 
+    /// 转账 from a token's own sheet.
+    ///
+    /// The token the sheet is ABOUT, preselected — the core's `select_token`,
+    /// which also warms the fee quote (028 phase 10's rule). Before 057 this
+    /// pushed the form and the live router put the picker back, which reads as
+    /// a button that did nothing.
+    private func sendSelectedToken() {
+        guard let token = wallet.balance?.tokens[safe: assetRow] else { return }
+        flows.enter(.send)
+        Task {
+            await openSend()
+            // Matched in the SEND machine's own list, and selected by ITS id.
+            //
+            // Not a reconstructed one: the core's id is
+            // `network_address_symbol` and `network` is the send wire's own
+            // spelling of the chain, which the balance wire does not carry.
+            // 054 spent an afternoon on exactly that mistake — a hand-built id
+            // that matched no token, so the tap did nothing.
+            guard let match = send.view?.tokens.first(where: {
+                $0.chainId == token.chainId
+                    && ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
+                    && $0.symbol == token.symbol
+            }) else { return }
+            send.selectToken(id: match.id)
+        }
+    }
+
+    /// 转账 from a contact's own page.
+    ///
+    /// The recipient rides through the SAME door a scanned code uses, so a
+    /// contact, a QR code and a link all land on one screen.
+    private func sendToContact(_ address: String) {
+        section = .wallet
+        flows.enter(.send)
+        Task {
+            await openSend()
+            send.scanned(address)
+        }
+    }
+
     /// 群发转账 — every member of a group, as one split.
     ///
     /// The amounts are left empty: the core mints the row ids and the person
@@ -1424,7 +1482,10 @@ struct RootView: View {
             let display = WalletLive.Display.from(settings.currency)
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
-                    SendLive.pick(view, on: pick, picking: sweepPicking, loc: loc)
+                    SendLive.pick(
+                        view, on: pick, picking: sweepPicking,
+                        classFilter: sendClassFilter, loc: loc
+                    )
                 )
             }
             if case .sendForm(let form) = model.base {
@@ -1577,6 +1638,8 @@ struct RootView: View {
         // in sweep mode because the last journey ended there would be the
         // wallet remembering a decision nobody made twice.
         sweepPicking = false
+        // A journey that starts fresh starts unfiltered too.
+        sendClassFilter = "all"
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
@@ -1655,6 +1718,7 @@ struct RootView: View {
                     onReceiveNetwork: { receiveNetwork = $0 },
                     onSelectActivity: { activityRow = ($0, $1) },
                     onSelectAsset: { assetRow = $0 },
+                    onSendToken: { sendSelectedToken() },
                     chainSheet: activity.feed.map {
                         FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
                     },
@@ -1686,6 +1750,7 @@ struct RootView: View {
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
+                    onSendFilter: { id in sendClassFilter = id },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },

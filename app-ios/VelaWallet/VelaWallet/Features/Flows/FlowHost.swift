@@ -65,6 +65,8 @@ struct FlowHost: View {
     var onSelectActivity: ((Int, Int) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
+    /// 转账 from a token's own sheet, with that token preselected.
+    var onSendToken: (() -> Void)?
     /// The network filter behind the header pill. Absent where the screen is a
     /// fixture, which is the gallery and the screenshot sweep.
     var chainSheet: ChainSheetModel?
@@ -94,6 +96,9 @@ struct FlowHost: View {
     var onSelectToken: ((Int) -> Void)?
     /// Sweep: "select all valuable", scoped to the rows on screen.
     var onSelectAllTokens: (([Int]) -> Void)?
+    /// 稳定币 / Gas / 其他 — the picker's class chips, drawn since 021 with
+    /// nothing behind them.
+    var onSendFilter: ((String) -> Void)?
     /// The picker's CTA. Entering the sweep pick from a single pick, or
     /// confirming a sweep once one is under way — the screen cannot tell those
     /// apart, and the shell's own picking flag can.
@@ -217,6 +222,7 @@ struct FlowHost: View {
                         addTokenError: addTokenError,
                         onExplorer: onExplorer,
                         onSaveCard: onSaveCard,
+                        onSendToken: onSendToken,
                         alert: alert,
                         onDismissAlert: onDismissAlert
                     )
@@ -289,6 +295,7 @@ struct FlowHost: View {
             FlowScaffold(header: m.header, onBack: onBack, onPill: { onNavigate(.chains) }) {
                 SendPickBody(
                     model: m,
+                    onFilter: { id in onSendFilter?(id) },
                     onSelect: { index in
                         if let onSelectToken { onSelectToken(index) }
                         else { onNavigate(.sendForm) }
@@ -413,6 +420,7 @@ private struct FlowSheetHost: View {
     var addTokenError: String?
     var onExplorer: (() -> Void)?
     var onSaveCard: (() -> Void)?
+    var onSendToken: (() -> Void)?
     var alert: FlowAlertModel?
     var onDismissAlert: (() -> Void)?
 
@@ -478,7 +486,11 @@ private struct FlowSheetHost: View {
             TokenDetailBody(
                 model: m,
                 onReceive: { onNavigate(.receive) },
-                onSend: { onNavigate(.sendForm) },
+                // The send opens on THIS token. Pushing the form without
+                // preselecting it opened the picker instead, which is the
+                // dead-button shape once more: the button worked and landed
+                // somewhere that looked like nothing had happened.
+                onSend: { onSendToken?() ?? onNavigate(.sendForm) },
                 onExplorer: { onExplorer?() }
             )
         case .addToken(let m):
