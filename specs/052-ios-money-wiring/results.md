@@ -250,30 +250,43 @@ corpus delta; `vela_core_uniffi.swift` unchanged. The one Rust edit is a
 
 ---
 
-## Two things the founder has to settle
+## Two findings raised to the founder — one resolved, one open
 
-### 1. That iPhone cannot reach the endpoints this app reads
+### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved
 
-Measured by running 051's own live suites **on the phone** rather than through
-the UI:
+**Withdrawn the same day.** The founder restored the phone's network and every
+measurement inverted:
 
-| | |
-|---|---|
-| Gnosis balance read (chain 100) | `failed: true` |
-| Ethereum mainnet Chainlink feeds | failed, 35.8 s |
-| The `vela-currency` HTTPS endpoint | **0 currencies quoted** |
-| The same suites on the simulator | all pass, seconds |
+| On the device | Without network | With network |
+|---|---|---|
+| `aRealContractAnswersWithItsOwnMetadata` | failed, 36.0 s | **passed, 2.3 s** |
+| Gnosis balance read (chain 100) | `failed: true` | **passed** |
+| `oneSessionAnswersTwoMachines` | failed, 146 s | **passed, 1.7 s** |
+| `testAddingATokenByContractFindsItAndKeepsIt` | failed, 77 s | **passed, 23.0 s** |
+| The whole acceptance suite | 10 of 11 | **12 of 12** |
 
-The currency endpoint is a plain HTTPS GET, not a chain RPC, so this is not
-about RPC providers — the phone is not reaching these hosts at all. Wi-Fi, a
-VPN, Low Data Mode or a per-app data restriction are all candidates and only
-somebody holding the phone can tell which.
+So the diagnosis held: the add-token screen was never the problem, and neither
+was anything in this cut. Both hypotheses that were tested and recorded as wrong
+stay wrong, and the two changes they produced stay because each is right on its
+own terms — a found card outranking the spinner, and a test that empties the ban
+map rather than inheriting one.
 
-**Why the acceptance suite still passes**: the home renders the **cached**
-total, which is 051 working exactly as designed. The device screenshot above
-shows it plainly — ¥3.56 in the hero with the 资产 list empty underneath. A
-suite that reads money can be green on a phone with no network, and that is
-worth knowing before any SC is read as proof of a chain read.
+**The finding that outlives the outage** is the one worth carrying:
+
+> The home renders the **cached** total, so a suite that reads money was green
+> on a phone with no network at all. The device screenshot in this file shows it
+> plainly — ¥3.56 in the hero with the 资产 list empty underneath.
+
+That is 051 working as designed, and it means an SC row that says "the home
+showed real money" is not by itself evidence of a chain read. Where a criterion
+is about reaching a chain, the evidence has to be a figure that could only have
+come from one — a fresh receipt, a balance that changed, a hash.
+
+A second finding keeps its sting: `anAddressThatIsNotATokenAnswersNothing`
+**passed** during the outage, in 36 seconds. It expects nothing, so a total
+blackout looked exactly like a correct negative. A test that cannot tell "the
+chain says no" from "the chain never answered" will one day certify a dead
+network.
 
 ### 2. A Release build cannot be compiled on this toolchain
 
