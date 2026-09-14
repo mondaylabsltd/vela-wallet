@@ -106,7 +106,47 @@ list.
 
 ---
 
-## Next — Phase 4: sign and submit
+### Phase 4 — sign and submit ✅ committed `411ff1ab`
+
+**Money moved.** Dust left the golden Safe from the founder's iPhone: user op
+`0xcf9fcae6…bd269195`, tx `0x151d63c8…57b9`, Gnosis block `0x2e014dd`,
+`success: true`. Five defects on the way, all in results.md; the one that cost
+most was the **bundler endpoint missing its `/{chainId}`** — wrong since 051,
+invisible because 051 never called a bundler.
+
+The live send is `testDustLeavesTheGoldenSafeAndComesBackAsAReceipt`, behind
+`-DVELA_LIVE_SEND` because it spends. `RelayLiveTests` (behind
+`-DVELA_LIVE_TESTS`) prints what the real relay answers — it is what found the
+endpoint defect, and it is the first thing to run when a quote misbehaves.
+
+---
+
+## Next — Phase 5: `tx_tracker`
+
+- [ ] **T501** `TrackerStore` resident, booted at launch, `LoadPendingTxs` from
+      `TxRecords.pending`. A force-quit must lose nothing.
+- [ ] **T502** The six operations (`TrackerExecutor`), receipts through
+      `RelayClient.userOpReceipt` — which already returns the logs, so
+      `notify_confirmed` can feed `token_trust::ReceiptLogsConfirmed`.
+- [ ] **T503** Foreground 3-second tick while anything is pending; nothing when
+      nothing is.
+- [ ] **T504** `scenePhase` → `AppResumed`; the background grace and the
+      `BGTaskScheduler` request (research D2). **Claim no cadence** — claim
+      that no verdict is lost.
+- [ ] **T505** The notification, and the tap that opens the receipt.
+- [ ] **T506** Device: submit, force-quit, relaunch — the row is there and
+      reaches confirmed (SC-003).
+
+**The hash to poll while testing**: `0xcf9fcae6…bd269195` is already confirmed,
+so it is a good fixture for "a receipt that exists".
+
+### Then
+
+Phase 6 refusals and the two sheets · Phase 7 the three markers and closeout.
+
+---
+
+## Phase 4's task list, for reference
 
 The first phase where money can move. The spine is already written and tested
 (phase 1); what is missing is the screen reaching it.
