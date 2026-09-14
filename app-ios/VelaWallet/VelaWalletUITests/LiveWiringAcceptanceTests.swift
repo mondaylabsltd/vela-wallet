@@ -564,4 +564,58 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         attach(outside.screenshot(), named: "device-parallel-space-left")
     }
 
+    // MARK: - The send journey (spec 052 US1)
+
+    /// 转账 opens on the person's OWN holdings, and picking one carries it
+    /// through to a form that is the core's.
+    ///
+    /// The picker used to be a fixture list of somebody else's tokens, and the
+    /// tap that opened the form threw away WHICH row was tapped — the same
+    /// defect the network list and the receive sheet each had. So this asserts
+    /// both halves: the rows are real, and the one that was tapped is the one
+    /// the form opens with.
+    ///
+    /// Driven in the parallel space, whose Safe holds exactly one asset on
+    /// Gnosis — which is what makes "the row that was tapped" checkable.
+    func testSendOpensOnRealHoldingsAndCarriesTheTappedToken() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30),
+                      "the home never appeared")
+        tap(app.buttons["转账"], "转账")
+
+        // The picker's rows are the balance machine's holdings. The fixture
+        // list carried POL, ETH and USDT; the parallel Safe carries xDAI.
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 30),
+                      "the picker is not showing this wallet's own holdings")
+        XCTAssertFalse(app.staticTexts["POL"].exists,
+                       "a fixture token is still in the picker")
+        attach(app.screenshot(), named: "device-send-pick-live")
+
+        tap(app.staticTexts["xDAI"], "the xDAI row")
+
+        // The form, and ONLY the form, carries 收款人.
+        //
+        // An earlier version of this test waited for "a text field and xDAI",
+        // which the PICKER also has — a search box and the row that was just
+        // tapped. It passed on the device while the screenshot showed the
+        // picker, which is a test that cannot tell "the form opened" from
+        // "nothing happened". The discriminator has to be something only the
+        // destination has.
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20),
+                      "tapping a token did not open the form")
+        XCTAssertFalse(app.staticTexts["选择代币"].exists,
+                       "the picker is still on screen")
+        // And it opened on the token that was tapped.
+        XCTAssertTrue(app.staticTexts["xDAI"].exists,
+                      "the form opened on a different token than the one tapped")
+        attach(app.screenshot(), named: "device-send-form-live")
+    }
+
 }

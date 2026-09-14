@@ -74,6 +74,17 @@ struct RootView: View {
     // navigation, so there is no path back once it flips.
     /// The wallet-flow stack (spec 021). Lives here, beside the session, so
     /// it survives the wallet body's own re-renders.
+    /// The money machines. Resident, because a send that died with its screen
+    /// would lose a submitted operation the moment somebody swiped back.
+    @State private var fees: FeeStore
+    @State private var send: SendStore
+    /// What the person is typing. Held locally and echoed to the core, which
+    /// owns the value: a field bound straight to a machine loses characters on
+    /// the round trip (Android found it on the device).
+    @State private var recipientDraft = ""
+    @State private var amountDraft = ""
+    @State private var feeSheetOpen = false
+    @State private var sendAlert: (title: String, body: String)?
     @State private var flows = FlowNav()
     /// Which section of the signed-in shell is showing (spec 050).
     @State private var section: WalletSection = .wallet
@@ -113,13 +124,26 @@ struct RootView: View {
         // activity feed ask the same question about the same addresses, and two
         // resolvers would mean two caches and two names for one person.
         let identity = RecipientIdentity(store: shelf, pool: pool, accounts: store)
+        // The money path. One relay client, one spine, one fee session — the
+        // spine is shared with 053's dApp transactions, which is why it is
+        // built here rather than inside the send store.
+        let relay = RelayClient(port: PoolRelayPort(pool: pool))
+        let port = SendAccountPort(accounts: store)
+        let spine = UserOpSpine(
+            relay: relay,
+            accounts: port,
+            signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) }
+        )
+        let feeStore = FeeStore(relay: relay, accounts: port)
+        _fees = State(initialValue: feeStore)
         _contacts = State(initialValue: ContactsStore(
             store: shelf, identity: identity, pool: pool
         ))
         // `vela.serviceEndpoints` has two writers; the executor reaches it
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
-        _settings = State(initialValue: SettingsStore(store: shelf, accounts: store, pool: pool))
+        let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
+        _settings = State(initialValue: settingsStore)
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -139,6 +163,19 @@ struct RootView: View {
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
         ))
+        // The send machine, last: it reads the holdings the balance machine
+        // found and asks the fee session for a quote, so both must exist.
+        let metadata = TokenMetadata(store: shelf, pool: pool)
+        let sendExecutor = SendExecutor(
+            store: shelf, relay: relay, pool: pool, spine: spine, accounts: port,
+            fees: feeStore, identity: identity, metadata: metadata, accountStore: store,
+            balances: { [weak wallet] in wallet?.balance },
+            networks: { [weak settingsStore] in settingsStore?.networkAdmin },
+            ports: SendExecutor.Ports(
+                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) }
+            )
+        )
+        _send = State(initialValue: SendStore(executor: sendExecutor))
         // The receive screen's watcher. A detected deposit buzzes and re-reads
         // the balances, so the figure behind the code is the new one.
         _deposits = State(initialValue: ReceiveWatchStore(
@@ -387,7 +424,13 @@ struct RootView: View {
             // because these are still fixtures — and because the flows push
             // full-bleed surfaces (the scanner, the share card) that a
             // navigation bar would frame wrongly.
-            if let state = flows.top {
+            if let drawn = flows.top {
+                // The CORE owns which send screen is showing. A back-swipe and
+                // a stage change must agree, and only one of them can be the
+                // authority — on every other client it is the machine.
+                let state = sendStates.contains(drawn)
+                    ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
+                    : drawn
                 FlowHost(
                     model: flowModel(state),
                     onBack: { flows.back() },
@@ -410,9 +453,44 @@ struct RootView: View {
                     },
                     onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
                     alert: saveAlert,
-                    onDismissAlert: { saveOutcome = nil }
+                    onDismissAlert: { saveOutcome = nil },
+                    sendAmount: sendStates.contains(state) ? $amountDraft : nil,
+                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
+                    sendCtaDisabled: sendCtaDisabled(state),
+                    onSelectToken: { index in
+                        guard let token = send.view?.tokens[safe: index] else { return }
+                        send.selectToken(id: token.id)
+                    },
+                    onMax: { send.tapMax() }
                 )
                 .transition(.move(edge: .trailing))
+                // The field holds what is typed and the core holds the value:
+                // a field bound straight to a machine loses characters on the
+                // round trip. The echo back is ignored while the person types.
+                .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
+                .onChange(of: amountDraft) { _, value in send.setAmount(value) }
+                .onChange(of: send.view?.amount) { _, value in
+                    if let value, value != amountDraft { amountDraft = value }
+                }
+                // The bridge between the two money machines. The core keeps
+                // them apart on purpose — the signing sheet uses the fee
+                // machine without the send machine existing — so every client
+                // joins them in the shell, and this is that joint.
+                .onChange(of: fees.view?.busy) { _, busy in
+                    if let busy { send.feeBusyChanged(busy) }
+                }
+                .onChange(of: fees.view?.fee) { _, estimate in
+                    if let estimate { send.feeUpdated(estimate) }
+                }
+                // The picker is a READ of what the balance machine had at the
+                // instant the flow opened — and on a cold start that instant
+                // is before the chains have answered. Without this the list is
+                // empty forever, which is what the device showed: not the
+                // fixture's tokens, not the wallet's, nothing at all.
+                .onChange(of: wallet.balance?.tokens.count) { _, _ in
+                    if sendStates.contains(state) { send.refreshTokens() }
+                }
                 .task(id: state) {
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
@@ -420,6 +498,16 @@ struct RootView: View {
                     if state == .r2 || state == .r3 {
                         deposits.open(address: session.view.address)
                     }
+                }
+                // Keyed on the DRAWN state, not the derived one.
+                //
+                // `Open` re-enters the flow, so firing it whenever the derived
+                // state changes reset the machine to the picker the instant it
+                // reached the form — the screen flickered to SD2 and came
+                // straight back. `flows.top` stays `.sd1` for the whole
+                // journey, which is exactly the lifetime this event has.
+                .task(id: drawn) {
+                    if sendStates.contains(drawn) { await openSend() }
                 }
             } else {
                 switch section {
@@ -455,6 +543,13 @@ struct RootView: View {
                         // figure it matters most on, and it must not wait for a
                         // visit to 设置 to learn the person chose CNY.
                         settings.openCurrency()
+                        // So is the NETWORK list, and for a sharper reason: the
+                        // send machine resolves every holding against it, so a
+                        // `network_admin` that had not been opened yet made the
+                        // token picker EMPTY — device-found, and the same shape
+                        // as Android's contact picker, which was empty because
+                        // its machine only booted on the contacts page.
+                        settings.open()
                         wallet.open(address: session.view.address)
                     }
                 case .contacts:
@@ -646,6 +741,29 @@ struct RootView: View {
                 on: detail, loc: loc
             ))
         }
+        // The send journey. SD1's rows are the holdings the balance machine
+        // already found; SD2 and SD3 are the core's figures, its refusals and
+        // its gates.
+        if let view = send.view {
+            let display = WalletLive.Display.from(settings.currency)
+            if case .sendPick(let pick) = model.base {
+                model.base = .sendPick(SendLive.pick(view, on: pick, loc: loc))
+            }
+            if case .sendForm(let form) = model.base {
+                model.base = .sendForm(SendLive.form(
+                    view, fee: fees.view, display: display, on: form, loc: loc
+                ))
+            }
+            if case .sendConfirm(let confirm) = model.base {
+                model.base = .sendConfirm(SendLive.confirm(
+                    view, from: (session.view.address, session.view.activeName),
+                    display: display, on: confirm, loc: loc
+                ))
+            }
+            if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
+                model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
+            }
+        }
         // The ERC-20 tab only: the native tab adds a NETWORK, which is
         // `network_admin`'s wizard and not this machine's.
         if case .addToken(let sheet) = model.sheet, sheet.tab == .erc20,
@@ -653,6 +771,42 @@ struct RootView: View {
             model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
         }
         return model
+    }
+
+    /// The states the send machine owns. Anything else is still a drawing.
+    private var sendStates: Set<FlowStateId> {
+        [.sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c]
+    }
+
+    /// Open the flow for the signed-in account. Idempotent.
+    ///
+    /// The account **id** is the founding credential's, and the session view
+    /// does not carry it — it carries what a header needs, a name and an
+    /// address. So it is read from the store, which is also the only place that
+    /// holds the key set the signature is packed against.
+    private func openSend() async {
+        let record = await accounts.loadAccounts().first {
+            ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
+        }
+        let display = WalletLive.Display.from(settings.currency)
+        send.open(
+            accountId: record?["id"] as? String ?? "",
+            address: session.view.address,
+            name: session.view.activeName.isEmpty ? nil : session.view.activeName,
+            displayCode: display.code,
+            displayRate: display.rate,
+            fiatDecimals: 2
+        )
+    }
+
+    /// The CTA's gate is the core's, never a conjunction assembled here.
+    private func sendCtaDisabled(_ state: FlowStateId) -> Bool {
+        guard let view = send.view else { return false }
+        switch state {
+        case .sd2, .sd2b, .sd2d: return !view.canContinue
+        case .sd3, .sd3b, .sd3c: return !view.canConfirm
+        default: return false
+        }
     }
 
     /// Render the receive card and put it in the album.

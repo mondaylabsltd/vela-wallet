@@ -250,6 +250,92 @@ corpus delta; `vela_core_uniffi.swift` unchanged. The one Rust edit is a
 
 ---
 
+## Phase 3 — `fee_policy` + `send`, up to the confirm screen
+
+Three new machines' shells (`FeeWire`/`FeeExecutor`/`FeeStore`,
+`SendWire`/`SendExecutor`/`SendStore`), one live builder (`SendLive`), and the
+two fields the form was drawn without.
+
+### The picker is the person's own money now
+
+On the founder's iPhone, in the parallel space: 转账 opens on
+**xDAI · Gnosis · 0.53097**, and tapping it opens 发送 xDAI with that token's
+card, an amount field, a recipient field and a 继续 the core keeps disabled
+until it is satisfied. The fixture list — POL, ETH, somebody's USDT — is gone.
+
+### Four defects, and the order they were found in matters
+
+They are recorded in the order they surfaced because each one hid the next.
+
+1. **The picker was empty — not fixtures, nothing.** A screen with no rows
+   cannot say whether the shell answered badly or the core refused the answer,
+   so the first move was a hermetic test that drives the REAL machine with a
+   scripted holding. It passed. That split the question in half and made the
+   rest quick.
+2. **`network_admin` had never been opened.** The send machine resolves every
+   holding against the chain list, and the settings machine only booted when
+   somebody visited 设置. It is now opened from the home beside the currency
+   machine, for the sharper version of the same reason 051 gave: which networks
+   exist is app-wide. **This is Android's contact-picker defect with different
+   nouns** — a machine that only boots on its own page, read from another page.
+3. **The picker was a one-shot read of the balance at the instant the flow
+   opened**, which on a cold start is before any chain has answered. The core
+   has `RefreshTokens` for exactly this; a balance that lands later now
+   re-fetches. Without it the list was empty *forever*.
+4. **`Open` was re-fired on every stage change and reset the machine.** The
+   task was keyed on the DERIVED state, so reaching the form re-entered the
+   flow and bounced straight back to the picker. Keyed on `flows.top` instead,
+   which stays `.sd1` for the whole journey — the lifetime that event actually
+   has.
+
+### A test that passed while the screen was wrong
+
+Worth its own heading, because it is the failure mode this program keeps
+finding. The first version of the acceptance test waited for "a text field and
+xDAI" after tapping a token. **It passed on the device, and the screenshot
+showed the picker** — which has a search box and the row just tapped. A test
+that cannot tell "the form opened" from "nothing happened" is worse than no
+test, because it certifies the defect.
+
+It now waits for 收款人, which only the form has, and asserts 选择代币 is gone.
+It failed immediately, which is how defect 4 was found.
+
+### Three fixtures the device screenshot caught
+
+Visible only once the form was real:
+
+| | Was | Is |
+|---|---|---|
+| the title | **发送 USDT** on a wallet holding xDAI — a sentence about somebody else's money | `send.sendTitle` with the selected token |
+| the fee row's badge | **ETH**, the drawing's, on every network | the chain the fee is actually paid on |
+| the recipient's identicon | a face drawn from the **zero address**, sitting over an empty field as though somebody had been chosen | an empty seed draws a themed circle — only a real address earns a face, which is the founder's anti-poisoning rule the code had in a comment and not in the pixels |
+
+### What phase 3 deliberately did not do
+
+Sign anything. `submit_user_op` is wired in the executor and the spine behind it
+is tested, but nothing on screen reaches it until phase 4. `simulate_calls`
+answers `null` (055), `add_network` answers `error` (its only entry is the
+scanner, 055), and split/sweep/batch are 054.
+
+### Gates
+
+Hermetic tests 357 → **359**; device UI 12 → **13**, all green on the founder's
+iPhone. Literal violations 35.
+
+**Measured against 052's branch point rather than the merge base** — the merge
+base is `origin/main`, and 050/051 sit between the two, so a diff against it
+reports their work as this cut's:
+
+| | |
+|---|---|
+| `rust/crates/vela-core/src/app/` | empty |
+| corpus (`i18n_catalogs/`, `assets/i18n/`) | empty |
+| `vela_core_uniffi.swift` | **empty** — SC-011 holds |
+| `app-web/`, `app-desktop/`, `app-android/`, `app-browser-extension/` | empty |
+| all of `rust/` | a `crate-type` line and one new build script |
+
+---
+
 ## Two findings raised to the founder — one resolved, one open
 
 ### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved

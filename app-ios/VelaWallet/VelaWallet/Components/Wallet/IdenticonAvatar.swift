@@ -69,7 +69,16 @@ struct IdenticonAvatar: View {
 
     var body: some View {
         Group {
-            if let image = IdenticonCache.image(
+            // An empty seed draws NOTHING but a themed circle.
+            //
+            // An identicon is an identity claim, and the founder's
+            // anti-poisoning rule is that only a real address earns one — a
+            // picture drawn from a placeholder is a face for nobody, and on the
+            // send form it sat above an empty recipient field looking like
+            // somebody had been chosen (device-found, spec 052 phase 3).
+            if seed.isEmpty {
+                Circle().fill(theme.bgSunken)
+            } else if let image = IdenticonCache.image(
                 seed: seed,
                 sizePx: UInt32(max(1, (size * displayScale).rounded())),
                 scale: displayScale,

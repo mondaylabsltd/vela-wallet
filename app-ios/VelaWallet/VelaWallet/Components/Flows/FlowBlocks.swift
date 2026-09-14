@@ -158,14 +158,29 @@ struct AmountInputView: View {
 
     let amount: AmountFieldModel
     var onDenom: () -> Void = {}
+    /// The live field; `nil` renders the drawn figure.
+    var text: Binding<String>?
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
-            Text(verbatim: amount.value)
-                .typeRole(Typography.amountHero.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
+            if let text {
+                // `typeRole` is a `Text` extension (the sanctioned styling
+                // seam); a `TextField` takes the same role's font directly.
+                TextField("0", text: text)
+                    .font(Typography.amountHero.scaled(textScale).font)
+                    .foregroundStyle(theme.fgBase)
+                    .multilineTextAlignment(.center)
+                    .keyboardType(.decimalPad)
+                    .minimumScaleFactor(WalletGeometry.heroMinScale)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("send.amount")
+            } else {
+                Text(verbatim: amount.value)
+                    .typeRole(Typography.amountHero.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .minimumScaleFactor(WalletGeometry.heroMinScale)
+                    .lineLimit(1)
+            }
             Button(action: onDenom) {
                 HStack(spacing: Tokens.Space.s2) {
                     Text(verbatim: amount.fiat)
@@ -420,6 +435,10 @@ struct RecipientFieldView: View {
     let field: RecipientFieldModel
     var onPick: () -> Void = {}
     var onScan: () -> Void = {}
+    /// The live field. `nil` renders exactly as drawn — which is what the
+    /// gallery and the screenshot sweep get, so they stay pixel-identical
+    /// (the same mode-not-a-type trick `SettingsUrlField` uses since 050).
+    var text: Binding<String>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
@@ -429,10 +448,19 @@ struct RecipientFieldView: View {
             HStack(spacing: Tokens.Space.s8) {
                 IdenticonAvatar(seed: field.identiconSeed, size: WalletGeometry.rowIcon)
                 VStack(alignment: .leading, spacing: Tokens.Space.s0) {
-                    ForEach(Array(field.lines.enumerated()), id: \.offset) { _, line in
-                        Text(verbatim: line)
-                            .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                    if let text {
+                        TextField("", text: text)
+                            .font(Typography.monoAddressDetail.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityLabel(field.label)
+                    } else {
+                        ForEach(Array(field.lines.enumerated()), id: \.offset) { _, line in
+                            Text(verbatim: line)
+                                .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                        }
                     }
                 }
                 Spacer(minLength: Tokens.Space.s4)

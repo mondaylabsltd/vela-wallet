@@ -69,6 +69,18 @@ struct FlowHost: View {
     /// a card does not close the code somebody was showing.
     var alert: FlowAlertModel?
     var onDismissAlert: (() -> Void)?
+    /// The send journey's live half. Absent everywhere the flow is a picture,
+    /// which is the gallery and the screenshot sweep.
+    var sendAmount: Binding<String>?
+    var sendRecipient: Binding<String>?
+    var sendWarning: String?
+    var sendCtaDisabled = false
+    /// Which row of the picker was tapped. The index travels because the core
+    /// keys tokens by id and the screen only knows positions — the same defect
+    /// the receive sheet and the network list each had: a tap that forgets what
+    /// it tapped opens the first one.
+    var onSelectToken: ((Int) -> Void)?
+    var onMax: (() -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -177,7 +189,10 @@ struct FlowHost: View {
             FlowScaffold(header: m.header, onBack: onBack, onPill: { onNavigate(.chains) }) {
                 SendPickBody(
                     model: m,
-                    onSelect: { _ in onNavigate(.sendForm) },
+                    onSelect: { index in
+                        if let onSelectToken { onSelectToken(index) }
+                        else { onNavigate(.sendForm) }
+                    },
                     onCta: { onNavigate(.sendMulti) }
                 )
             }
@@ -195,15 +210,27 @@ struct FlowHost: View {
                         }
                     },
                     onFee: { onNavigate(.feeToken) },
+                    onMax: { _ in onMax?() },
                     onAddRecipient: { onNavigate(.addRecipient) },
-                    onContinue: { onNavigate(.sendConfirm) }
+                    onContinue: { onNavigate(.sendConfirm) },
+                    amountText: sendAmount,
+                    recipientText: sendRecipient,
+                    warning: sendWarning,
+                    ctaDisabled: sendCtaDisabled
                 )
             }
         case .sendConfirm(let m):
             FlowScaffold(header: m.header, onBack: onBack) {
                 SendConfirmBody(model: m)
             } footer: {
-                FlowFooter { VelaButton(title: m.cta, kind: .primary) { onNavigate(.sendReceipt) } }
+                FlowFooter {
+                    // A BUTTON, not a slider: the slider belongs to the signing
+                    // sheet, and Android 045 recorded the difference after
+                    // building the wrong one.
+                    VelaButton(title: m.cta, kind: .primary) { onNavigate(.sendReceipt) }
+                        .disabled(sendCtaDisabled)
+                        .opacity(sendCtaDisabled ? Tokens.Opacity.disabled : 1)
+                }
             }
         case .sendReceipt(let m):
             FlowScaffold(header: m.header, onBack: onBack) {

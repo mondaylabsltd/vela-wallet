@@ -511,3 +511,149 @@ struct TxRecordWriteTests {
         #expect(pending == ["pending-one"])
     }
 }
+
+// MARK: - The send machine, driven end to end without a network
+
+/// The picker's rows are the holdings the balance machine already found.
+///
+/// Written after the device showed an EMPTY picker: not the fixture list, not
+/// the wallet's own — nothing at all. A screen with no rows cannot say whether
+/// the shell answered badly or the core refused the answer, so this drives the
+/// real machine with a scripted holding and asks it.
+@MainActor
+struct SendMachineTests {
+    private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+
+    /// A `BalanceViewWire` built the way the core would emit one. Decoded from
+    /// JSON rather than constructed, because the wire's initialiser is the
+    /// decoder and a hand-built value could drift from what actually arrives.
+    private func balance(symbol: String = "xDAI", chainId: Int = 100, amount: String = "0.53097") throws -> BalanceViewWire {
+        let json = """
+        {
+          "address": "\(golden)",
+          "display_total_usd": 0.53, "balance_unknown": false, "balance_partial": false,
+          "notice": null, "hidden": false, "refreshing": false,
+          "last_refreshed_at_ms": null,
+          "tokens": [{
+            "chain_id": \(chainId), "symbol": "\(symbol)", "name": "\(symbol)",
+            "balance": "\(amount)", "decimals": 18, "token_address": null,
+            "price_usd": 1.0, "spam": false
+          }],
+          "unpriced_tokens": [],
+          "failed_chain_ids": [], "rate_limited_chain_ids": [], "banner_chain_ids": [],
+          "holdings_loading": false, "cached_total_usd": null,
+          "switcher": { "open": false, "loading": false, "balances": [] }
+        }
+        """
+        return try CoreJSON.decode(BalanceViewWire.self, from: CoreJSON.object(json))
+    }
+
+    private func networks(chainId: Int = 100) throws -> NetViewWire {
+        let json = """
+        {
+          "loaded": true, "last_added_chain_id": null, "endpoints": [], "providers": [],
+          "networks": [{
+            "id": "chain-\(chainId)", "chain_id": \(chainId), "display_name": "Gnosis",
+            "native_symbol": "xDAI", "is_custom": false,
+            "rpc_url": "", "explorer_url": "", "bundler_url": "",
+            "rpc_health": null, "explorer_health": null, "rpc_chain_mismatch": null,
+            "rpc_save_deferred": false
+          }],
+          "wizard": {
+            "phase": "idle", "query": "", "custom_rpc": "", "suggestions": [],
+            "chain_info": null, "compat": null, "error": null, "can_add": false
+          }
+        }
+        """
+        return try CoreJSON.decode(NetViewWire.self, from: CoreJSON.object(json))
+    }
+
+    /// Drive the real `send` machine with a scripted world and read its view.
+    @Test func thePickerShowsTheHoldingsTheBalanceMachineFound() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let held = try balance()
+        let nets = try networks()
+
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: RpcPool(store: store, accounts: accounts),
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
+            accounts: accountPort, fees: fees,
+            identity: RecipientIdentity(
+                store: store, pool: RpcPool(store: store, accounts: accounts), accounts: accounts
+            ),
+            metadata: TokenMetadata(store: store, pool: RpcPool(store: store, accounts: accounts)),
+            accountStore: accounts,
+            balances: { held },
+            networks: { nets },
+            ports: SendExecutor.Ports()
+        )
+        let send = SendStore(executor: executor)
+        send.open(
+            accountId: "cred-0", address: golden, name: "Parallel One",
+            displayCode: "USD", displayRate: 1, fiatDecimals: 2
+        )
+
+        // The fetch is one hop through the effect loop, with no network in it.
+        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        let view = try #require(send.view)
+        #expect(view.tokens.count == 1)
+        #expect(view.tokens.first?.symbol == "xDAI")
+        // And the id the picker sends back is the core's own spelling.
+        #expect(view.tokens.first?.id == "chain-100_native_xDAI")
+    }
+    /// Picking a token moves the machine to the form.
+    ///
+    /// The screen navigates by `SendLive.flowState(view)` rather than by
+    /// remembering where it came from, so if the core does not move, nothing
+    /// on screen does either — which is exactly what the device showed.
+    @Test func pickingATokenMovesTheMachineToTheForm() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let port = ScriptedRelayPort()
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accountPort = ScriptedAccounts()
+        let fees = FeeStore(relay: relay, accounts: accountPort)
+        let held = try balance()
+        let nets = try networks()
+        let pool = RpcPool(store: store, accounts: accounts)
+
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool,
+            spine: UserOpSpine(relay: relay, accounts: accountPort, signer: { CountingSigner() }),
+            accounts: accountPort, fees: fees,
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accounts),
+            metadata: TokenMetadata(store: store, pool: pool),
+            accountStore: accounts,
+            balances: { held }, networks: { nets }, ports: SendExecutor.Ports()
+        )
+        let send = SendStore(executor: executor)
+        send.open(
+            accountId: "cred-0", address: golden, name: "Parallel One",
+            displayCode: "USD", displayRate: 1, fiatDecimals: 2
+        )
+        for _ in 0..<40 where send.view?.tokens.isEmpty ?? true {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        let id = try #require(send.view?.tokens.first?.id)
+
+        send.selectToken(id: id)
+        for _ in 0..<40 where send.view?.stage != .enterDetails {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        let view = try #require(send.view)
+        #expect(view.stage == .enterDetails)
+        #expect(view.selectedToken?.symbol == "xDAI")
+        // And the screen would follow, because it navigates by this.
+        #expect(SendLive.flowState(view, feeSheetOpen: false) == .sd2)
+    }
+
+}

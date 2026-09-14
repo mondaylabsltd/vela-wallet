@@ -617,6 +617,12 @@ struct SendFormBody: View {
     var onMax: (Int) -> Void = { _ in }
     var onAddRecipient: () -> Void = {}
     var onContinue: () -> Void = {}
+    /// The two live fields. Absent everywhere the form is a picture.
+    var amountText: Binding<String>?
+    var recipientText: Binding<String>?
+    /// The core's live refusal, under the fields.
+    var warning: String?
+    var ctaDisabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -655,10 +661,20 @@ struct SendFormBody: View {
                 )
             }
             if let amount = model.amount {
-                AmountInputView(amount: amount, onDenom: onDenom)
+                AmountInputView(amount: amount, onDenom: onDenom, text: amountText)
             }
             if let recipient = model.recipient {
-                RecipientFieldView(field: recipient, onPick: onPickRecipient, onScan: onScan)
+                RecipientFieldView(
+                    field: recipient, onPick: onPickRecipient, onScan: onScan,
+                    text: recipientText
+                )
+            }
+            // The core's sentence, where the person is looking when it becomes
+            // true — not in an alert they have to dismiss to get back to it.
+            if let warning {
+                Text(verbatim: warning)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.warningBase)
             }
             if let add = model.addRecipient {
                 Button(action: onAddRecipient) {
@@ -682,6 +698,8 @@ struct SendFormBody: View {
             }
             FeeRowView(fee: model.fee, onOpen: onFee)
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
+                .disabled(ctaDisabled)
+                .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
         }
     }
