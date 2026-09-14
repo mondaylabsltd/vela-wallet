@@ -338,5 +338,20 @@ struct BrowserWireDriftTests {
                 "approval_guard asks for `\(tag)`, which this build's executor does not handle"
             )
         }
+
+        // **Choosing a cap must actually reach the machine.**
+        //
+        // Device-found: 撤销 was tapped and the sheet kept saying 无限额. The
+        // first suspicion was the wrong event name; this pins the shape
+        // instead of guessing at it.
+        let revoked = try CoreJSON.decode(
+            GuardViewWire.self,
+            from: try view(from: core.dispatch(eventJson: CoreJSON.string([
+                "type": "preset_selected", "mode": "revoke",
+            ])))
+        )
+        #expect(revoked.editor?.choice == .revoke, "the revoke preset did not land")
+        #expect(revoked.confirmAllowed, "a chosen cap must open this machine's gate")
+        #expect(revoked.rewrittenParamsJson != nil, "a chosen cap must produce params to sign")
     }
 }

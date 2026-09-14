@@ -134,7 +134,12 @@ struct ConnectionModel {
 /// the identity and resolve the contents at render time. Storing the contents
 /// is how a sheet ends up showing what was true when it opened.
 enum ExploreSheetKind: String, Identifiable {
-    case groupManage, siteMenu, connection
+    // The hyphenated spellings the fixtures have used since spec 022 — this
+    // type took over `ExploreSheet`'s identity and must not change it.
+    case groupManage = "group-manage"
+    case siteMenu = "site-menu"
+    case connection = "connection"
+
     var id: String { rawValue }
 
     func resolved(in model: ExploreHomeModel) -> ExploreSheet {

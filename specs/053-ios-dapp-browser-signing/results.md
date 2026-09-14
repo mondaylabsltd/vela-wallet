@@ -4,14 +4,14 @@
 
 | | at 053's start | at closeout |
 |---|---|---|
-| `@Test` declarations | 402 | |
-| hermetic test run | 371 | |
-| XCUITest methods | 20 | |
-| literal-audit violations | 35 | |
-| `vela_core_uniffi.swift` bytes | 353,772 | |
-| `// live in 05x` markers | 0 | |
-| Swift files referencing any of the six machines | **0** | |
-| WebKit imports in the app | **0** | |
+| `@Test` declarations | 402 | 457 |
+| hermetic test run | 371 | **426** |
+| XCUITest methods | 20 | **29** (9 new, all browser) |
+| literal-audit violations | 35 | **35** — no new ones |
+| `vela_core_uniffi.swift` bytes | 353,772 | 353,772 — untouched |
+| `// live in 05x` markers | 0 | 0 |
+| Swift files referencing any of the six machines | **0** | 20 |
+| WebKit imports in the app | **0** | 3 |
 
 The baseline is taken at **this cut's branch point**, not at `origin/main`:
 050, 051 and 052 sit in between and their work is not this cut's.
@@ -292,3 +292,100 @@ The through-line of all three: **a test that cannot drive the product cannot
 report on it**, and each of these failed in a way that looked like a product
 defect. The second one especially — a sheet that does not respond to a tap is
 exactly what a broken confirm button looks like.
+
+## Phase 5 — the guard, and a signature the page can verify
+
+Both device-verified on the iPhone 11.
+
+### `personal_sign` → `isValidSignature` → `0x1626ba7e`
+
+```
+#verdict personal_sign ok "0x00000000000000000000000094a4f6affbd8975951142c3999aeab7ecee555c2…"
+#verdict verify valid 0x1626ba7e
+```
+
+The whole loop, on a real chain: the wallet hashed the message under the Safe's
+own domain, signed it once with the fixed keyset, packed the EIP-1271 envelope,
+and the **page** then called `isValidSignature` through the wallet's own read
+proxy. `0x1626ba7e` is the contract saying yes. The sheet showed the message as
+words — `Hello, Vela` — not as hex, and the slide armed with no fee quote,
+because an off-chain signature has nothing to pay.
+
+### An unlimited approval never leaves
+
+The sheet: `Approve` in danger red, `Amount: Unlimited`, the spender in full,
+授权上限 reading **无限额**, the "as requested" and "balance" chips **disabled**,
+the custom field, both refusal sentences, and the red banner "无限额 — 该合约可以
+花费你的所有代币". The slide **shut**.
+
+Then 撤销: 授权上限 becomes **0 USDC**, the banner is gone, and the slide arms.
+
+Four defects on the way, and the order they were found in matters — each one
+hid the next.
+
+**① The slide advertised itself as enabled when it was inert.**
+`allowsHitTesting(false)` is invisible to assistive technology, so VoiceOver
+announced "滑动以确认 · 确认发送, button" for a control that does nothing —
+including at the exact moment the wallet is refusing on somebody's behalf.
+`.disabled(!enabled)` now says so. **A product fix, found because a test could
+not tell the two states apart either.**
+
+**② The test asserted a flag rather than a refusal.** Fixed by dragging the
+shut slide all the way and asserting nothing was submitted. A flag is not a
+refusal.
+
+**③ 撤销 dispatched the wrong event.** The core has a `revoke_chosen`, and it
+belongs to the **boolean card** — `setApprovalForAll`, a DAI permit — where
+there is no amount to cap. The amount editor's chips are all
+`preset_selected { mode }`, 撤销 included. Sending the boolean card's event
+from the editor is an event the editor does not answer, so the chip did
+nothing. Pinned by a test against the real core before the fix, not after.
+
+**④ `ViewThatFits` puts every candidate layout in the accessibility tree.**
+Even with the right event, the chip still did nothing — because
+`app.buttons["撤销"].firstMatch` was matching a **measured but unrendered**
+copy from the layout that did not fit. It existed, it reported itself enabled,
+and tapping it went nowhere. The test now taps the first `isHittable` match.
+
+Defects ③ and ④ produce *identical* symptoms — a chip that is there and does
+nothing — which is why ③ was fixed and the screenshot looked exactly the same.
+The way out was to stop looking at screenshots and pin each layer separately:
+the core answered `preset_selected` correctly
+(`BrowserWireDriftTests`), then the controller carried it correctly
+(`SigningControllerTests`), so the only layer left was the tap.
+
+## Closeout
+
+| | Criterion | Verdict |
+|---|---|---|
+| **SC-001** | 探索 loads a real page and the address bar shows its host | **device-verified** |
+| **SC-002** | consent names the origin; approving returns that address | **device-verified** — `0x88cCA0…6894` |
+| **SC-003** | a page's chain read goes through the wallet's own pool | **device-verified** — `eth_blockNumber` answered for the browser's chain |
+| **SC-004** | `wallet_switchEthereumChain` moves the wallet | **half** — `eth_chainId` answers `0x64` and the switch path is unit-tested (`-32602`/`4902`/switch); the harness's switch button was not driven on the device |
+| **SC-005** | a dApp transaction lands; the page gets a **tx hash** | **device-verified** — 0.50067 → 0.48967 xDAI on Gnosis |
+| **SC-006** | an unlimited approval is stopped and capped | **device-verified**, and the signed-calldata half is `DisplayedIsSignedTests` |
+| **SC-007** | `personal_sign` verifies as `0x1626ba7e` | **device-verified** |
+| **SC-008** | disconnect emits `accountsChanged []` and re-asks | **test-only** — the revoke path is wired and unit-covered; not driven on the device |
+| **SC-009** | a window dismissed with no answer settles 4900 | **test-only** — the core's rule, reached through `settle_forwarded`; not provoked on the device |
+| **SC-010** | favourites, a visit and the tabs survive a relaunch | **device-verified** |
+| **SC-011** | the bundled provider is the web tree's bytes | **met** — `ProviderBundleTests` |
+| **SC-012** | displayed equals signed | **met** — two calldatas, two challenges |
+| **SC-013** | `eth_sign` and unknown methods refused without reaching a node | **device-verified** (`eth_sign` → 4900) and unit-covered for the rest |
+| **SC-014** | no core, corpus, bindings or sibling-client change | **met** — all seven diffs empty |
+
+### Owed
+
+- **SC-012 of Android's numbering — the founder's own passkey answering a
+  page.** Everything up to the ceremony is the same code with one
+  substitution; it needs a finger.
+- **A public dApp.** Android could not get Uniswap's connector to fire in two
+  scripted passes either, and recorded the same question: their UI or ours.
+- **SC-004's device half and SC-008/SC-009.** Wired, unit-covered, not driven
+  on the phone.
+- **The boolean card.** `setApprovalForAll` and a DAI permit have no control on
+  the drawn sheet — `guardRevoke`/`guardGrant` exist and are reachable by
+  nothing. The core's rule is that a grant-all is never preselected and must be
+  tapped deliberately; that surface is owed and is recorded on the methods
+  themselves.
+- **`dapp_permissions::PopupRequest`.** An extension-window shape iOS does not
+  have. Deliberately undispatched.

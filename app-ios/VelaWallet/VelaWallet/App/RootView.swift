@@ -731,13 +731,17 @@ struct RootView: View {
                             )
                         },
                         onSigningConfirm: { signing?.approve() },
-                        onAllowanceChip: { chip in
-                            switch chip {
-                            case "revoke": signing?.guardRevoke()
-                            case "grant": signing?.guardGrant()
-                            default: signing?.guardPreset(chip)
-                            }
-                        },
+                        // **Every chip on the editor is a PRESET, 撤销 included.**
+                        //
+                        // The core has a separate `revoke_chosen`, and it
+                        // belongs to the BOOLEAN card — `setApprovalForAll`,
+                        // a DAI permit — where there is no amount to cap and
+                        // the choice is yes or no. Sending it from the amount
+                        // editor's chip is an event the editor does not
+                        // answer, and the chip silently does nothing.
+                        // Device-found: 撤销 was tapped, the sheet kept saying
+                        // 无限额, and the slide stayed shut.
+                        onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,

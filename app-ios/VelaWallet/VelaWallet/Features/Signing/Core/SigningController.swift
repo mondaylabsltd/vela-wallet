@@ -266,6 +266,18 @@ final class SigningController {
         dispatch(guardCore, ["type": "custom_amount_changed", "text": text])
     }
 
+    /// The BOOLEAN card's two deliberate answers — `setApprovalForAll`, a DAI
+    /// permit — where there is no amount to cap and the choice is yes or no.
+    ///
+    /// **Not the editor's chips.** 撤销 on the amount editor is
+    /// `preset_selected { mode: "revoke" }`; sending `revoke_chosen` from
+    /// there is an event the editor does not answer, and the chip does
+    /// nothing at all (device-found, 053 phase 5).
+    ///
+    /// Neither has a control on the drawn sheet yet: the boolean card is
+    /// `SigningBlock`'s vocabulary and nothing builds one. Recorded rather
+    /// than deleted — the core's rule is that a grant-all is never
+    /// preselected and must be tapped deliberately, and that surface is owed.
     func guardRevoke() { dispatch(guardCore, ["type": "revoke_chosen"]) }
     func guardGrant() { dispatch(guardCore, ["type": "grant_deliberately_chosen"]) }
 

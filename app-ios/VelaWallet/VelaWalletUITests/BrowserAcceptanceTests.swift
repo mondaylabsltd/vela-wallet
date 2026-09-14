@@ -390,4 +390,126 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(answered, "the page never got a hash back")
     }
     #endif
+
+    // MARK: - US5: an unlimited approval never leaves
+
+    /// A site asks to spend everything, forever. The wallet does not let that
+    /// happen, and does not make the person read hex to find out.
+    ///
+    /// The device half of FR-010: the editor is there, the "as requested" chip
+    /// is **disabled** rather than merely unselected, and the slide is **shut**
+    /// until a finite cap is named. That the signed calldata then carries the
+    /// cap is proved hermetically (`DisplayedIsSignedTests`) — it is a fact
+    /// about bytes, and a screenshot cannot show it.
+    func testAnUnlimitedApprovalIsStoppedUntilACapIsNamed() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        connect(app)
+
+        app.webViews.buttons["Approve unlimited"].firstMatch.tap()
+
+        XCTAssertTrue(app.staticTexts["授权上限"].waitForExistence(timeout: 30),
+                      "the spending-cap editor never appeared for an unlimited approval")
+        attach(app.screenshot(), named: "device-browser-unlimited")
+
+        XCTAssertTrue(app.staticTexts["无限额"].exists,
+                      "the requested amount must read as the unlimited grant it is")
+
+        let requested = app.buttons["请求额度"].firstMatch
+        XCTAssertTrue(requested.exists, "the 'as requested' chip must be present")
+        XCTAssertFalse(requested.isEnabled,
+                       "there is no finite figure to request — the chip must be disabled, not merely unselected")
+
+        let slide = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
+        ).firstMatch
+        XCTAssertTrue(slide.waitForExistence(timeout: 20))
+        XCTAssertFalse(slide.isEnabled,
+                       "the slide must stay shut until a finite cap is chosen")
+
+        // And shut means shut: dragging it all the way must do nothing.
+        // Asserting only on `isEnabled` would have been asserting on a flag,
+        // and a flag is not a refusal.
+        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+            .press(forDuration: 0.05,
+                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
+        _ = XCTWaiter.wait(for: [expectation(description: "settle")], timeout: 6)
+        XCTAssertFalse(
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "已提交")).firstMatch.exists,
+            "an unlimited approval was submitted with no cap chosen"
+        )
+        XCTAssertTrue(app.staticTexts["授权上限"].exists, "the sheet must still be waiting for a cap")
+
+        // 撤销 is a finite choice — zero — and needs no typing.
+        //
+        // **Tap the HITTABLE one.** The chips live inside a `ViewThatFits`,
+        // which measures every candidate layout, so each chip appears in the
+        // accessibility tree more than once. `firstMatch` picks whichever came
+        // first — often a measured copy that is not on screen — and tapping it
+        // does nothing at all. The chip existed, reported itself enabled, and
+        // the sheet went on saying 无限额.
+        let revoke = app.buttons.matching(identifier: "撤销").allElementsBoundByIndex
+        guard let hittable = revoke.first(where: { $0.isHittable }) else {
+            XCTFail("no on-screen 撤销 chip among \(revoke.count) matches")
+            return
+        }
+        hittable.tap()
+
+        // The guard is satisfied now, but an approval is an ON-CHAIN
+        // transaction and the fee machine is the third gate. So the slide
+        // arms when the quote lands, not at the moment of the tap.
+        let armed = XCTWaiter().wait(
+            for: [expectation(
+                for: NSPredicate(format: "isEnabled == true"), evaluatedWith: slide
+            )],
+            timeout: 90
+        )
+        attach(app.screenshot(), named: "device-browser-unlimited-capped")
+        XCTAssertEqual(armed, .completed,
+                       "choosing a cap did not arm the slide — the guard, or the fee, never agreed")
+    }
+
+    // MARK: - US6: a signature the page can verify
+
+    /// `personal_sign` is answered, and the page verifies the signature
+    /// **on-chain** for the Safe's own address.
+    ///
+    /// The whole loop in one test: the wallet signs with the Safe's message
+    /// hash, packs the EIP-1271 envelope, and the page then calls
+    /// `isValidSignature` through the wallet's own read proxy. `0x1626ba7e` is
+    /// the contract saying yes.
+    func testAMessageSignatureVerifiesOnChainThroughTheWalletsOwnProxy() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        connect(app)
+
+        app.webViews.buttons["Sign"].firstMatch.tap()
+
+        // A message is readable, so the sheet shows the words rather than hex.
+        XCTAssertTrue(app.staticTexts["Hello, Vela"].waitForExistence(timeout: 30),
+                      "the sheet did not show the message it was asked to sign")
+        attach(app.screenshot(), named: "device-browser-message")
+
+        let slide = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
+        ).firstMatch
+        XCTAssertTrue(slide.waitForExistence(timeout: 20))
+        // No network fee to wait for: an off-chain signature costs nothing.
+        XCTAssertTrue(slide.isEnabled, "a message signature must not wait for a fee quote")
+        slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+            .press(forDuration: 0.05,
+                   thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))
+
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict personal_sign ok", timeout: 90),
+                      "the page never got a signature")
+
+        app.webViews.buttons["Verify sign"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict verify valid 0x1626ba7e", timeout: 90),
+                      "the Safe did not accept its own signature — the EIP-1271 envelope, the message hash, or the read proxy is wrong")
+        attach(app.screenshot(), named: "device-browser-verified")
+    }
 }

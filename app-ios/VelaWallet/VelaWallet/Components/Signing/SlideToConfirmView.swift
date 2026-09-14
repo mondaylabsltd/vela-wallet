@@ -80,6 +80,13 @@ struct SlideToConfirmView: View {
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
+        // **`allowsHitTesting(false)` is invisible to assistive technology.**
+        // Without this a VoiceOver user is told "slide to confirm, button" for
+        // a control that does nothing — for instance while an unlimited
+        // approval is waiting for a cap, which is exactly the moment the
+        // wallet is refusing on their behalf and ought to say so. Device-found
+        // in 053, by a test that could not tell the two states apart either.
+        .disabled(!enabled)
         .accessibilityAction {
             guard enabled, !done else { return }
             progress = 1

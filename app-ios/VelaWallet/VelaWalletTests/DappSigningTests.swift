@@ -387,6 +387,16 @@ struct DisplayedIsSignedTests {
     private func challenge(forParams paramsJson: String) async -> Data? {
         let port = ScriptedRelayPort()
         port.rpc["eth_getCode"] = .ok("0x")
+        // A call WITH calldata must be estimated, and an estimate that fails
+        // is fatal for a contract call — correctly, since submitting an
+        // un-estimated contract call is how money is burned on a revert. So
+        // the estimate is scripted; without it the spine stops before the
+        // ceremony and this test measures nothing.
+        port.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40",
+            "callGasLimit": "0x30d40",
+            "preVerificationGas": "0xc350",
+        ] as [String: Any])
         let signer = ChallengeCapturingSigner()
         let spine = UserOpSpine(
             relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
@@ -397,7 +407,10 @@ struct DisplayedIsSignedTests {
         else { return nil }
         _ = try? await spine.submit(
             chainId: 100, account: golden, calls: calls,
-            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "0", recipient: "")
+            // A USABLE quote: `quoted_fee_usable` refuses a zero amount with
+            // no recipient, and the spine then stops before the ceremony —
+            // which is correct, and would make this test measure nothing.
+            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: golden)
         )
         return signer.challenge
     }
@@ -446,6 +459,64 @@ struct DisplayedIsSignedTests {
         #expect(calls?.first?.data == approve(String(format: "%064x", 100_000_000)))
         #expect(calls?.first?.data.hasSuffix(String(repeating: "f", count: 64)) == false,
                 "the unlimited word must not survive into the call")
+    }
+}
+
+// MARK: - The controller, end to end
+
+@MainActor
+struct SigningControllerTests {
+
+    private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private let token = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+
+    private func controller(_ store: VelaStore) -> SigningController {
+        let port = ScriptedRelayPort()
+        port.rpc["eth_getCode"] = .ok("0x")
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        return SigningController(
+            wallet: (address: golden, credentialId: "cred-1"),
+            relay: relay,
+            accounts: accounts,
+            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+            store: store,
+            pool: RpcPool(store: store, accounts: AccountStore()),
+            ports: SigningController.Ports(knownChains: { [100] })
+        )
+    }
+
+    /// **Choosing a cap on the editor must reach the guard through the
+    /// controller**, not only through the core.
+    ///
+    /// Device-found: 撤销 was tapped on the phone and the sheet went on saying
+    /// 无限额. The core answers `preset_selected` correctly — proved in
+    /// `BrowserWireDriftTests` — so the question was whether the controller
+    /// carries it, and a screenshot cannot answer that.
+    @Test func choosingACapReachesTheGuardThroughTheController() async {
+        let suite = "vela.tests.signing.\(UUID().uuidString)"
+        let store = VelaStore(defaults: UserDefaults(suiteName: suite)!)
+        let unlimited = "0x095ea7b3"
+            + String(repeating: "0", count: 24) + String(repeating: "1", count: 40)
+            + String(repeating: "f", count: 64)
+
+        let controller = self.controller(store)
+        controller.open(SigningController.Incoming(
+            id: "req-1", method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"\#(token)","value":"0x0","data":"\#(unlimited)"}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: 100
+        ))
+
+        #expect(controller.guardView.surface == .approvalEditor)
+        #expect(!controller.guardView.confirmAllowed, "an unlimited approval must hold the gate shut")
+
+        controller.guardPreset("revoke")
+
+        #expect(controller.guardView.editor?.choice == .revoke,
+                "the chip's event never reached the guard through the controller")
+        #expect(controller.guardView.confirmAllowed)
+        #expect(controller.guardView.rewrittenParamsJson != nil,
+                "a capped approval must produce params to sign")
     }
 }
 
