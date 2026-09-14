@@ -831,4 +831,95 @@ struct SendMachineTests {
         }
     }
 
+    /// A launch picks up what a previous run left in flight.
+    ///
+    /// There is no tracker key on any client: the pending set is DERIVED from
+    /// `vela.transactionHistory`, which is exactly what makes a force-quit
+    /// lose nothing. This drives the real machine against a store that already
+    /// holds a pending row, as a relaunch would find it.
+    @Test func aRelaunchPicksUpWhatWasStillInFlight() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        // What the previous run wrote at submit. The timestamp is RECENT on
+        // purpose: the core refuses to give a verdict to an operation older
+        // than twenty-four hours (its rule ④), so a fixture dated 2023 is not
+        // "a pending send" to it — it is one it has rightly stopped following.
+        TxRecords.writeRecords([[
+            "id": "rec-1", "userOpHash": "0xcf9f", "txHash": "",
+            "from": golden, "to": golden, "value": "1", "symbol": "XDAI",
+            "decimals": 18, "chainId": 100,
+            "timestamp": Date().timeIntervalSince1970,
+            "status": "pending", "type": "send",
+        ]], store: store)
+
+        let port = ScriptedRelayPort()
+        // The relay says it landed.
+        port.rpc["eth_getUserOperationReceipt"] = .ok([
+            "success": true,
+            "sender": golden,
+            "receipt": [
+                "transactionHash": "0x151d", "logs": [[String: Any]](),
+            ] as [String: Any],
+        ] as [String: Any])
+        var notified: [String] = []
+        let executor = TrackerExecutor(
+            store: store,
+            relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
+            ports: TrackerExecutor.Ports(
+                notifyConfirmed: { hash, _, _ in notified.append(hash) }
+            )
+        )
+        let tracker = TrackerStore(executor: executor)
+        tracker.boot()
+
+        // Wait for the RECORD, not for the entry: the verdict lands in the
+        // view first and reaches disk one effect later, and a test that stops
+        // at the view would pass while the store still said pending.
+        for _ in 0..<60 where !TxRecords.pending(store: store).isEmpty {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+        let entry = try #require(tracker.view?.entries.first, "the pending row was not picked up")
+        #expect(entry.userOpHash == "0xcf9f")
+        #expect(entry.status == "confirmed")
+        #expect(entry.txHash == "0x151d")
+        // And the record on disk says so, in place.
+        let row = try #require(TxRecords.load(store: store).first)
+        #expect(row["status"] as? String == "confirmed")
+        #expect(row["txHash"] as? String == "0x151d")
+        #expect(TxRecords.pending(store: store).isEmpty)
+        // The confirmation was announced exactly once.
+        #expect(notified == ["0xcf9f"])
+    }
+
+    /// An unreachable bundler is not a failure.
+    ///
+    /// The row stays pending and the record is not patched: "we could not find
+    /// out" and "it did not land" are different facts, and only one of them is
+    /// safe to tell somebody about their money.
+    @Test func anUnreachableBundlerLeavesTheRecordAlone() async throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        TxRecords.writeRecords([[
+            "id": "rec-1", "userOpHash": "0xcf9f", "txHash": "",
+            "from": golden, "to": golden, "value": "1", "symbol": "XDAI",
+            "decimals": 18, "chainId": 100,
+            "timestamp": Date().timeIntervalSince1970,
+            "status": "pending", "type": "send",
+        ]], store: store)
+
+        // Nothing scripted: every bundler call sweeps clean.
+        let executor = TrackerExecutor(
+            store: store,
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+        )
+        let tracker = TrackerStore(executor: executor)
+        tracker.boot()
+        for _ in 0..<20 where tracker.view?.entries.isEmpty ?? true {
+            try? await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        #expect(TxRecords.load(store: store).first?["status"] as? String == "pending")
+        #expect(!TxRecords.pending(store: store).isEmpty)
+    }
+
 }

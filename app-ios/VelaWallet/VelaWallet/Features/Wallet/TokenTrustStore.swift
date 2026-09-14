@@ -145,6 +145,24 @@ final class TokenTrustStore {
     }
 
     /// `boot` commits the core's first view; everything after is a dispatch.
+    /// A confirmation landed, with the logs the tracker just polled.
+    ///
+    /// **The single constructor of an admission session.** The core's own doc
+    /// says so: this path may reach `WriteCustomToken`, and the sign-sheet's
+    /// simulated deltas may reach it "through no code path at all". A receipt
+    /// is something the chain produced; a simulation is something a site can
+    /// author, and a wallet that admitted tokens from the second would let a
+    /// scam seed itself.
+    func receiptLogsConfirmed(from: String, chainId: Int, logs: [[String: Any]]) {
+        guard !logs.isEmpty else { return }
+        send([
+            "type": "receipt_logs_confirmed",
+            "from": from,
+            "chain_id": chainId,
+            "logs": logs,
+        ])
+    }
+
     private func send(_ event: [String: Any]) {
         let json = CoreJSON.string(event)
         if core.boot(json) { return }

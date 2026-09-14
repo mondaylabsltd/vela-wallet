@@ -25,5 +25,13 @@
 	-->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Vela uses Bluetooth to find the nearby device you sign in with after it scans the code on screen.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.getvela.VelaWallet.tracker</string>
+	</array>
 </dict>
 </plist>

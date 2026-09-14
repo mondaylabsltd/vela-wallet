@@ -421,6 +421,78 @@ fee token; the relay offers three on Gnosis, so this one is now drivable).
 
 ---
 
+## Phase 5 — `tx_tracker`. A send survives the app being killed.
+
+**SC-003 is met, on the device.** Submitted in the parallel space, force-quit
+before the chain confirmed, relaunched: the feed showed **已发送 −0.0001 xDAI ·
+至 0x031d…772b**, resolved by a tracker nobody asked to start, and the balance
+moved from $0.53 to $0.51.
+
+### What this client can honestly promise
+
+Three layers, and only the first two are the shell's to schedule:
+
+| | |
+|---|---|
+| foreground | a 3-second tick while anything is pending, at the core's cadence, stopped the moment nothing is |
+| backgrounding | `beginBackgroundTask` grace — **read from `backgroundTimeRemaining`**, not assumed, because the number has changed across releases |
+| later | a `BGAppRefreshTask` iOS runs at its own discretion and may never run, and a relaunch, which always does |
+
+So the promise is **not a cadence**. It is that no verdict is lost: the pending
+set is derived from `vela.transactionHistory`, every launch resumes it, and the
+core abandons at twenty-four hours. Android's worker gives two minutes; iOS
+gives half a minute and a maybe, and saying otherwise would be a promise the
+platform does not keep. The spec says this in FR-007 rather than in a comment.
+
+### The receipt's logs are the only door a token comes through
+
+`notify_confirmed` hands the logs the tracker just polled to
+`token_trust::ReceiptLogsConfirmed` — the core's own doc calls it "the single
+constructor of an admission session", and says the sign sheet's simulated
+deltas reach a write "through no code path at all". A receipt is something the
+chain produced; a simulation is something a site can author. That asymmetry is
+the founder's standing ruling and this cut does not re-decide it.
+
+`poll_receipt` therefore answers `receipt_with_logs` rather than `receipt`: the
+core reads them for an `ExecutionFailure` inside an operation the EntryPoint
+counted as a success — the money did not move, and the record must say
+`failed`.
+
+### Two tests that were wrong about the world before the code was
+
+1. **A fixture dated 2023 is not "a pending send".** The core refuses a verdict
+   to an operation older than twenty-four hours (rule ④), so the first version
+   of the resume test watched a record the core had rightly stopped following.
+   The fixture is now dated *now*.
+2. **The view moves one effect before the disk does.** Waiting on the entry's
+   status passed while the store still said `pending`. The test waits on
+   `TxRecords.pending` being empty, which is the fact that matters — a person
+   reads the feed, not the machine.
+
+And one about the harness: `app.screenshot()` after `app.terminate()` fails
+with "cannot request screenshot data because it does not exist". Photograph
+before the kill.
+
+### Wired, not driven
+
+The **notification** posts only when the app is away, asks permission at the
+first submit (never at launch), dedupes on the operation hash and opens the
+transaction when tapped. Its wiring is exercised by the resume test's
+`notifyConfirmed` port; the banner itself needs somebody to background the app
+at the right second with the permission granted, and is **not** claimed as
+device-verified.
+
+### Gates
+
+Hermetic tests 362 → **364**; device UI 13 → **14**, all green on the founder's
+iPhone (the two spending tests are behind `-DVELA_LIVE_SEND` and are not in
+that count). Literal violations 35. Against 052's branch point:
+`rust/crates/vela-core/src/app/`, the corpus, `vela_core_uniffi.swift` and the
+other four clients are all unchanged. `Info.plist` gains two keys, both
+additive: `UIBackgroundModes` and `BGTaskSchedulerPermittedIdentifiers`.
+
+---
+
 ## Two findings raised to the founder — one resolved, one open
 
 ### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved

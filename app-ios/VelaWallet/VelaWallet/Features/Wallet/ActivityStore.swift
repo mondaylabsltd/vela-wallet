@@ -122,6 +122,17 @@ final class ActivityStore {
     }
 
     /// The network chip. `nil` is all chains.
+    /// The tracker patched records on disk, so the feed re-reads.
+    ///
+    /// The count matters to the core: zero resolved verdicts is not a reason to
+    /// re-read, and a feed that re-read on every poll would rebuild itself
+    /// three times a second while a send is in flight.
+    func reconciled(count: Int = 1) {
+        core.dispatch(CoreJSON.string([
+            "type": "reconcile_completed", "resolved_count": max(0, count),
+        ]))
+    }
+
     func chainFilter(_ chainId: Int?) {
         core.dispatch(CoreJSON.string([
             "type": "chain_filter_changed",

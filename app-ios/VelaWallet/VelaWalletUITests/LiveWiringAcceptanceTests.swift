@@ -690,4 +690,76 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         #endif
     }
 
+    /// SC-003: a send survives the app being killed.
+    ///
+    /// Submits, force-quits before the chain has confirmed, relaunches, and
+    /// waits for the feed row to reach 已发送. Nothing is asked of the person
+    /// in between — the pending set is derived from the transaction store, so
+    /// the launch that follows a kill picks up exactly what the kill
+    /// interrupted.
+    ///
+    /// **Spends dust**, so it lives behind the same flag as the send itself.
+    func testASubmittedSendSurvivesAForceQuit() throws {
+        #if !VELA_LIVE_SEND
+        throw XCTSkip("set -DVELA_LIVE_SEND to spend dust on Gnosis")
+        #else
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30))
+        tap(app.buttons["转账"], "转账")
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 30))
+        tap(app.staticTexts["xDAI"], "the xDAI row")
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20))
+
+        XCTAssertEqual(app.textFields.count, 2, "the form's fields changed shape")
+        let recipient = app.textFields.element(boundBy: 1)
+        recipient.tap()
+        recipient.typeText("0x031d7D57c99CAF891e1C250554691Fd12D84772b")
+        let amount = app.textFields.element(boundBy: 0)
+        amount.tap()
+        amount.typeText("0.0001")
+
+        let cont = app.buttons["继续"]
+        let armed = NSPredicate(format: "isEnabled == true")
+        XCTAssertTrue(cont.waitForExistence(timeout: 60))
+        expectation(for: armed, evaluatedWith: cont, handler: nil)
+        waitForExpectations(timeout: 90)
+        tap(cont, "继续")
+
+        let confirm = app.buttons["确认并发送"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 30))
+        expectation(for: armed, evaluatedWith: confirm, handler: nil)
+        waitForExpectations(timeout: 90)
+        tap(confirm, "确认")
+        XCTAssertTrue(app.staticTexts["交易已提交至网络"].waitForExistence(timeout: 120))
+
+        // Killed, not backgrounded: the grace window and the background refresh
+        // are both gone, and only the store is left.
+        // Screenshot BEFORE the kill: a terminated app has nothing to
+        // photograph, and asking anyway fails the test for the wrong reason.
+        attach(app.screenshot(), named: "device-send-killed")
+        app.terminate()
+
+        let relaunched = XCUIApplication()
+        relaunched.launchEnvironment["VELA_LANG"] = "zh"
+        relaunched.launchEnvironment["VELA_THEME"] = "dark"
+        relaunched.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        relaunched.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        relaunched.launchArguments += ["-AppleLanguages", "(zh)"]
+        relaunched.launch()
+
+        // The feed's row for a send this device made, now resolved by a
+        // tracker that nobody asked to start.
+        XCTAssertTrue(relaunched.staticTexts["已发送"].waitForExistence(timeout: 120),
+                      "the interrupted send never reached a verdict after a relaunch")
+        attach(relaunched.screenshot(), named: "device-send-survived-kill")
+        #endif
+    }
+
 }

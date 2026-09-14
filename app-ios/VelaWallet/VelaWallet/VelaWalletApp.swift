@@ -3,6 +3,7 @@
 //  VelaWallet
 //
 
+import BackgroundTasks
 import SwiftUI
 
 @main
@@ -19,9 +20,20 @@ struct VelaWalletApp: App {
         #endif
     }
 
+    /// The identifier `Info.plist` permits and the scene registers.
+    static let trackerTask = "app.getvela.VelaWallet.tracker"
+
     var body: some Scene {
         WindowGroup {
             RootView(loc: loc)
+        }
+        // A background refresh, which iOS runs at ITS discretion and may never
+        // run at all. It is best effort by design, and the wallet's promise
+        // does not rest on it: every launch resumes the pending set from
+        // storage, so a refresh that never happens delays a verdict rather
+        // than losing one.
+        .backgroundTask(.appRefresh(Self.trackerTask)) {
+            await TrackerBackgroundBridge.run()
         }
     }
 }

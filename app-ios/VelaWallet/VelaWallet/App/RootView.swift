@@ -78,6 +78,9 @@ struct RootView: View {
     /// would lose a submitted operation the moment somebody swiped back.
     @State private var fees: FeeStore
     @State private var send: SendStore
+    /// Money in flight, followed for as long as the app exists.
+    @State private var tracker: TrackerStore
+    @State private var notifier: TrackerNotifier
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -95,6 +98,7 @@ struct RootView: View {
     /// Mirrored into view state rather than read from the hook on every render:
     /// the hook is the authority, and a `@State` copy is what makes SwiftUI
     /// redraw when the door opens during `.task`.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var parallelSpace = false
     @State private var launching = !LaunchAnimation.isDisabled
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
@@ -153,9 +157,10 @@ struct RootView: View {
         let held = HeldTokens()
         let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
         _trust = State(initialValue: trust)
-        _activity = State(initialValue: ActivityStore(
+        let activityStore = ActivityStore(
             store: shelf, accounts: store, held: held, trust: trust, identity: identity
-        ))
+        )
+        _activity = State(initialValue: activityStore)
         // A saved token has to reach the balances, so the core's
         // "invalidate the token cache" becomes a re-read here — there is no
         // cache on this client, only a fetch.
@@ -165,6 +170,25 @@ struct RootView: View {
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
         ))
+        // The tracker, before the send machine that hands off to it.
+        let notify = TrackerNotifier(loc: loc)
+        _notifier = State(initialValue: notify)
+        let trackerExecutor = TrackerExecutor(
+            store: shelf, relay: relay,
+            ports: TrackerExecutor.Ports(
+                notifyConfirmed: { [weak notify] hash, chain, tx in
+                    notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
+                },
+                // The authentic receipt logs, to the ONE entry point that may
+                // admit a token. A sign-time simulation never may.
+                receiptLogs: { [weak trust] from, chain, logs in
+                    trust?.receiptLogsConfirmed(from: from, chainId: chain, logs: logs)
+                },
+                recordsPatched: { [weak activityStore] in activityStore?.reconciled() }
+            )
+        )
+        let trackerStore = TrackerStore(executor: trackerExecutor)
+        _tracker = State(initialValue: trackerStore)
         // The send machine, last: it reads the holdings the balance machine
         // found and asks the fee session for a quote, so both must exist.
         let metadata = TokenMetadata(store: shelf, pool: pool)
@@ -174,6 +198,14 @@ struct RootView: View {
             balances: { [weak wallet] in wallet?.balance },
             networks: { [weak settingsStore] in settingsStore?.networkAdmin },
             ports: SendExecutor.Ports(
+                // A send the relay accepted is the tracker's from that moment.
+                // The permission is asked HERE — at the first submit, never at
+                // launch — because this is the first time there is anything to
+                // notify about.
+                trackSubmitted: { [weak trackerStore, weak notify] hash, ids, chain in
+                    notify?.askOnceIfNeeded()
+                    trackerStore?.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                },
                 // The core's own exit. `Done` on a receipt, and `close` on any
                 // refusal that ends the attempt, both land here.
                 closed: { [weak flowNav] in flowNav?.close() },
@@ -412,6 +444,27 @@ struct RootView: View {
                 await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
                 parallelSpace = ParallelSpaceHook.isActive
                 session.boot()
+                // At LAUNCH, not with a screen: what the tracker follows
+                // outlives every screen. The pending set is derived from the
+                // transaction store, so a force-quit mid-send loses nothing —
+                // the next launch picks it up here.
+                tracker.boot()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active: tracker.foregrounded()
+                case .background: tracker.backgrounded()
+                default: break
+                }
+            }
+            .onChange(of: notifier.pendingReceipt) { _, hash in
+                // A tapped notification opens the transaction it is about. It
+                // waits for a wallet to exist: a cold-start tap arrives before
+                // the session machine has ruled on where the app may be.
+                guard hash != nil, session.view.allowedRoute == .wallet else { return }
+                section = .wallet
+                flows.enter(.activity)
+                notifier.clearPendingReceipt()
             }
         }
     }
