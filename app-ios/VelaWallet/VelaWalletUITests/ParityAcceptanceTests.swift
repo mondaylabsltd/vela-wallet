@@ -241,13 +241,13 @@ final class ParityAcceptanceTests: XCTestCase {
         XCTAssertTrue(apply.waitForExistence(timeout: 20),
                       "the core did not parse the pasted list")
         attach(app.screenshot(), named: "device-batch-parsed")
-        // The count on the button is the CORE's. XCUITest's keyboard cannot
-        // reliably put a newline into a `TextEditor` — one `typeText` with an
-        // embedded "\n" and two separate calls both land a single row — so the
-        // device drives ONE row end to end and `BatchImportTests` covers the
-        // multi-row parse hermetically. Recorded in results as a harness limit,
-        // not a product one.
-        XCTAssertTrue(apply.label.contains("1") || apply.label.contains("2"),
+        // The count on the button is the CORE's, and it differs by harness:
+        // a real phone's keyboard puts a newline into the `TextEditor` and the
+        // core sees TWO rows; the simulator's swallows it and the core sees
+        // one. Both prove the same wiring, so the assertion is on the count
+        // being real rather than on which one it is.
+        let parsed = apply.label.contains("2") ? 2 : 1
+        XCTAssertTrue(apply.label.contains("\(parsed)"),
                       "the CTA does not count what the core parsed: \(apply.label)")
         XCTAssertTrue(apply.isEnabled, "the CTA is shut on a list the core accepted")
         apply.tap()
@@ -258,14 +258,18 @@ final class ParityAcceptanceTests: XCTestCase {
         // and the importer is gone, because `seed_split_recipients` shuts it.
         XCTAssertTrue(app.staticTexts["收款人 1"].waitForExistence(timeout: 15),
                       "the split did not receive the imported person")
+        if parsed == 2 {
+            XCTAssertTrue(app.staticTexts["收款人 2"].exists,
+                          "only one of the two imported people reached the split")
+        }
         XCTAssertFalse(app.staticTexts["导入收款人"].exists,
                        "the importer stayed open after applying")
         // The summary counts people in the corpus's words — and counts them
         // with the PLURAL key, which this spec had to fix: the bare
         // `send.recipientCount` does not exist, so the screen was printing
         // its own key name.
-        XCTAssertTrue(app.staticTexts["1 位收款人"].exists,
-                      "the split summary does not name the imported person")
+        XCTAssertTrue(app.staticTexts["\(parsed) 位收款人"].exists,
+                      "the split summary does not count the imported people")
         attach(app.screenshot(), named: "device-batch-applied")
     }
 

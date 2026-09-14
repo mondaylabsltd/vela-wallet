@@ -41,31 +41,44 @@ phone (SC-001) has not been driven.
 - [ ] **T204** Continue → `confirm_multi_selection`; SD2d reads `multi_specs`,
       not the balances the picker showed.
 
-### Then
+### Then — all done
 
-3 batch · 4 the two exits · 5 **draw C7/C8/C9** · 6 wire the form · 7 the book
-travels · 8 closeout.
+3 batch · 4 the two exits · 5 **draw C7/C8/C9** · 6 wire the form · 7 driven on
+a screen. See [results.md](./results.md) for what each one turned up.
+
+**054 is closed. Next is 055 — signing depth** (simulation blocks, message-
+signing depth, the camera scanner).
 
 ---
 
-## What the survey found that is not in any phase yet
+## What the survey found — all nine now addressed
 
-Recorded here so it is not lost. Each is a live defect or a dropped judgement:
+Each was a live defect or a dropped judgement. Struck through means fixed in
+this cut; the phase is named.
 
-1. **`ContactDetailScreen`'s edit pencil is a literal no-op** (`Button {}`).
-2. **Delete from the contact detail does nothing**, because `ContactsLive.detail`
-   passes `sheet: nil`. Delete works only from the C1 row-swipe.
-3. **The contacts search field is a `Text`**, so `contacts.query` is permanently
-   `nil` and live search cannot work.
-4. **`set_group_members` has zero call sites** in `ContactsStore`.
-5. **`view.recipient` is decoded and never read** — no `inspect_recipient` is
-   ever dispatched, so it is always `nil`.
-6. **`import_failure` and `export` are not decoded at all.**
+1. ~~**`ContactDetailScreen`'s edit pencil is a literal no-op** (`Button {}`).~~
+   Phase 6 — it opens the edit form.
+2. ~~**Delete from the contact detail does nothing**, because
+   `ContactsLive.detail` passes `sheet: nil`.~~ Phases 6 and 7 — the live
+   builder carries the confirm and the confirm deletes.
+3. ~~**The contacts search field is a `Text`**~~ Phase 6 — a real `TextField`
+   with a clear affordance.
+4. ~~**`set_group_members` has zero call sites**~~ Phase 6 — the C10 picker,
+   both directions, committing a set.
+5. ~~**`view.recipient` is decoded and never read**~~ Phase 6 — opening a
+   contact's page inspects their address, and the two neutral tags say what
+   came back.
+6. ~~**`import_failure` and `export` are not decoded at all.**~~ Phase 6 — both
+   decoded (`import_failure` is TAGGED, not bare) and both presented.
 7. `sections` is not decoded **on purpose**: iOS derives its own A–Z with CJK
    transliteration, and that divergence is recorded in 050.
-8. `BatchImportBody`'s four callbacks are not passed by `FlowHost`, and its
-   paste box is a read-only `Text`.
-9. `SendFormBody.onMax` drops the sweep row index (`{ _ in onMax?() }`).
+8. ~~`BatchImportBody`'s four callbacks are not passed by `FlowHost`, and its
+   paste box is a read-only `Text`.~~ Phase 3 — passed, and forwarded to
+   `FlowSheetHost` (which phase 7 found they were not).
+9. `SendFormBody.onMax` drops the sweep row index. **Recorded, not fixed** —
+   phase 6 removed the chip from the live sweep form instead: the only event
+   behind it is `tap_max`, which acts on the single selected token, and a sweep
+   already moves the maximum of every row.
 
 ---
 
