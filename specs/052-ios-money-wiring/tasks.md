@@ -75,7 +75,67 @@ regeneration — the first iOS cut that does not.
 
 ---
 
-## Next — Phase 1: the money plumbing, provable before anything can spend
+### Phase 1 — the money plumbing ✅ committed `0e2fcb1e` · `8d1e6282`
+
+`Core/{RelayClient,UserOpSpine}.swift`, `Features/Send/Core/UserOpSigner.swift`,
+`CoreHTTP.getREST`, `RpcPool.bundlerBase`, `TxRecords.{writeRecords,patch,
+pending}`. 331 → 356 hermetic tests. No screen changed.
+
+Two defects found, both in results.md: the pool was dropping the relay's own
+sentence (`RpcOutcome.rpcError` now exists), and `relay_error_message` can eat
+the `[existingHash:]` marker that prevents a double spend.
+
+### Phase 2 — the parallel space ✅ committed `dbdab017` · `866da5c5` · `bafa82e8`
+
+A second **staticlib** xcframework linked only by Debug.
+`rust/scripts/build-ios-dev-fixtures.sh` builds it. SC-010 measured with a
+control (Release 0 / Debug 567 fixture symbols). Device-verified: the space
+opens on `0x88cC…6894` and closes cleanly.
+
+**The whole acceptance suite is 12 of 12 on the founder's iPhone.**
+
+---
+
+## Next — Phase 3: `fee_policy` + `send`, up to the confirm screen
+
+The first phase with a screen. The order to follow is web 026's "machine order
+to repeat", and it is not negotiable:
+
+- [ ] **T301** `Features/Send/{FeeWire,FeeStore,FeeExecutor}.swift` — the six
+      `fee_policy` operations over `RelayClient`. One quote in flight per
+      surface, keyed by a generation token, so a stale answer cannot land on a
+      newer attempt.
+- [ ] **T302** `Features/Send/{SendWire,SendStore,SendExecutor}.swift` — the
+      eighteen arms. `estimate_fee` dispatches into the resident fee session and
+      awaits its view (research D6); `add_network` answers `Error` (055 owns the
+      scanner, its only entry); `simulate_calls` answers `sim_json: null` (055).
+- [ ] **T303** `Features/Send/SendLive.swift` — `SendView` → `FlowScreenModel`,
+      a sibling of `WalletFlowFixtures` exactly as `WalletLive` is of
+      `WalletFixtures`. The gallery must stay pixel-identical.
+- [ ] **T304** `FlowHost`/`FlowNav`: SD1 → SD2 → SD3 read the core. **The
+      confirm CTA is a button, not a slider** (the signing sheet's is the
+      slider — Android 045 recorded the difference).
+- [ ] **T305** A warm quote on `select_token` (web 028 ph10): the fee is being
+      fetched while the person types an amount, not after they tap 继续.
+- [ ] **T306** Drift tests for all three families; `neutralAnswer` per machine.
+
+**Watch for**, from Android's device runs — each of these cost a day there:
+
+- an input bound straight to the machine loses characters on the round trip
+  (local echo, ignore the echo);
+- the relay's quote rows carry `balance` as **hex** and `feeToken` as **null**
+  (already handled in `RelayClient.quoteRow`, with a test);
+- the feed only re-reads on focus;
+- the system back gesture must not close the whole flow from any step.
+
+### Then
+
+Phase 4 sign and submit · Phase 5 `tx_tracker` · Phase 6 refusals and the two
+sheets · Phase 7 the three markers and closeout.
+
+---
+
+## Phase 1's task list, for reference
 
 - [ ] **T101** `Core/CoreHTTP.swift` — add a REST `get(url:headers:timeout:)`.
       It has `rpc` and `rpcEnvelope` and no plain GET with a header, and the
