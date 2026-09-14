@@ -6,6 +6,7 @@
 //  welcome content resolved through the localization layer.
 //
 
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -148,6 +149,12 @@ struct RootView: View {
     /// by the payroll importer and the address book, because they are the same
     /// platform affordance asked for twice.
     @State private var documents: UIKitDocumentPorts
+    /// The camera behind the scanner (spec 055). App-resident so the session
+    /// survives the surface's own rebuilds — reconfiguring it drops frames for
+    /// a beat, which on a viewfinder reads as the camera stuttering.
+    @State private var camera = CameraScanner()
+    /// What the photo library had to say, when it had nothing.
+    @State private var scanNotice: (title: String, body: String)?
     /// Whether the app is inside the parallel space, for the badge.
     ///
     /// Mirrored into view state rather than read from the hook on every render:
@@ -591,83 +598,7 @@ struct RootView: View {
                 let state = sendStates.contains(drawn)
                     ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
                     : drawn
-                FlowHost(
-                    model: flowModel(state),
-                    onBack: { flows.back() },
-                    onNavigate: { step in
-                        // 导入表格 is the CORE's flag, not a push: the live
-                        // router derives the send journey's state from the
-                        // machine, so a pushed SD2c would be overridden back to
-                        // the form — the dead-button shape twice already found
-                        // in this flow.
-                        if step == .batchImport { openBatch() } else { flows.push(step) }
-                    },
-                    addTokenInput: addTokenInput(for: state),
-                    onAddToken: addTokenAction(for: state),
-                    addTokenError: addTokenError(for: state),
-                    onReceiveNetwork: { receiveNetwork = $0 },
-                    onSelectActivity: { activityRow = ($0, $1) },
-                    onSelectAsset: { assetRow = $0 },
-                    chainSheet: activity.feed.map {
-                        FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
-                    },
-                    onPickChain: { chainId in
-                        chainFilter = chainId
-                        activity.chainFilter(chainId)
-                    },
-                    onExplorer: explorerLink(for: state).map { url in
-                        { UIApplication.shared.open(url) }
-                    },
-                    onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
-                    // The core's refusal outranks the save alert: one is an
-                    // answer to something the person just did with money, the
-                    // other is about a picture.
-                    alert: sendRefusal ?? saveAlert,
-                    onDismissAlert: {
-                        if send.alert != nil { send.alert = nil } else { saveOutcome = nil }
-                    },
-                    sendAmount: sendStates.contains(state) ? $amountDraft : nil,
-                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
-                    sendRow: splitRows(for: state),
-                    sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
-                    sendCtaDisabled: sendCtaDisabled(state),
-                    onSelectToken: selectSendToken,
-                    onSelectAllTokens: { visible in selectAllValuable(visible) },
-                    onPickCta: { sendPickCta() },
-                    onMax: { send.tapMax() },
-                    onRemoveRecipient: { index in removeSplitRow(at: index) },
-                    onAddRecipient: { addSplitRow() },
-                    onConfirm: { send.slideConfirm() },
-                    onReceiptDone: { send.done() },
-                    onContinueSend: { send.advance() },
-                    onNoticeAction: {
-                        // Whatever the notice is about, tried again. The CORE
-                        // decides which — a funded relayer re-runs the
-                        // pre-check, a refused submit re-signs, and a prompt
-                        // that is up is cancelled at its own checkpoint.
-                        if send.view?.treasuryBootstrap != nil {
-                            send.retryAfterBootstrap()
-                        } else if send.view?.txError != nil {
-                            send.retryAfterError()
-                        } else if send.view?.txStatus == "signing" {
-                            send.cancelSigning()
-                        }
-                    },
-                    // 暂不: the pause is dismissed and the facts are kept.
-                    onNoticeSecondary: { send.dismissTreasurySheet() },
-                    onPickFeeToken: pickFeeToken,
-                    onPickContact: pickSendContact,
-                    batchPaste: state == .sd2c ? $batchPaste : nil,
-                    batchRate: state == .sd2c ? $batchRate : nil,
-                    onBatchUnit: { batch.setUnit($0) },
-                    onBatchFile: { batch.pickFile() },
-                    onBatchTemplate: { batch.saveTemplate() },
-                    onBatchResetRate: {
-                        batch.resetRate()
-                        batchRate = batch.view.rateInput
-                    },
-                    onBatchApply: { batchApply() }
-                )
+                flowScreen(state)
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
                 // a field bound straight to a machine loses characters on the
@@ -723,6 +654,16 @@ struct RootView: View {
                     if sendStates.contains(state) { send.refreshTokens() }
                 }
                 .task(id: state) {
+                    // The viewfinder runs only while it is on screen. A camera
+                    // left running behind another screen is a light nobody
+                    // asked for and a battery nobody budgeted.
+                    if state == .s1 {
+                        camera.onScan = { text in scannedCode(text) }
+                        send.openScanner()
+                        await camera.start()
+                    } else {
+                        camera.stop()
+                    }
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
                     // minutes, at the core's own cadence, and it stops itself.
@@ -1581,6 +1522,180 @@ struct RootView: View {
             fee: live.fee,
             context: context
         )
+    }
+
+    // MARK: - The scanner (spec 055)
+
+    /// Why there is no viewfinder, in the core's words. Four refusals, four
+    /// sentences — somebody who denied permission and somebody on a device with
+    /// no camera need different things said to them.
+    /// The flow screen itself.
+    ///
+    /// Extracted from `signedInOrWelcome` because this argument list is the
+    /// thing that times out Swift's type checker — three times in this program
+    /// already, and the scanner was the fourth. A method body is type-checked on
+    /// its own, which is the whole trick.
+    private func flowScreen(_ state: FlowStateId) -> some View {
+                FlowHost(
+                    model: flowModel(state),
+                    onBack: { flows.back() },
+                    onNavigate: { step in
+                        // 导入表格 is the CORE's flag, not a push: the live
+                        // router derives the send journey's state from the
+                        // machine, so a pushed SD2c would be overridden back to
+                        // the form — the dead-button shape twice already found
+                        // in this flow.
+                        if step == .batchImport { openBatch() } else { flows.push(step) }
+                    },
+                    addTokenInput: addTokenInput(for: state),
+                    onAddToken: addTokenAction(for: state),
+                    addTokenError: addTokenError(for: state),
+                    onReceiveNetwork: { receiveNetwork = $0 },
+                    onSelectActivity: { activityRow = ($0, $1) },
+                    onSelectAsset: { assetRow = $0 },
+                    chainSheet: activity.feed.map {
+                        FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
+                    },
+                    onPickChain: { chainId in
+                        chainFilter = chainId
+                        activity.chainFilter(chainId)
+                    },
+                    onExplorer: explorerLink(for: state).map { url in
+                        { UIApplication.shared.open(url) }
+                    },
+                    onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    // The core's refusal outranks the save alert: one is an
+                    // answer to something the person just did with money, the
+                    // other is about a picture.
+                    alert: sendRefusal ?? scanAlert ?? saveAlert,
+                    onDismissAlert: {
+                        if send.alert != nil {
+                            send.alert = nil
+                        } else if scanNotice != nil {
+                            scanNotice = nil
+                        } else {
+                            saveOutcome = nil
+                        }
+                    },
+                    sendAmount: sendStates.contains(state) ? $amountDraft : nil,
+                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendRow: splitRows(for: state),
+                    sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
+                    sendCtaDisabled: sendCtaDisabled(state),
+                    onSelectToken: selectSendToken,
+                    onSelectAllTokens: { visible in selectAllValuable(visible) },
+                    onPickCta: { sendPickCta() },
+                    onMax: { send.tapMax() },
+                    onRemoveRecipient: { index in removeSplitRow(at: index) },
+                    onAddRecipient: { addSplitRow() },
+                    onConfirm: { send.slideConfirm() },
+                    onReceiptDone: { send.done() },
+                    onContinueSend: { send.advance() },
+                    onNoticeAction: {
+                        // Whatever the notice is about, tried again. The CORE
+                        // decides which — a funded relayer re-runs the
+                        // pre-check, a refused submit re-signs, and a prompt
+                        // that is up is cancelled at its own checkpoint.
+                        if send.view?.treasuryBootstrap != nil {
+                            send.retryAfterBootstrap()
+                        } else if send.view?.txError != nil {
+                            send.retryAfterError()
+                        } else if send.view?.txStatus == "signing" {
+                            send.cancelSigning()
+                        }
+                    },
+                    // 暂不: the pause is dismissed and the facts are kept.
+                    onNoticeSecondary: { send.dismissTreasurySheet() },
+                    onPickFeeToken: pickFeeToken,
+                    onPickContact: pickSendContact,
+                    batchPaste: state == .sd2c ? $batchPaste : nil,
+                    batchRate: state == .sd2c ? $batchRate : nil,
+                    onBatchUnit: { batch.setUnit($0) },
+                    onBatchFile: { batch.pickFile() },
+                    onBatchTemplate: { batch.saveTemplate() },
+                    onBatchResetRate: {
+                        batch.resetRate()
+                        batchRate = batch.view.rateInput
+                    },
+                    onBatchApply: { batchApply() },
+                    scan: scanInputs()
+                )
+    }
+    /// A picked photo with no code in it. Its own alert rather than a silent
+    /// return: somebody who chose a picture is owed an answer about it.
+    private var scanAlert: FlowAlertModel? {
+        scanNotice.map { FlowAlertModel(title: $0.title, message: $0.body) }
+    }
+
+    /// Everything the live scanner needs, as one value.
+    ///
+    /// The session is handed over only while there is something to SHOW: a
+    /// preview layer attached to a session with no frames is a black rectangle
+    /// where the drawn placeholder belongs.
+    private func scanInputs() -> ScanInputs {
+        let live: AVCaptureSession? = (camera.refusal == nil && camera.running)
+            ? camera.session : nil
+        var inputs = ScanInputs(
+            session: live,
+            refusal: scanRefusalText(),
+            torchOn: camera.torchOn,
+            onTool: { tool in scanTool(tool) }
+        )
+        if camera.refusal == .denied {
+            inputs.refusalAction = (
+                label: loc.t("componentsUi.scanner.grantPermission"),
+                act: openSettings
+            )
+        }
+        return inputs
+    }
+
+    private func scanRefusalText() -> String? {
+        switch camera.refusal {
+        case .denied: loc.t("componentsUi.scanner.permissionText")
+        case .restricted: loc.t("componentsUi.scanner.permissionText")
+        case .noCamera: loc.t("componentsUi.scanner.noCamera")
+        case .unavailable: loc.t("componentsUi.scanner.cameraUnavailable")
+        case nil: nil
+        }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func scanTool(_ tool: ScanTool) {
+        switch tool {
+        case .torch: camera.toggleTorch()
+        case .flip: camera.flip()
+        case .gallery: pickCodeFromLibrary()
+        }
+    }
+
+    /// A code decoded — from the camera or from a photo, through the one
+    /// decoder. The CORE decides what it means.
+    private func scannedCode(_ text: String) {
+        camera.stop()
+        send.scanned(text)
+        flows.back()
+    }
+
+    /// The photo library. `PHPickerViewController` is cross-process and needs
+    /// NO photo permission, which is what keeps this app's album key the
+    /// narrowest thing in it (051: add-only).
+    private func pickCodeFromLibrary() {
+        Task {
+            guard let image = await PhotoPicker.pick() else { return }
+            guard let payload = QrDecoder.decode(image: image) else {
+                scanNotice = (
+                    loc.t("componentsUi.scanner.noQrFound"),
+                    loc.t("componentsUi.scanner.noQrFoundMsg")
+                )
+                return
+            }
+            scannedCode(payload)
+        }
     }
 
     /// The CTA's gate is the core's, never a conjunction assembled here.

@@ -181,9 +181,12 @@ extension UIKitDocumentPorts: UIDocumentPickerDelegate {
     }
 }
 
-private extension UIViewController {
+extension UIViewController {
     /// The controller actually on top, so a sheet does not present from
     /// underneath one that is already up.
+    ///
+    /// Shared with the photo picker (spec 055): two platform sheets asking the
+    /// same question of the view hierarchy should not answer it twice.
     var topmost: UIViewController {
         presentedViewController?.topmost ?? self
     }

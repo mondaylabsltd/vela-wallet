@@ -14,6 +14,7 @@
 //  015's H7x does, so one mechanism serves both features.
 //
 
+import AVFoundation
 import SwiftUI
 
 /// Where a screen can go next. Names match the web host's navigation intents.
@@ -34,6 +35,15 @@ enum FlowStep {
     case receive
     case chains
     case done
+}
+
+/// Everything the live scanner needs, as one value.
+struct ScanInputs {
+    var session: AVCaptureSession?
+    var refusal: String?
+    var refusalAction: (label: String, act: () -> Void)?
+    var torchOn = false
+    var onTool: (ScanTool) -> Void = { _ in }
 }
 
 struct FlowHost: View {
@@ -119,6 +129,14 @@ struct FlowHost: View {
     var onBatchTemplate: (() -> Void)?
     var onBatchResetRate: (() -> Void)?
     var onBatchApply: (() -> Void)?
+
+    /// The live viewfinder and what it has to say. Absent in the gallery, where
+    /// the scanner is a picture of a frame.
+    ///
+    /// ONE value rather than five arguments, because this host's parameter list
+    /// is the thing that has timed out Swift's type checker three times in this
+    /// program — and five more expressions to solve is how it happens a fourth.
+    var scan: ScanInputs?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -219,7 +237,15 @@ struct FlowHost: View {
     @ViewBuilder private var base: some View {
         switch model.base {
         case .scan(let m):
-            ScanSurfaceView(model: m, onClose: onBack)
+            ScanSurfaceView(
+                model: m,
+                onClose: onBack,
+                onTool: { tool in scan?.onTool(tool) },
+                session: scan?.session,
+                refusalText: scan?.refusal,
+                refusalAction: scan?.refusalAction,
+                torchOn: scan?.torchOn ?? false
+            )
         case .share(let m):
             // Not a screen: the saved image, shown on its own so the gallery
             // and the save path render the very same artwork.

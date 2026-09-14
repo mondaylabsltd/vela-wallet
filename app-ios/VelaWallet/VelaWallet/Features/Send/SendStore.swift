@@ -156,6 +156,21 @@ final class SendStore {
 
     // MARK: - Batch
 
+    // MARK: - The scanner (spec 055)
+
+    /// The viewfinder opens because the CORE says so — the flag is
+    /// `show_scanner`, and a shell that pushed its own screen would show a
+    /// scanner the machine does not know is open.
+    func openScanner() { dispatch(["type": "open_scanner"]) }
+    func closeScanner() { dispatch(["type": "close_scanner"]) }
+
+    /// A decoded code. The shell tokenises (it owns the grammar — Hermes has no
+    /// WebAssembly, so every client parses its own), and the CORE decides what
+    /// the result means: which token, which chain, whether the send locks.
+    func scanned(_ text: String) {
+        dispatch(["type": "scan_resolved", "scan": Eip681.scan(of: text)])
+    }
+
     func openBatchImport() { dispatch(["type": "open_batch_import"]) }
     func closeBatchImport() { dispatch(["type": "close_batch_import"]) }
 
