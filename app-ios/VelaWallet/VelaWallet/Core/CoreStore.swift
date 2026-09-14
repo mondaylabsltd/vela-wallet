@@ -104,6 +104,22 @@ final class CoreStore<View: Decodable> {
         driver.dispatch(eventJson)
     }
 
+    /// Written for the compiler, not for the runtime: it is empty on purpose.
+    ///
+    /// The target builds with `-default-isolation MainActor`, which makes every
+    /// deinit an ISOLATED deinit (SE-0371, new in Swift 6.2). Optimising the
+    /// deallocating destructor of a GENERIC class in that mode crashes
+    /// swift-frontend 6.2.4 — `EarlyPerfInliner`, inside
+    /// `isCallerAndCalleeLayoutConstraintsCompatible`. It reproduces in three
+    /// lines (`app-ios/scripts/check-generic-class-deinit.mjs` carries them) and
+    /// it is why Release and Archive could not be built at all until 058.
+    /// Writing the deinit `nonisolated` is the whole fix: it restores the
+    /// pre-6.2 destructor, which is what this class always had — nothing here
+    /// touches main-actor state on the way out.
+    ///
+    /// Delete it when the toolchain is fixed, and let the guard tell you.
+    nonisolated deinit {}
+
     private func commit(_ json: [String: Any]) {
         do {
             let decoded = try CoreJSON.decode(View.self, from: json)

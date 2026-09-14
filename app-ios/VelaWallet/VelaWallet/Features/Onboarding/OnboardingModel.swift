@@ -382,6 +382,10 @@ private final class UsbPromptsBridge: SmartCardCtapCeremony.Prompts, @unchecked 
     private final class Box<T>: @unchecked Sendable {
         var value: T
         init(_ value: T) { self.value = value }
+        /// A generic class needs a `nonisolated deinit` to survive `-O` under
+        /// this target's default MainActor isolation — see `CoreStore`, and
+        /// `app-ios/scripts/check-generic-class-deinit.mjs`.
+        nonisolated deinit {}
     }
 
     func askPin(product: String, retries: Int, isRetry: Bool) -> String? {
