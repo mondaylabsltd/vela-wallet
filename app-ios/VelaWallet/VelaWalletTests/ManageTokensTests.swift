@@ -262,4 +262,40 @@ struct ManageTokensTests {
             )
         }
     }
+    /// A card the core has already found outranks the spinner.
+    ///
+    /// The core probes every chain in parallel and keeps `detecting` true until
+    /// the LAST one settles. Reading `detecting` first therefore hides an
+    /// answer the wallet already has — on the founder's iPhone, for over a
+    /// minute (spec 052, found on the device: 16.9 s on the simulator against
+    /// more than 60 s on the phone, with the field filled and the status line
+    /// still spinning). `not_found` is untouched: it is only true once every
+    /// chain has answered, so nothing here can say "not found" early, which is
+    /// the dangerous direction.
+    @Test func aFoundCardOutranksTheStillSearchingSpinner() {
+        let midSweep = FlowsLive.addToken(
+            view(input: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                 valid: true, detecting: true, found: [card]),
+            on: base, loc: loc
+        )
+        guard case .token(_, let name, _, _) = midSweep.result else {
+            Issue.record("a found card must show while other chains are still answering")
+            return
+        }
+        #expect(name == "USD Coin")
+        // And it is addable at that moment, not a minute later.
+        #expect(!midSweep.ctaDisabled)
+
+        // With nothing found yet, the sweep still says it is searching.
+        let empty = FlowsLive.addToken(
+            view(input: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                 valid: true, detecting: true),
+            on: base, loc: loc
+        )
+        guard case .searching = empty.result else {
+            Issue.record("with nothing found, the sheet still says it is searching")
+            return
+        }
+    }
+
 }

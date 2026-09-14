@@ -441,8 +441,30 @@ enum FlowsLive {
         return live
     }
 
+    /// What the result slot says.
+    ///
+    /// **A found card outranks the spinner**, and the order of these two lines
+    /// is the whole of it. The core probes every chain in parallel and
+    /// publishes a card the moment one answers, but it keeps `detecting` true
+    /// until the LAST chain settles — so a `detecting`-first reading shows
+    /// 正在搜索所有网络… over an answer the wallet already has.
+    ///
+    /// On a Mac that costs a few seconds and nobody notices. On the founder's
+    /// iPhone the straggler pushed the whole sweep past **sixty seconds**
+    /// (measured 2026-09-14: 16.9 s on the simulator, >60 s on the device, and
+    /// the accessibility tree showed the field filled, the network row reading
+    /// Ethereum and the status line still spinning). A person types a contract
+    /// address, the wallet finds it in two seconds, and the screen tells them
+    /// it is still looking for a minute. That reads as broken.
+    ///
+    /// `detecting` is still what draws the spinner when there is nothing found
+    /// yet, and `not_found` is still only true once every chain has answered —
+    /// so this cannot say "not found" early, which would be the dangerous
+    /// direction.
     private static func result(_ view: MtokViewWire, loc: Loc) -> AddTokenResult {
-        if view.detecting { return .searching(loc.t("addToken.searchingNetworks")) }
+        if view.found.isEmpty, view.detecting {
+            return .searching(loc.t("addToken.searchingNetworks"))
+        }
         if view.notFound {
             return .notFound("\(loc.t("addToken.notFoundTitle")) — \(loc.t("addToken.notFoundMessage"))")
         }

@@ -388,6 +388,15 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         app.launchEnvironment["VELA_THEME"] = "dark"
         app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
         app.launchArguments += ["-AppleLanguages", "(zh)"]
+        // The ban map, emptied for this launch only.
+        //
+        // `rpc_pool` persists bans under `vela.rpc.banned`, and they are FACTS
+        // about endpoints rather than session state — so on a phone that has
+        // run this suite many times they accumulate. An argument-domain value
+        // outranks the persisted one without writing anything, which is the
+        // difference between a test that starts from a known pool and one whose
+        // result depends on how often the device has been tested before.
+        app.launchArguments += ["-vela.rpc.banned", "[]"]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30),
