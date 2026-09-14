@@ -121,7 +121,42 @@ endpoint defect, and it is the first thing to run when a quote misbehaves.
 
 ---
 
-## Next — Phase 5: `tx_tracker`
+### Phase 5 — `tx_tracker` ✅ committed `76fb9b97`
+
+**SC-003 device-verified**: submit, force-quit, relaunch, and the feed resolves
+itself. The promise is "no verdict is lost", never a cadence — read FR-007
+before writing anything that implies otherwise.
+
+The notification is wired and **not** claimed as device-verified.
+
+---
+
+## Next — Phase 6: the refusals and the two sheets
+
+- [ ] **T601** Every `SendAlertKind` driven and read on the phone (SC-005). The
+      alert surface already routes through `sendRefusal`; what is missing is
+      having provoked each one.
+- [ ] **T602** No sentence contains a raw unit. The same-asset ceiling is the
+      one that bit Android — every figure in it is base units and the shell
+      formats them.
+- [ ] **T603** The fee-token sheet: `SendLive.feeSheet` is written and the
+      sheet is reachable, but the row tap must dispatch `choose_fee_token` and
+      the quote must follow. **The relay offers three assets on Gnosis** (XDAI,
+      USDC, USDT), so SC-006 is drivable now — it was not before phase 4 fixed
+      the bundler endpoint.
+- [ ] **T604** The contact picker: `contacts` is resident, but Android's trap
+      is that the machine only opens on the contacts page. Boot it from the
+      picker too (`CoreStore.boot` is idempotent).
+- [ ] **T605** The treasury pause's two exits — the core's retry and 暂不
+      (`DismissTreasurySheet`), the facts kept.
+
+### Then
+
+Phase 7: the three `// live in 052` markers, the device pass, closeout.
+
+---
+
+## Phase 5's task list, for reference
 
 - [ ] **T501** `TrackerStore` resident, booted at launch, `LoadPendingTxs` from
       `TxRecords.pending`. A force-quit must lose nothing.
