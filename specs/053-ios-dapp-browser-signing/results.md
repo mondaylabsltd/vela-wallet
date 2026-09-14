@@ -82,3 +82,43 @@ within one cut of the other.
 The `browser_history` drift test does more than decode: it **proves the drop**.
 A visit dispatched before the load lands is gone, and the same visit after it
 is kept. The controller's wait is a tested rule rather than a comment.
+
+## Phase 1 — the engine
+
+**Device-verified on the iPhone 11.** The 探索 tab runs a real `WKWebView`, the
+page finds this wallet before its own scripts run, and the address bar tells
+the truth about where it is.
+
+```
+#verdict announce Vela Wallet app.getvela
+#verdict legacy present isVela=true
+```
+
+`BrowserAcceptanceTests` 2 of 2. The harness is served by an `NWListener`
+inside the UI-test runner on `127.0.0.1:8137`, with keccak-256 **vendored**
+into the page: Android's phase 5 lost its on-chain check to a CDN script that
+would not load on the phone, and a harness that needs the internet to verify a
+signature fails for the wrong reason.
+
+### The defect the first run found
+
+**A page loaded, ran, and was invisible.** The provider announced itself, the
+history recorded the visit, the engine reported its URL — and the screen went
+on drawing the start page over it, because `ExploreScreen.view` came from the
+FIXTURE (`model.view`, which is `.start` for E2) and only a tap could override
+it.
+
+This is the same shape as 052's empty token picker and Android's empty contact
+picker, one layer further out: the machinery was right and the surface was
+reading somebody else's answer about what to show. The live screen now asks the
+**tabs**: a selected tab with a page means the browsing view, and none means
+the start page. The fixture's `view` still drives E1–E7.
+
+### Recorded, not fixed
+
+**There is no corpus sentence for "this site is not secure".** `explore.*` has
+`secureSite` and no counterpart, so an http page is described by its host and
+by the absence of the padlock rather than by a phrase invented in the shell —
+a security claim in a language nobody translated is worse than no claim. The
+padlock's absence is asserted on the device
+(`testTheAddressBarShowsThePagesOwnHost`). For 056.

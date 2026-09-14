@@ -2,6 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  探索 is a real browser (spec 053), and a browser must be able to open an
+	  http page: refusing would break a redirect chain that dips through http
+	  and would make the local test harness unreachable.
+
+	  It does NOT weaken the wallet. This key covers WEB CONTENT only — the
+	  app's own requests still require TLS (`CoreHTTP.request` refuses anything
+	  that is not https, and will keep refusing) — and `dapp_permissions`
+	  refuses to sign for an insecure origin on its own, as `insecure_origin`.
+	  So an http page can be READ and cannot ask for a signature.
+
+	  `NSAllowsLocalNetworking` is for the device harness: the UI-test runner
+	  serves the test dApp on 127.0.0.1:8137. `file://` is not an option, because
+	  `dapp_origin_of` gives a file URL no origin at all — every signature would
+	  fail closed and the harness would prove nothing.
+	-->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>PlusJakartaSans_400Regular.ttf</string>

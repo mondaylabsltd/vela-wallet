@@ -22,6 +22,10 @@ struct ExploreScreen: View {
     let loc: Loc
     /// A signing request the page can raise. Fixture-driven for now.
     var signing: SigningModel?
+    /// The live browser. `nil` is the gallery: every E-state still renders
+    /// from fixtures, and a gallery that ran somebody else's JavaScript would
+    /// not be a gallery.
+    var controller: BrowserController?
     var onSelectTab: (WalletTab) -> Void = { _ in }
 
     @State private var viewOverride: ExploreView?
@@ -31,7 +35,50 @@ struct ExploreScreen: View {
     /// person does, and the sheet has to show it happening.
     @State private var hidden: Set<String> = []
 
-    private var view: ExploreView { viewOverride ?? model.view }
+    /// Which of the three views is on screen.
+    ///
+    /// A person's own choice wins. Otherwise, **when the browser is live the
+    /// tabs decide**: a tab with a page showing means the browsing view, and
+    /// no such tab means the start page. Before this the view came from the
+    /// fixture, so a page could load, run, and be invisible — the browser was
+    /// working and the screen was still drawing the start page over it.
+    private var view: ExploreView {
+        if let viewOverride { return viewOverride }
+        if controller != nil { return engine != nil ? .browsing : .start }
+        return model.view
+    }
+
+    /// The engine in front of the person, if the browser is live and a tab
+    /// with a page is selected.
+    private var engine: BrowserEngine? { controller?.current }
+
+    /// Chrome reads the engine, when there is one, and the fixture otherwise.
+    /// Never a blend: a live address bar over a drawn page would be a lie
+    /// about what is on screen.
+    private var browserHost: String { engine?.host ?? model.browser.host }
+    private var browserSecure: Bool { engine?.secure ?? model.browser.secure }
+
+    /// The chrome's model, with the engine's facts substituted where it has
+    /// them. `engineTick` is read so SwiftUI redraws when navigation state
+    /// changes — a `WKWebView`'s properties are not observable.
+    private var liveBrowser: BrowserModel {
+        guard let engine, let controller else { return model.browser }
+        _ = controller.engineTick
+        var live = model.browser
+        live = BrowserModel(
+            url: engine.url,
+            host: engine.host,
+            secure: engine.secure,
+            connected: controller.permissions.isConnected,
+            canBack: engine.canGoBack,
+            canForward: engine.canGoForward,
+            bookmarked: controller.explore.favorites.contains { $0.origin == engine.origin },
+            account: live.account,
+            tabCount: controller.explore.tabs.count,
+            page: live.page
+        )
+        return live
+    }
 
     private var visibleGroups: [GroupModel] {
         model.groups.filter { !hidden.contains($0.id) }
@@ -51,27 +98,38 @@ struct ExploreScreen: View {
                 )
             case .browsing:
                 AddressBarView(
-                    host: model.browser.host, secure: model.browser.secure,
+                    host: browserHost, secure: browserSecure,
                     secureLabel: loc.t("explore.secureSite"),
                     closeLabel: loc.t("explore.closePage"),
                     menuLabel: loc.t("explore.siteMenu"),
                     onClose: { viewOverride = .start },
                     onMenu: { sheet = model.menus.siteMenu }
                 )
-                ScrollView {
-                    DemoPageView(page: model.browser.page) {
-                        if signing != nil { signingUp = true }
+                if let engine {
+                    BrowserWebView(engine: engine)
+                        .accessibilityIdentifier("explore.page")
+                } else {
+                    ScrollView {
+                        DemoPageView(page: model.browser.page) {
+                            if signing != nil { signingUp = true }
+                        }
                     }
                 }
                 BrowserToolbarView(
-                    browser: model.browser,
+                    browser: liveBrowser,
                     backLabel: loc.t("explore.back"),
                     forwardLabel: loc.t("explore.forward"),
                     accountLabel: loc.t("explore.account"),
                     connectedLabel: loc.t("explore.connectedTag"),
                     bookmarkLabel: loc.t("explore.addToFavorites"),
                     tabsLabel: loc.t("explore.tabs"),
+                    onBack: { controller?.goBack() },
+                    onForward: { controller?.goForward() },
                     onAccount: { sheet = .connection(model.menus.connection) },
+                    onBookmark: {
+                        guard let engine, !engine.url.isEmpty else { return }
+                        controller?.addFavorite(url: engine.url, title: engine.title)
+                    },
                     onTabs: { viewOverride = .tabs }
                 )
             case .start:
@@ -132,7 +190,10 @@ struct ExploreScreen: View {
 
                 ExploreSearchField(
                     placeholder: model.searchPlaceholder, scanLabel: model.scanLabel,
-                    onSubmit: { _ in viewOverride = .browsing }
+                    onSubmit: { text in
+                        controller?.open(text)
+                        viewOverride = .browsing
+                    }
                 )
                 .padding(.bottom, Tokens.Space.s20)
 

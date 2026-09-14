@@ -81,6 +81,11 @@ struct RootView: View {
     /// Money in flight, followed for as long as the app exists.
     @State private var tracker: TrackerStore
     @State private var notifier: TrackerNotifier
+    /// The browser (spec 053). App-resident like every other wallet-state
+    /// machine, and for a sharper reason than most: a page keeps running, a
+    /// request stays in flight, and a dApp that reloaded every time somebody
+    /// glanced at their balance would lose a half-finished swap.
+    @State private var browser: BrowserController
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -189,6 +194,37 @@ struct RootView: View {
         )
         let trackerStore = TrackerStore(executor: trackerExecutor)
         _tracker = State(initialValue: trackerStore)
+        // The browser. Its reads go through the SAME pool the wallet uses, so
+        // a page asking a chain something gets this person's endpoints, their
+        // bans and their cooldowns — never an endpoint the page named.
+        let browserController = BrowserController(store: shelf)
+        browserController.ports = BrowserController.Ports(
+            knownChains: { [weak settingsStore] in
+                settingsStore?.networkAdmin?.networks.map(\.chainId) ?? []
+            },
+            poolCall: { [weak pool] chainId, method, params, bundler in
+                guard let pool else { return nil }
+                switch await pool.call(
+                    chainId: chainId, method: method, params: params,
+                    kind: bundler ? "bundler" : "rpc"
+                ) {
+                case .ok(let body):
+                    return ["result": body ?? NSNull()]
+                case .rpcError(let code, let message):
+                    // The node's own sentence, verbatim. A page that shows its
+                    // user "execution reverted: insufficient allowance" is a
+                    // page that can be debugged; one that shows "-32603" is not.
+                    return ["error": ["code": code ?? -32603, "message": message]]
+                default:
+                    return nil
+                }
+            },
+            writeRecords: { [weak activityStore] rows in
+                TxRecords.writeRecords(rows, store: shelf)
+                activityStore?.reconciled()
+            }
+        )
+        _browser = State(initialValue: browserController)
         // The send machine, last: it reads the holdings the balance machine
         // found and asks the fee session for a quote, so both must exist.
         let metadata = TokenMetadata(store: shelf, pool: pool)
@@ -650,8 +686,20 @@ struct RootView: View {
                         signing: SigningFixtures.build(.cs12, loc: loc)
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
+                        controller: browser,
                         onSelectTab: selectTab
                     )
+                    .task {
+                        browser.start()
+                        browser.accountsChanged(
+                            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
+                            active: session.view.address
+                        )
+                        // The device harness opens its own page. Not a product
+                        // affordance: a browser that launched a URL somebody
+                        // else chose is a browser nobody should install.
+                        if let url = PageOverride.browserURL { browser.open(url) }
+                    }
                 }
             }
         } else {
@@ -1253,6 +1301,17 @@ enum PageOverride {
     /// `VELA_SETTINGS_STATE`: without it a screenshot pass can only ever see
     /// the first state.
     static let state: String? = ProcessInfo.processInfo.environment["VELA_STATE"]
+
+    /// A page for the browser to open at launch. **Debug only** — a release
+    /// build that opened a URL from its environment would be one an attacker
+    /// with a launch profile could point anywhere.
+    static let browserURL: String? = {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["VELA_URL"]
+        #else
+        return nil
+        #endif
+    }()
 }
 
 /// Resolves every welcome-screen string from the corpus — existing keys only,
