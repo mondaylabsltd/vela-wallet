@@ -76,6 +76,11 @@ struct FactRowModel: Identifiable {
     var mono = false
     /// Shows a copy affordance under this accessible name.
     var copy: String?
+    /// What that affordance puts on the clipboard. `nil` copies `value`, which
+    /// is right only when the value is whole — an address or a hash is shown
+    /// ELLIPSED, and copying `0x1234…abcd` gives somebody a string no chain
+    /// has ever heard of. Android's `FactRow` has carried this field since 043.
+    var copyValue: String?
 }
 
 enum StatusTone {
@@ -121,8 +126,13 @@ struct AddressCardModel {
 
 struct ContractLineModel {
     let label: String
+    /// Shortened for the line; `copyValue` is what a person actually needs.
     let value: String
     let copyLabel: String
+    /// The whole contract address. A copy button that put the ELLIPSED form on
+    /// the clipboard would be worse than no button — Android carries the same
+    /// field for the same reason.
+    var copyValue: String?
 }
 
 struct ReceiveQrModel {
@@ -197,6 +207,11 @@ struct TxDetailModel {
     let positive: Bool
     let facts: [FactRowModel]
     let viewOnExplorer: String
+    /// 删除记录 — the local record, not the transaction. Absent where there is
+    /// nothing to delete (a fixture, a receipt still in flight). The web's
+    /// `TxDetail.svelte` has drawn this button since 028 and never set the
+    /// label, so it has been invisible on every client.
+    var deleteLabel: String?
 }
 
 // MARK: - Assets
@@ -583,6 +598,11 @@ struct SendReceiptModel {
     /// The single bottom button: "Close · keep running" or "Done".
     let cta: String
     let ctaAccent: Bool
+    /// While the passkey ceremony is up the button is 取消 and it must NOT
+    /// leave the screen: it is the core's own checkpoint (`cancel_signing`),
+    /// and navigating away from it would abandon a prompt nobody can answer.
+    /// Android has drawn this distinction since 043.
+    var ctaCancels: Bool = false
 }
 
 // MARK: - The screens

@@ -285,6 +285,9 @@ struct StorageGroupView: View {
     @Environment(\.theme) private var theme
     let group: StorageGroupModel
     var onGroupAction: () -> Void = {}
+    /// One row's 清除, by item id. Absent in the gallery, where nothing should
+    /// be removable by looking at it.
+    var onItemAction: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -314,9 +317,16 @@ struct StorageGroupView: View {
                         // the label wraps into whatever is left.
                         .fixedSize()
                         .layoutPriority(1)
-                    Text(item.action)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(item.destructive ? theme.errorBase : theme.fgMuted)
+                    // The row's own action. It was a label until 058 — the
+                    // page offered to clear eight things and could clear none.
+                    Button { onItemAction?(item.id) } label: {
+                        Text(item.action)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(item.destructive ? theme.errorBase : theme.fgMuted)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onItemAction == nil)
                 }
                 .frame(minHeight: 44)
                 .padding(.vertical, Tokens.Space.s12)

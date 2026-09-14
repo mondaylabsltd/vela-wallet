@@ -31,7 +31,10 @@ struct ShareCardArtwork: View {
 
             VStack(spacing: Tokens.Space.s8) {
                 QrCardView(label: model.headline, modules: model.modules) {
-                    IdenticonAvatar(seed: model.identiconSeed, size: WalletFlowGeometry.qrCentre)
+                    // Drawn for a PICTURE — this view is rendered to a PNG, and
+                    // an image has nothing to tap.
+                    IdenticonAvatar(seed: model.identiconSeed,
+                                    size: WalletFlowGeometry.qrCentre, tappable: false)
                 }
                 Text(verbatim: model.name)
                     .typeRole(Typography.rowTitle)

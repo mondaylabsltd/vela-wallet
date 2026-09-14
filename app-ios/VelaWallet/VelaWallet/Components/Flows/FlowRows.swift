@@ -104,7 +104,13 @@ struct FactRowView: View {
             lead
             value
             if let copy = fact.copy {
-                Button(action: onCopy) {
+                Button {
+                    // It copies. Until 058 every fact row on this client — the
+                    // counterparty, the transaction hash, a token's contract —
+                    // showed a checkmark and left the clipboard untouched.
+                    velaCopy(fact.copyValue ?? fact.value)
+                    onCopy()
+                } label: {
                     LucideIcon(copied ? .check : .copy, size: LucideIconSize.checkmark)
                         .foregroundStyle(copied ? theme.successBase : theme.fgSubtle)
                         .contentShape(Rectangle())

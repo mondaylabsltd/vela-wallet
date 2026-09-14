@@ -162,6 +162,24 @@ struct VelaStore {
         defaults.removeObject(forKey: key)
     }
 
+    /// Every key this app owns, right now.
+    ///
+    /// The `vela.` prefix is the ownership boundary: `UserDefaults` is shared
+    /// with the system's own bookkeeping, and a storage page that measured
+    /// Apple's keys — or an erase that deleted them — would be reporting on,
+    /// and destroying, somebody else's data. Android's `allKeys` draws the
+    /// same line around its DataStore.
+    func allKeys() -> [String] {
+        defaults.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix("vela.") }
+            .sorted()
+    }
+
+    /// The raw stored text, whatever its shape — what the storage page weighs.
+    func rawValue(_ key: String) -> String? {
+        defaults.string(forKey: key)
+    }
+
     // MARK: - The one parse, the one write
 
     private func json(_ key: String) -> Any? {

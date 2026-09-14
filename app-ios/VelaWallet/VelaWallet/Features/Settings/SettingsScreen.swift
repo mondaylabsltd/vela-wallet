@@ -50,6 +50,11 @@ struct SettingsScreen: View {
     var appearance = SettingsAppearanceActions()
     var onPick: ((SettingsOverlay, String) -> Void)?
     var onClearCaches: (() -> Void)?
+    /// One storage row's 清除, by item id (058). Android clears the row's keys
+    /// on the tap, with no second question; matched here rather than inventing
+    /// a confirmation sheet nobody drew — recorded in results.md as a hazard
+    /// the founder may want a gate on.
+    var onClearStorageItem: ((String) -> Void)?
     var onErase: (() -> Void)?
     var onSelectAccount: ((String) -> Void)?
     /// The endpoints and providers pages' live half.
@@ -80,6 +85,7 @@ struct SettingsScreen: View {
         appearance: SettingsAppearanceActions = SettingsAppearanceActions(),
         onPick: ((SettingsOverlay, String) -> Void)? = nil,
         onClearCaches: (() -> Void)? = nil,
+        onClearStorageItem: ((String) -> Void)? = nil,
         onErase: (() -> Void)? = nil,
         onSelectAccount: ((String) -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
@@ -94,6 +100,7 @@ struct SettingsScreen: View {
         self.appearance = appearance
         self.onPick = onPick
         self.onClearCaches = onClearCaches
+        self.onClearStorageItem = onClearStorageItem
         self.onErase = onErase
         self.onSelectAccount = onSelectAccount
         self.endpointActions = endpointActions
@@ -216,7 +223,8 @@ struct SettingsScreen: View {
         case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions)
         case .endpoints: EndpointsBody(panel: model.endpoints, actions: endpointActions)
         case .storage: StorageBody(panel: model.storage,
-                                   onClearCaches: { overlay = .clearCaches })
+                                   onClearCaches: { overlay = .clearCaches },
+                                   onClearItem: onClearStorageItem)
         case .about: AboutBody(panel: model.about)
         }
     }
@@ -610,6 +618,7 @@ private struct StorageBody: View {
     @Environment(\.theme) private var theme
     let panel: StorageModel
     let onClearCaches: () -> Void
+    var onClearItem: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -628,7 +637,8 @@ private struct StorageBody: View {
             .padding(.bottom, Tokens.Space.s16)
             StorageBar(segments: panel.segments)
             ForEach(panel.groups) { group in
-                StorageGroupView(group: group, onGroupAction: onClearCaches)
+                StorageGroupView(group: group, onGroupAction: onClearCaches,
+                                 onItemAction: onClearItem)
             }
         }
     }

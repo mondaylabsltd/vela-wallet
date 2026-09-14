@@ -18,6 +18,23 @@
 	  `dapp_origin_of` gives a file URL no origin at all — every signature would
 	  fail closed and the harness would prove nothing.
 	-->
+	<!--
+	  The build's commit, for 关于 (spec 058). Android reads
+	  `BuildConfig.GIT_COMMIT`, which its Gradle file fills by running git at
+	  configuration time. iOS cannot: `ENABLE_USER_SCRIPT_SANDBOXING = YES`
+	  means a build phase may not read `.git`, and a phase that quietly failed
+	  would stamp a plausible wrong hash.
+
+	  So it is a build SETTING, defaulting to `unknown`, and a release passes
+	  the real one:
+
+	      xcodebuild archive … VELA_GIT_COMMIT=$(git rev-parse --short HEAD)
+
+	  When it is `unknown` the About page says `build <CFBundleVersion>`
+	  instead — true, and never a hash nobody can look up.
+	-->
+	<key>VelaGitCommit</key>
+	<string>$(VELA_GIT_COMMIT)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>

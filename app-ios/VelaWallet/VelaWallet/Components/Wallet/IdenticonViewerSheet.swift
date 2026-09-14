@@ -20,13 +20,19 @@ struct IdenticonViewerSheet: View {
     let loc: Loc
     /// The seed, verbatim: what the artwork was drawn from.
     let address: String
+    /// Whose it is, where the caller knows — the initials style draws from the
+    /// NAME, so a viewer without one would show a different face than the row
+    /// it was opened from.
+    var name: String?
     let onClose: () -> Void
 
     @State private var copied = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s16) {
-            IdenticonAvatar(seed: address, size: WalletGeometry.identiconViewer)
+            // Not tappable: it is already the viewer.
+            IdenticonAvatar(seed: address, size: WalletGeometry.identiconViewer,
+                            name: name, tappable: false)
                 .padding(.bottom, Tokens.Space.s8)
 
             Text(loc.t("componentsUi.identiconViewer.title"))

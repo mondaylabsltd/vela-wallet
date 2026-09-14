@@ -435,8 +435,10 @@ struct SettingsScreenModel {
     var addNetwork: AddNetworkModel
     var rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel
-    let storage: StorageModel
-    let about: AboutModel
+    /// `var` since 058: both are MEASURED now — the storage page from the
+    /// store's own keys, the about page from the running build.
+    var storage: StorageModel
+    var about: AboutModel
     var accountsSheet: AccountsSheetModel
     let signOutSheet: ConfirmSheetModel
     var languageSheet: SelectSheetModel

@@ -648,10 +648,25 @@ enum SendLive {
         var captions: [String]
         switch stage {
         case .submitting:
-            title = loc.t("send.txSubmitting")
-            captions = model.captions
+            // Three states, three sentences — the Android receipt's own
+            // distinction (058 US2). One sentence for all three left a person
+            // looking at 正在提交 while the phone was actually waiting for
+            // their finger, which is the moment they most need telling.
+            switch view.txStatus {
+            case "signing": title = loc.t("send.txSigning")
+            case "submitting": title = loc.t("send.txSubmitting")
+            default: title = loc.t("send.txPreparing")
+            }
+            captions = [loc.t("send.txPreparingBiometric"), loc.t("send.txBackgroundHint")]
         case .submitted:
             title = loc.t("send.txSubmittedTitle")
+            // Held for fees: the payment is not stuck and not lost — it goes
+            // out by itself when fees settle, and saying so is the difference
+            // between waiting and sending it twice.
+            if view.receipt?.holdReason != nil {
+                captions = [loc.t("send.txHeldFees")]
+                break
+            }
             captions = [loc.t("send.txWaitingConfirm")]
             if let seconds = view.receipt?.typicalInclusionS {
                 captions.append(loc.t("send.txTypicalTime", vars: [
@@ -667,6 +682,14 @@ enum SendLive {
             captions = ["\(to) · \(chain)"]
         case .failed:
             title = loc.t("componentsTx.receipt.statusFailed")
+            // A fee-rejected send is not a failure of the transfer: the fee
+            // rose above what was approved and NOTHING was sent, which is a
+            // different sentence and a different next step. `hold_reason` was
+            // on this client's wire and read by no Swift at all until 058.
+            if view.receipt?.holdReason != nil {
+                captions = [loc.t("send.txRejectedFees")]
+                break
+            }
             // The core's reason, then the corpus's explanation of what a
             // reverted transfer actually costs — the money did not move and the
             // network fee may still have been taken, which is the one thing a
@@ -702,10 +725,17 @@ enum SendLive {
             // A chain with no explorer gets no button — sending somebody to the
             // wrong explorer is the misleading link 051 refused to port.
             viewOnExplorer: view.txHash?.isEmpty == false ? model.viewOnExplorer : nil,
-            cta: stage == .confirmed || stage == .failed
-                ? loc.t("componentsTx.receipt.done")
-                : loc.t("send.txCloseBackground"),
-            ctaAccent: stage == .confirmed || stage == .failed
+            cta: {
+                if stage == .confirmed || stage == .failed {
+                    return loc.t("componentsTx.receipt.done")
+                }
+                // The ceremony's only honest button.
+                return view.txStatus == "signing"
+                    ? loc.t("componentsUi.funding.cancel")
+                    : loc.t("send.txCloseBackground")
+            }(),
+            ctaAccent: stage == .confirmed || stage == .failed,
+            ctaCancels: stage == .submitting && view.txStatus == "signing"
         )
     }
 

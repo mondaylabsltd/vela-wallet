@@ -171,18 +171,24 @@ struct BrowserMemoryTests {
         #expect(ExploreLive.tint(for: "") == BrandPalette.unknown)
     }
 
-    /// **An http page is never described as secure.**
+    /// **An http page is SAID to be insecure**, not merely left unpraised.
     ///
-    /// There is no corpus sentence for "not secure", so the shell says the
-    /// host instead of inventing one. What it must never do is say the
-    /// opposite.
-    @Test func anInsecureOriginIsNeverCalledSecure() {
+    /// 056 asserted the weaker claim — that the line names the host and does
+    /// not say "secure" — because it believed no corpus sentence existed for
+    /// this. 058's copy ruler found `connect.browser.a11yInsecure`, which
+    /// Android has used since 044 and which is translated everywhere. Saying
+    /// nothing about an unencrypted page is not neutral: it reads as fine.
+    @Test func anInsecureOriginIsCalledInsecure() {
         let secureLabel = loc().t("explore.secureSite")
+        let insecureLabel = loc().t("connect.browser.a11yInsecure")
         let insecure = ExploreLive.statusLine(
             secure: false, connected: true, host: "127.0.0.1:8137", loc: loc()
         )
         #expect(!insecure.contains(secureLabel))
-        #expect(insecure.contains("127.0.0.1:8137"))
+        #expect(insecure.contains(insecureLabel))
+        // The sentence is a sentence, not the key echoed back (FR-005's
+        // failure signal would pass a `contains` check against itself).
+        #expect(insecureLabel != "connect.browser.a11yInsecure")
         #expect(insecure.contains(loc().t("explore.connectedTag")))
 
         let secure = ExploreLive.statusLine(

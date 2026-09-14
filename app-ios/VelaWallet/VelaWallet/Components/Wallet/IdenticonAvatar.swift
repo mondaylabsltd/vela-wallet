@@ -59,10 +59,29 @@ private enum IdenticonCache {
     }
 }
 
+/// Opens the identicon viewer for a seed. Provided once, high in the tree;
+/// `nil` where there is no viewer to open (the gallery, a share card being
+/// rendered to an image).
+///
+/// This is the mechanism Android uses (`LocalIdenticonViewer`) and the reason
+/// its viewer reaches every avatar while iOS's reached exactly one: the
+/// AVATAR opens it, so a new call site needs no wiring and cannot forget.
+private struct IdenticonViewerKey: EnvironmentKey {
+    static let defaultValue: ((String, String?) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var identiconViewer: ((String, String?) -> Void)? {
+        get { self[IdenticonViewerKey.self] }
+        set { self[IdenticonViewerKey.self] = newValue }
+    }
+}
+
 struct IdenticonAvatar: View {
     @Environment(\.theme) private var theme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.identiconProvider) private var provider
+    @Environment(\.identiconViewer) private var openViewer
 
     let seed: String
     let size: CGFloat
@@ -70,6 +89,11 @@ struct IdenticonAvatar: View {
     /// there is no name to take one from — an address alone has no initial,
     /// and a letter cut from hex would be a face for nobody.
     var name: String?
+    /// The founder, spec 048: 说好了 identicon 要能点击放大. Every artwork drawn
+    /// from an address opens the viewer. An avatar that is part of a control
+    /// somebody else owns — a row that navigates, a card being rendered to an
+    /// image — passes `false` rather than stealing the tap.
+    var tappable = true
 
     var body: some View {
         Group {
@@ -115,6 +139,11 @@ struct IdenticonAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+        .modifier(IdenticonTap(
+            open: tappable && !seed.isEmpty ? openViewer : nil,
+            seed: seed,
+            name: name
+        ))
         .accessibilityHidden(true)
     }
 
@@ -127,6 +156,27 @@ struct IdenticonAvatar: View {
         guard let first = (name ?? "").trimmingCharacters(in: .whitespaces).first
         else { return nil }
         return String(first).uppercased()
+    }
+}
+
+/// The tap, applied only where there is a viewer to open.
+///
+/// A modifier rather than an `if` inside `body`: adding and removing a gesture
+/// changes the view's identity, and an avatar that re-identified itself when a
+/// sheet appeared would re-decode its image.
+private struct IdenticonTap: ViewModifier {
+    let open: ((String, String?) -> Void)?
+    let seed: String
+    let name: String?
+
+    func body(content: Content) -> some View {
+        if let open {
+            content
+                .contentShape(Circle())
+                .onTapGesture { open(seed, name) }
+        } else {
+            content
+        }
     }
 }
 

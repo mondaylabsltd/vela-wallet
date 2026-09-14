@@ -40,7 +40,39 @@ final class Loc {
         }
         self.engine = engine
 
+        self.preferredLanguages = preferredLanguages
         let candidate = overrideTag ?? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
+        adopt(candidate)
+    }
+
+    /// The device's own order, kept so `auto` can be re-resolved later without
+    /// asking `Locale` again mid-session (it does not change while we run, and
+    /// a test needs to be able to supply its own).
+    private var preferredLanguages: [String] = []
+
+    /// Adopt the stored language choice — `auto`, or one of `supported`.
+    ///
+    /// **This is what was missing.** `vela.language` was written by the
+    /// settings page and read by nobody: not at launch, not on relaunch, not
+    /// ever, so picking 日本語 changed one row's subtitle and no other word in
+    /// the app. Android has read its preference since 047 and the web since
+    /// 028; this is the same call on the third client.
+    ///
+    /// Safe to call repeatedly, and safe to call with the language already
+    /// active — the engine is asked once and the catalog is loaded once.
+    func apply(_ stored: String) {
+        let wanted = stored == "auto" || stored.isEmpty
+            ? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
+            : (Self.supported.contains(stored) ? stored : Self.mapPreferredLanguage(stored))
+        guard wanted != resolvedLanguage else { return }
+        adopt(wanted)
+    }
+
+    /// Ask the engine for a language and load its catalog, or fall back to
+    /// English cleanly. A half-loaded catalog would be a mixed screen, which
+    /// FR-005 forbids more strongly than it forbids the wrong language.
+    private func adopt(_ candidate: String) {
+        guard let engine else { return }
         if candidate != "en" {
             let state = try? engine.changeLanguage(lng: candidate)
             let active = state?.resolvedLanguage ?? "en"
@@ -52,12 +84,22 @@ final class Loc {
             }
             // Catalog unavailable → fall back to English cleanly.
             _ = try? engine.changeLanguage(lng: "en")
+        } else {
+            _ = try? engine.changeLanguage(lng: "en")
         }
         resolvedLanguage = "en"
     }
 
     /// Resolve a translation. Missing keys echo the key (FR-005).
+    ///
+    /// Reading `resolvedLanguage` here is deliberate and is the whole of the
+    /// live-change mechanism: `@Observable` records the access, so **every
+    /// view that renders a translated string depends on the language**, and
+    /// changing it invalidates exactly those views. Without this line the
+    /// engine would switch and the screen would keep the old words until
+    /// something else happened to redraw it.
     func t(_ key: String, vars: [String: String] = [:]) -> String {
+        _ = resolvedLanguage
         guard let engine else { return key }
         let opts = TOptions(
             count: nil,

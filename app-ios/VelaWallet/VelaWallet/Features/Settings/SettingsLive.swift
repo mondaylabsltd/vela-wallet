@@ -512,6 +512,122 @@ enum SettingsLive {
         )
     }
 
+    // MARK: - 存储 and 关于 (spec 058)
+
+    /// The storage page, measured.
+    ///
+    /// The fixture keeps every label, every action word and the order of the
+    /// rows; what changes is every NUMBER — the total, the ring's three
+    /// fractions, and each row's "n records · size". Android has reported real
+    /// bytes since 047 and iOS drew "2.4 MB · 216 records" on every phone.
+    ///
+    /// A row with nothing in it says its size (`0 B`) rather than disappearing:
+    /// the page is an inventory, and a missing row reads as data hidden
+    /// somewhere else.
+    static func withStorage(
+        _ report: DeviceStorage.Report,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let total = DeviceStorage.size(report.totalBytes)
+        let totalBytes = max(report.totalBytes, 1)
+
+        func meta(_ id: String) -> String {
+            guard let item = report.item(id) else { return DeviceStorage.sizeText(0) }
+            let size = DeviceStorage.sizeText(item.bytes)
+            guard let records = item.records else { return size }
+            // Each row counts in the unit it holds — the corpus has three
+            // count sentences and using "records" for contacts would be the
+            // same shrug the fixture made.
+            let count: String
+            switch id {
+            case "contacts": count = loc.t(k.countContacts, vars: ["count": String(records)])
+            case "custom": count = loc.t(k.countItems, vars: ["count": String(records)])
+            case "dapps": return loc.t(k.countSites, vars: ["count": String(records)])
+            default: count = loc.t(k.countRecords, vars: ["count": String(records)])
+            }
+            return "\(count) · \(size)"
+        }
+
+        let storage = StorageModel(
+            title: model.storage.title,
+            subtitle: model.storage.subtitle,
+            amount: total.amount,
+            unit: total.unit,
+            summary: loc.t(k.storageSummary, vars: ["count": String(report.totalRecords)]),
+            segments: model.storage.segments.map { segment in
+                let group = DeviceStorage.Group(rawValue: segment.id)
+                return StorageSegmentModel(
+                    id: segment.id,
+                    label: segment.label,
+                    fraction: group.map { Double(report.bytes(of: $0)) / Double(totalBytes) } ?? 0,
+                    color: segment.color
+                )
+            },
+            groups: model.storage.groups.map { group in
+                StorageGroupModel(
+                    label: group.label,
+                    items: group.items.map { item in
+                        StorageItemModel(id: item.id, label: item.label, meta: meta(item.id),
+                                         action: item.action, destructive: item.destructive)
+                    },
+                    action: group.action
+                )
+            }
+        )
+        var live = model
+        live.storage = storage
+        return live
+    }
+
+    /// 关于, from the build that is running.
+    ///
+    /// `commit` is `unknown` unless the archive passed one (see `Info.plist`),
+    /// and the caller substitutes the build number in that case — the page
+    /// never prints a hash that is not this build's.
+    static func withAbout(
+        version: String,
+        commit: String,
+        networkCount: Int,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        var live = model
+        let versionLine = loc.t(k.aboutVersion, vars: ["version": version, "commit": commit])
+        live.about = AboutModel(
+            title: model.about.title,
+            tagline: model.about.tagline,
+            version: versionLine,
+            sectionTechnical: model.about.sectionTechnical,
+            rows: model.about.rows.map { row in
+                // The network count is the only technical row that is not a
+                // constant about the wallet's design — it is what THIS device
+                // has, custom chains included.
+                row.label == loc.t(k.aboutNetworksLabel)
+                    ? KeyValueRowModel(
+                        label: row.label,
+                        value: loc.t(k.aboutNetworksValue, vars: ["count": String(networkCount)]),
+                        mono: row.mono,
+                        external: row.external
+                    )
+                    : row
+            },
+            links: model.about.links,
+            footer: model.about.footer
+        )
+        // The home row's subtitle names the same version.
+        for index in live.sections.indices {
+            for row in live.sections[index].rows.indices
+            where live.sections[index].rows[row].id == "about" {
+                live.sections[index].rows[row].subtitle =
+                    loc.t(k.aboutSubtitle, vars: ["version": version])
+            }
+        }
+        return live
+    }
+
     private static func chainMeta(_ loc: Loc, _ chainId: Int) -> String {
         loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(chainId)])
     }

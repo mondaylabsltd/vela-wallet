@@ -48,8 +48,13 @@ enum ExploreLive {
         )
         let siteMenu = ExploreSheet.siteMenu(
             site: engine.map(currentSite) ?? ExploreFixtures.uniswap,
-            statusLine: statusLine(secure: engine?.secure ?? false, connected: false,
-                                   host: engine?.host ?? "", loc: loc),
+            // The site MENU names the page; the connection sheet judges it.
+            // Android splits them the same way: a menu that shouted "insecure"
+            // at every http page would be a warning nobody reads, and the
+            // warning belongs where a person is about to grant something.
+            statusLine: (engine?.secure ?? false)
+                ? loc.t("explore.secureSite")
+                : (engine?.host ?? ""),
             items: ExploreFixtures.siteMenuItems(loc)
         )
 
@@ -241,7 +246,13 @@ enum ExploreLive {
         )
 
         return ConnectionModel(
-            title: loc.t("explore.connectionTitle"),
+            // A site that is ASKING is named in the title — "连接到 {host}".
+            // The anti-phishing line: the sheet's first sentence is the origin
+            // the request came from, not a generic heading a person skims.
+            // Android has titled it this way since 044.
+            title: permissions.consent == nil
+                ? loc.t("explore.connectionTitle")
+                : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
             statusLine: status,
             account: (
@@ -272,14 +283,17 @@ enum ExploreLive {
 
     /// The line under a site's name.
     ///
-    /// **There is no corpus sentence for "this site is not secure"**, and this
-    /// cut adds no corpus. So an http page is described by its host and by
-    /// the absence of the padlock, rather than by a phrase invented here: a
-    /// security claim in a language nobody translated is worse than no claim.
-    /// Recorded for 056.
+    /// 056 recorded that **no corpus sentence existed** for an insecure site
+    /// and described an http page by its bare host. That was wrong:
+    /// `connect.browser.a11yInsecure` — "Insecure site — not encrypted" — is
+    /// in the corpus, translated into all fifteen languages, and Android has
+    /// used it since 044. The copy ruler in 058 is what found the difference.
+    ///
+    /// The host is still shown when there is no sentence to show (an empty
+    /// origin), because naming what you are looking at beats saying nothing.
     static func statusLine(secure: Bool, connected: Bool, host: String, loc: Loc) -> String {
         let pieces = [
-            secure ? loc.t("explore.secureSite") : (host.isEmpty ? nil : host),
+            secure ? loc.t("explore.secureSite") : loc.t("connect.browser.a11yInsecure"),
             connected ? loc.t("explore.connectedTag") : nil,
         ].compactMap { $0 }
         return pieces.joined(separator: " · ")

@@ -109,7 +109,13 @@ struct ReceiveQrBody: View {
                     Text(verbatim: contract.value)
                         .monoRole(Typography.monoAddress.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Button { copied = "contract" } label: {
+                    Button {
+                        // It copies. Until 058 this button showed a checkmark
+                        // and left the clipboard exactly as it was — a person
+                        // pasted whatever was there before, into a payment.
+                        velaCopy(contract.copyValue ?? contract.value)
+                        copied = "contract"
+                    } label: {
                         // The same copy affordance the address row carries, one
                         // size down: a contract is a detail ABOUT the code
                         // below, not the thing being received.
@@ -125,7 +131,12 @@ struct ReceiveQrBody: View {
             AddressCardView(
                 account: model.account,
                 copied: copied == "address",
-                onCopy: { copied = "address" }
+                // The lines ARE the address, split for the card — the same
+                // reconstruction Android's receive sheet does.
+                onCopy: {
+                    velaCopy(model.account.lines.joined())
+                    copied = "address"
+                }
             )
 
             QrCardView(label: model.title, modules: model.modules) {
@@ -207,6 +218,8 @@ struct TxDetailBody: View {
 
     let model: TxDetailModel
     var onExplorer: () -> Void = {}
+    /// 删除记录. Absent in the gallery, where nothing is real enough to remove.
+    var onDelete: (() -> Void)?
 
     @State private var copiedIndex: Int?
 
@@ -230,6 +243,10 @@ struct TxDetailBody: View {
             }
             VelaButton(title: model.viewOnExplorer, kind: .secondary, action: onExplorer)
                 .padding(.top, Tokens.Space.s16)
+            if let label = model.deleteLabel, let onDelete {
+                VelaButton(title: label, kind: .danger, action: onDelete)
+                    .padding(.top, Tokens.Space.s8)
+            }
         }
     }
 }

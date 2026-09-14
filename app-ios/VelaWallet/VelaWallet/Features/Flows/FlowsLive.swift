@@ -162,7 +162,10 @@ enum FlowsLive {
                 value: item.alias ?? AddressText.short(counterparty),
                 lead: .identicon(counterparty),
                 mono: item.alias == nil,
-                copy: loc.t("componentsUi.identiconViewer.copyAddress")
+                copy: loc.t("componentsUi.identiconViewer.copyAddress"),
+                // The ADDRESS, even when the row shows a name: a name is not
+                // something anybody can paste into a send.
+                copyValue: counterparty
             ))
         }
         if let chain {
@@ -191,7 +194,8 @@ enum FlowsLive {
                 label: loc.t("componentsTx.detail.labelHash"),
                 value: AddressText.short(hash),
                 mono: true,
-                copy: loc.t("componentsUi.identiconViewer.copyAddress")
+                copy: loc.t("componentsUi.identiconViewer.copyAddress"),
+                copyValue: hash
             ))
         }
 
@@ -209,7 +213,13 @@ enum FlowsLive {
             fiat: record?.usd.map { "≈ \($0)" } ?? "",
             positive: incoming,
             facts: facts,
-            viewOnExplorer: model.viewOnExplorer
+            viewOnExplorer: model.viewOnExplorer,
+            // The LOCAL record. The chain keeps the transaction; this is the
+            // wallet forgetting it, which is why the sentence is "delete
+            // record" and not "delete transaction". Placed on the detail, as
+            // the web places it — a swipe on a feed row is a gesture nobody
+            // drew and a destructive one to discover by accident.
+            deleteLabel: loc.t("history.deleteRecord")
         )
     }
 
@@ -265,7 +275,8 @@ enum FlowsLive {
                 label: loc.t("tokenDetail.labelContract"),
                 value: AddressText.short(contract),
                 mono: true,
-                copy: loc.t("componentsUi.identiconViewer.copyAddress")
+                copy: loc.t("componentsUi.identiconViewer.copyAddress"),
+                copyValue: contract
             ))
         }
         facts.append(FactRowModel(label: loc.t("tokenDetail.labelDecimals"),
@@ -342,12 +353,17 @@ enum FlowsLive {
     ///
     /// The QR encodes the **bare address**. That is the whole answer in address
     /// mode; the amount-carrying EIP-681 request is `payment_request`'s, and
-    /// its mode toggle, amount field and acknowledge gate are drawn nowhere on
-    /// this client yet — recorded in results.md rather than invented here.
+    /// its mode toggle and amount field are drawn nowhere on EITHER phone —
+    /// Android's `receiveMode` and `receiveAmount` have no callers either —
+    /// so that half stays recorded rather than invented here.
+    ///
+    /// What 058 does add is the **asset**: `payment_request` knows which coin
+    /// the code was asked for, and R3 has always been drawn for it.
     static func receiveQr(
         _ address: String,
         name: String,
         chain: ChainMeta?,
+        asset: PaymentRequestAssetWire? = nil,
         on model: ReceiveQrModel,
         loc: Loc
     ) -> ReceiveQrModel {
@@ -364,6 +380,32 @@ enum FlowsLive {
                 badgeColor: SettingsLive.mark(chainId: chain.chainId,
                                               name: chain.displayName).color
             )
+        }
+        // A token's own code: the sentence names the coin, the mark in the
+        // middle of the code is that coin, and the contract it means is
+        // printed above — which is the question "which USDC?" that a symbol
+        // alone cannot answer.
+        if let asset, let contract = asset.tokenAddress, !contract.isEmpty {
+            let network = ChainCatalog.meta(asset.chainId)?.displayName ?? asset.networkName
+            live.title = loc.t("receive.qrTitleAsset", vars: [
+                "symbol": asset.symbol, "network": network,
+            ])
+            live.centre = TokenMarkModel(
+                ticker: asset.symbol,
+                badgeColor: SettingsLive.mark(chainId: asset.chainId, name: network).color
+            )
+            live.contract = ContractLineModel(
+                label: loc.t("receive.tokenContract"),
+                value: AddressText.short(contract),
+                copyLabel: model.contract?.copyLabel
+                    ?? loc.t("componentsUi.identiconViewer.copyAddress"),
+                copyValue: contract
+            )
+        } else {
+            // A network code has no contract. The fixture's row is R3's and
+            // leaving it up would print a stranger's contract over a code for
+            // the chain's own coin.
+            live.contract = nil
         }
         live.account = AddressCardModel(
             name: name.isEmpty ? model.account.name : name,

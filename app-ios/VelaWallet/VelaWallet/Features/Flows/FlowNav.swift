@@ -50,6 +50,7 @@ final class FlowNav {
     /// Pushes a step deeper within a flow that is already open.
     private static let steps: [FlowStep: FlowStateId] = [
         .receiveQr: .r2,
+        .receiveQrAsset: .r3,
         .txDetail: .a2,
         .tokenDetail: .t2,
         .addToken: .t3,

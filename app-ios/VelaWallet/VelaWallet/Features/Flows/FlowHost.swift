@@ -20,6 +20,10 @@ import SwiftUI
 /// Where a screen can go next. Names match the web host's navigation intents.
 enum FlowStep {
     case receiveQr
+    /// R3 — the same sheet, for ONE asset: a token's own page asking to be
+    /// paid in that token. The distinction is the contract line and the title,
+    /// and it is the reason this is a separate step rather than a flag.
+    case receiveQrAsset
     case txDetail
     case tokenDetail
     case addToken
@@ -67,6 +71,9 @@ struct FlowHost: View {
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
     var onSendToken: (() -> Void)?
+    var onReceiveToken: (() -> Void)?
+    /// 删除记录 on the open transaction (058). Absent in the gallery.
+    var onDeleteTx: (() -> Void)?
     /// The network filter behind the header pill. Absent where the screen is a
     /// fixture, which is the gallery and the screenshot sweep.
     var chainSheet: ChainSheetModel?
@@ -223,6 +230,8 @@ struct FlowHost: View {
                         onExplorer: onExplorer,
                         onSaveCard: onSaveCard,
                         onSendToken: onSendToken,
+                        onReceiveToken: onReceiveToken,
+                        onDeleteTx: onDeleteTx,
                         alert: alert,
                         onDismissAlert: onDismissAlert
                     )
@@ -369,8 +378,12 @@ struct FlowHost: View {
                         // 关闭 · 后台继续 and 完成 are the same button in two
                         // states, and both mean "I am done looking". The core
                         // decides what that does to a send still in flight.
+                        //
+                        // 取消 is the third state and it is not an exit: the
+                        // passkey prompt is up, the core's checkpoint answers
+                        // it, and the screen stays to show what happened.
                         onReceiptDone?()
-                        onNavigate(.done)
+                        if !m.ctaCancels { onNavigate(.done) }
                     }
                 }
             }
@@ -421,6 +434,9 @@ private struct FlowSheetHost: View {
     var onExplorer: (() -> Void)?
     var onSaveCard: (() -> Void)?
     var onSendToken: (() -> Void)?
+    var onReceiveToken: (() -> Void)?
+    /// 删除记录 on the open transaction (058). Absent in the gallery.
+    var onDeleteTx: (() -> Void)?
     var alert: FlowAlertModel?
     var onDismissAlert: (() -> Void)?
 
@@ -481,11 +497,14 @@ private struct FlowSheetHost: View {
                 onExplorer: { onExplorer?() }
             )
         case .txDetail(let m):
-            TxDetailBody(model: m, onExplorer: { onExplorer?() })
+            TxDetailBody(model: m, onExplorer: { onExplorer?() }, onDelete: onDeleteTx)
         case .tokenDetail(let m):
             TokenDetailBody(
                 model: m,
-                onReceive: { onNavigate(.receive) },
+                // 收款 on a token's page means "pay me THIS" — the asset-limited
+                // code, not the network list. Android has done it this way
+                // since 048; iOS drew the sheet and could not reach it.
+                onReceive: { onReceiveToken?() ?? onNavigate(.receive) },
                 // The send opens on THIS token. Pushing the form without
                 // preselecting it opened the picker instead, which is the
                 // dead-button shape once more: the button worked and landed

@@ -53,6 +53,10 @@ struct RootView: View {
     @State private var deposits: ReceiveWatchStore
     /// Which network row opened the receive code.
     @State private var receiveNetwork = 0
+    /// The identicon viewer, hosted once for the whole app.
+    @State private var identiconViewer: IdenticonSubject?
+    /// Bumped when storage is cleared, so the measured page re-reads the store.
+    @State private var storageTick = 0
     /// Which history row opened the transaction sheet, and which assets row
     /// opened the token sheet. The drawn sheets show ONE of each; without the
     /// tap travelling with the navigation they would show the first.
@@ -351,6 +355,10 @@ struct RootView: View {
         ))
         let prefs = Preferences(store: shelf)
         prefs.boot()
+        // Before the first frame, and before the welcome model is built from
+        // it: the stored language decides which words this launch uses. Until
+        // 058 nothing read `vela.language` at all.
+        loc.apply(prefs.language)
         Formats.apply(prefs)
         UiScale.apply(prefs)
         AvatarPreference.apply(prefs)
@@ -471,6 +479,34 @@ struct RootView: View {
             guard let request else { return }
             prefillSend(from: request)
         }
+        // Every avatar in the app opens the viewer (row 10 of 057's audit).
+        //
+        // Provided ONCE, here, and reached by the avatar component itself —
+        // Android's `LocalIdenticonViewer` arrangement. The alternative, a
+        // callback threaded through twelve call sites, is how the viewer came
+        // to open from the wallet header and nowhere else: eleven sites had
+        // nothing to thread.
+        .environment(\.identiconViewer, { seed, name in
+            identiconViewer = IdenticonSubject(seed: seed, name: name)
+        })
+        .sheet(item: $identiconViewer) { subject in
+            IdenticonViewerSheet(
+                loc: loc,
+                address: subject.seed,
+                name: subject.name,
+                onClose: { identiconViewer = nil }
+            )
+            .presentationDetents([.medium, .large])
+            .themed(scheme)
+        }
+    }
+
+    /// Whose artwork the viewer is showing. A value, not a pair of `@State`s,
+    /// so `sheet(item:)` can key the presentation on it.
+    struct IdenticonSubject: Identifiable, Equatable {
+        let seed: String
+        let name: String?
+        var id: String { seed }
     }
 
     // MARK: - Deep links (spec 056 US3)
@@ -775,6 +811,17 @@ struct RootView: View {
                     // minutes, at the core's own cadence, and it stops itself.
                     if state == .r2 || state == .r3 {
                         deposits.open(address: session.view.address)
+                    }
+                    // The request machine learns whose address this is when the
+                    // receive flow opens, exactly as Android's `openReceive`
+                    // does. Every question the code sheet asks it — which
+                    // asset, which precision — is answered against this.
+                    if state == .r1 {
+                        paymentRequest.start(
+                            account: session.view.address,
+                            recipient: session.view.address,
+                            baseUrl: Self.payLinkBase
+                        )
                     }
                 }
                 // Keyed on the DRAWN state, not the derived one.
@@ -1348,6 +1395,51 @@ struct RootView: View {
         }
     }
 
+    /// 删除记录 on the open transaction.
+    ///
+    /// The feed tombstones the record and drops the row at once, so the detail
+    /// has nothing left to show and steps back to the list it came from —
+    /// exactly what the web's `deleteSelectedTx` does. The CHAIN keeps the
+    /// transaction; this is the wallet forgetting it.
+    private func deleteOpenTransaction() {
+        guard let feed = activity.feed, let item = selectedItem(in: feed) else { return }
+        activity.deleteRequested(id: item.id)
+        flows.back()
+    }
+
+    /// 收款 from a token's own page — R3, the asset-limited code.
+    ///
+    /// The asset goes through the MACHINE (`asset_picked`), not into a field
+    /// beside the sheet: the core re-clamps the request's precision to the new
+    /// asset, and a shell that kept the pick to itself would draw a USDC code
+    /// over an 18-decimal request.
+    private func receiveSelectedToken() {
+        guard let token = wallet.balance?.tokens[safe: assetRow] else { return }
+        // The catalog's name, or the chain id in words nobody has to invent —
+        // the balance wire carries the TOKEN's name, which is not the network's.
+        let network = ChainCatalog.meta(token.chainId)?.displayName ?? String(token.chainId)
+        paymentRequest.start(
+            account: session.view.address,
+            recipient: session.view.address,
+            baseUrl: Self.payLinkBase
+        )
+        paymentRequest.pickAsset(
+            chainId: token.chainId,
+            tokenAddress: token.tokenAddress,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            networkName: network
+        )
+        // Enter the flow, then the code: Back lands on the network list, which
+        // is where a person who wanted a different network needs to be.
+        flows.enter(.receive)
+        flows.push(.receiveQrAsset)
+    }
+
+    /// Where a pay link points. The public host, because a phone has no origin
+    /// of its own — the same constant Android keeps in `VelaNavHost`.
+    private static let payLinkBase = "https://getvela.app/pay"
+
     /// 转账 from a contact's own page.
     ///
     /// The recipient rides through the SAME door a scanned code uses, so a
@@ -1438,10 +1530,17 @@ struct RootView: View {
             model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc))
         }
         if case .receiveQr(let qr)? = model.sheet {
+            // R2 is a NETWORK's code and R3 is one ASSET's. The state is the
+            // distinction — the machine always holds an asset, so asking it
+            // unconditionally would print a contract line over a code for the
+            // chain's own coin.
+            let asset = state == .r3 ? paymentRequest.view?.asset : nil
             model.sheet = .receiveQr(FlowsLive.receiveQr(
                 address, name: session.view.activeName,
-                chain: ChainCatalog.chains.indices.contains(receiveNetwork)
-                    ? ChainCatalog.chains[receiveNetwork] : nil,
+                chain: asset.flatMap { ChainCatalog.meta($0.chainId) }
+                    ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
+                        ? ChainCatalog.chains[receiveNetwork] : nil),
+                asset: asset,
                 on: qr, loc: loc
             ))
         }
@@ -1715,10 +1814,25 @@ struct RootView: View {
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),
                     addTokenError: addTokenError(for: state),
-                    onReceiveNetwork: { receiveNetwork = $0 },
+                    onReceiveNetwork: { index in
+                        receiveNetwork = index
+                        // A network row asks to be paid in that chain's OWN
+                        // coin. Telling the machine keeps the sheet's mark and
+                        // the machine's asset from disagreeing.
+                        guard let chain = ChainCatalog.chains[safe: index] else { return }
+                        paymentRequest.pickAsset(
+                            chainId: chain.chainId,
+                            tokenAddress: nil,
+                            symbol: chain.nativeSymbol,
+                            decimals: 18,
+                            networkName: chain.displayName
+                        )
+                    },
                     onSelectActivity: { activityRow = ($0, $1) },
                     onSelectAsset: { assetRow = $0 },
                     onSendToken: { sendSelectedToken() },
+                    onReceiveToken: { receiveSelectedToken() },
+                    onDeleteTx: { deleteOpenTransaction() },
                     chainSheet: activity.feed.map {
                         FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
                     },
@@ -1756,7 +1870,16 @@ struct RootView: View {
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
                     onConfirm: { send.slideConfirm() },
-                    onReceiptDone: { send.done() },
+                    onReceiptDone: {
+                        // One button, two meanings, the core's rule: a prompt
+                        // that is up is cancelled at its checkpoint; anything
+                        // else is somebody saying they are done looking.
+                        if send.view?.txStatus == "signing" {
+                            send.cancelSigning()
+                        } else {
+                            send.done()
+                        }
+                    },
                     onContinueSend: { send.advance() },
                     onNoticeAction: {
                         // Whatever the notice is about, tried again. The CORE
@@ -2058,6 +2181,14 @@ struct RootView: View {
             ),
             onPick: { overlay, id in settingsPicked(overlay, id) },
             onClearCaches: { clearSettingsCaches() },
+            onClearStorageItem: { id in
+                DeviceStorage.clear(shelf, item: id)
+                storageTick += 1
+                // What was cleared is what the rest of the app was showing:
+                // balances re-read, the feed and the address book re-read
+                // themselves from a store that no longer has those keys.
+                wallet.refresh(pull: true)
+            },
             onErase: { eraseThisDevice() },
             onSelectAccount: { address in switchToAccount(address) },
             endpointActions: SettingsEndpointActions(
@@ -2104,6 +2235,18 @@ struct RootView: View {
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
         model = SettingsLive.withProviderTests(on: model, loc: loc)
+        // Measured, not drawn (058). `storageTick` is what makes a clear show
+        // up: the report is read here, so the page has to be asked to build
+        // again after keys are removed.
+        _ = storageTick
+        model = SettingsLive.withStorage(DeviceStorage.measure(shelf), on: model, loc: loc)
+        model = SettingsLive.withAbout(
+            version: BuildInfo.version,
+            commit: BuildInfo.commit,
+            networkCount: settings.networkAdmin?.networks.count
+                ?? ChainCatalog.chains.count,
+            on: model, loc: loc
+        )
         return model
     }
 
@@ -2114,15 +2257,13 @@ struct RootView: View {
     /// made of: "clear caches" is an offer to make the app forget what it can
     /// look up again, and a person who taps it is not asking to lose data.
     private func clearSettingsCaches() {
-        for key in [
-            VelaStore.Key.balanceCache,
-            VelaStore.Key.fiatRates,
-            VelaStore.Key.fiatFeedAddrs,
-            VelaStore.Key.fxRates,
-        ] {
-            shelf.writeString(key, nil)
-        }
+        // Through the SAME mapping the storage page weighs, so what the page
+        // said would be freed is exactly what is removed. A hand-kept key list
+        // beside a measured one drifts, and the drift shows up as a page that
+        // still reports megabytes after clearing them (028's finding).
+        DeviceStorage.clearCaches(shelf)
         relayClient.clearCaches()
+        storageTick += 1
         wallet.refresh(pull: true)
     }
 
@@ -2195,7 +2336,12 @@ struct RootView: View {
             settings.chooseCurrency(id)
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
-            preferences.setLanguage(id == "system" ? "auto" : id)
+            let tag = id == "system" ? "auto" : id
+            preferences.setLanguage(tag)
+            // And the app changes language now, not on the next launch —
+            // `Loc.t` observes `resolvedLanguage`, so every translated view
+            // redraws. Android has done this since 047.
+            loc.apply(tag)
         case .numberFormat:
             guard let key = NumberFormatKey(rawValue: id) else { return }
             preferences.setNumberFormat(key)

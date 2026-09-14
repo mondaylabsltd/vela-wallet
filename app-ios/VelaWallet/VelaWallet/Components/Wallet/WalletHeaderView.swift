@@ -29,7 +29,11 @@ struct WalletHeaderView: View {
         HStack(spacing: Tokens.Space.s12) {
             if let onIdenticon {
                 Button(action: onIdenticon) {
-                    IdenticonAvatar(seed: model.identiconSeed, size: WalletGeometry.avatar, name: model.name)
+                    // The header manages its own tap, so the avatar does not
+                    // take one — two gestures over one circle is how a sheet
+                    // ends up trying to present while another is dismissing.
+                    IdenticonAvatar(seed: model.identiconSeed, size: WalletGeometry.avatar,
+                                    name: model.name, tappable: false)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(identiconLabel ?? "")
