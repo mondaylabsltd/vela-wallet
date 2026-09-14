@@ -36,10 +36,14 @@ enum SendLive {
             return .sd1
         case .enterDetails:
             if view.showContactPicker { return .sd2e }
+            if view.showBatchImport { return .sd2c }
             if feeSheetOpen { return .sd2f }
-            return .sd2
+            if view.multiSelectMode { return .sd2d }
+            return view.splitMode ? .sd2b : .sd2
         case .confirm:
-            return feeSheetOpen ? .sd2f : .sd3
+            if feeSheetOpen { return .sd2f }
+            if view.multiSelectMode { return .sd3c }
+            return view.splitMode ? .sd3b : .sd3
         case .receipt:
             switch view.receipt?.status {
             case "confirmed": return .sd4c
@@ -51,17 +55,61 @@ enum SendLive {
 
     // MARK: - SD1, the token picker
 
-    static func pick(_ view: SendViewWire, on model: SendPickModel, loc: Loc) -> SendPickModel {
+    static func pick(
+        _ view: SendViewWire, on model: SendPickModel, picking: Bool = false, loc: Loc
+    ) -> SendPickModel {
         SendPickModel(
             header: model.header,
             searchPlaceholder: model.searchPlaceholder,
             filters: model.filters,
-            // 052 is single mode: no chain lock, no tick, no count.
-            notice: nil,
+            // Once a chain is pinned, say which — the dimmed rows are the
+            // consequence and this is the reason. The corpus has no sentence
+            // for "locked to", so the summary line's own words carry it:
+            // "N 个代币 · Gnosis" is exactly what has been chosen.
+            notice: picking && view.multiChainId != nil
+                ? SendNoticeModel(
+                    mark: model.notice?.mark
+                        ?? TokenMarkModel(
+                            ticker: "",
+                            badgeColor: chainColor(view.multiChainId ?? 0)
+                        ),
+                    text: loc.t("send.multiSendSummary", vars: [
+                        "n": String(view.multiSelectedIds.count),
+                        "chain": view.multiChainId
+                            .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
+                    ])
+                )
+                : nil,
             rows: view.tokens.map(assetRow),
-            selection: nil,
-            cta: model.cta
+            selection: picking ? SendSelectionModel(
+                selected: view.tokens.map { view.multiSelectedIds.contains(tokenId($0)) },
+                // A row on a chain the pick has left behind is drawn dimmed and
+                // is not tappable: a tappable row is an invitation the wallet
+                // will not honour.
+                dimmed: view.tokens.map { SweepPick.dimmed(view: view, chainId: $0.chainId) },
+                selectAll: model.selection?.selectAll ?? loc.t("send.selectAllValuable")
+            ) : nil,
+            cta: picking
+                ? SendCtaModel(
+                    label: loc.t("send.multiSendContinue", vars: [
+                        "n": String(view.multiSelectedIds.count),
+                        "chain": view.multiChainId
+                            .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
+                    ]),
+                    // Nothing ticked is nothing to send.
+                    accent: !view.multiSelectedIds.isEmpty
+                )
+                : model.cta
         )
+    }
+
+    /// The id the core knows a holding by.
+    ///
+    /// A token is a (chain, contract) pair — the same symbol on two chains is
+    /// two different holdings, and an id that was only the symbol would tick
+    /// both.
+    static func tokenId(_ token: SendTokenWire) -> String {
+        "\(token.chainId):\(token.tokenAddress ?? "native")"
     }
 
     private static func assetRow(_ token: SendTokenWire) -> AssetRowModel {
@@ -130,6 +178,31 @@ enum SendLive {
             )
         }
 
+        // The split's rows, each with the core's verdict on it.
+        live.recipients = view.splitMode ? view.recipients.enumerated().map { index, row in
+            RecipientCardModel(
+                ordinal: loc.t("send.recipientN", vars: ["n": String(index + 1)]),
+                name: row.name ?? (row.address.isEmpty
+                    ? loc.t("send.recipientPlaceholder")
+                    : AddressText.short(row.address)),
+                identiconSeed: isAddress(row.address) ? row.address : "",
+                amount: "\(trim(row.amount)) \(symbol)",
+                removeLabel: loc.t("send.removeRecipient"),
+                rowId: row.id,
+                problem: rowProblem(row, in: view, loc: loc)
+            )
+        } : live.recipients
+
+        // A split's sweep-style summary: how many people, and the sum.
+        live.summary = view.splitMode
+            ? SummaryLineModel(
+                label: loc.t("send.recipientCount", vars: [
+                    "count": String(view.recipients.count),
+                ]),
+                value: "\(trim(view.confirmAmount)) \(symbol)"
+            )
+            : live.summary
+
         return SendFormModel(
             // The title names the token being SENT. The fixture's said USDT,
             // which on a wallet holding xDAI is a sentence about somebody
@@ -153,6 +226,27 @@ enum SendLive {
             fee: feeRow(model.fee, view: view, fee: fee, loc: loc),
             cta: live.cta
         )
+    }
+
+    /// What is wrong with **this** row, in the core's vocabulary.
+    ///
+    /// A list of six rows with one sentence underneath makes somebody count
+    /// rows to find the bad one. The core does not publish a per-row verdict
+    /// for the split, so the two facts it does publish are read here: an
+    /// address that is not one, and a row that repeats an earlier address.
+    /// Anything subtler stays the form's single warning.
+    static func rowProblem(
+        _ row: SendRecipientDraftWire, in view: SendViewWire, loc: Loc
+    ) -> String? {
+        if !row.address.isEmpty, !isAddress(row.address) {
+            return loc.t("send.batchBadAddress")
+        }
+        let earlier = view.recipients.prefix { $0.id != row.id }
+        if !row.address.isEmpty,
+           earlier.contains(where: { $0.address.caseInsensitiveCompare(row.address) == .orderedSame }) {
+            return loc.t("send.batchDup")
+        }
+        return nil
     }
 
     /// The ≈ line beside a token-denominated figure.

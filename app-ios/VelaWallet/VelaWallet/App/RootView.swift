@@ -571,10 +571,13 @@ struct RootView: View {
                     },
                     sendAmount: sendStates.contains(state) ? $amountDraft : nil,
                     sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onMax: { send.tapMax() },
+                    onRemoveRecipient: { index in removeSplitRow(at: index) },
+                    onAddRecipient: { addSplitRow() },
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: { send.done() },
                     onContinueSend: { send.advance() },
@@ -861,6 +864,65 @@ struct RootView: View {
             transportId: request.transportId,
             chainId: request.chainId
         ))
+    }
+
+    // MARK: - Split (spec 054)
+
+    /// The split's row bindings, or `nil` where the form is a picture.
+    ///
+    /// Extracted rather than written at the call site: `FlowHost` already has
+    /// enough arguments that one more ternary tips the type-checker over
+    /// (052's lesson, hit again here).
+    private func splitRows(
+        for state: FlowStateId
+    ) -> ((String) -> (address: Binding<String>, amount: Binding<String>))? {
+        guard sendStates.contains(state) else { return nil }
+        return splitRowBinding
+    }
+
+    /// One row's two live fields, by the core's row id.
+    ///
+    /// Each keystroke sends the **whole list** back, because that is the
+    /// event the core has: `recipients_changed` reconciles ids, names and
+    /// identities, and a delta would be the shell deciding which parts of its
+    /// own state the core may trust. Untouched rows come back byte-identical,
+    /// which is what makes that cheap (`SplitRows`).
+    private func splitRowBinding(
+        _ rowId: String
+    ) -> (address: Binding<String>, amount: Binding<String>) {
+        let rows = send.view.map(SplitRows.drafts) ?? []
+        let row = rows.first { $0.id == rowId }
+        return (
+            address: Binding(
+                get: { row?.address ?? "" },
+                set: { send.recipientsChanged(SplitRows.addressEdited(rows, id: rowId, address: $0)) }
+            ),
+            amount: Binding(
+                get: { row?.amount ?? "" },
+                set: { send.recipientsChanged(SplitRows.amountEdited(rows, id: rowId, amount: $0)) }
+            )
+        )
+    }
+
+    /// 「+ 添加收款人」 — the door from a single send into a split.
+    ///
+    /// **This button shipped doing nothing.** It pushed a state the live
+    /// router could never render, so the screen re-drew as the one the person
+    /// was already on (survey, 054). From a single send it enters split mode;
+    /// from a split it appends a row.
+    private func addSplitRow() {
+        guard let view = send.view else { return }
+        guard view.splitMode else {
+            send.enterSplitMode()
+            return
+        }
+        send.recipientsChanged(SplitRows.appended(SplitRows.drafts(from: view)))
+    }
+
+    private func removeSplitRow(at index: Int) {
+        guard let view = send.view, view.recipients.indices.contains(index) else { return }
+        let rows = SplitRows.drafts(from: view)
+        send.recipientsChanged(SplitRows.removed(rows, id: rows[index].id))
     }
 
     private func selectTab(_ tab: WalletTab) {

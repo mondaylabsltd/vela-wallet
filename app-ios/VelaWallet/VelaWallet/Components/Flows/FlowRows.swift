@@ -230,31 +230,63 @@ struct RecipientCardView: View {
 
     let recipient: RecipientCardModel
     var onRemove: () -> Void = {}
+    /// The live fields. `nil` renders exactly as drawn — the gallery and the
+    /// screenshot sweep stay pixel-identical (the mode-not-a-type shape
+    /// `AmountInputView` and `RecipientFieldView` already use).
+    var address: Binding<String>?
+    var amount: Binding<String>?
 
     var body: some View {
-        HStack(spacing: Tokens.Space.s12) {
-            IdenticonAvatar(seed: recipient.identiconSeed, size: WalletGeometry.rowIcon)
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: recipient.ordinal)
-                    .typeRole(Typography.caption.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
-                Text(verbatim: recipient.name)
-                    .monoRole(Typography.monoAddressDetail.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            HStack(spacing: Tokens.Space.s12) {
+                IdenticonAvatar(seed: recipient.identiconSeed, size: WalletGeometry.rowIcon)
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(verbatim: recipient.ordinal)
+                        .typeRole(Typography.caption.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                    if let address {
+                        TextField(recipient.name, text: address)
+                            .font(Typography.monoAddressDetail.scaled(textScale).font)
+                            .foregroundStyle(theme.fgBase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .lineLimit(1)
+                    } else {
+                        Text(verbatim: recipient.name)
+                            .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: Tokens.Space.s8)
+                if let amount {
+                    TextField("0", text: amount)
+                        .font(Typography.rowValue.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                } else {
+                    Text(verbatim: recipient.amount)
+                        .typeRole(Typography.rowValue.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                }
+                Button(action: onRemove) {
+                    LucideIcon(.close, size: LucideIconSize.flowRowAction)
+                        .foregroundStyle(theme.fgSubtle)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(recipient.removeLabel)
             }
-            Spacer(minLength: Tokens.Space.s8)
-            Text(verbatim: recipient.amount)
-                .typeRole(Typography.rowValue.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-            Button(action: onRemove) {
-                LucideIcon(.close, size: LucideIconSize.flowRowAction)
-                    .foregroundStyle(theme.fgSubtle)
-                    .contentShape(Rectangle())
+            // The core's verdict on THIS row. A list of six with one sentence
+            // underneath makes somebody count rows to find the bad one.
+            if let problem = recipient.problem {
+                Text(verbatim: problem)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(recipient.removeLabel)
         }
         .padding(Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))

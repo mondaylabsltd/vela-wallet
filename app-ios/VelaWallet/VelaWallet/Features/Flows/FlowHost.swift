@@ -73,6 +73,8 @@ struct FlowHost: View {
     /// which is the gallery and the screenshot sweep.
     var sendAmount: Binding<String>?
     var sendRecipient: Binding<String>?
+    /// One binding pair per split row, by the core's row id.
+    var sendRow: ((String) -> (address: Binding<String>, amount: Binding<String>))?
     var sendWarning: String?
     var sendCtaDisabled = false
     /// Which row of the picker was tapped. The index travels because the core
@@ -81,6 +83,9 @@ struct FlowHost: View {
     /// it tapped opens the first one.
     var onSelectToken: ((Int) -> Void)?
     var onMax: (() -> Void)?
+    /// Split: a row was removed, or a row was added.
+    var onRemoveRecipient: ((Int) -> Void)?
+    var onAddRecipient: (() -> Void)?
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
     /// a picture, where the CTA still just navigates.
     var onConfirm: (() -> Void)?
@@ -246,15 +251,20 @@ struct FlowHost: View {
                         case .add: onNavigate(.addRecipient)
                         }
                     },
+                    onRemoveRecipient: { index in onRemoveRecipient?(index) },
                     onFee: { onNavigate(.feeToken) },
                     onMax: { _ in onMax?() },
-                    onAddRecipient: { onNavigate(.addRecipient) },
+                    onAddRecipient: {
+                        if let onAddRecipient { onAddRecipient() }
+                        else { onNavigate(.addRecipient) }
+                    },
                     onContinue: {
                         if let onContinueSend { onContinueSend() }
                         else { onNavigate(.sendConfirm) }
                     },
                     amountText: sendAmount,
                     recipientText: sendRecipient,
+                    rowText: sendRow,
                     warning: sendWarning,
                     ctaDisabled: sendCtaDisabled
                 )

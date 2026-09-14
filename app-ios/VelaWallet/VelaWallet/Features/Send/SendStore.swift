@@ -126,6 +126,39 @@ final class SendStore {
     func pickedAddress(_ address: String) {
         dispatch(["type": "picked_address", "address": address])
     }
+    // MARK: - Split (spec 054)
+
+    /// Turn a single send into a list of them.
+    func enterSplitMode() { dispatch(["type": "enter_split_mode"]) }
+
+    /// The **whole list**, every time. The core reconciles it — ids, names and
+    /// identities included — so a shell that sent a delta would be deciding
+    /// which parts of its own state the core is allowed to trust.
+    func recipientsChanged(_ rows: [SplitRows.Draft]) {
+        dispatch(["type": "recipients_changed", "recipients": rows.map(\.json)])
+    }
+
+    /// Seed the list from somewhere else — a batch file, a whole group.
+    func seedSplitRecipients(_ rows: [[String: Any]]) {
+        dispatch(["type": "seed_split_recipients", "recipients": rows])
+    }
+
+    // MARK: - Sweep
+
+    /// The events one tap on the picker becomes, in the order the core needs
+    /// them: the pin before the tick, because the pin is what the tick is
+    /// judged against.
+    func sweepTap(_ events: [[String: Any]]) {
+        for event in events { dispatch(event) }
+    }
+
+    func confirmMultiSelection() { dispatch(["type": "confirm_multi_selection"]) }
+
+    // MARK: - Batch
+
+    func openBatchImport() { dispatch(["type": "open_batch_import"]) }
+    func closeBatchImport() { dispatch(["type": "close_batch_import"]) }
+
     func advance() { dispatch(["type": "continue"]) }
     func back() { dispatch(["type": "back"]) }
     func editAmount() { dispatch(["type": "edit_amount"]) }

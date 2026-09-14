@@ -620,6 +620,9 @@ struct SendFormBody: View {
     /// The two live fields. Absent everywhere the form is a picture.
     var amountText: Binding<String>?
     var recipientText: Binding<String>?
+    /// One binding pair per split row, by the core's row id. Absent in the
+    /// gallery, where the rows are a picture of a list.
+    var rowText: ((String) -> (address: Binding<String>, amount: Binding<String>))?
     /// The core's live refusal, under the fields.
     var warning: String?
     var ctaDisabled = false
@@ -688,7 +691,13 @@ struct SendFormBody: View {
                 .buttonStyle(.plain)
             }
             ForEach(Array(model.recipients.enumerated()), id: \.element.id) { index, recipient in
-                RecipientCardView(recipient: recipient, onRemove: { onRemoveRecipient(index) })
+                let live = rowText.map { $0(recipient.rowId) }
+                RecipientCardView(
+                    recipient: recipient,
+                    onRemove: { onRemoveRecipient(index) },
+                    address: live?.address,
+                    amount: live?.amount
+                )
             }
             if !model.recipientActions.isEmpty {
                 GhostPillRowView(items: model.recipientActions, onSelect: onRecipientAction)

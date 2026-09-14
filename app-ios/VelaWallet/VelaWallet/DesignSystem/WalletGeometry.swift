@@ -19,6 +19,10 @@ enum WalletGeometry {
     static let identiconViewer: CGFloat = 160
     /// Leading circle of activity/asset rows (mock: 80 px @2x).
     static let rowIcon: CGFloat = 40
+    /// The editable amount on a split row (spec 054). Wide enough for a
+    /// six-figure payroll line and narrow enough to leave the address room —
+    /// measured against the SD2b drawing's own amount column.
+    static let splitAmountWidth: CGFloat = 96
     /// Chain-dot badge on row icons (mock: 24 px @2x).
     static let badge: CGFloat = 12
     /// Ring separating the badge from the icon (bg-colored).

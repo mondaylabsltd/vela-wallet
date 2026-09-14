@@ -338,6 +338,13 @@ struct RecipientCardModel: Identifiable {
     let identiconSeed: String
     let amount: String
     let removeLabel: String
+    /// The core's row id, so an edit can say which row it edited. Empty in
+    /// the fixtures, which have no machine behind them.
+    var rowId: String = ""
+    /// The core's verdict on this row, if it has one — an empty amount, an
+    /// address that is not one, a duplicate. A row's problem belongs on the
+    /// row, not in a sentence at the bottom of a list of six.
+    var problem: String?
 }
 
 /// SD2d's sweep row: one token, its amount, and a Max.
