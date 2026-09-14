@@ -89,6 +89,11 @@ struct FlowHost: View {
     /// navigates — pushing a screen the machine has not moved to renders the
     /// one it is still on, which looks exactly like a dead button.
     var onContinueSend: (() -> Void)?
+    /// The two sheets the send flow raises. Both bodies have always had an
+    /// `onSelect`; the host simply never passed one, which is the same shape
+    /// as the token picker before phase 3 — a list nobody can pick from.
+    var onPickFeeToken: ((Int) -> Void)?
+    var onPickContact: ((Int) -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -105,6 +110,28 @@ struct FlowHost: View {
     var body: some View {
         base
             .environment(\.walletTextScale, model.textScale)
+            // The refusal surface belongs to the SCREEN, not only to the sheet.
+            //
+            // Spec 051 put it inside `FlowSheetHost` because the thing that
+            // needed it was saving a receive card, which is a sheet. The send
+            // form is a base screen, so the core's refusals — an amount over
+            // the balance, an address that is not one — were raised into a
+            // surface that did not exist: 继续 was armed, pressing it said
+            // nothing at all, and the device found it.
+            //
+            // Presented only when no sheet is up, so a refusal cannot appear
+            // twice at once.
+            .alert(
+                alert?.title ?? "",
+                isPresented: Binding(
+                    get: { alert != nil && !sheetShown },
+                    set: { if !$0 { onDismissAlert?() } }
+                )
+            ) {
+                Button("OK") { onDismissAlert?() }
+            } message: {
+                Text(verbatim: alert?.message ?? "")
+            }
             .sheet(isPresented: $pickingChain) {
                 if let chainSheet {
                     ChainSelectSheet(model: chainSheet, onSelect: { chainId in
@@ -128,6 +155,8 @@ struct FlowHost: View {
                     FlowSheetHost(
                         sheet: sheet,
                         onNavigate: onNavigate,
+                        onPickFeeToken: onPickFeeToken,
+                        onPickContact: onPickContact,
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
                         addTokenError: addTokenError,
@@ -287,6 +316,8 @@ private struct FlowSheetHost: View {
 
     let sheet: WalletFlowSheet
     var onNavigate: (FlowStep) -> Void = { _ in }
+    var onPickFeeToken: ((Int) -> Void)?
+    var onPickContact: ((Int) -> Void)?
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
     var addTokenError: String?
@@ -367,8 +398,14 @@ private struct FlowSheetHost: View {
                 input: addTokenInput,
                 errorText: addTokenError
             )
-        case .contactPick(let m): ContactPickBody(model: m, onScan: { onNavigate(.scan) })
-        case .feeToken(let m): FeeTokenBody(model: m)
+        case .contactPick(let m):
+            ContactPickBody(
+                model: m,
+                onScan: { onNavigate(.scan) },
+                onSelect: { index in onPickContact?(index) }
+            )
+        case .feeToken(let m):
+            FeeTokenBody(model: m, onSelect: { index in onPickFeeToken?(index) })
         case .batchImport(let m): BatchImportBody(model: m)
         }
     }

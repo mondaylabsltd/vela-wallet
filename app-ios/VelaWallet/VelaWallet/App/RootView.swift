@@ -524,14 +524,13 @@ struct RootView: View {
                     sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
-                    onSelectToken: { index in
-                        guard let token = send.view?.tokens[safe: index] else { return }
-                        send.selectToken(id: token.id)
-                    },
+                    onSelectToken: selectSendToken,
                     onMax: { send.tapMax() },
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: { send.done() },
-                    onContinueSend: { send.advance() }
+                    onContinueSend: { send.advance() },
+                    onPickFeeToken: pickFeeToken,
+                    onPickContact: pickSendContact
                 )
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
@@ -577,6 +576,20 @@ struct RootView: View {
                 // journey, which is exactly the lifetime this event has.
                 .task(id: drawn) {
                     if sendStates.contains(drawn) { await openSend() }
+                }
+                .task(id: drawn) {
+                    // Keyed on the DRAWN state, because the fee sheet is the
+                    // shell's and not the core's: `send`'s stage stays
+                    // `enter_details` while it is up.
+                    //
+                    // Deriving it from `state` was circular — `flowState` only
+                    // answers `.sd2f` when this flag is already true, so the
+                    // flag could never become true and the sheet never opened.
+                    feeSheetOpen = (drawn == .sd2f)
+                    // Android's trap, avoided: its contacts machine only opened
+                    // on the contacts page, so the picker was empty. `boot` is
+                    // idempotent, so opening it from here costs nothing.
+                    if drawn == .sd2e { contacts.open(myAddress: session.view.address) }
                 }
             } else {
                 switch section {
@@ -837,6 +850,9 @@ struct RootView: View {
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
                 model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
             }
+            if case .contactPick(let sheet)? = model.sheet, let book = contacts.view {
+                model.sheet = .contactPick(SendLive.contactSheet(book, on: sheet, loc: loc))
+            }
         }
         // The ERC-20 tab only: the native tab adds a NETWORK, which is
         // `network_admin`'s wizard and not this machine's.
@@ -845,6 +861,34 @@ struct RootView: View {
             model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
         }
         return model
+    }
+
+    /// A picker row was tapped. The index travels because the screen knows
+    /// positions and the core keys tokens by id.
+    private func selectSendToken(_ index: Int) {
+        guard let token = send.view?.tokens[safe: index] else { return }
+        send.selectToken(id: token.id)
+    }
+
+    /// A fee asset was chosen.
+    ///
+    /// It is a QUOTE PARAMETER on both machines: the fee session re-quotes the
+    /// real leg (a native transfer and an ERC-20 `transfer` are 68 bytes of
+    /// calldata and one storage write apart), and the send machine records what
+    /// was asked for so `submit_user_op` signs the same shape.
+    private func pickFeeToken(_ index: Int) {
+        let contract = fees.view?.options[safe: index]?.contract
+        fees.selectAsset(contract)
+        send.chooseFeeToken(contract)
+        feeSheetOpen = false
+    }
+
+    /// Somebody was picked from the address book.
+    private func pickSendContact(_ index: Int) {
+        guard let contact = contacts.view?.contacts[safe: index] else { return }
+        recipientDraft = contact.address
+        send.pickedAddress(contact.address)
+        send.closeContactPicker()
     }
 
     /// The states the send machine owns. Anything else is still a drawing.

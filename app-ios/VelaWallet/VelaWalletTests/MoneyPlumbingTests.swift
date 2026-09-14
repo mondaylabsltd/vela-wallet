@@ -922,4 +922,172 @@ struct SendMachineTests {
         #expect(!TxRecords.pending(store: store).isEmpty)
     }
 
+// MARK: - What the screen says when the core refuses
+
+/// Every refusal reaches the screen as the core's sentence, and none of them
+/// contains a raw unit.
+///
+/// The second half is the one that bit Android: every figure in the same-asset
+/// ceiling is a **base-unit decimal string** and the shell formats it. Its
+/// first cut printed `5000000000000000000 XDAI` on a phone — a true number
+/// nobody can read, about somebody's own money.
+@MainActor
+struct SendRefusalTests {
+    private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+
+    /// A view carrying one refusal and nothing else.
+    private func view(
+        warning: SendAmountWarningWire? = nil,
+        sameAsset: SendFeeIssueWire? = nil,
+        decimals: Int = 18
+    ) -> SendViewWire {
+        let json = """
+        {
+          "stage": "enter_details", "loading": false, "locked": false,
+          "amount_locked": false, "resolving_lock": false, "adding_network": false,
+          "tokens": [], "selected_token": {
+            "network": "chain-100", "chain_id": 100, "symbol": "XDAI",
+            "balance": "0.5", "decimals": \(decimals), "token_address": null,
+            "price_usd": 1.0, "logo_urls": [], "spam": false
+          },
+          "recipient": "", "amount": "", "amount_fiat_code": null,
+          "denom_toggle_shown": false, "denom_toggle_enabled": false,
+          "denom_toggle_reason": null, "confirm_amount_issue": null,
+          "token_amount": "", "confirm_amount": "",
+          "split_mode": false, "recipients": [], "split_over_balance": false,
+          "multi_select_mode": false, "multi_selected_ids": [],
+          "multi_valuable_ids": [], "multi_chain_id": null,
+          "show_scanner": false, "show_contact_picker": false,
+          "show_batch_import": false,
+          "estimating_gas": false, "fee_busy": false, "fee": null,
+          "gas_fee_token": null, "amount_warning": null,
+          "same_asset_fee_issue": null,
+          "can_continue": false, "can_confirm": false, "sending": false,
+          "tx_status": "idle", "tx_error": null, "tx_hash": null,
+          "user_op_hash": null, "receipt": null, "treasury_bootstrap": null,
+          "recipient_identity": null, "recipient_risk": null
+        }
+        """
+        var object = (try? CoreJSON.object(json)) ?? [:]
+        if let warning {
+            switch warning {
+            case .notEnoughToken(let symbol):
+                object["amount_warning"] = ["type": "not_enough_token", "symbol": symbol]
+            case .insufficientForGas(let symbol):
+                object["amount_warning"] = [
+                    "type": "insufficient_for_gas",
+                    "symbol": symbol.map { $0 as Any } ?? NSNull(),
+                ]
+            case .needGas(let symbol):
+                object["amount_warning"] = [
+                    "type": "need_gas", "symbol": symbol.map { $0 as Any } ?? NSNull(),
+                ]
+            case .cannotConvert(let code, let symbol):
+                object["amount_warning"] = [
+                    "type": "cannot_convert", "code": code, "symbol": symbol,
+                ]
+            }
+        }
+        if let sameAsset {
+            object["same_asset_fee_issue"] = [
+                "symbol": sameAsset.symbol,
+                "transfer_amount": sameAsset.transferAmount,
+                "balance": sameAsset.balance,
+                "fee_amount": sameAsset.feeAmount,
+                "total": sameAsset.total,
+                "max_transfer_amount": sameAsset.maxTransferAmount,
+            ]
+        }
+        // swiftlint:disable:next force_try
+        return try! CoreJSON.decode(SendViewWire.self, from: object)
+    }
+
+    /// Any run of ten or more digits is a raw unit that escaped formatting.
+    /// A human figure has a decimal point long before it gets that long.
+    private func hasRawUnits(_ text: String) -> Bool {
+        var run = 0
+        for character in text {
+            if character.isNumber {
+                run += 1
+                if run >= 10 { return true }
+            } else {
+                run = 0
+            }
+        }
+        return false
+    }
+
+    @Test func everyAmountWarningHasASentence() {
+        let warnings: [SendAmountWarningWire] = [
+            .notEnoughToken(symbol: "XDAI"),
+            .insufficientForGas(symbol: "XDAI"),
+            .needGas(symbol: "XDAI"),
+            .cannotConvert(code: "CNY", symbol: "XDAI"),
+        ]
+        for warning in warnings {
+            let text = SendLive.formWarning(view(warning: warning), loc: loc)
+            let sentence = try? #require(text)
+            #expect(sentence?.isEmpty == false, "a refusal with no sentence is a silent refusal")
+            // And it is not a raw key left un-interpolated.
+            #expect(sentence?.contains("{{") == false)
+            #expect(hasRawUnits(sentence ?? "") == false)
+        }
+    }
+
+    /// The same-asset ceiling, formatted.
+    ///
+    /// Five base-unit figures go in; five human ones must come out. This is the
+    /// exact sentence Android printed in wei.
+    @Test func theSameAssetCeilingIsFormattedNotPrinted() throws {
+        let issue = SendFeeIssueWire(
+            symbol: "XDAI",
+            transferAmount: "5000000000000000000",
+            balance: "5100000000000000000",
+            feeAmount: "2100000000000000",
+            total: "5002100000000000000",
+            maxTransferAmount: "5097900000000000000"
+        )
+        let text = try #require(SendLive.formWarning(view(sameAsset: issue), loc: loc))
+        #expect(text.contains("5 "), "the transfer amount should read as 5, not as 5e18")
+        #expect(!hasRawUnits(text), "a base-unit figure reached the screen: \(text)")
+        #expect(!text.contains("{{"))
+    }
+
+    /// A six-decimal token's ceiling is scaled by SIX, not by eighteen.
+    ///
+    /// The decimals come from the selected token, and a stablecoin read at 18
+    /// renders a five-dollar fee as `0.000000000005`.
+    @Test func theCeilingUsesTheTokensOwnDecimals() throws {
+        let issue = SendFeeIssueWire(
+            symbol: "USDC", transferAmount: "5000000", balance: "5100000",
+            feeAmount: "2100", total: "5002100", maxTransferAmount: "5097900"
+        )
+        let text = try #require(
+            SendLive.formWarning(view(sameAsset: issue, decimals: 6), loc: loc)
+        )
+        #expect(text.contains("5 ") || text.contains("5\u{00A0}"), "5 USDC should read as 5")
+        #expect(!hasRawUnits(text))
+    }
+
+    /// Every alert the core can raise has a title and, where the corpus has
+    /// one, a body — and none of them is an empty string pair.
+    @Test func everyAlertKindHasWords() {
+        let kinds: [[String: Any]] = [
+            ["type": "invalid_address"],
+            ["type": "invalid_amount"],
+            ["type": "insufficient_balance", "warning": NSNull()],
+            ["type": "split_over_balance"],
+            ["type": "load_tokens_failed"],
+            ["type": "estimate_failed", "kind": "other"],
+            ["type": "account_unavailable"],
+        ]
+        for kind in kinds {
+            let text = SendLive.alertText(kind, loc: loc)
+            #expect(!text.title.isEmpty, "\(kind["type"] ?? "?") has no title")
+            #expect(!text.title.contains("{{"))
+            #expect(!text.body.contains("{{"))
+        }
+    }
+}
+
 }

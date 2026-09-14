@@ -762,4 +762,98 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         #endif
     }
 
+    /// SC-005 and SC-006 on the phone: the core's refusal, and the fee token.
+    ///
+    /// Reads only — nothing is signed, so it runs in the default sweep. What it
+    /// proves is that a refusal REACHES the screen in the core's words and that
+    /// the fee-token sheet is a sheet somebody can pick from.
+    func testTheFormSaysWhatTheCoreRefusesAndTheFeeTokenCanBeChanged() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30))
+        tap(app.buttons["转账"], "转账")
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 30))
+        tap(app.staticTexts["xDAI"], "the xDAI row")
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20))
+
+        XCTAssertEqual(app.textFields.count, 2, "the form's fields changed shape")
+        let recipient = app.textFields.element(boundBy: 1)
+        recipient.tap()
+        recipient.typeText("0x031d7D57c99CAF891e1C250554691Fd12D84772b")
+
+        // Far more than the Safe holds. The core decides that, not the screen.
+        let amount = app.textFields.element(boundBy: 0)
+        amount.tap()
+        amount.typeText("999")
+
+        // A refusal appears, and WHICH one depends on whether the fee has
+        // settled yet: before it, the plain over-balance warning; after it, the
+        // same-asset ceiling, which is the sharper sentence because the fee is
+        // paid in the coin being sent. Pinning one of them made this test race
+        // the quote — it passed on the phone and failed on the simulator, where
+        // the relay answers faster.
+        //
+        // What is durable is that SOMETHING says so, in figures a person can
+        // read.
+        let overBalance = app.staticTexts["总额超过你的余额。"]
+        let ceiling = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "最多可发送")
+        ).firstMatch
+        // Polled rather than expected: `waitForExpectations` requires ALL of
+        // them, and either sentence alone is the whole proof.
+        var sentence = ""
+        for _ in 0..<60 where sentence.isEmpty {
+            if overBalance.exists { sentence = overBalance.label }
+            else if ceiling.exists { sentence = ceiling.label }
+            else { Thread.sleep(forTimeInterval: 0.5) }
+        }
+        XCTAssertFalse(sentence.isEmpty, "an over-balance amount produced no sentence")
+        // And no base-unit figure escaped formatting: ten digits in a row is a
+        // raw amount, never a number a person would write.
+        XCTAssertNil(sentence.range(of: "[0-9]{10,}", options: .regularExpression),
+                     "a raw unit reached the screen: \(sentence)")
+        attach(app.screenshot(), named: "device-send-refusal")
+
+        // The inline sentence is the live hint; the GATE is a separate decision
+        // the core makes, and pressing it must not get past the refusal. Which
+        // of the two stops it is the core's business — what this asserts is
+        // that one of them does, and that the person is told why.
+        let cont = app.buttons["继续"]
+        if cont.isEnabled {
+            tap(cont, "继续")
+            XCTAssertTrue(app.staticTexts["余额不足"].waitForExistence(timeout: 10),
+                          "继续 was armed over an over-balance amount and said nothing")
+            attach(app.screenshot(), named: "device-send-refusal-alert")
+            // The alert is dismissed so the sheet below can be reached.
+            if app.buttons["OK"].exists { app.buttons["OK"].tap() }
+        }
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 10),
+                      "the refusal left the form")
+
+        // SC-006: the fee sheet lists what the relay accepts on this chain, and
+        // a row can be picked. The relay offers three assets on Gnosis.
+        tap(app.buttons["手续费币种"], "手续费币种")
+        XCTAssertTrue(app.staticTexts["XDAI"].waitForExistence(timeout: 30),
+                      "the fee sheet is not showing the chain's fee assets")
+        attach(app.screenshot(), named: "device-fee-token-sheet")
+
+        // The row carries THIS account's balance and THIS operation's
+        // estimate — not the drawing's.
+        XCTAssertTrue(app.staticTexts["预估费用"].exists, "the row has no estimate")
+
+        // **One row, and that is correct.** The relay offers three fee assets
+        // on Gnosis (XDAI, USDC, USDT) but the golden Safe holds only xDAI, and
+        // the core does not offer a fee asset an account cannot pay with — a
+        // choice nobody can take is not a choice. So SC-006's second half,
+        // paying in a DIFFERENT asset, cannot be driven from this wallet and is
+        // test-covered rather than device-verified. Android recorded exactly
+        // the same limitation for exactly the same reason.
+    }
+
 }

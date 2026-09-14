@@ -471,6 +471,36 @@ enum SendLive {
         )
     }
 
+    // MARK: - SD2E, the contact picker
+
+    /// The person's own address book, in the drawn picker.
+    ///
+    /// The name shown is theirs if they gave one, the resolved name if a
+    /// registry knew it, and the shortened address otherwise — the same order
+    /// the address book itself uses, so one person is not two names on two
+    /// screens.
+    static func contactSheet(
+        _ book: ContactsViewWire, on model: ContactPickModel, loc: Loc
+    ) -> ContactPickModel {
+        ContactPickModel(
+            title: model.title,
+            closeLabel: model.closeLabel,
+            searchPlaceholder: model.searchPlaceholder,
+            scanRow: model.scanRow,
+            groupsTitle: model.groupsTitle,
+            groups: model.groups,
+            contactsTitle: model.contactsTitle,
+            contacts: book.contacts.map { contact in
+                ContactEntryModel(
+                    name: contact.name ?? contact.resolvedName ?? AddressText.short(contact.address),
+                    group: nil,
+                    addressDisplay: AddressText.short(contact.address),
+                    identiconSeed: contact.address
+                )
+            }
+        )
+    }
+
     // MARK: - Formatting
 
     static let zeroAddress = "0x0000000000000000000000000000000000000000"

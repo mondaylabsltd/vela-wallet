@@ -493,6 +493,80 @@ additive: `UIBackgroundModes` and `BGTaskSchedulerPermittedIdentifiers`.
 
 ---
 
+## Phase 6 — the refusals, and the two sheets
+
+**SC-005 and the readable half of SC-006, device-verified** (on a second
+iPhone — see the note below). What the phone showed, verbatim:
+
+> 发送 999 加网络费 0.01，共需 999.01 xDAI；当前余额为 0.50067。 最多可发送 0.49067 xDAI。
+
+Five base-unit figures went into that sentence and five human ones came out.
+This is the exact sentence Android's first cut printed as
+`5000000000000000000 XDAI`.
+
+### A refusal had nowhere to appear
+
+The sharpest defect of the phase. Spec 051 put the alert surface **inside
+`FlowSheetHost`**, because the thing that needed it was saving a receive card
+— which is a sheet. The send form is a base screen, so every refusal the core
+raised through `show_alert` went into a surface that did not exist: 继续 was
+armed over an over-balance amount, pressing it did nothing at all, and the core
+had answered correctly the whole time. The alert now belongs to the screen,
+presented only when no sheet is up so one refusal cannot appear twice.
+
+### A flag that could never become true
+
+`feeSheetOpen` was derived from the state `SendLive.flowState` returns — and
+`flowState` only answers `.sd2f` when that flag is already true. The fee sheet
+could not open. It is the shell's state, not the core's (`send`'s stage stays
+`enter_details` while it is up), so it follows the navigation instead.
+
+### The two sheets, and what the fee sheet honestly shows
+
+Both bodies have always had an `onSelect`; the host simply never passed one —
+the same shape as the token picker before phase 3. The fee sheet now shows this
+account's real balance and this operation's real estimate:
+**XDAI · 0.50067 · ~0.01 XDAI**, ticked.
+
+**One row, and that is correct.** The relay offers three fee assets on Gnosis,
+but the golden Safe holds only xDAI, and the core does not offer a fee asset an
+account cannot pay with — a choice nobody can take is not a choice. So SC-006's
+second half, *paying in a different asset*, cannot be driven from this wallet
+and is **test-covered, not device-verified**. Android recorded the same
+limitation for the same reason.
+
+The contact picker boots the `contacts` machine from the picker itself.
+Android's trap was that its machine only opened on the contacts page, so the
+picker was empty; `CoreStore.boot` is idempotent, so opening it here costs
+nothing and cannot be forgotten.
+
+### A test that raced the network
+
+The refusal assertion pinned 总额超过你的余额。 — and **which** sentence appears
+depends on whether the fee has settled: before it, the plain over-balance
+warning; after it, the same-asset ceiling, which is sharper because the fee is
+paid in the coin being sent. It passed on the phone and failed on the
+simulator, where the relay answers faster. It now accepts either and asserts
+the durable property instead: a sentence exists, and no run of ten digits
+reached the screen.
+
+### The device changed mid-phase
+
+The founder swapped iPhones. The suite was re-run in full on the new one
+(**iPhone 11, iOS 26.5.2, UDID `00008030-001A75961445802E`**) and is **14 of 14
+green** there. The older phone (iPhone 15 Pro, `00008130-001C68C804E1401C`)
+carries the earlier phases' evidence, including the on-chain send.
+
+### Gates
+
+Hermetic tests 364 → **368** (four refusal tests: every amount warning has a
+sentence, the same-asset ceiling is formatted, a six-decimal token scales by
+six and not eighteen, every alert kind has words). Device UI 14, all green.
+Literal violations 35. Against 052's branch point: core, corpus, bindings and
+the sibling clients unchanged.
+
+---
+
 ## Two findings raised to the founder — one resolved, one open
 
 ### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved
