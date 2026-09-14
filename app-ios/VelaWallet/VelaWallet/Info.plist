@@ -45,6 +45,25 @@
 	  the first time the viewfinder is opened, and never again — so it says what
 	  the camera is FOR rather than that a camera exists.
 	-->
+	<!--
+	  `velawallet://` (spec 056). Two shapes reach the app: `pay` prefills a
+	  send, `open` hands a URL to the in-app browser. Universal links to
+	  `getvela.app` ride the `applinks:` entitlement, which has been there since
+	  019 with nothing behind it.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.getvela.VelaWallet</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>velawallet</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Vela uses the camera to scan QR codes — a payment request, or somebody's address.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

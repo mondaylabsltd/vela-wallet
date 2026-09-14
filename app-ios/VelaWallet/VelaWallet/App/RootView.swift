@@ -149,6 +149,9 @@ struct RootView: View {
     /// by the payroll importer and the address book, because they are the same
     /// platform affordance asked for twice.
     @State private var documents: UIKitDocumentPorts
+    /// The `/pay` link machine (spec 056). Resident: a link can arrive before
+    /// the wallet has finished opening, and the verdict has to survive that.
+    @State private var paymentRequest: PaymentRequestStore
     /// What this person chose about how the app looks and counts (spec 056).
     /// No machine owns it — storage keys with a reader, on the same spellings
     /// every client writes.
@@ -324,6 +327,9 @@ struct RootView: View {
         _documents = State(initialValue: documentPorts)
         // Read before the first frame: a theme or a text size adopted one
         // render late is a visible flash of the wrong one.
+        _paymentRequest = State(initialValue: PaymentRequestStore(
+            executor: PaymentRequestExecutor(store: shelf)
+        ))
         let prefs = Preferences(store: shelf)
         prefs.boot()
         Formats.apply(prefs)
@@ -436,6 +442,54 @@ struct RootView: View {
         }
         .themed(scheme)
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
+        // A link, from anywhere: the scheme, a universal link, a page.
+        .onOpenURL { url in openLink(url) }
+        // The core's verdict on a `/pay` link. Watched rather than awaited,
+        // because a link can arrive before the wallet has finished opening and
+        // the answer has to survive that.
+        .onChange(of: paymentRequest.view?.pay) { _, request in
+            guard let request else { return }
+            prefillSend(from: request)
+        }
+    }
+
+    // MARK: - Deep links (spec 056 US3)
+
+    /// A link this app was opened with.
+    ///
+    /// Two shapes act, and everything else is ignored in silence — an app that
+    /// showed an error for a link it does not handle would be an app that can
+    /// be made to say things by anybody with a URL.
+    private func openLink(_ url: URL) {
+        switch PayLink.parse(url.absoluteString) {
+        case .pay:
+            guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
+            // The CORE validates. Seven strings and whether they add up to a
+            // request this wallet can honour is 600 lines that already exist.
+            paymentRequest.linkOpened(event)
+        case .open(let page):
+            section = .explore
+            browser.open(page)
+        case nil:
+            break
+        }
+    }
+
+    /// A `/pay` link the core accepted, as a send with the fields already in.
+    ///
+    /// The amount rides only when the link named one: an OPEN request is
+    /// somebody asking to be paid without saying how much, and filling in a
+    /// figure there would be the wallet inventing the ask.
+    private func prefillSend(from request: PayRequestWire) {
+        section = .wallet
+        flows.enter(.send)
+        Task {
+            await openSend()
+            // The link's own `ethereum:` URI, through the SAME door a scanned
+            // code uses — so a link and a QR code of the same request land on
+            // exactly the same screen.
+            send.scanned(request.eip681Uri)
+        }
     }
 
     private var themedBackground: some View {
