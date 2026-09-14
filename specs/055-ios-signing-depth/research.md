@@ -1,15 +1,28 @@
 # Research — 055
 
-## D1 · One QR decoder: Vision
+## D1 · One QR decoder: CoreImage's `CIDetector`
 
-`VNDetectBarcodesRequest` with `symbologies = [.qr]`. Camera frames go through
-`VNImageRequestHandler(cmSampleBuffer:orientation:)`, photos through
-`(cgImage:)`, and both read `payloadStringValue`.
+**Revised during phase 0.** The first choice was `VNDetectBarcodesRequest`, for
+the right reason: it reads a sample buffer and a still image alike, so the
+camera and the photo library share one decoder — the fork Android's `QrDecoder`
+exists to prevent, and two decoders eventually disagree about what a code says.
 
-`AVCaptureMetadataOutput` cannot read a photo, so choosing it would mean a
-second decoder for the library — exactly the fork Android's `QrDecoder` exists
-to prevent. `VisionKit.DataScannerViewController` brings its own UI and is
-camera-only.
+It does read both **on a device**. In the simulator it finds nothing at all: a
+code this app itself rendered — large, square, four-module quiet zone — came
+back from Vision with zero observations and was read correctly by `CIDetector`
+in the same test, with no error thrown by either. A decoder that cannot be
+exercised in the hermetic suite is a decoder nobody can prove works.
+
+`CIDetector(ofType: CIDetectorTypeQRCode)` keeps the property that mattered: it
+reads a `CIImage`, and a `CIImage` comes from a camera's pixel buffer and from a
+photo alike. One detector is held for the life of the process — building one
+compiles a pipeline, and the scanner asks thirty times a second.
+
+`AVCaptureMetadataOutput` remains rejected: it cannot read a photo.
+`VisionKit.DataScannerViewController` brings its own UI and is camera-only.
+
+The round trip is a test: `QrCode.modules` renders what the receive screen
+renders, and the decoder reads it back — square and rotated a quarter turn.
 
 ## D2 · The simulation is the SHELL's half only
 

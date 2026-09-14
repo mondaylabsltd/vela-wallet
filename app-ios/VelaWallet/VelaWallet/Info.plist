@@ -39,6 +39,14 @@
 	  somebody's photos in order to save a QR code would be asking for far more
 	  than it needs.
 	-->
+	<!--
+	  The scanner (spec 055): reading a payment code, a receive code, or a
+	  WalletConnect-style URI with the camera. The system shows this sentence
+	  the first time the viewfinder is opened, and never again — so it says what
+	  the camera is FOR rather than that a camera exists.
+	-->
+	<key>NSCameraUsageDescription</key>
+	<string>Vela uses the camera to scan QR codes — a payment request, or somebody's address.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Vela saves your receive QR code to your album so you can share it.</string>
 	<!--
