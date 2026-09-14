@@ -200,7 +200,21 @@ enum SendLive {
                 fiat: view.amountFiatCode != nil
                     ? "\(trim(view.tokenAmount)) \(symbol)"
                     : fiatLine(view, token: token, display: display),
-                denomLabel: view.amountFiatCode ?? display.code
+                denomLabel: view.amountFiatCode ?? display.code,
+                // The core's three judgements about the ⇄ control, all of
+                // which this client was dropping (spec 056's dropped-judgement
+                // ruler). Absent, refused-with-a-reason and offered are three
+                // states, and a chevron that silently does nothing is the one
+                // nobody can act on.
+                denomShown: view.denomToggleShown,
+                denomEnabled: view.denomToggleEnabled,
+                denomReason: view.denomToggleReason.map { issue in
+                    loc.t("send.warnCannotConvert", vars: [
+                        "code": issue.code, "symbol": issue.symbol,
+                    ])
+                },
+                // A scanned or linked amount is not the person's to change.
+                locked: view.amountLocked
             )
         }
 

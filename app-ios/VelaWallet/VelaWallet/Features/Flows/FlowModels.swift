@@ -368,6 +368,18 @@ struct AmountFieldModel {
     let value: String
     let fiat: String
     let denomLabel: String
+    /// Whether the ⇄ row is offered at all — the core's `denomToggleShown`.
+    /// A token with no price cannot be counted in a currency, and a chevron
+    /// there is an invitation the wallet cannot honour.
+    var denomShown = true
+    /// Offered but REFUSED, with the core's reason underneath. Different from
+    /// absent: this one says why.
+    var denomEnabled = true
+    var denomReason: String?
+    /// The amount came from a scanned code or a link and is not the person's
+    /// to change. The field goes read-only rather than silently ignoring
+    /// typing.
+    var locked = false
 }
 
 struct RecipientFieldModel {

@@ -163,7 +163,7 @@ struct AmountInputView: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
-            if let text {
+            if let text, !amount.locked {
                 // `typeRole` is a `Text` extension (the sanctioned styling
                 // seam); a `TextField` takes the same role's font directly.
                 TextField("0", text: text)
@@ -181,18 +181,36 @@ struct AmountInputView: View {
                     .minimumScaleFactor(WalletGeometry.heroMinScale)
                     .lineLimit(1)
             }
-            Button(action: onDenom) {
-                HStack(spacing: Tokens.Space.s2) {
-                    Text(verbatim: amount.fiat)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                    LucideIcon(.chevronsUpDown, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgMuted)
+            if amount.denomShown {
+                Button(action: onDenom) {
+                    HStack(spacing: Tokens.Space.s2) {
+                        Text(verbatim: amount.fiat)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                        LucideIcon(.chevronsUpDown, size: LucideIconSize.smallChevron)
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .disabled(!amount.denomEnabled)
+                .opacity(amount.denomEnabled ? 1 : Tokens.Opacity.disabled)
+                .accessibilityLabel(amount.denomLabel)
+            } else {
+                // No toggle, but the figure's own currency still reads.
+                Text(verbatim: amount.fiat)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(amount.denomLabel)
+            // A control that visibly DECLINES says why. Silence here is how a
+            // person taps the same chevron three times.
+            if let reason = amount.denomReason {
+                Text(verbatim: reason)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Tokens.Space.s24)
