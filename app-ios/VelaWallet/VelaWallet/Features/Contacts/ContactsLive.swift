@@ -120,7 +120,11 @@ enum ContactsLive {
         }
 
         if !view.groups.isEmpty {
-            model.groupsHeader = (loc.t("contacts.sectionGroups"), loc.t("contacts.manage"))
+            // 新建分组, as Android's header says. It read 管理 and led nowhere
+            // — a header action naming a page this client does not have.
+            // Recorded in 058's results as a label changed to match the phone
+            // beside it, not a screen invented here.
+            model.groupsHeader = (loc.t("contacts.sectionGroups"), loc.t("contacts.groupNew"))
             model.groups = view.groups.map {
                 GroupRowModel(
                     name: $0.name,

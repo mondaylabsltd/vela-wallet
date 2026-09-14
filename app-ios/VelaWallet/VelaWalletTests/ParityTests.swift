@@ -300,6 +300,36 @@ struct ParityTests {
         #expect(model.rpcFix.field.value == "https://rpc.gnosischain.example")
     }
 
+    // MARK: - 分组
+
+    /// The groups header offered 管理 — a page this client does not have — and
+    /// nothing happened. Android's says 新建分组 and creates one.
+    @Test func theGroupsHeaderOffersToCreateAGroup() throws {
+        let group = try CoreJSON.decode(ContactGroupWire.self, from: [
+            "id": "g1", "name": "Team", "color": NSNull(), "members": [],
+        ])
+        // With a contact in the book: an EMPTY book draws its own state and no
+        // section headers at all — which is its own finding, below.
+        let view = try CoreJSON.decode(ContactsViewWire.self, from: [
+            "loaded": true,
+            "contacts": [[
+                "address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "name": "Alice", "resolved_name": NSNull(), "resolved_source": NSNull(),
+                "kind": "eoa", "favorite": false, "note": NSNull(), "tx_count": 0,
+                "last_used_ms": 0, "first_seen_ms": 0, "source": "manual",
+            ]],
+            "sections": [], "groups": [
+                ["id": "g1", "name": "Team", "color": NSNull(), "members": []],
+            ],
+            "last_import": NSNull(), "import_failure": NSNull(),
+            "export": NSNull(), "recipient": NSNull(),
+        ])
+        let model = ContactsLive.home(view, loc: loc)
+        #expect(model.groupsHeader?.action == loc.t("contacts.groupNew"))
+        #expect(model.groupsHeader?.action != loc.t("contacts.manage"))
+        #expect(group.name == "Team")
+    }
+
     // MARK: - 语言
 
     /// The stored choice decides the app's language. It was written by the
@@ -315,6 +345,16 @@ struct ParityTests {
         target.apply("en")
         #expect(target.resolvedLanguage == "en")
         #expect(japanese != target.t("componentsTx.receipt.done"))
+    }
+
+    /// `VELA_LANG` pins the language, and a stored preference does not
+    /// override it — that pin is how the screenshot sweep and the acceptance
+    /// tests ask for one, and it broke the moment `apply` landed.
+    @Test func anExplicitPinOutranksTheStoredChoice() {
+        let pinned = Loc(overrideTag: "zh", preferredLanguages: ["en-US"])
+        #expect(pinned.resolvedLanguage == "zh")
+        pinned.apply("ja")
+        #expect(pinned.resolvedLanguage == "zh")
     }
 
     /// `auto` means the device decides, which is what every other client

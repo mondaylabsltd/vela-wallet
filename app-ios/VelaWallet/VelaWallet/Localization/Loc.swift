@@ -41,9 +41,18 @@ final class Loc {
         self.engine = engine
 
         self.preferredLanguages = preferredLanguages
+        // `VELA_LANG` PINS the language: it is how the screenshot sweep and the
+        // acceptance tests ask for a specific one, and a stored preference that
+        // overrode it would make every pinned run show the device's language
+        // instead. Found the moment `apply` landed — the storage page came up
+        // in English under `VELA_LANG=zh`.
+        self.pinned = overrideTag != nil
         let candidate = overrideTag ?? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
         adopt(candidate)
     }
+
+    /// Whether an explicit tag was supplied at construction.
+    private var pinned = false
 
     /// The device's own order, kept so `auto` can be re-resolved later without
     /// asking `Locale` again mid-session (it does not change while we run, and
@@ -61,6 +70,7 @@ final class Loc {
     /// Safe to call repeatedly, and safe to call with the language already
     /// active — the engine is asked once and the catalog is loaded once.
     func apply(_ stored: String) {
+        guard !pinned else { return }
         let wanted = stored == "auto" || stored.isEmpty
             ? Self.mapPreferredLanguage(preferredLanguages.first ?? "en")
             : (Self.supported.contains(stored) ? stored : Self.mapPreferredLanguage(stored))

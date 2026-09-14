@@ -21,6 +21,9 @@ struct ContactsScreen: View {
     let model: ContactsHomeModel
     var onOpenContact: (ContactModel) -> Void = { _ in }
     var onOpenGroup: (GroupRowModel) -> Void = { _ in }
+    /// 新建分组, from the groups header. Absent in the gallery, where the
+    /// header is a picture of a section that already has its groups.
+    var onNewGroup: (() -> Void)?
     /// Leaving 通讯录. Without it this screen is a place a person can reach and
     /// not get out of — which is what the tab bar looked like before spec 050.
     var onSelectTab: (WalletTab) -> Void = { _ in }
@@ -229,7 +232,8 @@ struct ContactsScreen: View {
 
     @ViewBuilder private var groupsBlock: some View {
         if let header = model.groupsHeader {
-            WalletSectionHeader(title: header.title, action: header.action)
+            WalletSectionHeader(title: header.title, action: header.action,
+                                onAction: onNewGroup)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.top, Tokens.Space.s24)
             VStack(spacing: Tokens.Space.s0) {

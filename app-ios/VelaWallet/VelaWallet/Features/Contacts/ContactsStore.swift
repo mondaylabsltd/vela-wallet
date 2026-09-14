@@ -186,6 +186,23 @@ final class ContactsStore {
         ]))
     }
 
+    /// 新建分组 / 重命名分组 — the same event for both, which is what `id`
+    /// being optional in `ContactGroupInput` means: absent mints a group,
+    /// present renames the one it names. **Members are not sent**: `nil` there
+    /// tells the core to leave the membership alone, and `[]` would empty a
+    /// group somebody only meant to rename.
+    func saveGroup(id: String?, name: String) {
+        core.dispatch(CoreJSON.string([
+            "type": "group_save",
+            "input": [
+                "id": id ?? NSNull(),
+                "name": name,
+                "color": NSNull(),
+                "members": NSNull(),
+            ] as [String: Any],
+        ]))
+    }
+
     func deleteGroup(id: String) {
         core.dispatch(CoreJSON.string(["type": "group_delete", "id": id]))
     }

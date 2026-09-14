@@ -33,6 +33,8 @@ struct GroupDetailScreen: View {
     /// 导入到本组 and 导出本组, from the ⋯ menu.
     var onImportIntoGroup: () -> Void = {}
     var onExportGroup: () -> Void = {}
+    /// 编辑分组 — the menu's first item, which dismissed until 058.
+    var onRenameGroup: (() -> Void)?
 
     /// Whether the ⋯ menu is up. The picker's presence is the core's answer.
     @State private var menuShown = false
@@ -86,13 +88,15 @@ struct GroupDetailScreen: View {
                 ActionMenuSheet(
                     model: sheet,
                     // 编辑分组 · 导入到本组 · 导出本组 · 删除分组, in the drawn
-                    // order. The first still has no form drawn for it and
-                    // dismisses; the other three now act.
+                    // order. All four act since 058 — the first asks for the
+                    // name with the platform's own prompt, which is the shape
+                    // the explore tab's 新建分组 already uses on this client.
                     onItem: { item in
                         menuShown = false
                         if item.destructive {
                             onDeleteGroup()
                         } else if let index = sheet.items.firstIndex(where: { $0.id == item.id }) {
+                            if index == 0 { onRenameGroup?() }
                             if index == 1 { onImportIntoGroup() }
                             if index == 2 { onExportGroup() }
                         }

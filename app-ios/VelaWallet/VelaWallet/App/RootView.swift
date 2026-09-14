@@ -57,6 +57,14 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
+    /// Naming a group — new, or renaming the one it names.
+    ///
+    /// The platform's own prompt, which is the shape the explore tab's
+    /// 新建分组 already uses on this client (053). Android draws a bottom
+    /// sheet for it; the alert is this client's existing precedent for "ask
+    /// for one short string", and no new sheet is invented here.
+    @State private var groupNaming: GroupNaming?
+    @State private var groupNameDraft = ""
     /// The rescue the hero's status line opened, and what it is about.
     @State private var rescue: SettingsOverlay?
     @State private var rescueChain: Int?
@@ -493,6 +501,24 @@ struct RootView: View {
         .environment(\.identiconViewer, { seed, name in
             identiconViewer = IdenticonSubject(seed: seed, name: name)
         })
+        // 新建分组 / 重命名分组.
+        .alert(groupNaming?.title ?? "", isPresented: Binding(
+            get: { groupNaming != nil },
+            set: { if !$0 { groupNaming = nil } }
+        )) {
+            TextField(groupNaming?.title ?? "", text: $groupNameDraft)
+            Button(loc.t("contacts.cancel"), role: .cancel) { groupNaming = nil }
+            Button(loc.t("contacts.save")) {
+                let name = groupNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                let target = groupNaming
+                groupNaming = nil
+                groupNameDraft = ""
+                // An empty name is not a group. The core would refuse it, and
+                // asking it to is how a blank row appears in a list.
+                guard !name.isEmpty else { return }
+                contacts.saveGroup(id: target?.id, name: name)
+            }
+        }
         .sheet(item: $identiconViewer) { subject in
             IdenticonViewerSheet(
                 loc: loc,
@@ -503,6 +529,13 @@ struct RootView: View {
             .presentationDetents([.medium, .large])
             .themed(scheme)
         }
+    }
+
+    /// Which group is being named. `id == nil` is a new one.
+    struct GroupNaming: Identifiable, Equatable {
+        let id: String?
+        let current: String
+        var title: String
     }
 
     /// Whose artwork the viewer is showing. A value, not a pair of `@State`s,
@@ -1284,7 +1317,14 @@ struct RootView: View {
                             // seeded straight into the send machine.
                             onBatchSend: { sendToGroup(group) },
                             onImportIntoGroup: { importContacts(intoGroup: group.id) },
-                            onExportGroup: { exportContacts(groupId: group.id) }
+                            onExportGroup: { exportContacts(groupId: group.id) },
+                            onRenameGroup: {
+                                groupNameDraft = group.name
+                                groupNaming = GroupNaming(
+                                    id: group.id, current: group.name,
+                                    title: loc.t("contacts.groupRename")
+                                )
+                            }
                         )
                     } else {
                         contactsHome(view)
@@ -1323,6 +1363,11 @@ struct RootView: View {
                 if let group = view.groups.first(where: { $0.name == row.name }) {
                     contactsRoute = .group(id: group.id)
                 }
+            },
+            onNewGroup: {
+                groupNameDraft = ""
+                groupNaming = GroupNaming(id: nil, current: "",
+                                          title: loc.t("contacts.groupNew"))
             },
             onSelectTab: selectTab,
             onDelete: { contacts.delete(address: $0) },
