@@ -149,6 +149,10 @@ struct RootView: View {
     /// by the payroll importer and the address book, because they are the same
     /// platform affordance asked for twice.
     @State private var documents: UIKitDocumentPorts
+    /// What this person chose about how the app looks and counts (spec 056).
+    /// No machine owns it — storage keys with a reader, on the same spellings
+    /// every client writes.
+    @State private var preferences: Preferences
     /// The camera behind the scanner (spec 055). App-resident so the session
     /// survives the surface's own rebuilds — reconfiguring it drops frames for
     /// a beat, which on a viewfinder reads as the camera stuttering.
@@ -318,6 +322,13 @@ struct RootView: View {
         // fallback of 1 would pay out the fiat figure in tokens.
         let documentPorts = UIKitDocumentPorts()
         _documents = State(initialValue: documentPorts)
+        // Read before the first frame: a theme or a text size adopted one
+        // render late is a visible flash of the wrong one.
+        let prefs = Preferences(store: shelf)
+        prefs.boot()
+        Formats.apply(prefs)
+        UiScale.apply(prefs)
+        _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
             documents: { documentPorts }
@@ -344,7 +355,19 @@ struct RootView: View {
     }
 
     private var scheme: ColorScheme {
-        ThemeOverride.launchScheme ?? systemScheme
+        // The launch pin (a screenshot sweep) outranks everything; then the
+        // person's own choice; then the OS. `system` pins NOTHING — that is the
+        // whole meaning of the choice, and a resolved "dark" would stop
+        // following an OS that changes at sunset.
+        ThemeOverride.launchScheme ?? chosenScheme ?? systemScheme
+    }
+
+    private var chosenScheme: ColorScheme? {
+        switch preferences.theme {
+        case .light: .light
+        case .dark: .dark
+        case .system: nil
+        }
     }
 
     var body: some View {
@@ -412,7 +435,7 @@ struct RootView: View {
             #endif
         }
         .themed(scheme)
-        .preferredColorScheme(ThemeOverride.launchScheme)
+        .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
     }
 
     private var themedBackground: some View {

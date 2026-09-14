@@ -165,14 +165,17 @@ enum WalletLive {
     /// decimals can be subordinated, which is the design language's rule about
     /// money: the magnitude reads first.
     static func split(_ total: Double) -> (String, String) {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        let text = formatter.string(from: NSNumber(value: total))
-            ?? String(format: "%.2f", total)
-        guard let separator = text.lastIndex(of: ".") else { return (text, "00") }
-        return (String(text[..<separator]), String(text[text.index(after: separator)...]))
+        // The PERSON's preset, not the device's idea of a locale (spec 056).
+        // The decimal mark is whatever they chose, so the split looks for that
+        // and not for a dot.
+        let text = Formats.number(
+            total, minimumFractionDigits: 2, maximumFractionDigits: 2
+        )
+        let mark = Formats.separators(Formats.current.number).decimal
+        guard let separator = text.range(of: mark, options: .backwards) else {
+            return (text, "00")
+        }
+        return (String(text[..<separator.lowerBound]), String(text[separator.upperBound...]))
     }
 
     // MARK: - The assets
@@ -212,11 +215,13 @@ enum WalletLive {
             // that rather than showing a `$0.00` nobody should read as a value.
             return .noPrice("")
         }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = display.code
+        // The person's own preset, with the currency's glyph in front of it —
+        // a system currency formatter would put both the marks and the symbol
+        // wherever the DEVICE's locale says, which is not what they chose.
         let value = amount * price * display.rate
-        return .value(formatter.string(from: NSNumber(value: value)) ?? "")
+        return .value(display.glyph + Formats.number(
+            value, minimumFractionDigits: 2, maximumFractionDigits: 2
+        ))
     }
 
     /// The same brand colours the settings list uses, and the same neutral for a
@@ -310,14 +315,10 @@ extension WalletLive {
         let day = Date(timeIntervalSince1970: dayStartMs / 1000)
         if calendar.isDateInToday(day) { return loc.t("componentsUi.dayGroup.today") }
         if calendar.isDateInYesterday(day) { return loc.t("componentsUi.dayGroup.yesterday") }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: loc.resolvedLanguage)
-        // A month and a day, in whatever order the person's language puts them.
-        // No corpus key: the format is the locale's, not copy anybody wrote.
-        formatter.setLocalizedDateFormatFromTemplate(
-            calendar.isDate(day, equalTo: Date(), toGranularity: .year) ? "MMMd" : "yMMMd"
-        )
-        return formatter.string(from: Date(timeIntervalSince1970: timestamp))
+        // The person's own DATE preset (spec 056). Until then this read the
+        // device's locale, which is the thing the presets exist to override:
+        // one wallet, one order, everywhere they open it.
+        return Formats.date(Date(timeIntervalSince1970: timestamp))
     }
 
     /// The amount as a row shows it — grouped, and never rounded UP.

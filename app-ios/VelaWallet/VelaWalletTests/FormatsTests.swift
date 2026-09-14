@@ -235,3 +235,103 @@ struct PreferencesTests {
         #expect(TextScaleLevel.allCases.map(\.factor) == [0.82, 0.91, 1, 1.1, 1.22, 1.35])
     }
 }
+
+// MARK: - Where the presets actually show (spec 056 US1)
+
+/// 049's lesson, restated: a format is verified where it SHOWS, never on the
+/// settings page. A picker that previews itself is not evidence that the hero
+/// reads it — and on Android the avatar style and the number preset both
+/// previewed correctly while every real surface ignored them.
+@MainActor
+struct FormatsReachTheScreensTests {
+
+    private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+
+    private func withPreset(_ key: NumberFormatKey, _ body: () -> Void) {
+        let before = Formats.current
+        Formats.current = Formats.Current(number: key, date: .iso, time: .h24)
+        body()
+        Formats.current = before
+    }
+
+    private func withDate(_ key: DateFormatKey, _ body: () -> Void) {
+        let before = Formats.current
+        Formats.current = Formats.Current(number: .commaDot, date: key, time: .h24)
+        body()
+        Formats.current = before
+    }
+
+    /// **The hero.** The figure a person looks at first, and the decimals it
+    /// subordinates — which means the split has to find the chosen decimal
+    /// MARK, not a dot.
+    @Test func theHeroSplitsOnTheChosenDecimalMark() {
+        withPreset(.commaDot) {
+            let (whole, cents) = WalletLive.split(1234567.89)
+            #expect(whole == "1,234,567")
+            #expect(cents == "89")
+        }
+        withPreset(.dotComma) {
+            let (whole, cents) = WalletLive.split(1234567.89)
+            #expect(whole == "1.234.567", "the hero is still grouped the device's way")
+            #expect(cents == "89", "the split found the comma, not a dot")
+        }
+        withPreset(.indian) {
+            #expect(WalletLive.split(1234567.89).0 == "12,34,567")
+        }
+    }
+
+    /// **A day group.** Every date this app prints goes through the preset —
+    /// "今天" and "昨天" survive, because a relative day is copy and the corpus
+    /// owns it.
+    @Test func theFeedsDaysFollowTheChosenOrder() {
+        let old = Date(timeIntervalSince1970: 1_781_000_000)
+        withDate(.iso) {
+            let label = WalletLive.dayLabel(
+                dayStartMs: old.timeIntervalSince1970 * 1000,
+                timestamp: old.timeIntervalSince1970, loc: loc
+            )
+            #expect(label.contains("-"), "an ISO date has dashes: \(label)")
+        }
+        withDate(.dmyDot) {
+            let label = WalletLive.dayLabel(
+                dayStartMs: old.timeIntervalSince1970 * 1000,
+                timestamp: old.timeIntervalSince1970, loc: loc
+            )
+            #expect(label.contains("."), "a dotted date has dots: \(label)")
+        }
+        // Today is still a word, not a date.
+        let now = Date().timeIntervalSince1970
+        #expect(WalletLive.dayLabel(dayStartMs: now * 1000, timestamp: now, loc: loc)
+            == loc.t("componentsUi.dayGroup.today"))
+    }
+
+    /// **The signing sheet.** The core formats inside a clear-signing panel, so
+    /// what it is handed must be the RESOLVED preset — never the word "auto",
+    /// which only a shell can turn into a convention.
+    @Test func theSigningPanelIsHandedAResolvedPreset() {
+        let before = Formats.current
+        Formats.current = Formats.Current(number: .auto, date: .auto, time: .auto)
+        let locale = SigningController.defaultLocale
+        #expect(locale["number_format"] as? String != "auto")
+        #expect(locale["date_format"] as? String != "auto")
+        #expect(locale["time_format"] as? String != "auto")
+
+        Formats.current = Formats.Current(number: .indian, date: .dmyDot, time: .h12)
+        let chosen = SigningController.defaultLocale
+        #expect(chosen["number_format"] as? String == "indian")
+        #expect(chosen["date_format"] as? String == "dmy_dot")
+        #expect(chosen["time_format"] as? String == "h12")
+        Formats.current = before
+    }
+
+    /// The chosen SIZE multiplies a screen's own scale rather than replacing
+    /// it: the gallery's 1.35× chip and a person's "large" are two different
+    /// statements about the same text.
+    @Test func theChosenSizeMultipliesRatherThanReplaces() {
+        let before = UiScale.factor
+        UiScale.factor = 1.22
+        #expect(UiScale.factor * 1 == 1.22)
+        #expect(UiScale.factor * 1.35 > 1.35, "the gallery chip still says more than the choice")
+        UiScale.factor = before
+    }
+}

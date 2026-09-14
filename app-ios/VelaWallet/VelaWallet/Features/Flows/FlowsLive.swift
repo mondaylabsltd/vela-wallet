@@ -228,15 +228,15 @@ enum FlowsLive {
     /// emits epoch seconds and leaves both to the shell, which is where the
     /// device's clock and locale live.
     private static func timestamp(_ seconds: Double, loc: Loc) -> String {
+        // The PERSON's presets (spec 056), not the device's locale: a wallet
+        // where the same transaction reads two ways on two of their machines is
+        // the thing the presets exist to prevent. "今天" survives — a relative
+        // day is copy, and the corpus owns it.
         let date = Date(timeIntervalSince1970: seconds)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: loc.resolvedLanguage)
         if Calendar.current.isDateInToday(date) {
-            formatter.setLocalizedDateFormatFromTemplate("Hm")
-            return "\(loc.t("componentsUi.dayGroup.today")) \(formatter.string(from: date))"
+            return "\(loc.t("componentsUi.dayGroup.today")) \(Formats.time(date))"
         }
-        formatter.setLocalizedDateFormatFromTemplate("yMMMd Hm")
-        return formatter.string(from: date)
+        return Formats.dateTime(date)
     }
 
     // MARK: - T2, one token
@@ -300,10 +300,9 @@ enum FlowsLive {
     }
 
     private static func money(_ value: Double, _ display: WalletLive.Display) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = display.code
-        return formatter.string(from: NSNumber(value: value)) ?? ""
+        display.glyph + Formats.number(
+            value, minimumFractionDigits: 2, maximumFractionDigits: 2
+        )
     }
 
     // MARK: - R1 / R2, the receive screens

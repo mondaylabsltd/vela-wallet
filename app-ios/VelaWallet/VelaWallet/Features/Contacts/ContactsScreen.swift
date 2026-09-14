@@ -84,7 +84,7 @@ struct ContactsScreen: View {
             WalletTabBar(tabs: model.tabs, selected: .contacts, onSelect: onSelectTab)
         }
         .background(theme.bgBase.ignoresSafeArea())
-        .environment(\.walletTextScale, model.textScale)
+        .walletTextScale(model.textScale)
         // ONE sheet, whose CONTENT changes — never two `.sheet` modifiers on
         // one view.
         //
@@ -101,7 +101,7 @@ struct ContactsScreen: View {
             case .menu(let menu):
                 ActionMenuSheet(model: menu, onItem: { item in confirm(item) },
                                 onCancel: { dismissSheet() })
-                    .environment(\.walletTextScale, model.textScale)
+                    .walletTextScale(model.textScale)
             case .form(let form):
                 ContactFormSheet(
                     model: form,
@@ -110,7 +110,7 @@ struct ContactsScreen: View {
                     onSave: onSaveForm,
                     onCancel: { dismissSheet() }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case nil:
                 EmptyView()
             }

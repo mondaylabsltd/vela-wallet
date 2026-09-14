@@ -82,11 +82,11 @@ struct WalletScreen: View {
             WalletTabBar(tabs: model.tabs, onSelect: onSelectTab)
         }
         .background(theme.bgBase.ignoresSafeArea())
-        .environment(\.walletTextScale, model.textScale)
+        .walletTextScale(model.textScale)
         .sheet(isPresented: $sheetShown) {
             if let sheet = model.sheet {
                 ChainSelectSheet(model: sheet)
-                    .environment(\.walletTextScale, model.textScale)
+                    .walletTextScale(model.textScale)
                     .presentationDetents([.height(WalletGeometry.chainSheetHeight)])
                     .presentationDragIndicator(.hidden)
                     .presentationCornerRadius(Tokens.Radius.r20)

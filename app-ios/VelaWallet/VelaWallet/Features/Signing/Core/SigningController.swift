@@ -481,16 +481,20 @@ final class SigningController {
 
     /// How numbers and dates are written inside a clear-signing panel.
     ///
-    /// **The app's own format preferences are 056's**, and until then this is
-    /// the shipped default rather than a reading of what somebody chose. A
-    /// signing sheet that printed a date in a format the rest of the app does
-    /// not use is a small wrongness, and it is recorded rather than hidden.
-    static let defaultLocale: [String: Any] = [
-        "number_format": "comma_dot",
-        "date_format": "iso",
-        "time_format": "h24",
-        "tz_offset_minutes": TimeZone.current.secondsFromGMT() / 60,
-    ]
+    /// **The person's own presets** (spec 056). 053 shipped the defaults here
+    /// and recorded it: a signing sheet printing a date in a format the rest of
+    /// the app does not use is a small wrongness, and this is the cut that
+    /// removes it. The core does the formatting inside the panel, so what it
+    /// needs is the RESOLVED preset — never the word "auto", which only a shell
+    /// can turn into a convention.
+    static var defaultLocale: [String: Any] {
+        [
+            "number_format": Formats.resolve(Formats.current.number).rawValue,
+            "date_format": Formats.resolve(Formats.current.date).rawValue,
+            "time_format": Formats.resolve(Formats.current.time).rawValue,
+            "tz_offset_minutes": TimeZone.current.secondsFromGMT() / 60,
+        ]
+    }
 
     /// `eth_signTypedData_v4`'s payload is `[address, json]` — the JSON is the
     /// **second** parameter.

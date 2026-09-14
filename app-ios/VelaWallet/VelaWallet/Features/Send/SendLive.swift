@@ -355,7 +355,7 @@ enum SendLive {
         guard converted.isFinite, converted < 1e15 else { return "" }
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
-        return "≈ \(display.glyph)\(String(format: "%.2f", converted))"
+        return "≈ \(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
     private static func feeRow(

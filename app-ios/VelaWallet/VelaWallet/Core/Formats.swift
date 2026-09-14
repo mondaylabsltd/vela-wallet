@@ -23,6 +23,33 @@ import Foundation
 
 enum Formats {
 
+    // MARK: - What the app is currently set to
+
+    /// The three presets in force, as the person chose them.
+    ///
+    /// A shared value rather than a parameter threaded through twenty
+    /// signatures — which is exactly the shape web has (`formatNumber` reads
+    /// `preferences.numberFormat` when no key is passed). Every renderer here
+    /// only READS it; it is written once at boot and again when somebody picks
+    /// something, and a test can set it.
+    struct Current {
+        var number: NumberFormatKey = .auto
+        var date: DateFormatKey = .auto
+        var time: TimeFormatKey = .auto
+    }
+
+    nonisolated(unsafe) static var current = Current()
+
+    /// Adopt what was chosen. Called at boot and on every pick.
+    @MainActor
+    static func apply(_ preferences: Preferences) {
+        current = Current(
+            number: preferences.numberFormat,
+            date: preferences.dateFormat,
+            time: preferences.timeFormat
+        )
+    }
+
     // MARK: - Presets
 
     private struct NumberStyle {
@@ -299,6 +326,33 @@ enum Formats {
     private static func pad(_ value: Int) -> String {
         value < 10 ? "0\(value)" : String(value)
     }
+
+    // MARK: - The chosen preset, for callers with nothing else to say
+
+    static func decimal(_ value: String) -> String { decimal(value, current.number) }
+
+    static func number(
+        _ value: Double, minimumFractionDigits: Int = 0, maximumFractionDigits: Int = 2
+    ) -> String {
+        number(value, current.number,
+               minimumFractionDigits: minimumFractionDigits,
+               maximumFractionDigits: maximumFractionDigits)
+    }
+
+    static func tokenAmount(_ value: Double, compact wantCompact: Bool = false) -> String {
+        tokenAmount(value, current.number, compact: wantCompact)
+    }
+
+    static func compact(_ value: Double) -> String { compact(value, current.number) }
+
+    static func date(_ date: Date) -> String { self.date(date, current.date) }
+    static func time(_ date: Date) -> String { time(date, current.time) }
+    static func dateTime(_ date: Date) -> String {
+        dateTime(date, current.date, current.time)
+    }
+
+    static func groupDigits(_ digits: String) -> String { groupDigits(digits, current.number) }
+    static func parse(_ text: String) -> String { parse(text, current.number) }
 
     // MARK: - The pickers' examples
 

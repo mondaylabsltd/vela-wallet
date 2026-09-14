@@ -152,7 +152,7 @@ struct FlowHost: View {
 
     var body: some View {
         base
-            .environment(\.walletTextScale, model.textScale)
+            .walletTextScale(model.textScale)
             // The refusal surface belongs to the SCREEN, not only to the sheet.
             //
             // Spec 051 put it inside `FlowSheetHost` because the thing that
@@ -181,7 +181,7 @@ struct FlowHost: View {
                         onPickChain?(chainId)
                         pickingChain = false
                     })
-                    .environment(\.walletTextScale, model.textScale)
+                    .walletTextScale(model.textScale)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.hidden)
                     .presentationCornerRadius(Tokens.Radius.r20)
@@ -220,7 +220,7 @@ struct FlowHost: View {
                         alert: alert,
                         onDismissAlert: onDismissAlert
                     )
-                        .environment(\.walletTextScale, model.textScale)
+                        .walletTextScale(model.textScale)
                         .presentationDragIndicator(.hidden)
                         .presentationCornerRadius(Tokens.Radius.r20)
                         .presentationBackground(theme.bgBase)

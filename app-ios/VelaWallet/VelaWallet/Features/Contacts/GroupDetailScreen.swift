@@ -74,7 +74,7 @@ struct GroupDetailScreen: View {
                 .padding(.bottom, Tokens.Space.s8)
         }
         .background(theme.bgBase.ignoresSafeArea())
-        .environment(\.walletTextScale, model.textScale)
+        .walletTextScale(model.textScale)
         // ONE sheet, whose content changes — the rule the contacts list paid
         // for in dead taps.
         .sheet(isPresented: Binding(
@@ -99,7 +99,7 @@ struct GroupDetailScreen: View {
                     },
                     onCancel: { menuShown = false }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case .members(let pick):
                 MultiPickSheet(
                     model: pick,
@@ -107,7 +107,7 @@ struct GroupDetailScreen: View {
                     onSave: onSaveMembers,
                     onCancel: { onCancelMembers() }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case nil:
                 EmptyView()
             }

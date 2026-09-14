@@ -117,3 +117,29 @@ extension EnvironmentValues {
         set { self[WalletTextScaleKey.self] = newValue }
     }
 }
+
+/// The size a person chose in 设置 → 字号 (spec 056).
+///
+/// A shared value rather than a parameter threaded through every model, for the
+/// same reason `Formats.current` is: every renderer only READS it, and it is
+/// written once at boot and again when somebody moves the slider.
+///
+/// It MULTIPLIES a screen's own scale rather than replacing it — the gallery's
+/// 1.35× chip and a person's "large" are two different statements about the
+/// same text, and a screen that replaced one with the other would make the
+/// gallery lie about what somebody sees.
+enum UiScale {
+    nonisolated(unsafe) static var factor: CGFloat = 1
+
+    @MainActor
+    static func apply(_ preferences: Preferences) {
+        factor = preferences.textScale.factor
+    }
+}
+
+extension View {
+    /// A screen's own text scale, times the person's chosen size.
+    func walletTextScale(_ modelScale: CGFloat) -> some View {
+        environment(\.walletTextScale, modelScale * UiScale.factor)
+    }
+}

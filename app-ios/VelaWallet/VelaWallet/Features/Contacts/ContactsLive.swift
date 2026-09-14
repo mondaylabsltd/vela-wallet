@@ -520,11 +520,9 @@ enum ContactsLive {
         calendar.timeZone = .current
         if calendar.isDateInToday(date) { return loc.t("time.today") }
         if calendar.isDateInYesterday(date) { return loc.t("time.yesterday") }
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
+        // The person's own preset (spec 056), like every other date this app
+        // prints.
+        return Formats.date(date)
     }
 
 }

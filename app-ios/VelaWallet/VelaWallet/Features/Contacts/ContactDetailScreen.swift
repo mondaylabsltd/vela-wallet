@@ -98,7 +98,7 @@ struct ContactDetailScreen: View {
             }
         }
         .background(theme.bgBase.ignoresSafeArea())
-        .environment(\.walletTextScale, model.textScale)
+        .walletTextScale(model.textScale)
         // ONE sheet, whose CONTENT changes. Three `.sheet` modifiers on one
         // view is what stopped the contacts list responding to taps at all
         // (the same defect, on the screen before this one).
@@ -121,7 +121,7 @@ struct ContactDetailScreen: View {
                     },
                     onCancel: { confirmShown = false }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case .form(let form):
                 ContactFormSheet(
                     model: form,
@@ -130,7 +130,7 @@ struct ContactDetailScreen: View {
                     onSave: onSaveForm,
                     onCancel: { onCancelForm() }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case .groups(let pick):
                 MultiPickSheet(
                     model: pick,
@@ -138,7 +138,7 @@ struct ContactDetailScreen: View {
                     onSave: onSaveGroups,
                     onCancel: { onCancelGroups() }
                 )
-                .environment(\.walletTextScale, model.textScale)
+                .walletTextScale(model.textScale)
             case nil:
                 EmptyView()
             }
