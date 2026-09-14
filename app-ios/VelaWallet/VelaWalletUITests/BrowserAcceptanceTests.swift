@@ -62,14 +62,51 @@ final class BrowserAcceptanceTests: XCTestCase {
         add(attachment)
     }
 
-    /// Wait for a `#verdict` line whose text contains `fragment`.
+    /// Connect, whether or not this origin is already granted.
+    ///
+    /// A grant persists across launches — that is the point of one — so a
+    /// second run of any of these tests is answered from the mirror with **no
+    /// sheet at all** (FR-007). A test that insisted on the sheet would fail
+    /// on its own success.
+    @discardableResult
+    private func connect(_ app: XCUIApplication) -> Bool {
+        app.webViews.buttons["Connect"].firstMatch.tap()
+        let approve = app.buttons["批准"].firstMatch
+        let asked = approve.waitForExistence(timeout: 12)
+        if asked { approve.tap() }
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_requestAccounts ok"),
+                      "the page was never connected")
+        return asked
+    }
+
+    /// Wait for the page's **latest** verdict to contain `fragment`.
+    ///
+    /// Reads the one-line `#last` element rather than scanning the page.
+    /// XCUITest re-snapshots the whole accessibility tree on every poll, and
+    /// this page grows as it works — so scanning cost ~30 seconds of wall
+    /// clock per check and the harness became slower than the chain it was
+    /// waiting for.
     @discardableResult
     private func waitForVerdict(
         _ app: XCUIApplication, containing fragment: String, timeout: TimeInterval = 30
     ) -> Bool {
-        let predicate = NSPredicate(format: "label CONTAINS %@", fragment)
-        let element = app.webViews.staticTexts.containing(predicate).firstMatch
-        return element.waitForExistence(timeout: timeout)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let lines = app.webViews.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "#verdict")
+            ).allElementsBoundByIndex
+            if let hit = lines.first(where: { $0.label.contains(fragment) }) {
+                // Attach the line itself. A hash the run proved and nobody
+                // wrote down is a hash somebody has to go and find again.
+                let note = XCTAttachment(string: hit.label)
+                note.name = "verdict"
+                note.lifetime = .keepAlways
+                add(note)
+                return true
+            }
+            _ = XCTWaiter.wait(for: [expectation(description: "poll")], timeout: 1.0)
+        }
+        return false
     }
 
     // MARK: - US1: a real page, with the wallet inside it
@@ -203,11 +240,19 @@ final class BrowserAcceptanceTests: XCTestCase {
 
         // The sheet opens ITSELF. A request that waited for somebody to find a
         // menu is a request the page thinks is hanging.
-        XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 20),
-                      "the consent surface never opened, or it did not name the origin")
-        attach(app.screenshot(), named: "device-browser-consent")
-
-        app.buttons["批准"].firstMatch.tap()
+        //
+        // Unless this origin is ALREADY granted — a grant persists, and then
+        // the answer comes from the mirror with no sheet at all (FR-007).
+        // Both are correct; the test says which happened.
+        let approve = app.buttons["批准"].firstMatch
+        if approve.waitForExistence(timeout: 15) {
+            XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].exists,
+                          "the consent surface did not name the origin")
+            attach(app.screenshot(), named: "device-browser-consent")
+            approve.tap()
+        } else {
+            attach(app.screenshot(), named: "device-browser-already-granted")
+        }
 
         // The golden multi-key Safe, which is a function of EVERY fixture key
         // — so seeing it is also proof the whole key set was used.
@@ -257,4 +302,92 @@ final class BrowserAcceptanceTests: XCTestCase {
                       "eth_sign was not refused as policy")
         attach(app.screenshot(), named: "device-browser-ethsign-refused")
     }
+
+    // MARK: - US4: a dApp asks for a transaction (the gate)
+
+    /// **Dust leaves the golden Safe because a page asked for it.**
+    ///
+    /// This is the cut's gate: everything after signing is easier to fix than
+    /// signing, and everything before it is worthless if signing does not
+    /// work.
+    ///
+    /// Spends real money on Gnosis, so it is behind `-DVELA_LIVE_SEND` like
+    /// 052's transfer. The parallel space signs it, so no finger is needed —
+    /// the founder's own passkey doing the same thing is SC-012 and is owed.
+    ///
+    /// What it proves, in order: the sheet describes the call in words before
+    /// hex, one slide signs it, the row is written pending at submit, and the
+    /// page is answered with a **transaction** hash rather than a
+    /// user-operation hash.
+    #if VELA_LIVE_SEND
+    func testDustLeavesTheSafeBecauseAPageAskedForIt() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+
+        connect(app)
+
+        app.webViews.buttons["Send dust"].firstMatch.tap()
+
+        // The sheet says what it DOES before it says what it is. A plain
+        // transfer with no calldata must read as a send, never as the blind
+        // "cannot decode" card — which is what Android shipped for one
+        // screenshot.
+        XCTAssertTrue(app.staticTexts["发送"].waitForExistence(timeout: 30),
+                      "the sheet did not describe a no-calldata transfer as a send")
+        attach(app.screenshot(), named: "device-browser-signing-sheet")
+
+        // The slide carries an accessibility action, because VoiceOver and
+        // Switch Control confirm by activating rather than dragging — so the
+        // harness activates it too, and a drag whose geometry drifts cannot
+        // make this test lie.
+        // `matching`, not `containing`: `containing` finds elements whose
+        // DESCENDANTS match, and the slide is a single accessibility element
+        // with no children — so `containing` silently matched an ancestor,
+        // reported it enabled, and tapped a container that does nothing.
+        let slide = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "滑动以确认")
+        ).firstMatch
+        XCTAssertTrue(slide.waitForExistence(timeout: 20), "the confirm slide is missing")
+        XCTAssertTrue(slide.isEnabled,
+                      "the slide is shut — one of the three gating machines never said yes")
+
+        // **A real drag, not a tap.**
+        //
+        // The slide carries an `accessibilityAction` so VoiceOver and Switch
+        // Control can confirm by activating — but XCUITest's `tap()`
+        // synthesises a touch at the element's centre rather than invoking
+        // that action. The drag gesture then sees a press at ~50% of the
+        // track, which is under the 88% commit threshold, and resets. The
+        // sheet is left looking exactly as if nothing had been tapped, which
+        // is what it was.
+        let knob = slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
+        let end = slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
+        knob.press(forDuration: 0.05, thenDragTo: end)
+
+        // **The wallet's own surface first, and the page's second.**
+        //
+        // Reading the page costs a full accessibility snapshot of rendered
+        // web content on every poll; reading the sheet costs almost nothing.
+        // So the submit is observed where it is cheap — and the sheet saying
+        // 已提交 is the stronger claim anyway: it means the RELAY accepted the
+        // operation, not merely that some string reached the page.
+        let submitted = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "已提交")
+        ).firstMatch
+        let accepted = submitted.waitForExistence(timeout: 120)
+        attach(app.screenshot(), named: "device-browser-after-slide")
+        XCTAssertTrue(accepted,
+                      "the relay never accepted the operation — the sheet never said 已提交")
+
+        // Then the page, once. The receipt wait can take a couple of minutes,
+        // and a transaction hash is what a dApp must be handed.
+        let answered = waitForVerdict(
+            app, containing: "#verdict eth_sendTransaction ok \"0x", timeout: 150
+        )
+        attach(app.screenshot(), named: "device-browser-sent")
+        XCTAssertTrue(answered, "the page never got a hash back")
+    }
+    #endif
 }

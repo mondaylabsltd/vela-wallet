@@ -237,3 +237,58 @@ by a failing assertion. The test failed on the button's label being English in
 a Chinese app; the panel behind it was wrong for a completely different reason,
 and an assertion on "Approve" alone would have been made to pass without ever
 seeing it.
+
+## Phase 4 — the gate: dust leaves the Safe because a page asked
+
+**Device-verified on the iPhone 11.** The golden Safe went from **0.50067** to
+**0.48967 xDAI** — 0.001 sent plus ~0.01 in fees — because a web page called
+`eth_sendTransaction`, and the page was answered with a transaction hash.
+
+The sheet, screenshotted before the slide:
+
+| | |
+|---|---|
+| who | `127.0.0.1:8137`, twice — host as name and as subtitle |
+| what | **发送**, −0.001 xDAI in the amount card, 接收方 with the short and the full address |
+| where | Gnosis |
+| the fee | ~0.01 xDAI, quoted, not guessed |
+| the technical details | present, collapsed |
+| the slide | armed only once all three machines agreed |
+
+**发送 and not the blind card.** A plain transfer with no calldata is the one
+transaction the core resolves without a descriptor, and drawing "cannot decode
+— 0 bytes" for it reads a dust send as an unknown contract call. Android
+shipped that for one screenshot; it never shipped here.
+
+### Three defects, all in driving the sheet, and the last one is a real lesson
+
+**① The slide query matched an ancestor.** `app.buttons.containing(predicate)`
+finds elements whose **descendants** match. The slide is a single accessibility
+element with no children, so `containing` matched some container above it,
+reported it enabled, and tapped a view that does nothing. `matching` is the
+query that finds the slide.
+
+**② `tap()` does not invoke an accessibility action.** With `matching` the
+right element was found — and tapping it still did nothing. The slide carries
+an `accessibilityAction` so VoiceOver and Switch Control can confirm by
+activating, but XCUITest's `tap()` synthesises a **touch at the element's
+centre**. The drag gesture then sees a press at ~50% of the track, under the
+88% commit threshold, and resets. The sheet was left looking exactly as if
+nothing had been tapped — which is what had happened.
+
+A slide-to-confirm has to be **dragged**: press near the knob, drag to the far
+end. That is also the only way the test exercises what a person does.
+
+**③ The harness was slower than the chain.** Every `waitForExistence` on the
+app snapshots the whole accessibility tree, web content included, and the test
+page rendered a pretty-printed state object that grew with every action —
+about 30 seconds of wall clock per poll. The page now keeps its last six
+verdict lines and a 400-character state dump, and the submit is watched on the
+**wallet's** surface (`已提交`) rather than the page's, because that is both
+cheaper and the stronger claim: it means the relay accepted the operation, not
+merely that a string reached a web page.
+
+The through-line of all three: **a test that cannot drive the product cannot
+report on it**, and each of these failed in a way that looked like a product
+defect. The second one especially — a sheet that does not respond to a tap is
+exactly what a broken confirm button looks like.

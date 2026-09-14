@@ -10,6 +10,7 @@
 <body>
   <h1>Vela test dApp</h1>
   <p>Spec 053's device harness. Every action prints a <code>#verdict</code> line, because XCUITest reads a WKWebView's RENDERED text and cannot see JavaScript state that was never painted.</p>
+  <pre id="last">#verdict boot waiting</pre>
   <pre id="verdicts">#verdict boot waiting</pre>
   <button id="connect" type="button">Connect</button>
   <button id="chain" type="button">Chain</button>
@@ -97,14 +98,25 @@ const keccak256 = (() => {
 
     const out = document.getElementById('out');
     const verdicts = document.getElementById('verdicts');
+    const last = document.getElementById('last');
     // XCUITest reads a WKWebView's RENDERED text through the accessibility
     // tree; JavaScript state that was never painted is invisible to it. So
     // every outcome gets a line on the page.
     const verdict = (name, value) => {
-      verdicts.textContent += '\n#verdict ' + name + ' ' + (typeof value === 'string' ? value : JSON.stringify(value));
+      const line = '#verdict ' + name + ' ' + (typeof value === 'string' ? value : JSON.stringify(value));
+      // The last six, not all of them. XCUITest walks the whole accessibility
+      // tree on every poll, so an unbounded log makes the harness slower than
+      // the chain it is waiting for — measured at ~30s per check.
+      verdicts.textContent = (verdicts.textContent + '\n' + line)
+        .split('\n').slice(-6).join('\n');
+      // One element, one line: what the device harness reads. The log above
+      // is for a person looking at a screenshot.
+      last.textContent = line;
     };
     const state = { announced: [], legacy: null, results: {}, events: [] };
-    const show = () => (out.textContent = JSON.stringify(state, null, 2));
+    // Bounded: the full object grows with every action, and XCUITest pays for
+    // every character of it on every poll.
+    const show = () => (out.textContent = JSON.stringify(state).slice(0, 400));
     window.addEventListener('eip6963:announceProvider', (ev) => {
       const { info, provider } = ev.detail;
       state.announced.push({ name: info.name, rdns: info.rdns, sameAsWindowEthereum: provider === window.ethereum, frozenInfo: Object.isFrozen(info) });
