@@ -89,8 +89,14 @@ struct IdenticonAvatar: View {
                 // itself and changes no real surface.
                 Circle().fill(theme.bgRaised)
                     .overlay(
+                        // A type ROLE scaled to this circle, not a system font
+                        // at a computed size: the same avatar is drawn at five
+                        // diameters, and the sanctioned seam is the only way a
+                        // letter here wears the same face as every other.
                         Text(verbatim: initial)
-                            .font(.system(size: size * 0.42, weight: .semibold))
+                            .typeRole(Typography.rowTitle.scaled(
+                                size / WalletGeometry.avatar
+                            ))
                             .foregroundStyle(theme.fgBase)
                     )
             } else if let image = IdenticonCache.image(
