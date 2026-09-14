@@ -195,7 +195,8 @@ struct ContactDetailScreen: View {
 
     private var hero: some View {
         VStack(spacing: Tokens.Space.s0) {
-            IdenticonAvatar(seed: model.contact.addressFull, size: ContactsGeometry.detailAvatar)
+            IdenticonAvatar(seed: model.contact.addressFull, size: ContactsGeometry.detailAvatar,
+                             name: model.contact.name)
             Text(verbatim: model.contact.name)
                 .typeRole(Typography.title.scaled(model.textScale))
                 .foregroundStyle(theme.fgBase)

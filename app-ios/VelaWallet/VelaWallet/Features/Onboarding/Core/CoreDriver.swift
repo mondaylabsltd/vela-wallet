@@ -55,6 +55,11 @@ final class CoreDriver {
     private let perform: ([String: Any]) async -> String
     private let onView: ([String: Any]) -> Void
     private let onFault: (Error) -> Void
+    /// The machine's own failure variant for an effect the core refused to
+    /// resolve. `nil` (or a machine with no such variant) leaves the loop
+    /// reporting the fault and nothing else — which is the honest thing when
+    /// there is no failure to express.
+    var toFailure: ((UInt64, Error) -> String?)?
 
     private var running: [UInt64: Task<Void, Never>] = [:]
     private var disposed = false
@@ -148,7 +153,27 @@ final class CoreDriver {
         do {
             apply(try CoreJSON.object(bridge.resolveEffect(effectId: id, resultJson: resultJson)))
         } catch {
+            // The core REFUSED this answer — a result it cannot deserialise,
+            // usually because the shell and the machine disagree about a shape.
+            //
+            // Reporting the fault is not enough. The machine asked a question
+            // and is still waiting for it: without an answer the screen sits on
+            // its loading state forever, which is exactly what somebody sees as
+            // a wallet that will not open (contract 048 §2).
+            //
+            // So the machine gets its OWN failure variant, exactly once, and
+            // then the fault is reported. If a second answer is refused too,
+            // the loop stops there rather than recursing.
             onFault(error)
+            guard let failure = toFailure?(id, error) else { return }
+            do {
+                apply(try CoreJSON.object(
+                    bridge.resolveEffect(effectId: id, resultJson: failure)
+                ))
+            } catch {
+                print("[vela-wallet] core: the failure answer was refused too — \(error)")
+                onFault(error)
+            }
         }
     }
 }

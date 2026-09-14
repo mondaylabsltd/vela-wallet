@@ -349,6 +349,7 @@ struct RootView: View {
         prefs.boot()
         Formats.apply(prefs)
         UiScale.apply(prefs)
+        AvatarPreference.apply(prefs)
         _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
@@ -1982,6 +1983,7 @@ struct RootView: View {
                 onAvatar: { id in
                     guard let style = AvatarStyle(rawValue: id) else { return }
                     preferences.setAvatarStyle(style)
+                    AvatarPreference.apply(preferences)
                 },
                 onTextScale: { index in
                     guard let level = TextScaleLevel.allCases[safe: index] else { return }

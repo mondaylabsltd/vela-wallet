@@ -170,11 +170,34 @@ actor AccountStore {
     /// write replaces the whole list anyway — but the wallet itself is not lost
     /// either way: its address derives from the passkey, so signing in rebuilds
     /// the record.
+    /// Whether the last read of `vela.accounts` FAILED, as opposed to finding
+    /// nothing.
+    ///
+    /// **They are not the same fact and a wallet must never confuse them**
+    /// (ANDROID-8, 2026-09-13: a test device's own account record went
+    /// missing). "No accounts" sends somebody to the create-a-wallet screen;
+    /// "this device's wallet data cannot be read" is a fault they can act on —
+    /// retry, or reset this device's copy. Reading the second as the first is
+    /// how a person is told they have no wallet.
+    private(set) var lastReadFailed = false
+
     private func readList(_ key: String) -> [[String: Any]] {
-        guard let raw = defaults.string(forKey: key),
-              let data = raw.data(using: .utf8),
-              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return [] }
+        guard let raw = defaults.string(forKey: key) else {
+            // Absent IS empty: a device that has never held a wallet.
+            if key == Key.accounts { lastReadFailed = false }
+            return []
+        }
+        guard let data = raw.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data),
+              let list = parsed as? [[String: Any]]
+        else {
+            // Present and unreadable. Torn, truncated, or written by something
+            // else — whatever it is, it is not "no accounts".
+            if key == Key.accounts { lastReadFailed = true }
+            print("[vela-wallet] accounts: \(key) is present and unreadable")
+            return []
+        }
+        if key == Key.accounts { lastReadFailed = false }
         return list
     }
 

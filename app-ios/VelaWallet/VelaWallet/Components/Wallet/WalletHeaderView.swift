@@ -29,7 +29,7 @@ struct WalletHeaderView: View {
         HStack(spacing: Tokens.Space.s12) {
             if let onIdenticon {
                 Button(action: onIdenticon) {
-                    IdenticonAvatar(seed: model.identiconSeed, size: WalletGeometry.avatar)
+                    IdenticonAvatar(seed: model.identiconSeed, size: WalletGeometry.avatar, name: model.name)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(identiconLabel ?? "")

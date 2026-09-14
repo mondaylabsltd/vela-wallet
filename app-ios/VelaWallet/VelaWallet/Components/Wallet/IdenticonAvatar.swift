@@ -66,6 +66,10 @@ struct IdenticonAvatar: View {
 
     let seed: String
     let size: CGFloat
+    /// The name this avatar belongs to, for the initials style. Absent where
+    /// there is no name to take one from — an address alone has no initial,
+    /// and a letter cut from hex would be a face for nobody.
+    var name: String?
 
     var body: some View {
         Group {
@@ -78,6 +82,17 @@ struct IdenticonAvatar: View {
             // somebody had been chosen (device-found, spec 052 phase 3).
             if seed.isEmpty {
                 Circle().fill(theme.bgSunken)
+            } else if AvatarPreference.style == .initials, let initial = initial {
+                // 首字母 — the style a person chose (spec 057). It was stored
+                // and read by nothing, which is the same defect Android 049
+                // found on its own settings page: a control that previews
+                // itself and changes no real surface.
+                Circle().fill(theme.bgRaised)
+                    .overlay(
+                        Text(verbatim: initial)
+                            .font(.system(size: size * 0.42, weight: .semibold))
+                            .foregroundStyle(theme.fgBase)
+                    )
             } else if let image = IdenticonCache.image(
                 seed: seed,
                 sizePx: UInt32(max(1, (size * displayScale).rounded())),
@@ -95,6 +110,31 @@ struct IdenticonAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .accessibilityHidden(true)
+    }
+
+    /// The first CHARACTER of the name, uppercased where that means anything.
+    ///
+    /// Not the first letter of the address: "0x" is every address's initial,
+    /// and a wall of identical circles is worse than no choice at all. With no
+    /// name, the identicon stands whatever the preference says.
+    private var initial: String? {
+        guard let first = (name ?? "").trimmingCharacters(in: .whitespaces).first
+        else { return nil }
+        return String(first).uppercased()
+    }
+}
+
+/// Which avatar style is in force.
+///
+/// A shared value for the same reason `Formats.current` is: every avatar in the
+/// app reads it, and threading it through twelve call sites would mean twelve
+/// chances to forget one — which is how it came to be stored and read nowhere.
+enum AvatarPreference {
+    nonisolated(unsafe) static var style: AvatarStyle = .identicon
+
+    @MainActor
+    static func apply(_ preferences: Preferences) {
+        style = preferences.avatarStyle
     }
 }
 
