@@ -103,8 +103,22 @@ struct FlowHost: View {
     /// The two sheets the send flow raises. Both bodies have always had an
     /// `onSelect`; the host simply never passed one, which is the same shape
     /// as the token picker before phase 3 — a list nobody can pick from.
+    /// The confirm page's notice buttons: retry what stopped it, or 暂不.
+    var onNoticeAction: (() -> Void)?
+    var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
     var onPickContact: ((Int) -> Void)?
+    /// The batch importer's four live edges — the unit toggle, the file
+    /// picker, the template and the apply — plus its two fields. Absent
+    /// everywhere the sheet is a picture, which is the gallery and the
+    /// screenshot sweep.
+    var batchPaste: Binding<String>?
+    var batchRate: Binding<String>?
+    var onBatchUnit: ((BatchUnit) -> Void)?
+    var onBatchFile: (() -> Void)?
+    var onBatchTemplate: (() -> Void)?
+    var onBatchResetRate: (() -> Void)?
+    var onBatchApply: (() -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -281,7 +295,11 @@ struct FlowHost: View {
             }
         case .sendConfirm(let m):
             FlowScaffold(header: m.header, onBack: onBack) {
-                SendConfirmBody(model: m)
+                SendConfirmBody(
+                    model: m,
+                    onNoticeAction: { onNoticeAction?() },
+                    onNoticeSecondary: { onNoticeSecondary?() }
+                )
             } footer: {
                 FlowFooter {
                     // A BUTTON, not a slider: the slider belongs to the signing
@@ -336,8 +354,22 @@ private struct FlowSheetHost: View {
 
     let sheet: WalletFlowSheet
     var onNavigate: (FlowStep) -> Void = { _ in }
+    /// The confirm page's notice buttons: retry what stopped it, or 暂不.
+    var onNoticeAction: (() -> Void)?
+    var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
     var onPickContact: ((Int) -> Void)?
+    /// The batch importer's four live edges — the unit toggle, the file
+    /// picker, the template and the apply — plus its two fields. Absent
+    /// everywhere the sheet is a picture, which is the gallery and the
+    /// screenshot sweep.
+    var batchPaste: Binding<String>?
+    var batchRate: Binding<String>?
+    var onBatchUnit: ((BatchUnit) -> Void)?
+    var onBatchFile: (() -> Void)?
+    var onBatchTemplate: (() -> Void)?
+    var onBatchResetRate: (() -> Void)?
+    var onBatchApply: (() -> Void)?
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
     var addTokenError: String?
@@ -426,7 +458,17 @@ private struct FlowSheetHost: View {
             )
         case .feeToken(let m):
             FeeTokenBody(model: m, onSelect: { index in onPickFeeToken?(index) })
-        case .batchImport(let m): BatchImportBody(model: m)
+        case .batchImport(let m):
+            BatchImportBody(
+                model: m,
+                onUnit: { raw in onBatchUnit?(BatchUnit(rawValue: raw) ?? .token) },
+                onFile: { onBatchFile?() },
+                onTemplate: { onBatchTemplate?() },
+                onApply: { onBatchApply?() },
+                pasteText: batchPaste,
+                rateText: batchRate,
+                onResetRate: { onBatchResetRate?() }
+            )
         }
     }
 }

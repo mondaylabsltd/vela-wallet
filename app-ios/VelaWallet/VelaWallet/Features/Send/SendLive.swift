@@ -431,6 +431,26 @@ enum SendLive {
             } ?? fiatLine(view, token: token, display: display),
             facts: facts,
             breakdown: live.breakdown,
+            notice: confirmNotice(view, loc: loc),
+            // The treasury pause has TWO exits (spec 054 US4): the core's
+            // retry, and 暂不 — which keeps the facts on screen rather than
+            // throwing the attempt away. A submit the relay refused has one,
+            // and a passkey prompt that is up has only cancel, which is the
+            // core's own checkpoint.
+            noticeAction: {
+                if view.treasuryBootstrap != nil {
+                    loc.t("componentsUi.treasuryBootstrap.retryBtn")
+                } else if view.txError != nil {
+                    loc.t("send.txRetryBtn")
+                } else if view.txStatus == "signing" {
+                    loc.t("componentsUi.funding.cancel")
+                } else {
+                    nil
+                }
+            }(),
+            noticeSecondary: view.treasuryBootstrap != nil
+                ? loc.t("componentsUi.funding.cancel")
+                : nil,
             cta: live.cta
         )
     }
@@ -592,6 +612,94 @@ enum SendLive {
         return FeeTokenPickModel(
             title: model.title, closeLabel: model.closeLabel, hint: model.hint,
             estimateLabel: model.estimateLabel, rows: rows
+        )
+    }
+
+    // MARK: - SD2C, the payroll importer
+
+    /// The web's `liveBatchImport`, word for word: the core parsed, priced and
+    /// gated; this only says so.
+    ///
+    /// Every number here is the core's own string. The rate is shown as typed
+    /// rather than reformatted, because a rate somebody pinned by hand and a
+    /// rate the wallet fetched must read the same — and because reformatting
+    /// what is in an open field steals characters as they type.
+    static func batchImport(
+        _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc
+    ) -> BatchImportModel {
+        let symbol = view.selectedToken?.symbol ?? ""
+        let count = batch.recipientCount
+        let rateValue = switch batch.rateStatus {
+        case .ok: "\(batch.rateInput) \(batch.fiatCode)"
+        case .loading: loc.t("send.batchRateLoading")
+        // Unknown, and said so — the core has already refused to apply.
+        case .failed: loc.t("send.batchRateFailed")
+        }
+        let cta = switch count {
+        case 0: loc.t("send.batchApplyEmpty")
+        case 1: loc.t("send.batchApply_one", vars: ["count": "1"])
+        default: loc.t("send.batchApply_other", vars: ["count": String(count)])
+        }
+        // One line, in the desktop's order of consequence: a file that could
+        // not be read at all, then a total that cannot be paid, then a list
+        // that will be trimmed, then the receipt for a template just saved.
+        //
+        // A picked file that silently does nothing is indistinguishable from a
+        // broken picker, which is why the first of these exists at all.
+        let note: (text: String, error: Bool)? =
+            if batch.fileError {
+                (
+                    "\(loc.t("send.batchImportFailedTitle"))\n\(loc.t("send.batchImportFailedBody"))",
+                    true
+                )
+            } else if batch.overBalance {
+                (loc.t("send.batchOverBalance", vars: ["sym": symbol]), true)
+            } else if batch.overCap {
+                (loc.t("send.batchOverCap", vars: ["n": String(BatchStore.maxRecipients)]), false)
+            } else if batch.templateSaved {
+                (loc.t("send.batchTemplateSaved"), false)
+            } else {
+                nil
+            }
+        return BatchImportModel(
+            title: model.title,
+            closeLabel: model.closeLabel,
+            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": batch.fiatCode]),
+            unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
+            unit: batch.unit,
+            pasteValue: batch.rawText,
+            pastePlaceholder: model.pastePlaceholder,
+            importFile: model.importFile,
+            template: model.template,
+            rateSection: model.rateSection,
+            rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
+            rateValue: rateValue,
+            rateHint: loc.t("send.batchRateHint", vars: ["code": batch.fiatCode, "sym": symbol]),
+            rateReset: loc.t("send.batchRateReset"),
+            rateEdited: batch.rateEdited,
+            parsedLabel: loc.t("send.batchParsedCount", vars: ["n": String(count)]),
+            rows: batch.preview.map { row in
+                BatchRowModel(
+                    ok: row.ok,
+                    address: row.name ?? row.address,
+                    conversion: row.tokenAmount.isEmpty
+                        ? row.rawAmount
+                        : "\(row.tokenAmount) \(symbol)"
+                )
+            },
+            rejectedText: batch.rejected > 0
+                ? loc.t(
+                    batch.rejected == 1 ? "send.batchRejected_one" : "send.batchRejected_other",
+                    vars: ["count": String(batch.rejected)]
+                )
+                : nil,
+            note: note?.text,
+            noteIsError: note?.error ?? false,
+            cta: cta,
+            // The core's ONE gate. Never a conjunction assembled here:
+            // `canApply` already knows about the busy fetch, the rejected rows
+            // and the balance, and a second opinion would eventually disagree.
+            ctaDisabled: !batch.canApply
         )
     }
 

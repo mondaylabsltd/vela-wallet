@@ -73,6 +73,15 @@ final class SettingsStore {
         )
     }
 
+    /// USD → that currency, through the display machine's own waterfall.
+    ///
+    /// The payroll importer's rate port (spec 054 US3). Exposed here rather
+    /// than rebuilt there so a currency the wallet cannot price stays
+    /// unpriceable in both places — see `DisplayCurrencyExecutor.resolve`.
+    func usdRate(_ code: String) async -> Double? {
+        await currencyExecutor.resolve(code)
+    }
+
     /// Called from the settings route's `.task`. Idempotent: the machines read
     /// their stores once and keep them.
     func open() {

@@ -111,7 +111,12 @@ final class DisplayCurrencyExecutor {
     /// `USD` short-circuits at 1 — the identity, not a default. Everything else
     /// asks the chain, then the endpoint, and answers `nil` rather than the
     /// plausible number that would silently mis-state somebody's money.
-    private func resolve(_ code: String) async -> Double? {
+    ///
+    /// Reachable from outside because the payroll importer prices its fiat
+    /// column through the SAME waterfall (spec 054 US3). A second resolver
+    /// would be a second place for "no source could price this" to turn into a
+    /// 1, and a rate of 1 on a payroll file pays out the fiat figure in tokens.
+    func resolve(_ code: String) async -> Double? {
         let upper = code.uppercased()
         if upper == "USD" { return 1 }
         for source in sources {

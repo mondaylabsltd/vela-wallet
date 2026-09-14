@@ -227,6 +227,8 @@ enum ContactsFixtures {
     static func buildMobileState(_ state: ContactsStateId, loc: Loc) -> ContactsScene {
         switch state {
         case .c1: .home(home(state, loc: loc))
+        case .c7: .home(home(state, loc: loc))
+        case .c8, .c9: .detail(detail(state, loc: loc))
         case .c1s: .home(home(state, loc: loc))
         case .c1f: .home(home(state, loc: loc))
         case .c3: .home(home(state, loc: loc))
@@ -293,6 +295,10 @@ enum ContactsFixtures {
         if state == .c5 {
             model.sheet = addMenu(loc: loc)
         }
+        // C7 — 新建联系人 over the list it will be added to.
+        if state == .c7 {
+            model.form = contactForm(loc: loc, edit: false)
+        }
         return model
     }
 
@@ -319,8 +325,40 @@ enum ContactsFixtures {
             deleteLabel: loc.t("contacts.deleteContact"),
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             editLabel: loc.t("contacts.edit"),
+            favourite: state == .c9
+                ? FavouriteControlModel(on: true, label: loc.t("contacts.sectionFavorites"))
+                : nil,
+            inspection: state == .c9
+                ? ContactInspectionModel(
+                    tag: loc.t("componentsUi.signing.walletTag"),
+                    firstTime: loc.t("componentsUi.signing.firstTimeTagNeutral")
+                )
+                : nil,
             sheet: state == .c2s ? deleteConfirm(loc: loc, name: alice.name) : nil,
+            // C8 — 编辑联系人, filled, over the contact it edits.
+            form: state == .c8 ? contactForm(loc: loc, edit: true) : nil,
             textScale: 1
+        )
+    }
+
+    /// C7 / C8 — the add form (empty, Save gated) and the edit form (filled,
+    /// address locked because an address IS the contact's identity).
+    static func contactForm(loc: Loc, edit: Bool) -> ContactFormModel {
+        let alice = contact(roster[0])
+        return ContactFormModel(
+            title: loc.t(edit ? "contacts.editTitle" : "contacts.addTitle"),
+            nameLabel: loc.t("contacts.nameLabel"),
+            namePlaceholder: loc.t("contacts.namePlaceholder"),
+            addressLabel: loc.t("contacts.addressLabel"),
+            addressPlaceholder: loc.t("contacts.addressPlaceholder"),
+            name: edit ? alice.name : "",
+            address: edit ? alice.addressFull : "",
+            error: nil,
+            save: loc.t("contacts.save"),
+            cancel: loc.t("contacts.cancel"),
+            // Nothing typed, nothing to save — the core's gate, drawn shut.
+            saveEnabled: edit,
+            addressLocked: edit
         )
     }
 

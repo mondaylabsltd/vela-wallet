@@ -84,6 +84,11 @@ struct RootView: View {
     /// would lose a submitted operation the moment somebody swiped back.
     @State private var fees: FeeStore
     @State private var send: SendStore
+    /// The payroll importer (spec 054 US3). Its own machine, beside the send
+    /// rather than inside it: parsing and pricing a file is 1,698 lines that
+    /// have nothing to do with the send journey, and the two meet at one point
+    /// — the applied list of recipients.
+    @State private var batch: BatchStore
     /// Money in flight, followed for as long as the app exists.
     @State private var tracker: TrackerStore
     @State private var notifier: TrackerNotifier
@@ -101,6 +106,11 @@ struct RootView: View {
     /// the round trip (Android found it on the device).
     @State private var recipientDraft = ""
     @State private var amountDraft = ""
+    /// The importer's two fields. Local for the same reason every other field
+    /// here is: a field bound straight to a machine loses characters on the
+    /// round trip.
+    @State private var batchPaste = ""
+    @State private var batchRate = ""
     @State private var feeSheetOpen = false
     /// Whether the token picker is showing tick boxes.
     ///
@@ -272,6 +282,15 @@ struct RootView: View {
             )
         )
         _send = State(initialValue: SendStore(executor: sendExecutor))
+        // The payroll importer. Its fiat column is priced through the DISPLAY
+        // machine's own waterfall — chain feed, then endpoint, then nothing —
+        // so a currency the wallet cannot price stays unpriced here too. A
+        // fallback of 1 would pay out the fiat figure in tokens.
+        let documentPorts = UIKitDocumentPorts()
+        _batch = State(initialValue: BatchStore(executor: BatchExecutor(
+            fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
+            documents: { documentPorts }
+        )))
         // The receive screen's watcher. A detected deposit buzzes and re-reads
         // the balances, so the figure behind the code is the new one.
         _deposits = State(initialValue: ReceiveWatchStore(
@@ -551,7 +570,14 @@ struct RootView: View {
                 FlowHost(
                     model: flowModel(state),
                     onBack: { flows.back() },
-                    onNavigate: { flows.push($0) },
+                    onNavigate: { step in
+                        // 导入表格 is the CORE's flag, not a push: the live
+                        // router derives the send journey's state from the
+                        // machine, so a pushed SD2c would be overridden back to
+                        // the form — the dead-button shape twice already found
+                        // in this flow.
+                        if step == .batchImport { openBatch() } else { flows.push(step) }
+                    },
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),
                     addTokenError: addTokenError(for: state),
@@ -590,13 +616,50 @@ struct RootView: View {
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: { send.done() },
                     onContinueSend: { send.advance() },
+                    onNoticeAction: {
+                        // Whatever the notice is about, tried again. The CORE
+                        // decides which — a funded relayer re-runs the
+                        // pre-check, a refused submit re-signs, and a prompt
+                        // that is up is cancelled at its own checkpoint.
+                        if send.view?.treasuryBootstrap != nil {
+                            send.retryAfterBootstrap()
+                        } else if send.view?.txError != nil {
+                            send.retryAfterError()
+                        } else if send.view?.txStatus == "signing" {
+                            send.cancelSigning()
+                        }
+                    },
+                    // 暂不: the pause is dismissed and the facts are kept.
+                    onNoticeSecondary: { send.dismissTreasurySheet() },
                     onPickFeeToken: pickFeeToken,
-                    onPickContact: pickSendContact
+                    onPickContact: pickSendContact,
+                    batchPaste: state == .sd2c ? $batchPaste : nil,
+                    batchRate: state == .sd2c ? $batchRate : nil,
+                    onBatchUnit: { batch.setUnit($0) },
+                    onBatchFile: { batch.pickFile() },
+                    onBatchTemplate: { batch.saveTemplate() },
+                    onBatchResetRate: {
+                        batch.resetRate()
+                        batchRate = batch.view.rateInput
+                    },
+                    onBatchApply: { batchApply() }
                 )
                 .transition(.move(edge: .trailing))
                 // The field holds what is typed and the core holds the value:
                 // a field bound straight to a machine loses characters on the
                 // round trip. The echo back is ignored while the person types.
+                .onChange(of: batchPaste) { _, value in batch.setText(value) }
+                .onChange(of: batchRate) { _, value in batch.editRate(value) }
+                // A PICKED file writes the paste box — the core puts the file's
+                // text where the typed text goes, and the field has to show it.
+                // Guarded on inequality so the echo of what is being typed does
+                // not land back in the field mid-word.
+                .onChange(of: batch.view.rawText) { _, value in
+                    if value != batchPaste { batchPaste = value }
+                }
+                .onChange(of: batch.view.rateInput) { _, value in
+                    if value != batchRate { batchRate = value }
+                }
                 .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
                 .onChange(of: amountDraft) { _, value in send.setAmount(value) }
                 .onChange(of: send.view?.amount) { _, value in
@@ -611,6 +674,21 @@ struct RootView: View {
                 }
                 .onChange(of: fees.view?.fee) { _, estimate in
                     if let estimate { send.feeUpdated(estimate) }
+                }
+                // A quote has a TTL, and somebody reading the confirm page can
+                // outlast it. When it expires, ask again — once per expiry,
+                // only while the page is open and nothing else is happening.
+                //
+                // The core keeps the request that was priced, so `requote`
+                // re-runs THAT one; the fresh estimate flows back through the
+                // handler above. Asking during a submit or a passkey prompt
+                // would move the fee under a signature already being made.
+                .onChange(of: fees.view?.stale) { _, stale in
+                    guard stale == true, fees.view?.busy == false,
+                          let view = send.view, view.stage == .confirm,
+                          view.txStatus == "idle", !view.sending
+                    else { return }
+                    fees.requote()
                 }
                 // The picker is a READ of what the balance machine had at the
                 // instant the flow opened — and on a cold start that instant
@@ -1125,6 +1203,11 @@ struct RootView: View {
             if case .contactPick(let sheet)? = model.sheet, let book = contacts.view {
                 model.sheet = .contactPick(SendLive.contactSheet(book, on: sheet, loc: loc))
             }
+            if case .batchImport(let sheet)? = model.sheet {
+                model.sheet = .batchImport(
+                    SendLive.batchImport(batch.view, view: view, on: sheet, loc: loc)
+                )
+            }
         }
         // The ERC-20 tab only: the native tab adds a NETWORK, which is
         // `network_admin`'s wizard and not this machine's.
@@ -1175,6 +1258,39 @@ struct RootView: View {
         }
         guard send.view?.multiSelectedIds.isEmpty == false else { return }
         send.confirmMultiSelection()
+    }
+
+    // MARK: - The payroll importer (spec 054 US3)
+
+    /// 导入表格 — two machines open together.
+    ///
+    /// The send machine raises its flag (which is what puts SD2c on screen) and
+    /// the importer opens on the token being sent. `Open` is a FULL reset by
+    /// the core's own rule, so a paste left from a previous file is never
+    /// waiting for the next one — which is why the drafts are cleared here too.
+    private func openBatch() {
+        guard let token = send.view?.selectedToken else { return }
+        batchPaste = ""
+        batchRate = ""
+        send.openBatchImport()
+        batch.open(
+            symbol: token.symbol,
+            decimals: token.decimals,
+            balance: token.balance,
+            priceUsd: token.priceUsd,
+            currencyCode: settings.currency?.code ?? "USD"
+        )
+    }
+
+    /// 导入 N 位收款人 — the parsed rows become the split's rows.
+    ///
+    /// Nothing is recomputed on the way across: the addresses the preview
+    /// showed as valid are the addresses that get paid, and the core mints the
+    /// row ids. `seed_split_recipients` also shuts the sheet, so there is no
+    /// second close here.
+    private func batchApply() {
+        guard let rows = batch.apply() else { return }
+        send.seedSplitRecipients(rows)
     }
 
     /// A fee asset was chosen.
@@ -1234,7 +1350,12 @@ struct RootView: View {
         guard let view = send.view else { return false }
         switch state {
         case .sd2, .sd2b, .sd2d: return !view.canContinue
-        case .sd3, .sd3b, .sd3c: return !view.canConfirm
+        // Three more reasons the confirm CTA is inert, and each one now has a
+        // line on the page saying so: a depleted relayer, a submit the relay
+        // refused, and a signature already under way.
+        case .sd3, .sd3b, .sd3c:
+            return !view.canConfirm || view.sending
+                || view.treasuryBootstrap != nil || view.txError != nil
         default: return false
         }
     }

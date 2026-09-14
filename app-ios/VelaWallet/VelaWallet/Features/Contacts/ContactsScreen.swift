@@ -28,8 +28,17 @@ struct ContactsScreen: View {
     /// the full address rather than the row model, because the address is the
     /// core's key and the row's `id` is a `UUID()` minted for SwiftUI.
     var onDelete: (String) -> Void = { _ in }
+    /// 添加联系人 — the header's +, and the empty state's CTA.
+    var onAdd: () -> Void = {}
+    /// The live form's fields and CTA. Absent in the gallery, where the sheet
+    /// is a picture.
+    var formName: Binding<String>?
+    var formAddress: Binding<String>?
+    var onSaveForm: () -> Void = {}
+    var onCancelForm: () -> Void = {}
 
     @State private var sheetShown = false
+    @State private var formShown = false
     @State private var confirming: ContactModel?
 
     var body: some View {
@@ -54,8 +63,29 @@ struct ContactsScreen: View {
                     .environment(\.walletTextScale, model.textScale)
             }
         }
-        .onAppear { sheetShown = model.sheet != nil }
+        .sheet(isPresented: $formShown) {
+            if let form = model.form {
+                ContactFormSheet(
+                    model: form,
+                    nameText: formName,
+                    addressText: formAddress,
+                    onSave: onSaveForm,
+                    onCancel: {
+                        formShown = false
+                        onCancelForm()
+                    }
+                )
+                .environment(\.walletTextScale, model.textScale)
+            }
+        }
+        .onAppear {
+            sheetShown = model.sheet != nil
+            formShown = model.form != nil
+        }
         .onChange(of: confirming?.id) { _, _ in sheetShown = presentedSheet != nil }
+        // The form's PRESENCE is the core's answer, so the sheet follows it: a
+        // save that succeeds closes the form by removing it.
+        .onChange(of: model.form != nil) { _, shown in formShown = shown }
     }
 
     /// The fixture sheet (C5) or the pre-resolved delete confirm raised by

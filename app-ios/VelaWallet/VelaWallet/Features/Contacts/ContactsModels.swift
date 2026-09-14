@@ -14,7 +14,7 @@ import SwiftUI
 
 /// The nine mobile contacts states (data-model.md §Screen states).
 enum ContactsStateId: String, CaseIterable, Identifiable {
-    case c1, c1s, c1f, c2, c2s, c3, c4, c5, c6
+    case c1, c1s, c1f, c2, c2s, c3, c4, c5, c6, c7, c8, c9
     var id: String { rawValue }
 
     /// Gallery chip label — mock/state code, not translatable copy.
@@ -29,6 +29,9 @@ enum ContactsStateId: String, CaseIterable, Identifiable {
         case .c4: "C4"
         case .c5: "C5"
         case .c6: "C6"
+        case .c7: "C7"
+        case .c8: "C8"
+        case .c9: "C9"
         }
     }
 }
@@ -140,11 +143,55 @@ struct ContactsHomeModel {
     let tabs: TabsModel
     var reveal: SwipeRevealModel?
     var sheet: ActionMenuModel?
+    /// The add form, over this screen (C7).
+    var form: ContactFormModel?
     /// Pre-resolved destructive confirm per contact (row-swipe 删除 →
     /// second confirmation, FR-008). Display-ready; keyed by contact id so
     /// the screen never touches the i18n layer.
     var deleteConfirms: [UUID: ActionMenuModel] = [:]
     let textScale: CGFloat
+}
+
+/// C7 / C8 — the add form (empty, Save gated) and the edit form (filled).
+///
+/// Drawn from 018's vocabulary and nothing else: two labelled fields, the
+/// core's one error line, Save and Cancel. Every string here is the core's;
+/// the shell decides only where they sit.
+struct ContactFormModel {
+    /// 新建联系人 / 编辑联系人.
+    let title: String
+    let nameLabel: String
+    let namePlaceholder: String
+    let addressLabel: String
+    let addressPlaceholder: String
+    let name: String
+    let address: String
+    /// The core's refusal, once there is something to refuse.
+    var error: String?
+    let save: String
+    let cancel: String
+    /// The CORE's gate. A form that decided this itself would eventually
+    /// let through a contact the core then rejects, with nothing on screen
+    /// to explain the difference.
+    let saveEnabled: Bool
+    /// Editing an existing contact: the address IS the contact's identity in
+    /// the address book, so it stays put and a new address means a new person.
+    var addressLocked = false
+}
+
+/// The star on a contact's detail. `on` is the core's `favorite`.
+struct FavouriteControlModel {
+    let on: Bool
+    /// The accessible name — 收藏, the same word the home's section uses.
+    let label: String
+}
+
+/// What the core found out about this address when the page opened
+/// (`InspectRecipient`): whether it is a contract wallet, and whether this
+/// person has ever been paid before.
+struct ContactInspectionModel {
+    var tag: String?
+    var firstTime: String?
 }
 
 struct ContactActionsModel {
@@ -179,7 +226,13 @@ struct ContactDetailModel {
     /// Resolved a11y labels for the header controls.
     let backLabel: String
     let editLabel: String
+    /// The star in the header (C9).
+    var favourite: FavouriteControlModel?
+    /// The core's reading of this address (C9).
+    var inspection: ContactInspectionModel?
     var sheet: ActionMenuModel?
+    /// The add/edit form, over this screen (C8).
+    var form: ContactFormModel?
     let textScale: CGFloat
 }
 

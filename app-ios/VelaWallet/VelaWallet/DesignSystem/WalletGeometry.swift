@@ -23,6 +23,9 @@ enum WalletGeometry {
     /// six-figure payroll line and narrow enough to leave the address room —
     /// measured against the SD2b drawing's own amount column.
     static let splitAmountWidth: CGFloat = 96
+    /// The batch importer's paste box (spec 054) — four mono lines, matching
+    /// the `lineLimit: 4` the drawn field used.
+    static let batchPasteHeight: CGFloat = 96
     /// Chain-dot badge on row icons (mock: 24 px @2x).
     static let badge: CGFloat = 12
     /// Ring separating the badge from the icon (bg-colored).

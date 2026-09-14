@@ -19,8 +19,20 @@ struct ContactDetailScreen: View {
 
     let model: ContactDetailModel
     var onBack: () -> Void = {}
+    /// The pencil. Opens the edit form, and it shipped doing nothing.
+    var onEdit: () -> Void = {}
+    /// The star. Every client's `ToggleFavorite`.
+    var onFavourite: () -> Void = {}
+    var onDelete: () -> Void = {}
+    /// The live form's fields and CTA. Absent in the gallery, where the sheet
+    /// is a picture.
+    var formName: Binding<String>?
+    var formAddress: Binding<String>?
+    var onSaveForm: () -> Void = {}
+    var onCancelForm: () -> Void = {}
 
     @State private var sheetShown = false
+    @State private var formShown = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -66,7 +78,38 @@ struct ContactDetailScreen: View {
                     .environment(\.walletTextScale, model.textScale)
             }
         }
-        .onAppear { sheetShown = model.sheet != nil }
+        .sheet(isPresented: $formShown) {
+            if let form = model.form {
+                ContactFormSheet(
+                    model: form,
+                    nameText: formName,
+                    addressText: formAddress,
+                    onSave: onSaveForm,
+                    onCancel: {
+                        formShown = false
+                        onCancelForm()
+                    }
+                )
+                .environment(\.walletTextScale, model.textScale)
+            }
+        }
+        .onAppear {
+            sheetShown = model.sheet != nil
+            formShown = model.form != nil
+        }
+        // The FORM's presence is the core's answer, so the sheet follows it
+        // rather than a flag of its own: a save that succeeds closes the form
+        // by removing it, and the screen must notice.
+        .onChange(of: model.form != nil) { _, shown in formShown = shown }
+    }
+
+    private func inspectionTag(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(model.textScale))
+            .foregroundStyle(theme.fgMuted)
+            .padding(.horizontal, Tokens.Space.s8)
+            .padding(.vertical, Tokens.Space.s2)
+            .background(Capsule().fill(theme.bgRaised))
     }
 
     // MARK: - Chrome
@@ -82,7 +125,18 @@ struct ContactDetailScreen: View {
             .buttonStyle(.plain)
             .accessibilityLabel(model.backLabel)
             Spacer(minLength: Tokens.Space.s12)
-            Button {} label: {
+            if let favourite = model.favourite {
+                Button(action: onFavourite) {
+                    LucideIcon(favourite.on ? .starSolid : .star, size: LucideIconSize.menuRow)
+                        .foregroundStyle(favourite.on ? theme.accentBase : theme.fgMuted)
+                        .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(favourite.label)
+                .accessibilityAddTraits(favourite.on ? [.isButton, .isSelected] : .isButton)
+            }
+            Button(action: onEdit) {
                 LucideIcon(.pencil, size: LucideIconSize.menuRow)
                     .foregroundStyle(theme.fgBase)
                     .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
@@ -106,6 +160,18 @@ struct ContactDetailScreen: View {
                 .monoRole(Typography.monoAddressDetail.scaled(model.textScale))
                 .foregroundStyle(theme.fgMuted)
                 .padding(.top, Tokens.Space.s8)
+            // What the core found out about this address when the page opened:
+            // whether it is a contract wallet, and whether this person has ever
+            // been paid before. Two neutral tags — never a warning, because
+            // neither fact is one.
+            if let inspection = model.inspection,
+               inspection.tag != nil || inspection.firstTime != nil {
+                HStack(spacing: Tokens.Space.s8) {
+                    if let tag = inspection.tag { inspectionTag(tag) }
+                    if let first = inspection.firstTime { inspectionTag(first) }
+                }
+                .padding(.top, Tokens.Space.s8)
+            }
             GroupChips(chips: model.chips, addLabel: model.addChip)
                 .padding(.top, Tokens.Space.s12)
         }

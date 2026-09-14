@@ -45,13 +45,18 @@ enum LucideGlyph: String {
     case arrowLeft, arrowRight, arrowDown
     case eye
     case lock, star, share2, power, externalLink, gripVertical
+    /// The same five-point path, filled. A favourite that is ON and one that
+    /// is off must differ by more than a tint: colour alone is invisible to
+    /// somebody who cannot see it, and the nav bar's outline/solid pairs
+    /// already set the convention.
+    case starSolid
     // `clock`, `zap` and `externalLink` are declared once, above: specs 021,
     // 022 and 023 each reached for them independently.
 
     /// Complete SVG document, white paint, 24×24 viewBox.
     var svg: String {
         switch self {
-        case .navWalletSolid, .navContactsSolid, .navExploreSolid, .navSettingsSolid:
+        case .navWalletSolid, .navContactsSolid, .navExploreSolid, .navSettingsSolid, .starSolid:
             return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\">\(body)</svg>"
         default:
             return "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\(body)</svg>"
@@ -158,6 +163,8 @@ enum LucideGlyph: String {
             return ##"<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>"##
         case .star:
             return ##"<path d="M12.00 2.70 L14.35 8.76 L20.84 9.13 L15.80 13.24 L17.47 19.52 L12.00 16.00 L6.53 19.52 L8.20 13.24 L3.16 9.13 L9.65 8.76 Z"/>"##
+        case .starSolid:
+            return ##"<path fill="#FFFFFF" d="M12.00 2.70 L14.35 8.76 L20.84 9.13 L15.80 13.24 L17.47 19.52 L12.00 16.00 L6.53 19.52 L8.20 13.24 L3.16 9.13 L9.65 8.76 Z"/>"##
         case .share2:
             return ##"<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>"##
         case .power:

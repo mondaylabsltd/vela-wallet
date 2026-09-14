@@ -495,9 +495,21 @@ struct BatchImportModel {
     let rateLabel: String
     let rateValue: String
     let rateHint: String
+    /// 自动 — back to the fetched rate. Shown only once somebody has typed
+    /// their own, because until then there is nothing to go back from.
+    var rateReset: String = ""
+    var rateEdited = false
     let parsedLabel: String
     let rows: [BatchRowModel]
     var rejectedText: String?
+    /// The one thing the core wants said that is not a rejected row: an
+    /// unreadable file, over the balance, over the cap, or a template saved.
+    /// Mirrors Android's `note` and the desktop's `notice`.
+    var note: String?
+    /// Whether that note is a refusal. The desktop colours the same three
+    /// facts this way: a file that could not be read and a total that cannot
+    /// be paid are errors; a trimmed list and a saved template are not.
+    var noteIsError = false
     let cta: String
     let ctaDisabled: Bool
 }
@@ -519,6 +531,17 @@ struct SendConfirmModel {
     let subline: String
     let facts: [FactRowModel]
     var breakdown: [BreakdownRowModel] = []
+    /// What stopped this page, in the core's words: a depleted relayer, a
+    /// submit the relay refused, or the passkey prompt that is up right now.
+    ///
+    /// Without this the page was silent about all three — the CTA simply
+    /// stopped working and nothing said why.
+    var notice: String?
+    /// The notice's own buttons. The primary retries what the notice is about;
+    /// the secondary is 暂不, which keeps the facts and lets somebody go on
+    /// looking at the page (spec 054 US4).
+    var noticeAction: String?
+    var noticeSecondary: String?
     let cta: String
 }
 

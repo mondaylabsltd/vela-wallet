@@ -865,6 +865,11 @@ struct BatchImportBody: View {
     var onFile: () -> Void = {}
     var onTemplate: () -> Void = {}
     var onApply: () -> Void = {}
+    /// The live fields. `nil` renders exactly as drawn, so the gallery and the
+    /// screenshot sweep stay pixel-identical.
+    var pasteText: Binding<String>?
+    var rateText: Binding<String>?
+    var onResetRate: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -876,7 +881,34 @@ struct BatchImportBody: View {
                 selectedId: model.unit.rawValue,
                 onSelect: onUnit
             )
-            FlowMonoField(value: model.pasteValue, lineLimit: 4)
+            if let pasteText {
+                // A real field: pasting a list is the whole point of this
+                // sheet, and a `Text` cannot be pasted into.
+                TextEditor(text: pasteText)
+                    .font(Typography.monoAddress.scaled(textScale).font)
+                    .foregroundStyle(theme.fgBase)
+                    .scrollContentBackground(.hidden)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .frame(minHeight: WalletGeometry.batchPasteHeight)
+                    .padding(Tokens.Space.s8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                            .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if pasteText.wrappedValue.isEmpty {
+                            Text(verbatim: model.pastePlaceholder)
+                                .monoRole(Typography.monoAddress.scaled(textScale))
+                                .foregroundStyle(theme.fgSubtle)
+                                .padding(Tokens.Space.s12)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .accessibilityIdentifier("send.batchPaste")
+            } else {
+                FlowMonoField(value: model.pasteValue, lineLimit: 4)
+            }
 
             HStack(spacing: Tokens.Space.s4) {
                 Spacer(minLength: Tokens.Space.s0)
@@ -909,11 +941,36 @@ struct BatchImportBody: View {
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 Spacer(minLength: Tokens.Space.s8)
-                Text(verbatim: "\(model.rateLabel) \(model.rateValue)")
+                Text(verbatim: model.rateLabel)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                LucideIcon(.pencil, size: LucideIconSize.checkmark)
-                    .foregroundStyle(theme.fgSubtle)
+                if let rateText {
+                    // Somebody's own rate, when the wallet could not price the
+                    // currency — or when they disagree with the price it found.
+                    TextField(model.rateValue, text: rateText)
+                        .font(Typography.body.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                        .accessibilityIdentifier("send.batchRate")
+                } else {
+                    Text(verbatim: model.rateValue)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                }
+                if model.rateEdited, !model.rateReset.isEmpty {
+                    Button(action: onResetRate) {
+                        Text(verbatim: model.rateReset)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.accentBase)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    LucideIcon(.pencil, size: LucideIconSize.checkmark)
+                        .foregroundStyle(theme.fgSubtle)
+                }
             }
             .padding(.vertical, Tokens.Space.s8)
             Text(verbatim: model.rateHint)
@@ -945,6 +1002,12 @@ struct BatchImportBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.errorBase)
             }
+            if let note = model.note {
+                Text(verbatim: note)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(model.noteIsError ? theme.errorBase : theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VelaButton(
                 title: model.cta,
@@ -969,6 +1032,8 @@ struct SendConfirmBody: View {
 
     let model: SendConfirmModel
     var onConfirm: () -> Void = {}
+    var onNoticeAction: () -> Void = {}
+    var onNoticeSecondary: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -993,6 +1058,35 @@ struct SendConfirmBody: View {
             }
             .padding(.horizontal, Tokens.Space.s12)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+
+            if let notice = model.notice {
+                VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                    NoticeBannerView(text: notice)
+                    if model.noticeAction != nil || model.noticeSecondary != nil {
+                        HStack(spacing: Tokens.Space.s8) {
+                            if let secondary = model.noticeSecondary {
+                                Button(action: onNoticeSecondary) {
+                                    Text(verbatim: secondary)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.fgMuted)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer(minLength: Tokens.Space.s8)
+                            if let action = model.noticeAction {
+                                Button(action: onNoticeAction) {
+                                    Text(verbatim: action)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.accentBase)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
 
             if !model.breakdown.isEmpty {
                 VStack(spacing: Tokens.Space.s0) {

@@ -273,6 +273,11 @@ struct FlowMonoInput: View {
     var label: String?
     var placeholder: String = ""
     var error: String?
+    /// The well behind the field. The default is the send form's, which sits
+    /// over `bgBase`; a field on a RAISED surface needs the sunken one, or the
+    /// well and its surface are the same colour and the field disappears —
+    /// which is exactly what C7 showed.
+    var well: Color?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
@@ -297,7 +302,7 @@ struct FlowMonoInput: View {
             .submitLabel(.done)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Tokens.Space.s12)
-            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(well ?? theme.bgRaised))
             .overlay(
                 RoundedRectangle(cornerRadius: Tokens.Radius.r12)
                     .stroke(

@@ -18,9 +18,9 @@ struct ContactsFixturesTests {
 
     // MARK: - State inventory
 
-    @Test func allNineMobileStatesExist() {
+    @Test func allTwelveMobileStatesExist() {
         #expect(ContactsStateId.allCases.map(\.rawValue) ==
-            ["c1", "c1s", "c1f", "c2", "c2s", "c3", "c4", "c5", "c6"])
+            ["c1", "c1s", "c1f", "c2", "c2s", "c3", "c4", "c5", "c6", "c7", "c8", "c9"])
         for state in ContactsStateId.allCases {
             #expect(ContactsFixtures.buildMobileState(state, loc: loc).state == state)
         }
@@ -36,6 +36,55 @@ struct ContactsFixturesTests {
         #expect(ContactsFixtures.buildMobileState(.c2s, loc: loc).detail != nil)
         #expect(ContactsFixtures.buildMobileState(.c4, loc: loc).group != nil)
         #expect(ContactsFixtures.buildMobileState(.c6, loc: loc).group != nil)
+        // C7 is the add form over the list; C8 the edit form over the contact;
+        // C9 the contact with the star lit.
+        #expect(ContactsFixtures.buildMobileState(.c7, loc: loc).home != nil)
+        #expect(ContactsFixtures.buildMobileState(.c8, loc: loc).detail != nil)
+        #expect(ContactsFixtures.buildMobileState(.c9, loc: loc).detail != nil)
+    }
+
+    // MARK: - C7 / C8 / C9 (spec 054 US5a)
+
+    /// The add form is empty and its Save is SHUT. A form that offered to save
+    /// nothing would be a button that does nothing — the shape this program
+    /// has found three times already.
+    @Test func theAddFormIsEmptyAndGated() throws {
+        let home = try #require(ContactsFixtures.buildMobileState(.c7, loc: loc).home)
+        let form = try #require(home.form)
+        #expect(form.title == loc.t("contacts.addTitle"))
+        #expect(form.name.isEmpty)
+        #expect(form.address.isEmpty)
+        #expect(!form.saveEnabled)
+        #expect(!form.addressLocked, "a new contact's address is the one thing being typed")
+    }
+
+    /// The edit form is filled, saveable, and its address is LOCKED: in the
+    /// address book an address is the identity of the person, so typing a
+    /// different one would name somebody else rather than rename this one.
+    @Test func theEditFormLocksTheAddress() throws {
+        let detail = try #require(ContactsFixtures.buildMobileState(.c8, loc: loc).detail)
+        let form = try #require(detail.form)
+        #expect(form.title == loc.t("contacts.editTitle"))
+        #expect(!form.name.isEmpty)
+        #expect(form.address.hasPrefix("0x"))
+        #expect(form.saveEnabled)
+        #expect(form.addressLocked)
+    }
+
+    /// C9: the star is lit, and the core's reading of the address is drawn
+    /// beside the name — two neutral tags, never a warning.
+    @Test func theFavouriteDetailLightsTheStar() throws {
+        let detail = try #require(ContactsFixtures.buildMobileState(.c9, loc: loc).detail)
+        let favourite = try #require(detail.favourite)
+        #expect(favourite.on)
+        #expect(favourite.label == loc.t("contacts.sectionFavorites"))
+        #expect(detail.inspection?.tag == loc.t("componentsUi.signing.walletTag"))
+        #expect(detail.inspection?.firstTime == loc.t("componentsUi.signing.firstTimeTagNeutral"))
+        // C2 is the same contact without either — the star and the tags are
+        // the whole difference between the two states.
+        let plain = try #require(ContactsFixtures.buildMobileState(.c2, loc: loc).detail)
+        #expect(plain.favourite == nil)
+        #expect(plain.inspection == nil)
     }
 
     // MARK: - Canon addresses (byte-exact — identicon seeds)
