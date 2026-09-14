@@ -348,6 +348,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VelaWallet/VelaWallet.entitlements;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lvela_dev_fixtures",
+				);
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;
@@ -385,6 +393,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VelaWallet/VelaWallet.entitlements;
+				EXCLUDED_SOURCE_FILE_NAMES = "vela_dev_fixtures.swift ParallelSpaceBinding.swift";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;

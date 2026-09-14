@@ -52,6 +52,20 @@ actor AccountStore {
         writeList(Key.accounts, accounts)
     }
 
+    /// Remove exactly one record, by id.
+    ///
+    /// Narrow on purpose. The only caller is the parallel space's exit (spec
+    /// 052 FR-003), and the alternative it exists to prevent is a caller
+    /// rewriting the whole list: this door is opened on a phone that holds the
+    /// founder's real wallet, and a list replacement there loses it. A record
+    /// that is not there is not an error — leaving twice is leaving once.
+    func removeAccount(id: String) {
+        let accounts = loadAccounts()
+        let kept = accounts.filter { ($0["id"] as? String) != id }
+        guard kept.count != accounts.count else { return }
+        writeList(Key.accounts, kept)
+    }
+
     /// Missing, garbage and negative all read as 0.
     ///
     /// A negative index would make the session render an empty address with a

@@ -23,6 +23,9 @@ struct RootView: View {
     /// The `vela.*` shelf, for the reads that are not a machine's — the
     /// explorer bases of custom networks.
     private let shelf: VelaStore
+    /// The account list, kept rather than passed and forgotten: the parallel
+    /// space's door needs it at `.task` time, after `init` has finished.
+    private let accounts: AccountStore
     @State private var router: Router
     @State private var model: WelcomeModel
     @State private var session: SessionController
@@ -76,6 +79,12 @@ struct RootView: View {
     @State private var section: WalletSection = .wallet
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
+    /// Whether the app is inside the parallel space, for the badge.
+    ///
+    /// Mirrored into view state rather than read from the hook on every render:
+    /// the hook is the authority, and a `@State` copy is what makes SwiftUI
+    /// redraw when the door opens during `.task`.
+    @State private var parallelSpace = false
     @State private var launching = !LaunchAnimation.isDisabled
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
     @State private var pageOpacity: Double = LaunchAnimation.isDisabled ? 1 : 0
@@ -85,6 +94,7 @@ struct RootView: View {
         let router = Router()
         _router = State(initialValue: router)
         let store = AccountStore()
+        self.accounts = store
         let session = SessionController(store: store)
         let onboarding = OnboardingModel(session: session, store: store)
         _session = State(initialValue: session)
@@ -173,7 +183,7 @@ struct RootView: View {
         // One continuous surface. Both the launch screen and Welcome sit on this
         // exact colour, which is what lets them cross-dissolve without a
         // washed-out middle where both layers are half-transparent (FR-012).
-        return ZStack {
+        return ZStack(alignment: .top) {
             themedBackground
 
             content(router: $router.path)
@@ -205,6 +215,12 @@ struct RootView: View {
                     }
                 )
             }
+
+            // Over everything, including the launch overlay: a screenshot taken
+            // in the parallel space must never be mistaken for one taken in the
+            // real app. It answers to neither gate — not the theme, not the
+            // launch animation — and it is absent from Release by construction.
+            if parallelSpace { ParallelSpaceBadge() }
         }
         .themed(scheme)
         .preferredColorScheme(ThemeOverride.launchScheme)
@@ -336,7 +352,16 @@ struct RootView: View {
                 )
                 .themed(scheme)
             }
-            .task { session.boot() }
+            .task {
+                // Before the session machine's first event, which is when it
+                // reads `vela.accounts`: a record written after that is not
+                // seen until a relaunch. The space upserts ONE record and
+                // removes exactly that one on the way out (FR-003) — this door
+                // is opened on a phone that holds the founder's real wallet.
+                await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
+                parallelSpace = ParallelSpaceHook.isActive
+                session.boot()
+            }
         }
     }
 
