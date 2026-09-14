@@ -102,6 +102,13 @@ struct RootView: View {
     @State private var recipientDraft = ""
     @State private var amountDraft = ""
     @State private var feeSheetOpen = false
+    /// Whether the token picker is showing tick boxes.
+    ///
+    /// **The shell's**, and deliberately so: the core's `multiSelectMode` flips
+    /// at CONFIRM, not when the boxes appear, so it cannot answer "are we
+    /// picking". Every other question about a sweep — which rows are valuable,
+    /// how much of each moves — goes to the core.
+    @State private var sweepPicking = false
     @State private var sendAlert: (title: String, body: String)?
     @State private var flows: FlowNav
     /// Which section of the signed-in shell is showing (spec 050).
@@ -575,6 +582,8 @@ struct RootView: View {
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
+                    onSelectAllTokens: { visible in selectAllValuable(visible) },
+                    onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
@@ -1090,7 +1099,9 @@ struct RootView: View {
         if let view = send.view {
             let display = WalletLive.Display.from(settings.currency)
             if case .sendPick(let pick) = model.base {
-                model.base = .sendPick(SendLive.pick(view, on: pick, loc: loc))
+                model.base = .sendPick(
+                    SendLive.pick(view, on: pick, picking: sweepPicking, loc: loc)
+                )
             }
             if case .sendForm(let form) = model.base {
                 model.base = .sendForm(SendLive.form(
@@ -1127,8 +1138,43 @@ struct RootView: View {
     /// A picker row was tapped. The index travels because the screen knows
     /// positions and the core keys tokens by id.
     private func selectSendToken(_ index: Int) {
-        guard let token = send.view?.tokens[safe: index] else { return }
-        send.selectToken(id: token.id)
+        guard let view = send.view, let token = view.tokens[safe: index] else { return }
+        guard sweepPicking else {
+            send.selectToken(id: token.id)
+            return
+        }
+        // One tap becomes one or two events, in the order the core needs them:
+        // the pin before the tick, because the pin is what the tick is judged
+        // against.
+        send.sweepTap(SweepPick.tap(
+            view: view, tokenId: token.id, chainId: token.chainId
+        ))
+    }
+
+    /// 「全选有价值代币」 — over the rows on screen, and only those.
+    private func selectAllValuable(_ visible: [Int]) {
+        guard let view = send.view, sweepPicking else { return }
+        let ids = visible.compactMap { view.tokens[safe: $0]?.id }
+        send.sweepTap(SweepPick.selectAll(
+            view: view,
+            visibleIds: ids,
+            chainOf: { id in view.tokens.first { $0.id == id }?.chainId }
+        ))
+    }
+
+    /// The picker's CTA.
+    ///
+    /// **「发送多个代币」 shipped doing nothing** — it pushed a state the live
+    /// router overrode back to the picker (survey, 054). From a plain pick it
+    /// turns the tick boxes on; from a sweep already under way it confirms the
+    /// selection and the core moves to the sweep form.
+    private func sendPickCta() {
+        guard sweepPicking else {
+            sweepPicking = true
+            return
+        }
+        guard send.view?.multiSelectedIds.isEmpty == false else { return }
+        send.confirmMultiSelection()
     }
 
     /// A fee asset was chosen.
@@ -1164,6 +1210,11 @@ struct RootView: View {
     /// address. So it is read from the store, which is also the only place that
     /// holds the key set the signature is packed against.
     private func openSend() async {
+        // A journey that starts fresh starts without tick boxes. The flag is
+        // the shell's, so nothing else will clear it — and a picker that opened
+        // in sweep mode because the last journey ended there would be the
+        // wallet remembering a decision nobody made twice.
+        sweepPicking = false
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }

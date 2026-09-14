@@ -291,3 +291,68 @@ enum SendPickFixture {
         return try! CoreJSON.decode(SendViewWire.self, from: object)
     }
 }
+
+// MARK: - What the sweep form promises
+
+@MainActor
+struct SweepFormTests {
+
+    private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+
+    /// **A sweep row shows what MOVES, never the balance.**
+    ///
+    /// A sweep is not "the whole balance": the core reserves what the fee needs
+    /// on the asset that pays it, so a row that showed 0.5 in the picker sends
+    /// slightly less. And when the core has not worked a row out yet the row
+    /// shows **nothing** rather than the balance — a figure the operation does
+    /// not carry is worse than no figure.
+    @Test func aSweepRowReadsTheCoresSpecAndNeverTheBalance() throws {
+        let core = SendCore()
+        var object = try CoreJSON.object(core.view())
+        object["multi_select_mode"] = true
+        // The core's own spelling: `network_address_symbol`. Inventing a second
+        // one is how a tick never matches its own token.
+        object["multi_selected_ids"] = ["Gnosis_native_xDAI", "Gnosis_0xtoken_USDC"]
+        object["multi_chain_id"] = 100
+        object["tokens"] = [
+            [
+                "symbol": "xDAI", "network": "Gnosis", "chain_id": 100,
+                "token_address": NSNull(), "decimals": 18, "balance": "0.50067",
+                "price_usd": 1.0, "logo_urls": [], "spam": false,
+            ],
+            [
+                "symbol": "USDC", "network": "Gnosis", "chain_id": 100,
+                "token_address": "0xtoken", "decimals": 6, "balance": "12.5",
+                "price_usd": 1.0, "logo_urls": [], "spam": false,
+            ],
+        ]
+        // Only the native one has been worked out.
+        object["multi_specs"] = [
+            ["token_address": NSNull(), "decimals": 18, "amount": "0.49067"],
+        ]
+        let view = try CoreJSON.decode(SendViewWire.self, from: object)
+
+        guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2d, loc: loc).base else {
+            Issue.record("sd2d is not a send form")
+            return
+        }
+        let model = SendLive.form(
+            view,
+            fee: nil,
+            display: .usd,
+            on: drawn,
+            loc: loc
+        )
+
+        #expect(model.sweepRows.count == 2)
+        #expect(model.sweepRows[0].amount == "0.49067 xDAI",
+                "the row must show what the core says leaves, not the 0.50067 held")
+        #expect(model.sweepRows[0].balanceLabel == "0.50067 xDAI",
+                "the balance is still shown — beside the figure, not as it")
+        #expect(model.sweepRows[1].amount.isEmpty,
+                "no spec yet is no figure, never the balance")
+        #expect(model.sweepSummary?.contains("Gnosis") == true)
+        #expect(model.token == nil, "a sweep has no single token to name in a header")
+        #expect(model.amount == nil, "and no single amount — the rows are the amount")
+    }
+}

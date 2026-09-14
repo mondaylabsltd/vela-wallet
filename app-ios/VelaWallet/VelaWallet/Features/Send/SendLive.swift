@@ -82,7 +82,7 @@ enum SendLive {
                 : nil,
             rows: view.tokens.map(assetRow),
             selection: picking ? SendSelectionModel(
-                selected: view.tokens.map { view.multiSelectedIds.contains(tokenId($0)) },
+                selected: view.tokens.map { view.multiSelectedIds.contains($0.id) },
                 // A row on a chain the pick has left behind is drawn dimmed and
                 // is not tappable: a tappable row is an invitation the wallet
                 // will not honour.
@@ -103,14 +103,7 @@ enum SendLive {
         )
     }
 
-    /// The id the core knows a holding by.
-    ///
-    /// A token is a (chain, contract) pair — the same symbol on two chains is
-    /// two different holdings, and an id that was only the symbol would tick
-    /// both.
-    static func tokenId(_ token: SendTokenWire) -> String {
-        "\(token.chainId):\(token.tokenAddress ?? "native")"
-    }
+
 
     private static func assetRow(_ token: SendTokenWire) -> AssetRowModel {
         AssetRowModel(
@@ -176,6 +169,43 @@ enum SendLive {
                 scanLabel: drawn.scanLabel,
                 note: view.recipientIdentity?.name ?? drawn.note
             )
+        }
+
+        // The sweep's rows: **what actually moves**, not what the picker showed.
+        //
+        // A sweep is not "the whole balance" — the core reserves what the fee
+        // needs on the asset that pays it, so a row that showed 0.5 xDAI in the
+        // picker sends slightly less. Reading the balances here would promise a
+        // figure the operation does not carry.
+        if view.multiSelectMode {
+            let ticked = view.tokens.filter { view.multiSelectedIds.contains($0.id) }
+            live.sweepRows = ticked.map { token in
+                let spec = view.multiSpecs.first {
+                    ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
+                }
+                return SweepRowModel(
+                    mark: TokenMarkModel(
+                        ticker: token.symbol, badgeColor: chainColor(token.chainId)
+                    ),
+                    symbol: token.symbol,
+                    balanceLabel: "\(trim(token.balance)) \(token.symbol)",
+                    // **No spec, no figure.** Falling back to the balance would
+                    // print a number the operation does not carry — the whole
+                    // reason these rows read `multi_specs` at all. An empty
+                    // amount is "not worked out yet", which is true.
+                    amount: spec.map { "\(trim($0.amount)) \(token.symbol)" } ?? "",
+                    max: model.sweepRows.first?.max ?? ""
+                )
+            }
+            live.sweepSummary = loc.t("send.multiSendSummary", vars: [
+                "n": String(ticked.count),
+                "chain": view.multiChainId
+                    .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
+            ])
+            // A sweep has no single amount and no single token: the rows are
+            // the amount, and the header card would name one of several.
+            live.amount = nil
+            live.token = nil
         }
 
         // The split's rows, each with the core's verdict on it.

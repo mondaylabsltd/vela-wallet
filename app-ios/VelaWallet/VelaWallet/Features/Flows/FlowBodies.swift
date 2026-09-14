@@ -537,7 +537,9 @@ struct SendPickBody: View {
     let model: SendPickModel
     var onFilter: (String) -> Void = { _ in }
     var onSelect: (Int) -> Void = { _ in }
-    var onSelectAll: () -> Void = {}
+    /// **The rows that are on screen**, by index. A search narrows the list,
+    /// and "select all valuable" must not sweep holdings a person cannot see.
+    var onSelectAll: ([Int]) -> Void = { _ in }
     var onCta: () -> Void = {}
 
     @State private var query = ""
@@ -578,7 +580,7 @@ struct SendPickBody: View {
                 }
             }
             if let selection = model.selection {
-                Button(action: onSelectAll) {
+                Button { onSelectAll(shown.map(\.offset)) } label: {
                     Text(verbatim: selection.selectAll)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)

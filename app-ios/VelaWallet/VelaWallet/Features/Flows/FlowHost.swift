@@ -82,6 +82,12 @@ struct FlowHost: View {
     /// the receive sheet and the network list each had: a tap that forgets what
     /// it tapped opens the first one.
     var onSelectToken: ((Int) -> Void)?
+    /// Sweep: "select all valuable", scoped to the rows on screen.
+    var onSelectAllTokens: (([Int]) -> Void)?
+    /// The picker's CTA. Entering the sweep pick from a single pick, or
+    /// confirming a sweep once one is under way — the screen cannot tell those
+    /// apart, and the shell's own picking flag can.
+    var onPickCta: (() -> Void)?
     var onMax: (() -> Void)?
     /// Split: a row was removed, or a row was added.
     var onRemoveRecipient: ((Int) -> Void)?
@@ -235,7 +241,11 @@ struct FlowHost: View {
                         if let onSelectToken { onSelectToken(index) }
                         else { onNavigate(.sendForm) }
                     },
-                    onCta: { onNavigate(.sendMulti) }
+                    onSelectAll: { visible in onSelectAllTokens?(visible) },
+                    onCta: {
+                        if let onPickCta { onPickCta() }
+                        else { onNavigate(.sendMulti) }
+                    }
                 )
             }
         case .sendForm(let m):
