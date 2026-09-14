@@ -96,7 +96,46 @@ opens on `0x88cC…6894` and closes cleanly.
 
 ---
 
-## Next — Phase 3: `fee_policy` + `send`, up to the confirm screen
+### Phase 3 — `fee_policy` + `send`, up to confirm ✅ committed `9baacaeb`
+
+The picker is the person's own money and the tapped token carries into the form
+— device-verified. Four defects on the way, all in results.md; the one worth
+carrying is that **a machine that only boots on its own page is unreadable from
+another page**, which cost Android its contact picker and cost this the chain
+list.
+
+---
+
+## Next — Phase 4: sign and submit
+
+The first phase where money can move. The spine is already written and tested
+(phase 1); what is missing is the screen reaching it.
+
+- [ ] **T401** SD3's CTA dispatches `slide_confirm`. The core raises
+      `submit_user_op`; `SendExecutor` already answers it through the spine.
+- [ ] **T402** `signingStarted` reaches the screen, and `cancel_signing`
+      cancels the task. **One prompt per attempt** is the test, counted on the
+      signer — not a reading of the code.
+- [ ] **T403** `persist_tx_records` before `track_submitted` — the core emits
+      them in that order and the shell must not make the write asynchronous.
+      The feed shows the row from that moment.
+- [ ] **T404** SD4a/b/c reachable from the core's `receipt.status`, not from
+      `FlowNav.steps` (which only knows `.sd4b`).
+- [ ] **T405** Device: dust from the golden Safe on Gnosis, in the parallel
+      space. Fund it first, and check the relay's treasury is covered.
+
+**Watch for**: the Tempo branch needs `accountInfo` before it can build a fee
+leg, and its quote's recipient must match the collector — the spine refuses
+otherwise, before any prompt.
+
+### Then
+
+Phase 5 `tx_tracker` · Phase 6 refusals and the two sheets · Phase 7 the three
+markers and closeout.
+
+---
+
+## Phase 3's task list, for reference
 
 The first phase with a screen. The order to follow is web 026's "machine order
 to repeat", and it is not negotiable:
