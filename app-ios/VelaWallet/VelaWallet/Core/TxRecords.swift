@@ -61,6 +61,70 @@ enum TxRecords {
         return fresh.count
     }
 
+    /// Write the records a submit just produced, in ONE atomic write.
+    ///
+    /// The core's invariant ⑥: all sibling records of one operation land
+    /// together, never one call per record. A split that wrote four times could
+    /// be interrupted after two, leaving a person with half a payment in their
+    /// history and no way to tell which half.
+    ///
+    /// Distinct from `merge`, which is the incoming scan's: that one de-dupes
+    /// against what is already stored and answers how many were NEW, because a
+    /// re-scan of the same window must not re-celebrate a receipt somebody has
+    /// already seen. This one is a write of rows that did not exist a moment
+    /// ago, and an id already present is **replaced** — a re-submit of the same
+    /// operation updates its row rather than doubling it.
+    @MainActor
+    static func writeRecords(_ records: [[String: Any]], store: VelaStore) {
+        guard !records.isEmpty else { return }
+        let ids = Set(records.compactMap { $0["id"] as? String })
+        var merged = records + load(store: store).filter { record in
+            guard let id = record["id"] as? String else { return true }
+            return !ids.contains(id)
+        }
+        merged.sort { timestamp($0) > timestamp($1) }
+        if merged.count > cap { merged = Array(merged.prefix(cap)) }
+        store.writeList(VelaStore.Key.transactionHistory, merged)
+    }
+
+    /// Patch the given ids in place — the tracker's verdict landing on rows
+    /// that already exist.
+    ///
+    /// Same ids, in place, **never a second record**: a patch that appended
+    /// would show the person their payment twice, once pending forever.
+    @MainActor
+    static func patch(ids: [String], fields: [String: Any], store: VelaStore) {
+        guard !ids.isEmpty else { return }
+        let wanted = Set(ids)
+        var records = load(store: store)
+        var touched = false
+        for index in records.indices {
+            guard let id = records[index]["id"] as? String, wanted.contains(id) else { continue }
+            for (key, value) in fields {
+                if value is NSNull { records[index].removeValue(forKey: key) }
+                else { records[index][key] = value }
+            }
+            touched = true
+        }
+        guard touched else { return }
+        store.writeList(VelaStore.Key.transactionHistory, records)
+    }
+
+    /// The still-pending submissions, as `load_pending_txs` defines them:
+    /// `status == "pending"`, a `userOpHash`, and **no** `txHash` yet.
+    ///
+    /// There is no separate tracker key on any client — Android's string of
+    /// that name is a WorkManager task identifier. This derivation IS the
+    /// pending set, which is why a force-quit loses nothing.
+    @MainActor
+    static func pending(store: VelaStore) -> [[String: Any]] {
+        load(store: store).filter { record in
+            (record["status"] as? String) == "pending"
+                && !((record["userOpHash"] as? String) ?? "").isEmpty
+                && ((record["txHash"] as? String) ?? "").isEmpty
+        }
+    }
+
     /// Remove one record. A missing id writes nothing — the core's optimistic
     /// delete already removed the row, and rewriting an identical file would
     /// only risk losing a concurrent write.

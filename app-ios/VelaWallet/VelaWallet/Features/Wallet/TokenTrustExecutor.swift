@@ -181,6 +181,12 @@ final class TokenTrustExecutor {
             result = ["type": "range_capped", "cap": max(0, Int(maxSpan))]
         case .failed:
             result = ["type": "failed"]
+        case .rpcError:
+            // An endpoint that refused the query has not told us there were no
+            // transfers. Before spec 052 this arrived as `.ok(nil)` and became
+            // `logs: []` — a scan that reported "nothing arrived" on the
+            // strength of an error, which the core would then believe.
+            result = ["type": "failed"]
         }
         return CoreJSON.string([
             "type": "logs", "address": address, "chain_id": chainId, "outcome": result,

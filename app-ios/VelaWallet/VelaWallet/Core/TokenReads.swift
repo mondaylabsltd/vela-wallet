@@ -87,6 +87,13 @@ enum TokenReads {
                 // Meaningless for a balance read; treated as a failure rather
                 // than silently dropped.
                 failed = true
+            case .rpcError:
+                // The endpoint answered and the answer was "no". The balance is
+                // therefore UNKNOWN, and an unknown balance is a failed chain —
+                // the alternative is a total that quietly omits a coin somebody
+                // owns. Before spec 052 this arrived as `.ok(nil)` and the
+                // chain reported success with nothing in it.
+                failed = true
             }
         }
 

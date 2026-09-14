@@ -54,6 +54,17 @@ enum RpcOutcome {
     /// The provider capped the block span of an `eth_getLogs`. The caller
     /// narrows and asks again; the core has already recorded the cap.
     case rangeCap(url: String, maxSpan: Double)
+    /// The endpoint answered, and the answer was a JSON-RPC error.
+    ///
+    /// **Not a failure of the endpoint** — `classify_response_error` routes an
+    /// error that is neither permanent nor transient to `Route::Success`,
+    /// because a revert, an "out of gas" and a relay's refusal of a user
+    /// operation are all valid responses to a question. They are just not
+    /// values. Until spec 052 this case did not exist and those answers
+    /// arrived as `.ok(nil)`, which conflated "the chain said no" with "the
+    /// method returned null" — and dropped the relay's own sentence, which is
+    /// the one thing `classify_relay_rejection` needs to do its job.
+    case rpcError(code: Int?, message: String)
 }
 
 @MainActor
@@ -87,6 +98,10 @@ final class RpcPool {
         let params: [Any]
         /// Bodies by URL. `Conclude { Respond { url } }` names which one won.
         var bodies: [String: Any?] = [:]
+        /// The JSON-RPC `error` members, by the URL that answered one. Kept
+        /// beside the bodies rather than inside them so `.ok`'s payload stays
+        /// exactly the `result` field every caller since 051 reads.
+        var errors: [String: [String: Any]] = [:]
         var resume: ((RpcOutcome) -> Void)?
     }
 
@@ -204,6 +219,36 @@ final class RpcPool {
             pending[callId] = entry
             core.dispatch(CoreJSON.string([
                 "type": "best_rpc_url_requested",
+                "call_id": callId,
+                "chain_id": chainId,
+                "now_ms": Self.nowMs,
+            ]))
+        }
+    }
+
+    /// Which bundler REST base this chain's `/v1/…` calls must use.
+    ///
+    /// The core's invariant ③: account-info and sponsor reads must resolve to
+    /// the SAME bundler the pool would submit to. Tempo's gas reimbursement is
+    /// paid to that bundler's per-Safe EOA, so reading it from a different one
+    /// reimburses the wrong address and the operation is rejected on chain.
+    /// `nil` means every bundler endpoint is banned or the pool is empty — the
+    /// caller falls back to the built-in base.
+    func bundlerBase(chainId: Int) async -> String? {
+        guard booted else { return nil }
+        let callId = mintCallId()
+        return await withCheckedContinuation { continuation in
+            var entry = Pending(method: "", params: [])
+            var resumed = false
+            entry.resume = { outcome in
+                guard !resumed else { return }
+                resumed = true
+                if case .ok(let value) = outcome { continuation.resume(returning: value as? String) }
+                else { continuation.resume(returning: nil) }
+            }
+            pending[callId] = entry
+            core.dispatch(CoreJSON.string([
+                "type": "bundler_base_requested",
                 "call_id": callId,
                 "chain_id": chainId,
                 "now_ms": Self.nowMs,
@@ -336,6 +381,10 @@ final class RpcPool {
                 info["code"] = (error["code"] as? NSNumber)?.intValue ?? NSNull()
                 info["message"] = (error["message"] as? String) ?? NSNull()
                 outcome = ["type": "response", "error": info]
+                // Held for `conclude`: when the core rules this answer a
+                // success (an execution error is a valid response), the
+                // caller must receive the sentence rather than a null.
+                pending[callId]?.errors[url] = error
             } else {
                 outcome = ["type": "response", "error": NSNull()]
                 pending[callId]?.bodies[url] = body["result"] ?? nil
@@ -366,7 +415,16 @@ final class RpcPool {
         switch verdict["type"] as? String ?? "" {
         case "respond":
             let url = verdict["url"] as? String ?? ""
-            entry.resume?(.ok(entry.bodies[url] ?? nil))
+            if let body = entry.bodies[url] {
+                entry.resume?(.ok(body))
+            } else if let error = entry.errors[url] {
+                entry.resume?(.rpcError(
+                    code: (error["code"] as? NSNumber)?.intValue,
+                    message: (error["message"] as? String) ?? ""
+                ))
+            } else {
+                entry.resume?(.ok(nil))
+            }
         case "range_cap":
             entry.resume?(.rangeCap(
                 url: verdict["url"] as? String ?? "",

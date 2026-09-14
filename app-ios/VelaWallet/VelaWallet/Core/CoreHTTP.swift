@@ -88,6 +88,48 @@ enum CoreHTTP {
         return result is NSNull ? nil : result
     }
 
+    /// A REST answer, with the status kept.
+    ///
+    /// The relay's `/v1/treasury/{chain}` returns **404 for a chain it does not
+    /// cover**, and that is a different fact from "the relay is down": one
+    /// means this network has no gas sponsorship, the other means try again.
+    /// Flattening both to `nil` — which every other method here does, on
+    /// purpose — would make the send screen say the wrong one.
+    enum RestAnswer {
+        case ok([String: Any])
+        /// A non-2xx, or a 2xx whose body was not a JSON object.
+        case status(Int)
+        /// Never reached a server, or the URL was refused before sending.
+        case failed
+    }
+
+    /// `GET url` with extra headers → a classified REST answer.
+    ///
+    /// The one header that matters is `X-Rpc-Url`: the relay reads the chain
+    /// through the endpoint THIS wallet picked, so a person on their own RPC
+    /// gets an account view derived from it rather than from whatever the
+    /// relay happens to use.
+    static func getREST(
+        _ url: String,
+        headers: [String: String] = [:],
+        timeout: TimeInterval = Timeout.ethereumData
+    ) async -> RestAnswer {
+        guard var request = request(url, timeout: timeout) else { return .failed }
+        for (name, value) in headers where !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        do {
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else { return .status(status) }
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return .status(status) }
+            return .ok(object)
+        } catch {
+            return .failed
+        }
+    }
+
     /// What a health probe needs and a plain fetch does not: the status code
     /// and how long it took, even when the body is useless.
     struct Probe {
