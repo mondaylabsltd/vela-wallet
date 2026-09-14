@@ -18,6 +18,19 @@
 
 import SwiftUI
 
+/// The endpoints and providers pages' live half (spec 056 US2). Eleven events
+/// the executor has answered since 050 and nothing had ever sent.
+struct SettingsEndpointActions {
+    var onEditEndpoint: (String, String) -> Void = { _, _ in }
+    var onBlurEndpoint: (String) -> Void = { _ in }
+    var onResetEndpoints: () -> Void = {}
+    var onEditProvider: (String, String) -> Void = { _, _ in }
+    var onBlurProvider: (String) -> Void = { _ in }
+    var onTestProvider: (String) -> Void = { _ in }
+    var onOpenEndpoints: () -> Void = {}
+    var onOpenProviders: () -> Void = {}
+}
+
 /// The three appearance controls' live half.
 struct SettingsAppearanceActions {
     var onTheme: ((String) -> Void)?
@@ -39,6 +52,11 @@ struct SettingsScreen: View {
     var onClearCaches: (() -> Void)?
     var onErase: (() -> Void)?
     var onSelectAccount: ((String) -> Void)?
+    /// The endpoints and providers pages' live half.
+    var endpointActions: SettingsEndpointActions?
+    /// The switcher was opened. The balance machine reads every account's
+    /// cached total so the sheet shows numbers the instant it appears.
+    var onOpenAccounts: (() -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -63,7 +81,9 @@ struct SettingsScreen: View {
         onPick: ((SettingsOverlay, String) -> Void)? = nil,
         onClearCaches: (() -> Void)? = nil,
         onErase: (() -> Void)? = nil,
-        onSelectAccount: ((String) -> Void)? = nil
+        onSelectAccount: ((String) -> Void)? = nil,
+        endpointActions: SettingsEndpointActions? = nil,
+        onOpenAccounts: (() -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -76,6 +96,8 @@ struct SettingsScreen: View {
         self.onClearCaches = onClearCaches
         self.onErase = onErase
         self.onSelectAccount = onSelectAccount
+        self.endpointActions = endpointActions
+        self.onOpenAccounts = onOpenAccounts
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -191,8 +213,8 @@ struct SettingsScreen: View {
         case .networks: networksBody
         case .networkDetail: NetworkDetailBody(detail: networkDetail)
         case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
-        case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders)
-        case .endpoints: EndpointsBody(panel: model.endpoints)
+        case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions)
+        case .endpoints: EndpointsBody(panel: model.endpoints, actions: endpointActions)
         case .storage: StorageBody(panel: model.storage,
                                    onClearCaches: { overlay = .clearCaches })
         case .about: AboutBody(panel: model.about)
@@ -200,7 +222,10 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder private var homeBody: some View {
-        SettingsAccountRow(account: model.account) { overlay = .accounts }
+        SettingsAccountRow(account: model.account) {
+            onOpenAccounts?()
+            overlay = .accounts
+        }
 
         ForEach(model.sections) { section in
             if let label = section.label {
@@ -469,6 +494,14 @@ struct SettingsNetworkActions {
 private struct RpcProvidersBody: View {
     @Environment(\.theme) private var theme
     let panel: RpcProvidersModel
+    /// The live half. Absent in the gallery, where the page is a picture of
+    /// keys somebody already entered.
+    var actions: SettingsEndpointActions?
+
+    /// What is being typed, per provider. Local for the reason every field in
+    /// this app is: a field bound straight to a machine loses characters on the
+    /// round trip.
+    @State private var drafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s32) {
@@ -484,7 +517,11 @@ private struct RpcProvidersBody: View {
                         Spacer()
                         StatusPill(pill: provider.badge)
                     }
-                    SettingsUrlField(field: provider.field)
+                    SettingsUrlField(
+                        field: provider.field,
+                        text: actions.map { _ in binding(for: provider.field) },
+                        onCommit: { actions?.onBlurProvider(provider.field.id) }
+                    )
                     if let support = provider.support {
                         Text(support)
                             .typeRole(Typography.label)
@@ -495,30 +532,77 @@ private struct RpcProvidersBody: View {
                             .typeRole(Typography.label)
                             .foregroundStyle(theme.infoBase)
                     }
+                    if let actions, let test = provider.test {
+                        Button { actions.onTestProvider(provider.field.id) } label: {
+                            Text(verbatim: test)
+                                .typeRole(Typography.flowCaption)
+                                .foregroundStyle(theme.accentBase)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
+    }
+
+    private func binding(for field: UrlFieldModel) -> Binding<String> {
+        Binding(
+            get: { drafts[field.id] ?? field.value },
+            set: { value in
+                drafts[field.id] = value
+                actions?.onEditProvider(field.id, value)
+            }
+        )
     }
 }
 
 private struct EndpointsBody: View {
     @Environment(\.theme) private var theme
     let panel: EndpointsModel
+    var actions: SettingsEndpointActions?
+
+    @State private var drafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s24) {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
-            ForEach(panel.fields) { SettingsUrlField(field: $0) }
-            HStack(spacing: Tokens.Space.s8) {
-                LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
-                Text(panel.reset).typeRole(Typography.flowCaption)
+            ForEach(panel.fields) { field in
+                SettingsUrlField(
+                    field: field,
+                    text: actions.map { _ in binding(for: field) },
+                    // A field is COMMITTED when the person is done saying it,
+                    // not on every keystroke: the core probes an endpoint when
+                    // it is blurred, and probing each half-typed prefix would
+                    // be a request per character.
+                    onCommit: { actions?.onBlurEndpoint(field.id) }
+                )
             }
-            .foregroundStyle(theme.fgMuted)
-            .frame(maxWidth: .infinity)
+            Button { actions?.onResetEndpoints() } label: {
+                HStack(spacing: Tokens.Space.s8) {
+                    LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
+                    Text(panel.reset).typeRole(Typography.flowCaption)
+                }
+                .foregroundStyle(theme.fgMuted)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(actions == nil)
             .padding(.top, Tokens.Space.s16)
         }
+    }
+
+    private func binding(for field: UrlFieldModel) -> Binding<String> {
+        Binding(
+            get: { drafts[field.id] ?? field.value },
+            set: { value in
+                drafts[field.id] = value
+                actions?.onEditEndpoint(field.id, value)
+            }
+        )
     }
 }
 

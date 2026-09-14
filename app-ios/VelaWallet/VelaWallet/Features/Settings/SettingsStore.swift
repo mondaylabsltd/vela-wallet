@@ -155,6 +155,65 @@ final class SettingsStore {
 
     // MARK: - Lookups the screens need
 
+    /// One event, to the networks machine.
+    private func dispatch(_ event: [String: Any]) {
+        core.dispatch(CoreJSON.string(event))
+    }
+
+    // MARK: - The endpoints and providers pages (spec 056 US2)
+    //
+    // Eleven events the executor has answered since 050 and nothing has ever
+    // sent. Two whole settings pages were drawn over live operations with no
+    // call sites — the event-parity ruler's largest single block.
+
+    /// A chain id typed into 添加网络. The core looks it up.
+    func addByChainId(_ text: String) {
+        dispatch(["type": "add_by_chain_id_requested", "text": text])
+    }
+
+    /// ST12 opened. The core reads what is stored and projects the fields.
+    func openEndpoints() { dispatch(["type": "endpoints_opened"]) }
+
+    /// One endpoint field, as it is typed and when it is left.
+    ///
+    /// Two events rather than one because they mean different things: EDITED is
+    /// what is on screen, BLURRED is what the person is done saying — and only
+    /// the second is worth writing to storage.
+    func editEndpoint(id: String, value: String) {
+        dispatch(["type": "endpoint_edited", "id": id, "value": value])
+    }
+
+    func blurEndpoint(id: String) {
+        dispatch(["type": "endpoint_blurred", "id": id])
+    }
+
+    func resetEndpoints() { dispatch(["type": "reset_endpoints_to_defaults"]) }
+
+    /// ST11 opened.
+    func openProviders() { dispatch(["type": "providers_opened"]) }
+
+    func editProviderKey(id: String, value: String) {
+        dispatch(["type": "provider_key_edited", "id": id, "value": value])
+    }
+
+    func blurProviderKey(id: String) {
+        dispatch(["type": "provider_key_blurred", "id": id])
+    }
+
+    /// 测试 — the core asks the provider whether the key works.
+    func testProvider(id: String) {
+        dispatch(["type": "provider_test_requested", "id": id])
+    }
+
+    /// One per-network RPC override, as it is typed and when it is left.
+    func editOverride(chainId: Int, value: String) {
+        dispatch(["type": "override_field_edited", "chain_id": chainId, "value": value])
+    }
+
+    func blurOverride(chainId: Int) {
+        dispatch(["type": "override_blurred", "chain_id": chainId])
+    }
+
     func network(id: String) -> NetNetworkRowWire? {
         networkAdmin?.networks.first { $0.id == id }
     }

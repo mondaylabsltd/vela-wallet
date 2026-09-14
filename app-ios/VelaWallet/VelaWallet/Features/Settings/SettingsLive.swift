@@ -186,6 +186,29 @@ enum SettingsLive {
         return locale.localizedString(forIdentifier: tag)?.capitalized ?? tag
     }
 
+    /// 测试 on every provider card, live only.
+    ///
+    /// The DRAWN panel has no such control: the gallery cannot ask a provider
+    /// anything, so a button there would be a picture of an action. The live
+    /// page can, and the core has had `provider_test_requested` since 050 with
+    /// nothing to send it.
+    static func withProviderTests(
+        on model: SettingsScreenModel, loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        copy.rpcProviders = RpcProvidersModel(
+            title: model.rpcProviders.title,
+            subtitle: model.rpcProviders.subtitle,
+            description: model.rpcProviders.description,
+            providers: model.rpcProviders.providers.map { provider in
+                var changed = provider
+                changed.test = loc.t("settingsModals.rpcProviders.test")
+                return changed
+            }
+        )
+        return copy
+    }
+
     static func withCurrency(
         _ view: CurrencyViewWire,
         on model: SettingsScreenModel,

@@ -46,6 +46,15 @@ final class BalanceExecutor {
     /// `vela.balanceHidden` — the tap-to-hide state, so it survives a relaunch.
     private static let privacyKey = "vela.balanceHidden"
 
+    /// Mid-fetch snapshots, as each chain lands.
+    ///
+    /// A PORT rather than an answer: the operation is still answered exactly
+    /// once (the contract), and these are separate EVENTS — which is what the
+    /// core expects, because a twelve-chain sweep that says nothing until the
+    /// slowest chain answers is a total that sits stale for as long as the
+    /// worst endpoint takes.
+    var onChainAssets: ([[String: Any]]) -> Void = { _ in }
+
     private let store: VelaStore
     private let pool: RpcPool
     /// The Chainlink map, cached across refreshes. One instance, because twelve
@@ -174,7 +183,15 @@ final class BalanceExecutor {
                 }
             }
             var collected: [TokenReads.ChainResult] = []
-            for await result in group { collected.append(result) }
+            for await result in group {
+                collected.append(result)
+                // The accumulated snapshot, every time a chain lands. Chains
+                // not in it keep their previous tokens, so the total never
+                // drops to zero mid-refresh — which is the whole reason the
+                // core has this event.
+                let snapshot = collected.flatMap(\.tokens)
+                await MainActor.run { [snapshot] in onChainAssets(snapshot) }
+            }
             return collected
         }
 

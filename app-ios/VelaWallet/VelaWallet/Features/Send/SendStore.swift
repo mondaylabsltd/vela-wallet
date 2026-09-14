@@ -196,6 +196,28 @@ final class SendStore {
     func cancelSigning() { dispatch(["type": "cancel_signing"]) }
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
+
+    /// The TRACKER's verdict, back to the send machine (spec 056).
+    ///
+    /// The receipt screen and the tracker are two machines watching one
+    /// operation, and only the tracker polls. Without this the receipt sat on
+    /// "submitted" while the notification said "confirmed" — two answers about
+    /// the same money, on one phone.
+    func receiptConfirmed(userOpHash: String, txHash: String) {
+        dispatch([
+            "type": "receipt_update",
+            "user_op_hash": userOpHash,
+            "outcome": ["type": "confirmed", "tx_hash": txHash],
+        ])
+    }
+
+    func receiptFailed(userOpHash: String, rejected: Bool) {
+        dispatch([
+            "type": "receipt_update",
+            "user_op_hash": userOpHash,
+            "outcome": ["type": "failed", "rejected": rejected],
+        ])
+    }
     func retryAfterBootstrap() { dispatch(["type": "retry_after_bootstrap"]) }
     func done() { dispatch(["type": "done"]) }
     func refreshTokens() { dispatch(["type": "refresh_tokens"]) }

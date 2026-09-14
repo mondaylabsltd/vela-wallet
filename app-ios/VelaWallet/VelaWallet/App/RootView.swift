@@ -318,7 +318,22 @@ struct RootView: View {
                 refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) }
             )
         )
-        _send = State(initialValue: SendStore(executor: sendExecutor))
+        let sendStore = SendStore(executor: sendExecutor)
+        _send = State(initialValue: sendStore)
+        // The tracker's verdict, back to the SEND machine — the other half of
+        // this wallet watching the same operation.
+        //
+        // Installed here rather than in the tracker's own initialiser because
+        // the tracker is built FIRST (the send machine hands off to it), which
+        // is the same ordering `SendStore` solves for its own two ports.
+        //
+        // Without this the receipt screen sat on "submitted" while the
+        // notification said "confirmed": two answers about one payment, on one
+        // phone.
+        trackerExecutor.ports.notifyConfirmed = { [weak notify, weak sendStore] hash, chain, tx in
+            notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
+            sendStore?.receiptConfirmed(userOpHash: hash, txHash: tx)
+        }
         // The payroll importer. Its fiat column is priced through the DISPLAY
         // machine's own waterfall — chain feed, then endpoint, then nothing —
         // so a currency the wallet cannot price stays unpriced here too. A
@@ -731,6 +746,15 @@ struct RootView: View {
                     if sendStates.contains(state) { send.refreshTokens() }
                 }
                 .task(id: state) {
+                    // The activity LIST polls at its own faster cadence while
+                    // it is the screen somebody is looking at — the core has a
+                    // separate event for it and this client sent only the
+                    // home's slower one.
+                    if state == .a1 || state == .a2 {
+                        activity.startLiveTicking()
+                    } else {
+                        activity.stopLiveTicking()
+                    }
                     // The viewfinder runs only while it is on screen. A camera
                     // left running behind another screen is a light nobody
                     // asked for and a battery nobody budgeted.
@@ -1968,9 +1992,27 @@ struct RootView: View {
             onPick: { overlay, id in settingsPicked(overlay, id) },
             onClearCaches: { clearSettingsCaches() },
             onErase: { eraseThisDevice() },
-            onSelectAccount: { address in switchToAccount(address) }
+            onSelectAccount: { address in switchToAccount(address) },
+            endpointActions: SettingsEndpointActions(
+                onEditEndpoint: { id, value in settings.editEndpoint(id: id, value: value) },
+                onBlurEndpoint: { id in settings.blurEndpoint(id: id) },
+                onResetEndpoints: { settings.resetEndpoints() },
+                onEditProvider: { id, value in settings.editProviderKey(id: id, value: value) },
+                onBlurProvider: { id in settings.blurProviderKey(id: id) },
+                onTestProvider: { id in settings.testProvider(id: id) },
+                onOpenEndpoints: { settings.openEndpoints() },
+                onOpenProviders: { settings.openProviders() }
+            ),
+            onOpenAccounts: { openAccountSwitcher() }
         )
-        .task { settings.open() }
+        .task {
+            settings.open()
+            // Both pages ask the core to read what is stored when they open.
+            // Until 056 nothing sent either event, so two live pages rendered
+            // whatever the machine happened to be holding.
+            settings.openEndpoints()
+            settings.openProviders()
+        }
     }
 
     private func settingsModel(_ state: SettingsStateId) -> SettingsScreenModel {
@@ -1994,6 +2036,7 @@ struct RootView: View {
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
+        model = SettingsLive.withProviderTests(on: model, loc: loc)
         return model
     }
 
@@ -2055,6 +2098,19 @@ struct RootView: View {
             // screen would be the worst thing this control could do.
             contacts.open(myAddress: address)
             wallet.refresh(pull: true)
+        }
+    }
+
+    /// The account switcher opened — from settings, or from the wallet header.
+    ///
+    /// The balance machine is told, so the sheet opens on CACHED totals rather
+    /// than on spinners: it has every account's last known figure and refreshes
+    /// behind them (the core's invariant ⑩).
+    private func openAccountSwitcher() {
+        Task {
+            let addresses = await accounts.loadAccounts()
+                .compactMap { $0["address"] as? String }
+            wallet.switcherOpened(addresses: addresses)
         }
     }
 

@@ -40,6 +40,11 @@ final class WalletStore {
             onView: { [weak self] view in self?.balance = view },
             onFault: { print("[vela-wallet] balance_dashboard fault: \($0)") }
         )
+        // The port closes over this store, so it is installed after it exists
+        // — the same shape `SendStore` uses for its two.
+        executor.onChainAssets = { [weak self] tokens in
+            self?.chainAssetsArrived(tokens)
+        }
     }
 
     /// Called from the home screen's `.task`, with the signed-in address.
@@ -90,6 +95,33 @@ final class WalletStore {
     /// a relaunch rather than being re-hidden by hand each time.
     func togglePrivacy() {
         core.dispatch(CoreJSON.string(["type": "privacy_toggled"]))
+    }
+
+    /// A mid-fetch snapshot from the executor's fan-out.
+    func chainAssetsArrived(_ tokens: [[String: Any]]) {
+        core.dispatch(CoreJSON.string([
+            "type": "chain_assets_arrived", "tokens": tokens,
+        ]))
+    }
+
+    /// The account switcher opened (spec 056).
+    ///
+    /// The roster travels because the SESSION machine owns accounts and this
+    /// one owns balances — the core reads the cache for every address at once
+    /// so the sheet opens on numbers instead of on spinners, then refreshes
+    /// behind them.
+    func switcherOpened(addresses: [String]) {
+        core.dispatch(CoreJSON.string([
+            "type": "switcher_opened", "addresses": addresses,
+        ]))
+    }
+
+    func switcherClosed() { core.dispatch(CoreJSON.string(["type": "switcher_closed"])) }
+
+    /// A chain that failed, retried. Clears it from the failed list and
+    /// re-fetches — the "fix this network" affordance's other half.
+    func fixChain(_ chainId: Int) {
+        core.dispatch(CoreJSON.string(["type": "fix_chain_resolved", "chain_id": chainId]))
     }
 
     func appFocused() { core.dispatch(CoreJSON.string(["type": "app_focused"])) }

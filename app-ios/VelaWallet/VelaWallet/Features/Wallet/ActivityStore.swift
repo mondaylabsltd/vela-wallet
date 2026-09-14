@@ -31,6 +31,10 @@ final class ActivityStore {
     /// The auto-refresh while the home is on screen. Web's is the same thirty
     /// seconds; the ten-second Activity-tab poll waits for a tab that exists.
     private static let tickSeconds: UInt64 = 30
+    /// The Activity TAB's own cadence — near-real-time while somebody is
+    /// looking at the list, because that is the screen where a new transfer
+    /// arriving late is most obviously late.
+    private static let liveTickSeconds: UInt64 = 10
 
     private(set) var feed: FeedViewWire?
     /// Whether the local store has been read at least once.
@@ -45,6 +49,7 @@ final class ActivityStore {
     private var core: CoreStore<FeedViewWire>!
     private var scopedTo: String?
     private var ticker: Task<Void, Never>?
+    private var liveTicker: Task<Void, Never>?
 
     init(
         store: VelaStore,
@@ -112,6 +117,26 @@ final class ActivityStore {
     }
 
     func focusTick() { core.dispatch(CoreJSON.string(["type": "focus_tick"])) }
+
+    /// The 10-second poll while the activity list is on screen.
+    ///
+    /// A separate cadence from the home's 30 seconds, and a separate EVENT:
+    /// the core distinguishes them, and this client sent only the slow one.
+    func startLiveTicking() {
+        guard liveTicker == nil else { return }
+        liveTicker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.liveTickSeconds * 1_000_000_000)
+                guard !Task.isCancelled else { return }
+                self?.core.dispatch(CoreJSON.string(["type": "live_tick"]))
+            }
+        }
+    }
+
+    func stopLiveTicking() {
+        liveTicker?.cancel()
+        liveTicker = nil
+    }
 
     /// The balance's hide state. The core suppresses the receipt toast while it
     /// is on — the row still glows and the haptic still fires, which is exactly

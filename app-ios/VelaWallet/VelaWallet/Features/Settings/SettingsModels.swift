@@ -246,6 +246,9 @@ struct ProviderCardModel: Identifiable {
     let field: UrlFieldModel
     var support: String?
     var link: String?
+    /// 测试 — the core asks the provider whether the key works. Absent in the
+    /// gallery, where nothing can be asked.
+    var test: String?
 }
 
 struct RpcProvidersModel {
@@ -430,7 +433,7 @@ struct SettingsScreenModel {
     /// tapping Gnosis opens Gnosis.
     var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
-    let rpcProviders: RpcProvidersModel
+    var rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel
     let storage: StorageModel
     let about: AboutModel
