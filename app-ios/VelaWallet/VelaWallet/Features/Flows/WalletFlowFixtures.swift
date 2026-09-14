@@ -590,7 +590,12 @@ enum WalletFlowFixtures {
                 label: loc.t("send.recipientLabel"),
                 lines: addressLines(aliceFull),
                 identiconSeed: aliceFull,
-                pickLabel: loc.t("send.recipientPickAria")
+                pickLabel: loc.t("send.recipientPickAria"),
+                // The scan button its own SWEEP sibling has drawn since 021.
+                // Without it the single send's recipient row offered the
+                // address book and nothing else, and the scanner spec 055
+                // built was reachable only from inside that book.
+                scanLabel: loc.t("send.scanAria")
             ),
             addRecipient: loc.t("send.addRecipient"),
             fee: fee,

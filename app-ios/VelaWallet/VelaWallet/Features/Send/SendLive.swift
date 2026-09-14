@@ -66,7 +66,13 @@ enum SendLive {
             // consequence and this is the reason. The corpus has no sentence
             // for "locked to", so the summary line's own words carry it:
             // "N 个代币 · Gnosis" is exactly what has been chosen.
-            notice: picking && view.multiChainId != nil
+            // A scanned request this wallet cannot fulfil says so HERE — on the
+            // screen the core put the person on. Until 055 the flow landed on
+            // the picker with nothing to explain why the code did not work.
+            //
+            // The core's own `添加该网络` affordance has no drawn home on this
+            // client; recorded in results rather than invented.
+            notice: lockNotice(view, loc: loc) ?? (picking && view.multiChainId != nil
                 ? SendNoticeModel(
                     mark: model.notice?.mark
                         ?? TokenMarkModel(
@@ -79,7 +85,7 @@ enum SendLive {
                             .flatMap { ChainCatalog.meta($0)?.displayName } ?? "",
                     ])
                 )
-                : nil,
+                : nil),
             rows: view.tokens.map(assetRow),
             selection: picking ? SendSelectionModel(
                 selected: view.tokens.map { view.multiSelectedIds.contains($0.id) },
@@ -104,6 +110,49 @@ enum SendLive {
     }
 
 
+
+    /// Why a scanned request cannot be fulfilled, in the core's words.
+    ///
+    /// `lock_error` is a field the core has always computed and this client was
+    /// not reading: a code for a chain the wallet does not have put the send
+    /// flow into a stage with nothing drawn on it at all.
+    static func lockNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+        switch view.lockError {
+        case .network(let chainId):
+            return SendNoticeModel(
+                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(chainId)),
+                text: "\(loc.t("send.lock.netTitle")) · "
+                    + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)])
+            )
+        case .token:
+            return SendNoticeModel(
+                mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                text: "\(loc.t("send.lock.tokenTitle")) · \(loc.t("send.lock.tokenBody"))"
+            )
+        case nil:
+            // An add-network attempt that FAILED still owes a sentence — the
+            // person asked for something and it did not happen.
+            switch view.addNetworkMsg {
+            case .netNotFound:
+                return SendNoticeModel(
+                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                    text: loc.t("send.lock.netNotFound")
+                )
+            case .netNotCompatible:
+                return SendNoticeModel(
+                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                    text: loc.t("send.lock.netNotCompatible")
+                )
+            case .netAddError:
+                return SendNoticeModel(
+                    mark: TokenMarkModel(ticker: "", badgeColor: chainColor(0)),
+                    text: loc.t("send.lock.netAddError")
+                )
+            case nil:
+                return nil
+            }
+        }
+    }
 
     private static func assetRow(_ token: SendTokenWire) -> AssetRowModel {
         AssetRowModel(

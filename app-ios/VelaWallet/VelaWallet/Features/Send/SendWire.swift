@@ -30,6 +30,38 @@ enum SendStageWire: String, Decodable {
     case confirm
 }
 
+/// Why a locked request cannot be fulfilled.
+enum SendLockErrorWire: Decodable, Equatable {
+    case network(chainId: Int)
+    case token
+
+    private enum CodingKeys: String, CodingKey { case type, chainId }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if try container.decode(String.self, forKey: .type) == "network" {
+            self = .network(chainId: try container.decode(Int.self, forKey: .chainId))
+        } else {
+            self = .token
+        }
+    }
+}
+
+/// The line under the add-network button.
+enum SendAddNetworkMsgWire: String, Decodable, Equatable {
+    case netNotFound = "net_not_found"
+    case netNotCompatible = "net_not_compatible"
+    case netAddError = "net_add_error"
+
+    private enum CodingKeys: String, CodingKey { case type }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let raw = try container.decode(String.self, forKey: .type)
+        self = SendAddNetworkMsgWire(rawValue: raw) ?? .netAddError
+    }
+}
+
 /// One holding the picker offers.
 struct SendTokenWire: Decodable, Equatable {
     let network: String
@@ -216,6 +248,16 @@ struct SendViewWire: Decodable, Equatable {
     let showScanner: Bool
     let showContactPicker: Bool
     let showBatchImport: Bool
+    /// Why a scanned request cannot be fulfilled (spec 055): a chain this
+    /// wallet does not have, or a token it cannot identify on one it does.
+    ///
+    /// The core computes this and 052 was not reading it — a scanned code for
+    /// an unknown chain put the send flow into a stage with nothing drawn on
+    /// it.
+    let lockError: SendLockErrorWire?
+    /// What the last add-network attempt had to say. Semantic — the shell owns
+    /// the words. (`addingNetwork` is already below.)
+    let addNetworkMsg: SendAddNetworkMsgWire?
 
     let estimatingGas: Bool
     let feeBusy: Bool

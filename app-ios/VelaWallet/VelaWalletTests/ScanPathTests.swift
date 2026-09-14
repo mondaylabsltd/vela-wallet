@@ -103,3 +103,59 @@ struct ScanPathTests {
         #expect(!loc.t("componentsUi.scanner.grantPermission").isEmpty)
     }
 }
+
+// MARK: - When the code names something this wallet cannot do
+
+/// A scanned request for a chain this wallet does not have.
+///
+/// The core has always computed `lock_error`; until 055 this client did not
+/// read it, so the flow landed on the token picker with nothing at all to say
+/// why the code had not worked.
+@MainActor
+struct ScanLockTests {
+
+    private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+
+    private func view(_ patch: [String: Any]) -> SendViewWire {
+        var object = try! CoreJSON.object(SendCore().view())
+        for (key, value) in patch { object[key] = value }
+        return try! CoreJSON.decode(SendViewWire.self, from: object)
+    }
+
+    @Test func anUnknownChainIsExplained() throws {
+        let view = view(["lock_error": ["type": "network", "chain_id": 424242]])
+        let notice = try #require(
+            SendLive.lockNotice(view, loc: loc),
+            "a code for a chain this wallet does not have said nothing"
+        )
+        #expect(notice.text.contains(loc.t("send.lock.netTitle")))
+        #expect(notice.text.contains("424242"), "the chain id is what a person would look up")
+    }
+
+    @Test func anUnknownTokenIsExplained() throws {
+        let notice = try #require(SendLive.lockNotice(view(["lock_error": ["type": "token"]]), loc: loc))
+        #expect(notice.text.contains(loc.t("send.lock.tokenTitle")))
+    }
+
+    /// An add-network attempt that failed still owes a sentence: the person
+    /// asked for something and it did not happen.
+    @Test func aFailedAddNetworkSaysWhy() throws {
+        for (tag, key) in [
+            ("net_not_found", "send.lock.netNotFound"),
+            ("net_not_compatible", "send.lock.netNotCompatible"),
+            ("net_add_error", "send.lock.netAddError"),
+        ] {
+            let notice = try #require(
+                SendLive.lockNotice(view(["add_network_msg": ["type": tag]]), loc: loc),
+                "\(tag) said nothing"
+            )
+            #expect(notice.text == loc.t(key))
+        }
+    }
+
+    /// Nothing wrong, nothing said — and the sweep's own chain notice still
+    /// gets the slot it always had.
+    @Test func aQuietPickerSaysNothing() {
+        #expect(SendLive.lockNotice(view([:]), loc: loc) == nil)
+    }
+}
