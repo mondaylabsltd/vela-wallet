@@ -105,14 +105,25 @@ final class ContactsExecutor {
         // core's own unknown variant — never an invented value.
         // ---------------------------------------------------------------
 
-        // live in 052 — needs the transaction store.
+        // The local send history — which is where the book's auto-suggested
+        // contacts come from, and how the core knows an address is not a first
+        // interaction.
         //
-        // `history_failed` rather than an empty list, deliberately: an empty
-        // list would tell the core this person has never sent to anybody, and
-        // the core would then treat every address as a first interaction — the
-        // address-poisoning warning, shown to everyone, forever.
+        // **Only `send` rows.** A `dapp_tx` reaches a router, a token contract
+        // or a dApp, and counting those as people would pollute the very trust
+        // signal the address-poisoning warning rests on (`contacts.rs`'s module
+        // doc says so, and the web narrows the same way).
+        //
+        // An unreadable store still answers `history_failed` rather than an
+        // empty list: empty would tell the core nobody has ever been paid, and
+        // then every address wears the warning forever. `TxRecords.load`
+        // answers an empty list for a corrupt store, so the two cases are
+        // separated by whether the KEY exists at all.
         case "load_send_history":
-            return CoreJSON.string(["type": "history_failed"])
+            guard let txs = Self.sendHistory(store: store) else {
+                return CoreJSON.string(["type": "history_failed"])
+            }
+            return CoreJSON.string(["type": "history_loaded", "txs": txs])
 
         // The name waterfall: the passkey index, then the on-chain name
         // services. `null` is "nobody could name them" and is never cached —
@@ -178,7 +189,7 @@ final class ContactsExecutor {
 
 // MARK: - Stored ⇄ wire
 
-private extension ContactsExecutor {
+extension ContactsExecutor {
 
     /// One stored contact → the core's `Contact`.
     ///
@@ -286,4 +297,23 @@ private extension ContactsExecutor {
         let raw = value as? String ?? ""
         return ["eoa", "account", "unknown"].contains(raw) ? raw : "unknown"
     }
+    /// The outgoing sends this device recorded, as `ContactHistoryTx`.
+    ///
+    /// `nil` means the store could not be read at all — which is a different
+    /// fact from "nothing has been sent", and the core has a variant for each.
+    static func sendHistory(store: VelaStore) -> [[String: Any]]? {
+        guard store.hasKey(VelaStore.Key.transactionHistory) else { return nil }
+        return TxRecords.load(store: store).compactMap { record in
+            guard (record["type"] as? String) == "send" else { return nil }
+            guard let to = record["to"] as? String, !to.isEmpty else { return nil }
+            return [
+                "kind": "send",
+                "to": to,
+                "to_name": (record["toName"] as? String).map { $0 as Any } ?? NSNull(),
+                // The store keeps SECONDS; the core counts milliseconds.
+                "timestamp_ms": ((record["timestamp"] as? NSNumber)?.doubleValue ?? 0) * 1000,
+            ]
+        }
+    }
+
 }

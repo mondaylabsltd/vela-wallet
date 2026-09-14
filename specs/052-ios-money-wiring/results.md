@@ -567,6 +567,55 @@ the sibling clients unchanged.
 
 ---
 
+## Phase 7 — the three inherited arms, and the closeout
+
+### `contacts::load_send_history`
+
+Two cuts answered `history_failed` on purpose: an empty list would tell the core
+nobody has ever been paid, and it would then treat every address as a first
+interaction — the address-poisoning warning, shown to everyone, forever. It now
+answers the store.
+
+**Only `send` rows.** A `dapp_tx` reaches a router, a token contract or a dApp;
+counting those as people would put a swap router in somebody's address book and,
+worse, would tell the core it has "interacted before" with a contract, which is
+the signal the warning rests on. `contacts.rs`'s own module doc says so and the
+web narrows the same way.
+
+The distinction the old answer protected survives: a store that has **never been
+written** still answers `history_failed`, because `TxRecords.load` reports an
+empty list for a corrupt one and the two are different facts. `VelaStore.hasKey`
+is what separates them.
+
+### The contact detail's 最近往来
+
+This device's own record of what passed between the two of you, both
+directions, narrowed from the same store the feed reads. It is **not** a history
+of the address: a hundred-block scan and a local store are all this wallet has,
+and claiming more would be inventing an indexer.
+
+### `network_admin::clear_bundler_cache`
+
+The relay's two caches exist now (in-band quotes 8 s, account info 30 s), so the
+settings machine's clear reaches something. The old comment was true when it was
+written, which is exactly why it was written down.
+
+### Closeout
+
+`grep 'live in 052'` returns nothing. Hermetic tests **371**; device acceptance
+**14 of 14** on the current phone. Literal violations 35. Every invariant diff
+against 052's branch point is empty: `rust/crates/vela-core/src/app/`, the
+corpus, `vela_core_uniffi.swift`, and the four sibling clients.
+
+**What 053 inherits**: `UserOpSpine.signMessage` is written and tested-adjacent
+but called by nothing — it is the dApp `personal_sign` path, ported with the
+transfer so the two cannot become two opinions. `RelayLiveTests` is the suite
+that found the bundler-endpoint defect and is the first thing to run when a
+quote misbehaves. The parallel space is the only way any of this was verified
+without a finger, and 053–057 depend on it.
+
+---
+
 ## Two findings raised to the founder — one resolved, one open
 
 ### 1. ~~That iPhone cannot reach the endpoints this app reads~~ — resolved
@@ -634,14 +683,14 @@ simulator run is preparation, never proof.
 
 | | Criterion | Verdict |
 |---|---|---|
-| SC-001 | dust leaves the golden Safe from the iPhone | |
-| SC-002 | the same send from the founder's own passkey, one prompt | |
-| SC-003 | submit, force-quit, relaunch — the row reaches confirmed | |
-| SC-004 | cancel at the assertion; the prompt count is one | |
-| SC-005 | every refusal driven and read; no raw units | |
-| SC-006 | the fee token changes and the quote follows | |
-| SC-007 | the live route reads no send fixture | |
-| SC-008 | the drift gate is exhaustive for all three families | |
-| SC-009 | the three markers are gone | |
-| SC-010 | a Release archive carries no fixture symbol | |
-| SC-011 | no core, corpus, bindings or sibling-client change | |
+| **SC-001** | dust leaves the golden Safe from the iPhone | **device-verified** — user op `0xcf9fcae6…bd269195`, tx `0x151d63c8…57b9`, Gnosis block `0x2e014dd`, `success: true` |
+| **SC-002** | the same send from the founder's own passkey, one prompt | **owed** — it needs a finger. Everything up to the ceremony is the same code with one substitution (FR-003) |
+| **SC-003** | submit, force-quit, relaunch — the row reaches confirmed | **device-verified** — the feed showed 已发送 −0.0001 xDAI resolved by a tracker nobody asked to start; balance $0.53 → $0.51 |
+| **SC-004** | cancel at the assertion; the prompt count is one | **test-only** — counted on the signer (`confirmingAsksTheSignerOnceAndACancelEndsTheAttempt`). Driving a cancel needs a real ceremony, which needs a finger |
+| **SC-005** | every refusal driven and read; no raw units | **device-verified** — the phone printed 发送 999 加网络费 0.01，共需 999.01 xDAI；当前余额为 0.50067。最多可发送 0.49067 xDAI。 Every warning kind is unit-tested for a sentence and for the absence of a base-unit figure |
+| **SC-006** | the fee token changes and the quote follows | **half device-verified** — the sheet shows this account's balance and this operation's estimate, live. Paying in a DIFFERENT asset cannot be driven: the golden Safe holds only xDAI and the core does not offer an asset it cannot pay with. Test-covered; Android recorded the same |
+| **SC-007** | the live route reads no send fixture | **met** — `SendLive` builds every send screen from the view; the fixtures are the fallback the gallery still renders |
+| **SC-008** | the drift gate is exhaustive for all three families | **met** — operation lists on all three executors, each with a `neutralAnswer` twin; hermetic tests 331 → **371** |
+| **SC-009** | the three `// live in 052` markers are gone | **met** — `grep` returns nothing |
+| **SC-010** | a Release archive carries no fixture symbol | **met, with a control** — Release 0 / Debug 567 fixture symbols, 0 / 1 badge strings, 0 / 93 binding symbols |
+| **SC-011** | no core, corpus, bindings or sibling-client change | **met** — all four diffs against the branch point are empty; `vela_core_uniffi.swift` was never regenerated |

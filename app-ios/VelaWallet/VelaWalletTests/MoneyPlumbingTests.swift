@@ -1090,4 +1090,87 @@ struct SendRefusalTests {
     }
 }
 
+// MARK: - The three arms spec 050 and 051 left for this cut
+
+@MainActor
+struct InheritedArmTests {
+    private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private let router = "0x1111111111111111111111111111111111111111"
+
+    private func store() -> VelaStore {
+        VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    }
+
+    /// The send history counts SENDS, never dApp transactions.
+    ///
+    /// A `dapp_tx` reaches a router, a token contract or a dApp. Counting those
+    /// as people would put a Uniswap router in somebody's address book and,
+    /// worse, would tell the core it has "interacted before" with a contract —
+    /// which is the very signal the address-poisoning warning rests on.
+    @Test func theSendHistoryExcludesDappTransactions() throws {
+        let store = store()
+        TxRecords.writeRecords([
+            [
+                "id": "a", "userOpHash": "0x1", "txHash": "0x1", "from": golden,
+                "to": golden, "value": "1", "symbol": "XDAI", "decimals": 18,
+                "chainId": 100, "timestamp": 1_700_000_000,
+                "status": "confirmed", "type": "send",
+            ],
+            [
+                "id": "b", "userOpHash": "0x2", "txHash": "0x2", "from": golden,
+                "to": router, "value": "0", "symbol": "XDAI", "decimals": 18,
+                "chainId": 100, "timestamp": 1_700_000_001,
+                "status": "confirmed", "type": "dapp_tx",
+            ],
+        ], store: store)
+
+        let history = try #require(ContactsExecutor.sendHistory(store: store))
+        #expect(history.count == 1)
+        #expect((history.first?["to"] as? String) == golden)
+        // Milliseconds on the wire; seconds in the store.
+        #expect((history.first?["timestamp_ms"] as? Double) == 1_700_000_000_000)
+    }
+
+    /// A store that has never been written answers `nil`, not an empty list.
+    ///
+    /// Empty would tell the core nobody has ever been paid, and every address
+    /// would then wear the first-interaction warning forever. That is why the
+    /// arm answered `history_failed` for two whole cuts rather than `[]`.
+    @Test func anUnwrittenStoreIsNotAnEmptyHistory() {
+        #expect(ContactsExecutor.sendHistory(store: store()) == nil)
+    }
+
+    /// A contact's page shows what passed between the two of you, both ways.
+    @Test func aContactsActivityIsThisDevicesOwnRecord() {
+        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+        let them = "0x031d7D57c99CAF891e1C250554691Fd12D84772b"
+        let rows = ContactsLive.activityRows(
+            with: them,
+            records: [
+                [
+                    "id": "a", "from": golden, "to": them, "value": "0.0001",
+                    "symbol": "XDAI", "chainId": 100,
+                    "timestamp": Date().timeIntervalSince1970, "type": "send",
+                ],
+                [
+                    "id": "b", "from": them, "to": golden, "value": "5",
+                    "symbol": "XDAI", "chainId": 100,
+                    "timestamp": Date().timeIntervalSince1970, "type": "receive",
+                ],
+                [
+                    "id": "c", "from": golden, "to": router, "value": "1",
+                    "symbol": "XDAI", "chainId": 100,
+                    "timestamp": Date().timeIntervalSince1970, "type": "send",
+                ],
+            ],
+            loc: loc
+        )
+        #expect(rows.count == 2, "somebody else's transfer reached this page")
+        #expect(rows.first?.amount == "−0.0001")
+        #expect(rows.first?.positive == false)
+        #expect(rows.last?.amount == "+5")
+        #expect(rows.last?.positive == true)
+    }
+}
+
 }

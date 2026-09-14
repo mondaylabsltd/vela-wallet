@@ -694,7 +694,13 @@ struct RootView: View {
                 case .detail(let address):
                     if let contact = contacts.contact(at: address) {
                         ContactDetailScreen(
-                            model: ContactsLive.detail(contact, view: view, loc: loc),
+                            model: ContactsLive.detail(
+                                contact, view: view,
+                                // This device's own record of what passed
+                                // between the two of you — the same store the
+                                // feed reads, narrowed to one address.
+                                records: TxRecords.load(store: shelf), loc: loc
+                            ),
                             onBack: { contactsRoute = nil }
                         )
                     } else {

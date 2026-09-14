@@ -123,6 +123,16 @@ struct VelaStore {
     /// `nil` means the key was never written — which several machines read as a
     /// real answer ("the person never chose a currency"), distinct from any
     /// value the key could hold.
+    /// Whether this key has ever been written.
+    ///
+    /// The difference between "nothing here" and "could not be read" is a real
+    /// one for the send history: an empty list tells the core nobody has ever
+    /// been paid, and it would then treat every address as a first
+    /// interaction — the address-poisoning warning, shown to everyone, forever.
+    func hasKey(_ key: String) -> Bool {
+        defaults.object(forKey: key) != nil
+    }
+
     func readString(_ key: String) -> String? {
         guard let raw = defaults.string(forKey: key), !raw.isEmpty else { return nil }
         return raw

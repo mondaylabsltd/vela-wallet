@@ -260,7 +260,9 @@ final class NetworkAdminExecutor {
         // MARK: Fail-closed until their infrastructure exists
 
 
-        // live in 052 — there is no bundler client, so no cache.
+        // The relay's two caches — the in-band quote (8 s) and the account
+        // info (30 s). Before spec 052 there was no bundler client to have a
+        // cache, and this answered truthfully that there was nothing to clear.
         case "clear_bundler_cache":
             return CoreJSON.string(["type": "bundler_cache_cleared"])
 
