@@ -68,7 +68,8 @@ enum ContactsLive {
     static func home(
         _ view: ContactsViewWire,
         loc: Loc,
-        query: String? = nil
+        query: String? = nil,
+        form: ContactDraft? = nil
     ) -> ContactsHomeModel {
         let searching = !(query ?? "").trimmingCharacters(in: .whitespaces).isEmpty
         let rows = searching ? narrowed(view.contacts, to: query ?? "") : view.contacts
@@ -90,6 +91,14 @@ enum ContactsLive {
             sheet: nil,
             textScale: 1
         )
+
+        // The add form rides the home, over whichever list is behind it —
+        // including the empty one, which is the state most likely to raise it.
+        model.form = form.map { formModel($0, loc: loc) }
+        // The + raises C5's three choices. Live it was nil, so the button
+        // presented an empty sheet: the drawn menu is the live one.
+        model.sheet = ContactsFixtures.addMenu(loc: loc)
+        model.notice = importNotice(view, loc: loc)
 
         // A book with nothing in it gets the drawn C3 treatment — the invitation
         // to add somebody, not an empty list under a "8 位" header.
@@ -133,6 +142,34 @@ enum ContactsLive {
         return model
     }
 
+    /// What an import had to say — the report, or the refusal.
+    ///
+    /// A file that was read and a file that could not be are two different
+    /// sentences, and the core keeps them apart: `lastImport` counts rows,
+    /// `importFailure` says the whole file was refused before ANY write. A
+    /// screen that collapsed them would tell somebody "0 added" about a file
+    /// nothing had even parsed.
+    static func importNotice(_ view: ContactsViewWire, loc: Loc) -> FlowAlertModel? {
+        if view.importFailure != nil {
+            return FlowAlertModel(
+                title: loc.t("contacts.importFailTitle"),
+                message: loc.t("contacts.importFailBody")
+            )
+        }
+        guard let report = view.lastImport else { return nil }
+        var message = loc.t("contacts.importDoneBody", vars: [
+            "added": String(report.added), "skipped": String(report.skipped),
+        ])
+        // The invalid count is a SECOND sentence and only when there is one:
+        // "另有 0 条地址无效" is noise on a clean import.
+        if report.invalid > 0 {
+            message += " " + loc.t("contacts.importDoneInvalid", vars: [
+                "invalid": String(report.invalid),
+            ])
+        }
+        return FlowAlertModel(title: loc.t("contacts.importDoneTitle"), message: message)
+    }
+
     /// One contact's page.
     ///
     /// The activity block is **this device's own record** of what passed
@@ -144,7 +181,9 @@ enum ContactsLive {
         _ contact: ContactWire,
         view: ContactsViewWire,
         records: [[String: Any]] = [],
-        loc: Loc
+        loc: Loc,
+        form: ContactDraft? = nil,
+        groupPick: Set<String>? = nil
     ) -> ContactDetailModel {
         let row = contactModel(contact, groups: view.groups)
         return ContactDetailModel(
@@ -168,9 +207,121 @@ enum ContactsLive {
             deleteLabel: loc.t("contacts.deleteContact"),
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             editLabel: loc.t("contacts.edit"),
+            // The star, always drawn on a page that has one — lit or not. A
+            // control that appears only when it is already on is a control
+            // nobody can turn on.
+            favourite: FavouriteControlModel(
+                on: contact.favorite,
+                label: loc.t("contacts.sectionFavorites")
+            ),
+            // What the core found out about THIS address, and only when it was
+            // asked about this one: a projection left over from the previous
+            // recipient would tag the wrong person.
+            inspection: inspection(view.recipient, of: contact.address, loc: loc),
             sheet: nil,
+            form: form.map { formModel($0, loc: loc) },
+            groupPick: groupPick.map { picked in
+                MultiPickModel(
+                    title: loc.t("contacts.sectionGroups"),
+                    rows: view.groups.map { group in
+                        MultiPickRowModel(
+                            id: group.id,
+                            title: group.name,
+                            subtitle: ContactsLabels.count(
+                                loc, "contacts.groupMembers", group.members.count
+                            ),
+                            identiconSeed: nil,
+                            picked: picked.contains(group.id)
+                        )
+                    },
+                    emptyText: loc.t("contacts.groupNoContacts"),
+                    save: loc.t("contacts.save"),
+                    cancel: loc.t("contacts.cancel")
+                )
+            },
             textScale: 1
         )
+    }
+
+    /// Which groups currently hold this address — the set the picker opens on.
+    ///
+    /// Read from the core's own membership rather than from the chips on
+    /// screen: the chips are display names, and two groups may share one.
+    static func groupsHolding(_ address: String, in view: ContactsViewWire) -> Set<String> {
+        Set(view.groups.filter { group in
+            group.members.contains { $0.address.caseInsensitiveCompare(address) == .orderedSame }
+        }.map(\.id))
+    }
+
+    /// The core's reading of an address, as two neutral tags.
+    ///
+    /// Neutral is the whole point: "a contract wallet" and "never paid before"
+    /// are facts, not warnings, and dressing either as a warning would teach
+    /// people to ignore the one that is.
+    private static func inspection(
+        _ recipient: ContactRecipientWire?, of address: String, loc: Loc
+    ) -> ContactInspectionModel? {
+        guard let recipient,
+              recipient.address.caseInsensitiveCompare(address) == .orderedSame
+        else { return nil }
+        var model = ContactInspectionModel()
+        // `nil` is "unknown or unreachable" and says nothing — never a false
+        // alarm, and never a false reassurance either.
+        if recipient.isContract == true {
+            model.tag = loc.t("componentsUi.signing.contractTag")
+        } else if recipient.isContract == false {
+            model.tag = loc.t("componentsUi.signing.walletTag")
+        }
+        if recipient.firstInteraction {
+            model.firstTime = loc.t("componentsUi.signing.firstTimeTagNeutral")
+        }
+        return (model.tag == nil && model.firstTime == nil) ? nil : model
+    }
+
+    /// What is in the form right now, as the shell holds it. The core owns the
+    /// contact; this is the two strings being typed at it.
+    struct ContactDraft {
+        /// The address being edited, or `nil` for a new contact.
+        var editing: String?
+        var name: String
+        var address: String
+        /// The core's refusal, once there is something to refuse.
+        var error: String?
+
+        var isEdit: Bool { editing != nil }
+    }
+
+    /// C7 / C8, live.
+    ///
+    /// **Save is gated on the address alone**, because a contact with no name
+    /// is a legitimate saved address and a contact with no address is nothing
+    /// at all. The shape check here is the shell's own cheap one; the CORE
+    /// still validates and can refuse — which is what `error` shows.
+    static func formModel(_ draft: ContactDraft, loc: Loc) -> ContactFormModel {
+        ContactFormModel(
+            title: loc.t(draft.isEdit ? "contacts.editTitle" : "contacts.addTitle"),
+            nameLabel: loc.t("contacts.nameLabel"),
+            namePlaceholder: loc.t("contacts.namePlaceholder"),
+            addressLabel: loc.t("contacts.addressLabel"),
+            addressPlaceholder: loc.t("contacts.addressPlaceholder"),
+            name: draft.name,
+            address: draft.address,
+            error: draft.error,
+            save: loc.t("contacts.save"),
+            cancel: loc.t("contacts.cancel"),
+            saveEnabled: draft.isEdit || isAddress(draft.address),
+            addressLocked: draft.isEdit
+        )
+    }
+
+    /// The shell's cheap shape check — 0x and forty hex digits. Not a
+    /// substitute for the core's judgement, which is what actually decides
+    /// whether a contact may be saved; this only keeps the button from
+    /// offering to save an obviously empty field.
+    static func isAddress(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 42, trimmed.hasPrefix("0x") else { return false }
+        return trimmed.dropFirst(2).allSatisfy(\.isHexDigit)
     }
 
     /// One group's page. Members arrive already resolved by the core, in
@@ -179,7 +330,8 @@ enum ContactsLive {
     static func group(
         _ group: ContactGroupWire,
         view: ContactsViewWire,
-        loc: Loc
+        loc: Loc,
+        memberPick: Set<String>? = nil
     ) -> GroupDetailModel {
         GroupDetailModel(
             state: .c4,
@@ -195,6 +347,27 @@ enum ContactsLive {
             // The ⋯ menu is drawn (C6) and its destructive item is the one with
             // a machine behind it; the screen raises the sheet on demand.
             sheet: ContactsFixtures.groupMenu(loc: loc),
+            memberPick: memberPick.map { picked in
+                MultiPickModel(
+                    title: loc.t("contacts.addMember"),
+                    // Every SAVED contact is a candidate. A member with no
+                    // saved contact is synthesised into the group's own list by
+                    // the core, and offering to "add" them again would be
+                    // offering a row that is already there.
+                    rows: view.contacts.map { contact in
+                        MultiPickRowModel(
+                            id: contact.address,
+                            title: displayName(contact),
+                            subtitle: AddressText.short(contact.address),
+                            identiconSeed: contact.address,
+                            picked: picked.contains(contact.address)
+                        )
+                    },
+                    emptyText: loc.t("contacts.groupNoContacts"),
+                    save: loc.t("contacts.save"),
+                    cancel: loc.t("contacts.cancel")
+                )
+            },
             textScale: 1
         )
     }

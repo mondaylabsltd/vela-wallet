@@ -194,7 +194,13 @@ enum SendLive {
                     // reason these rows read `multi_specs` at all. An empty
                     // amount is "not worked out yet", which is true.
                     amount: spec.map { "\(trim($0.amount)) \(token.symbol)" } ?? "",
-                    max: model.sweepRows.first?.max ?? ""
+                    // No Max on a sweep row: the sweep already moves the
+                    // maximum of each one, and the only event behind that chip
+                    // is `tap_max`, which acts on the SINGLE selected token —
+                    // tapping it on the third row would silently change a
+                    // different amount. Android draws the chip and drops the
+                    // index; this is the recorded deviation.
+                    max: ""
                 )
             }
             live.sweepSummary = loc.t("send.multiSendSummary", vars: [

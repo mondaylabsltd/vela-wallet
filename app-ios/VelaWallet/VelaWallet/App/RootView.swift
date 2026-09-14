@@ -125,6 +125,21 @@ struct RootView: View {
     @State private var section: WalletSection = .wallet
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
+    /// The add/edit form, while it is open. `nil` means no form — the presence
+    /// of the draft IS the presence of the sheet, so one state answers both.
+    @State private var contactDraft: ContactsLive.ContactDraft?
+    /// What is being typed into the address book's search field.
+    @State private var contactQuery = ""
+    /// The membership picker, while it is open. A SET, held here until 保存 —
+    /// the core takes a whole membership at once, and a sheet that emitted one
+    /// event per tap would leave a half-applied grouping behind if somebody
+    /// closed it midway.
+    @State private var groupPick: Set<String>?
+    @State private var memberPick: Set<String>?
+    /// The one document layer: pickers, save panels and the share sheet. Shared
+    /// by the payroll importer and the address book, because they are the same
+    /// platform affordance asked for twice.
+    @State private var documents: UIKitDocumentPorts
     /// Whether the app is inside the parallel space, for the badge.
     ///
     /// Mirrored into view state rather than read from the hook on every render:
@@ -287,6 +302,7 @@ struct RootView: View {
         // so a currency the wallet cannot price stays unpriced here too. A
         // fallback of 1 would pay out the fiat figure in tokens.
         let documentPorts = UIKitDocumentPorts()
+        _documents = State(initialValue: documentPorts)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
             documents: { documentPorts }
@@ -1041,17 +1057,77 @@ struct RootView: View {
                                 // This device's own record of what passed
                                 // between the two of you — the same store the
                                 // feed reads, narrowed to one address.
-                                records: TxRecords.load(store: shelf), loc: loc
+                                records: TxRecords.load(store: shelf), loc: loc,
+                                form: contactDraft, groupPick: groupPick
                             ),
-                            onBack: { contactsRoute = nil }
+                            onBack: { contactsRoute = nil },
+                            // The pencil shipped doing nothing (survey, 054).
+                            onEdit: {
+                                contactDraft = ContactsLive.ContactDraft(
+                                    editing: contact.address,
+                                    name: contact.name ?? "",
+                                    address: contact.address
+                                )
+                            },
+                            onFavourite: { contacts.toggleFavorite(address: contact.address) },
+                            // 删除联系人 at the foot of the page shipped doing
+                            // nothing too — the row swipe was the only way out.
+                            onDelete: {
+                                contacts.delete(address: contact.address)
+                                contactsRoute = nil
+                            },
+                            formName: Binding(
+                                get: { contactDraft?.name ?? "" },
+                                set: { contactDraft?.name = $0 }
+                            ),
+                            formAddress: Binding(
+                                get: { contactDraft?.address ?? "" },
+                                set: { contactDraft?.address = $0 }
+                            ),
+                            onSaveForm: { saveContactDraft() },
+                            onCancelForm: { contactDraft = nil },
+                            onOpenGroups: {
+                                groupPick = ContactsLive.groupsHolding(
+                                    contact.address, in: view
+                                )
+                            },
+                            onToggleGroup: { id in
+                                guard var picked = groupPick else { return }
+                                if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+                                groupPick = picked
+                            },
+                            onSaveGroups: {
+                                if let picked = groupPick {
+                                    contacts.setContactGroups(
+                                        address: contact.address, groupIds: Array(picked).sorted()
+                                    )
+                                }
+                                groupPick = nil
+                            },
+                            onCancelGroups: { groupPick = nil }
                         )
+                        // Opening somebody's page asks the core about their
+                        // address: is it a contract, and has this wallet ever
+                        // paid it. The answer lands in `view.recipient`.
+                        .task(id: contact.address) {
+                            contacts.inspect(
+                                address: contact.address,
+                                // The chain the browser is on, because that is
+                                // the chain a page would be paying on. With no
+                                // page open it is Gnosis — recorded as a
+                                // choice, not a fact about the address.
+                                chainId: browser.browserChain
+                            )
+                        }
                     } else {
                         contactsHome(view)
                     }
                 case .group(let id):
                     if let group = contacts.group(id: id) {
                         GroupDetailScreen(
-                            model: ContactsLive.group(group, view: view, loc: loc),
+                            model: ContactsLive.group(
+                                group, view: view, loc: loc, memberPick: memberPick
+                            ),
                             onBack: { contactsRoute = nil },
                             onOpenMember: { member in
                                 contactsRoute = .detail(address: member.addressFull)
@@ -1060,7 +1136,37 @@ struct RootView: View {
                                 contacts.deleteGroup(id: group.id)
                                 // Back to the list: the page this was is gone.
                                 contactsRoute = nil
-                            }
+                            },
+                            onOpenMembers: {
+                                memberPick = Set(group.members.map(\.address))
+                            },
+                            onToggleMember: { address in
+                                guard var picked = memberPick else { return }
+                                if picked.contains(address) {
+                                    picked.remove(address)
+                                } else {
+                                    picked.insert(address)
+                                }
+                                memberPick = picked
+                            },
+                            onSaveMembers: {
+                                if let picked = memberPick {
+                                    // The WHOLE membership, replaced — which is
+                                    // what the sheet asked about. `add_group_`
+                                    // `members` is a union and could not remove
+                                    // anybody the person just unticked.
+                                    contacts.setGroupMembers(
+                                        id: group.id, members: Array(picked).sorted()
+                                    )
+                                }
+                                memberPick = nil
+                            },
+                            onCancelMembers: { memberPick = nil },
+                            // 群发转账 — the group's people become a split,
+                            // seeded straight into the send machine.
+                            onBatchSend: { sendToGroup(group) },
+                            onImportIntoGroup: { importContacts(intoGroup: group.id) },
+                            onExportGroup: { exportContacts(groupId: group.id) }
                         )
                     } else {
                         contactsHome(view)
@@ -1086,7 +1192,11 @@ struct RootView: View {
 
     private func contactsHome(_ view: ContactsViewWire) -> some View {
         ContactsScreen(
-            model: ContactsLive.home(view, loc: loc, query: contacts.query),
+            model: ContactsLive.home(
+                view, loc: loc,
+                query: contactQuery.isEmpty ? nil : contactQuery,
+                form: contactDraft
+            ),
             onOpenContact: { contactsRoute = .detail(address: $0.addressFull) },
             onOpenGroup: { row in
                 // The row model carries a display name, not the core's id — so
@@ -1097,8 +1207,109 @@ struct RootView: View {
                 }
             },
             onSelectTab: selectTab,
-            onDelete: { contacts.delete(address: $0) }
+            onDelete: { contacts.delete(address: $0) },
+            onAdd: {
+                contactDraft = ContactsLive.ContactDraft(
+                    editing: nil, name: "", address: ""
+                )
+            },
+            onImport: { importContacts() },
+            onExport: { exportContacts() },
+            searchText: $contactQuery,
+            onClearSearch: { contactQuery = "" },
+            onAcknowledge: { contacts.importAcknowledged() },
+            formName: Binding(
+                get: { contactDraft?.name ?? "" },
+                set: { contactDraft?.name = $0 }
+            ),
+            formAddress: Binding(
+                get: { contactDraft?.address ?? "" },
+                set: { contactDraft?.address = $0 }
+            ),
+            onSaveForm: { saveContactDraft() },
+            onCancelForm: { contactDraft = nil }
         )
+    }
+
+    /// 保存 on the contact form.
+    ///
+    /// The CORE validates. This hands over what was typed and closes the form
+    /// only if the book actually gained or changed the contact — so a refusal
+    /// leaves the form open with the words still in it, rather than swallowing
+    /// somebody's typing and showing them an unchanged list.
+    private func saveContactDraft() {
+        guard let draft = contactDraft else { return }
+        let address = draft.editing ?? draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !address.isEmpty else { return }
+        contacts.save(address: address, name: draft.name)
+        // The core is synchronous through the bridge: by the time this returns
+        // the view has the contact, or it does not.
+        if contacts.contact(at: address.lowercased()) != nil
+            || contacts.contact(at: address) != nil {
+            contactDraft = nil
+        } else {
+            contactDraft?.error = loc.t("contacts.invalidAddress")
+        }
+    }
+
+    /// 从文件导入 — a picked file's TEXT, straight to the core.
+    ///
+    /// The shell does not parse it. The core sniffs JSON from CSV, refuses a
+    /// bad file before any write, and applies existing-wins; a shell that
+    /// pre-parsed would be a second, disagreeing reader of the same file.
+    private func importContacts(intoGroup: String? = nil) {
+        Task {
+            guard let picked = await documents.pick(types: DocumentTypes.addressBook) else { return }
+            contacts.importFile(
+                content: String(decoding: picked.bytes, as: UTF8.self),
+                filename: picked.name,
+                intoGroup: intoGroup
+            )
+        }
+    }
+
+    /// 群发转账 — every member of a group, as one split.
+    ///
+    /// The amounts are left empty: the core mints the row ids and the person
+    /// fills the figures in. Seeding a number here would be inventing what
+    /// somebody means to pay.
+    private func sendToGroup(_ group: ContactGroupWire) {
+        guard !group.members.isEmpty else { return }
+        let rows: [[String: Any]] = group.members.map { member in
+            [
+                "id": "",
+                "address": member.address,
+                "amount": "",
+                "name": member.name.map { $0 as Any } ?? NSNull(),
+            ]
+        }
+        section = .wallet
+        contactsRoute = nil
+        flows.enter(.send)
+        Task {
+            // `Open` resets the machine to the picker, so the seed must follow
+            // it — a split seeded first would be thrown away. The screen's own
+            // `.task` opens too; whichever gets there first does it, and the
+            // second is dropped by the store's idempotence guard.
+            await openSend()
+            send.seedSplitRecipients(rows)
+        }
+    }
+
+    /// 导出 — the core writes the file, the share sheet hands it over.
+    private func exportContacts(groupId: String? = nil) {
+        contacts.exportRequested(groupId: groupId)
+        guard let file = contacts.view?.export else { return }
+        Task {
+            _ = await documents.share(
+                name: file.filename,
+                type: DocumentTypes.type(forMime: file.mime),
+                bytes: Data(file.content.utf8)
+            )
+            // One-shot: taken or not, the file leaves the view. Leaving it
+            // there would re-offer the same backup on the next glance.
+            contacts.exportTaken()
+        }
     }
 
     /// The home screen: the person's own address, name — and, since spec 051,

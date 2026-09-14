@@ -16,6 +16,10 @@ struct ContactsSearchField: View {
 
     let model: ContactsSearchModel
     var onClear: () -> Void = {}
+    /// What is being typed. Absent in the gallery, where the field is a
+    /// picture of a query; present everywhere a person can search — and until
+    /// spec 054 it was absent EVERYWHERE, so the field could not be typed in.
+    var text: Binding<String>?
 
     private var hasQuery: Bool { !(model.query ?? "").isEmpty }
 
@@ -23,10 +27,24 @@ struct ContactsSearchField: View {
         HStack(spacing: Tokens.Space.s8) {
             LucideIcon(.search, size: LucideIconSize.checkmark)
                 .foregroundStyle(theme.fgSubtle)
-            Text(verbatim: hasQuery ? (model.query ?? "") : model.placeholder)
-                .typeRole(Typography.body.scaled(textScale))
-                .foregroundStyle(hasQuery ? theme.fgBase : theme.fgSubtle)
-                .lineLimit(1)
+            if let text {
+                TextField(
+                    "",
+                    text: text,
+                    prompt: Text(verbatim: model.placeholder).foregroundStyle(theme.fgSubtle)
+                )
+                .font(Typography.body.scaled(textScale).font)
+                .foregroundStyle(theme.fgBase)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .accessibilityLabel(Text(verbatim: model.placeholder))
+            } else {
+                Text(verbatim: hasQuery ? (model.query ?? "") : model.placeholder)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(hasQuery ? theme.fgBase : theme.fgSubtle)
+                    .lineLimit(1)
+            }
             Spacer(minLength: Tokens.Space.s8)
             if hasQuery {
                 Button(action: onClear) {

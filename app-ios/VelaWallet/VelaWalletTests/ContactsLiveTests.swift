@@ -34,11 +34,12 @@ struct ContactsLiveTests {
     private func view(
         _ contacts: [ContactWire],
         groups: [ContactGroupWire] = [],
-        loaded: Bool = true
+        loaded: Bool = true,
+        recipient: ContactRecipientWire? = nil
     ) -> ContactsViewWire {
         ContactsViewWire(
-            loaded: loaded, contacts: contacts, groups: groups,
-            lastImport: nil, recipient: nil
+            loaded: loaded, contacts: contacts, sections: [], groups: groups,
+            lastImport: nil, importFailure: nil, export: nil, recipient: recipient
         )
     }
 

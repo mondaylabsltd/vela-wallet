@@ -99,6 +99,93 @@ final class ContactsStore {
         ]))
     }
 
+    /// The form's 保存 — new or edited, the same event either way (it is
+    /// idempotent on the address).
+    ///
+    /// **The validation is the CORE's.** The form does not decide whether an
+    /// address is one; it hands over what was typed and shows what comes back.
+    /// A shell that validated first would eventually disagree with the machine
+    /// that stores the result.
+    func save(address: String, name: String?) {
+        let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        core.dispatch(CoreJSON.string([
+            "type": "save",
+            "input": [
+                "address": address,
+                "name": trimmed.isEmpty ? NSNull() : trimmed as Any,
+                "note": NSNull(),
+                "favorite": NSNull(),
+                "kind": NSNull(),
+                "resolved_name": NSNull(),
+                "resolved_source": NSNull(),
+            ],
+            "now_ms": Self.nowMs,
+        ]))
+    }
+
+    /// The star. Flips a saved contact's, or promotes an unsaved suggestion to
+    /// a starred saved contact — which is why it carries a clock.
+    func toggleFavorite(address: String) {
+        core.dispatch(CoreJSON.string([
+            "type": "toggle_favorite",
+            "address": address,
+            "now_ms": Self.nowMs,
+        ]))
+    }
+
+    /// A picked file, as text. The core sniffs JSON from CSV, refuses a bad
+    /// file before ANY write, and applies existing-wins.
+    func importFile(content: String, filename: String?, intoGroup: String? = nil) {
+        core.dispatch(CoreJSON.string([
+            "type": "import_file",
+            "content": content,
+            "filename": filename.map { $0 as Any } ?? NSNull(),
+            "into_group": intoGroup.map { $0 as Any } ?? NSNull(),
+            "now_ms": Self.nowMs,
+        ]))
+    }
+
+    /// The report (or the refusal) was read.
+    func importAcknowledged() {
+        core.dispatch(CoreJSON.string(["type": "import_acknowledged"]))
+    }
+
+    /// Write the book — or one group — into a file the shell then hands over.
+    func exportRequested(groupId: String? = nil, json: Bool = true) {
+        core.dispatch(CoreJSON.string([
+            "type": "export_requested",
+            "scope": groupId.map { ["type": "group", "id": $0] as [String: Any] }
+                ?? ["type": "all"],
+            "format": json ? "json" : "csv",
+            "exported_at_iso": Self.nowIso,
+        ]))
+    }
+
+    /// The file reached the share sheet; the one-shot leaves the view.
+    func exportTaken() {
+        core.dispatch(CoreJSON.string(["type": "export_taken"]))
+    }
+
+    /// Which groups hold one contact — the whole answer, not a delta: the
+    /// contact joins every listed group and leaves every other.
+    func setContactGroups(address: String, groupIds: [String]) {
+        core.dispatch(CoreJSON.string([
+            "type": "set_contact_groups",
+            "address": address,
+            "group_ids": groupIds,
+        ]))
+    }
+
+    /// A recipient came on screen. The core resolves the identity and the
+    /// classification and projects the trust line.
+    func inspect(address: String, chainId: Int) {
+        core.dispatch(CoreJSON.string([
+            "type": "inspect_recipient",
+            "chain_id": chainId,
+            "address": address,
+        ]))
+    }
+
     func deleteGroup(id: String) {
         core.dispatch(CoreJSON.string(["type": "group_delete", "id": id]))
     }
@@ -130,5 +217,14 @@ final class ContactsStore {
 
     private static var nowMs: Double {
         Date().timeIntervalSince1970 * 1000
+    }
+
+    /// The shell's clock again, in the form the export stamps its backup with
+    /// and dates its filename from. ISO-8601, UTC — the same string every
+    /// other client writes, so a backup made on a phone reads on a desktop.
+    private static var nowIso: String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: Date())
     }
 }

@@ -30,6 +30,15 @@ struct ContactsScreen: View {
     var onDelete: (String) -> Void = { _ in }
     /// 添加联系人 — the header's +, and the empty state's CTA.
     var onAdd: () -> Void = {}
+    /// 从文件导入, the menu's second row.
+    var onImport: () -> Void = {}
+    /// 导出, the menu's third.
+    var onExport: () -> Void = {}
+    /// The live search field. Absent in the gallery.
+    var searchText: Binding<String>?
+    var onClearSearch: () -> Void = {}
+    /// The import report was read. The core's one-shot leaves the view on it.
+    var onAcknowledge: () -> Void = {}
     /// The live form's fields and CTA. Absent in the gallery, where the sheet
     /// is a picture.
     var formName: Binding<String>?
@@ -46,7 +55,7 @@ struct ContactsScreen: View {
             header
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.top, Tokens.Space.s8)
-            ContactsSearchField(model: model.search)
+            ContactsSearchField(model: model.search, onClear: onClearSearch, text: searchText)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.top, Tokens.Space.s16)
 
@@ -86,6 +95,18 @@ struct ContactsScreen: View {
         // The form's PRESENCE is the core's answer, so the sheet follows it: a
         // save that succeeds closes the form by removing it.
         .onChange(of: model.form != nil) { _, shown in formShown = shown }
+        .alert(
+            model.notice?.title ?? "",
+            isPresented: Binding(
+                get: { model.notice != nil },
+                set: { if !$0 { onAcknowledge() } }
+            )
+        ) {
+            // The same system word the flow host's alerts use.
+            Button("OK") { onAcknowledge() }
+        } message: {
+            Text(verbatim: model.notice?.message ?? "")
+        }
     }
 
     /// The fixture sheet (C5) or the pre-resolved delete confirm raised by
@@ -103,8 +124,21 @@ struct ContactsScreen: View {
     /// somewhere invented would be worse than the honest nothing.
     private func confirm(_ item: MenuItemModel) {
         defer { sheetShown = false; confirming = nil }
-        guard let target = confirming, item.destructive else { return }
-        onDelete(target.addressFull)
+        if let target = confirming {
+            guard item.destructive else { return }
+            onDelete(target.addressFull)
+            return
+        }
+        // The add/import/export menu (C5). Its three rows shipped dismissing —
+        // honest at the time, because nothing was drawn behind them; each one
+        // now has somewhere to go.
+        guard let index = model.sheet?.items.firstIndex(where: { $0.id == item.id })
+        else { return }
+        switch index {
+        case 0: onAdd()
+        case 1: onImport()
+        default: onExport()
+        }
     }
 
     // MARK: - Header (large title + add button)
@@ -134,7 +168,7 @@ struct ContactsScreen: View {
     @ViewBuilder private var listArea: some View {
         if let empty = model.empty ?? model.searchEmpty {
             ScrollView {
-                EmptyStateCTA(model: empty)
+                EmptyStateCTA(model: empty, onPrimary: onAdd, onSecondary: onImport)
                     .padding(.top, Tokens.Space.s48)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

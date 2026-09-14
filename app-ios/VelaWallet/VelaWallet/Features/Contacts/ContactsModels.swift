@@ -14,7 +14,7 @@ import SwiftUI
 
 /// The nine mobile contacts states (data-model.md §Screen states).
 enum ContactsStateId: String, CaseIterable, Identifiable {
-    case c1, c1s, c1f, c2, c2s, c3, c4, c5, c6, c7, c8, c9
+    case c1, c1s, c1f, c2, c2s, c3, c4, c5, c6, c7, c8, c9, c10
     var id: String { rawValue }
 
     /// Gallery chip label — mock/state code, not translatable copy.
@@ -32,6 +32,7 @@ enum ContactsStateId: String, CaseIterable, Identifiable {
         case .c7: "C7"
         case .c8: "C8"
         case .c9: "C9"
+        case .c10: "C10"
         }
     }
 }
@@ -145,6 +146,9 @@ struct ContactsHomeModel {
     var sheet: ActionMenuModel?
     /// The add form, over this screen (C7).
     var form: ContactFormModel?
+    /// What the last import did, or why it could not be done at all. Sits
+    /// until it is acknowledged — the core's own one-shot.
+    var notice: FlowAlertModel?
     /// Pre-resolved destructive confirm per contact (row-swipe 删除 →
     /// second confirmation, FR-008). Display-ready; keyed by contact id so
     /// the screen never touches the i18n layer.
@@ -233,6 +237,8 @@ struct ContactDetailModel {
     var sheet: ActionMenuModel?
     /// The add/edit form, over this screen (C8).
     var form: ContactFormModel?
+    /// 分组 — which groups hold this person (C10).
+    var groupPick: MultiPickModel?
     let textScale: CGFloat
 }
 
@@ -254,6 +260,8 @@ struct GroupDetailModel {
     let backLabel: String
     let moreLabel: String
     var sheet: ActionMenuModel?
+    /// 添加成员 — who is in this group (C10).
+    var memberPick: MultiPickModel?
     let textScale: CGFloat
 }
 

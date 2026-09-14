@@ -18,9 +18,9 @@ struct ContactsFixturesTests {
 
     // MARK: - State inventory
 
-    @Test func allTwelveMobileStatesExist() {
+    @Test func allThirteenMobileStatesExist() {
         #expect(ContactsStateId.allCases.map(\.rawValue) ==
-            ["c1", "c1s", "c1f", "c2", "c2s", "c3", "c4", "c5", "c6", "c7", "c8", "c9"])
+            ["c1", "c1s", "c1f", "c2", "c2s", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"])
         for state in ContactsStateId.allCases {
             #expect(ContactsFixtures.buildMobileState(state, loc: loc).state == state)
         }
@@ -41,6 +41,25 @@ struct ContactsFixturesTests {
         #expect(ContactsFixtures.buildMobileState(.c7, loc: loc).home != nil)
         #expect(ContactsFixtures.buildMobileState(.c8, loc: loc).detail != nil)
         #expect(ContactsFixtures.buildMobileState(.c9, loc: loc).detail != nil)
+        #expect(ContactsFixtures.buildMobileState(.c10, loc: loc).group != nil)
+    }
+
+    /// C10 — the membership picker opens with the CURRENT members ticked. A
+    /// picker that opened empty would read as "nobody is in this group", and
+    /// saving it would quietly empty the group.
+    @Test func theMemberPickerOpensOnTheCurrentMembership() throws {
+        let group = try #require(ContactsFixtures.buildMobileState(.c10, loc: loc).group)
+        let pick = try #require(group.memberPick)
+        #expect(pick.rows.count == 8, "the whole address book is the candidate list")
+        // Two of the three members, because the third is an unsaved address the
+        // core synthesised into the group. It is a member without being a
+        // contact, so it is not a candidate to add — and a picker that offered
+        // it would be offering a row that is already there.
+        #expect(pick.rows.filter(\.picked).count == 2)
+        #expect(group.members.count == 3)
+        #expect(pick.save == loc.t("contacts.save"))
+        // C4 is the same page with no picker — the sheet is the difference.
+        #expect(ContactsFixtures.buildMobileState(.c4, loc: loc).group?.memberPick == nil)
     }
 
     // MARK: - C7 / C8 / C9 (spec 054 US5a)

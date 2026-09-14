@@ -77,6 +77,51 @@ struct ContactImportReportWire: Decodable, Equatable {
     let groupsCreated: Int
 }
 
+/// Why a file could not be read AT ALL — distinct from rows that failed. The
+/// core refuses the whole file before any write, so nothing was half-imported.
+///
+/// Tagged, not bare: the core serialises it as `{"type": "malformed_json"}`,
+/// and reading it as a string is the mistake the drift gate exists to catch.
+struct ContactImportFailureWire: Decodable, Equatable {
+    enum Reason: String, Decodable, Equatable {
+        case malformedJson = "malformed_json"
+        case noAddressColumn = "no_address_column"
+        case empty
+        case unknownGroup = "unknown_group"
+        /// A variant this build has not heard of. It still means "the file was
+        /// refused", which is the half the screen acts on.
+        case unrecognised
+    }
+
+    let reason: Reason
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let raw = try container.decode(String.self, forKey: .type)
+        reason = Reason(rawValue: raw) ?? .unrecognised
+    }
+
+    private enum CodingKeys: String, CodingKey { case type }
+}
+
+/// A file the core has written for the shell to hand over. One-shot: it sits
+/// in the view until `export_taken`.
+struct ContactExportFileWire: Decodable, Equatable {
+    let filename: String
+    let mime: String
+    let content: String
+    /// How many contacts the file carries — the shell's confirmation line.
+    let contacts: Int
+}
+
+/// The A–Z index, as the core computed it. The shell never re-sorts: the
+/// letter a name files under is a locale decision and the core owns it.
+struct ContactSectionWire: Decodable, Equatable {
+    let letter: String
+    /// Lowercased addresses, keys into `ContactsViewWire.contacts`.
+    let addresses: [String]
+}
+
 /// The trust line for the recipient currently on screen.
 struct ContactRecipientWire: Decodable, Equatable {
     let address: String
@@ -107,7 +152,12 @@ struct ContactsViewWire: Decodable, Equatable {
     /// loaded would offer actions the machine will discard.
     let loaded: Bool
     let contacts: [ContactWire]
+    let sections: [ContactSectionWire]
     let groups: [ContactGroupWire]
     let lastImport: ContactImportReportWire?
+    /// The file could not be read at all. `lastImport` and this are the two
+    /// outcomes of one pick, and they are never both set.
+    let importFailure: ContactImportFailureWire?
+    let export: ContactExportFileWire?
     let recipient: ContactRecipientWire?
 }

@@ -30,9 +30,15 @@ struct ContactDetailScreen: View {
     var formAddress: Binding<String>?
     var onSaveForm: () -> Void = {}
     var onCancelForm: () -> Void = {}
+    /// + 分组 — open the group picker, tick a row, commit the set.
+    var onOpenGroups: () -> Void = {}
+    var onToggleGroup: (String) -> Void = { _ in }
+    var onSaveGroups: () -> Void = {}
+    var onCancelGroups: () -> Void = {}
 
     @State private var sheetShown = false
     @State private var formShown = false
+    @State private var groupsShown = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -96,11 +102,27 @@ struct ContactDetailScreen: View {
         .onAppear {
             sheetShown = model.sheet != nil
             formShown = model.form != nil
+            groupsShown = model.groupPick != nil
         }
         // The FORM's presence is the core's answer, so the sheet follows it
         // rather than a flag of its own: a save that succeeds closes the form
         // by removing it, and the screen must notice.
         .onChange(of: model.form != nil) { _, shown in formShown = shown }
+        .sheet(isPresented: $groupsShown) {
+            if let pick = model.groupPick {
+                MultiPickSheet(
+                    model: pick,
+                    onToggle: onToggleGroup,
+                    onSave: onSaveGroups,
+                    onCancel: {
+                        groupsShown = false
+                        onCancelGroups()
+                    }
+                )
+                .environment(\.walletTextScale, model.textScale)
+            }
+        }
+        .onChange(of: model.groupPick != nil) { _, shown in groupsShown = shown }
     }
 
     private func inspectionTag(_ text: String) -> some View {
@@ -172,7 +194,7 @@ struct ContactDetailScreen: View {
                 }
                 .padding(.top, Tokens.Space.s8)
             }
-            GroupChips(chips: model.chips, addLabel: model.addChip)
+            GroupChips(chips: model.chips, addLabel: model.addChip, onAdd: onOpenGroups)
                 .padding(.top, Tokens.Space.s12)
         }
         .frame(maxWidth: .infinity)

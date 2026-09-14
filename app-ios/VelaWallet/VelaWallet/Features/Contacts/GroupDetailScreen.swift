@@ -23,8 +23,19 @@ struct GroupDetailScreen: View {
     /// still in the address book afterwards, which is what makes this different
     /// from deleting a contact — that one IS drawn with a confirm, and has one.
     var onDeleteGroup: () -> Void = {}
+    /// 添加成员 — open the member picker, tick rows, commit the set.
+    var onOpenMembers: () -> Void = {}
+    var onToggleMember: (String) -> Void = { _ in }
+    var onSaveMembers: () -> Void = {}
+    var onCancelMembers: () -> Void = {}
+    /// 群发转账 — the group's whole membership becomes a split.
+    var onBatchSend: () -> Void = {}
+    /// 导入到本组 and 导出本组, from the ⋯ menu.
+    var onImportIntoGroup: () -> Void = {}
+    var onExportGroup: () -> Void = {}
 
     @State private var sheetShown = false
+    @State private var membersShown = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -34,13 +45,16 @@ struct GroupDetailScreen: View {
                     title
                     membersBlock
                         .padding(.top, Tokens.Space.s16)
-                    GhostAddRow(label: model.addMemberLabel)
+                    GhostAddRow(label: model.addMemberLabel, onTap: onOpenMembers)
                 }
                 .padding(.bottom, Tokens.Space.s24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            PinnedCTABar(title: model.ctaLabel, caption: model.ctaCaption, enabled: model.ctaEnabled)
+            PinnedCTABar(
+                title: model.ctaLabel, caption: model.ctaCaption,
+                enabled: model.ctaEnabled, onTap: onBatchSend
+            )
                 .padding(.bottom, Tokens.Space.s8)
         }
         .background(theme.bgBase.ignoresSafeArea())
@@ -49,12 +63,17 @@ struct GroupDetailScreen: View {
             if let sheet = model.sheet {
                 ActionMenuSheet(
                     model: sheet,
-                    // Only the destructive item has anywhere to go: 编辑分组,
-                    // 导入 and 导出 are choices whose destinations nothing has
-                    // drawn, so they dismiss rather than pretending to act.
+                    // 编辑分组 · 导入到本组 · 导出本组 · 删除分组, in the
+                    // drawn order. The first still has no form drawn for it and
+                    // dismisses; the other three now act.
                     onItem: { item in
                         sheetShown = false
-                        if item.destructive { onDeleteGroup() }
+                        if item.destructive {
+                            onDeleteGroup()
+                        } else if let index = sheet.items.firstIndex(where: { $0.id == item.id }) {
+                            if index == 1 { onImportIntoGroup() }
+                            if index == 2 { onExportGroup() }
+                        }
                     },
                     onCancel: { sheetShown = false }
                 )
@@ -66,7 +85,25 @@ struct GroupDetailScreen: View {
         // the state rather than on `sheet != nil` is what lets a live group
         // carry the menu without it popping open on arrival — and it is
         // frame-identical for the fixtures, where only C6 has a sheet.
-        .onAppear { sheetShown = model.state == .c6 }
+        .sheet(isPresented: $membersShown) {
+            if let pick = model.memberPick {
+                MultiPickSheet(
+                    model: pick,
+                    onToggle: onToggleMember,
+                    onSave: onSaveMembers,
+                    onCancel: {
+                        membersShown = false
+                        onCancelMembers()
+                    }
+                )
+                .environment(\.walletTextScale, model.textScale)
+            }
+        }
+        .onAppear {
+            sheetShown = model.state == .c6
+            membersShown = model.memberPick != nil
+        }
+        .onChange(of: model.memberPick != nil) { _, shown in membersShown = shown }
     }
 
     private var navBar: some View {

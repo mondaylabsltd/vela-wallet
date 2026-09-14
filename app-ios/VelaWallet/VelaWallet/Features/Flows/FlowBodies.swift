@@ -649,16 +649,24 @@ struct SendFormBody: View {
                     masked: false
                 ))
                 .overlay(alignment: .trailing) {
-                    Button { onMax(index) } label: {
-                        Text(verbatim: row.max)
-                            .typeRole(Typography.chip.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .padding(.horizontal, Tokens.Space.s8)
-                            .padding(.vertical, Tokens.Space.s2)
-                            .background(Capsule().fill(theme.bgSunken))
-                            .contentShape(Capsule())
+                    // An empty label means no chip. A sweep moves the MAXIMUM
+                    // of every row by definition — the core already computes
+                    // each one net of gas — so the live form has nothing for
+                    // this control to do, and `tap_max` would move the amount
+                    // of whichever single token was selected before the sweep
+                    // began. The drawing keeps it; the live screen does not.
+                    if !row.max.isEmpty {
+                        Button { onMax(index) } label: {
+                            Text(verbatim: row.max)
+                                .typeRole(Typography.chip.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .padding(.horizontal, Tokens.Space.s8)
+                                .padding(.vertical, Tokens.Space.s2)
+                                .background(Capsule().fill(theme.bgSunken))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, Tokens.Space.s12)
                 .background(

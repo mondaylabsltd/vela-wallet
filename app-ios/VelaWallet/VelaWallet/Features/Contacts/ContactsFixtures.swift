@@ -234,7 +234,7 @@ enum ContactsFixtures {
         case .c3: .home(home(state, loc: loc))
         case .c5: .home(home(state, loc: loc))
         case .c2, .c2s: .detail(detail(state, loc: loc))
-        case .c4, .c6: .group(groupDetail(state, loc: loc))
+        case .c4, .c6, .c10: .group(groupDetail(state, loc: loc))
         }
     }
 
@@ -376,7 +376,31 @@ enum ContactsFixtures {
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             moreLabel: loc.t("contacts.manage"),
             sheet: state == .c6 ? groupMenu(loc: loc) : nil,
+            // C10 — 添加成员, the whole address book with the current members
+            // already ticked.
+            memberPick: state == .c10 ? memberPick(loc: loc) : nil,
             textScale: 1
+        )
+    }
+
+    /// C10 — the membership picker, as it opens on a group that already has
+    /// three of the eight people in it.
+    static func memberPick(loc: Loc) -> MultiPickModel {
+        let members = Set(familyMembers.map(\.addressFull))
+        return MultiPickModel(
+            title: loc.t("contacts.addMember"),
+            rows: roster.map { entry in
+                MultiPickRowModel(
+                    id: entry.addressFull,
+                    title: entry.name,
+                    subtitle: entry.addressDisplay,
+                    identiconSeed: entry.addressFull,
+                    picked: members.contains(entry.addressFull)
+                )
+            },
+            emptyText: loc.t("contacts.groupNoContacts"),
+            save: loc.t("contacts.save"),
+            cancel: loc.t("contacts.cancel")
         )
     }
 
