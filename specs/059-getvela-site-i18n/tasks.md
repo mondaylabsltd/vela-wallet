@@ -169,7 +169,7 @@ both, and `bun run build` still succeeds.
 
 - [X] T060 [P] [US5] Create `src/lib/i18n/messages.test.ts` — shape (no key absent from `en.ts`), `chrome`/`notice` completeness in all 15 locales
 - [X] T061 [P] [US5] Create `src/lib/i18n/placeholders.test.ts` — placeholder, link and inline-markup sets identical to the English value (FR-031)
-- [ ] T062 [US5] Add English content hashes per namespace/doc so a translation written before an English edit reports as **stale** (FR-026, data-model transitions)
+- [X] T062 [US5] Add English content hashes per namespace/doc so a translation written before an English edit reports as **stale** (FR-026, data-model transitions)
 - [X] T063 [US5] Add `bun run i18n:status` to `package.json` printing the per-locale table from contracts/translation-store.md, and assert it is computable in `src/lib/i18n/status.test.ts`
 - [ ] T064 [US5] Confirm a missing translation never fails the build — add a test that a locale with an incomplete namespace builds and renders fallback (FR-027)
 - [X] T065 [P] [US5] Create `src/lib/i18n/honesty.test.ts` — the A02 FR-2/FR-3 claims (no third-party audit, alpha, "architecturally can't") are present and unsoftened in every locale claiming `translated` (FR-032)

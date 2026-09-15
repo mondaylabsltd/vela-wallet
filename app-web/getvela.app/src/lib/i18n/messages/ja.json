@@ -5,7 +5,7 @@
 			"blog": "ブログ",
 			"docs": "ドキュメント",
 			"about": "Vela について",
-			"whyVela": "Vela を選ぶ理由",
+			"whyVela": "なぜ作ったか",
 			"howItWorks": "しくみ",
 			"pricing": "料金",
 			"faq": "よくある質問",
@@ -474,5 +474,11 @@
 		},
 		"fundingNote": "ストアでのダウンロードは有料で、それが小さな独立チームが Vela を公開の場で作り続けるための資金になります。すべてオープンソースなので、自分でビルドしても構いません — 同じアプリで、料金はかかりません。",
 		"storeNote": "まだどのストアにも並んでいません。それまでは、すべてのビルドを GitHub に置いています。"
+	},
+	"_fingerprints": {
+		"home": "74474c1cf723",
+		"about": "669db59e91a0",
+		"roadmap": "df15b90319f9",
+		"getStarted": "dbbb0da3f5cc"
 	}
 }

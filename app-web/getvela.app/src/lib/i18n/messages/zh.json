@@ -5,7 +5,7 @@
 			"blog": "博客",
 			"docs": "文档",
 			"about": "关于",
-			"whyVela": "为什么选 Vela",
+			"whyVela": "我们为什么做它",
 			"howItWorks": "工作原理",
 			"pricing": "价格",
 			"faq": "常见问题",
@@ -474,5 +474,11 @@
 		},
 		"fundingNote": "应用商店里的下载是付费的，这是一支独立小团队公开开发 Vela 的经费来源。所有代码都开源，所以你也可以自己构建——同一个应用，不收一分钱。",
 		"storeNote": "目前还没有上架任何应用商店。在那之前，每一个构建版本都在 GitHub 上。"
+	},
+	"_fingerprints": {
+		"home": "74474c1cf723",
+		"about": "669db59e91a0",
+		"roadmap": "df15b90319f9",
+		"getStarted": "dbbb0da3f5cc"
 	}
 }

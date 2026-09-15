@@ -47,7 +47,7 @@ export const en = {
 			blog: 'Blog',
 			docs: 'Docs',
 			about: 'About',
-			whyVela: 'Why Vela',
+			whyVela: 'Why we built it',
 			howItWorks: 'How it works',
 			pricing: 'Pricing',
 			faq: 'FAQ',

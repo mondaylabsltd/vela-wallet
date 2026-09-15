@@ -39,6 +39,8 @@ function walk(
 		const src = source as Record<string, unknown>;
 		const val = value as Record<string, unknown>;
 		for (const key of Object.keys(val)) {
+			// `_`-prefixed keys are bookkeeping (see `_fingerprints`), not copy.
+			if (key.startsWith('_')) continue;
 			if (!(key in src)) onExtra(`${path}.${key}`);
 		}
 		for (const [key, v] of Object.entries(src)) {
