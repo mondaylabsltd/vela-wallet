@@ -119,18 +119,24 @@ enum ContactsLive {
             return model
         }
 
-        if !view.groups.isEmpty {
-            // 新建分组, as Android's header says. It read 管理 and led nowhere
-            // — a header action naming a page this client does not have.
-            // Recorded in 058's results as a label changed to match the phone
-            // beside it, not a screen invented here.
-            model.groupsHeader = (loc.t("contacts.sectionGroups"), loc.t("contacts.groupNew"))
-            model.groups = view.groups.map {
-                GroupRowModel(
-                    name: $0.name,
-                    countLabel: ContactsLabels.count(loc, "contacts.groupMembers", $0.members.count)
-                )
-            }
+        // The header shows whenever there is somebody to GROUP, not only when
+        // a group already exists.
+        //
+        // Both phones drew it on `groups.isNotEmpty`, which means the door to
+        // the first group was behind the first group: a person with contacts
+        // and no groups could not make one (the founder, 2026-09-15, after
+        // 058's device pass found it on their own empty book). An empty book
+        // still gets C3's invitation instead — grouping nobody is not a thing
+        // to offer, and `contacts.groupNoContacts` says exactly that.
+        //
+        // 新建分组, as Android's header says. It read 管理 and led nowhere — a
+        // header action naming a page this client does not have.
+        model.groupsHeader = (loc.t("contacts.sectionGroups"), loc.t("contacts.groupNew"))
+        model.groups = view.groups.map {
+            GroupRowModel(
+                name: $0.name,
+                countLabel: ContactsLabels.count(loc, "contacts.groupMembers", $0.members.count)
+            )
         }
 
         model.contactsHeader = (

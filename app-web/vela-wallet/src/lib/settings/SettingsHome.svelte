@@ -16,7 +16,12 @@
 	import type { OnNetEvent } from './net-events';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
-	import type { SettingsHomeModel, SettingsOverlayId, SettingsPageId } from './model';
+	import type {
+		SettingsHomeModel,
+		SettingsOverlayId,
+		SettingsPageId,
+		StorageItemModel
+	} from './model';
 	import type { SettingsPrefEvent } from './pref-events';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import TabBar from '$lib/wallet/ui/TabBar.svelte';
@@ -103,6 +108,8 @@
 	// tapping owns it from then on.
 	let page = $state<SettingsPageId>(untrack(() => model.page));
 	let overlay = $state<SettingsOverlayId>(untrack(() => model.overlay));
+	/** The storage row waiting on an answer, and the warning its group carries. */
+	let pendingStorage = $state<{ item: StorageItemModel; warning: string } | null>(null);
 	let advancedOpen = $state(untrack(() => model.state === 'st1b'));
 
 	/** ST1's 高级 disclosure, applied over the fixture sections. */
@@ -372,7 +379,21 @@
 				{:else if page === 'storage'}
 					<StoragePanel
 						panel={model.storage}
-						onclear={onstorageclear}
+						onclear={(id) => {
+							// Ask first (spec 058, the founder's ruling): "Contacts
+							// and groups · Clear" removed the whole address book on
+							// one click, with nothing in between. The question is
+							// built from what the row already says — its label, its
+							// group's warning, its own action word — so no new
+							// sentence is invented for it.
+							const group = model.storage.groups.find((g) =>
+								g.items.some((item) => item.id === id)
+							);
+							const item = group?.items.find((entry) => entry.id === id);
+							if (!item) return;
+							pendingStorage = { item, warning: group?.label ?? '' };
+							overlay = 'clear-storage-item';
+						}}
 						onclearcaches={() => (overlay = 'clear-caches')}
 					/>
 				{:else if page === 'about'}
@@ -438,6 +459,26 @@
 						sheet={model.timeSheet}
 						onselect={(id) => {
 							onprefevent?.({ kind: 'time-format', id });
+							close();
+						}}
+					/>
+				{:else if overlay === 'clear-storage-item' && pendingStorage}
+					<ConfirmSheet
+						sheet={{
+							title: pendingStorage.item.label,
+							body: pendingStorage.warning,
+							confirm: pendingStorage.item.action,
+							cancel: model.clearCachesSheet.cancel,
+							tone: pendingStorage.item.destructive === true ? 'danger' : 'accent'
+						}}
+						onconfirm={() => {
+							const id = pendingStorage?.item.id;
+							pendingStorage = null;
+							if (id !== undefined) onstorageclear?.(id);
+							close();
+						}}
+						oncancel={() => {
+							pendingStorage = null;
 							close();
 						}}
 					/>

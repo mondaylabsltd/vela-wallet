@@ -37,6 +37,10 @@ enum SettingsPage: Equatable {
 enum SettingsOverlay: Equatable, Identifiable {
     case none, accounts, signOut, language, currency, numberFormat, dateFormat, timeFormat
     case clearCaches, eraseDevice, feedback, rpcFix, balanceDetail, relayer
+    /// One storage row's 清除, asked before it happens (058, the founder's
+    /// ruling): "联系人与分组 · 清除" removed the whole address book on a
+    /// single tap, with nothing in between.
+    case clearStorageItem
 
     var id: String { String(describing: self) }
 }

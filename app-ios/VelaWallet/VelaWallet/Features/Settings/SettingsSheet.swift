@@ -31,6 +31,9 @@ struct SettingsSheet: View {
     var onCommitRpc: (() -> Void)?
     /// SR3's 立即重试, per chain id.
     var onRetryChain: ((String) -> Void)?
+    /// The storage row waiting on an answer, and what 清除 does to it.
+    var storageConfirm: ConfirmSheetModel?
+    var onConfirmStorage: (() -> Void)?
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -74,6 +77,17 @@ struct SettingsSheet: View {
                         sheet: model.timeSheet,
                         onPick: { id in onPick?(.timeFormat, id) }
                     )
+                case .clearStorageItem:
+                    // Built from what the row already says — its own label, its
+                    // group's warning, its own action word. No new sentence is
+                    // invented for a question the page can already ask.
+                    if let confirm = storageConfirm {
+                        ConfirmSheetBody(
+                            sheet: confirm,
+                            onConfirm: { onConfirmStorage?(); onDismiss() },
+                            onCancel: onDismiss
+                        )
+                    }
                 case .clearCaches:
                     ConfirmSheetBody(
                         sheet: model.clearCachesSheet,

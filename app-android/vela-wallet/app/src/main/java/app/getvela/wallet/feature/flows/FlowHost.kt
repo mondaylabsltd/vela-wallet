@@ -79,16 +79,18 @@ fun FlowHost(
     addToken: AddTokenCallbacks? = null,
     /** Spec 047 US2: the receive sheet's 保存图片, when the host can render and share the card. */
     onSaveImage: (() -> Unit)? = null,
+    /** Spec 058: 删除记录 on the open transaction — the local record, not the chain's. */
+    onDeleteTx: (() -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage)
+            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage)
+        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx)
     }
 }
 
@@ -132,6 +134,9 @@ private fun FlowHostContent(
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
     onSaveImage: (() -> Unit)? = null,
+    /** 删除记录 on the open transaction (spec 058). Last, because the two call
+     * sites above pass this list positionally. */
+    onDeleteTx: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -246,7 +251,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage, onDeleteTx = onDeleteTx)
         }
     }
 }
@@ -259,7 +264,7 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null, onDeleteTx: (() -> Unit)? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
@@ -289,7 +294,11 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
             }
             when (sheet) {
                 is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() }, onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) })
-                is FlowSheet.TxDetail -> TxDetailBody(model = sheet.model, onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) })
+                is FlowSheet.TxDetail -> TxDetailBody(
+                    model = sheet.model,
+                    onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) },
+                    onDelete = onDeleteTx,
+                )
                 is FlowSheet.TokenDetail -> TokenDetailBody(
                     model = sheet.model,
                     onReceive = { selected?.takeIf { onReceiveToken != null }?.let { onReceiveToken?.invoke(it) } ?: onNavigate(FlowStep.Receive) },

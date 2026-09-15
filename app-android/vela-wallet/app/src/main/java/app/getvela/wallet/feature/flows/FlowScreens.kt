@@ -3,6 +3,7 @@ package app.getvela.wallet.feature.flows
 import androidx.compose.foundation.text.BasicTextField
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.platform.Clipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
@@ -335,6 +336,8 @@ fun TxDetailBody(
     model: TxDetailModel,
     modifier: Modifier = Modifier,
     onExplorer: () -> Unit = {},
+    /** 删除记录 (spec 058). Absent in the gallery, where nothing is real. */
+    onDelete: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
@@ -366,6 +369,14 @@ fun TxDetailBody(
             accent = false,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (model.deleteLabel != null && onDelete != null) {
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+            VelaDangerButton(
+                text = model.deleteLabel,
+                onClick = onDelete,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

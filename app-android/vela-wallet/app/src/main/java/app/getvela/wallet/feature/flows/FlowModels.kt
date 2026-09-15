@@ -205,6 +205,13 @@ data class TxDetailModel(
     val viewOnExplorer: String,
     /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
     val explorerUrl: String? = null,
+    /**
+     * 删除记录 — the LOCAL record, not the transaction (spec 058). `null` where
+     * there is nothing to delete. The web has drawn this button since 028 and
+     * never set its label, and `deleteActivity` on this client had no caller,
+     * so it has been unreachable everywhere.
+     */
+    val deleteLabel: String? = null,
 )
 
 /* ------------------------------------------------------------------ assets */

@@ -166,6 +166,9 @@ fun SettingsRoute(
     // Spec 048: keyed on the model's page too, so a page another route asked for (the add-token 原生代币 tab) wins over a remembered one.
     var page by rememberSaveable(model.state, model.page) { mutableStateOf(model.page) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
+    // The storage row waiting on an answer, and the warning its group carries
+    // (spec 058): 清除 asks before it removes.
+    var pendingStorage by remember { mutableStateOf<Pair<StorageItemModel, String>?>(null) }
     var advancedOpen by rememberSaveable(model.state) {
         mutableStateOf(model.state == SettingsScreenState.ST1B)
     }
@@ -219,7 +222,28 @@ fun SettingsRoute(
         onResetEndpoints = actions.onResetEndpoints,
         onSegment = actions.onSegment,
         onTextScale = actions.onTextScale,
-        onStorageClear = actions.onStorageClear,
+        onStorageClear = { id ->
+            val group = model.storage.groups.firstOrNull { g -> g.items.any { it.id == id } }
+            val item = group?.items?.firstOrNull { it.id == id }
+            if (item != null) {
+                pendingStorage = item to group.label
+                overlay = SettingsOverlay.ClearStorageItem
+            }
+        },
+        storageConfirm = pendingStorage?.let { (item, warning) ->
+            ConfirmSheetModel(
+                title = item.label,
+                body = warning,
+                confirm = item.action,
+                cancel = model.clearCachesSheet.cancel,
+                danger = item.destructive,
+            )
+        },
+        onConfirmStorage = {
+            pendingStorage?.let { (item, _) -> actions.onStorageClear(item.id) }
+            pendingStorage = null
+            overlay = SettingsOverlay.None
+        },
         onClearCaches = { actions.onClearCaches(); overlay = SettingsOverlay.None },
         onErase = actions.onErase,
         onFeedbackSend = actions.onFeedbackSend,
@@ -264,6 +288,9 @@ fun SettingsScreen(
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
     onStorageClear: (String) -> Unit = {},
+    /** Spec 058: the question a storage row's 清除 asks first. */
+    storageConfirm: ConfirmSheetModel? = null,
+    onConfirmStorage: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
     onOverrideEdited: (Long, String, String) -> Unit = { _, _, _ -> },
@@ -375,6 +402,8 @@ fun SettingsScreen(
                 onDismiss = onDismissOverlay,
                 onSignOut = onSignOut,
                 onSheetSelect = onSheetSelect,
+                storageConfirm = storageConfirm,
+                onConfirmStorage = onConfirmStorage,
                 onClearCaches = onClearCaches,
                 onErase = onErase,
                 onFeedbackSend = onFeedbackSend,
@@ -1047,6 +1076,8 @@ private fun SettingsSheet(
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
+    storageConfirm: ConfirmSheetModel? = null,
+    onConfirmStorage: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
     onFeedbackSend: (String) -> Unit = {},
@@ -1106,6 +1137,9 @@ private fun SettingsSheet(
                 }
                 SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet) {
                     onSheetSelect(SettingsOverlay.TimeFormat, it)
+                }
+                SettingsOverlay.ClearStorageItem -> storageConfirm?.let { sheet ->
+                    ConfirmSheetBody(sheet, onConfirm = onConfirmStorage, onCancel = onDismiss)
                 }
                 SettingsOverlay.ClearCaches -> ConfirmSheetBody(
                     model.clearCachesSheet,

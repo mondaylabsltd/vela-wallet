@@ -254,6 +254,9 @@ object FlowLive {
                 ""
             },
             facts = facts,
+            // The chain keeps the transaction; this is the wallet forgetting
+            // it, which is why the sentence is "delete record" (spec 058).
+            deleteLabel = strings.t(I18nKeys.Flows.DELETE_RECORD),
         )
     }
 

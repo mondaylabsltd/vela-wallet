@@ -71,6 +71,9 @@ struct SettingsScreen: View {
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
+    /// The storage row whose 清除 is waiting on an answer.
+    @State private var pendingStorageItem: StorageItemModel?
+    @State private var pendingStorageWarning = ""
     @State private var advancedOpen: Bool
     /// Which network row was tapped, so the detail page is that chain's.
     @State private var selectedNetwork: String?
@@ -155,6 +158,19 @@ struct SettingsScreen: View {
                             select(address)
                             self.overlay = .none
                         }
+                    },
+                    storageConfirm: pendingStorageItem.map { item in
+                        ConfirmSheetModel(
+                            title: item.label,
+                            body: pendingStorageWarning,
+                            confirm: item.action,
+                            cancel: model.clearCachesSheet.cancel,
+                            danger: item.destructive
+                        )
+                    },
+                    onConfirmStorage: {
+                        if let id = pendingStorageItem?.id { onClearStorageItem?(id) }
+                        pendingStorageItem = nil
                     }
                 )
                     .themed(theme.scheme)
@@ -222,9 +238,21 @@ struct SettingsScreen: View {
         case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
         case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions)
         case .endpoints: EndpointsBody(panel: model.endpoints, actions: endpointActions)
-        case .storage: StorageBody(panel: model.storage,
-                                   onClearCaches: { overlay = .clearCaches },
-                                   onClearItem: onClearStorageItem)
+        case .storage: StorageBody(
+            panel: model.storage,
+            onClearCaches: { overlay = .clearCaches },
+            // Ask first. "联系人与分组 · 清除" took the whole address book on
+            // one tap; the answer is the founder's ruling of 2026-09-15 and
+            // the sheet is built from what the row already says.
+            onClearItem: onClearStorageItem == nil ? nil : { id in
+                guard let item = model.storage.groups
+                    .flatMap(\.items).first(where: { $0.id == id }) else { return }
+                pendingStorageItem = item
+                pendingStorageWarning = model.storage.groups
+                    .first { $0.items.contains { $0.id == id } }?.label ?? ""
+                overlay = .clearStorageItem
+            }
+        )
         case .about: AboutBody(panel: model.about)
         }
     }

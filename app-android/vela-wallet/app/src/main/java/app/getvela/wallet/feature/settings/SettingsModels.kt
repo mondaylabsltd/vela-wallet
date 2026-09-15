@@ -33,6 +33,15 @@ enum class SettingsPage {
 enum class SettingsOverlay {
     None, Accounts, SignOut, Language, Currency, NumberFormat, DateFormat, TimeFormat,
     ClearCaches, EraseDevice, Feedback, RpcFix, BalanceDetail, Relayer,
+
+    /**
+     * One storage row's 清除, asked before it happens (spec 058, the founder's
+     * ruling of 2026-09-15): 「联系人与分组 · 清除」 removed the whole address
+     * book on a single tap, with nothing in between. The question is built from
+     * what the row already says — its label, its group's warning, its own
+     * action word — so no new sentence is invented for it.
+     */
+    ClearStorageItem,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
