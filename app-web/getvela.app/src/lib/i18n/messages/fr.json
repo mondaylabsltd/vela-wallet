@@ -166,76 +166,82 @@
 		},
 		"compare": {
 			"heading": "Vela, à côté des autres",
-			"desc": "Trois types de portefeuille — une simple clé, un smart account d'éditeur, et celui-ci. Nous utilisons les trois. Aucun ne gagne toutes les lignes.",
+			"desc": "Trois types de portefeuille : un simple EOA, un smart account d'éditeur, et Vela. Nous utilisons les trois, et aucun n'est meilleur sur tous les points.",
 			"rows": [
 				{
 					"feature": "Type de compte",
 					"vela": "<a href=\"/docs/account-contract\">Smart account Safe v1.4.1</a>",
-					"metamask": "Un EOA — une simple clé sur la chaîne",
+					"metamask": "EOA",
 					"base": "Smart account Coinbase"
 				},
 				{
 					"feature": "Clé de signature",
-					"vela": "Passkey ou clé de sécurité — jusqu'à sept, 1-of-n",
-					"metamask": "Phrase de 12 mots ; portefeuille matériel possible",
-					"base": "Passkey"
+					"vela": "Passkey ou clé de sécurité",
+					"metamask": "La clé privée derrière une phrase de récupération ; portefeuilles matériels pris en charge",
+					"base": "Passkey ou clé de sécurité"
 				},
 				{
 					"feature": "Gas par transaction",
-					"vela": "Le plus élevé : vérification de signature on-chain, EntryPoint, et les frais du relais",
-					"metamask": "Le plus bas : le gas de la chaîne, rien d'autre",
-					"base": "Surcoût ERC-4337, souvent pris en charge"
+					"vela": "Surcoût ERC-4337, plus les frais de service du relais",
+					"metamask": "Le gas d'une simple transaction EOA",
+					"base": "Surcoût ERC-4337"
 				},
 				{
-					"feature": "Gas offert",
-					"vela": "Seulement l'activation initiale du compte, quand nous le pouvons",
-					"metamask": "Aucun — vous payez toujours",
-					"base": "Oui, sur Base et certains réseaux ; souvent gratuit pour vous"
+					"feature": "Gas pris en charge",
+					"vela": "Non proposé",
+					"metamask": "Non proposé",
+					"base": "Pris en charge là où c'est supporté"
 				},
 				{
 					"feature": "Réseaux personnalisés",
-					"vela": "Toute chaîne avec RIP-7212 — un <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">outil de configuration</a> déploie les contrats",
-					"metamask": "Toute chaîne EVM, avec votre propre RPC",
-					"base": "Base d'abord ; liste courte"
+					"vela": "Tout réseau EVM qui remplit les conditions de Vela ; vous pouvez déployer les contrats vous-même",
+					"metamask": "Réseaux EVM et RPC personnalisés",
+					"base": "Éventail de réseaux plus restreint"
 				},
 				{
-					"feature": "Si vous perdez un appareil",
-					"vela": "Signez avec n'importe laquelle de vos autres clés",
-					"metamask": "La phrase de récupération, sinon le portefeuille est perdu",
-					"base": "Synchronisation de la passkey, plus une clé de récupération générée dans le navigateur"
+					"feature": "Si vous perdez une clé",
+					"vela": "Signez avec une autre clé ajoutée ou synchronisée",
+					"metamask": "Restauration par la phrase de récupération",
+					"base": "Signez avec une autre clé ajoutée ou synchronisée"
 				},
 				{
 					"feature": "Transactions groupées",
-					"vela": "Oui — plusieurs appels en une opération",
-					"metamask": "Seulement après une mise à niveau EIP-7702",
-					"base": "Oui"
+					"vela": "Pris en charge",
+					"metamask": "Dépend des capacités du compte — EIP-7702 et consorts",
+					"base": "Pris en charge"
 				},
 				{
-					"feature": "Vérifier avant de signer",
-					"vela": "Décodé dans l'app, plus une page ou une extension que vous hébergez",
-					"metamask": "Décodé dans l'app, avec analyse de risque tierce",
-					"base": "Décodé dans l'app"
+					"feature": "Décodage avant signature",
+					"vela": "Pris en charge",
+					"metamask": "Pris en charge",
+					"base": "Pris en charge"
 				},
 				{
-					"feature": "Auto-hébergeable de bout en bout",
-					"vela": "L'app, le relais et chaque service backend",
-					"metamask": "Compilez l'app vous-même ; pointez-la vers votre RPC",
-					"base": "Non"
+					"feature": "Vérification supplémentaire",
+					"vela": "Via une page ou une extension indépendante que vous hébergez",
+					"metamask": "Détection de risque par un tiers",
+					"base": "—"
 				},
 				{
-					"feature": "Open source",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relais + chaque service backend</a>",
-					"metamask": "Extension et application mobile publiées",
-					"base": "SDK oui ; le service de compte non"
+					"feature": "Auto-hébergement complet",
+					"vela": "App, relais et services backend, tous exécutables par vous",
+					"metamask": "Le client et le RPC sont à vous de choisir ou d'héberger",
+					"base": "Non disponible"
 				},
 				{
-					"feature": "Ancienneté",
-					"vela": "Récent, peu d'utilisateurs. Contrats audités par des tiers ; notre code applicatif non",
-					"metamask": "Des années sur le marché, des dizaines de millions d'utilisateurs",
-					"base": "Adossé à Coinbase, audité"
+					"feature": "Périmètre open source",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App, relais et services backend</a>",
+					"metamask": "Le client du portefeuille",
+					"base": "SDK ; certains services de compte ne sont pas ouverts"
+				},
+				{
+					"feature": "Maturité",
+					"vela": "Récent, peu d'utilisateurs",
+					"metamask": "Des années sur le marché, une large base d'utilisateurs",
+					"base": "Maintenu par Coinbase"
 				}
 			],
-			"note": "Rien de tout cela n'est une attaque contre les deux autres. MetaMask est la façon la moins chère et la plus universelle de bouger de l'argent on-chain ; Base Account est la plus simple, et souvent gratuite. Le pari de Vela est ailleurs : utiliser des passkeys sans confier les clés à personne — et pouvoir faire tourner chaque pièce soi-même."
+			"note": "Rien de tout cela n'est une attaque contre les deux autres.\n\nLes forces de MetaMask sont la simplicité et l'universalité — et une simple transaction EOA est ce qu'on peut faire de moins cher on-chain.\n\nBase Account demande le moins d'efforts, et là où c'est supporté, le gas n'est pas à votre charge.\n\nVela fait d'autres arbitrages : des passkeys, plusieurs clés de signature indépendantes, et chaque pièce — app, relais, services backend — que vous pouvez faire tourner vous-même.\n\nIl n'est pas meilleur sur chaque ligne. Ce sur quoi il insiste : le contrôle du compte reste chez vous, et le moins de choses possible dépend d'un seul fournisseur."
 		},
 		"pricing": {
 			"heading": "Gratuit et ouvert. Payez seulement si vous le voulez.",

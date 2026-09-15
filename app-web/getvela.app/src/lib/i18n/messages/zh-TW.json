@@ -166,76 +166,82 @@
 		},
 		"compare": {
 			"heading": "Vela 和它們比起來",
-			"desc": "三類錢包——一把普通私鑰、一個廠商的智慧帳戶，以及這一個。三個我們都在用，沒有哪一個每一行都贏。",
+			"desc": "三種錢包：普通 EOA、廠商提供的智慧帳戶，以及 Vela。三個我們都在用，也沒有哪一個在每一項上都更好。",
 			"rows": [
 				{
 					"feature": "帳戶類型",
 					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 智慧帳戶</a>",
-					"metamask": "EOA——鏈上的一把普通私鑰",
+					"metamask": "EOA",
 					"base": "Coinbase 智慧帳戶"
 				},
 				{
 					"feature": "簽署金鑰",
-					"vela": "密碼金鑰或安全金鑰——最多七把，1-of-n",
-					"metamask": "12 個助記詞；可外接硬體錢包",
-					"base": "密碼金鑰"
+					"vela": "密碼金鑰或安全金鑰",
+					"metamask": "助記詞對應的私鑰；支援硬體錢包",
+					"base": "密碼金鑰或安全金鑰"
 				},
 				{
-					"feature": "每筆交易的 gas",
-					"vela": "最高：鏈上驗一次簽章、走 EntryPoint，再加中繼服務費",
-					"metamask": "最低：只有鏈本身的 gas",
-					"base": "ERC-4337 的開銷，但常有人代付"
+					"feature": "交易 gas",
+					"vela": "ERC-4337 開銷 + 中繼服務費",
+					"metamask": "普通 EOA 交易 gas",
+					"base": "ERC-4337 開銷"
 				},
 				{
-					"feature": "代付 gas",
-					"vela": "只有首次帳戶啟用，且盡力而為",
-					"metamask": "沒有——一律自己付",
-					"base": "有，在 Base 與部分網路；對你常常是免費的"
+					"feature": "Gas 代付",
+					"vela": "不提供",
+					"metamask": "不提供",
+					"base": "支援的場景可代付"
 				},
 				{
 					"feature": "自訂網路",
-					"vela": "任何支援 RIP-7212 的鏈——<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">設定工具</a>會把合約部署好",
-					"metamask": "任何 EVM 鏈，用你自己的 RPC",
-					"base": "以 Base 為主，數量不多"
+					"vela": "任何滿足 Vela 運行條件的 EVM 網路；可自行部署所需合約",
+					"metamask": "支援自訂 EVM 網路和 RPC",
+					"base": "支援的網路範圍較有限"
 				},
 				{
-					"feature": "裝置弄丟了怎麼辦",
-					"vela": "用你其餘任意一把金鑰簽署",
-					"metamask": "靠助記詞，弄丟錢包就沒了",
-					"base": "密碼金鑰同步，外加一把在瀏覽器裡產生的復原金鑰"
+					"feature": "弄丟一把金鑰",
+					"vela": "使用其他已加入或已同步的簽署金鑰",
+					"metamask": "使用助記詞復原",
+					"base": "使用其他已加入或已同步的簽署金鑰"
 				},
 				{
 					"feature": "批次交易",
-					"vela": "支援——多筆呼叫打包成一次操作",
-					"metamask": "要先做 EIP-7702 升級",
+					"vela": "支援",
+					"metamask": "取決於帳戶能力 / EIP-7702 等機制",
 					"base": "支援"
 				},
 				{
-					"feature": "簽署前的核對",
-					"vela": "應用內解碼，另有一個你自己託管的頁面或擴充功能",
-					"metamask": "應用內解碼，並有第三方風險掃描",
-					"base": "應用內解碼"
+					"feature": "簽署前解碼",
+					"vela": "支援",
+					"metamask": "支援",
+					"base": "支援"
 				},
 				{
-					"feature": "能否完全自架",
-					"vela": "應用程式、中繼與每一項後端服務",
-					"metamask": "可以自己建置應用，RPC 換成你自己的",
-					"base": "不行"
+					"feature": "額外核對",
+					"vela": "可透過獨立、自架的頁面或擴充功能核對",
+					"metamask": "第三方風險偵測",
+					"base": "—"
 				},
 				{
-					"feature": "開源",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">應用程式 + 中繼 + 每一項後端服務</a>",
-					"metamask": "擴充功能與手機應用已公開原始碼",
-					"base": "SDK 開源；帳戶服務不開源"
+					"feature": "完整自架",
+					"vela": "應用程式、中繼與後端服務均可自行運行",
+					"metamask": "用戶端和 RPC 可自行選擇或運行",
+					"base": "不支援完整自架"
 				},
 				{
-					"feature": "資歷",
-					"vela": "新，使用者還少。合約經過第三方稽核，我們自己的程式碼沒有",
-					"metamask": "入場多年，數千萬使用者",
-					"base": "Coinbase 背書，經過稽核"
+					"feature": "開源範圍",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">應用程式、中繼與後端服務</a>",
+					"metamask": "錢包用戶端",
+					"base": "SDK；部分帳戶服務不開源"
+				},
+				{
+					"feature": "成熟度",
+					"vela": "新，使用者較少",
+					"metamask": "運行多年，使用者規模大",
+					"base": "Coinbase 維護"
 				}
 			],
-			"note": "這裡沒有一句是在貶低另外兩個。MetaMask 是鏈上轉帳最便宜、最通用的方式；Base Account 最省事，而且常常免費。Vela 押的是另一件事：用密碼金鑰的同時，金鑰不交給任何人，而且每一個環節你都能自己跑。"
+			"note": "這裡沒有一句是在貶低另外兩個。\n\nMetaMask 的優勢是簡單、通用，而且普通 EOA 交易的鏈上開銷最低。\n\nBase Account 的優勢是體驗省事，在支援的場景裡還可以免去使用者支付 gas。\n\nVela 選擇的是另一組取捨：使用密碼金鑰，同時支援多把獨立簽署金鑰，並且從應用程式、中繼到後端服務都可以自己運行。\n\n它不是每一項都更好。它更強調的是：帳戶控制權留在使用者手裡，同時盡可能減少對單一服務提供商的依賴。"
 		},
 		"pricing": {
 			"heading": "免費且開源。願意付費再付。",

@@ -317,76 +317,82 @@ export const en = {
 
 		compare: {
 			heading: 'How Vela compares',
-			desc: 'Three kinds of wallet \u2014 a plain key, a vendor smart account, and this one. We use all three. None of them wins every row.',
+			desc: 'Three kinds of wallet: a plain EOA, a vendor smart account, and Vela. We use all three, and none of them is better at everything.',
 			rows: [
 				{
 					feature: 'Account type',
 					vela: '<a href="/docs/account-contract">Safe v1.4.1 smart account</a>',
-					metamask: 'An EOA \u2014 a plain key on the chain',
+					metamask: 'EOA',
 					base: 'Coinbase smart account'
 				},
 				{
 					feature: 'Signing key',
-					vela: 'Passkey or security key \u2014 up to seven, 1-of-n',
-					metamask: 'A 12-word seed phrase; hardware wallet optional',
-					base: 'Passkey'
+					vela: 'Passkey or security key',
+					metamask: 'The private key behind a seed phrase; hardware wallets supported',
+					base: 'Passkey or security key'
 				},
 				{
-					feature: 'Gas per transaction',
-					vela: 'Highest: an on-chain signature check, the EntryPoint, and the relay&rsquo;s fee',
-					metamask: 'Lowest: the chain&rsquo;s own gas and nothing else',
-					base: 'ERC-4337 overhead, often sponsored'
+					feature: 'Transaction gas',
+					vela: "ERC-4337 overhead, plus the relay's service fee",
+					metamask: "A plain EOA transaction's gas",
+					base: 'ERC-4337 overhead'
 				},
 				{
 					feature: 'Sponsored gas',
-					vela: 'Only the one-time account activation, where we can',
-					metamask: 'None \u2014 you always pay',
-					base: 'Yes, on Base and some networks; often free for you'
+					vela: 'Not offered',
+					metamask: 'Not offered',
+					base: 'Sponsored where supported'
 				},
 				{
 					feature: 'Custom networks',
-					vela: 'Any chain with RIP-7212 \u2014 a <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">setup tool</a> deploys the contracts',
-					metamask: 'Any EVM chain, with your own RPC',
-					base: 'Base first; a short list'
+					vela: "Any EVM network that meets Vela's requirements; you can deploy the contracts yourself",
+					metamask: 'Custom EVM networks and RPCs',
+					base: 'A narrower range of networks'
 				},
 				{
-					feature: 'If you lose a device',
-					vela: 'Sign with any of your other keys',
-					metamask: 'The seed phrase, or the wallet is gone',
-					base: 'Passkey sync, plus a recovery key generated in a browser'
+					feature: 'Losing one key',
+					vela: 'Sign with another key you added or synced',
+					metamask: 'Restore from the seed phrase',
+					base: 'Sign with another key you added or synced'
 				},
 				{
 					feature: 'Batched transactions',
-					vela: 'Yes \u2014 many calls in one operation',
-					metamask: 'Only after an EIP-7702 upgrade',
-					base: 'Yes'
+					vela: 'Supported',
+					metamask: 'Depends on account capabilities \u2014 EIP-7702 and the like',
+					base: 'Supported'
 				},
 				{
-					feature: 'Checking before you sign',
-					vela: 'Decoded in the app, plus a page or extension you host yourself',
-					metamask: 'Decoded in the app, with third-party risk scanning',
-					base: 'Decoded in the app'
+					feature: 'Decoded before signing',
+					vela: 'Supported',
+					metamask: 'Supported',
+					base: 'Supported'
 				},
 				{
-					feature: 'Self-hostable end to end',
-					vela: 'App, relay and every backend service',
-					metamask: 'Build the app yourself; point it at your own RPC',
-					base: 'No'
+					feature: 'An extra check',
+					vela: 'An independent, self-hosted page or extension',
+					metamask: 'Third-party risk detection',
+					base: '\u2014'
+				},
+				{
+					feature: 'Full self-hosting',
+					vela: 'App, relay and backend services, all runnable by you',
+					metamask: 'Client and RPC are yours to choose or run',
+					base: 'Not available'
 				},
 				{
 					feature: 'Open source',
-					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">App + relayer + every backend service</a>',
-					metamask: 'Extension and mobile app published',
-					base: 'SDK yes; the account service, no'
+					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">App, relay and backend services</a>',
+					metamask: 'The wallet client',
+					base: 'SDK; some account services are not open'
 				},
 				{
-					feature: 'Track record',
-					vela: 'New, few users. Contracts third-party audited; our app code is not',
-					metamask: 'Years in the market, tens of millions of users',
-					base: 'Coinbase-backed, audited'
+					feature: 'Maturity',
+					vela: 'New, few users',
+					metamask: 'Years in the market, a large user base',
+					base: 'Maintained by Coinbase'
 				}
 			],
-			note: 'None of this is a knock on the other two. MetaMask is the cheapest and most universal way to move money on-chain; Base Account is the easiest, and often free. Vela&rsquo;s bet is that you can have passkeys without handing anyone else the keys \u2014 and run every piece of it yourself.'
+			note: "None of this is a knock on the other two.\n\nMetaMask's strengths are simplicity and universality \u2014 and a plain EOA transaction is the cheapest thing you can do on-chain.\n\nBase Account is the least trouble, and where it is supported the gas can be on them rather than on you.\n\nVela takes a different set of trade-offs: passkeys, several independent signing keys, and every piece \u2014 app, relay, backend services \u2014 runnable by you.\n\nIt is not better on every row. What it insists on is that control of the account stays with you, and that as little as possible depends on a single provider."
 		},
 
 		pricing: {

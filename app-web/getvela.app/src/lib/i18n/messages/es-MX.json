@@ -166,76 +166,82 @@
 		},
 		"compare": {
 			"heading": "Cómo se compara Vela",
-			"desc": "Tres tipos de cartera — una llave simple, una cuenta inteligente de un proveedor, y esta. Usamos las tres. Ninguna gana todas las filas.",
+			"desc": "Tres tipos de cartera: una EOA común, una cuenta inteligente de un proveedor, y Vela. Usamos las tres, y ninguna es mejor en todo.",
 			"rows": [
 				{
 					"feature": "Tipo de cuenta",
 					"vela": "<a href=\"/docs/account-contract\">Cuenta inteligente Safe v1.4.1</a>",
-					"metamask": "Una EOA — una llave simple en la cadena",
+					"metamask": "EOA",
 					"base": "Cuenta inteligente de Coinbase"
 				},
 				{
 					"feature": "Llave de firma",
-					"vela": "Passkey o llave de seguridad — hasta siete, 1-of-n",
-					"metamask": "Frase de 12 palabras; cartera de hardware opcional",
-					"base": "Passkey"
+					"vela": "Passkey o llave de seguridad",
+					"metamask": "La llave privada detrás de una frase de recuperación; carteras de hardware compatibles",
+					"base": "Passkey o llave de seguridad"
 				},
 				{
 					"feature": "Gas por transacción",
-					"vela": "El más alto: verificación de firma on-chain, EntryPoint y la comisión del relay",
-					"metamask": "El más bajo: el gas de la cadena y nada más",
-					"base": "Sobrecosto de ERC-4337, a menudo patrocinado"
+					"vela": "Sobrecosto de ERC-4337, más la comisión de servicio del relay",
+					"metamask": "El gas de una transacción EOA común",
+					"base": "Sobrecosto de ERC-4337"
 				},
 				{
 					"feature": "Gas patrocinado",
-					"vela": "Solo la activación inicial de la cuenta, cuando podemos",
-					"metamask": "Ninguno — siempre pagas tú",
-					"base": "Sí, en Base y algunas redes; muchas veces gratis para ti"
+					"vela": "No se ofrece",
+					"metamask": "No se ofrece",
+					"base": "Patrocinado donde hay soporte"
 				},
 				{
 					"feature": "Redes personalizadas",
-					"vela": "Cualquier cadena con RIP-7212 — una <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">herramienta de configuración</a> despliega los contratos",
-					"metamask": "Cualquier cadena EVM, con tu propio RPC",
-					"base": "Base primero; lista corta"
+					"vela": "Cualquier red EVM que cumpla los requisitos de Vela; los contratos puedes desplegarlos tú",
+					"metamask": "Redes EVM y RPC personalizados",
+					"base": "Un rango de redes más acotado"
 				},
 				{
-					"feature": "Si pierdes un dispositivo",
-					"vela": "Firmas con cualquiera de tus otras llaves",
-					"metamask": "La frase de recuperación, o la cartera se perdió",
-					"base": "Sincronización de passkey, más una llave de recuperación generada en el navegador"
+					"feature": "Si pierdes una llave",
+					"vela": "Firmas con otra llave agregada o sincronizada",
+					"metamask": "Recuperas con la frase de recuperación",
+					"base": "Firmas con otra llave agregada o sincronizada"
 				},
 				{
 					"feature": "Transacciones en lote",
-					"vela": "Sí — varias llamadas en una sola operación",
-					"metamask": "Solo tras una actualización EIP-7702",
-					"base": "Sí"
+					"vela": "Compatible",
+					"metamask": "Depende de las capacidades de la cuenta — EIP-7702 y similares",
+					"base": "Compatible"
 				},
 				{
-					"feature": "Revisar antes de firmar",
-					"vela": "Decodificado en la app, más una página o extensión que alojas tú",
-					"metamask": "Decodificado en la app, con análisis de riesgo de terceros",
-					"base": "Decodificado en la app"
+					"feature": "Decodificado antes de firmar",
+					"vela": "Compatible",
+					"metamask": "Compatible",
+					"base": "Compatible"
 				},
 				{
-					"feature": "Autoalojable de punta a punta",
-					"vela": "App, relay y cada servicio de backend",
-					"metamask": "Compilas la app tú mismo; la apuntas a tu propio RPC",
-					"base": "No"
+					"feature": "Revisión adicional",
+					"vela": "Con una página o extensión independiente que alojas tú",
+					"metamask": "Detección de riesgo de terceros",
+					"base": "—"
 				},
 				{
-					"feature": "Código abierto",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relay + cada servicio de backend</a>",
-					"metamask": "Extensión y app móvil publicadas",
-					"base": "SDK sí; el servicio de cuentas no"
+					"feature": "Autoalojamiento completo",
+					"vela": "App, relay y servicios de backend, todo lo puedes correr tú",
+					"metamask": "El cliente y el RPC los eliges o los corres tú",
+					"base": "No disponible"
 				},
 				{
-					"feature": "Trayectoria",
-					"vela": "Nueva, pocos usuarios. Contratos auditados por terceros; nuestro código de app no",
-					"metamask": "Años en el mercado, decenas de millones de usuarios",
-					"base": "Respaldada por Coinbase, auditada"
+					"feature": "Alcance del código abierto",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App, relay y servicios de backend</a>",
+					"metamask": "El cliente de la cartera",
+					"base": "SDK; algunos servicios de cuenta no están abiertos"
+				},
+				{
+					"feature": "Madurez",
+					"vela": "Nueva, pocos usuarios",
+					"metamask": "Años en el mercado, base de usuarios grande",
+					"base": "Mantenida por Coinbase"
 				}
 			],
-			"note": "Nada de esto va en contra de las otras dos. MetaMask es la forma más barata y universal de mover dinero on-chain; Base Account es la más fácil, y a menudo gratis. La apuesta de Vela es otra: usar passkeys sin entregarle las llaves a nadie — y poder correr cada pieza tú mismo."
+			"note": "Nada de esto va en contra de las otras dos.\n\nLas fortalezas de MetaMask son la simplicidad y la universalidad — y una transacción EOA común es lo más barato que puedes hacer on-chain.\n\nBase Account es la que menos molesta, y donde hay soporte el gas no lo pagas tú.\n\nVela toma otro conjunto de compromisos: passkeys, varias llaves de firma independientes, y cada pieza — app, relay, servicios de backend — que puedes correr tú.\n\nNo es mejor en cada fila. En lo que insiste es en que el control de la cuenta se queda contigo, y en que lo menos posible dependa de un solo proveedor."
 		},
 		"pricing": {
 			"heading": "Gratis y abierta. Paga solo si quieres.",

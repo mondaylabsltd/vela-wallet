@@ -166,76 +166,82 @@
 		},
 		"compare": {
 			"heading": "Vela를 나란히 놓고 보면",
-			"desc": "세 종류의 지갑 — 그냥 키 하나, 벤더의 스마트 계정, 그리고 이것. 셋 다 우리가 씁니다. 모든 줄에서 이기는 지갑은 없습니다.",
+			"desc": "세 종류의 지갑: 평범한 EOA, 벤더의 스마트 계정, 그리고 Vela. 셋 다 우리가 쓰고 있고, 모든 항목에서 더 나은 지갑은 없습니다.",
 			"rows": [
 				{
 					"feature": "계정 종류",
 					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 스마트 계정</a>",
-					"metamask": "EOA — 체인 위의 평범한 키",
+					"metamask": "EOA",
 					"base": "Coinbase 스마트 계정"
 				},
 				{
 					"feature": "서명 키",
-					"vela": "패스키 또는 보안 키 — 최대 일곱 개, 1-of-n",
-					"metamask": "12단어 시드 문구. 하드웨어 지갑 연결 가능",
-					"base": "패스키"
+					"vela": "패스키 또는 보안 키",
+					"metamask": "시드 문구에 대응하는 개인 키. 하드웨어 지갑 지원",
+					"base": "패스키 또는 보안 키"
 				},
 				{
-					"feature": "거래당 가스",
-					"vela": "가장 비쌈: 온체인 서명 검증, EntryPoint, 그리고 릴레이 수수료",
-					"metamask": "가장 쌈: 체인의 가스, 그것뿐",
-					"base": "ERC-4337 부담이 있지만 대납되는 경우가 많음"
+					"feature": "거래 가스",
+					"vela": "ERC-4337 부담 + 릴레이 수수료",
+					"metamask": "평범한 EOA 거래의 가스",
+					"base": "ERC-4337 부담"
 				},
 				{
 					"feature": "가스 대납",
-					"vela": "최초 계정 활성화만, 가능한 범위에서",
-					"metamask": "없음 — 항상 직접 부담",
-					"base": "있음. Base 등 일부 네트워크에서는 무료인 경우도"
+					"vela": "없음",
+					"metamask": "없음",
+					"base": "지원되는 경우 대납"
 				},
 				{
 					"feature": "커스텀 네트워크",
-					"vela": "RIP-7212를 지원하는 모든 체인 — <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">설정 도구</a>가 컨트랙트를 배포",
-					"metamask": "모든 EVM 체인, 원하는 RPC로",
-					"base": "Base 중심, 목록이 짧음"
+					"vela": "Vela의 동작 조건을 만족하는 EVM 네트워크라면 무엇이든. 필요한 컨트랙트는 직접 배포 가능",
+					"metamask": "커스텀 EVM 네트워크와 RPC 지원",
+					"base": "지원 네트워크 범위가 좁음"
 				},
 				{
-					"feature": "기기를 잃어버리면",
-					"vela": "남은 키 중 아무거나로 서명",
-					"metamask": "시드 문구뿐. 잃으면 끝",
-					"base": "패스키 동기화와 브라우저에서 생성된 복구 키"
+					"feature": "키 하나를 잃어버리면",
+					"vela": "추가했거나 동기화된 다른 키로 서명",
+					"metamask": "시드 문구로 복구",
+					"base": "추가했거나 동기화된 다른 키로 서명"
 				},
 				{
 					"feature": "묶음 거래",
-					"vela": "가능 — 여러 호출을 한 번의 작업으로",
-					"metamask": "EIP-7702 업그레이드 후에만",
-					"base": "가능"
+					"vela": "지원",
+					"metamask": "계정 기능에 따라 다름 — EIP-7702 등",
+					"base": "지원"
 				},
 				{
-					"feature": "서명 전 확인",
-					"vela": "앱에서 디코딩, 그리고 직접 호스팅하는 페이지나 확장",
-					"metamask": "앱에서 디코딩, 제3자 위험 검사 포함",
-					"base": "앱에서 디코딩"
+					"feature": "서명 전 디코딩",
+					"vela": "지원",
+					"metamask": "지원",
+					"base": "지원"
+				},
+				{
+					"feature": "추가 확인",
+					"vela": "독립적이고 직접 호스팅하는 페이지나 확장으로 확인",
+					"metamask": "제3자 위험 탐지",
+					"base": "—"
 				},
 				{
 					"feature": "전부 직접 호스팅",
-					"vela": "앱, 릴레이, 모든 백엔드 서비스",
-					"metamask": "앱은 직접 빌드 가능, RPC도 교체 가능",
+					"vela": "앱, 릴레이, 백엔드 서비스까지 직접 운영 가능",
+					"metamask": "클라이언트와 RPC는 직접 고르거나 운영",
 					"base": "불가"
 				},
 				{
-					"feature": "오픈소스",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">앱 + 릴레이 + 모든 백엔드 서비스</a>",
-					"metamask": "확장과 모바일 앱 공개",
-					"base": "SDK는 공개, 계정 서비스는 비공개"
+					"feature": "오픈소스 범위",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">앱, 릴레이, 백엔드 서비스</a>",
+					"metamask": "지갑 클라이언트",
+					"base": "SDK 공개. 일부 계정 서비스는 비공개"
 				},
 				{
-					"feature": "업력",
-					"vela": "새롭고 사용자도 적음. 컨트랙트는 제3자 감사, 우리 앱 코드는 미감사",
-					"metamask": "수년간, 수천만 사용자",
-					"base": "Coinbase 지원, 감사 완료"
+					"feature": "성숙도",
+					"vela": "새롭고 사용자도 적음",
+					"metamask": "수년간 운영, 큰 사용자 규모",
+					"base": "Coinbase가 유지"
 				}
 			],
-			"note": "다른 둘을 깎아내리려는 말이 아닙니다. MetaMask는 온체인 송금에서 가장 싸고 가장 널리 통합니다. Base Account는 가장 편하고 종종 무료입니다. Vela가 거는 쪽은 다른 것입니다 — 패스키를 쓰면서도 키를 누구에게도 넘기지 않고, 모든 조각을 직접 돌릴 수 있다는 것."
+			"note": "여기 적은 것은 다른 둘을 깎아내리려는 말이 아닙니다.\n\nMetaMask의 강점은 단순함과 범용성이고, 평범한 EOA 거래는 온체인에서 가장 저렴합니다.\n\nBase Account는 손이 가장 덜 가고, 지원되는 경우에는 가스를 대신 내주기도 합니다.\n\nVela가 택한 것은 다른 절충입니다: 패스키를 쓰고, 독립적인 서명 키를 여러 개 두고, 앱부터 릴레이, 백엔드까지 직접 운영할 수 있게 하는 것.\n\n모든 항목에서 더 낫지는 않습니다. 고집하는 것은 계정의 통제권이 사용자에게 남는 것, 그리고 한 공급자에 대한 의존을 최대한 줄이는 것입니다."
 		},
 		"pricing": {
 			"heading": "무료이고 열려 있습니다. 원할 때만 내세요.",

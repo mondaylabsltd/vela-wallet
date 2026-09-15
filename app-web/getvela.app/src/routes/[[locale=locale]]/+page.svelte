@@ -64,15 +64,16 @@
 	 */
 	const COMPARE_TONES = [
 		{ vela: '', metamask: '', base: '' },
-		{ vela: 'yes', metamask: 'warn', base: 'yes' },
-		{ vela: 'warn', metamask: 'yes', base: 'yes' },
-		{ vela: 'warn', metamask: 'no', base: 'yes' },
-		{ vela: 'yes', metamask: 'yes', base: 'no' },
-		{ vela: 'yes', metamask: 'warn', base: 'warn' },
-		{ vela: 'yes', metamask: 'warn', base: 'yes' },
-		{ vela: 'yes', metamask: 'warn', base: 'warn' },
-		{ vela: 'yes', metamask: 'warn', base: 'no' },
+		{ vela: 'yes', metamask: '', base: 'yes' },
+		{ vela: 'warn', metamask: 'yes', base: '' },
+		{ vela: 'warn', metamask: 'warn', base: 'yes' },
+		{ vela: 'yes', metamask: 'yes', base: 'warn' },
+		{ vela: 'yes', metamask: '', base: 'yes' },
+		{ vela: 'yes', metamask: '', base: 'yes' },
+		{ vela: 'yes', metamask: 'yes', base: 'yes' },
 		{ vela: 'yes', metamask: '', base: 'warn' },
+		{ vela: 'yes', metamask: '', base: 'warn' },
+		{ vela: 'yes', metamask: '', base: '' },
 		{ vela: 'warn', metamask: 'yes', base: 'yes' }
 	] as const;
 
@@ -618,7 +619,11 @@
 				</tbody>
 			</table>
 		</div>
-		<p class="compare-note">{m.home.compare.note}</p>
+		<div class="compare-note">
+			{#each m.home.compare.note.split('\n\n') as para (para)}
+				<p>{para}</p>
+			{/each}
+		</div>
 	</div>
 </section>
 
@@ -1605,13 +1610,26 @@
 		margin: 0 auto;
 		overflow-x: auto;
 	}
+	/* Five short paragraphs now — the founder's summary of what each of the three
+	   is actually good at — so it is a block of prose under the table rather
+	   than one centred caption. Left-aligned at that length: centred text that
+	   wraps five times is a poster, not a paragraph. */
 	.compare-note {
-		max-width: 640px;
-		margin: 18px auto 0;
-		text-align: center;
-		font-size: 0.8rem;
-		line-height: 1.6;
-		color: var(--text-tertiary);
+		max-width: 680px;
+		margin: 26px auto 0;
+		font-size: 0.86rem;
+		line-height: 1.7;
+		color: var(--text-secondary);
+	}
+	.compare-note p {
+		margin: 0;
+	}
+	.compare-note p + p {
+		margin-top: 11px;
+	}
+	/* The last line is the claim the whole table exists to support. */
+	.compare-note p:last-child {
+		color: var(--text);
 	}
 	.compare-table {
 		width: 100%;
