@@ -82,6 +82,38 @@ export const en = {
 			label: 'Language',
 			choose: 'Choose a language'
 		},
+		/**
+		 * The docs sidebar. This is CHROME, not page content: it frames every docs
+		 * page including the ones still falling back to English, so it merges per
+		 * key and a missing title simply stays English rather than blanking a
+		 * navigation row. Order and slugs stay in `content/sidebar.ts` — a
+		 * translator names things, they do not reorder the docs.
+		 */
+		docs: {
+			groups: {
+				gettingStarted: 'Getting Started',
+				using: 'Using Vela',
+				security: 'Security',
+				reference: 'Reference'
+			},
+			titles: {
+				introduction: 'Introduction',
+				'why-vela': 'Why we built Vela',
+				install: 'Install Vela',
+				'create-wallet': 'Create your wallet',
+				'send-and-receive': 'Send & receive',
+				'networks-and-fees': 'Networks & fees',
+				passkeys: 'How passkeys work',
+				signers: 'Signers & security keys',
+				'clear-signing': 'Clear signing',
+				'bybit-attack': 'The Bybit attack',
+				recovery: 'Recovery & sign-in',
+				'account-contract': 'The account contract',
+				'security-audits': 'Audits & known issues',
+				whitepaper: 'Whitepaper',
+				faq: 'FAQ'
+			}
+		},
 		englishOnly: {
 			/** Badge on a link that leads to an English-only page (FR-020). */
 			badge: 'EN',

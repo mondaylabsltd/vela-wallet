@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { PREFIXED_LOCALES } from '$lib/i18n/locales';
+import { DEFAULT_LOCALE, PREFIXED_LOCALES, toLocale } from '$lib/i18n/locales';
 import type { EntryGenerator, PageLoad } from './$types';
 import { getDoc, getDocSlugs } from '$lib/content/docs';
 
@@ -15,9 +15,12 @@ export const entries: EntryGenerator = () =>
 	]);
 
 export const load: PageLoad = ({ params }) => {
-	const doc = getDoc(params.slug);
+	const locale = toLocale(params.locale) ?? DEFAULT_LOCALE;
+	const doc = getDoc(locale, params.slug);
 	if (!doc) {
 		error(404, 'Documentation page not found');
 	}
-	return { slug: doc.slug, meta: doc.meta };
+	// `fallback` travels in the load data so the page can decide whether to show
+	// the notice from the DOC's real state, not from the locale.
+	return { slug: doc.slug, meta: doc.meta, fallback: doc.fallback };
 };

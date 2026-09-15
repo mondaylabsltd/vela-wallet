@@ -6,16 +6,21 @@
  */
 export interface SidebarItem {
 	slug: string;
+	/** English title. The rendered title comes from `chrome.docs.titles[slug]`. */
 	title: string;
 }
 
 export interface SidebarGroup {
+	/** Key into `chrome.docs.groups` — the group's name is translated copy. */
+	key: 'gettingStarted' | 'using' | 'security' | 'reference';
+	/** English title, kept here so this file still reads as the source of truth. */
 	title: string;
 	items: SidebarItem[];
 }
 
 export const sidebar: SidebarGroup[] = [
 	{
+		key: 'gettingStarted',
 		title: 'Getting Started',
 		items: [
 			{ slug: 'introduction', title: 'Introduction' },
@@ -25,6 +30,7 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
+		key: 'using',
 		title: 'Using Vela',
 		items: [
 			{ slug: 'send-and-receive', title: 'Send & receive' },
@@ -32,6 +38,7 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
+		key: 'security',
 		title: 'Security',
 		items: [
 			{ slug: 'passkeys', title: 'How passkeys work' },
@@ -44,6 +51,7 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
+		key: 'reference',
 		title: 'Reference',
 		items: [
 			{ slug: 'whitepaper', title: 'Whitepaper' },

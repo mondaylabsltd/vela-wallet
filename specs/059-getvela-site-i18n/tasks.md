@@ -101,11 +101,11 @@ sitemap lists exactly the pages that exist.
 - [X] T032 [US4] **Delete the stale hardcoded `og:title` / `twitter:title` / `og:description` / `twitter:description` from `src/app.html`** — a third retired tagline duplicated on every page (research §1, contracts/head-and-sitemap.md invariant 5)
 - [X] T033 [US4] Extend `src/lib/components/Seo.svelte` with an `alternates` input emitting `hreflang` links + `x-default`, `og:locale`, `og:locale:alternate`, and `inLanguage` in JSON-LD
 - [ ] T034 [US4] Replace the landing page's hand-written `<svelte:head>` in `src/routes/[[locale=locale]]/+page.svelte` with `Seo.svelte` so canonical/alternates come from one place
-- [ ] T035 [P] [US4] Replace the hand-written `<svelte:head>` in `roadmap/+page.svelte` with `Seo.svelte` for the same reason
-- [ ] T036 [US4] Emit alternates from `TranslationRecord` only for locales whose state is `translated`/`source` — a falling-back page is advertised by nobody, including itself (FR-018)
-- [ ] T037 [US4] Update `src/routes/sitemap.xml/+server.ts` — `xmlns:xhtml`, one `<url>` per (page, locale) that exists, `<xhtml:link>` alternates + `x-default`, English-only pages listed once with none
-- [ ] T038 [P] [US4] Create `src/lib/i18n/hreflang.test.ts` — reciprocity, self-reference, `x-default` is English on every page, and no fallback page is advertised
-- [ ] T039 [P] [US4] Create `src/lib/i18n/sitemap.test.ts` — every sitemap URL corresponds to a generated page and no generated localized page is missing (FR-025)
+- [X] T035 [P] [US4] Replace the hand-written `<svelte:head>` in `roadmap/+page.svelte` with `Seo.svelte` for the same reason
+- [X] T036 [US4] Emit alternates from `TranslationRecord` only for locales whose state is `translated`/`source` — a falling-back page is advertised by nobody, including itself (FR-018)
+- [X] T037 [US4] Update `src/routes/sitemap.xml/+server.ts` — `xmlns:xhtml`, one `<url>` per (page, locale) that exists, `<xhtml:link>` alternates + `x-default`, English-only pages listed once with none
+- [X] T038 [P] [US4] Create `src/lib/i18n/hreflang.test.ts` — reciprocity, self-reference, `x-default` is English on every page, and no fallback page is advertised
+- [X] T039 [P] [US4] Create `src/lib/i18n/sitemap.test.ts` — every sitemap URL corresponds to a generated page and no generated localized page is missing (FR-025)
 - [ ] T040 [P] [US4] Assert in `tests/head.spec.ts` that a built page contains exactly one `og:title` — the regression T032 fixes
 
 **Checkpoint**: US4 complete. Safe to let crawlers see the locale prefixes.
@@ -121,14 +121,14 @@ fallback and working navigation in every locale.
 English under a notice **in that locale**, chrome stays localized, and no page
 advertises that translation.
 
-- [ ] T041 [US3] Edit `src/lib/content/docs.ts` — glob `/src/content/docs/**/*.md`, key by `(locale, slug)`, and expose `getDoc(locale, slug)` returning the translation or the English source plus a `fallback` flag
-- [ ] T042 [US3] Edit `src/lib/content/docs.ts` — `getDocEditUrl` must point at the file that actually rendered (`docs/<tag>/<slug>.md` when translated, `docs/<slug>.md` when fallen back), FR-019
-- [ ] T043 [US3] Edit `src/lib/content/sidebar.ts` — per-locale group and item titles, with order and slugs staying single-source (research §5)
+- [X] T041 [US3] Edit `src/lib/content/docs.ts` — glob `/src/content/docs/**/*.md`, key by `(locale, slug)`, and expose `getDoc(locale, slug)` returning the translation or the English source plus a `fallback` flag
+- [X] T042 [US3] Edit `src/lib/content/docs.ts` — `getDocEditUrl` must point at the file that actually rendered (`docs/<tag>/<slug>.md` when translated, `docs/<slug>.md` when fallen back), FR-019
+- [X] T043 [US3] Edit `src/lib/content/sidebar.ts` — per-locale group and item titles, with order and slugs staying single-source (research §5)
 - [ ] T044 [P] [US3] Create `src/lib/components/FallbackNotice.svelte` — one line, in the reader's locale, from `notice.fallback`
-- [ ] T045 [US3] Render the notice in `src/routes/[[locale=locale]]/docs/[...slug]/+page.svelte` and `docs/+page.svelte` whenever the doc fell back
+- [X] T045 [US3] Render the notice in `src/routes/[[locale=locale]]/docs/[...slug]/+page.svelte` and `docs/+page.svelte` whenever the doc fell back
 - [ ] T046 [US3] Apply the same page-level fallback to `home`, `about` and `roadmap` so the rule is one rule, not a docs special case (SC-006)
 - [ ] T047 [P] [US3] Mark English-only destinations in `SiteHeader.svelte` / `SiteFooter.svelte` with an `EN` badge and `hreflang="en"` when the reader is in a non-English locale (FR-020)
-- [ ] T048 [P] [US3] Create `src/lib/content/docs.test.ts` — `(locale, slug)` resolution, fallback flag, and the edit URL following the rendered file
+- [X] T048 [P] [US3] Create `src/lib/content/docs.test.ts` — `(locale, slug)` resolution, fallback flag, and the edit URL following the rendered file
 - [ ] T049 [US3] Translate the 11 docs into `src/content/docs/zh/` and verify `/zh/docs/*` end to end
 - [ ] T050 [P] [US3] Add `tests/fallback.spec.ts` — with one `zh` doc removed, the page shows Chinese chrome + Chinese notice + English body, and emits no `hreflang="zh"` for it
 

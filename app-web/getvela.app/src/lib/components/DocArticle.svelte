@@ -2,6 +2,7 @@
 	import { getAdjacentDocs, getDocEditUrl } from '$lib/content/docs';
 	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
 	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
+	import { catalog } from '$lib/i18n/resolve';
 	import type { Snippet } from 'svelte';
 	import Prose from './Prose.svelte';
 	import Toc from './Toc.svelte';
@@ -13,7 +14,13 @@
 	}: { slug: string; locale?: Locale; children: Snippet } = $props();
 
 	const adjacent = $derived(getAdjacentDocs(slug));
-	const editUrl = $derived(getDocEditUrl(slug));
+	const m = $derived(catalog(locale));
+	/** The pager names other docs, so it must name them in the reader's language. */
+	const titleOf = $derived(
+		(item: { slug: string; title: string }) =>
+			m.chrome.docs.titles[item.slug as keyof typeof m.chrome.docs.titles] ?? item.title
+	);
+	const editUrl = $derived(getDocEditUrl(locale, slug));
 
 	// prev/next must stay in the reader's language.
 	function hrefFor(target: string) {
@@ -52,7 +59,7 @@
 				{#if adjacent.prev}
 					<a class="pager-link" href={hrefFor(adjacent.prev.slug)}>
 						<span class="dir">← Previous</span>
-						<span class="t">{adjacent.prev.title}</span>
+						<span class="t">{titleOf(adjacent.prev)}</span>
 					</a>
 				{:else}
 					<span></span>
@@ -60,7 +67,7 @@
 				{#if adjacent.next}
 					<a class="pager-link right" href={hrefFor(adjacent.next.slug)}>
 						<span class="dir">Next →</span>
-						<span class="t">{adjacent.next.title}</span>
+						<span class="t">{titleOf(adjacent.next)}</span>
 					</a>
 				{/if}
 			</nav>

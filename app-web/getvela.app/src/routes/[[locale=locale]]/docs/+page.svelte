@@ -3,7 +3,7 @@
 	import Seo from '$lib/components/Seo.svelte';
 	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
 	import { pathFor } from '$lib/i18n/locales';
-	import { getDoc } from '$lib/content/docs';
+	import { docLocales, getDoc } from '$lib/content/docs';
 	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
 	import { seoConfig } from '$lib/seo';
 	import type { PageData } from './$types';
@@ -11,17 +11,19 @@
 	let { data }: { data: PageData } = $props();
 
 	const slug = DOCS_INDEX_SLUG;
-	const doc = getDoc(slug)!;
-	const Content = doc.component;
+	const doc = $derived(getDoc(data.locale, slug)!);
+	const Content = $derived(doc.component);
+	const alternates = $derived(docLocales(slug));
 
-	const jsonLd = {
+	const jsonLd = $derived({
 		'@context': 'https://schema.org',
 		'@type': 'TechArticle',
 		headline: doc.meta.title,
 		description: doc.meta.description,
-		url: `${seoConfig.domain}/docs`,
+		url: `${seoConfig.domain}${pathFor(data.locale, '/docs')}`,
+		inLanguage: doc.renderedLocale,
 		publisher: { '@type': 'Organization', name: seoConfig.siteName }
-	};
+	});
 </script>
 
 <Seo
@@ -29,15 +31,13 @@
 	description={doc.meta.description ?? 'Vela Wallet documentation.'}
 	canonical={pathFor(data.locale, '/docs')}
 	locale={data.locale}
+	{alternates}
 	englishPath="/docs"
 	{jsonLd}
 />
 
-<!-- No docs page is translated yet — the per-locale content pipeline is T041 —
-     so a localized docs URL is English, and the reader is told so in their own
-     language. When translations land this becomes conditional on the page's
-     real state rather than on the locale. -->
-{#if data.locale !== 'en'}
+<!-- The notice follows the DOC, not the locale. -->
+{#if doc.fallback}
 	<TranslationNotice locale={data.locale} />
 {/if}
 

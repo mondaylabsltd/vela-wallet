@@ -2,13 +2,16 @@
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { catalog, namespaceState } from '$lib/i18n/resolve';
+	import Seo from '$lib/components/Seo.svelte';
+	import { pathFor } from '$lib/i18n/locales';
+	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	const m = $derived(catalog(data.locale));
 	const roadmapState = $derived(namespaceState('roadmap', data.locale));
+	const alternates = $derived(translatedLocales('roadmap'));
 
 	/**
 	 * Status and date are DATA, not copy: the badge colour is a judgement and the
@@ -28,10 +31,17 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>{m.roadmap.meta.title}</title>
-	<meta name="description" content={m.roadmap.meta.description} />
-</svelte:head>
+<!-- Through Seo.svelte rather than a hand-written head: canonical, alternates
+     and og:locale are the same three rules on every page, and a page that
+     rolls its own head is the one that silently loses them. -->
+<Seo
+	title={m.roadmap.meta.title}
+	description={m.roadmap.meta.description}
+	canonical={pathFor(data.locale, '/roadmap')}
+	locale={data.locale}
+	{alternates}
+	englishPath="/roadmap"
+/>
 
 {#if roadmapState === 'fallback'}
 	<TranslationNotice locale={data.locale} />

@@ -4,10 +4,14 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { DOCS_INDEX_SLUG, sidebar } from '$lib/content/sidebar';
 	import { pathFor, splitLocalePath } from '$lib/i18n/locales';
+	import { catalog } from '$lib/i18n/resolve';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
+
+	const m = $derived(catalog(data.locale));
+	type DocSlug = keyof typeof m.chrome.docs.titles;
 
 	let menuOpen = $state(false);
 
@@ -36,9 +40,9 @@
 
 	<aside class="sidebar" class:open={menuOpen}>
 		<nav aria-label="Documentation">
-			{#each sidebar as group (group.title)}
+			{#each sidebar as group (group.key)}
 				<div class="group">
-					<p class="group-title">{group.title}</p>
+					<p class="group-title">{m.chrome.docs.groups[group.key]}</p>
 					<ul>
 						{#each group.items as item (item.slug)}
 							<li>
@@ -48,7 +52,7 @@
 									aria-current={isActive(item.slug) ? 'page' : undefined}
 									onclick={() => (menuOpen = false)}
 								>
-									{item.title}
+									{m.chrome.docs.titles[item.slug as DocSlug] ?? item.title}
 								</a>
 							</li>
 						{/each}
