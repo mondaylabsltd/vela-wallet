@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import HeroFaceKey from '$lib/components/HeroFaceKey.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import { seoConfig } from '$lib/seo';
@@ -313,18 +312,28 @@
 		<div class="hero-text">
 			<h1>An Ethereum wallet you actually own</h1>
 			<p class="subtitle">
-				An open-source, self-custodial wallet for ETH and ERC-20s. Sign with a passkey — no seed
-				phrase, no hardware key, and no company that can lock you out.
+				Open source, self-hostable, 12 EVM chains. Sign with Face ID or a fingerprint on an
+				unmodified Safe — and keep signing if we disappear.
 			</p>
 			<div class="hero-cta">
-				<a
-					href="https://wallet.getvela.app/"
-					target="_blank"
-					rel="noopener"
-					class="btn btn-primary"
-					data-rybbit-event="cta_click"
-					data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
-				>
+				<div class="hero-buttons">
+					<a
+						href="https://wallet.getvela.app/"
+						target="_blank"
+						rel="noopener"
+						class="btn btn-primary btn-hero"
+						data-rybbit-event="cta_click"
+						data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
+					>
+					<a
+						href="https://github.com/mondaylabsltd/vela-wallet"
+						target="_blank"
+						rel="noopener"
+						class="btn btn-outline btn-hero"
+						data-rybbit-event="cta_click"
+						data-rybbit-prop-location="hero-code">Read the code</a
+					>
+				</div>
 				<a
 					href="https://wallet.getvela.app/"
 					target="_blank"
@@ -335,9 +344,37 @@
 				>
 			</div>
 		</div>
-		<div class="hero-visual">
-			<HeroFaceKey />
-		</div>
+		<!-- The five facts a sceptic checks before trusting a wallet with money. Every
+		     line is verifiable from the page below it or from the repo — nothing here
+		     is a claim the docs don't already make. -->
+		<dl class="hero-facts">
+			<div class="fact">
+				<dt>Safe v1.4.1, unmodified</dt>
+				<dd>
+					Third-party audited contracts, deployed exactly as published. Vela adds no contract of
+					its own.
+				</dd>
+			</div>
+			<div class="fact">
+				<dt>ERC-4337 smart account</dt>
+				<dd>A WebAuthn P-256 signer, and the same address on every chain.</dd>
+			</div>
+			<div class="fact">
+				<dt>12 chains built in, plus your own</dt>
+				<dd>Any EVM chain with the RIP-7212 precompile and Vela's contracts deployed.</dd>
+			</div>
+			<div class="fact">
+				<dt>Up to 7 signers, security keys included</dt>
+				<dd>
+					Passkeys, a nearby device, or a USB/NFC key — any one of them signs. Chosen when you
+					create the wallet.
+				</dd>
+			</div>
+			<div class="fact">
+				<dt>100% open source</dt>
+				<dd>The app, the bundler, the chain-data and passkey-index services. Run your own.</dd>
+			</div>
+		</dl>
 	</div>
 	<div class="scroll-hint">
 		<svg
@@ -865,9 +902,12 @@
 			<details>
 				<summary>Can I add a second passkey as backup?</summary>
 				<p>
-					Not right now. Each wallet is bound to a single passkey — a design choice in the current
-					signer module. Your backup is the built-in sync: iCloud Keychain or Google Password
-					Manager replicates the passkey across all your trusted devices automatically.
+					Yes — up to seven signers per wallet, and any one of them can sign on its own. They can
+					be passkeys on different devices, a nearby phone you scan, or a USB/NFC security key.
+					The catch: you choose them <strong>when you create the wallet</strong>, because your
+					address is derived from the full set of keys — adding one later would be a different
+					address. On top of that, each passkey is replicated by its own sync (iCloud Keychain,
+					Google Password Manager) across your trusted devices.
 				</p>
 			</details>
 			<!-- Trust & transparency -->
@@ -1128,18 +1168,19 @@
 	}
 	.hero-grid {
 		display: grid;
-		grid-template-columns: 1fr 380px;
-		gap: 48px;
+		grid-template-columns: 1.1fr 0.9fr;
+		gap: 72px;
 		align-items: center;
 	}
 	.hero-text {
 		text-align: left;
 	}
 	h1 {
-		font-size: clamp(2.5rem, 5vw, 3.2rem);
-		line-height: 1.1;
-		letter-spacing: -0.02em;
-		margin-bottom: 24px;
+		font-size: clamp(2.75rem, 6vw, 4.5rem);
+		font-weight: 700;
+		line-height: 1.02;
+		letter-spacing: -0.03em;
+		margin-bottom: 28px;
 		/* The headline is a sentence now, not two two-word lines, so it has no
 		   hard break: `balance` keeps the wrap even at every width instead of
 		   leaving one orphan word on the last line. Browsers without it simply
@@ -1151,13 +1192,46 @@
 		font-size: 1.05rem;
 		line-height: 1.75;
 		max-width: 520px;
-		margin-bottom: 28px;
+		margin-bottom: 32px;
 	}
 	.hero-cta {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 14px;
+		gap: 16px;
+	}
+	.hero-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.btn-hero {
+		padding: 14px 28px;
+		font-size: 0.95rem;
+	}
+
+	/* The fact column. One hairline carries the whole list — no cards, no
+	   boxes — so the eye reads five statements, not five containers. */
+	.hero-facts {
+		margin: 0;
+		padding: 4px 0 4px 32px;
+		border-left: 1px solid var(--border);
+		display: flex;
+		flex-direction: column;
+		gap: 26px;
+	}
+	.hero-facts dt {
+		font-weight: 600;
+		font-size: 0.95rem;
+		color: var(--text);
+		margin-bottom: 5px;
+	}
+	.hero-facts dd {
+		margin: 0;
+		font-size: 0.95rem;
+		line-height: 1.6;
+		color: var(--text-secondary);
+		max-width: 38ch;
 	}
 	.hero-signin {
 		font-size: 0.85rem;
@@ -1376,12 +1450,6 @@
 		background: currentColor;
 		mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h6v6'/%3E%3Cpath d='M10 14 21 3'/%3E%3Cpath d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/%3E%3C/svg%3E")
 			center / contain no-repeat;
-	}
-
-	/* ── Hero Visual ── */
-	.hero-visual {
-		display: flex;
-		justify-content: center;
 	}
 
 	/* ── Trust Strip ── */
@@ -1833,14 +1901,29 @@
 		.hero-cta {
 			align-items: center;
 		}
-		.hero-visual {
-			order: -1;
+		.hero-buttons {
+			justify-content: center;
+		}
+		/* Stacked, the vertical hairline has nothing to divide, so each fact
+		   gets its own rule above it instead. */
+		.hero-facts {
+			padding: 0;
+			border-left: none;
+			gap: 0;
+			text-align: left;
+		}
+		.hero-facts .fact {
+			padding: 18px 0;
+			border-top: 1px solid var(--border);
+		}
+		.hero-facts dd {
+			max-width: none;
 		}
 		.scroll-hint {
 			display: none;
 		}
 		h1 {
-			font-size: 2rem;
+			font-size: 2.35rem;
 		}
 		h2 {
 			font-size: 1.5rem;
