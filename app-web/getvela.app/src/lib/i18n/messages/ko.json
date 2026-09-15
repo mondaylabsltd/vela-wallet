@@ -458,5 +458,11 @@
 		},
 		"fundingNote": "스토어에서의 내려받기는 유료이며, 그것이 작은 독립 팀이 Vela를 공개적으로 만들어 가는 재원입니다. 전부 오픈소스이니 직접 빌드해도 됩니다 — 같은 앱이고, 비용은 없습니다.",
 		"storeNote": "아직 어느 스토어에도 없습니다. 그때까지 모든 빌드는 GitHub에 있습니다."
+	},
+	"_fingerprints": {
+		"home": "22a7ee775855",
+		"about": "669db59e91a0",
+		"roadmap": "df15b90319f9",
+		"getStarted": "dbbb0da3f5cc"
 	}
 }

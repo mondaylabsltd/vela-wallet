@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './messages/en';
-import { SUPPORTED_LOCALES } from './locales';
 import {
 	PAGE_NAMESPACES,
 	__internals,
@@ -57,41 +56,32 @@ describe('catalog()', () => {
 		}
 	});
 
-	// Picked at test time rather than hard-coded: as locales get translated, a
-	// hard-coded example silently stops testing fallback and starts testing a
-	// translation. The test needs a locale that is genuinely still English.
-	const untranslated = SUPPORTED_LOCALES.find((l) => namespaceState('home', l) === 'fallback');
-
-	it('has a locale left to demonstrate fallback with', () => {
-		// If this ever fails, every locale is translated — delete these three
-		// tests rather than weakening them.
-		expect(untranslated, 'no untranslated locale remains').toBeDefined();
-	});
-
-	it('falls back to the whole English namespace, not a mixture', () => {
-		// The fallback locale's home namespace is the English one, word for word,
-		// not an English-shaped merge of translated fragments. The only difference
-		// allowed is the link prefix (see the next test), so the comparison is
-		// made with hrefs stripped.
-		const strip = (v: unknown): unknown =>
-			JSON.parse(JSON.stringify(v).replace(/href=\\"[^"]*\\"/g, 'href'));
-		expect(strip(catalog(untranslated!).home)).toEqual(strip(en.home));
-	});
-
-	it('keeps a fallback page’s internal links inside the reader’s locale', () => {
-		// An English page at /tr must not tip the reader back out to /docs — they
-		// asked for Turkish and the rest of the site still has it.
+	/**
+	 * These used to pick, at test time, a locale whose `home` was still English,
+	 * and assert the fallback through it. On 2026-09-15 the last four locales
+	 * (vi, id, tr, zh-HK) were translated and no such locale exists any more —
+	 * the guard test that watched for exactly this moment said to delete rather
+	 * than weaken them, so the fallback-through-a-real-locale pair is gone.
+	 *
+	 * What is NOT gone: fallback itself is still the rule for the 16 docs pages,
+	 * and the rule it rests on — a namespace is used only when every leaf of it
+	 * is present — is asserted directly by the `isComplete` block above and by
+	 * `namespaceState` below. What remains here is the link rewriting, which was
+	 * never about fallback: an internal href is written English-relative in every
+	 * catalog and must come back out under the reader's prefix.
+	 */
+	it('keeps a page’s internal links inside the reader’s locale', () => {
 		// Found by its link rather than by its index: the table is edited far more
 		// often than this test, and a row number would quietly stop testing
 		// anything the first time a row is added above it.
 		const linked = (locale: string) =>
 			catalog(locale as never).home.compare.rows.find((r) => r.vela.includes('href="'))?.vela ?? '';
 		expect(linked('en'), 'a row with an internal link').toContain('href="/docs/');
-		expect(linked(untranslated!)).toContain(`href="/${untranslated}/docs/`);
+		expect(linked('zh')).toContain('href="/zh/docs/');
 	});
 
 	it('leaves external links and anchors alone', () => {
-		expect(catalog(untranslated!).home.why.p1).toContain('href="https://account.base.app"');
+		expect(catalog('zh').home.why.p1).toContain('href="https://account.base.app"');
 	});
 
 	it('keeps chrome and notice readable in a locale whose pages fall back', () => {
