@@ -248,19 +248,19 @@ export const en = {
 			lede: 'Three reasons not to use Vela — while your money is still somewhere else.',
 			items: [
 				{
-					title: 'Every transaction pays a fee that keeps the relay running.',
-					body: 'A passkey signature is verified on-chain and the transaction goes through the ERC-4337 EntryPoint, which on its own costs more gas than a plain transfer. The relayer fronts that gas and submits the transaction, and is paid more than the gas actually costs on-chain — the difference is what runs the service. You see the total before you sign, and it is written into the transaction you sign: what you signed is what is charged, and it cannot move afterwards. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
+					title: 'Every transaction pays an extra relay service fee.',
+					body: 'A Vela transaction verifies a passkey signature on-chain and executes through ERC-4337, so it normally uses more gas than a transfer sent directly from an ordinary account.\n\nBy default the relayer pays that gas and submits the transaction for you. What you pay covers the real on-chain cost, plus what it takes to keep the relay service running.\n\nThe full fee is shown before you sign and is part of the transaction you actually sign. What you signed is what you pay; it does not change afterwards.\n\nYou do not have to use our relayer. Change it in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run one yourself</a>.'
 				},
 				{
-					title: 'Whatever holds your key is what you have to trust.',
-					body: "A passkey either syncs with your Apple or Google account or lives on a USB/NFC security key, so one of those is what you are trusting — and hardware has had its own failures too. Afraid of losing a device: set several keys when you create the wallet, on different devices. Afraid of theft: anyone who can sign in to that Apple or Google account and unlock a device can spend your money, so the account has to be held to the same standard as the wallet. Afraid one of them lets you down: don't put every key in the same place — the first key can already be a security key, and a synced passkey plus a hardware key means no single vendor can lock you out. But be clear about what each extra key is: one more way back into the wallet, and one more thing that can be stolen — any single key signs on its own."
+					title: "Wherever your keys live, that place becomes part of your wallet's security.",
+					body: 'Vela uses passkeys. They can sync between the devices your Apple or Google account connects, or they can be kept on a USB/NFC hardware security key.\n\nWhich means you have to trust the devices, the accounts and the hardware that hold those keys.\n\nWorried about losing a device: set several keys when you create the wallet, kept on different devices or on different hardware. Worried about depending on a single provider: pair a synced passkey with a hardware security key.\n\nThere is one trade-off here that matters:\n\nEvery extra key is one more way to recover the wallet, and one more way in to spend from it.\n\nVela is 1-of-n: any authorised key can sign on its own. So every key has to be protected to the standard of a wallet key.'
 				},
 				{
-					title: 'You are trusting audited Safe contracts — and an audit is not a guarantee.',
-					body: 'Your account is Safe v1.4.1 plus the WebAuthn signer module: audited by third parties, deployed at their canonical addresses, not one line changed by us. But an audit covers one version of one piece of code; it lowers the risk, it does not promise nothing will go wrong — and on-chain there is no support desk to roll anything back. The app code around those contracts is ours: public and readable by anyone. <a href="/docs/security-audits">Audits &amp; known issues</a> lists every contract, every report and what we are watching. The software is provided as is, without warranty: the risk of what you put in is yours.'
+					title: 'You are relying on audited Safe contracts — and an audit is not a guarantee.',
+					body: 'Your account is Safe v1.4.1 plus the WebAuthn signer module. We use contracts that were audited by third parties and deployed from their published versions, with nothing of ours changed in them.\n\n"Audited" is not the same as "nothing can go wrong".\n\nAn audit looks at a specific version of specific code. It lowers the chance that a flaw is still in there; it does not remove the risk. And when a smart contract does go wrong, there is no support desk that can reverse or roll back an on-chain transaction.\n\nThe Vela app code that runs around those contracts is written by us and published for anyone to inspect.\n\n<a href="/docs/security-audits">Audits &amp; known issues</a> lists the contracts involved, their audit reports, and the problems we know about and keep watching.\n\nThe software is provided as is, without warranty. The risk of the money you put into Vela is ultimately yours.'
 				}
 			],
-			close: 'If one of those is a dealbreaker, Vela is not for you yet.'
+			close: 'If one of those three is unacceptable to you, Vela is not for you yet.'
 		},
 
 		/**

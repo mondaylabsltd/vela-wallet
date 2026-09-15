@@ -502,15 +502,24 @@
 		<div class="tradeoffs-content">
 			<h2>{m.home.tradeoffs.heading}</h2>
 			<p class="tradeoffs-lede">{m.home.tradeoffs.lede}</p>
-			<ul class="tradeoff-list">
-				{#each m.home.tradeoffs.items as item (item.title)}
+			<!-- Numbered, because the close refers to "one of those three" and a
+			     reader who has to count them is already being asked for too much.
+			     The digit is markup, not catalog text: a translator should never be
+			     able to renumber the list by translating it. -->
+			<ol class="tradeoff-list">
+				{#each m.home.tradeoffs.items as item, i (item.title)}
 					<li class="tradeoff">
-						<h3>{item.title}</h3>
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						<p>{@html item.body}</p>
+						<h3><span class="tradeoff-index">{i + 1}</span>{item.title}</h3>
+						<!-- Paragraphs are blank-line separated in the catalog rather than
+						     <p> tags of their own: a translator writes prose, not markup,
+						     and the markup-parity test has nothing extra to keep in step. -->
+						{#each item.body.split('\n\n') as para (para)}
+							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+							<p>{@html para}</p>
+						{/each}
 					</li>
 				{/each}
-			</ul>
+			</ol>
 			<p class="tradeoffs-close">{m.home.tradeoffs.close}</p>
 		</div>
 	</div>
@@ -1338,7 +1347,8 @@
 	}
 	.tradeoff-list {
 		list-style: none;
-		padding: 0;
+		/* Room for the hanging index; the titles stay flush with the lede. */
+		padding: 0 0 0 22px;
 		margin: 28px 0 0;
 	}
 	.tradeoff {
@@ -1351,11 +1361,25 @@
 		line-height: 1.45;
 		margin-bottom: 10px;
 	}
+	/* Hanging in the left margin so the titles keep one edge and the numbers
+	   read as an index rather than as the first word of the sentence. */
+	.tradeoff-index {
+		display: inline-block;
+		width: 22px;
+		margin-left: -22px;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-tertiary);
+	}
 	.tradeoff p {
 		color: var(--text-secondary);
 		font-size: 0.92rem;
 		line-height: 1.75;
 		margin: 0;
+	}
+	.tradeoff p + p {
+		margin-top: 13px;
 	}
 	.tradeoffs-close {
 		margin: 26px 0 0;
