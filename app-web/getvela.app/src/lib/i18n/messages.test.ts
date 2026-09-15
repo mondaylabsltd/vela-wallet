@@ -97,11 +97,7 @@ describe('chrome and notice are complete in every locale (data-model §3)', () =
 						for (const [k, v] of Object.entries(source)) collect(v, val[k], `${path}.${k}`);
 					}
 				};
-				collect(
-					en[ns],
-					(TRANSLATIONS[locale] as Record<string, unknown>)[ns],
-					`${locale}.${ns}`
-				);
+				collect(en[ns], (TRANSLATIONS[locale] as Record<string, unknown>)[ns], `${locale}.${ns}`);
 				expect(missing).toEqual([]);
 			});
 		}
@@ -132,6 +128,39 @@ describe('inline markup survives translation (FR-031)', () => {
 					if (ta.join('|') !== tb.join('|')) {
 						problems.push(`${path}: tags ${JSON.stringify(ta)} → ${JSON.stringify(tb)}`);
 					}
+				},
+				() => {}
+			);
+			expect(problems).toEqual([]);
+		});
+	}
+});
+
+describe('a rewritten English string cannot hide inside a stale translation', () => {
+	/**
+	 * Added on 2026-09-15, after a real miss. The English trade-offs and signing
+	 * sections were rewritten from one paragraph into six; nine locales kept the
+	 * old single paragraph. `i18n:status` had flagged them stale, and the flag
+	 * was cleared by re-stamping on the reasoning that the files had been edited
+	 * in the same commit as `en.ts` — which was true, and told you nothing,
+	 * because that commit had only touched one card.
+	 *
+	 * A fingerprint says "something changed since this was translated"; after a
+	 * stamp it says nothing at all. Paragraph structure is the part of a string
+	 * that survives translation into every language, so a mismatch here is drift
+	 * that no amount of stamping can paper over.
+	 */
+	for (const locale of localesWithFiles) {
+		it(`${locale} keeps the English paragraph structure`, () => {
+			const problems: string[] = [];
+			walk(
+				en as unknown as Json,
+				TRANSLATIONS[locale] as unknown as Json,
+				'',
+				(path, english, translated) => {
+					const a = english.split('\n\n').length;
+					const b = translated.split('\n\n').length;
+					if (a !== b) problems.push(`${path}: ${a} paragraphs in English, ${b} translated`);
 				},
 				() => {}
 			);

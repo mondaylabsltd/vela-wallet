@@ -129,38 +129,38 @@
 			"items": [
 				{
 					"title": "Cada transação paga uma taxa que mantém o relay no ar.",
-					"body": "Uma assinatura passkey é verificada on-chain e a transação passa pelo EntryPoint do ERC-4337 — só isso já gasta mais gas do que uma transferência comum. O relay adianta esse gas e envia a transação, e recebe mais do que o gas custa de fato on-chain: essa diferença é o que mantém o serviço. Você vê o total antes de assinar, e ele fica escrito na transação que você assina: cobra-se exatamente o que você assinou, e depois não muda. O relay pode ser trocado nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode o seu</a>."
+					"body": "Uma transação da Vela verifica on-chain uma assinatura de passkey e roda por ERC-4337, então normalmente gasta mais gas do que uma transferência enviada direto de uma conta comum.\n\nPor padrão, o relayer adianta esse gas e envia a transação por você. O que você paga cobre o custo real on-chain, mais o que é preciso para manter o serviço de relay de pé.\n\nA taxa completa aparece antes de você assinar e faz parte da transação que você realmente assina. O que você assinou é o que você paga; depois não muda.\n\nVocê não é obrigado a usar o nosso relayer. Troque nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode um você mesmo</a>."
 				},
 				{
-					"title": "Aquilo que guarda sua chave é aquilo em que você precisa confiar.",
-					"body": "Uma passkey sincroniza com sua conta Apple ou Google ou fica em uma chave de segurança USB/NFC: é em um dos dois que você está confiando — e o hardware também já teve suas falhas. Tem medo de perder um aparelho: crie várias chaves na hora de criar a carteira, em aparelhos diferentes. Tem medo de roubo: quem conseguir entrar nessa conta Apple ou Google e desbloquear um aparelho consegue gastar seu dinheiro, então a conta precisa ser cuidada com o mesmo rigor que a carteira. Tem medo de que um deles falhe: não deixe todas as chaves no mesmo lugar — já a primeira chave pode ser uma chave de segurança, e uma passkey sincronizada mais uma chave de hardware significa que nenhum fornecedor sozinho consegue te trancar do lado de fora. Mas tenha clareza do que é cada chave a mais: mais um caminho de volta para a carteira, e mais uma coisa que pode ser roubada — qualquer chave assina sozinha."
+					"title": "Onde suas chaves moram, aquele lugar vira parte da segurança da sua carteira.",
+					"body": "A Vela usa passkeys. Elas podem sincronizar entre os aparelhos que a sua conta Apple ou Google conecta, ou podem ficar numa chave de segurança física USB/NFC.\n\nO que significa que você precisa confiar nos aparelhos, nas contas e no hardware que guardam essas chaves.\n\nCom medo de perder um aparelho: defina várias chaves na hora de criar a carteira, guardadas em aparelhos diferentes ou em hardwares diferentes. Com medo de depender de um único fornecedor: combine uma passkey sincronizada com uma chave de segurança física.\n\nExiste aqui um dilema que importa de verdade:\n\nCada chave a mais é mais um caminho de volta para a carteira, e mais uma porta de entrada para gastar dela.\n\nA Vela é 1-of-n: qualquer chave autorizada assina sozinha. Por isso toda chave precisa ser protegida no padrão de uma chave de carteira."
 				},
 				{
 					"title": "Você está confiando em contratos Safe auditados — e uma auditoria não é uma garantia.",
-					"body": "Sua conta é o Safe v1.4.1 mais o módulo de assinatura WebAuthn: auditados por terceiros, publicados nos endereços canônicos, sem uma linha alterada por nós. Mas uma auditoria cobre uma versão de um pedaço de código: reduz o risco, não promete que nada vai dar errado — e on-chain não existe suporte para reverter nada. O código do app em volta desses contratos é nosso: público e legível por qualquer um. <a href=\"/docs/security-audits\">Auditorias e problemas conhecidos</a> lista cada contrato, cada relatório e o que estamos acompanhando. O software é fornecido como está, sem garantias: o risco do que você colocar é seu."
+					"body": "Sua conta é o Safe v1.4.1 mais o módulo assinante WebAuthn. Usamos contratos auditados por terceiros e publicados nas versões que eles mesmos divulgaram, sem nada nosso alterado dentro.\n\n“Auditado” não é a mesma coisa que “não pode dar errado”.\n\nUma auditoria olha uma versão específica de um código específico. Ela reduz a chance de ainda haver uma falha ali; não elimina o risco. E quando um contrato inteligente dá errado, não existe atendimento que reverta ou desfaça uma transação já on-chain.\n\nO código do app da Vela que roda em volta desses contratos é escrito por nós e publicado para qualquer um inspecionar.\n\n<a href=\"/docs/security-audits\">Auditorias &amp; problemas conhecidos</a> lista os contratos envolvidos, seus relatórios de auditoria e os problemas que conhecemos e continuamos acompanhando.\n\nO software é fornecido como está, sem garantia. O risco do dinheiro que você coloca na Vela, no fim, é seu."
 				}
 			],
 			"close": "Se um desses for impeditivo, a Vela ainda não é para você."
 		},
 		"signing": {
-			"heading": "Assine o que você vê.",
-			"lede": "A Bybit perdeu US$ 1,5 bilhão em fevereiro de 2025 porque quem assinava aprovou uma transação cujo resumo na tela não batia com o que foi realmente assinado. Fechar essa brecha é todo o trabalho de uma tela de assinatura.",
+			"heading": "Uma passkey assina um hash, não uma tela.",
+			"lede": "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Nenhuma assinatura falhou: o que quebrou foi a confiança entre o que uma pessoa via e o que a máquina de fato assinou.\n\nEssa mesma brecha existe em carteiras que assinam com passkey, inclusive a Vela.\n\nO que o aparelho assina no fim é um hash. O texto em linguagem comum acima dele — para quem vai, quanto, o que faz — é a leitura que o software faz dos dados da transação.\n\nSe o software que faz essa leitura for adulterado, ele pode mostrar A enquanto você assina B.",
 			"today": {
 				"label": "Hoje",
 				"title": "Toda transação é decodificada antes de você aprovar.",
-				"body": "O que ela faz, quanto e para quem — em linguagem clara em vez de hexadecimal, usando descritores <a href=\"/docs/clear-signing\">ERC-7730</a>. Uma aprovação que concederia permissão ilimitada é reescrita para um valor finito que você escolhe, e uma última checagem se recusa a enviar uma que continue ilimitada. Quando uma chamada não pode ser decodificada, a Vela diz isso, em vez de mostrar um resumo simpático pelo qual não poderia responder."
+				"body": "O que ela faz, quanto e para quem — a Vela lê a transação pelos descritores <a href=\"/docs/clear-signing\">ERC-7730</a> e coloca em linguagem clara, em vez de deixar você com uma sequência de hexadecimal.\n\nUma aprovação que daria permissão ilimitada é reescrita para um valor finito escolhido por você, e uma última checagem antes do envio recusa qualquer uma que continue ilimitada.\n\nQuando uma chamada não pode ser decodificada com segurança, a Vela diz que não consegue lê-la, em vez de mostrar um resumo que parece tranquilizador e não dá para verificar.\n\nIsso barra enganos e diminui a chance de um dApp hostil convencer você a assinar.\n\nO que isso não barra é a própria Vela.\n\nA transação e a prévia continuam vindo do mesmo app. Se esse app for adulterado, em princípio ele pode adulterar as duas coisas. Essa é a fronteira de confiança que preferimos não fingir que não existe."
 			},
 			"next": {
 				"label": "Rode a sua própria cópia",
-				"title": "A seguir: um caminho de assinatura sem nada em que confiar.",
-				"body": "Um segundo caminho de assinatura, independente, para as transações que você prefere conferir na mão: uma página estática sem nenhuma dependência — e uma extensão do Chrome construída a partir da mesma pasta — que decodifica a transação bruta por conta própria e mostra o calldata real antes de a sua passkey assinar. Sem framework, sem bundler, sem chamadas de rede. Ela continua opcional, porque é mais lenta. E você não vai precisar usar a nossa: implante a página você mesmo, ou rode do localhost."
+				"title": "Uma página de assinatura hospedada por você.",
+				"body": "Uma página estática sem nenhuma dependência, e uma extensão do Chrome construída a partir da mesma pasta.\n\nEla não acredita no resumo que a Vela entrega. Ela pega a transação crua, decodifica o calldata de novo por conta própria e põe na sua frente o que a assinatura vai de fato autorizar, antes de a sua passkey assinar.\n\nSem framework, sem bundler, sem nenhuma requisição de rede.\n\nA questão não é a nossa segunda cópia ser mais segura. A questão é a transação vir de um lugar e a conferência e a assinatura acontecerem em outro, que você controla.\n\nCarregue como extensão do Chrome sua, ou hospede a página você mesmo. A partir daí, comprometer o app da Vela ou o caminho por onde ele chega até você não basta mais para forjar ao mesmo tempo a transação e o que você vê antes de assinar.\n\nIsso não abole a confiança. Divide em duas uma confiança que antes ficava num lugar só.\n\nNo momento em que uma conta guarda dinheiro que você lamentaria perder, a assinatura deveria migrar para esse caminho — não de vez em quando, mas dali em diante."
 			},
 			"aside": {
-				"title": "Para que serve",
+				"title": "A partir de quando usar",
 				"items": [
-					"Mover um valor em que você não gostaria de errar.",
-					"Aprovar um contrato que você nunca usou.",
-					"Sempre que a única coisa te dizendo o que você está assinando é a interface do próprio dApp."
+					"No dia em que a conta começa a guardar dinheiro que você lamentaria perder — e dali em diante, em toda assinatura.",
+					"Não é “quando o valor é alto”: uma aprovação pequena pode entregar o suficiente para esvaziar a conta.",
+					"É um jeito de assinar, não uma ocasião. Assine assim todo dia; senão, no dia que importa você também não vai mudar de método de repente."
 				]
 			}
 		},

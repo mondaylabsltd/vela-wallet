@@ -109,7 +109,7 @@ EntryPoint v0.9（2025 年 11 月）；v0.7 本身没法打补丁。我们预计
 
 - **Vela 自己的合约。** 我们自己写的两个小合约，部署在 Gnosis 上：
   [通行密钥公钥索引](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools)
-  （一个只追加的注册表，帮你的设备找到你的公钥）和它的批量辅助合约。它们没有经过
+  （一个只追加的登记表，帮你的设备找到你的公钥）和它的批量辅助合约。它们没有经过
   审计。从构造上说，它们不持有任何资金、没有所有者，也不能升级——它们是一层发现
   机制，不是一层授权机制。花钱的权限永远来自配置在你 Safe 内部的那把通行密钥。
   现实中最坏的故障是骚扰（有人抢占一条索引记录），这会让恢复变得不那么方便，
@@ -136,7 +136,7 @@ EntryPoint v0.9（2025 年 11 月）；v0.7 本身没法打补丁。我们预计
 
 ## 自己去核实
 
-上面每一个地址都是公开的规范部署，你可以对照官方注册表核实——
+上面每一个地址都是公开的规范部署，你可以对照官方的部署登记核实——
 [safe-deployments](https://github.com/safe-global/safe-deployments)、
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 以及 [EntryPoint 的发布说明](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)：

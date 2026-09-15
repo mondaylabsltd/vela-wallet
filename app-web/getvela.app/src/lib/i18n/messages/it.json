@@ -129,38 +129,38 @@
 			"items": [
 				{
 					"title": "Ogni transazione paga una commissione che tiene in piedi il relay.",
-					"body": "Una firma passkey viene verificata on-chain e la transazione passa dall'EntryPoint ERC-4337: già questo consuma più gas di un semplice trasferimento. Il relay anticipa quel gas e invia la transazione, e riceve più di quanto il gas costi davvero on-chain — la differenza è ciò che manda avanti il servizio. Il totale lo vedi prima di firmare ed è scritto nella transazione che firmi: ti viene addebitato esattamente quello che hai firmato, e dopo non cambia. Il relay si sostituisce nelle impostazioni, oppure <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">fai girare il tuo</a>."
+					"body": "Una transazione Vela verifica on-chain una firma con passkey ed è eseguita tramite ERC-4337, quindi di norma consuma più gas di un bonifico mandato direttamente da un conto ordinario.\n\nPer impostazione predefinita il relayer anticipa quel gas e invia la transazione al posto tuo. Quello che paghi copre il costo reale on-chain, più quanto serve a tenere in piedi il servizio di relay.\n\nLa commissione completa è mostrata prima che tu firmi ed è parte della transazione che firmi davvero. Quello che hai firmato è quello che paghi; dopo non cambia.\n\nNon sei obbligato a usare il nostro relayer. Cambialo nelle impostazioni, oppure <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">fallo girare tu</a>."
 				},
 				{
-					"title": "Ciò che custodisce la tua chiave è ciò di cui ti devi fidare.",
-					"body": "Una passkey si sincronizza con il tuo account Apple o Google oppure vive su una chiave di sicurezza USB/NFC: è di uno dei due che ti stai fidando — e anche l'hardware ha avuto i suoi guasti. Hai paura di perdere un dispositivo: crea più chiavi quando crei il portafoglio, su dispositivi diversi. Hai paura del furto: chiunque riesca ad accedere a quell'account Apple o Google e a sbloccare un dispositivo può spendere i tuoi soldi, quindi l'account va tenuto allo stesso standard del portafoglio. Hai paura che uno dei due ti tradisca: non mettere tutte le chiavi nello stesso posto — già la prima chiave può essere una chiave di sicurezza, e una passkey sincronizzata più una chiave hardware significa che nessun singolo fornitore può chiuderti fuori. Sii però chiaro su cosa sia ogni chiave in più: una via di ritorno in più verso il portafoglio, e una cosa in più che può essere rubata — qualsiasi singola chiave firma da sola."
+					"title": "Ovunque stiano le tue chiavi, quel posto diventa parte della sicurezza del tuo wallet.",
+					"body": "Vela usa le passkey. Possono sincronizzarsi tra i dispositivi collegati al tuo account Apple o Google, oppure restare su una chiave di sicurezza hardware USB/NFC.\n\nIl che vuol dire che devi fidarti dei dispositivi, degli account e dell’hardware che custodiscono quelle chiavi.\n\nSe temi di perdere un dispositivo: imposta più chiavi quando crei il wallet, tenute su dispositivi diversi o su hardware diverso. Se temi di dipendere da un solo fornitore: affianca a una passkey sincronizzata una chiave di sicurezza hardware.\n\nQui c’è un compromesso che conta davvero:\n\nOgni chiave in più è un modo in più per rientrare nel wallet, e un ingresso in più per spendere da lì.\n\nVela è 1-of-n: qualsiasi chiave autorizzata firma da sola. Perciò ogni chiave va protetta come si protegge la chiave di un wallet."
 				},
 				{
 					"title": "Ti stai fidando di contratti Safe verificati — e un audit non è una garanzia.",
-					"body": "Il tuo account è Safe v1.4.1 più il modulo di firma WebAuthn: verificati da terze parti, deployati ai loro indirizzi canonici, senza una riga cambiata da noi. Ma un audit copre una versione di un pezzo di codice: abbassa il rischio, non promette che non andrà storto nulla — e on-chain non c'è un'assistenza che possa annullare qualcosa. Il codice dell'app attorno a quei contratti è nostro: pubblico e leggibile da chiunque. <a href=\"/docs/security-audits\">Audit e problemi noti</a> elenca ogni contratto, ogni rapporto e ciò che stiamo tenendo d'occhio. Il software è fornito così com'è, senza garanzie: il rischio di ciò che ci metti dentro è tuo."
+					"body": "Il tuo account è Safe v1.4.1 più il modulo firmatario WebAuthn. Usiamo contratti verificati da terze parti e distribuiti nelle versioni che loro hanno pubblicato, senza nulla di nostro modificato dentro.\n\n«Verificato da un audit» non è la stessa cosa di «non può andare storto nulla».\n\nUn audit guarda una versione precisa di un codice preciso. Abbassa la probabilità che un difetto sia ancora lì dentro; non elimina il rischio. E quando uno smart contract va storto, non c’è nessuna assistenza che possa annullare o riportare indietro una transazione già on-chain.\n\nIl codice dell’app Vela che gira attorno a quei contratti lo scriviamo noi ed è pubblicato perché chiunque possa esaminarlo.\n\n<a href=\"/docs/security-audits\">Audit &amp; problemi noti</a> elenca i contratti coinvolti, i loro report di audit e i problemi che conosciamo e continuiamo a tenere d’occhio.\n\nIl software è fornito così com’è, senza garanzie. Il rischio sui soldi che metti in Vela alla fine è tuo."
 				}
 			],
 			"close": "Se uno di questi è un ostacolo insormontabile, Vela non fa ancora per te."
 		},
 		"signing": {
-			"heading": "Firma quello che vedi.",
-			"lede": "Bybit ha perso 1,5 miliardi di dollari a febbraio 2025 perché chi firmava ha approvato una transazione il cui riepilogo a schermo non corrispondeva a ciò che veniva davvero firmato. Chiudere quella distanza è tutto il lavoro di una schermata di firma.",
+			"heading": "Una passkey firma un hash, non uno schermo.",
+			"lede": "A febbraio 2025 Bybit ha perso circa 1,5 miliardi di dollari. Nessuna firma ha fallito: a rompersi è stata la fiducia tra ciò che una persona vedeva e ciò che la macchina ha davvero firmato.\n\nLo stesso scarto esiste nei wallet che firmano con una passkey, Vela compresa.\n\nQuello che il dispositivo firma alla fine è un hash. Il testo in chiaro sopra — a chi va, quanto, cosa fa — è la lettura che il software dà dei dati della transazione.\n\nSe il software che fa quella lettura viene manomesso, può mostrarti A mentre firmi B.",
 			"today": {
 				"label": "Oggi",
 				"title": "Ogni transazione viene decodificata prima che tu la approvi.",
-				"body": "Cosa fa, quanto e a chi — in linguaggio chiaro invece che in esadecimale, usando i descrittori <a href=\"/docs/clear-signing\">ERC-7730</a>. Un'approvazione che concederebbe un permesso illimitato viene riscritta su un importo finito che scegli tu, e un ultimo controllo si rifiuta di inviarne una rimasta illimitata. Quando una chiamata non può essere decodificata, Vela lo dice, invece di mostrare un riepilogo rassicurante di cui non potrebbe rispondere."
+				"body": "Cosa fa, quanto, e a chi — Vela legge la transazione attraverso i descrittori <a href=\"/docs/clear-signing\">ERC-7730</a> e la mette in parole comprensibili, invece di lasciarti una stringa di esadecimale.\n\nUn’approvazione che concederebbe un permesso illimitato viene riscritta su un importo finito scelto da te, e un ultimo controllo prima dell’invio rifiuta qualunque approvazione sia ancora illimitata.\n\nQuando una chiamata non può essere decodificata in modo affidabile, Vela ti dice che non riesce a leggerla, invece di mostrarti un riassunto che sembra rassicurante e non è verificabile.\n\nQuesto ferma gli errori e abbassa le probabilità che una dApp ostile ti convinca a firmare.\n\nQuello che non può fermare è Vela stessa.\n\nLa transazione e l’anteprima vengono ancora dalla stessa app. Se quell’app viene manomessa, in linea di principio può manomettere entrambe. È il confine di fiducia che preferiamo non far finta che non esista."
 			},
 			"next": {
 				"label": "Falla girare tu",
-				"title": "Poi: una via di firma senza nulla di cui fidarsi.",
-				"body": "Una seconda via di firma, indipendente, per le transazioni che preferisci controllare a mano: una pagina statica senza alcuna dipendenza — e un'estensione Chrome costruita dalla stessa cartella — che decodifica da sé la transazione grezza e ti mostra la calldata reale prima che la tua passkey firmi. Nessun framework, nessun bundler, nessuna chiamata di rete. Resta opzionale, perché è più lenta. E non dovrai usare la nostra: fai il deploy della pagina da solo, o eseguila da localhost."
+				"title": "Una pagina di firma che ospiti tu.",
+				"body": "Una pagina statica senza alcuna dipendenza, e un’estensione Chrome costruita dalla stessa cartella.\n\nNon crede al riassunto che le passa Vela. Prende la transazione grezza, ridecodifica da sola il calldata e ti mette davanti quello che la firma autorizzerà davvero, prima che la tua passkey firmi.\n\nNessun framework, nessun bundler, nessuna richiesta di rete.\n\nIl punto non è che la nostra seconda copia sia più sicura. Il punto è che la transazione arriva da un posto e il controllo e la firma avvengono in un altro, che controlli tu.\n\nCaricala come estensione Chrome tua, oppure ospita la pagina per conto tuo. A quel punto compromettere l’app Vela o il modo in cui ti arriva non basta più a falsificare insieme la transazione e ciò che vedi prima di firmarla.\n\nQuesto non abolisce la fiducia. Divide in due una fiducia che prima stava tutta in un posto.\n\nDal momento in cui un account tiene soldi che ti dispiacerebbe perdere, la firma dovrebbe spostarsi su quel percorso — non ogni tanto, ma da lì in avanti."
 			},
 			"aside": {
-				"title": "A cosa serve",
+				"title": "Da quando conviene usarla",
 				"items": [
-					"Muovere una cifra su cui non vorresti sbagliare.",
-					"Approvare un contratto che non hai mai usato.",
-					"Ogni volta che l'unica cosa che ti dice cosa stai firmando è l'interfaccia della dApp."
+					"Dal giorno in cui l’account comincia a tenere soldi che ti dispiacerebbe perdere — e da lì in poi, per ogni firma.",
+					"Non «quando l’importo è grande»: anche una piccola approvazione può cedere abbastanza da svuotare l’account.",
+					"È un modo di firmare, non un’occasione. Firma così tutti i giorni, altrimenti nel giorno che conta non cambierai metodo all’improvviso."
 				]
 			}
 		},
