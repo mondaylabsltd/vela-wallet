@@ -127,8 +127,8 @@
 			"lede": "三條不該用 Vela 的理由——趁錢還沒放進來。",
 			"items": [
 				{
-					"title": "gas 比普通轉帳貴，中繼者還要收手續費。",
-					"body": "密碼金鑰的簽章要在鏈上驗證，交易還要走一遍 ERC-4337 EntryPoint，這本身就比普通轉帳費 gas。中繼者替你墊付這筆 gas 並提交上鏈，它收的費用會高於真正消耗掉的 gas。總額在你簽署前就顯示出來，而且寫在你簽的這筆交易裡——簽的是多少就收多少，簽完不會變。中繼者可以在設定裡換掉，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己跑一個</a>。"
+					"title": "每一筆交易都要付一筆手續費，用來支撐中繼服務。",
+					"body": "密碼金鑰的簽章要在鏈上驗證，交易還要走一遍 ERC-4337 EntryPoint，這本身就比普通轉帳費 gas。中繼者替你墊付這筆 gas 並提交上鏈，它收的錢高於真正消耗掉的 gas——多出來的部分就是維持這項服務的費用。總額在你簽署前就顯示出來，而且寫在你簽的這筆交易裡：簽的是多少就收多少，簽完不會變。中繼者可以在設定裡換掉，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己跑一個</a>。"
 				},
 				{
 					"title": "用會同步的密碼金鑰，你的 Apple 或 Google 帳號就是其中一把金鑰。",

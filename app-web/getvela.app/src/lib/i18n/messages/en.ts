@@ -248,8 +248,8 @@ export const en = {
 			lede: 'Three reasons not to use Vela — while your money is still somewhere else.',
 			items: [
 				{
-					title: 'Gas costs more than a plain transfer, and the relayer adds a fee.',
-					body: 'A passkey signature is verified on-chain and the transaction goes through the ERC-4337 EntryPoint, which on its own costs more gas than a plain transfer. The relayer that fronts that gas and submits the transaction is paid more than the gas actually costs on-chain. You see the total before you sign, and it is written into the transaction you sign — what you signed is what is charged, and it cannot move afterwards. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
+					title: 'Every transaction pays a fee that keeps the relay running.',
+					body: 'A passkey signature is verified on-chain and the transaction goes through the ERC-4337 EntryPoint, which on its own costs more gas than a plain transfer. The relayer fronts that gas and submits the transaction, and is paid more than the gas actually costs on-chain — the difference is what runs the service. You see the total before you sign, and it is written into the transaction you sign: what you signed is what is charged, and it cannot move afterwards. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
 				},
 				{
 					title: 'A synced passkey makes your Apple or Google account one of the keys.',
