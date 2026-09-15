@@ -69,7 +69,7 @@ describe('catalog()', () => {
 	});
 
 	it('leaves external links and anchors alone', () => {
-		expect(catalog('ja').home.doesLess.p2).toContain('href="https://walletpair.org/"');
+		expect(catalog('ja').home.why.p1).toContain('href="https://account.base.app"');
 	});
 
 	it('keeps chrome and notice readable in a locale whose pages fall back', () => {

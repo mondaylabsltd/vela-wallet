@@ -17,21 +17,46 @@
 	const m = $derived(catalog(data.locale));
 	const homeState = $derived(namespaceState('home', data.locale));
 	const alternates = $derived(translatedLocales('home'));
+	/** Internal links written English-relative, served under the reader's prefix. */
+	const L = $derived((path: string) => pathFor(data.locale, path));
 
 	/**
 	 * The colour of each comparison cell. Deliberately NOT in the message
 	 * catalog: "is this good or bad" is a claim we make, and a translator
 	 * shouldn't be able to change it — or silently lose it — while translating
-	 * the words. Ordered to match `m.home.compare.rows`.
+	 * the words. Ordered to match `m.home.compare.rows`; an empty string is a
+	 * neutral cell, which the first row needs because all three wallets keep the
+	 * key in the same place and pretending otherwise would be the cheapest
+	 * possible lie.
 	 */
+	/**
+	 * Where each hero claim is proved. Ordered to match `m.home.hero.facts`; the
+	 * catalog holds the label, this holds the destination, so a translation can
+	 * never point a reader somewhere else.
+	 */
+	const FACT_LINKS = [
+		{ href: '/docs/security-audits', external: false },
+		{ href: '/docs/networks-and-fees', external: false },
+		{ href: '/docs/passkeys', external: false },
+		{
+			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
+			external: true
+		},
+		{ href: '/docs/clear-signing', external: false }
+	] as const;
+
 	const COMPARE_TONES = [
-		{ vela: 'yes', metamask: 'warn', base: 'yes' },
-		{ vela: 'yes', metamask: 'warn', base: 'yes' },
-		{ vela: 'yes', metamask: 'warn', base: 'warn' },
-		{ vela: 'yes', metamask: 'warn', base: 'warn' },
-		{ vela: '', metamask: 'yes', base: 'warn' },
-		{ vela: 'yes', metamask: 'yes', base: 'warn' },
-		{ vela: 'yes', metamask: 'no', base: 'no' }
+		{ vela: '', base: '', safe: '' },
+		{ vela: 'yes', base: '', safe: 'yes' },
+		{ vela: 'warn', base: 'no', safe: 'warn' },
+		{ vela: 'yes', base: '', safe: 'yes' },
+		{ vela: 'yes', base: 'warn', safe: 'warn' },
+		{ vela: 'yes', base: 'no', safe: 'warn' },
+		{ vela: 'yes', base: 'warn', safe: 'warn' },
+		{ vela: '', base: '', safe: '' },
+		{ vela: 'yes', base: 'no', safe: 'yes' },
+		{ vela: 'yes', base: 'no', safe: 'warn' },
+		{ vela: '', base: '', safe: '' }
 	] as const;
 
 	// Analytics helper
@@ -402,10 +427,18 @@
 		     "100% open source" used to be rows of their own; both are still stated
 		     in the trust strip and the technical-details table below. -->
 		<dl class="hero-facts">
-			{#each m.home.hero.facts as fact (fact.term)}
+			{#each m.home.hero.facts as fact, i (fact.term)}
 				<div class="fact">
 					<dt>{fact.term}</dt>
-					<dd>{fact.detail}</dd>
+					<dd>
+						{#if FACT_LINKS[i]?.external}
+							<a class="fact-link" href={FACT_LINKS[i].href} target="_blank" rel="noopener"
+								>{fact.link}</a
+							>
+						{:else}
+							<a class="fact-link" href={L(FACT_LINKS[i].href)}>{fact.link}</a>
+						{/if}
+					</dd>
 				</div>
 			{/each}
 		</dl>
@@ -427,37 +460,69 @@
 	</div>
 </section>
 
-<!-- Does Less -->
-<section id="minimal" class="does-less">
-	<div class="container">
-		<div class="does-less-content">
-			<h2>{m.home.doesLess.heading}</h2>
-			<p>{m.home.doesLess.p1}</p>
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<p>{@html m.home.doesLess.p2}</p>
-			<p>{m.home.doesLess.p3}</p>
-			<p>{m.home.doesLess.p4}</p>
-		</div>
-	</div>
-</section>
-
-<!-- Why -->
+<!-- Why (the short version; the essay lives at /docs/why-vela) -->
 <section id="why" class="why">
 	<div class="container">
 		<div class="why-content">
 			<h2>{m.home.why.heading}</h2>
-			<p>{m.home.why.p1}</p>
-			<p class="why-beat">{m.home.why.beat}</p>
-			<p>{m.home.why.p2}</p>
 			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<p>{@html m.home.why.p3}</p>
-			<p>{m.home.why.p4}</p>
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<p>{@html m.home.why.p5}</p>
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<p>{@html m.home.why.p6}</p>
-			<p>{m.home.why.p7}</p>
-			<p>{m.home.why.p8}</p>
+			<p>{@html m.home.why.p1}</p>
+			<p class="why-beat">{m.home.why.p2}</p>
+			<a class="more-link" href={L('/docs/why-vela')} data-rybbit-event="why_long_version"
+				>{m.home.why.more}</a
+			>
+		</div>
+	</div>
+</section>
+
+<!-- The trade-offs, before the pitch goes any further -->
+<section id="trade-offs" class="tradeoffs">
+	<div class="container">
+		<div class="tradeoffs-content">
+			<h2>{m.home.tradeoffs.heading}</h2>
+			<p class="tradeoffs-lede">{m.home.tradeoffs.lede}</p>
+			<ul class="tradeoff-list">
+				{#each m.home.tradeoffs.items as item (item.title)}
+					<li class="tradeoff">
+						<h3>{item.title}</h3>
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						<p>{@html item.body}</p>
+					</li>
+				{/each}
+			</ul>
+			<p class="tradeoffs-close">{m.home.tradeoffs.close}</p>
+		</div>
+	</div>
+</section>
+
+<!-- Sign what you see -->
+<section id="signing" class="signing">
+	<div class="container">
+		<div class="signing-content">
+			<h2>{m.home.signing.heading}</h2>
+			<p class="signing-lede">{m.home.signing.lede}</p>
+
+			<div class="signing-block">
+				<span class="signing-label">{m.home.signing.today.label}</span>
+				<h3>{m.home.signing.today.title}</h3>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<p>{@html m.home.signing.today.body}</p>
+			</div>
+
+			<div class="signing-block signing-next">
+				<span class="signing-label signing-label-soon">{m.home.signing.next.label}</span>
+				<h3>{m.home.signing.next.title}</h3>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<p>{@html m.home.signing.next.body}</p>
+				<div class="signing-aside">
+					<h4>{m.home.signing.aside.title}</h4>
+					<ul>
+						{#each m.home.signing.aside.items as line (line)}
+							<li>{line}</li>
+						{/each}
+					</ul>
+				</div>
+			</div>
 		</div>
 	</div>
 </section>
@@ -473,8 +538,8 @@
 					<tr>
 						<th></th>
 						<th>Vela</th>
-						<th>MetaMask</th>
 						<th>Base Account</th>
+						<th>Safe&#123;Wallet&#125; + passkey</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -483,8 +548,8 @@
 							<td>{row.feature}</td>
 							<!-- eslint-disable svelte/no-at-html-tags -->
 							<td class={COMPARE_TONES[i]?.vela}>{@html row.vela}</td>
-							<td class={COMPARE_TONES[i]?.metamask}>{@html row.metamask}</td>
 							<td class={COMPARE_TONES[i]?.base}>{@html row.base}</td>
+							<td class={COMPARE_TONES[i]?.safe}>{@html row.safe}</td>
 							<!-- eslint-enable svelte/no-at-html-tags -->
 						</tr>
 					{/each}
@@ -495,102 +560,7 @@
 	</div>
 </section>
 
-<!-- How It Works -->
-<section id="how-it-works" class="how-it-works">
-	<div class="container">
-		<h2>{m.home.how.heading}</h2>
-		<p class="section-desc">{m.home.how.desc}</p>
-
-		{#each m.home.how.steps as step, i (step.title)}
-			<div class="pillar">
-				<div class="pillar-number">{String(i + 1).padStart(2, '0')}</div>
-				<div class="pillar-content">
-					<h3>{step.title}</h3>
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<p>{@html step.body}</p>
-				</div>
-			</div>
-		{/each}
-
-		<div class="tech-details">
-			<h3>{m.home.how.tech.heading}</h3>
-			<table>
-				<tbody>
-					<tr>
-						<td>{m.home.how.tech.wallet}</td>
-						<td
-							><a
-								href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
-								target="_blank"
-								rel="noopener">Safe v1.4.1</a
-							></td
-						>
-					</tr>
-					<tr>
-						<td>{m.home.how.tech.authentication}</td>
-						<td
-							><a href="https://www.w3.org/TR/webauthn-2/" target="_blank" rel="noopener"
-								>WebAuthn</a
-							> / P-256</td
-						>
-					</tr>
-					<tr>
-						<td>{m.home.how.tech.accountType}</td>
-						<td
-							><a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener"
-								>ERC-4337</a
-							> {m.home.how.tech.accountTypeValue}</td
-						>
-					</tr>
-					<tr>
-						<td>{m.home.how.tech.signerModule}</td>
-						<td
-							><a
-								href="https://github.com/safe-global/safe-modules/tree/main/modules/passkey/contracts/4337"
-								target="_blank"
-								rel="noopener">SafeWebAuthnSharedSigner</a
-							></td
-						>
-					</tr>
-					<tr>
-						<td>{m.home.how.tech.networks}</td>
-						<td>{m.home.how.tech.networksValue}</td>
-					</tr>
-					<tr>
-						<td>{m.home.how.tech.sourceCode}</td>
-						<td
-							><a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
-								>GitHub</a
-							></td
-						>
-					</tr>
-				</tbody>
-			</table>
-
-			<div class="tech-networks">
-				<div class="network-row">
-					{#each NETWORKS as net (net.chainId)}
-						<span class="network-chip">
-							<img
-								class="network-logo"
-								src={chainLogo(net.chainId)}
-								alt=""
-								width="22"
-								height="22"
-								loading="lazy"
-							/>
-							{net.name}
-						</span>
-					{/each}
-				</div>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				<p class="network-note">{@html m.home.how.networkNote}</p>
-			</div>
-		</div>
-	</div>
-</section>
-
-<!-- Business Model -->
+<!-- Pricing -->
 <section id="pricing" class="business-model">
 	<div class="container">
 		<div class="bm-content">
@@ -608,8 +578,88 @@
 				{/each}
 			</div>
 
-			<p class="bm-note">{m.home.pricing.note}</p>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<p class="bm-note">{@html m.home.pricing.note}</p>
 		</div>
+	</div>
+</section>
+
+<!-- How It Works -->
+<section id="how-it-works" class="how-it-works">
+	<div class="container">
+		<h2>{m.home.how.heading}</h2>
+		<p class="section-desc">{m.home.how.desc}</p>
+
+		<ol class="steps">
+			{#each m.home.how.steps as step, i (step.title)}
+				<li class="step">
+					<span class="step-number">{String(i + 1).padStart(2, '0')}</span>
+					<h3>{step.title}</h3>
+					<p>{step.body}</p>
+				</li>
+			{/each}
+		</ol>
+
+		<!-- The spec line. Every claim above is one of these five links; the detail
+		     that used to be a six-row table now points at the pages that own it. -->
+		<div class="stack">
+			<span class="stack-label">{m.home.how.stack.label}</span>
+			<ul class="stack-list">
+				<li>
+					<a
+						href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
+						target="_blank"
+						rel="noopener">Safe v1.4.1</a
+					>
+				</li>
+				<li>
+					<a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener"
+						>ERC-4337</a
+					>
+				</li>
+				<li>
+					<a href="https://www.w3.org/TR/webauthn-2/" target="_blank" rel="noopener">WebAuthn</a> / P-256
+				</li>
+				<li>
+					<a
+						href="https://github.com/safe-global/safe-modules/tree/main/modules/passkey/contracts/4337"
+						target="_blank"
+						rel="noopener">SafeWebAuthnSharedSigner</a
+					>
+				</li>
+				<li>
+					<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
+						>GitHub</a
+					>
+				</li>
+			</ul>
+			<a class="more-link" href={L('/docs/whitepaper')}>{m.home.how.stack.link}</a>
+		</div>
+	</div>
+</section>
+
+<!-- Networks -->
+<section id="networks" class="networks">
+	<div class="container">
+		<h2>{m.home.networks.heading}</h2>
+		<ul class="network-grid">
+			{#each NETWORKS as net (net.chainId)}
+				<li class="network-chip">
+					<img
+						class="network-logo"
+						src={chainLogo(net.chainId)}
+						alt=""
+						width="26"
+						height="26"
+						loading="lazy"
+					/>
+					{net.name}
+				</li>
+			{/each}
+		</ul>
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		<p class="network-note">{@html m.home.networks.body}</p>
+		<a class="more-link" href={L('/docs/networks-and-fees')}>{m.home.networks.link}</a>
 	</div>
 </section>
 
@@ -626,84 +676,6 @@
 					<p>{@html item.a}</p>
 				</details>
 			{/each}
-		</div>
-	</div>
-</section>
-
-<!-- CTA -->
-<section id="notify" class="notify">
-	<div class="container">
-		<h2>{m.home.cta.heading}</h2>
-		<p class="notify-sub">{m.home.cta.sub}</p>
-		<a
-			href="https://wallet.getvela.app/"
-			target="_blank"
-			rel="noopener"
-			class="btn btn-primary btn-cta-main"
-			data-rybbit-event="cta_click"
-			data-rybbit-prop-location="bottom">{m.home.cta.button}</a
-		>
-
-		<ul class="notify-cards">
-			{#each m.home.cta.cards as card, i (card.title)}
-				<li class="notify-card">
-					<svg
-						width="22"
-						height="22"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						{#if i === 0}
-							<path d="M8 6l-5 6 5 6M16 6l5 6-5 6" stroke-linecap="round" stroke-linejoin="round" />
-						{:else if i === 1}
-							<rect x="3" y="4" width="18" height="7" rx="1.5" />
-							<rect x="3" y="13" width="18" height="7" rx="1.5" />
-							<path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" />
-						{:else if i === 2}
-							<path
-								d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						{:else}
-							<path
-								d="M7 3H5a2 2 0 00-2 2v2M17 3h2a2 2 0 012 2v2M7 21H5a2 2 0 01-2-2v-2M17 21h2a2 2 0 002-2v-2M9 10v1M15 10v1M9.5 15a3.5 3.5 0 005 0"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							/>
-						{/if}
-					</svg>
-					<h4>{card.title}</h4>
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<p>{@html card.body}</p>
-				</li>
-			{/each}
-		</ul>
-
-		<div class="notify-divider"><span>{m.home.cta.divider}</span></div>
-
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		<p class="notify-email-desc">{@html m.home.cta.followDesc}</p>
-
-		<div class="notify-social">
-			<a
-				href="https://x.com/realvelawallet"
-				target="_blank"
-				rel="noopener"
-				class="btn btn-outline btn-social"
-				data-rybbit-event="social_click"
-				data-rybbit-prop-network="x">{m.home.cta.followX}</a
-			>
-			<a
-				href="https://t.me/velawallet"
-				target="_blank"
-				rel="noopener"
-				class="btn btn-outline btn-social"
-				data-rybbit-event="social_click"
-				data-rybbit-prop-network="telegram">{m.home.cta.joinTelegram}</a
-			>
 		</div>
 	</div>
 </section>
@@ -794,12 +766,17 @@
 	}
 	.hero-grid {
 		display: grid;
-		grid-template-columns: 1.1fr 0.9fr;
-		gap: 72px;
-		align-items: center;
+		grid-template-columns: 1.05fr 0.95fr;
+		gap: 64px;
+		/* Both columns run the full height of the spread, so the headline and the
+		   first claim share a top edge and the seal and the last claim share a
+		   bottom one. Nothing floats. */
+		align-items: stretch;
 	}
 	.hero-text {
 		text-align: left;
+		display: flex;
+		flex-direction: column;
 	}
 	h1 {
 		font-size: clamp(2.75rem, 6vw, 4.5rem);
@@ -827,51 +804,85 @@
 		line-height: 1.2;
 		letter-spacing: -0.01em;
 	}
+	/* One sentence now, so it can carry the weight of a standfirst rather than
+	   reading as body text under a headline. */
 	.subtitle {
 		color: var(--text-secondary);
-		font-size: 1.05rem;
-		line-height: 1.75;
-		max-width: 520px;
-		margin-bottom: 32px;
+		font-size: 1.2rem;
+		line-height: 1.6;
+		max-width: 460px;
+		margin-bottom: 36px;
 	}
 	.hero-cta {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 16px;
+		margin-bottom: 24px;
 	}
 	.hero-buttons {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 12px;
 	}
-	.btn-hero {
-		padding: 14px 28px;
-		font-size: 0.95rem;
+	.btn.btn-hero {
+		padding: 20px 44px;
+		min-width: 230px;
+		text-align: center;
+		font-size: 1.02rem;
+		border-radius: 12px;
 	}
 
-	/* The fact column. One hairline carries the whole list — no cards, no
-	   boxes — so the eye reads five statements, not five containers. */
+	/* The fact column. Each claim sits on its own rule, the way a well-set page
+	   of an annual report does — an indented list hanging off one vertical line
+	   read as a spec sheet, which is exactly what these five lines are not. */
 	.hero-facts {
+		/* The rules must not outrun the words: the column is capped at the text
+		   measure so every hairline ends where the line above it does. */
+		max-width: 520px;
+		height: 100%;
 		margin: 0;
-		padding: 4px 0 4px 32px;
-		border-left: 1px solid var(--border);
+		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 26px;
+		justify-content: space-between;
+	}
+	.hero-facts .fact {
+		padding: 20px 0;
+		border-top: 1px solid var(--border);
+	}
+	.hero-facts .fact:first-child {
+		border-top: none;
+		padding-top: 0;
 	}
 	.hero-facts dt {
 		font-weight: 600;
-		font-size: 0.95rem;
+		font-size: 1rem;
+		line-height: 1.4;
+		letter-spacing: -0.01em;
 		color: var(--text);
-		margin-bottom: 5px;
+		margin-bottom: 7px;
 	}
+	/* The proof, not the explanation: every claim above is one link away from
+	   the page that can check it. */
 	.hero-facts dd {
 		margin: 0;
-		font-size: 0.95rem;
-		line-height: 1.6;
-		color: var(--text-secondary);
-		max-width: 38ch;
+	}
+	.fact-link {
+		font-size: 0.82rem;
+		color: var(--text-tertiary);
+		text-decoration: none;
+		transition: color 0.15s;
+	}
+	.fact-link::after {
+		content: ' →';
+		transition: margin-left 0.15s;
+	}
+	.fact-link:hover {
+		color: var(--accent);
+	}
+	.fact-link:hover::after {
+		margin-left: 3px;
 	}
 
 	.brand {
@@ -934,31 +945,7 @@
 		}
 	}
 
-	/* ── Live Stat (trust strip) ── */
-	.live-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--green);
-		box-shadow: 0 0 6px color-mix(in srgb, var(--green) 50%, transparent);
-		animation: pulse-dot 2s ease-in-out infinite;
-	}
-	.stat-number {
-		font-size: 0.92rem;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		color: var(--accent);
-	}
-	/* Placeholder shown while the on-chain count is still loading. */
-	.stat-skeleton {
-		display: inline-block;
-		width: 26px;
-		height: 0.72rem;
-		border-radius: 4px;
-		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
-		background-size: 200% 100%;
-		animation: stat-shimmer 1.3s ease-in-out infinite;
-	}
+	/* Shimmer for the seal's loading placeholder. */
 	@keyframes stat-shimmer {
 		0% {
 			background-position: 200% 0;
@@ -997,79 +984,70 @@
 		transform: translateY(-1px);
 		box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
 	}
-	.btn-cta-main {
-		padding: 14px 36px;
-		font-size: 1rem;
-		margin-bottom: 40px;
-	}
-	.notify-cards {
-		list-style: none;
-		padding: 0;
-		margin: 16px auto 56px;
-		max-width: 760px;
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: 14px;
-		text-align: center;
-	}
-	.notify-card {
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 36px 18px;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 10px;
-		box-shadow: var(--shadow-sm);
-	}
-	.notify-card svg {
-		color: var(--accent);
-	}
-	.notify-card h4 {
-		font-size: 0.92rem;
-		font-weight: 600;
+	.btn-outline {
+		background: transparent;
 		color: var(--text);
+		border: 1px solid var(--border);
 	}
-	.notify-card p {
-		font-size: 0.78rem;
-		color: var(--text-secondary);
-		line-height: 1.55;
-		margin: 0;
+	.btn-outline:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+		transform: translateY(-1px);
+	}
+
+	/* The one link shape that carries a reader off this page and into the docs.
+	   Not a button: the page is not asking, it is offering. */
+	.more-link {
+		display: inline-block;
+		margin-top: 8px;
+		font-size: 0.88rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: none;
+	}
+	.more-link::after {
+		content: ' →';
+		transition: margin-left 0.15s;
+	}
+	.more-link:hover::after {
+		margin-left: 3px;
 	}
 
 	/* ── Text links ── */
 	/* Inline links keep the surrounding ink color — no accent highlight. The
 	   underline offset clears descenders (g, y) so the line stays unbroken. */
-	.why-content :global(a),
-	.does-less-content :global(a),
-	.pillar-content :global(a),
-	.tech-details a,
+	.why-content :global(a:not(.more-link)),
+	.tradeoff :global(a),
+	.signing-block :global(a),
+	.network-note :global(a),
 	.compare-table td :global(a),
 	.bm-card :global(a),
+	.bm-note :global(a),
 	details :global(a) {
 		color: inherit;
 		text-decoration: underline;
 		text-underline-offset: 4px;
 		transition: color 0.15s;
 	}
-	.why-content :global(a:hover),
-	.does-less-content :global(a:hover),
-	.pillar-content :global(a:hover),
-	.tech-details a:hover,
+	.why-content :global(a:not(.more-link):hover),
+	.tradeoff :global(a:hover),
+	.signing-block :global(a:hover),
+	.network-note :global(a:hover),
 	.compare-table td :global(a:hover),
 	.bm-card :global(a:hover),
+	.bm-note :global(a:hover),
 	details :global(a:hover) {
 		color: var(--accent);
 	}
 	/* External links get a trailing lucide external-link glyph, masked in
 	   currentColor so it follows the link color. */
 	.why-content :global(a[target='_blank']::after),
-	.does-less-content :global(a[target='_blank']::after),
-	.pillar-content :global(a[target='_blank']::after),
-	.tech-details a[target='_blank']::after,
+	.tradeoff :global(a[target='_blank']::after),
+	.signing-block :global(a[target='_blank']::after),
+	.network-note :global(a[target='_blank']::after),
 	.compare-table td :global(a[target='_blank']::after),
 	.bm-card :global(a[target='_blank']::after),
+	.bm-note :global(a[target='_blank']::after),
 	details :global(a[target='_blank']::after) {
 		content: '';
 		display: inline-block;
@@ -1092,7 +1070,8 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		margin-top: 52px;
+		margin-top: auto;
+		align-self: flex-start;
 		padding: 15px 26px 13px;
 		border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
 		border-radius: 14px;
@@ -1171,65 +1150,60 @@
 		animation: stat-shimmer 1.3s ease-in-out infinite;
 	}
 
-	/* ── Networks (inside Technical details) ── */
-	.tech-networks {
-		margin-top: 20px;
-		padding-top: 20px;
-		border-top: 1px solid var(--border);
+	/* ── Networks ── */
+	.networks {
+		padding-top: 0;
 	}
-	.network-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 12px 18px;
+	.networks h2 {
+		max-width: 760px;
+		margin: 0 auto 32px;
+		text-align: center;
+		/* Two chains of words, not one line plus an orphan. */
+		text-wrap: balance;
+	}
+	.network-grid {
+		list-style: none;
+		padding: 0;
+		margin: 0 auto;
+		max-width: 760px;
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 18px 24px;
 	}
 	.network-chip {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
-		gap: 8px;
-		font-size: 0.82rem;
+		gap: 10px;
+		font-size: 0.88rem;
 		font-weight: 500;
 		color: var(--text);
 		white-space: nowrap;
 	}
 	.network-logo {
-		width: 22px;
-		height: 22px;
+		width: 26px;
+		height: 26px;
 		border-radius: 50%;
 		flex-shrink: 0;
 		background: var(--border);
 	}
 	.network-note {
-		margin-top: 16px;
-		color: var(--text-tertiary);
-		font-size: 0.8rem;
-		line-height: 1.65;
+		max-width: 640px;
+		margin: 40px auto 0;
+		color: var(--text-secondary);
+		font-size: 0.88rem;
+		line-height: 1.75;
+	}
+	.networks .more-link {
+		display: block;
+		max-width: 640px;
+		margin: 12px auto 0;
 	}
 
-	/* ── Does Less ── */
-	.does-less {
-		margin-top: 12px;
-		padding: 96px 0;
-		border-top: 1px solid var(--border);
-	}
-	.does-less-content {
-		max-width: 640px;
-		margin: 0 auto;
-	}
-	.does-less-content h2 {
-		margin-bottom: 20px;
-	}
-	.does-less-content p {
-		color: var(--text-secondary);
-		font-size: 1.05rem;
-		line-height: 1.8;
-		margin-bottom: 16px;
-	}
-	.does-less-content p:last-child {
-		margin-bottom: 0;
-	}
 	/* ── Why ── */
 	.why {
-		padding: 120px 0 60px;
+		margin-top: 12px;
+		padding: 96px 0 72px;
+		border-top: 1px solid var(--border);
 	}
 	.why-content {
 		max-width: 640px;
@@ -1245,104 +1219,218 @@
 		line-height: 1.8;
 		margin-bottom: 16px;
 	}
-	.why-content :global(strong) {
-		color: var(--text);
-	}
 	.why-content .why-beat {
 		color: var(--text);
 		font-size: 1.05rem;
-		font-weight: 400;
-		line-height: 1.5;
-		margin: 20px 0;
+		line-height: 1.6;
+		margin: 20px 0 4px;
 	}
 
-	/* ── How It Works (Pillars) ── */
-	.how-it-works h2,
-	.how-it-works .section-desc {
-		text-align: center;
+	/* ── The trade-offs ──
+	   Hairlines, not cards. Three admissions in a row inside three boxes would
+	   read as a feature grid; stacked on rules they read as a list of things we
+	   are telling you. */
+	.tradeoffs {
+		padding: 0 0 96px;
 	}
-	.pillar {
-		display: flex;
-		gap: 32px;
-		align-items: flex-start;
+	.tradeoffs-content {
 		max-width: 640px;
-		margin: 0 auto 56px;
-		padding: 28px 28px 28px 32px;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-left: 3px solid var(--accent);
-		border-radius: 0 var(--radius) var(--radius) 0;
-		box-shadow: var(--shadow-sm);
+		margin: 0 auto;
 	}
-	.pillar:last-child {
-		margin-bottom: 0;
+	.tradeoffs-lede {
+		color: var(--text-secondary);
+		font-size: 0.95rem;
+		margin: 8px 0 0;
 	}
-	.pillar-number {
-		font-size: 0.78rem;
-		font-weight: 700;
-		color: var(--accent);
-		background: var(--accent-soft);
-		border: 1px solid var(--border-accent);
-		padding: 6px 12px;
-		border-radius: 8px;
-		flex-shrink: 0;
-		font-variant-numeric: tabular-nums;
-		letter-spacing: 0.02em;
+	.tradeoff-list {
+		list-style: none;
+		padding: 0;
+		margin: 28px 0 0;
 	}
-	.pillar-content h3 {
-		font-size: 1.1rem;
+	.tradeoff {
+		padding: 26px 0;
+		border-top: 1px solid var(--border);
+	}
+	.tradeoff h3 {
+		font-size: 1rem;
 		font-weight: 600;
+		line-height: 1.45;
 		margin-bottom: 10px;
-		line-height: 1.3;
 	}
-	.pillar-content p {
+	.tradeoff p {
 		color: var(--text-secondary);
 		font-size: 0.92rem;
 		line-height: 1.75;
-		margin-bottom: 12px;
+		margin: 0;
 	}
-	.pillar-content p:last-child,
-	.pillar-content p:last-of-type {
-		margin-bottom: 0;
+	.tradeoffs-close {
+		margin: 26px 0 0;
+		padding-top: 22px;
+		border-top: 1px solid var(--border);
+		color: var(--text);
+		font-size: 0.95rem;
+		line-height: 1.7;
 	}
-	/* ── Tech Details ── */
-	.tech-details {
+
+	/* ── Sign what you see ──
+	   Two blocks that must never blur into one: what the wallet does today, and
+	   what is built but not deployed. The second one says so on its label. */
+	.signing {
+		padding: 0 0 96px;
+	}
+	.signing-content {
 		max-width: 640px;
-		margin: 56px auto 0;
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 28px 28px;
-		box-shadow: var(--shadow-sm);
+		margin: 0 auto;
 	}
-	.tech-details h3 {
-		font-size: 0.82rem;
+	.signing-lede {
+		color: var(--text-secondary);
+		font-size: 1rem;
+		line-height: 1.8;
+		margin: 16px 0 0;
+	}
+	.signing-block {
+		margin-top: 36px;
+		padding-top: 26px;
+		border-top: 1px solid var(--border);
+	}
+	.signing-label {
+		display: inline-block;
+		margin-bottom: 12px;
+		padding: 3px 9px;
+		border-radius: 999px;
+		border: 1px solid var(--border-accent, var(--border));
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	/* Not accent-coloured: this one is a caveat, not a badge of honour. */
+	.signing-label-soon {
+		border: 1px dashed var(--border-strong, var(--border));
+		background: transparent;
+		color: var(--text-tertiary);
+	}
+	.signing-block h3 {
+		font-size: 1.05rem;
+		font-weight: 600;
+		line-height: 1.45;
+		margin-bottom: 10px;
+	}
+	.signing-block p {
+		color: var(--text-secondary);
+		font-size: 0.92rem;
+		line-height: 1.75;
+		margin: 0;
+	}
+	.signing-aside {
+		margin-top: 22px;
+		padding: 18px 20px;
+		border-left: 2px solid var(--border-accent, var(--border));
+		background: var(--bg-raised);
+		border-radius: 0 var(--radius) var(--radius) 0;
+	}
+	.signing-aside h4 {
+		font-size: 0.78rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: var(--text-secondary);
-		margin-bottom: 16px;
+		margin-bottom: 10px;
 	}
-	.tech-details table {
-		width: 100%;
-		border-collapse: collapse;
-	}
-	.tech-details td {
-		padding: 8px 0;
-		font-size: 0.88rem;
-		border-bottom: 1px solid var(--border);
-	}
-	.tech-details tr:last-child td {
-		border-bottom: none;
-	}
-	.tech-details td:first-child {
+	.signing-aside ul {
+		margin: 0;
+		padding-left: 18px;
 		color: var(--text-secondary);
-		width: 40%;
+		font-size: 0.88rem;
+		line-height: 1.7;
 	}
-	.tech-details td:last-child {
+
+	/* ── How It Works ── */
+	.how-it-works h2,
+	.how-it-works .section-desc {
+		text-align: center;
+	}
+	.section-desc {
+		margin-bottom: 48px;
+	}
+	.steps {
+		list-style: none;
+		padding: 0;
+		margin: 0 auto;
+		max-width: 900px;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 32px;
+	}
+	.step {
+		padding-top: 18px;
+		border-top: 1px solid var(--border);
+	}
+	.step-number {
+		display: block;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		color: var(--accent);
+		font-variant-numeric: tabular-nums;
+		margin-bottom: 10px;
+	}
+	.step h3 {
+		font-size: 1.05rem;
+		font-weight: 600;
+		margin-bottom: 8px;
+	}
+	.step p {
+		color: var(--text-secondary);
+		font-size: 0.92rem;
+		line-height: 1.75;
+		margin: 0;
+	}
+
+	/* The spec line: five links, one row, no table. */
+	.stack {
+		max-width: 900px;
+		margin: 48px auto 0;
+		padding-top: 20px;
+		border-top: 1px solid var(--border);
+		text-align: center;
+	}
+	.stack-label {
+		display: block;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-tertiary);
+		margin-bottom: 12px;
+	}
+	.stack-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px 0;
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+	}
+	.stack-list li + li::before {
+		content: '·';
+		margin: 0 12px;
+		color: var(--text-tertiary);
+	}
+	.stack-list a {
 		color: var(--text);
-		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 4px;
 	}
+	.stack-list a:hover {
+		color: var(--accent);
+	}
+
 	/* ── Compare ── */
 	.compare h2,
 	.compare .section-desc {
@@ -1365,7 +1453,7 @@
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 0.82rem;
-		min-width: 640px;
+		min-width: 720px;
 	}
 	.compare-table th,
 	.compare-table td {
@@ -1381,7 +1469,7 @@
 		vertical-align: bottom;
 	}
 	.compare-table thead th:first-child {
-		width: 28%;
+		width: 24%;
 	}
 	.compare-table tbody td:first-child {
 		color: var(--text-secondary);
@@ -1396,12 +1484,12 @@
 	.compare-table td.no {
 		color: var(--text-tertiary);
 	}
-	/* ── Business Model ── */
+	/* ── Pricing ── */
 	.business-model h2 {
 		text-align: center;
 	}
 	.bm-content {
-		max-width: 720px;
+		max-width: 900px;
 		margin: 0 auto;
 	}
 	.bm-intro {
@@ -1409,51 +1497,45 @@
 		color: var(--text-secondary);
 		font-size: 1rem;
 		line-height: 1.7;
-		margin-bottom: 40px;
+		margin: 0 auto 48px;
 		max-width: 560px;
-		margin-left: auto;
-		margin-right: auto;
 	}
 	.bm-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		max-width: 560px;
-		margin: 0 auto 32px;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 32px;
+		margin-bottom: 36px;
 	}
 	.bm-card {
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 24px 20px;
-		box-shadow: var(--shadow-sm);
+		padding-top: 18px;
+		border-top: 1px solid var(--border);
 	}
 	.bm-card h4 {
-		font-size: 0.88rem;
+		font-size: 0.78rem;
 		font-weight: 600;
-		margin-bottom: 8px;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-secondary);
+		margin-bottom: 10px;
 	}
 	.bm-price {
-		font-size: 1.1rem;
+		font-size: 1.25rem;
 		font-weight: 700;
-		color: var(--accent);
+		letter-spacing: -0.01em;
 		margin-bottom: 12px;
 	}
 	.bm-card p {
 		color: var(--text-secondary);
-		font-size: 0.82rem;
-		line-height: 1.6;
-		margin-bottom: 8px;
-	}
-	.bm-card p:last-child {
-		margin-bottom: 0;
+		font-size: 0.85rem;
+		line-height: 1.7;
+		margin: 0;
 	}
 	.bm-note {
 		text-align: center;
 		color: var(--text-tertiary);
 		font-size: 0.82rem;
-		line-height: 1.6;
-		max-width: 560px;
+		line-height: 1.7;
+		max-width: 620px;
 		margin: 0 auto;
 	}
 
@@ -1496,63 +1578,6 @@
 		line-height: 1.7;
 		font-size: 0.88rem;
 	}
-	/* ── Notify ── */
-	.notify {
-		text-align: center;
-		padding: 112px 0 128px;
-	}
-	.notify h2 {
-		margin-bottom: 28px;
-	}
-	.notify-social {
-		display: flex;
-		gap: 12px;
-		justify-content: center;
-		flex-wrap: wrap;
-	}
-	.btn-social {
-		padding: 12px 28px;
-	}
-	.btn-outline {
-		background: transparent;
-		color: var(--text);
-		border: 1px solid var(--border);
-	}
-	.btn-outline:hover {
-		border-color: var(--accent);
-		color: var(--accent);
-		transform: translateY(-1px);
-	}
-	.notify-divider {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		margin: 48px auto;
-		max-width: 400px;
-	}
-	.notify-divider::before,
-	.notify-divider::after {
-		content: '';
-		flex: 1;
-		height: 1px;
-		background: var(--border);
-	}
-	.notify-divider span {
-		color: var(--text-tertiary);
-		font-size: 0.78rem;
-	}
-	/* Notify social links */
-	.notify-sub {
-		color: var(--text-secondary);
-		font-size: 0.95rem;
-		margin-bottom: 28px;
-	}
-	.notify-email-desc {
-		color: var(--text-tertiary);
-		font-size: 0.82rem;
-		margin-bottom: 16px;
-	}
-
 	/* ── Responsive ── */
 	@media (max-width: 768px) {
 		.hero {
@@ -1566,6 +1591,7 @@
 		}
 		.hero-text {
 			text-align: center;
+			display: block;
 		}
 		.hero-cta {
 			align-items: center;
@@ -1573,20 +1599,24 @@
 		.hero-buttons {
 			justify-content: center;
 		}
-		/* Stacked, the vertical hairline has nothing to divide, so each fact
-		   gets its own rule above it instead. */
 		.hero-facts {
-			padding: 0;
-			border-left: none;
-			gap: 0;
+			max-width: none;
+			height: auto;
 			text-align: left;
 		}
-		.hero-facts .fact {
-			padding: 18px 0;
+		.hero-facts .fact:first-child {
+			padding-top: 18px;
 			border-top: 1px solid var(--border);
 		}
 		.hero-facts dd {
 			max-width: none;
+		}
+		/* Side by side at phone width only if neither label has to break: a
+		   two-line button reads as a mistake. */
+		.btn.btn-hero {
+			min-width: 0;
+			padding: 16px 22px;
+			white-space: nowrap;
 		}
 		.scroll-hint {
 			display: none;
@@ -1602,40 +1632,19 @@
 			margin-left: auto;
 			margin-right: auto;
 		}
-		.trust-row {
-			justify-content: center;
-		}
-		.trust-chip {
-			font-size: 0.72rem;
-		}
-		.network-chip {
-			font-size: 0.8rem;
-		}
-		.why-content {
-			text-align: left;
-		}
 		.why-content h2 {
 			font-size: 1.4rem;
 		}
-		.pillar {
-			flex-direction: column;
-			gap: 12px;
+		.steps,
+		.bm-grid {
+			grid-template-columns: 1fr;
+			gap: 24px;
 		}
-		.pillar-number {
-			align-self: flex-start;
+		.network-grid {
+			grid-template-columns: repeat(2, 1fr);
 		}
 		.nav-links {
 			display: none;
-		}
-		.notify-cards {
-			grid-template-columns: repeat(2, 1fr);
-		}
-		.notify-social {
-			flex-direction: column;
-			padding: 0 16px;
-		}
-		.notify-social .btn-social {
-			width: 100%;
 		}
 	}
 </style>

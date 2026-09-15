@@ -24,6 +24,12 @@ stage D, marked `drafted`, and may keep the English line until reviewed (FR-006)
 |---|---|---|
 | `en` | `Sign with a passkey Vela never sees. Open source and self-hostable on most EVM chains — so it keeps working even if we disappear.` | founder, 2026-09-15 |
 | `zh` | `用通行密钥签名，Vela 永远看不到你的密钥。开源、可自部署、支持大多数 EVM 链——即使 Vela 消失，钱包照常可用。` | founder, 2026-09-15 |
+
+**Superseded the same day.** The founder cut the subtitle to its first sentence
+(`Sign with a passkey Vela never sees.` / `用通行密钥签名，Vela 永远看不到你的密钥。`)
+and moved the rest into the hero's fact column, where it became the hook
+"If Vela disappears, your wallet does not." The notes below still govern both
+halves wherever they now appear.
 | others | — | stage D |
 
 ### Notes for translators (R7 axes)

@@ -89,3 +89,75 @@ and the one wording judgement made on a half-typed line.
 **Standing hazard**: an editor holding the old path will break the build again on
 its next save. The landing page now lives at
 `src/routes/[[locale=locale]]/+page.svelte`.
+
+## Founder pass on the landing page — 2026-09-15 (outside the task list)
+
+Not a numbered task: a founder review of `/` arrived mid-phase and rebuilt the
+page's information architecture. Recorded here because it changes copy that
+T020/T029 had already extracted and translated, and because two rulings came out
+of it that later work has to respect.
+
+### What the page is now
+
+`hero → why (short) → trade-offs → sign what you see → compare → pricing → how →
+networks → FAQ`. Removed: "A wallet that does less" and the whole bottom
+"Ready to try it?" block (its social links already live in the footer). The nine
+paragraphs of "Why we built Vela" moved to a new doc, `/docs/why-vela`, with the
+landing page keeping three sentences and a link.
+
+### Two founder rulings
+
+1. **The independent signing page may be advertised, labelled.** `app-web/clearsigning`
+   is built and tested but not deployed and not wired into the wallet
+   (HANDOVER.md §还没做 item 4), so the section carries "Built and tested — not
+   live yet" and the comparison row reads "in testing". The draft line "it's off
+   by default — turn it on" was false today and is not on the page.
+2. **No price number until the stores are configured.** Pricing says "one-time
+   purchase — never a subscription"; the `$39.99` / regional figures in
+   docs/marketing/pricing-analysis.md §99 stay out of public copy for now.
+
+### Accuracy fixes made while writing
+
+- The draft claimed a hardware key as a second signer removes the
+  Apple/Google-account risk. It does not: signers are **1-of-n**, so a second key
+  is a way back in, not a second lock. The trade-off item, the FAQ answer and
+  `/docs/why-vela` now say that, and point at `KeyMethod::SecurityKey` — the
+  first key's method is a choice — as the actual answer to that risk.
+- "Platforms" in the comparison says "Web today; desktop, mobile and an extension
+  … in testing", matching `/get-started`, not the draft's "desktop (Windows /
+  macOS / Linux)" which reads as shipped.
+- Fees are described as the relayer quote (network cost + service fee, locked
+  into what you sign, small minimum, gas-account activation deposit), per
+  docs/networks-and-fees.md, not as a generic "bundler fee".
+
+### The hero, after three rounds of founder notes
+
+The subtitle is one sentence again; its second half ("open source and
+self-hostable … even if we disappear") became one of five **hooks** on the right,
+each a single line with no explanatory paragraph and a link to the page that
+proves it. Written from the reader's fear rather than our architecture: *No one
+can freeze your money. Not even us. / One address. Every chain you use. / Lose
+your phone. Keep your wallet. / If Vela disappears, your wallet does not. / Never
+sign what you cannot read.* Hrefs live in `FACT_LINKS` in the component, beside
+`COMPARE_TONES`, for the same reason: a translation may not move a destination.
+
+Layout: both hero columns stretch to a shared top and bottom edge, the on-chain
+seal is the bottom anchor of the left column, and the CTA buttons are 230×62.
+**A latent bug surfaced here**: `.btn` is declared *after* `.btn-hero` in this
+stylesheet, so at equal specificity the hero buttons had silently never had their
+own padding — every previous size change to `.btn-hero` did nothing. Fixed as
+`.btn.btn-hero`.
+
+### Checks
+
+`bun run check` 0 errors · `vitest --project server` 41 passed ·
+`bun run test:e2e` **56 passed** · `bun run build` green, 11 docs × 15 locales
+(`/docs/why-vela` prerendered and in the sitemap).
+
+`zh.json` was rewritten alongside `en.ts`, so `namespaceState('home','zh')` is
+still `translated` — had it not been, `/zh` would have fallen back to English
+under a notice and SC-006's demo would have regressed silently.
+
+**Hazard repeated from Phase 2**: `bun run format` is `prettier --write .` and
+reformatted ~30 files this session that nothing in this work had touched. They
+were reverted; format single files instead while the tree is shared.

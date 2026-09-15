@@ -19,6 +19,7 @@ export const sidebar: SidebarGroup[] = [
 		title: 'Getting Started',
 		items: [
 			{ slug: 'introduction', title: 'Introduction' },
+			{ slug: 'why-vela', title: 'Why we built Vela' },
 			{ slug: 'install', title: 'Install Vela' },
 			{ slug: 'create-wallet', title: 'Create your wallet' }
 		]
