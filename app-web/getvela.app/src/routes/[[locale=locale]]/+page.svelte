@@ -883,7 +883,7 @@
 	   as text that fell out of the hero; with it, it is a section. Small and
 	   muted on purpose — the claims are the loud part. */
 	.facts-lede {
-		max-width: 1040px;
+		max-width: 1000px;
 		margin: 0 auto 22px;
 		color: var(--text-tertiary);
 		font-size: 0.85rem;
@@ -899,7 +899,7 @@
 		/* Capped and centred: the page is 1400px wide and these are short lines —
 		   left to fill it, each claim would sit alone at the end of a rule twice
 		   the length of its own sentence. */
-		max-width: 1040px;
+		max-width: 1000px;
 		margin: 0 auto;
 		padding: 0;
 		list-style: none;
@@ -912,9 +912,9 @@
 	   should take you to it — a 12px link at the end was the only target. */
 	.fact-row {
 		display: grid;
-		grid-template-columns: 52px minmax(0, 1.05fr) minmax(0, 0.95fr);
+		grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr);
 		align-items: baseline;
-		column-gap: 32px;
+		column-gap: 28px;
 		padding: 26px 16px;
 		/* Bled out past the text so the hover tint reads as a row, not a box
 		   drawn around the words. */

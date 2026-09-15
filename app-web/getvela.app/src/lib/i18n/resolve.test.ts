@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './messages/en';
+import { SUPPORTED_LOCALES } from './locales';
 import { PAGE_NAMESPACES, __internals, catalog, namespaceState, translatedLocales } from './resolve';
 
 const { isComplete } = __internals;
@@ -50,26 +51,38 @@ describe('catalog()', () => {
 		}
 	});
 
+	// Picked at test time rather than hard-coded: as locales get translated, a
+	// hard-coded example silently stops testing fallback and starts testing a
+	// translation. The test needs a locale that is genuinely still English.
+	const untranslated = SUPPORTED_LOCALES.find((l) => namespaceState('home', l) === 'fallback');
+
+	it('has a locale left to demonstrate fallback with', () => {
+		// If this ever fails, every locale is translated — delete these three
+		// tests rather than weakening them.
+		expect(untranslated, 'no untranslated locale remains').toBeDefined();
+	});
+
 	it('falls back to the whole English namespace, not a mixture', () => {
-		// `ja` has no page content — so its home namespace is the English one,
-		// word for word, not an English-shaped merge of Japanese fragments. The
-		// only difference allowed is the link prefix (see the next test), so the
-		// comparison is made with hrefs stripped.
+		// The fallback locale's home namespace is the English one, word for word,
+		// not an English-shaped merge of translated fragments. The only difference
+		// allowed is the link prefix (see the next test), so the comparison is
+		// made with hrefs stripped.
 		const strip = (v: unknown): unknown =>
 			JSON.parse(JSON.stringify(v).replace(/href=\\"[^"]*\\"/g, 'href'));
-		expect(namespaceState('home', 'ja')).toBe('fallback');
-		expect(strip(catalog('ja').home)).toEqual(strip(en.home));
+		expect(strip(catalog(untranslated!).home)).toEqual(strip(en.home));
 	});
 
 	it('keeps a fallback page’s internal links inside the reader’s locale', () => {
-		// An English page at /ja must not tip the reader back out to /docs — they
-		// asked for Japanese and the rest of the site still has it.
-		expect(catalog('ja').home.compare.rows[3].vela).toContain('href="/ja/docs/security-audits"');
+		// An English page at /tr must not tip the reader back out to /docs — they
+		// asked for Turkish and the rest of the site still has it.
+		expect(catalog(untranslated!).home.compare.rows[3].vela).toContain(
+			`href="/${untranslated}/docs/security-audits"`
+		);
 		expect(catalog('en').home.compare.rows[3].vela).toContain('href="/docs/security-audits"');
 	});
 
 	it('leaves external links and anchors alone', () => {
-		expect(catalog('ja').home.why.p1).toContain('href="https://account.base.app"');
+		expect(catalog(untranslated!).home.why.p1).toContain('href="https://account.base.app"');
 	});
 
 	it('keeps chrome and notice readable in a locale whose pages fall back', () => {

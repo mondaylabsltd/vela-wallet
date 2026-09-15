@@ -191,11 +191,11 @@ export const en = {
 				},
 				{
 					term: "Don't bet the wallet on one device.",
-					link: 'Add up to seven keys when you create the account — passkeys, or a YubiKey'
+					link: 'Up to seven keys, set at creation — hardware security keys included'
 				},
 				{
-					term: "Bybit's screen lied. Every signature was valid.",
-					link: 'How we close the path that cost them $1.5B'
+					term: 'Bybit saw one transaction and signed another.',
+					link: 'How $1.5B was lost, and the path we close'
 				},
 				{
 					term: 'If Vela disappears, your wallet does not.',
