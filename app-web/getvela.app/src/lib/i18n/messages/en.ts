@@ -264,30 +264,37 @@ export const en = {
 		},
 
 		/**
-		 * The signing story, in two halves that must not be confused: what the
-		 * wallet does today (shipped, checkable) and the independent signer
-		 * (built and tested, not deployed). The `next.label` carries that second
-		 * fact and is not decoration — see the founder ruling of 2026-09-15.
+		 * The signing story, in two halves that must not be confused.
+		 *
+		 * The correction of 2026-09-15: "Sign what you see" was the wrong claim
+		 * to lead with, because a passkey signs a HASH. The decoded summary above
+		 * it is produced by the same app that built the transaction, so by itself
+		 * it proves nothing — that is precisely the link that broke at Bybit. The
+		 * section now states the gap first, says what today's decoding does and
+		 * does not buy, and puts the self-hosted signing page where it belongs:
+		 * the only version of this that does not ask you to trust us. Its label
+		 * still carries the status (built and tested, not deployed) and is not
+		 * decoration.
 		 */
 		signing: {
-			heading: 'Sign what you see.',
-			lede: 'Bybit lost $1.5 billion in February 2025 because the people signing approved a transaction whose on-screen summary did not match what was actually signed. Closing that gap is the entire job of a signing screen.',
+			heading: 'A passkey signs a hash, not a screen.',
+			lede: 'In February 2025, Bybit lost $1.5 billion. The people signing approved what the interface showed them; the interface had been tampered with, and every signature was valid. That gap exists in every passkey wallet, including this one: what your device signs is a hash, and the plain-language summary above it is a claim made by the software that built the transaction.',
 			today: {
 				label: 'Today',
-				title: 'Every transaction is decoded before you approve it.',
-				body: 'What it does, how much, and to whom — in plain language instead of hex, using <a href="/docs/clear-signing">ERC-7730</a> descriptors. An approval that would grant an unlimited allowance is rewritten to a finite amount you pick, and a last check refuses to submit one that is still unlimited. When a call cannot be decoded, Vela says so instead of showing a friendly summary it cannot stand behind.'
+				title: 'Vela decodes every transaction before you approve it.',
+				body: 'What it does, how much, and to whom — in plain language instead of hex, using <a href="/docs/clear-signing">ERC-7730</a> descriptors. An approval that would grant an unlimited allowance is rewritten to a finite amount you pick, and a last check refuses to submit one that is still unlimited. When a call cannot be decoded, Vela says so instead of showing a friendly summary it cannot stand behind. That catches mistakes and hostile dApps. What it cannot do is vouch for itself: the preview and the transaction come from the same app, and that is the link that broke at Bybit.'
 			},
 			next: {
 				label: 'Built and tested — not live yet',
-				title: 'Next: a signing path with nothing to trust.',
-				body: 'A second, independent way to sign the transactions you would rather check by hand: a zero-dependency static page — and a Chrome extension built from the same folder — that decodes the raw transaction itself and shows you the real calldata before your passkey signs it. No framework, no bundler, no network calls. It stays optional, because it is slower. And you will not have to use ours: deploy the page yourself, or run it from localhost.'
+				title: 'A signing page you host yourself.',
+				body: 'A zero-dependency static page — and a Chrome extension built from the same folder — that decodes the raw transaction itself and puts the real calldata in front of you immediately before your passkey signs it. No framework, no bundler, no network calls. The point is not that our copy is safer: deploy it yourself, or run it from localhost, and the code that shows you the transaction is code you put there — replacing it means getting into your hosting, not ours. Once an account holds money you would mind losing, this is how to sign.'
 			},
 			aside: {
-				title: 'What it is for',
+				title: 'When to use it',
 				items: [
 					'Moving an amount you would not want to be wrong about.',
 					"Approving a contract you haven't used before.",
-					"Any time a dApp's own interface is the only thing telling you what you are signing."
+					"An account holding money you would mind losing — or any time a dApp's own interface is the only thing telling you what you are signing."
 				]
 			}
 		},
