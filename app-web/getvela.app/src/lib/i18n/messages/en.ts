@@ -252,8 +252,8 @@ export const en = {
 					body: 'A passkey signature is verified on-chain and the transaction goes through the ERC-4337 EntryPoint, which on its own costs more gas than a plain transfer. The relayer fronts that gas and submits the transaction, and is paid more than the gas actually costs on-chain — the difference is what runs the service. You see the total before you sign, and it is written into the transaction you sign: what you signed is what is charged, and it cannot move afterwards. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
 				},
 				{
-					title: 'A synced passkey makes your Apple or Google account one of the keys.',
-					body: 'Whoever controls that account and can unlock a device it syncs to can sign. If that is not acceptable, create the wallet with a USB/NFC security key instead — the choice is there for the <em>first</em> key, not only for extra ones. And extra keys are extra ways in, not a second lock: any one of them signs on its own.'
+					title: 'Whatever holds your key is what you have to trust.',
+					body: 'A passkey either syncs with your Apple or Google account or lives on a USB/NFC security key, and either way you are trusting that thing — the account, or the vendor; hardware has had its own failures. Afraid of losing a device: set several keys when you create the wallet, on different devices. Afraid of theft: whoever controls that Apple or Google account and can unlock a device it syncs to can sign, so protect it like the wallet itself. Afraid of the hardware: the very first key can already be a security key, so pick a vendor you trust. One thing to know either way — any single key signs on its own, so every extra key is another way in: a way back, not a second lock.'
 				},
 				{
 					title: "Vela's own code has never been independently audited.",
@@ -449,7 +449,7 @@ export const en = {
 				},
 				{
 					q: 'What does it cost to use?',
-					a: 'The wallet is free and there is no token. You pay network gas out of your own balance plus the relayer\'s fee, quoted before you sign and locked into what you sign. Smart-account signing burns several times the gas of a plain transfer — a P-256 signature is verified on-chain and the call goes through the ERC-4337 EntryPoint — and the relayer that fronts that gas is paid 3× what it fronts. Each network also needs a small, non-refundable deposit to activate its gas relayer account, which Vela sponsors for new wallets where it can. Run <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">your own relay</a> and only the gas is left. Full breakdown in <a href="/docs/networks-and-fees">Networks &amp; fees</a>.'
+					a: 'The wallet is free and there is no token. You pay network gas out of your own balance plus the relayer\'s fee. Smart-account signing costs more gas than a plain transfer — a P-256 signature is verified on-chain and the call goes through the ERC-4337 EntryPoint — and the relayer that fronts that gas is paid more than the gas costs on-chain; the difference is what runs the service. The total is quoted before you sign and written into the transaction you sign, so what you signed is what is charged. Each network also needs a small, non-refundable deposit to activate its gas relayer account, which Vela sponsors for new wallets where it can. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>. Full breakdown in <a href="/docs/networks-and-fees">Networks &amp; fees</a>.'
 				},
 				{
 					q: 'Which chains and tokens does it hold?',

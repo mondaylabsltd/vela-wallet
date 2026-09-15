@@ -131,8 +131,8 @@
 					"body": "Eine Passkey-Signatur wird on-chain geprüft und die Transaktion läuft durch den ERC-4337-EntryPoint — das allein kostet mehr Gas als eine einfache Überweisung. Der Relayer streckt dieses Gas vor und reicht die Transaktion ein; er bekommt mehr, als das Gas on-chain tatsächlich kostet — die Differenz hält den Dienst am Laufen. Den Gesamtbetrag siehst du vor dem Signieren, und er steht in der Transaktion, die du signierst: berechnet wird genau das, was du signiert hast, und danach ändert es sich nicht mehr. Den Relayer kannst du in den Einstellungen wechseln oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">selbst betreiben</a>."
 				},
 				{
-					"title": "Ein synchronisierter Passkey macht dein Apple- oder Google-Konto zu einem der Schlüssel.",
-					"body": "Wer dieses Konto kontrolliert und ein Gerät entsperren kann, mit dem es synchronisiert, kann signieren. Wenn das für dich nicht in Frage kommt, lege die Wallet stattdessen mit einem USB/NFC-Sicherheitsschlüssel an — die Wahl gibt es schon beim <em>ersten</em> Schlüssel, nicht erst bei weiteren. Und weitere Schlüssel sind weitere Wege hinein, kein zweites Schloss: jeder einzelne signiert für sich allein."
+					"title": "Was deinen Schlüssel hält, musst du ihm vertrauen.",
+					"body": "Ein Passkey synchronisiert entweder mit deinem Apple- oder Google-Konto oder liegt auf einem USB/NFC-Sicherheitsschlüssel — in beiden Fällen vertraust du diesem Etwas: dem Konto oder dem Hersteller; auch Hardware hatte schon ihre Ausfälle. Angst, ein Gerät zu verlieren: lege beim Erstellen der Wallet mehrere Schlüssel an, auf verschiedenen Geräten. Angst vor Diebstahl: wer dieses Apple- oder Google-Konto kontrolliert und ein Gerät entsperren kann, mit dem es synchronisiert, kann signieren — schütze es also wie die Wallet selbst. Angst vor der Hardware: schon der erste Schlüssel kann ein Sicherheitsschlüssel sein, nimm einen Hersteller, dem du vertraust. Eins gilt in jedem Fall — jeder einzelne Schlüssel signiert allein, jeder weitere ist also ein weiterer Weg hinein: ein Weg zurück, kein zweites Schloss."
 				},
 				{
 					"title": "Velas eigener Code wurde nie unabhängig auditiert.",
@@ -476,7 +476,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "b5fa0b1af9d6",
+		"home": "0047eab5a777",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

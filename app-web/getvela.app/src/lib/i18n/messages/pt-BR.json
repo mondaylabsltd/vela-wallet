@@ -127,12 +127,12 @@
 			"lede": "Três motivos para não usar a Vela — enquanto o seu dinheiro ainda está em outro lugar.",
 			"items": [
 				{
-					"title": "A mesma transferência custa aqui várias vezes mais.",
-					"body": "Uma assinatura de passkey é verificada on-chain e a transação passa pelo EntryPoint do ERC-4337, então ela queima várias vezes o gas de uma transferência simples — e o relayer que adianta esse gas recebe 3× o que adianta. O total é cotado antes de você assinar e faz parte do que você assina, então não muda depois. <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">Rode o seu próprio relay</a> e sobra só o gas."
+					"title": "Cada transação paga uma taxa que mantém o relay no ar.",
+					"body": "Uma assinatura passkey é verificada on-chain e a transação passa pelo EntryPoint do ERC-4337 — só isso já gasta mais gas do que uma transferência comum. O relay adianta esse gas e envia a transação, e recebe mais do que o gas custa de fato on-chain: essa diferença é o que mantém o serviço. Você vê o total antes de assinar, e ele fica escrito na transação que você assina: cobra-se exatamente o que você assinou, e depois não muda. O relay pode ser trocado nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode o seu</a>."
 				},
 				{
-					"title": "Uma passkey sincronizada torna sua conta Apple ou Google uma das chaves.",
-					"body": "Quem controla essa conta e consegue desbloquear um aparelho que sincroniza com ela consegue assinar. Se isso não for aceitável, crie a carteira com uma chave de segurança USB/NFC — a escolha existe já na <em>primeira</em> chave, não só nas adicionais. E chaves extras são entradas a mais, não uma segunda fechadura: qualquer uma delas assina sozinha."
+					"title": "Aquilo que guarda sua chave é aquilo em que você precisa confiar.",
+					"body": "Uma passkey sincroniza com sua conta Apple ou Google ou fica em uma chave de segurança USB/NFC, e nos dois casos você está confiando nisso — na conta, ou no fabricante; o hardware também já teve suas falhas. Tem medo de perder um aparelho: crie várias chaves na hora de criar a carteira, em aparelhos diferentes. Tem medo de roubo: quem controla essa conta Apple ou Google e consegue desbloquear um aparelho sincronizado consegue assinar, então proteja a conta como a própria carteira. Tem medo do hardware: já a primeira chave pode ser uma chave de segurança, escolha um fabricante em que você confie. Uma coisa vale nos dois casos — qualquer chave assina sozinha, então cada chave a mais é mais uma porta de entrada: um caminho de volta, não uma segunda fechadura."
 				},
 				{
 					"title": "O código da Vela nunca passou por auditoria independente.",
@@ -315,7 +315,7 @@
 				},
 				{
 					"q": "Quanto custa usar?",
-					"a": "A carteira é gratuita e não há token. Você paga o gas da rede do seu próprio saldo mais a taxa do relayer, cotada antes de assinar e travada no que você assina. Assinar com uma conta inteligente queima várias vezes o gas de uma transferência simples — uma assinatura P-256 é verificada on-chain e a chamada passa pelo EntryPoint do ERC-4337 — e o relayer que adianta esse gas recebe 3× o que adianta. Cada rede também precisa de um depósito pequeno e não reembolsável para ativar a conta de relayer de gas, que a Vela banca para carteiras novas quando dá. Rode <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">o seu próprio relay</a> e sobra só o gas. Detalhamento completo em <a href=\"/docs/networks-and-fees\">Redes e taxas</a>."
+					"a": "A carteira é gratuita e não há token. Você paga o gas da rede do seu próprio saldo mais a taxa do relayer. Assinar com uma conta inteligente custa mais gas que uma transferência simples — uma assinatura P-256 é verificada on-chain e a chamada passa pelo EntryPoint do ERC-4337 — e o relayer que adianta esse gas recebe mais do que o gas custa on-chain; a diferença é o que mantém o serviço. O total é cotado antes de você assinar e fica escrito na transação que você assina, então o que você assinou é o que é cobrado. Cada rede também precisa de um depósito pequeno e não reembolsável para ativar a conta de relayer de gas, que a Vela banca para carteiras novas quando dá. O relayer é trocável nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode o seu</a>. Detalhamento completo em <a href=\"/docs/networks-and-fees\">Redes e taxas</a>."
 				},
 				{
 					"q": "Quais chains e tokens ela guarda?",
@@ -476,7 +476,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "b5fa0b1af9d6",
+		"home": "0047eab5a777",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -127,12 +127,12 @@
 			"lede": "Tre motivi per non usare Vela — mentre i tuoi soldi sono ancora altrove.",
 			"items": [
 				{
-					"title": "Lo stesso trasferimento qui costa diverse volte di più.",
-					"body": "Una firma passkey viene verificata on-chain e la transazione passa per l'EntryPoint ERC-4337, quindi brucia diverse volte il gas di un trasferimento semplice — e il relayer che anticipa quel gas viene pagato 3× ciò che anticipa. Il totale è quotato prima della firma e fa parte di ciò che firmi, quindi dopo non può più muoversi. <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">Fai girare il tuo relay</a> e resta solo il gas."
+					"title": "Ogni transazione paga una commissione che tiene in piedi il relay.",
+					"body": "Una firma passkey viene verificata on-chain e la transazione passa dall'EntryPoint ERC-4337: già questo consuma più gas di un semplice trasferimento. Il relay anticipa quel gas e invia la transazione, e riceve più di quanto il gas costi davvero on-chain — la differenza è ciò che manda avanti il servizio. Il totale lo vedi prima di firmare ed è scritto nella transazione che firmi: ti viene addebitato esattamente quello che hai firmato, e dopo non cambia. Il relay si sostituisce nelle impostazioni, oppure <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">fai girare il tuo</a>."
 				},
 				{
-					"title": "Una passkey sincronizzata rende il tuo account Apple o Google una delle chiavi.",
-					"body": "Chi controlla quell'account e riesce a sbloccare un dispositivo con cui si sincronizza può firmare. Se non ti sta bene, crea il wallet con una chiave di sicurezza USB/NFC: la scelta c'è già per la <em>prima</em> chiave, non solo per quelle aggiuntive. E le chiavi in più sono altre vie d'ingresso, non una seconda serratura: una qualsiasi firma da sola."
+					"title": "Ciò che custodisce la tua chiave è ciò di cui ti devi fidare.",
+					"body": "Una passkey si sincronizza con il tuo account Apple o Google oppure vive su una chiave di sicurezza USB/NFC, e in entrambi i casi ti stai fidando di quella cosa — l'account, o il produttore; anche l'hardware ha avuto i suoi guasti. Hai paura di perdere un dispositivo: crea più chiavi quando crei il portafoglio, su dispositivi diversi. Hai paura del furto: chi controlla quell'account Apple o Google e riesce a sbloccare un dispositivo sincronizzato può firmare, quindi proteggilo come il portafoglio stesso. Hai paura dell'hardware: già la prima chiave può essere una chiave di sicurezza, scegli un produttore di cui ti fidi. Una cosa vale in ogni caso — qualsiasi singola chiave firma da sola, quindi ogni chiave in più è un'altra via d'ingresso: una via di ritorno, non una seconda serratura."
 				},
 				{
 					"title": "Il codice di Vela non è mai stato sottoposto ad audit indipendente.",
@@ -315,7 +315,7 @@
 				},
 				{
 					"q": "Quanto costa usarlo?",
-					"a": "Il wallet è gratuito e non c'è alcun token. Paghi il gas di rete dal tuo saldo più la commissione del relayer, quotata prima della firma e bloccata in ciò che firmi. Firmare con uno smart account brucia diverse volte il gas di un trasferimento semplice — una firma P-256 viene verificata on-chain e la chiamata passa per l'EntryPoint ERC-4337 — e il relayer che anticipa quel gas viene pagato 3× ciò che anticipa. Ogni rete ha bisogno anche di un piccolo deposito non rimborsabile per attivare il suo account di relayer del gas, che Vela copre per i wallet nuovi dove può. Fai girare <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">il tuo relay</a> e resta solo il gas. Dettaglio completo in <a href=\"/docs/networks-and-fees\">Reti e commissioni</a>."
+					"a": "Il wallet è gratuito e non c'è alcun token. Paghi il gas di rete dal tuo saldo più la commissione del relayer. Firmare con uno smart account costa più gas di un trasferimento semplice — una firma P-256 viene verificata on-chain e la chiamata passa per l'EntryPoint ERC-4337 — e il relayer che anticipa quel gas viene pagato più di quanto il gas costi on-chain; la differenza è ciò che tiene in piedi il servizio. Il totale è quotato prima della firma ed è scritto nella transazione che firmi, quindi ciò che hai firmato è ciò che viene addebitato. Ogni rete ha bisogno anche di un piccolo deposito non rimborsabile per attivare il suo account di relayer del gas, che Vela copre per i wallet nuovi dove può. Il relayer è sostituibile nelle impostazioni, oppure <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">fai girare il tuo</a>. Dettaglio completo in <a href=\"/docs/networks-and-fees\">Reti e commissioni</a>."
 				},
 				{
 					"q": "Quali chain e quali token contiene?",
@@ -474,5 +474,11 @@
 		},
 		"fundingNote": "I download negli store sono a pagamento, ed è così che un piccolo team indipendente finanzia il costruire Vela allo scoperto. È tutto open source, quindi puoi sempre compilartelo da solo — stessa app, nessun costo.",
 		"storeNote": "Non è ancora negli store. Fino ad allora, ogni build è su GitHub."
+	},
+	"_fingerprints": {
+		"home": "0047eab5a777",
+		"about": "669db59e91a0",
+		"roadmap": "df15b90319f9",
+		"getStarted": "dbbb0da3f5cc"
 	}
 }

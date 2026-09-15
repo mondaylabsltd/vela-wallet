@@ -127,12 +127,12 @@
 			"lede": "Trois raisons de ne pas utiliser Vela — pendant que votre argent est encore ailleurs.",
 			"items": [
 				{
-					"title": "Le même transfert coûte ici plusieurs fois plus cher.",
-					"body": "Une signature passkey est vérifiée on-chain et la transaction passe par l'EntryPoint ERC-4337 : elle brûle donc plusieurs fois le gas d'un transfert simple — et le relayeur qui avance ce gas est payé 3× ce qu'il avance. Le total est annoncé avant la signature et fait partie de ce que vous signez : il ne peut plus bouger ensuite. <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">Faites tourner votre propre relais</a> et il ne reste que le gas."
+					"title": "Chaque transaction paie des frais qui font tourner le relais.",
+					"body": "Une signature passkey est vérifiée on-chain et la transaction passe par l'EntryPoint ERC-4337, ce qui consomme déjà plus de gas qu'un simple transfert. Le relais avance ce gas et soumet la transaction ; il reçoit plus que ce que le gas coûte réellement on-chain — la différence est ce qui fait tourner le service. Vous voyez le total avant de signer, et il est inscrit dans la transaction que vous signez : ce que vous avez signé est ce qui est facturé, et cela ne bouge plus ensuite. Le relais se remplace dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faites tourner le vôtre</a>."
 				},
 				{
-					"title": "Une passkey synchronisée fait de votre compte Apple ou Google l'une des clés.",
-					"body": "Qui contrôle ce compte et peut déverrouiller un appareil avec lequel il se synchronise peut signer. Si ce n'est pas acceptable, créez le portefeuille avec une clé de sécurité USB/NFC : ce choix existe dès la <em>première</em> clé, pas seulement pour les suivantes. Et des clés supplémentaires sont autant d'entrées en plus, pas une seconde serrure : n'importe laquelle signe seule."
+					"title": "Ce qui détient votre clé, c'est ce à quoi vous devez faire confiance.",
+					"body": "Une passkey se synchronise avec votre compte Apple ou Google, ou bien vit sur une clé de sécurité USB/NFC ; dans les deux cas vous faites confiance à cette chose — le compte, ou le fabricant ; le matériel a eu ses propres défaillances. Peur de perdre un appareil : créez plusieurs clés au moment de créer le portefeuille, sur des appareils différents. Peur du vol : qui contrôle ce compte Apple ou Google et peut déverrouiller un appareil synchronisé peut signer, alors protégez-le comme le portefeuille lui-même. Peur du matériel : la toute première clé peut déjà être une clé de sécurité, choisissez un fabricant en qui vous avez confiance. Une chose à savoir dans les deux cas — n'importe quelle clé signe seule, donc chaque clé supplémentaire est une porte d'entrée de plus : un chemin de retour, pas un second verrou."
 				},
 				{
 					"title": "Le code de Vela n'a jamais été audité de façon indépendante.",
@@ -315,7 +315,7 @@
 				},
 				{
 					"q": "Combien ça coûte à l'usage ?",
-					"a": "Le portefeuille est gratuit et il n'y a pas de jeton. Vous payez le gas réseau depuis votre propre solde, plus les frais du relayeur, annoncés avant la signature et verrouillés dans ce que vous signez. La signature par compte intelligent brûle plusieurs fois le gas d'un transfert simple — une signature P-256 est vérifiée on-chain et l'appel passe par l'EntryPoint ERC-4337 — et le relayeur qui avance ce gas est payé 3× ce qu'il avance. Chaque réseau demande aussi un petit dépôt non remboursable pour activer son compte de relayeur de gas, que Vela prend en charge pour les nouveaux portefeuilles quand c'est possible. Faites tourner <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">votre propre relais</a> et il ne reste que le gas. Détail complet dans <a href=\"/docs/networks-and-fees\">Réseaux et frais</a>."
+					"a": "Le portefeuille est gratuit et il n'y a pas de jeton. Vous payez le gas réseau depuis votre propre solde, plus les frais du relayeur. La signature par compte intelligent coûte plus de gas qu'un transfert simple — une signature P-256 est vérifiée on-chain et l'appel passe par l'EntryPoint ERC-4337 — et le relayeur qui avance ce gas est payé plus que le gas ne coûte on-chain ; la différence fait tourner le service. Le total est annoncé avant la signature et inscrit dans la transaction que vous signez : ce que vous avez signé est ce qui est facturé. Chaque réseau demande aussi un petit dépôt non remboursable pour activer son compte de relayeur de gas, que Vela prend en charge pour les nouveaux portefeuilles quand c'est possible. Le relayeur est interchangeable dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faites tourner le vôtre</a>. Détail complet dans <a href=\"/docs/networks-and-fees\">Réseaux et frais</a>."
 				},
 				{
 					"q": "Quelles chaînes et quels jetons peut-il détenir ?",
@@ -476,7 +476,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "b5fa0b1af9d6",
+		"home": "0047eab5a777",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
