@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import Globe from '$lib/components/Globe.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
 	import { LOCALES, pathFor } from '$lib/i18n/locales';
@@ -18,9 +19,7 @@
 	const homeState = $derived(namespaceState('home', data.locale));
 	const alternates = $derived(translatedLocales('home'));
 	/** Internal links written English-relative, served under the reader's prefix. */
-	const L = $derived((path: string) =>
-		path.startsWith('#') ? path : pathFor(data.locale, path)
-	);
+	const L = $derived((path: string) => (path.startsWith('#') ? path : pathFor(data.locale, path)));
 
 	/**
 	 * The colour of each comparison cell. Deliberately NOT in the message
@@ -354,22 +353,14 @@
 				{m.chrome.nav.alpha}
 			</a>
 		</div>
+		<!-- Two links. "How it works", "Pricing", GitHub and "Sign in" came out on
+		     2026-09-15: the first screen's job is one question, and a six-item bar
+		     above it was answering five others. Every one of them is still on the
+		     page — the sections are a scroll away, the code is the hero's second
+		     button, and the wallet is behind "Getting started". -->
 		<div class="nav-links">
 			<a href="#why">{m.chrome.nav.whyVela}</a>
-			<a href="#how-it-works">{m.chrome.nav.howItWorks}</a>
-			<a href="#pricing">{m.chrome.nav.pricing}</a>
 			<a href="#faq">{m.chrome.nav.faq}</a>
-
-			<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
-				>GitHub</a
-			>
-			<a
-				href="https://wallet.getvela.app/"
-				target="_blank"
-				rel="noopener"
-				data-rybbit-event="cta_click"
-				data-rybbit-prop-location="nav-signin">{m.chrome.nav.signIn}</a
-			>
 		</div>
 		<LanguageSwitcher locale={data.locale} />
 		<ThemeToggle />
@@ -378,60 +369,88 @@
 
 <!-- Hero -->
 <section class="hero">
+	<!-- Left: the claim and the choice. Right: the globe and the one number on
+	     this page nobody can fake. The four hooks used to sit on the right and
+	     made the first screen a page to read rather than a thing to answer; they
+	     now have a screen of their own, one scroll down. -->
 	<div class="container hero-grid">
 		<div class="hero-text">
 			<h1>{m.home.hero.headline}</h1>
 			<p class="subtitle">{m.home.hero.subtitle}</p>
-			<div class="hero-cta">
-				<div class="hero-buttons">
-					<!-- Not straight to the web wallet any more: the same wallet now ships
-					     as a desktop app, two mobile apps and an extension, so the first
-					     click is a choice, not a destination. -->
-					<a
-						href={pathFor(data.locale, '/get-started')}
-						class="btn btn-primary btn-hero"
-						data-rybbit-event="cta_click"
-						data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
-					>
-					<a
-						href="https://github.com/mondaylabsltd/vela-wallet"
-						target="_blank"
-						rel="noopener"
-						class="btn btn-outline btn-hero"
-						data-rybbit-event="cta_click"
-						data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
-					>
-				</div>
+			<div class="hero-buttons">
+				<!-- Not straight to the web wallet any more: the same wallet now ships
+				     as a desktop app, two mobile apps and an extension, so the first
+				     click is a choice, not a destination. -->
+				<a
+					href={pathFor(data.locale, '/get-started')}
+					class="btn btn-primary btn-hero"
+					data-rybbit-event="cta_click"
+					data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
+				>
+				<a
+					href="https://github.com/mondaylabsltd/vela-wallet"
+					target="_blank"
+					rel="noopener"
+					class="btn btn-outline btn-hero"
+					data-rybbit-event="cta_click"
+					data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
+				>
 			</div>
+		</div>
 
-			<!-- The on-chain wallet count, stamped rather than stated. It is the one
-			     number on this page that nobody can fake: it is read live from the
-			     registry contract, so it is presented like a seal on a document —
-			     and it links to the registry so the claim can be checked. Hidden
-			     entirely when every RPC fails: a seal with no number is worse than
-			     no seal. -->
+		<!-- The wallet count, read live from the registry contract and set over a
+		     slowly turning globe: a running total rather than a stamp. The globe
+		     is abstract on purpose — we do not know where these wallets were
+		     created, and a dotted map would be inventing that. The number links
+		     to the registry so the claim can be checked, and the whole block is
+		     dropped when every RPC fails: a counter with no number is worse than
+		     no counter. -->
+		<div class="hero-globe">
+			<Globe />
 			{#if !countFailed}
 				<a
-					class="seal"
+					class="counter"
 					href={resolve('/registry')}
 					title={m.home.seal.verify}
 					data-rybbit-event="registry_open"
 				>
-					<span class="seal-dot" aria-hidden="true"></span>
 					{#if countReady}
-						<span class="seal-count">{displayCount.toLocaleString()}</span>
+						<span class="counter-count">{displayCount.toLocaleString()}</span>
 					{:else}
-						<span class="seal-skeleton" aria-label={m.home.seal.loading}></span>
+						<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
 					{/if}
-					<span class="seal-label">{m.home.seal.label}</span>
+					<span class="counter-label">
+						<span class="counter-dot" aria-hidden="true"></span>
+						{m.home.seal.label}
+					</span>
 				</a>
 			{/if}
 		</div>
-		<!-- The three facts a sceptic checks before trusting a wallet with money.
-		     Every line is verifiable from the page below it or from the repo —
-		     nothing here is a claim the docs don't already make. ERC-4337 and
-		     "100% open source" used to be rows of their own; both are still stated
-		     in the trust strip and the technical-details table below. -->
+	</div>
+	<div class="scroll-hint">
+		<svg
+			width="20"
+			height="20"
+			fill="none"
+			viewBox="0 0 24 24"
+			stroke="currentColor"
+			stroke-width="2"
+			><path
+				d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/></svg
+		>
+	</div>
+</section>
+
+<!-- The four facts a sceptic checks before trusting a wallet with money. They
+     get the second screen to themselves, so the reader meets them one row at a
+     time instead of all at once next to the headline. Every line is verifiable
+     from the page below it or from the repo — nothing here is a claim the docs
+     don't already make. -->
+<section id="facts" class="facts">
+	<div class="container">
 		<dl class="hero-facts">
 			{#each m.home.hero.facts as fact, i (fact.term)}
 				<div class="fact">
@@ -448,21 +467,6 @@
 				</div>
 			{/each}
 		</dl>
-	</div>
-	<div class="scroll-hint">
-		<svg
-			width="20"
-			height="20"
-			fill="none"
-			viewBox="0 0 24 24"
-			stroke="currentColor"
-			stroke-width="2"
-			><path
-				d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-			/></svg
-		>
 	</div>
 </section>
 
@@ -770,19 +774,38 @@
 		align-items: center;
 		position: relative;
 	}
+	/* Text left, globe right. The fact list that used to hold the right-hand
+	   column is a section of its own now, so this screen carries one sentence,
+	   one choice and one number — and a lot of air. */
 	.hero-grid {
 		display: grid;
-		grid-template-columns: 1.05fr 0.95fr;
-		gap: 64px;
-		/* Both columns run the full height of the spread, so the headline and the
-		   first claim share a top edge and the seal and the last claim share a
-		   bottom one. Nothing floats. */
+		grid-template-columns: 1fr 0.85fr;
+		gap: 72px;
+		/* Both columns run the full height of the spread so the two pairs of edges
+		   line up: the headline starts where the globe starts, and the buttons end
+		   where the counter ends. Nothing floats. */
 		align-items: stretch;
 	}
 	.hero-text {
 		text-align: left;
+		/* A readable measure even on a wide window; the column can be wider than
+		   the words. */
+		max-width: 620px;
 		display: flex;
 		flex-direction: column;
+	}
+	.hero-globe {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-self: center;
+	}
+	/* The two bottom edges. Whichever column is taller sets the height; the
+	   other's slack is taken up above these, never below them. */
+	.hero-buttons,
+	.counter {
+		margin-top: auto;
 	}
 	h1 {
 		font-size: clamp(2.75rem, 6vw, 4.5rem);
@@ -817,14 +840,7 @@
 		font-size: 1.2rem;
 		line-height: 1.6;
 		max-width: 460px;
-		margin-bottom: 36px;
-	}
-	.hero-cta {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 16px;
-		margin-bottom: 24px;
+		margin: 0 0 40px;
 	}
 	.hero-buttons {
 		display: flex;
@@ -839,31 +855,37 @@
 		border-radius: 12px;
 	}
 
-	/* The fact column. Each claim sits on its own rule, the way a well-set page
-	   of an annual report does — an indented list hanging off one vertical line
-	   read as a spec sheet, which is exactly what these five lines are not. */
-	.hero-facts {
-		/* The rules must not outrun the words: the column is capped at the text
-		   measure so every hairline ends where the line above it does. */
-		max-width: 520px;
-		height: 100%;
-		margin: 0;
-		padding: 0;
+	/* ── The four claims ── */
+	/* Their own screen, vertically centred, so the reader arrives at four lines
+	   and nothing else. */
+	.facts {
+		min-height: 70vh;
 		display: flex;
-		flex-direction: column;
-		justify-content: space-between;
+		align-items: center;
+	}
+	/* Each claim sits on its own rule, the way a well-set page of an annual
+	   report does. Two columns rather than one long list: four items stacked
+	   would fill a screen by themselves and read as a spec sheet, which is
+	   exactly what these four lines are not. */
+	.hero-facts {
+		/* Capped and centred: the page is 1400px wide and these are short lines —
+		   left to fill it, each claim would sit alone at the end of a rule twice
+		   the length of its own sentence. */
+		max-width: 1040px;
+		margin: 0 auto;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		column-gap: 72px;
+		row-gap: 8px;
 	}
 	.hero-facts .fact {
-		padding: 20px 0;
+		padding: 28px 0;
 		border-top: 1px solid var(--border);
-	}
-	.hero-facts .fact:first-child {
-		border-top: none;
-		padding-top: 0;
 	}
 	.hero-facts dt {
 		font-weight: 600;
-		font-size: 1rem;
+		font-size: 1.05rem;
 		line-height: 1.4;
 		letter-spacing: -0.01em;
 		color: var(--text);
@@ -1066,79 +1088,58 @@
 			center / contain no-repeat;
 	}
 
-	/* ── The on-chain seal ──
-	   A stamp, not a chip: two hairline rings, a slight rotation, and the number
-	   set in the brand serif. Rotated back to square on hover so it reads as a
-	   thing you can press. */
-	.seal {
-		position: relative;
-		display: inline-flex;
+	/* ── The on-chain counter ──
+	   The number sits under the globe as a running total: the brand serif for the
+	   figure, a live dot and a quiet label under it. It is a link, because the
+	   claim it makes is one the reader can go and check. */
+	.counter {
+		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 2px;
-		margin-top: auto;
-		align-self: flex-start;
-		padding: 15px 26px 13px;
-		border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
-		border-radius: 14px;
-		background: var(--accent-soft);
-		color: var(--text-secondary);
+		gap: 4px;
+		padding: 6px 14px;
+		border-radius: 12px;
 		text-decoration: none;
-		transform: rotate(-2.5deg);
+		color: var(--text-secondary);
 		transition:
-			transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1),
-			border-color 0.2s,
-			box-shadow 0.25s;
+			color 0.2s,
+			background 0.2s;
 	}
-	/* The inner ring — the detail that makes it read as a stamp rather than a
-	   card. Inset so it never touches the outer one. */
-	.seal::before {
-		content: '';
-		position: absolute;
-		inset: 4px;
-		border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-		border-radius: 10px;
-		pointer-events: none;
+	.counter:hover {
+		background: var(--accent-soft);
 	}
-	.seal:hover {
-		transform: rotate(0deg);
-		border-color: var(--accent);
-		box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 16%, transparent);
-	}
-	.seal-count {
+	.counter-count {
 		font-family: var(--font-serif);
-		font-size: 2.25rem;
+		font-size: 3rem;
 		font-weight: 700;
-		line-height: 1.05;
+		line-height: 1;
 		letter-spacing: -0.02em;
 		font-variant-numeric: tabular-nums;
 		color: var(--accent);
 	}
-	.seal-label {
-		font-size: 0.66rem;
+	.counter-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		font-size: 0.7rem;
 		font-weight: 600;
 		letter-spacing: 0.09em;
 		text-transform: uppercase;
-		color: color-mix(in srgb, var(--accent) 75%, var(--text-secondary));
-		text-align: center;
-		/* One line. A stamp's band does not wrap — and "ON-CHAIN" breaking at its
-		   own hyphen was the first thing the eye caught. */
+		color: var(--text-muted);
+		/* One line: "ON-CHAIN" breaking at its own hyphen was the first thing the
+		   eye caught. */
 		white-space: nowrap;
-		line-height: 1.4;
 	}
 	/* CJK has no case, so the uppercase transform does nothing and the wide
 	   tracking just pulls the characters apart. */
-	:global(html[lang^='zh']) .seal-label,
-	:global(html[lang='ja']) .seal-label,
-	:global(html[lang='ko']) .seal-label {
+	:global(html[lang^='zh']) .counter-label,
+	:global(html[lang='ja']) .counter-label,
+	:global(html[lang='ko']) .counter-label {
 		text-transform: none;
 		letter-spacing: 0.02em;
-		font-size: 0.72rem;
+		font-size: 0.76rem;
 	}
-	.seal-dot {
-		position: absolute;
-		top: 10px;
-		right: 10px;
+	.counter-dot {
 		width: 5px;
 		height: 5px;
 		border-radius: 50%;
@@ -1146,10 +1147,10 @@
 		box-shadow: 0 0 6px color-mix(in srgb, var(--green) 50%, transparent);
 		animation: pulse-dot 2s ease-in-out infinite;
 	}
-	.seal-skeleton {
+	.counter-skeleton {
 		display: block;
-		width: 72px;
-		height: 2.25rem;
+		width: 96px;
+		height: 3rem;
 		border-radius: 6px;
 		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
 		background-size: 200% 100%;
@@ -1591,28 +1592,48 @@
 			padding-bottom: 24px;
 			min-height: 100vh;
 		}
+		/* The globe goes under the words on a phone, and everything centres. */
 		.hero-grid {
 			grid-template-columns: 1fr;
-			gap: 40px;
+			gap: 28px;
 		}
 		.hero-text {
 			text-align: center;
-			display: block;
-		}
-		.hero-cta {
-			align-items: center;
+			max-width: none;
 		}
 		.hero-buttons {
 			justify-content: center;
 		}
+		.subtitle {
+			margin-bottom: 32px;
+		}
+		/* A phone screen has to hold the headline, the choice, the globe AND the
+		   number: the globe gives up the room. */
+		.hero-globe {
+			--globe-size: 220px;
+		}
+		.counter-count {
+			font-size: 2.5rem;
+		}
+		/* Stacked on a phone, so there is no second column to line up with: the
+		   counter sits straight under the globe. */
+		.hero-buttons,
+		.counter {
+			margin-top: 0;
+		}
+		.facts {
+			/* A phone screen fits about two of these, so the section stops
+			   pretending to be exactly one screen and is simply a section. */
+			min-height: 0;
+			padding: 72px 0;
+		}
 		.hero-facts {
-			max-width: none;
-			height: auto;
+			grid-template-columns: 1fr;
+			row-gap: 0;
 			text-align: left;
 		}
-		.hero-facts .fact:first-child {
-			padding-top: 18px;
-			border-top: 1px solid var(--border);
+		.hero-facts .fact {
+			padding: 22px 0;
 		}
 		.hero-facts dd {
 			max-width: none;
