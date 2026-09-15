@@ -33,7 +33,7 @@ for (const [path, value] of Object.entries(files)) {
 }
 
 /** The page namespaces — the localizable pages that are not docs. */
-export const PAGE_NAMESPACES = ['home', 'about', 'roadmap'] as const;
+export const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted'] as const;
 export type PageNamespace = (typeof PAGE_NAMESPACES)[number];
 
 /** Namespaces that must be complete in every locale (data-model §3). */

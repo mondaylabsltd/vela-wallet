@@ -353,10 +353,11 @@
 			<p class="subtitle">{m.home.hero.subtitle}</p>
 			<div class="hero-cta">
 				<div class="hero-buttons">
+					<!-- Not straight to the web wallet any more: the same wallet now ships
+					     as a desktop app, two mobile apps and an extension, so the first
+					     click is a choice, not a destination. -->
 					<a
-						href="https://wallet.getvela.app/"
-						target="_blank"
-						rel="noopener"
+						href={pathFor(data.locale, '/get-started')}
 						class="btn btn-primary btn-hero"
 						data-rybbit-event="cta_click"
 						data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
@@ -370,15 +371,30 @@
 						data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
 					>
 				</div>
-				<a
-					href="https://wallet.getvela.app/"
-					target="_blank"
-					rel="noopener"
-					class="hero-signin"
-					data-rybbit-event="cta_click"
-					data-rybbit-prop-location="hero-signin">{m.home.hero.signIn}</a
-				>
 			</div>
+
+			<!-- The on-chain wallet count, stamped rather than stated. It is the one
+			     number on this page that nobody can fake: it is read live from the
+			     registry contract, so it is presented like a seal on a document —
+			     and it links to the registry so the claim can be checked. Hidden
+			     entirely when every RPC fails: a seal with no number is worse than
+			     no seal. -->
+			{#if !countFailed}
+				<a
+					class="seal"
+					href={resolve('/registry')}
+					title={m.home.seal.verify}
+					data-rybbit-event="registry_open"
+				>
+					<span class="seal-dot" aria-hidden="true"></span>
+					{#if countReady}
+						<span class="seal-count">{displayCount.toLocaleString()}</span>
+					{:else}
+						<span class="seal-skeleton" aria-label={m.home.seal.loading}></span>
+					{/if}
+					<span class="seal-label">{m.home.seal.label}</span>
+				</a>
+			{/if}
 		</div>
 		<!-- The three facts a sceptic checks before trusting a wallet with money.
 		     Every line is verifiable from the page below it or from the repo —
@@ -408,64 +424,6 @@
 				stroke-linejoin="round"
 			/></svg
 		>
-	</div>
-</section>
-
-<!-- Trust Strip -->
-<section class="trust-strip">
-	<div class="container">
-		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-		<p class="trust-tagline">{@html m.home.trust.tagline}</p>
-		<div class="trust-row">
-			<div class="trust-chip">
-				<svg
-					width="14"
-					height="14"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html m.home.trust.chipOpenSource}
-			</div>
-			<div class="trust-chip">
-				<svg
-					width="14"
-					height="14"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html m.home.trust.chipSafe}
-			</div>
-			{#if !countFailed}
-				<div class="trust-chip">
-					<span class="live-dot"></span>
-					{#if countReady}
-						<a href={resolve('/registry')} data-rybbit-event="registry_open">
-							<span class="stat-number">{displayCount.toLocaleString()}</span>
-						</a>
-					{:else}
-						<span class="stat-skeleton" aria-label={m.home.trust.walletsLoading}></span>
-					{/if}
-
-					{m.home.trust.walletsCreated}
-				</div>
-			{/if}
-		</div>
 	</div>
 </section>
 
@@ -915,16 +873,6 @@
 		color: var(--text-secondary);
 		max-width: 38ch;
 	}
-	.hero-signin {
-		font-size: 0.85rem;
-		color: var(--text-secondary);
-		text-decoration: underline;
-		text-underline-offset: 3px;
-		transition: color 0.15s;
-	}
-	.hero-signin:hover {
-		color: var(--text);
-	}
 
 	.brand {
 		display: flex;
@@ -1134,54 +1082,93 @@
 			center / contain no-repeat;
 	}
 
-	/* ── Trust Strip ── */
-	.trust-strip {
-		padding: 32px 0 0;
-	}
-	.trust-tagline {
-		text-align: center;
-		color: var(--text-secondary);
-		font-size: 0.9rem;
-		line-height: 1.6;
-		max-width: 720px;
-		margin: 0 auto 20px;
-	}
-	.trust-tagline :global(a) {
-		color: var(--text);
-		text-decoration: underline;
-		text-underline-offset: 4px;
-	}
-	.trust-tagline :global(a:hover) {
-		color: var(--accent);
-	}
-	.trust-row {
-		display: flex;
-		justify-content: center;
-		flex-wrap: wrap;
-		gap: 12px;
-	}
-	.trust-chip {
+	/* ── The on-chain seal ──
+	   A stamp, not a chip: two hairline rings, a slight rotation, and the number
+	   set in the brand serif. Rotated back to square on hover so it reads as a
+	   thing you can press. */
+	.seal {
+		position: relative;
 		display: inline-flex;
+		flex-direction: column;
 		align-items: center;
-		gap: 6px;
-		padding: 7px 14px;
-		border-radius: 999px;
-		font-size: 0.78rem;
+		gap: 2px;
+		margin-top: 52px;
+		padding: 15px 26px 13px;
+		border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+		border-radius: 14px;
+		background: var(--accent-soft);
 		color: var(--text-secondary);
-		background: var(--bg-raised);
-		border: 1px solid var(--border);
+		text-decoration: none;
+		transform: rotate(-2.5deg);
+		transition:
+			transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1),
+			border-color 0.2s,
+			box-shadow 0.25s;
 	}
-	.trust-chip svg {
-		color: var(--text-tertiary);
-		flex-shrink: 0;
+	/* The inner ring — the detail that makes it read as a stamp rather than a
+	   card. Inset so it never touches the outer one. */
+	.seal::before {
+		content: '';
+		position: absolute;
+		inset: 4px;
+		border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+		border-radius: 10px;
+		pointer-events: none;
 	}
-	.trust-chip :global(a) {
-		color: var(--text);
-		text-decoration: underline;
-		text-underline-offset: 4px;
+	.seal:hover {
+		transform: rotate(0deg);
+		border-color: var(--accent);
+		box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 16%, transparent);
 	}
-	.trust-chip :global(a:hover) {
+	.seal-count {
+		font-family: var(--font-serif);
+		font-size: 2.25rem;
+		font-weight: 700;
+		line-height: 1.05;
+		letter-spacing: -0.02em;
+		font-variant-numeric: tabular-nums;
 		color: var(--accent);
+	}
+	.seal-label {
+		font-size: 0.66rem;
+		font-weight: 600;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: color-mix(in srgb, var(--accent) 75%, var(--text-secondary));
+		text-align: center;
+		/* One line. A stamp's band does not wrap — and "ON-CHAIN" breaking at its
+		   own hyphen was the first thing the eye caught. */
+		white-space: nowrap;
+		line-height: 1.4;
+	}
+	/* CJK has no case, so the uppercase transform does nothing and the wide
+	   tracking just pulls the characters apart. */
+	:global(html[lang^='zh']) .seal-label,
+	:global(html[lang='ja']) .seal-label,
+	:global(html[lang='ko']) .seal-label {
+		text-transform: none;
+		letter-spacing: 0.02em;
+		font-size: 0.72rem;
+	}
+	.seal-dot {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: var(--green);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--green) 50%, transparent);
+		animation: pulse-dot 2s ease-in-out infinite;
+	}
+	.seal-skeleton {
+		display: block;
+		width: 72px;
+		height: 2.25rem;
+		border-radius: 6px;
+		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
+		background-size: 200% 100%;
+		animation: stat-shimmer 1.3s ease-in-out infinite;
 	}
 
 	/* ── Networks (inside Technical details) ── */

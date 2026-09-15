@@ -69,9 +69,7 @@ describe('catalog()', () => {
 	});
 
 	it('leaves external links and anchors alone', () => {
-		expect(catalog('ja').home.trust.tagline).toContain(
-			'href="https://github.com/mondaylabsltd/vela-wallet"'
-		);
+		expect(catalog('ja').home.doesLess.p2).toContain('href="https://walletpair.org/"');
 	});
 
 	it('keeps chrome and notice readable in a locale whose pages fall back', () => {

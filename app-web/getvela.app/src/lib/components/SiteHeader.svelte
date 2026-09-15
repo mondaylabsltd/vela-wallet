@@ -67,11 +67,11 @@
 				rel="noopener"
 				onclick={() => (open = false)}>GitHub</a
 			>
+			<!-- Same destination as the hero button: the wallet ships four ways now,
+			     so the header CTA opens the chooser rather than assuming the web. -->
 			<a
 				class="cta"
-				href="https://wallet.getvela.app/"
-				target="_blank"
-				rel="noopener"
+				href={pathFor(active, '/get-started')}
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="header"
 				onclick={() => (open = false)}>{m.chrome.nav.createWallet}</a

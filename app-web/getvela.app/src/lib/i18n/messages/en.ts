@@ -51,7 +51,7 @@ export const en = {
 			howItWorks: 'How it works',
 			pricing: 'Pricing',
 			faq: 'FAQ',
-			createWallet: 'Create wallet',
+			createWallet: 'Get Vela',
 			signIn: 'Sign in',
 			/** aria-labels — read aloud, never seen. Still copy. */
 			primary: 'Primary',
@@ -122,9 +122,8 @@ export const en = {
 			headline: 'An Ethereum wallet you actually own',
 			subtitle:
 				'Sign with a passkey Vela never sees. Open source and self-hostable on most EVM chains — so it keeps working even if we disappear.',
-			ctaCreate: 'Create a wallet — no seed phrase',
+			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
-			signIn: 'Already have a wallet? Sign in',
 			facts: [
 				{
 					term: 'Safe v1.4.1, unmodified',
@@ -143,13 +142,16 @@ export const en = {
 			]
 		},
 
-		trust: {
-			tagline: `Don't trust us — verify. Every line is on <a href="${GITHUB}" target="_blank" rel="noopener">GitHub</a>, every wallet is on-chain, and <a href="/docs/security-audits" data-rybbit-event="audits_open" data-rybbit-prop-location="trust-tagline">every audit and known issue is documented</a>.`,
-			chipOpenSource: `<a href="${GITHUB}" target="_blank" rel="noopener">100% open source</a> — app + all our services`,
-			chipSafe: `<a href="${SAFE_REPO}" target="_blank" rel="noopener">Safe v1.4.1</a> — <a href="/docs/security-audits" data-rybbit-event="audits_open" data-rybbit-prop-location="trust-chip">audited, unmodified</a>`,
-			/** Follows the number: "1,234 wallets created on-chain". */
-			walletsCreated: 'wallets created on-chain',
-			walletsLoading: 'Loading wallet count'
+		/**
+		 * The on-chain wallet counter, rendered in the hero as a stamped seal.
+		 * The label is a noun phrase, not a sentence fragment: the number sits
+		 * above it, so "355 wallets created on-chain" reads as two lines, not as
+		 * a sentence cut in half.
+		 */
+		seal: {
+			label: 'wallets created on-chain',
+			loading: 'Loading wallet count',
+			verify: 'Every wallet is on-chain — see the registry'
 		},
 
 		doesLess: {
@@ -455,6 +457,58 @@ export const en = {
 				body: 'The wallet launches on the web, from a single codebase that also builds for iOS and Android — Safe smart accounts (ERC-4337), passkey sign-in, and no seed phrase, from day one.'
 			}
 		]
+	},
+
+	getStarted: {
+		meta: {
+			title: 'Get Vela',
+			description:
+				'Vela runs in your browser today, with desktop, mobile and a browser extension built from the same code. Pick the one you want.'
+		},
+		heading: 'Get Vela',
+		lede: 'One wallet, one address, built from one codebase. Start in your browser — nothing to install — or take the same wallet to your desktop, your phone, or your browser toolbar.',
+		recommended: 'Recommended',
+		availableNow: 'Available now',
+		comingSoon: 'Coming soon',
+		githubCta: 'Download from GitHub Releases',
+		platforms: {
+			web: {
+				title: 'Web',
+				blurb:
+					'Nothing to install and nothing to update. Open it, authenticate with your passkey, and your wallet is there — on any device with a recent browser.',
+				action: 'Open the web wallet'
+			},
+			desktop: {
+				title: 'Desktop',
+				systems: 'macOS · Windows · Linux',
+				blurb:
+					'A native app for when the wallet is something you keep open. Same address, same passkey, same chains.',
+				stores: 'Mac App Store · Microsoft Store'
+			},
+			mobile: {
+				title: 'Mobile',
+				systems: 'iOS · Android',
+				blurb:
+					'Sign with Face ID or a fingerprint on the device your passkey already lives on. The builds are in real-device testing.',
+				stores: 'App Store · Google Play'
+			},
+			extension: {
+				title: 'Browser extension',
+				systems: 'Chrome · Edge · Brave',
+				blurb:
+					'Puts the wallet in your toolbar and lets dApps talk to it directly — no pairing step, no second device.',
+				stores: 'Chrome Web Store'
+			}
+		},
+		/**
+		 * The honest version of "please buy it from the store". A store download
+		 * is paid and it is how the project is funded; building from source is
+		 * free and always will be. Saying both is the same posture the pricing
+		 * section already takes — you pay for convenience, not access.
+		 */
+		fundingNote:
+			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. Everything is open source, so you can always build it yourself instead — same app, no charge.',
+		storeNote: 'Not on the stores yet. Until then, every build is on GitHub.'
 	}
 } as const;
 

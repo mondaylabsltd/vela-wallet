@@ -9,7 +9,7 @@
 			"howItWorks": "工作原理",
 			"pricing": "价格",
 			"faq": "常见问题",
-			"createWallet": "创建钱包",
+			"createWallet": "获取 Vela",
 			"signIn": "登录",
 			"primary": "主导航",
 			"toggleMenu": "展开菜单"
@@ -62,9 +62,8 @@
 		"hero": {
 			"headline": "真正属于你的以太坊钱包",
 			"subtitle": "用通行密钥签名，Vela 永远看不到你的密钥。开源、可自部署、支持大多数 EVM 链——即使 Vela 消失，钱包照常可用。",
-			"ctaCreate": "创建钱包 — 无需助记词",
+			"ctaCreate": "开始使用",
 			"ctaCode": "查看源码",
-			"signIn": "已有钱包？登录",
 			"facts": [
 				{
 					"term": "Safe v1.4.1，未经改动",
@@ -80,12 +79,10 @@
 				}
 			]
 		},
-		"trust": {
-			"tagline": "别信我们——自己去验证。每一行代码都在 <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">GitHub</a> 上，每一个钱包都在链上，<a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"trust-tagline\">每一份审计和每一个已知问题都写在文档里</a>。",
-			"chipOpenSource": "<a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">100% 开源</a> — 应用加我们所有的服务",
-			"chipSafe": "<a href=\"https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1\" target=\"_blank\" rel=\"noopener\">Safe v1.4.1</a> — <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"trust-chip\">已审计，未改动</a>",
-			"walletsCreated": "个钱包已在链上创建",
-			"walletsLoading": "正在读取钱包数量"
+		"seal": {
+			"label": "已在链上创建的钱包",
+			"loading": "正在读取钱包数量",
+			"verify": "每一个钱包都在链上 — 查看注册表"
 		},
 		"doesLess": {
 			"heading": "一款刻意做得更少的钱包。",
@@ -262,13 +259,22 @@
 			"sub": "网页钱包已经上线，免费。不用安装，不用助记词——验证身份就能开始。",
 			"button": "创建钱包",
 			"cards": [
-				{ "title": "开源", "body": "每一行代码都在 GitHub 上。别信，去验证。" },
-				{ "title": "可自行部署", "body": "打包器和各项服务，你都可以自己跑。" },
+				{
+					"title": "开源",
+					"body": "每一行代码都在 GitHub 上。别信，去验证。"
+				},
+				{
+					"title": "可自行部署",
+					"body": "打包器和各项服务，你都可以自己跑。"
+				},
 				{
 					"title": "久经检验",
 					"body": "你的账户就是一个<a href=\"/docs/security-audits\">经过审计</a>、未经改动的 Safe v1.4.1。"
 				},
-				{ "title": "无需助记词", "body": "用通行密钥签名。没有任何东西需要抄下来。" }
+				{
+					"title": "无需助记词",
+					"body": "用通行密钥签名。没有任何东西需要抄下来。"
+				}
 			],
 			"divider": "手机应用即将上线",
 			"followDesc": "关注 <a href=\"https://x.com/realvelawallet\" target=\"_blank\" rel=\"noopener\">@realvelawallet</a>，iOS 与 Android 一上线我们就会发消息。",
@@ -375,5 +381,44 @@
 				"body": "钱包在网页端发布，源自同一份也能构建 iOS 与 Android 的代码库——从第一天起就是 Safe 智能账户（ERC-4337）、通行密钥登录、以及没有助记词。"
 			}
 		]
+	},
+	"getStarted": {
+		"meta": {
+			"title": "获取 Vela",
+			"description": "Vela 今天就能在浏览器里用，桌面端、移动端和浏览器扩展都由同一份代码构建。挑一个你想用的。"
+		},
+		"heading": "获取 Vela",
+		"lede": "一个钱包、一个地址，出自同一份代码。从浏览器开始——不用安装任何东西——或者把同一个钱包带到你的电脑、手机，或浏览器工具栏上。",
+		"recommended": "推荐",
+		"availableNow": "现已可用",
+		"comingSoon": "即将上架",
+		"githubCta": "从 GitHub Releases 下载",
+		"platforms": {
+			"web": {
+				"title": "网页版",
+				"blurb": "不用安装，也不用更新。打开它，用通行密钥验证身份，钱包就在那里——任何装有较新浏览器的设备都可以。",
+				"action": "打开网页钱包"
+			},
+			"desktop": {
+				"title": "桌面版",
+				"systems": "macOS · Windows · Linux",
+				"blurb": "当钱包是你会一直开着的东西时，就用原生应用。同一个地址、同一把通行密钥、同样的链。",
+				"stores": "Mac App Store · Microsoft Store"
+			},
+			"mobile": {
+				"title": "移动版",
+				"systems": "iOS · Android",
+				"blurb": "在通行密钥本来就所在的那台设备上，用 Face ID 或指纹签名。构建版本正在真机测试中。",
+				"stores": "App Store · Google Play"
+			},
+			"extension": {
+				"title": "浏览器扩展",
+				"systems": "Chrome · Edge · Brave",
+				"blurb": "把钱包放进工具栏，让 dApp 直接和它对话——不用配对，也不用第二台设备。",
+				"stores": "Chrome 应用商店"
+			}
+		},
+		"fundingNote": "应用商店里的下载是付费的，这是一支独立小团队公开开发 Vela 的经费来源。所有代码都开源，所以你也可以自己构建——同一个应用，不收一分钱。",
+		"storeNote": "目前还没有上架任何应用商店。在那之前，每一个构建版本都在 GitHub 上。"
 	}
 }
