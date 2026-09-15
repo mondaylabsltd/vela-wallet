@@ -78,10 +78,11 @@ counterparty, the transaction hash, a token's contract. `FactRowModel` carries
 `copyValue` now (the whole address, never the ellipsed one), as Android's has
 since 043, and every copy goes through `velaCopy`.
 
-**删除记录** on the open transaction, where the web puts it — not a swipe. It was
-dead on all three clients: the web draws the button and never sets its label,
-Android's `deleteActivity` has no caller. `history.deleteRecord` was in the
-corpus the whole time.
+**删除记录** on the open transaction, where the web puts it — not a swipe. It
+was dead on both PHONES: Android's `deleteActivity` had no caller and iOS drew
+no button. The web has had it since 028 (`liveTxDetail` sets the label); an
+earlier draft of this file said otherwise and was wrong. `history.deleteRecord`
+was in the corpus the whole time.
 
 **Every avatar opens the viewer**, through an environment opener the avatar
 itself reads (Android's `LocalIdenticonViewer`). Threading a callback through
@@ -132,7 +133,7 @@ languages, and Android has used it since 044. The copy ruler found it.
 | 10 · identicon viewer from every avatar | **live** |
 | 12 · hero status line → rescue | **live**, both sheets live with it |
 | 26 · asset-limited receive (r3) | **live** |
-| 28 · activity 删除 | **live on iOS**, from the detail. Owed on web (set `deleteLabel`) and Android (call `deleteActivity`) |
+| 28 · activity 删除 | **live on iOS and Android**. The web was never missing it — `liveTxDetail` has set `deleteLabel` all along and only the FIXTURE omits it, which is the correction this spec owes its own earlier claim |
 | 33 · 存储 | **live** — measured |
 | 34 · 关于 | **live** — the running build |
 | 37 · native transaction detail (a3) | **recorded**: reachable in substance — the live detail renders both directions. What a3 draws and live omits is the 代币合约 row, and no client can fill it (`LocalTransaction` stores a symbol, not a contract) |
@@ -157,9 +158,7 @@ precedent (37, 38) want a decision rather than a drawing.
    removes the address book in one touch. Say whether that wants a gate; a
    confirm sheet would be new UI, so it is not built here.
 4. **t3b**: delete the drawn native-coin tab, or keep it as a picture.
-5. **Row 28 on the other two clients.** One line each, but they are not this
-   branch's tree: web `TxDetail` needs `deleteLabel` set, Android's
-   `deleteActivity` needs a caller.
+5. **The browser and app.uniswap.org** — see the last section.
 
 ## The honest residue
 
@@ -220,3 +219,103 @@ the `VELA_LANG` regression.
 screens that need a wallet — the receipt's three stages, a token's receive
 code, the hero's status line. They need a session, and a session needs a
 finger.
+
+
+---
+
+# After the founder's second pass (2026-09-15)
+
+Six more asks, and one of them found a bug that made four settings dead.
+
+## 1 · 清除 asks before it removes — **done on three clients**
+
+"联系人与分组 · 清除" took the whole address book on a single tap. It now asks,
+on iOS, Android and the web, with a sheet built entirely from what the row
+already says: its label, its group's warning, its own action word. **Zero new
+corpus keys** — a confirmation whose sentences had to be invented would be a
+confirmation in one language.
+
+**Desktop is the exception, and the reason is not laziness:** its storage rows
+have no `on_click` at all (`settings/components.rs`). There is no one-click
+deletion there to gate.
+
+## 2 · t3b stays — **recorded**
+
+The drawn native-coin tab keeps its place. Still unreachable on both phones,
+now by decision rather than by omission.
+
+## 3 · 删除记录 — **done**, and a correction
+
+Live on both phones. The web already had it; the claim above is fixed.
+
+## 5 · The first group was behind the first group — **done**
+
+Both phones drew the groups header on "a group exists", so 新建分组 appeared
+only once a group did. The header now shows whenever there is somebody to
+group; an empty book keeps its own invitation. The web already did this.
+
+## 6 · The founder's own report: four settings were dead
+
+> 设置页面切换语言似乎没有生效,切换首字母和图形头像也没有理解生效
+
+Both true, and the first was not the language code.
+
+**Every select sheet was inert.** `SelectRow` carried its own
+`.onTapGesture { onTap(row.id) }` with `onTap` **defaulted to a no-op**, and
+`SelectSheetBody` wraps that row in a `Button`. The inner gesture is inside the
+button, so it won: every tap ran the no-op. **Language, currency, number
+format, date format, time format — five pickers, dead, through one default
+argument.** Proved on the iPhone 11 (the sheet stayed open, the selection never
+moved) and fixed by making the handler optional: a row with nobody to call
+attaches no gesture and cannot eat anybody's tap.
+
+**The avatar style reached nothing.** `AvatarPreference.style` is a static and
+`IdenticonAvatar` read it; a static cannot invalidate a view, so the choice was
+stored and every avatar stayed as it was. It is an environment value now
+(`\.avatarStyle` — Android's `LocalAvatarStyle`), injected at the root. Proved
+by cropping a contact's avatar on the phone and comparing the bytes.
+
+**The formats had the same shape one level up.** `Formats` and `UiScale` are
+statics, so the settings page (which rebuilds from `preferences`) updated while
+every other screen kept yesterday's shape. The root body reads the four choices
+now. Deliberately not an `.id(…)`: re-identifying the root would tear down
+every sheet, flow and scroll position to change a comma.
+
+Four device tests drive these on the phone, and two are written against traps
+this session fell into: a full-screen pixel comparison passes on the segmented
+control's own highlight, and the settings account row has no avatar at all
+without a wallet.
+
+## 7 · 网络 LOGO · 代币 LOGO — **done**
+
+`Marks` is Android's file ported, rules and all; `RemoteLogoView` is the
+loader. Read on the iPhone 11, in the parallel space: the receive list with
+nine chains in their own brand marks, and the home showing xDAI on Gnosis with
+the Gnosis owl and **no badge** — the "don't say it twice" rule, visible.
+
+## 8 · The parallel space, and Uniswap
+
+The space works on this phone: the golden Safe opens, reads its balances
+(0.48967 xDAI · ¥3.29) and draws them. **Nothing was spent** — a send ends at a
+slider that moves real money, and that is the founder's to pull.
+
+**The browser loads a real site**: `example.com` renders with `🔒 example.com`
+in the address bar. **`https://app.uniswap.org/` does not**: white page, empty
+address bar, after sixty seconds — and **no error**. The corpus has
+`connect.browser.loadFailed` ("Couldn't load this page") with a retry beside
+it, and neither appeared. So two things are owed, and the second is the worse
+one:
+
+1. why that navigation never commits;
+2. why a page that fails to load says nothing at all.
+
+Recorded rather than fixed: it needs the navigation delegate read against
+`WKWebView`'s failure callbacks, which is its own cut.
+
+## Where this leaves the four rulers
+
+| | 057's end | now |
+|---|---|---|
+| hermetic tests | 564 | **584 in 75 suites** |
+| device tests (iOS) | 0 | **11** across three files |
+| Release / Archive | crashes the compiler | succeeds |
