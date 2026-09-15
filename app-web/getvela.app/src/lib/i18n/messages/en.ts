@@ -287,14 +287,14 @@ export const en = {
 			next: {
 				label: 'Built and tested — not live yet',
 				title: 'A signing page you host yourself.',
-				body: 'A zero-dependency static page — and a Chrome extension built from the same folder — that decodes the raw transaction itself and puts the real calldata in front of you immediately before your passkey signs it. No framework, no bundler, no network calls. The point is not that our copy is safer: deploy it yourself, or run it from localhost, and the code that shows you the transaction is code you put there — replacing it means getting into your hosting, not ours. Once an account holds money you would mind losing, this is how to sign.'
+				body: 'A zero-dependency static page — and a Chrome extension built from the same folder — that decodes the raw transaction itself and puts the real calldata in front of you immediately before your passkey signs it. No framework, no bundler, no network calls. The point is not that our copy is safer: deploy it yourself, or run it from localhost, and the code that shows you the transaction is code you put there — replacing it means getting into your hosting, not ours. The moment an account holds money you would mind losing, this becomes how you sign — not for a particular transaction, but from then on.'
 			},
 			aside: {
-				title: 'When to use it',
+				title: 'When to start using it',
 				items: [
-					'Moving an amount you would not want to be wrong about.',
-					"Approving a contract you haven't used before.",
-					"An account holding money you would mind losing — or any time a dApp's own interface is the only thing telling you what you are signing."
+					'The day the account starts holding money you would mind losing — from then on, every signature.',
+					'Not "when the amount is large": a small approval can empty an account just as thoroughly as a large transfer.',
+					'It is a way to sign, not an occasion. Sign this way every day, or you will not be signing this way on the day it matters.'
 				]
 			}
 		},
