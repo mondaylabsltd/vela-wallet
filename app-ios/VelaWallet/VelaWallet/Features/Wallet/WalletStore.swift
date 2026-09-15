@@ -98,10 +98,29 @@ final class WalletStore {
     }
 
     /// A mid-fetch snapshot from the executor's fan-out.
+    ///
+    /// **Tagged with the account it is for.** The core requires it — "a stale
+    /// account's stream can never paint the new account (invariant ⑤)" — and
+    /// this client left the field out, so every snapshot was REFUSED:
+    ///
+    ///     balance_dashboard fault: invalid event from shell: missing field `address`
+    ///
+    /// once per chain, per refresh, forever. The progressive total the fan-out
+    /// exists to paint never arrived; the home only moved when a later event
+    /// happened to carry the whole answer. Found in the device console on
+    /// 2026-09-15 while looking at something else entirely.
     func chainAssetsArrived(_ tokens: [[String: Any]]) {
-        core.dispatch(CoreJSON.string([
-            "type": "chain_assets_arrived", "tokens": tokens,
-        ]))
+        guard let address = scopedTo, !address.isEmpty else { return }
+        core.dispatch(Self.chainAssetsEvent(address: address, tokens: tokens))
+    }
+
+    /// The event, as a value, so a test can hand the REAL core the very JSON
+    /// this store sends. A test that rebuilt the shape itself would have
+    /// passed for the two specs this field was missing.
+    static func chainAssetsEvent(address: String, tokens: [[String: Any]]) -> String {
+        CoreJSON.string([
+            "type": "chain_assets_arrived", "address": address, "tokens": tokens,
+        ])
     }
 
     /// The account switcher opened (spec 056).

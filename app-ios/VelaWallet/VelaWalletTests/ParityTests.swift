@@ -371,6 +371,41 @@ struct ParityTests {
         #expect(mark.logoURLs.first == stated)
     }
 
+    // MARK: - The event the fan-out sends
+
+    /// **The core must accept the snapshot this app actually sends.**
+    ///
+    /// It did not. `chain_assets_arrived` went without the `address` the core
+    /// requires — "a stale account's stream can never paint the new account
+    /// (invariant ⑤)" — so every mid-fetch snapshot was refused:
+    ///
+    ///     balance_dashboard fault: invalid event from shell: missing field `address`
+    ///
+    /// once per chain, per refresh, since 051. The progressive total the
+    /// fan-out exists to paint never arrived. Found in the device console.
+    ///
+    /// The test hands the REAL core the REAL event: rebuilding the shape here
+    /// would have passed throughout.
+    @Test func theCoreAcceptsTheChainSnapshotThisAppSends() throws {
+        let core = BalanceDashboardCore()
+        let token: [String: Any] = [
+            "chain_id": 100, "symbol": "XDAI", "name": "xDai", "balance": "0.5",
+            "decimals": 18, "token_address": NSNull(), "price_usd": 1.0, "spam": false,
+        ]
+        let accepted = try CoreJSON.object(core.dispatch(eventJson: WalletStore.chainAssetsEvent(
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", tokens: [token]
+        )))
+        // A refused event comes back as a fault, not a view.
+        #expect(accepted["view"] != nil)
+
+        // And the field really is required — which is what makes the fix a fix
+        // rather than a coincidence.
+        let refused = try? core.dispatch(eventJson: CoreJSON.string([
+            "type": "chain_assets_arrived", "tokens": [token],
+        ]))
+        #expect(refused == nil)
+    }
+
     // MARK: - 语言
 
     /// The stored choice decides the app's language. It was written by the
