@@ -34,15 +34,20 @@
 	 * catalog holds the label, this holds the destination, so a translation can
 	 * never point a reader somewhere else.
 	 */
+	/**
+	 * Where each hook's proof lives, in the hooks' own order. The hrefs are here
+	 * rather than in the catalog so a translation can change the LABEL and never
+	 * the destination.
+	 */
 	const FACT_LINKS = [
-		{ href: '/docs/security-audits', external: false },
-		{ href: '/docs/networks-and-fees', external: false },
 		{ href: '/docs/passkeys', external: false },
+		{ href: '/docs/recovery', external: false },
+		{ href: '/docs/clear-signing', external: false },
+		{ href: '/docs/security-audits', external: false },
 		{
 			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
 			external: true
-		},
-		{ href: '/docs/clear-signing', external: false }
+		}
 	] as const;
 
 	const COMPARE_TONES = [

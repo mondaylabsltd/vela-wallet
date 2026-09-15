@@ -130,10 +130,22 @@ export const en = {
 			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
 			/**
-			 * Five hooks, written from the reader's side of the table rather than
-			 * ours. Each one names the thing they are actually afraid of — a frozen
-			 * account, a lost phone, a vendor that folds, a transaction they could
-			 * not read — and answers it in one line they could repeat to a friend.
+			 * Five hooks, ordered by the founder's own persona research
+			 * (docs/marketing/100-marketing-leads.md), not by our architecture:
+			 *
+			 *   1. no seed phrase — ranked there as the number-one hook, and
+			 *      missing from the first draft of this list entirely
+			 *   2. losing the phone — the top objection of Persona B, the
+			 *      acquisition persona
+			 *   3. blind signing — Persona A's first concern, and Persona A is
+			 *      the revenue core
+			 *   4. nobody can freeze it — the post-FTX trust line
+			 *   5. it outlives us — the one thing no competitor in the table
+			 *      below can say
+			 *
+			 * "One address, twelve chains" was dropped from this list on purpose:
+			 * the networks have a section of their own further down, and a
+			 * convenience claim was crowding out a fear.
 			 *
 			 * The substance moved into `link`, which is both the proof and the
 			 * label of the page that carries it. The hrefs live in the component
@@ -142,24 +154,24 @@ export const en = {
 			 */
 			facts: [
 				{
-					term: 'No one can freeze your money. Not even us.',
-					link: 'Unmodified Safe v1.4.1, audited'
-				},
-				{
-					term: 'One address. Every chain you use.',
-					link: 'Twelve built in, and how to add your own'
+					term: 'No seed phrase. Nothing to write down, nothing to phish.',
+					link: 'How a passkey replaces twelve words'
 				},
 				{
 					term: 'Lose your phone. Keep your wallet.',
-					link: 'Up to seven keys, any one of them signs'
+					link: 'What happens when you sign in on a new device'
+				},
+				{
+					term: "Never sign something you can't read.",
+					link: 'Every transaction in plain language first'
+				},
+				{
+					term: 'No one can freeze your money. Not even us.',
+					link: 'An unmodified Safe v1.4.1 holds it — we never can'
 				},
 				{
 					term: 'If Vela disappears, your wallet does not.',
-					link: 'Open source — self-host every part of it'
-				},
-				{
-					term: 'Never sign what you cannot read.',
-					link: 'Clear signing, down to the calldata'
+					link: 'Open source — run every part of it yourself'
 				}
 			]
 		},
