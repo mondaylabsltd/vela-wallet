@@ -292,3 +292,33 @@ Proof, with the browser pinned to `en-US` on every page:
 Eight of fifteen locales now render a number the browser would have got wrong.
 The seven that match are correct by coincidence of convention, not by accident of
 code.
+
+### T049 + T055 — six locales now carry the docs · 2026-09-15
+
+`zh` (T049), then `zh-TW`, `zh-HK`, `ja`, `ko` (T055). With English that is six
+of fifteen locales at 20/20 — four pages and sixteen docs, nothing falling back.
+
+The founder's call on scope: CJK first, the Latin-script nine (T056, T057) after,
+because those markets are the least willing to read English technical
+documentation and because three of the four are ones the founder can spot-check
+without a translator.
+
+**Three things the next locale needs to know.**
+
+1. **Markdown links are not localized for you.** The catalog's link localizer
+   only touches message strings. A translated doc must write
+   `/<tag>/docs/passkeys` itself. Getting it wrong breaks no test and no build —
+   it quietly walks the reader back into English.
+2. **`<script>` and `<Callout>` are Svelte, not prose.** The `type` and `title`
+   attributes get translated; the tags do not move.
+3. **Frontmatter titles must match `chrome.docs.titles` for that locale**, or the
+   sidebar and the page disagree with each other.
+
+**Terminology is per locale, deliberately.** zh 通行密钥 / zh-TW 密碼金鑰 /
+zh-HK 通行密鑰 for passkey; zh-TW 稽核 vs zh-HK 審計 for audit; zh-TW 網路 vs
+zh-HK 網絡. R7 is explicit that regional variants are not each other's copies,
+and zh-HK is written Cantonese in this corpus, not Traditional Mandarin.
+
+Build after the batch: **8.5 s, 306 pages** — unchanged from T059, because Shiki
+compiles each markdown file once. The remaining nine locales should cost roughly
+the same again.
