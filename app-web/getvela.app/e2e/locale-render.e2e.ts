@@ -29,15 +29,43 @@ test.describe('a locale renders server-side (FR-011, FR-014)', () => {
 });
 
 test.describe('hreflang reflects what exists, not what is supported (FR-018, FR-021)', () => {
-	test('/ advertises only the locales that genuinely have it', async ({ request }) => {
-		const html = await (await request.get('/')).text();
-		const tags = [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)"/g)].map((m) => m[1]);
-		expect(tags).toContain('en');
-		expect(tags).toContain('zh');
-		expect(tags).toContain('x-default');
-		// Nothing else is translated yet — advertising ja here would tell Google a
-		// Japanese page exists when /ja is English.
-		expect(tags).not.toContain('ja');
+	test('/ advertises exactly the locales whose page is really in that language', async ({
+		request
+	}) => {
+		// Not a snapshot of which locales are translated today — that changes every
+		// time somebody finishes one, and a hard-coded list stops testing the
+		// invariant the moment it goes out of date. This asserts the RULE: a locale
+		// is advertised if and only if its own page is not falling back to English.
+		const home = await (await request.get('/')).text();
+		const advertised = new Set(
+			[...home.matchAll(/<link rel="alternate" hreflang="([^"]+)"/g)].map((m) => m[1])
+		);
+		expect(advertised.has('en')).toBe(true);
+		expect(advertised.has('x-default')).toBe(true);
+
+		const LOCALES = [
+			'zh',
+			'zh-TW',
+			'zh-HK',
+			'ja',
+			'ko',
+			'vi',
+			'id',
+			'tr',
+			'es-MX',
+			'pt-BR',
+			'fr',
+			'de',
+			'ru',
+			'it'
+		];
+		for (const locale of LOCALES) {
+			const page = await (await request.get(`/${locale}`)).text();
+			// The notice component renders `lang="<tag>"` on itself; its presence is
+			// the page admitting it is English.
+			const fallsBack = page.includes('class="notice svelte-') || page.includes('<p class="notice');
+			expect(advertised.has(locale), `${locale}: advertised=${advertised.has(locale)} fallback=${fallsBack}`).toBe(!fallsBack);
+		}
 	});
 
 	test('a localized page canonicalizes to itself, never to English', async ({ request }) => {
