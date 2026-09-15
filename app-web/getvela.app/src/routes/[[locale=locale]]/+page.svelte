@@ -42,12 +42,9 @@
 	 * the destination.
 	 */
 	const FACT_LINKS = [
-		{ href: '/docs/security-audits', external: false },
-		{ href: '/docs/recovery', external: false },
-		// The proof of this one is a section of this same page, so the link is an
-		// anchor: nothing to load, and the reader reads the argument in place.
-		{ href: '#signing', external: false },
-		{ href: '/docs/whitepaper', external: false },
+		{ href: '/docs/account-contract', external: false },
+		{ href: '/docs/signers', external: false },
+		{ href: '/docs/bybit-attack', external: false },
 		{
 			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
 			external: true

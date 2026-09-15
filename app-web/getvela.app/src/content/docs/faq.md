@@ -41,7 +41,7 @@ plus custom networks, holding native tokens and ERC-20s. Your address is the sam
 ## How much does it cost?
 
 The wallet is free and Vela has **no token**. You pay network **gas** out of
-your own wallet balance, plus a relayer fee. The price is quoted by the bundler
+your own wallet balance, plus a relayer fee. The price is quoted by the relay
 and shown as a _network fee / relayer fee / total_ split **before you sign** —
 the exact cost of every transaction is on the confirm screen, and the quoted
 amount is part of what you sign, so it can't change afterwards. Very cheap
@@ -62,7 +62,7 @@ authoritative version.
 ## Is Vela open source?
 
 Yes — the wallet and its four backend services (chain data, passkey index,
-bundler, exchange rates) are [public on GitHub](https://github.com/mondaylabsltd/vela-wallet) under
+relay, exchange rates) are [public on GitHub](https://github.com/mondaylabsltd/vela-wallet) under
 the MIT license, and you can self-host them.
 
 ## I have a question that's not here.

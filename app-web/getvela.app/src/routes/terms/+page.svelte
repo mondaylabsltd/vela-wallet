@@ -65,7 +65,7 @@
 	<section>
 		<h2>4. Service Availability</h2>
 		<p>
-			We provide backend services (Passkey Index, Chain Data Index, Bundler) on a best-effort basis.
+			We provide backend services (Passkey Index, Chain Data Index, Relay) on a best-effort basis.
 			These services may experience downtime, rate limiting, or discontinuation.
 		</p>
 		<p>

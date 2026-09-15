@@ -136,7 +136,7 @@
 				address is visible to these providers.
 			</li>
 			<li>
-				<strong>Vela Relay</strong> — To relay ERC-4337 UserOperations to the blockchain. The bundler
+				<strong>Vela Relay</strong> — To relay ERC-4337 UserOperations to the blockchain. The relay
 				sees your signed transaction data but cannot modify it.
 			</li>
 			<li>

@@ -25,7 +25,7 @@ OS, end-to-end encrypted, and unlocked with Face ID, Touch ID, or a fingerprint.
 There are no seed phrases and no private keys for you to copy, store, or lose.
 
 Vela, the company, never holds your keys or your funds and **cannot move, freeze,
-or seize them**. The app, the transaction bundler, and the supporting services
+or seize them**. The app, the transaction relay, and the supporting services
 are all open source and self-hostable. What you trust reduces to audited smart
 contracts, your operating system's passkey vault, and — for liveness only — a
 relay you can replace or run yourself.
@@ -101,24 +101,24 @@ biometric verification every time — there is no long-lived session key. See
 3. **Sign** — your device produces a WebAuthn assertion over the
    operation hash after biometric verification.
 4. **Encode** the assertion as an **EIP-1271** contract signature.
-5. **Relay** the signed operation to the bundler, which submits it to the
+5. **Relay** the signed operation to the relay, which submits it to the
    EntryPoint.
 6. **Verify on-chain** — the Safe verifies the P-256 signature on-chain via the
    RIP-7212 precompile before executing. The precompile is a hard requirement:
    there is no fallback verifier, and Vela refuses to enable a network that
    lacks it.
 
-The bundler receives an **already-signed** operation. It cannot change the
+The relay receives an **already-signed** operation. It cannot change the
 recipient, amount, or any other field without invalidating the signature.
 
-### Bundler and gas model
+### Relay and gas model
 
 - Gas is paid **from your own wallet's balance** — in the network's native token
   by default, or in a supported stablecoin where the relay offers one. Tempo,
   which has no native coin, always settles gas in USD stablecoins. There is
   **no paymaster** and no third party sponsoring — or gating — your
   transactions.
-- The **bundler is the single source of truth for the gas price.** It quotes the
+- The **relay is the single source of truth for the gas price.** It quotes the
   price from live chain conditions; the wallet displays that quote and signs
   exactly what it shows.
 - Vela's relayer charge is deliberately simple: the total is the **network cost
@@ -133,10 +133,10 @@ recipient, amount, or any other field without invalidating the signature.
   by a **non-refundable** deposit. It can run down over time, so it may need
   **re-activating again later** — it isn't strictly a one-time deposit.
 
-The bundler is a **liveness** dependency, not a **custody** one: it can delay or
+The relay is a **liveness** dependency, not a **custody** one: it can delay or
 decline to relay, but it can never alter, forge, or steal. It is open source and
 you can run your own — and because the price is **quoted and shown** rather than
-hidden, even a self-hosted or third-party bundler's fee is always visible to you
+hidden, even a self-hosted or third-party relay's fee is always visible to you
 before you sign. See [networks & fees](/docs/networks-and-fees).
 
 ### Clear signing (ERC-7730)
@@ -181,7 +181,7 @@ not a second party who can.
   credential.
 - The **RPC providers** you query (Vela uses a multi-source pool with failover;
   you can set your own).
-- The **bundler** for liveness only — and you can self-host it.
+- The **relay** for liveness only — and you can self-host it.
 
 **Threats considered:**
 
@@ -211,7 +211,7 @@ The full recovery model, including the honest limits, is in
 ## If Vela disappears
 
 Self-custody means your keys and funds do not depend on Vela being online. Funds
-live in **your Safe contract on-chain**, and the bundler is open source and
+live in **your Safe contract on-chain**, and the relay is open source and
 replaceable.
 
 One honest caveat: WebAuthn ties a passkey to a relying-party domain
@@ -233,7 +233,7 @@ cookieless, self-hosted analytics. See the [privacy policy](/privacy).
 ## Verifiability and open source
 
 Everything is **MIT-licensed and open source** — the app and all four backend
-services (chain data, passkey index, bundler, currency rates), which you can
+services (chain data, passkey index, relay, currency rates), which you can
 **self-host** (Settings → Advanced → Service Endpoints). Read the code at
 [github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
 

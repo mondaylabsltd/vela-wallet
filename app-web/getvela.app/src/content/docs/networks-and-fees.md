@@ -1,6 +1,6 @@
 ---
 title: Networks & fees
-description: The 12 networks Vela supports, how account-abstraction gas fees work, who runs the bundler and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
+description: The 12 networks Vela supports, how account-abstraction gas fees work, who runs the relay and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
 ---
 
 <script>
@@ -46,8 +46,11 @@ recovery. That's separate from which network you transact on.
 ## How fees work (account abstraction)
 
 Vela uses **ERC-4337 account abstraction**, so a transaction isn't broadcast by
-you directly — it's a **UserOperation** handed to a **bundler**, which submits it
-on-chain and is reimbursed for the gas. A few things follow from that:
+you directly — it's a **UserOperation** handed to a **relay**, which submits it
+on-chain and is reimbursed for the gas. (The ERC-4337 spec calls that role a
+*bundler*. Vela's is called a relay because it does more than bundle: it quotes
+fees in band and runs the gas-account protocol below, neither of which is part
+of the standard.) A few things follow from that:
 
 - **Gas is paid from your own wallet's balance** — in the network's native token
   (ETH, BNB, xDAI…) by default, or in a supported stablecoin where the relay
@@ -56,11 +59,11 @@ on-chain and is reimbursed for the gas. A few things follow from that:
   **paymaster** sponsoring — or gating — each transaction. (Vela may sponsor the
   one-time _gas-account activation_ for new users; that's separate, and covered
   below.)
-- The **bundler quotes the gas price** — it is the single source of truth, and the
+- The **relay quotes the gas price** — it is the single source of truth, and the
   wallet displays that quote and signs exactly what it shows. There is no speed
   picker: every transaction is submitted at high priority.
 - The total charge is the **network cost plus the relayer's service fee**, with
-  a small minimum charge on very cheap transactions. The bundler's quote is the
+  a small minimum charge on very cheap transactions. The relay's quote is the
   price — there is no separate fee schedule to consult. One part goes to the
   chain's validators; the rest pays the relayer that fronts the gas and runs
   the infrastructure.
@@ -69,12 +72,12 @@ on-chain and is reimbursed for the gas. A few things follow from that:
   of what you sign, so the relayer is paid exactly what was shown — a changed
   number would invalidate your signature.
 
-## Who runs the bundler — and who gets the fees
+## Who runs the relay — and who gets the fees
 
-Every network points at a bundler. By default that's **Vela's own bundler**, and
+Every network points at a relay. By default that's **Vela's own relay**, and
 you can replace the endpoint under _Settings → Advanced → Service Endpoints_.
 One endpoint applies to every built-in network; a custom network keeps the
-bundler URL you gave it when you added it.
+relay URL you gave it when you added it.
 
 An honest caveat about compatibility: the app quotes fees through a
 Vela-specific RPC method (`vela_getInBandGasQuote`), and the send flow fails
@@ -84,7 +87,7 @@ one you host yourself. A generic ERC-4337 bundler such as **Pimlico** or
 **Alchemy** doesn't implement that method, so it won't work end to end in the
 current release.
 
-Whoever operates the bundler for a network **collects that network's fees** —
+Whoever operates the relay for a network **collects that network's fees** —
 the relayer markup on every transaction and the gas-account activation deposit.
 Run your own vela-relay and those fees fund your infrastructure instead of
 Vela's; Vela takes no cut on traffic you route elsewhere.
@@ -97,8 +100,8 @@ the deposit funds your own relay's account, not Vela's.
 
 ### Activating the gas account (Vela Relay)
 
-On Vela's bundler, your first transaction on each network **activates a dedicated
-gas account**. The app first asks the bundler's treasury to fund it for you —
+On Vela's relay, your first transaction on each network **activates a dedicated
+gas account**. The app first asks the relay's treasury to fund it for you —
 this happens silently inside the send flow, and a sponsored wallet never sees a
 funding screen. Only when sponsorship is declined does the app show a top-up
 request: you send a small amount of the native token to the gas-account address
@@ -111,9 +114,9 @@ namely when:
   temporarily depleted on that chain.
 - **You've used up the free quota** — sponsorship is capped per wallet, so beyond
   the first few it's self-funded.
-- **Vela's bundler doesn't fund that network at all** — e.g. **custom or test
+- **Vela's relay doesn't fund that network at all** — e.g. **custom or test
   networks you added yourself**, which Vela holds no treasury for. (Route these to
-  your own or a third-party bundler if you'd rather skip activation entirely.)
+  your own relay if you'd rather skip activation entirely.)
 
 The activation deposit is **non-refundable** — it's the relayer's starting balance
 and tops itself up from gas refunds over time, though it can still run down and
