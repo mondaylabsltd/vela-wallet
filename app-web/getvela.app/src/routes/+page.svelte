@@ -250,12 +250,12 @@
 </script>
 
 <svelte:head>
-	<title>Vela Wallet — Your keys. Your face.</title>
+	<title>Vela Wallet — An Ethereum wallet you actually own</title>
 	<meta
 		name="description"
 		content="An open-source, self-hostable Ethereum wallet for ETH & ERC-20s. Sign with a passkey — no seed phrase, no hardware key, no lock-in. You pay for convenience, not access."
 	/>
-	<meta property="og:title" content="Vela Wallet — Your keys. Your face." />
+	<meta property="og:title" content="Vela Wallet — An Ethereum wallet you actually own" />
 	<meta
 		property="og:description"
 		content="Open-source, self-hostable wallet for ETH & ERC-20s. Passkey signing, no seed phrase, no lock-in. Compile it yourself if you want to."
@@ -311,7 +311,7 @@
 <section class="hero">
 	<div class="container hero-grid">
 		<div class="hero-text">
-			<h1>Your keys.<br />Your face.</h1>
+			<h1>An Ethereum wallet you actually own</h1>
 			<p class="subtitle">
 				An open-source, self-custodial wallet for ETH and ERC-20s. Sign with a passkey — no seed
 				phrase, no hardware key, and no company that can lock you out.
@@ -1140,6 +1140,11 @@
 		line-height: 1.1;
 		letter-spacing: -0.02em;
 		margin-bottom: 24px;
+		/* The headline is a sentence now, not two two-word lines, so it has no
+		   hard break: `balance` keeps the wrap even at every width instead of
+		   leaving one orphan word on the last line. Browsers without it simply
+		   wrap normally. */
+		text-wrap: balance;
 	}
 	.subtitle {
 		color: var(--text-secondary);

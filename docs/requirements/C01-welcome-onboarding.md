@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-A short, honest onboarding that communicates the value proposition ("Your keys. Your face." — no seed
+A short, honest onboarding that communicates the value proposition ("An Ethereum wallet you actually own." — no seed
 phrase) and sets accurate expectations about recovery (B09) before the user creates a wallet (C02). It
 does **not** contain a seed-phrase step and does **not** show a scary "beta" banner (A02).
 

@@ -1,11 +1,11 @@
 <!--
-	Hero visual: "Your face is the key."
+	Hero visual: a face that turns into a key.
 	An invisible pen draws the Face ID frame and a minimal face, then the line
 	drops out of the face and loops into a key — pupils and key teeth are the
 	only orange. One 14s cycle: draw → hold → fade. Pure CSS/SVG, colors come
 	from the global theme tokens, so both themes work automatically.
 -->
-<section class="stage" aria-label="Your face is the key — animated illustration">
+<section class="stage" aria-label="Animated illustration: a face drawn in one line, which becomes a key">
 	<svg class="art" viewBox="0 0 400 500" role="img" aria-hidden="true">
 		<!-- ambient dashed ring, persists across cycles -->
 		<circle class="ring anim" cx="200" cy="255" r="175" pathLength="1" />

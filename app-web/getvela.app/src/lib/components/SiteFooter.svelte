@@ -11,7 +11,7 @@
 				<img src="/vela-logo.png" alt="Vela" width="24" height="24" />
 				<span>Vela Wallet</span>
 			</div>
-			<p class="tagline">Your keys. Your face. No seed phrase.</p>
+			<p class="tagline">An Ethereum wallet you actually own. No seed phrase.</p>
 			<p class="copy">&copy; {year} MONDAY LABS LTD</p>
 		</div>
 

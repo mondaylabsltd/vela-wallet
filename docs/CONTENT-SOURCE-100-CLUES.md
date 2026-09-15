@@ -35,7 +35,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **1. A wallet with no seed phrase — the founding thesis.** Each wallet is controlled by a WebAuthn passkey (P-256) held in the device secure enclave and unlocked by Face ID / Touch ID / fingerprint. "There is no secret you can type," so there is nothing to phish. Source: `app-web/getvela.app/src/content/docs/whitepaper.md`, [src/modules/passkey/](../src/modules/passkey/). **Keywords:** seedless wallet, no seed phrase, passkey wallet, wallet without recovery phrase.
 
-**2. Positioning & taglines (use verbatim).** Brand line: **"Your keys. Your face."** Product: **"an open-source, self-custodial wallet for ETH and ERC-20s."** Secondary: **"A wallet that does less — on purpose."** Source: `app-web/getvela.app/src/routes/+page.svelte`. **Never improvise alternative taglines.**
+**2. Positioning & taglines (use verbatim).** Brand line: **"An Ethereum wallet you actually own."** (Simplified Chinese, verbatim: **"真正属于你的以太坊钱包"**.) *Retired 2026-09-15 by spec 059: "Your keys. Your face." — never reinstate it.* Product: **"an open-source, self-custodial wallet for ETH and ERC-20s."** Secondary: **"A wallet that does less — on purpose."** Source: `app-web/getvela.app/src/routes/+page.svelte`. **Never improvise alternative taglines.**
 
 **3. The trust model — "we architecturally can't."** "We can't access your keys. Not 'we promise not to' — we architecturally can't." Signing uses OS-managed WebAuthn keys; Vela never has the private key. Source: whitepaper.md, [README.md](../README.md) Security Model. This "verify, don't trust" framing is the single most distinctive differentiator — lead with it.
 
@@ -284,7 +284,7 @@ Each cluster below is a writeable document. Pull facts only from the cited clues
 
 ### Reusable canonical assets
 
-- **Taglines:** "Your keys. Your face." · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify."
+- **Taglines:** "An Ethereum wallet you actually own." (zh: "真正属于你的以太坊钱包") · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify."
 - **One-line ICP:** *"For people who want real self-custody without the footgun of seed-phrase management — if you can unlock your phone, you can use Vela safely."* (`docs/introduction.md`)
 - **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
 

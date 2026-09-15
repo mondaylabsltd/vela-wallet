@@ -1,6 +1,6 @@
 # Store Listing Copy — App Store + Google Play
 
-Grounded in real product facts (`src/models/chains.ts` = 12 chains; ERC-7730 clear-signing shipped; WalletPair relay for dApp Connect — **not** Bluetooth; no analytics SDK; Safe v1.4.1 + ERC-4337 + passkeys). Brand voice matches getvela.app ("Your keys. Your face." / "A wallet that does less — on purpose.").
+Grounded in real product facts (`src/models/chains.ts` = 12 chains; ERC-7730 clear-signing shipped; WalletPair relay for dApp Connect — **not** Bluetooth; no analytics SDK; Safe v1.4.1 + ERC-4337 + passkeys). Brand voice matches getvela.app ("An Ethereum wallet you actually own." / "A wallet that does less — on purpose."). *"Your keys. Your face." was retired 2026-09-15 by spec 059 — if it still appears in a submitted listing, it is stale copy.*
 
 **Red lines respected:** no "audited"/"audit planned" claims (open-source = *anyone can inspect the code*, not a third-party audit); no "beta/alpha"; no price/exchange/ROI claims; no fiat on-ramp/trading claims; dApp Connect described as QR/relay, not Bluetooth.
 
@@ -15,7 +15,7 @@ Field character limits noted as `(≤N)`. Counts verified for the English fields
 **Subtitle** (≤30) — `Self-custody, no seed phrase` (28)
 
 **Promotional Text** (≤170, editable without review):
-> Your keys, your face. A self-custodial Ethereum wallet with no seed phrase — sign with Face ID, recover across devices, and read every transaction before you approve it.
+> An Ethereum wallet you actually own. Self-custodial, no seed phrase — sign with Face ID, recover across devices, and read every transaction before you approve it.
 
 **Keywords** (≤100, comma-separated, no spaces wasted; "wallet" already in the title so it's omitted here):
 ```
@@ -162,5 +162,5 @@ Vela 是面向以太坊及 EVM 网络的自我托管加密钱包。私钥由你�
 - **App Store subtitle vs Play short description** are different fields with different limits — don't copy one into the other.
 - **Screenshots still needed** (separate task): App Store 6.9"/6.7" iPhone; Play needs ≥2 phone screenshots + a 1024×500 feature graphic.
 - **More locales:** the app ships ~15 locales. I can produce listing copy for any of them (de, es-MX, fr, id, it, ja, ko, pt-BR, ru, tr, vi, zh-HK, zh-TW) from this English canonical — say which markets to prioritize. Machine-translated store copy should get a native eyeball before publishing (per the i18n-localization note).
-- If you prefer the brand tagline as the subtitle instead of the ASO one: App Store subtitle `Your keys. Your face.` (21) — but `Self-custody, no seed phrase` wins on search.
+- The brand tagline `An Ethereum wallet you actually own.` (36) is too long for an App Store subtitle (30), so the ASO line `Self-custody, no seed phrase` stays — it wins on search anyway. The tagline belongs in the promotional text above.
 ```

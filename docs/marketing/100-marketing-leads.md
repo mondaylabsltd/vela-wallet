@@ -11,7 +11,7 @@
 ## 〇、先读：定位、受众、语气、红线
 
 **一句话定位**：自我托管的智能合约钱包 —— 没有助记词，用人脸/指纹签名，每一笔交易都能读懂再批准。
-**品牌口号**：`Your keys. Your face.`（你的钥匙，你的脸）/ `A wallet that does less — on purpose.`（一款"刻意做得更少"的钱包）。
+**品牌口号**：`An Ethereum wallet you actually own.`（真正属于你的以太坊钱包；2026-09-15 起取代已停用的 `Your keys. Your face.`）/ `A wallet that does less — on purpose.`（一款"刻意做得更少"的钱包）。
 **核心受众**：想要真正自托管、但被助记词坑过或怕被坑的人；"能解锁手机就能安全用钱包"。
 **语气**：诚实优先于营销（whitepaper 原话："favors honesty over marketing"）；温暖、克制、不夸张。
 
