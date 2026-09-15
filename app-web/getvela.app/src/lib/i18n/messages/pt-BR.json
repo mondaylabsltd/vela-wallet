@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alfa",
+			"blog": "Blog",
+			"docs": "Documentação",
+			"about": "Sobre",
+			"whyVela": "Por que a Vela",
+			"howItWorks": "Como funciona",
+			"pricing": "Preços",
+			"faq": "Perguntas frequentes",
+			"createWallet": "Obter a Vela",
+			"signIn": "Entrar",
+			"primary": "Navegação principal",
+			"toggleMenu": "Abrir menu"
+		},
+		"footer": {
+			"tagline": "Uma carteira Ethereum que é realmente sua. Sem frase de recuperação.",
+			"label": "Rodapé",
+			"columns": {
+				"resources": "Recursos",
+				"infrastructure": "Infraestrutura",
+				"community": "Comunidade",
+				"legal": "Jurídico"
+			},
+			"links": {
+				"docs": "Documentação",
+				"whitepaper": "Whitepaper",
+				"audits": "Auditorias e problemas conhecidos",
+				"roadmap": "Roteiro",
+				"blog": "Blog",
+				"about": "Sobre",
+				"privacy": "Privacidade",
+				"terms": "Termos"
+			}
+		},
+		"language": {
+			"label": "Idioma",
+			"choose": "Escolher idioma"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Primeiros passos",
+				"using": "Usando a Vela",
+				"security": "Segurança",
+				"reference": "Referência"
+			},
+			"titles": {
+				"introduction": "Introdução",
+				"why-vela": "Por que criamos a Vela",
+				"install": "Instalar a Vela",
+				"create-wallet": "Crie sua carteira",
+				"send-and-receive": "Enviar e receber",
+				"networks-and-fees": "Redes e taxas",
+				"passkeys": "Como as passkeys funcionam",
+				"signers": "Assinantes e chaves de segurança",
+				"clear-signing": "Assinatura legível",
+				"bybit-attack": "O ataque à Bybit",
+				"recovery": "Recuperação e login",
+				"account-contract": "O contrato da conta",
+				"security-audits": "Auditorias e problemas conhecidos",
+				"whitepaper": "Whitepaper",
+				"faq": "Perguntas frequentes"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Esta página está disponível apenas em inglês"
+		}
+	},
+	"notice": {
+		"fallback": "Esta página ainda não foi traduzida. O texto abaixo está em inglês.",
+		"offer": {
+			"message": "Esta página também está disponível em português.",
+			"accept": "Ler em português",
+			"dismiss": "Dispensar"
+		}
+	}
+}

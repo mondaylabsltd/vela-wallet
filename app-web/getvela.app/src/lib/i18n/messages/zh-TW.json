@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "測試版",
+			"blog": "部落格",
+			"docs": "文件",
+			"about": "關於",
+			"whyVela": "為什麼選 Vela",
+			"howItWorks": "運作方式",
+			"pricing": "價格",
+			"faq": "常見問題",
+			"createWallet": "取得 Vela",
+			"signIn": "登入",
+			"primary": "主導覽",
+			"toggleMenu": "開啟選單"
+		},
+		"footer": {
+			"tagline": "真正屬於你的以太坊錢包。不用助記詞。",
+			"label": "頁尾",
+			"columns": {
+				"resources": "資源",
+				"infrastructure": "基礎建設",
+				"community": "社群",
+				"legal": "法律"
+			},
+			"links": {
+				"docs": "文件",
+				"whitepaper": "白皮書",
+				"audits": "稽核與已知問題",
+				"roadmap": "發展藍圖",
+				"blog": "部落格",
+				"about": "關於",
+				"privacy": "隱私權政策",
+				"terms": "服務條款"
+			}
+		},
+		"language": {
+			"label": "語言",
+			"choose": "選擇語言"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "開始使用",
+				"using": "使用 Vela",
+				"security": "安全",
+				"reference": "參考"
+			},
+			"titles": {
+				"introduction": "簡介",
+				"why-vela": "我們為什麼做 Vela",
+				"install": "安裝 Vela",
+				"create-wallet": "建立你的錢包",
+				"send-and-receive": "轉帳與收款",
+				"networks-and-fees": "網路與費用",
+				"passkeys": "密碼金鑰如何運作",
+				"signers": "簽署金鑰與安全金鑰",
+				"clear-signing": "清晰簽署",
+				"bybit-attack": "Bybit 攻擊事件",
+				"recovery": "復原與登入",
+				"account-contract": "帳戶合約",
+				"security-audits": "稽核與已知問題",
+				"whitepaper": "白皮書",
+				"faq": "常見問題"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "此頁面僅有英文版"
+		}
+	},
+	"notice": {
+		"fallback": "這個頁面尚未翻譯，以下為英文原文。",
+		"offer": {
+			"message": "這個頁面也有繁體中文版。",
+			"accept": "用繁體中文閱讀",
+			"dismiss": "不用了"
+		}
+	}
+}

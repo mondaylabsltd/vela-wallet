@@ -448,28 +448,41 @@
      get the second screen to themselves, so the reader meets them one row at a
      time instead of all at once next to the headline. Every line is verifiable
      from the page below it or from the repo — nothing here is a claim the docs
-     don't already make. -->
+     don't already make.
+
+     Set as a numbered list of full-width rows rather than the 2x2 grid this
+     started as: four claims of very different lengths in two columns left the
+     rules ending in four different places and the block reading as debris. A
+     row per claim — index, claim, proof — puts every rule and every link on the
+     same line as the one above it, and the numbers tell the reader at a glance
+     that there are exactly four things to check. The whole row is the link:
+     the proof is the point, so the whole row should take you to it. -->
 <section id="facts" class="facts">
 	<div class="container">
-		<dl class="hero-facts">
+		<p class="facts-lede">{m.home.facts.lede}</p>
+		<ol class="fact-list">
 			{#each m.home.hero.facts as fact, i (fact.term)}
-				<div class="fact">
-					<dt>{fact.term}</dt>
-					<dd>
-						{#if FACT_LINKS[i]?.external}
-							<a class="fact-link" href={FACT_LINKS[i].href} target="_blank" rel="noopener"
-								>{fact.link}</a
-							>
-						{:else}
-							<a class="fact-link" href={L(FACT_LINKS[i].href)}>{fact.link}</a>
-						{/if}
-					</dd>
-				</div>
+				{@const proof = FACT_LINKS[i]}
+				<li class="fact">
+					<a
+						class="fact-row"
+						href={proof.external ? proof.href : L(proof.href)}
+						target={proof.external ? '_blank' : undefined}
+						rel={proof.external ? 'noopener' : undefined}
+					>
+						<!-- Decorative: a screen reader gets the four claims as a numbered
+						     list from <ol> already, and would otherwise hear each one twice. -->
+						<span class="fact-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+						<span class="fact-term">{fact.term}</span>
+						<span class="fact-proof">
+							{fact.link}<span class="fact-arrow" aria-hidden="true">→</span>
+						</span>
+					</a>
+				</li>
 			{/each}
-		</dl>
+		</ol>
 	</div>
 </section>
-
 <!-- Why (the short version; the essay lives at /docs/why-vela) -->
 <section id="why" class="why">
 	<div class="container">
@@ -863,54 +876,128 @@
 		display: flex;
 		align-items: center;
 	}
-	/* Each claim sits on its own rule, the way a well-set page of an annual
-	   report does. Two columns rather than one long list: four items stacked
-	   would fill a screen by themselves and read as a spec sheet, which is
-	   exactly what these four lines are not. */
-	.hero-facts {
+	.facts .container {
+		width: 100%;
+	}
+	/* One quiet line to say what the four rows ARE. Without it the block reads
+	   as text that fell out of the hero; with it, it is a section. Small and
+	   muted on purpose — the claims are the loud part. */
+	.facts-lede {
+		max-width: 1040px;
+		margin: 0 auto 22px;
+		color: var(--text-tertiary);
+		font-size: 0.85rem;
+		letter-spacing: 0.01em;
+	}
+	/* A numbered list of full-width rows, the way a well-set contents page does
+	   it. This was a 2x2 grid and the four claims are of very different lengths,
+	   so the rules ended in four different places and the whole block read as
+	   debris. One row per claim puts every rule, every claim and every proof on
+	   the same two vertical lines, and the numbers say at a glance that there
+	   are exactly four things to check. */
+	.fact-list {
 		/* Capped and centred: the page is 1400px wide and these are short lines —
 		   left to fill it, each claim would sit alone at the end of a rule twice
 		   the length of its own sentence. */
 		max-width: 1040px;
 		margin: 0 auto;
 		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		column-gap: 72px;
-		row-gap: 8px;
-	}
-	.hero-facts .fact {
-		padding: 28px 0;
+		list-style: none;
 		border-top: 1px solid var(--border);
 	}
-	.hero-facts dt {
-		font-weight: 600;
-		font-size: 1.05rem;
-		line-height: 1.4;
-		letter-spacing: -0.01em;
-		color: var(--text);
-		margin-bottom: 7px;
+	.fact {
+		border-bottom: 1px solid var(--border);
 	}
-	/* The proof, not the explanation: every claim above is one link away from
-	   the page that can check it. */
-	.hero-facts dd {
-		margin: 0;
-	}
-	.fact-link {
-		font-size: 0.82rem;
-		color: var(--text-tertiary);
+	/* The whole row is the link. The proof is the point of the row, so the row
+	   should take you to it — a 12px link at the end was the only target. */
+	.fact-row {
+		display: grid;
+		grid-template-columns: 52px minmax(0, 1.05fr) minmax(0, 0.95fr);
+		align-items: baseline;
+		column-gap: 32px;
+		padding: 26px 16px;
+		/* Bled out past the text so the hover tint reads as a row, not a box
+		   drawn around the words. */
+		margin: 0 -16px;
+		border-radius: 10px;
+		color: inherit;
 		text-decoration: none;
-		transition: color 0.15s;
+		transition: background-color 0.18s;
 	}
-	.fact-link::after {
-		content: ' →';
-		transition: margin-left 0.15s;
+	.fact-row:hover {
+		background: light-dark(rgba(35, 33, 28, 0.03), rgba(237, 234, 226, 0.04));
 	}
-	.fact-link:hover {
+	.fact-row:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	/* Tabular so 01–04 sit in one column, and mono so they read as an index
+	   rather than as part of the sentence next to them. */
+	.fact-index {
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.06em;
+		color: var(--text-tertiary);
+		transition: color 0.18s;
+	}
+	.fact-row:hover .fact-index {
 		color: var(--accent);
 	}
-	.fact-link:hover::after {
-		margin-left: 3px;
+	.fact-term {
+		font-weight: 600;
+		font-size: 1.16rem;
+		line-height: 1.45;
+		letter-spacing: -0.01em;
+		color: var(--text);
+		text-wrap: balance;
+	}
+	/* The proof, not the explanation: every claim is one link away from the page
+	   that can check it. */
+	.fact-proof {
+		font-size: 0.86rem;
+		line-height: 1.55;
+		color: var(--text-tertiary);
+		transition: color 0.18s;
+	}
+	.fact-row:hover .fact-proof {
+		color: var(--text-secondary);
+	}
+	.fact-arrow {
+		display: inline-block;
+		margin-left: 6px;
+		transition: transform 0.18s;
+	}
+	.fact-row:hover .fact-arrow {
+		transform: translateX(3px);
+	}
+	/* Three columns need about 900px to hold a sentence each; below that the
+	   proof goes under its claim and keeps the number's column. This is the one
+	   rule on the page with its own breakpoint, because 768px is already too
+	   narrow for the three-column row. */
+	@media (max-width: 900px) {
+		.fact-row {
+			grid-template-columns: 34px minmax(0, 1fr);
+			column-gap: 14px;
+			row-gap: 6px;
+		}
+		.fact-index {
+			grid-column: 1;
+			grid-row: 1;
+		}
+		.fact-term,
+		.fact-proof {
+			grid-column: 2;
+		}
+	}
+	/* CJK sets tighter than Latin at the same size and the claims are the only
+	   place on this screen where that shows; a hair smaller keeps a four-line
+	   claim off a third line. */
+	:global(html[lang^='zh']) .fact-term,
+	:global(html[lang='ja']) .fact-term,
+	:global(html[lang='ko']) .fact-term {
+		font-size: 1.1rem;
+		letter-spacing: 0;
 	}
 
 	.brand {
@@ -1627,16 +1714,15 @@
 			min-height: 0;
 			padding: 72px 0;
 		}
-		.hero-facts {
-			grid-template-columns: 1fr;
-			row-gap: 0;
-			text-align: left;
+		.fact-row {
+			padding: 20px 12px;
+			margin: 0 -12px;
 		}
-		.hero-facts .fact {
-			padding: 22px 0;
+		.fact-term {
+			font-size: 1.05rem;
 		}
-		.hero-facts dd {
-			max-width: none;
+		.fact-proof {
+			font-size: 0.8rem;
 		}
 		/* Side by side at phone width only if neither label has to break: a
 		   two-line button reads as a mistake. */

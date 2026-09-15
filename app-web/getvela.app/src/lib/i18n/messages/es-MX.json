@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alfa",
+			"blog": "Blog",
+			"docs": "Documentación",
+			"about": "Acerca de",
+			"whyVela": "Por qué Vela",
+			"howItWorks": "Cómo funciona",
+			"pricing": "Precios",
+			"faq": "Preguntas frecuentes",
+			"createWallet": "Obtener Vela",
+			"signIn": "Iniciar sesión",
+			"primary": "Navegación principal",
+			"toggleMenu": "Abrir menú"
+		},
+		"footer": {
+			"tagline": "Una wallet de Ethereum que de verdad es tuya. Sin frase semilla.",
+			"label": "Pie de página",
+			"columns": {
+				"resources": "Recursos",
+				"infrastructure": "Infraestructura",
+				"community": "Comunidad",
+				"legal": "Legal"
+			},
+			"links": {
+				"docs": "Documentación",
+				"whitepaper": "Whitepaper",
+				"audits": "Auditorías y problemas conocidos",
+				"roadmap": "Hoja de ruta",
+				"blog": "Blog",
+				"about": "Acerca de",
+				"privacy": "Privacidad",
+				"terms": "Términos"
+			}
+		},
+		"language": {
+			"label": "Idioma",
+			"choose": "Elegir idioma"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Primeros pasos",
+				"using": "Usar Vela",
+				"security": "Seguridad",
+				"reference": "Referencia"
+			},
+			"titles": {
+				"introduction": "Introducción",
+				"why-vela": "Por qué hicimos Vela",
+				"install": "Instalar Vela",
+				"create-wallet": "Crea tu wallet",
+				"send-and-receive": "Enviar y recibir",
+				"networks-and-fees": "Redes y comisiones",
+				"passkeys": "Cómo funcionan las passkeys",
+				"signers": "Firmantes y llaves de seguridad",
+				"clear-signing": "Firma legible",
+				"bybit-attack": "El ataque a Bybit",
+				"recovery": "Recuperación e inicio de sesión",
+				"account-contract": "El contrato de la cuenta",
+				"security-audits": "Auditorías y problemas conocidos",
+				"whitepaper": "Whitepaper",
+				"faq": "Preguntas frecuentes"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Esta página solo está disponible en inglés"
+		}
+	},
+	"notice": {
+		"fallback": "Esta página aún no está traducida. El texto de abajo está en inglés.",
+		"offer": {
+			"message": "Esta página también está disponible en español.",
+			"accept": "Leer en español",
+			"dismiss": "Cerrar"
+		}
+	}
+}

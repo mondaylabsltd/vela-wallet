@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "アルファ版",
+			"blog": "ブログ",
+			"docs": "ドキュメント",
+			"about": "Vela について",
+			"whyVela": "Vela を選ぶ理由",
+			"howItWorks": "しくみ",
+			"pricing": "料金",
+			"faq": "よくある質問",
+			"createWallet": "Vela を入手",
+			"signIn": "ログイン",
+			"primary": "メインナビゲーション",
+			"toggleMenu": "メニューを開く"
+		},
+		"footer": {
+			"tagline": "本当にあなたのものになるイーサリアムウォレット。シードフレーズは不要です。",
+			"label": "フッター",
+			"columns": {
+				"resources": "リソース",
+				"infrastructure": "インフラ",
+				"community": "コミュニティ",
+				"legal": "規約"
+			},
+			"links": {
+				"docs": "ドキュメント",
+				"whitepaper": "ホワイトペーパー",
+				"audits": "監査と既知の問題",
+				"roadmap": "ロードマップ",
+				"blog": "ブログ",
+				"about": "Vela について",
+				"privacy": "プライバシー",
+				"terms": "利用規約"
+			}
+		},
+		"language": {
+			"label": "言語",
+			"choose": "言語を選ぶ"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "はじめに",
+				"using": "Vela を使う",
+				"security": "セキュリティ",
+				"reference": "リファレンス"
+			},
+			"titles": {
+				"introduction": "概要",
+				"why-vela": "Vela を作った理由",
+				"install": "Vela を使い始める",
+				"create-wallet": "ウォレットを作成する",
+				"send-and-receive": "送金と受取",
+				"networks-and-fees": "ネットワークと手数料",
+				"passkeys": "パスキーのしくみ",
+				"signers": "署名鍵とセキュリティキー",
+				"clear-signing": "クリア署名",
+				"bybit-attack": "Bybit の事件",
+				"recovery": "復旧とサインイン",
+				"account-contract": "アカウントコントラクト",
+				"security-audits": "監査と既知の問題",
+				"whitepaper": "ホワイトペーパー",
+				"faq": "よくある質問"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "このページは英語版のみです"
+		}
+	},
+	"notice": {
+		"fallback": "このページはまだ翻訳されていません。以下は英語の原文です。",
+		"offer": {
+			"message": "このページは日本語でもお読みいただけます。",
+			"accept": "日本語で読む",
+			"dismiss": "閉じる"
+		}
+	}
+}

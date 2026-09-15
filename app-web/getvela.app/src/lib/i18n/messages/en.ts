@@ -191,10 +191,10 @@ export const en = {
 				},
 				{
 					term: "Don't bet the wallet on one device.",
-					link: 'Up to seven signers — passkeys, or a YubiKey, chosen at creation'
+					link: 'Add up to seven keys when you create the account — passkeys, or a YubiKey'
 				},
 				{
-					term: "Bybit's signers hit approve on what the screen showed. They signed something else.",
+					term: "Bybit's screen lied. Every signature was valid.",
 					link: 'How we close the path that cost them $1.5B'
 				},
 				{
@@ -202,6 +202,15 @@ export const en = {
 					link: 'Self-host the app, the relay and every backend service'
 				}
 			]
+		},
+
+		/**
+		 * The four hooks above get a screen of their own, and a screen needs to
+		 * say what it is. One line, and deliberately not a heading: the claims are
+		 * the loud part, this is the caption under the exhibit.
+		 */
+		facts: {
+			lede: 'Four things worth checking before a wallet holds your money.'
 		},
 
 		/**

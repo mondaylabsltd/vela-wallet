@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alpha",
+			"blog": "Blog",
+			"docs": "Tài liệu",
+			"about": "Giới thiệu",
+			"whyVela": "Vì sao chọn Vela",
+			"howItWorks": "Cách hoạt động",
+			"pricing": "Giá",
+			"faq": "Câu hỏi thường gặp",
+			"createWallet": "Tải Vela",
+			"signIn": "Đăng nhập",
+			"primary": "Điều hướng chính",
+			"toggleMenu": "Mở menu"
+		},
+		"footer": {
+			"tagline": "Một ví Ethereum thực sự thuộc về bạn. Không cần cụm từ khôi phục.",
+			"label": "Chân trang",
+			"columns": {
+				"resources": "Tài nguyên",
+				"infrastructure": "Hạ tầng",
+				"community": "Cộng đồng",
+				"legal": "Pháp lý"
+			},
+			"links": {
+				"docs": "Tài liệu",
+				"whitepaper": "Whitepaper",
+				"audits": "Kiểm toán & vấn đề đã biết",
+				"roadmap": "Lộ trình",
+				"blog": "Blog",
+				"about": "Giới thiệu",
+				"privacy": "Quyền riêng tư",
+				"terms": "Điều khoản"
+			}
+		},
+		"language": {
+			"label": "Ngôn ngữ",
+			"choose": "Chọn ngôn ngữ"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Bắt đầu",
+				"using": "Dùng Vela",
+				"security": "Bảo mật",
+				"reference": "Tham khảo"
+			},
+			"titles": {
+				"introduction": "Giới thiệu",
+				"why-vela": "Vì sao chúng tôi làm Vela",
+				"install": "Cài đặt Vela",
+				"create-wallet": "Tạo ví của bạn",
+				"send-and-receive": "Gửi & nhận",
+				"networks-and-fees": "Mạng & phí",
+				"passkeys": "Passkey hoạt động thế nào",
+				"signers": "Khóa ký & khóa bảo mật",
+				"clear-signing": "Ký minh bạch",
+				"bybit-attack": "Vụ tấn công Bybit",
+				"recovery": "Khôi phục & đăng nhập",
+				"account-contract": "Hợp đồng tài khoản",
+				"security-audits": "Kiểm toán & vấn đề đã biết",
+				"whitepaper": "Whitepaper",
+				"faq": "Câu hỏi thường gặp"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Trang này chỉ có bản tiếng Anh"
+		}
+	},
+	"notice": {
+		"fallback": "Trang này chưa được dịch. Nội dung bên dưới là bản tiếng Anh.",
+		"offer": {
+			"message": "Trang này cũng có bản tiếng Việt.",
+			"accept": "Đọc bằng tiếng Việt",
+			"dismiss": "Bỏ qua"
+		}
+	}
+}

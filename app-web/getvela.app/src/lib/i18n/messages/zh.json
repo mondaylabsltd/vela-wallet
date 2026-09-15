@@ -38,6 +38,31 @@
 			"label": "语言",
 			"choose": "选择语言"
 		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "开始使用",
+				"using": "使用 Vela",
+				"security": "安全",
+				"reference": "参考"
+			},
+			"titles": {
+				"introduction": "简介",
+				"why-vela": "我们为什么做 Vela",
+				"install": "安装 Vela",
+				"create-wallet": "创建你的钱包",
+				"send-and-receive": "转账与收款",
+				"networks-and-fees": "网络与费用",
+				"passkeys": "通行密钥如何工作",
+				"signers": "签名钥匙与安全密钥",
+				"clear-signing": "清晰签名",
+				"bybit-attack": "Bybit 被攻击那次",
+				"recovery": "恢复与登录",
+				"account-contract": "账户合约",
+				"security-audits": "审计与已知问题",
+				"whitepaper": "白皮书",
+				"faq": "常见问题"
+			}
+		},
 		"englishOnly": {
 			"badge": "EN",
 			"title": "此页面仅有英文版"
@@ -71,10 +96,10 @@
 				},
 				{
 					"term": "别把整个钱包押在一台设备上。",
-					"link": "最多七把签名钥匙——通行密钥，或一把 YubiKey，创建时选定"
+					"link": "创建账户时最多可以加七把钥匙：通行密钥，或一把 YubiKey"
 				},
 				{
-					"term": "Bybit 的人看着屏幕点了确认，真正签下的是另一笔交易。",
+					"term": "屏幕骗了 Bybit，每个签名却都是真的。",
 					"link": "我们如何切断那条让他们损失 15 亿美元的路"
 				},
 				{
@@ -82,6 +107,9 @@
 					"link": "应用、中继和每一个后端服务，你都能自己跑"
 				}
 			]
+		},
+		"facts": {
+			"lede": "在把钱交给一个钱包之前，值得核对的四件事。"
 		},
 		"seal": {
 			"label": "已在链上创建的钱包",

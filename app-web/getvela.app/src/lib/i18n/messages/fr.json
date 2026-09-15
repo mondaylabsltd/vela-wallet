@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alpha",
+			"blog": "Blog",
+			"docs": "Documentation",
+			"about": "À propos",
+			"whyVela": "Pourquoi Vela",
+			"howItWorks": "Comment ça marche",
+			"pricing": "Tarifs",
+			"faq": "FAQ",
+			"createWallet": "Obtenir Vela",
+			"signIn": "Se connecter",
+			"primary": "Navigation principale",
+			"toggleMenu": "Ouvrir le menu"
+		},
+		"footer": {
+			"tagline": "Un portefeuille Ethereum qui vous appartient vraiment. Sans phrase de récupération.",
+			"label": "Pied de page",
+			"columns": {
+				"resources": "Ressources",
+				"infrastructure": "Infrastructure",
+				"community": "Communauté",
+				"legal": "Mentions légales"
+			},
+			"links": {
+				"docs": "Documentation",
+				"whitepaper": "Livre blanc",
+				"audits": "Audits et problèmes connus",
+				"roadmap": "Feuille de route",
+				"blog": "Blog",
+				"about": "À propos",
+				"privacy": "Confidentialité",
+				"terms": "Conditions"
+			}
+		},
+		"language": {
+			"label": "Langue",
+			"choose": "Choisir une langue"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Premiers pas",
+				"using": "Utiliser Vela",
+				"security": "Sécurité",
+				"reference": "Référence"
+			},
+			"titles": {
+				"introduction": "Introduction",
+				"why-vela": "Pourquoi nous avons créé Vela",
+				"install": "Installer Vela",
+				"create-wallet": "Créer votre portefeuille",
+				"send-and-receive": "Envoyer et recevoir",
+				"networks-and-fees": "Réseaux et frais",
+				"passkeys": "Comment fonctionnent les passkeys",
+				"signers": "Signataires et clés de sécurité",
+				"clear-signing": "Signature lisible",
+				"bybit-attack": "L'attaque de Bybit",
+				"recovery": "Récupération et connexion",
+				"account-contract": "Le contrat de compte",
+				"security-audits": "Audits et problèmes connus",
+				"whitepaper": "Livre blanc",
+				"faq": "FAQ"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Cette page n'existe qu'en anglais"
+		}
+	},
+	"notice": {
+		"fallback": "Cette page n'est pas encore traduite. Le texte ci-dessous est en anglais.",
+		"offer": {
+			"message": "Cette page est aussi disponible en français.",
+			"accept": "Lire en français",
+			"dismiss": "Fermer"
+		}
+	}
+}

@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alpha",
+			"blog": "Blog",
+			"docs": "Documentazione",
+			"about": "Chi siamo",
+			"whyVela": "Perché Vela",
+			"howItWorks": "Come funziona",
+			"pricing": "Prezzi",
+			"faq": "Domande frequenti",
+			"createWallet": "Ottieni Vela",
+			"signIn": "Accedi",
+			"primary": "Navigazione principale",
+			"toggleMenu": "Apri il menu"
+		},
+		"footer": {
+			"tagline": "Un wallet Ethereum davvero tuo. Senza seed phrase.",
+			"label": "Piè di pagina",
+			"columns": {
+				"resources": "Risorse",
+				"infrastructure": "Infrastruttura",
+				"community": "Community",
+				"legal": "Note legali"
+			},
+			"links": {
+				"docs": "Documentazione",
+				"whitepaper": "Whitepaper",
+				"audits": "Audit e problemi noti",
+				"roadmap": "Roadmap",
+				"blog": "Blog",
+				"about": "Chi siamo",
+				"privacy": "Privacy",
+				"terms": "Termini"
+			}
+		},
+		"language": {
+			"label": "Lingua",
+			"choose": "Scegli la lingua"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Per iniziare",
+				"using": "Usare Vela",
+				"security": "Sicurezza",
+				"reference": "Riferimento"
+			},
+			"titles": {
+				"introduction": "Introduzione",
+				"why-vela": "Perché abbiamo creato Vela",
+				"install": "Installare Vela",
+				"create-wallet": "Crea il tuo wallet",
+				"send-and-receive": "Inviare e ricevere",
+				"networks-and-fees": "Reti e commissioni",
+				"passkeys": "Come funzionano le passkey",
+				"signers": "Firmatari e chiavi di sicurezza",
+				"clear-signing": "Firma leggibile",
+				"bybit-attack": "L'attacco a Bybit",
+				"recovery": "Recupero e accesso",
+				"account-contract": "Il contratto dell'account",
+				"security-audits": "Audit e problemi noti",
+				"whitepaper": "Whitepaper",
+				"faq": "Domande frequenti"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Questa pagina è disponibile solo in inglese"
+		}
+	},
+	"notice": {
+		"fallback": "Questa pagina non è ancora tradotta. Il testo qui sotto è in inglese.",
+		"offer": {
+			"message": "Questa pagina è disponibile anche in italiano.",
+			"accept": "Leggi in italiano",
+			"dismiss": "Chiudi"
+		}
+	}
+}

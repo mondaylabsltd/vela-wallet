@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alfa",
+			"blog": "Blog",
+			"docs": "Belgeler",
+			"about": "Hakkında",
+			"whyVela": "Neden Vela",
+			"howItWorks": "Nasıl çalışır",
+			"pricing": "Fiyatlandırma",
+			"faq": "SSS",
+			"createWallet": "Vela'yı edinin",
+			"signIn": "Giriş yap",
+			"primary": "Ana gezinme",
+			"toggleMenu": "Menüyü aç"
+		},
+		"footer": {
+			"tagline": "Gerçekten size ait olan bir Ethereum cüzdanı. Kurtarma ifadesi yok.",
+			"label": "Alt bilgi",
+			"columns": {
+				"resources": "Kaynaklar",
+				"infrastructure": "Altyapı",
+				"community": "Topluluk",
+				"legal": "Yasal"
+			},
+			"links": {
+				"docs": "Belgeler",
+				"whitepaper": "Teknik doküman",
+				"audits": "Denetimler ve bilinen sorunlar",
+				"roadmap": "Yol haritası",
+				"blog": "Blog",
+				"about": "Hakkında",
+				"privacy": "Gizlilik",
+				"terms": "Koşullar"
+			}
+		},
+		"language": {
+			"label": "Dil",
+			"choose": "Dil seçin"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Başlangıç",
+				"using": "Vela'yı kullanma",
+				"security": "Güvenlik",
+				"reference": "Referans"
+			},
+			"titles": {
+				"introduction": "Giriş",
+				"why-vela": "Vela'yı neden yaptık",
+				"install": "Vela'yı kurun",
+				"create-wallet": "Cüzdanınızı oluşturun",
+				"send-and-receive": "Gönderme ve alma",
+				"networks-and-fees": "Ağlar ve ücretler",
+				"passkeys": "Geçiş anahtarları nasıl çalışır",
+				"signers": "İmzalayıcılar ve güvenlik anahtarları",
+				"clear-signing": "Açık imzalama",
+				"bybit-attack": "Bybit saldırısı",
+				"recovery": "Kurtarma ve giriş",
+				"account-contract": "Hesap sözleşmesi",
+				"security-audits": "Denetimler ve bilinen sorunlar",
+				"whitepaper": "Teknik doküman",
+				"faq": "SSS"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Bu sayfa yalnızca İngilizce mevcut"
+		}
+	},
+	"notice": {
+		"fallback": "Bu sayfa henüz çevrilmedi. Aşağıdaki metin İngilizcedir.",
+		"offer": {
+			"message": "Bu sayfa Türkçe olarak da mevcut.",
+			"accept": "Türkçe oku",
+			"dismiss": "Kapat"
+		}
+	}
+}

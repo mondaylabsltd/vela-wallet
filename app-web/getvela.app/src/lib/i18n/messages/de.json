@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alpha",
+			"blog": "Blog",
+			"docs": "Dokumentation",
+			"about": "Über uns",
+			"whyVela": "Warum Vela",
+			"howItWorks": "So funktioniert es",
+			"pricing": "Preise",
+			"faq": "Häufige Fragen",
+			"createWallet": "Vela holen",
+			"signIn": "Anmelden",
+			"primary": "Hauptnavigation",
+			"toggleMenu": "Menü öffnen"
+		},
+		"footer": {
+			"tagline": "Eine Ethereum-Wallet, die wirklich dir gehört. Ohne Seed Phrase.",
+			"label": "Fußzeile",
+			"columns": {
+				"resources": "Ressourcen",
+				"infrastructure": "Infrastruktur",
+				"community": "Community",
+				"legal": "Rechtliches"
+			},
+			"links": {
+				"docs": "Dokumentation",
+				"whitepaper": "Whitepaper",
+				"audits": "Audits und bekannte Probleme",
+				"roadmap": "Roadmap",
+				"blog": "Blog",
+				"about": "Über uns",
+				"privacy": "Datenschutz",
+				"terms": "AGB"
+			}
+		},
+		"language": {
+			"label": "Sprache",
+			"choose": "Sprache wählen"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Erste Schritte",
+				"using": "Vela nutzen",
+				"security": "Sicherheit",
+				"reference": "Referenz"
+			},
+			"titles": {
+				"introduction": "Einführung",
+				"why-vela": "Warum wir Vela gebaut haben",
+				"install": "Vela installieren",
+				"create-wallet": "Wallet erstellen",
+				"send-and-receive": "Senden und empfangen",
+				"networks-and-fees": "Netzwerke und Gebühren",
+				"passkeys": "So funktionieren Passkeys",
+				"signers": "Signaturschlüssel und Sicherheitsschlüssel",
+				"clear-signing": "Klartext-Signatur",
+				"bybit-attack": "Der Bybit-Angriff",
+				"recovery": "Wiederherstellung und Anmeldung",
+				"account-contract": "Der Account-Vertrag",
+				"security-audits": "Audits und bekannte Probleme",
+				"whitepaper": "Whitepaper",
+				"faq": "Häufige Fragen"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Diese Seite gibt es nur auf Englisch"
+		}
+	},
+	"notice": {
+		"fallback": "Diese Seite ist noch nicht übersetzt. Der Text unten ist auf Englisch.",
+		"offer": {
+			"message": "Diese Seite gibt es auch auf Deutsch.",
+			"accept": "Auf Deutsch lesen",
+			"dismiss": "Schließen"
+		}
+	}
+}

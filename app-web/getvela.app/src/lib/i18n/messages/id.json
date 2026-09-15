@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alpha",
+			"blog": "Blog",
+			"docs": "Dokumentasi",
+			"about": "Tentang",
+			"whyVela": "Kenapa Vela",
+			"howItWorks": "Cara kerjanya",
+			"pricing": "Harga",
+			"faq": "Tanya jawab",
+			"createWallet": "Dapatkan Vela",
+			"signIn": "Masuk",
+			"primary": "Navigasi utama",
+			"toggleMenu": "Buka menu"
+		},
+		"footer": {
+			"tagline": "Dompet Ethereum yang benar-benar milik Anda. Tanpa seed phrase.",
+			"label": "Footer",
+			"columns": {
+				"resources": "Sumber daya",
+				"infrastructure": "Infrastruktur",
+				"community": "Komunitas",
+				"legal": "Legal"
+			},
+			"links": {
+				"docs": "Dokumentasi",
+				"whitepaper": "Whitepaper",
+				"audits": "Audit & masalah yang diketahui",
+				"roadmap": "Peta jalan",
+				"blog": "Blog",
+				"about": "Tentang",
+				"privacy": "Privasi",
+				"terms": "Ketentuan"
+			}
+		},
+		"language": {
+			"label": "Bahasa",
+			"choose": "Pilih bahasa"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Memulai",
+				"using": "Menggunakan Vela",
+				"security": "Keamanan",
+				"reference": "Referensi"
+			},
+			"titles": {
+				"introduction": "Pengantar",
+				"why-vela": "Kenapa kami membuat Vela",
+				"install": "Memasang Vela",
+				"create-wallet": "Membuat dompet Anda",
+				"send-and-receive": "Kirim & terima",
+				"networks-and-fees": "Jaringan & biaya",
+				"passkeys": "Cara kerja passkey",
+				"signers": "Kunci penanda tangan & kunci keamanan",
+				"clear-signing": "Clear signing",
+				"bybit-attack": "Serangan Bybit",
+				"recovery": "Pemulihan & masuk",
+				"account-contract": "Kontrak akun",
+				"security-audits": "Audit & masalah yang diketahui",
+				"whitepaper": "Whitepaper",
+				"faq": "Tanya jawab"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Halaman ini hanya tersedia dalam bahasa Inggris"
+		}
+	},
+	"notice": {
+		"fallback": "Halaman ini belum diterjemahkan. Teks di bawah dalam bahasa Inggris.",
+		"offer": {
+			"message": "Halaman ini juga tersedia dalam bahasa Indonesia.",
+			"accept": "Baca dalam bahasa Indonesia",
+			"dismiss": "Tutup"
+		}
+	}
+}

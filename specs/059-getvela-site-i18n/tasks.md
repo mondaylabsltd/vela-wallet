@@ -81,7 +81,7 @@ JavaScript; switching language from `/docs/faq` lands on `/zh/docs/faq`.
 - [X] T025 [US2] Create `src/lib/components/LanguageSwitcher.svelte` — all 15 endonyms, preserves the current path, marks the active locale
 - [X] T026 [US2] Wire the switcher into **both** headers: `src/lib/components/SiteHeader.svelte` and the landing page's own inline `<nav>` (they are separate — the landing page does not use SiteHeader)
 - [X] T027 [US2] Create `src/lib/components/LocaleOfferBanner.svelte` — client-side `navigator.languages` offer, written in the offered language, dismissal in `localStorage`, **never navigates** (FR-013, research §7)
-- [ ] T028 [P] [US2] Add the banner's strings to every locale in `messages/*.json` — it is shown to a reader who cannot read the page, so it is the one string that cannot fall back
+- [X] T028 [P] [US2] Add the banner's strings to every locale in `messages/*.json` — it is shown to a reader who cannot read the page, so it is the one string that cannot fall back
 - [X] T029 [US2] Translate the `home`, `about`, `roadmap` namespaces into `src/lib/i18n/messages/zh.json`, using [approved-copy.md](./approved-copy.md) verbatim for the tagline and subtitle
 - [X] T030 [P] [US2] Create `tests/locale-render.spec.ts` (Playwright, `javaScriptEnabled: false`) — `/zh/` carries Chinese copy in the response body and `<html lang="zh">` (FR-011, FR-014)
 - [X] T031 [P] [US2] Add a switcher e2e to `tests/locale-render.spec.ts` — from `/docs/networks-and-fees` to 简体中文 lands on `/zh/docs/networks-and-fees`, never `/zh/` (SC-003)
@@ -145,7 +145,7 @@ machinery is done; what remains is content.
 locale whose chrome is missing would print its "this page is English" notice in
 English (data-model §3).
 
-- [ ] T051 [US3] Complete `chrome` + `notice` in all 13 remaining `src/lib/i18n/messages/*.json` before any page content
+- [X] T051 [US3] Complete `chrome` + `notice` in all 13 remaining `src/lib/i18n/messages/*.json` before any page content
 - [ ] T052 [P] [US3] Draft `home` + `about` + `roadmap` for `ja`, `ko`, `zh-TW`, `zh-HK` in `src/lib/i18n/messages/*.json`
 - [ ] T053 [P] [US3] Draft `home` + `about` + `roadmap` for `de`, `fr`, `it`, `es-MX`, `pt-BR` in `src/lib/i18n/messages/*.json`
 - [ ] T054 [P] [US3] Draft `home` + `about` + `roadmap` for `ru`, `tr`, `vi`, `id` in `src/lib/i18n/messages/*.json`
@@ -167,12 +167,12 @@ be reviewed.
 **Independent test**: remove one key and edit one English string; the report names
 both, and `bun run build` still succeeds.
 
-- [ ] T060 [P] [US5] Create `src/lib/i18n/messages.test.ts` — shape (no key absent from `en.ts`), `chrome`/`notice` completeness in all 15 locales
-- [ ] T061 [P] [US5] Create `src/lib/i18n/placeholders.test.ts` — placeholder, link and inline-markup sets identical to the English value (FR-031)
+- [X] T060 [P] [US5] Create `src/lib/i18n/messages.test.ts` — shape (no key absent from `en.ts`), `chrome`/`notice` completeness in all 15 locales
+- [X] T061 [P] [US5] Create `src/lib/i18n/placeholders.test.ts` — placeholder, link and inline-markup sets identical to the English value (FR-031)
 - [ ] T062 [US5] Add English content hashes per namespace/doc so a translation written before an English edit reports as **stale** (FR-026, data-model transitions)
-- [ ] T063 [US5] Add `bun run i18n:status` to `package.json` printing the per-locale table from contracts/translation-store.md, and assert it is computable in `src/lib/i18n/status.test.ts`
+- [X] T063 [US5] Add `bun run i18n:status` to `package.json` printing the per-locale table from contracts/translation-store.md, and assert it is computable in `src/lib/i18n/status.test.ts`
 - [ ] T064 [US5] Confirm a missing translation never fails the build — add a test that a locale with an incomplete namespace builds and renders fallback (FR-027)
-- [ ] T065 [P] [US5] Create `src/lib/i18n/honesty.test.ts` — the A02 FR-2/FR-3 claims (no third-party audit, alpha, "architecturally can't") are present and unsoftened in every locale claiming `translated` (FR-032)
+- [X] T065 [P] [US5] Create `src/lib/i18n/honesty.test.ts` — the A02 FR-2/FR-3 claims (no third-party audit, alpha, "architecturally can't") are present and unsoftened in every locale claiming `translated` (FR-032)
 - [ ] T066 [US5] Run the R7 review on `zh` per [spec.md](./spec.md) §R7, record findings in `specs/059-getvela-site-i18n/reviews/zh.md`, repair every High and Medium, then set `review.json` to `reviewed`
 - [ ] T067 [P] [US5] Run the R7 review for `ja`, `ko`, `zh-TW`, `zh-HK` into `reviews/<tag>.md`
 - [ ] T068 [P] [US5] Run the R7 review for `de`, `fr`, `it`, `es-MX`, `pt-BR` into `reviews/<tag>.md`

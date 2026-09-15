@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "測試版",
+			"blog": "網誌",
+			"docs": "文件",
+			"about": "關於",
+			"whyVela": "點解揀 Vela",
+			"howItWorks": "點樣運作",
+			"pricing": "價錢",
+			"faq": "常見問題",
+			"createWallet": "攞 Vela",
+			"signIn": "登入",
+			"primary": "主導覽",
+			"toggleMenu": "打開選單"
+		},
+		"footer": {
+			"tagline": "真正屬於你嘅以太坊錢包。唔使助記詞。",
+			"label": "頁尾",
+			"columns": {
+				"resources": "資源",
+				"infrastructure": "基礎建設",
+				"community": "社群",
+				"legal": "法律"
+			},
+			"links": {
+				"docs": "文件",
+				"whitepaper": "白皮書",
+				"audits": "審計同已知問題",
+				"roadmap": "發展路線",
+				"blog": "網誌",
+				"about": "關於",
+				"privacy": "私隱政策",
+				"terms": "服務條款"
+			}
+		},
+		"language": {
+			"label": "語言",
+			"choose": "揀語言"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "開始用",
+				"using": "用 Vela",
+				"security": "安全",
+				"reference": "參考"
+			},
+			"titles": {
+				"introduction": "簡介",
+				"why-vela": "我哋點解做 Vela",
+				"install": "安裝 Vela",
+				"create-wallet": "開你個錢包",
+				"send-and-receive": "轉帳同收款",
+				"networks-and-fees": "網絡同費用",
+				"passkeys": "密碼金鑰點運作",
+				"signers": "簽署金鑰同安全金鑰",
+				"clear-signing": "清晰簽署",
+				"bybit-attack": "Bybit 被攻擊嗰次",
+				"recovery": "復原同登入",
+				"account-contract": "帳戶合約",
+				"security-audits": "審計同已知問題",
+				"whitepaper": "白皮書",
+				"faq": "常見問題"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "呢版淨係有英文"
+		}
+	},
+	"notice": {
+		"fallback": "呢版重未翻譯，下面係英文原文。",
+		"offer": {
+			"message": "呢版都有廣東話版。",
+			"accept": "用廣東話睇",
+			"dismiss": "唔使喇"
+		}
+	}
+}

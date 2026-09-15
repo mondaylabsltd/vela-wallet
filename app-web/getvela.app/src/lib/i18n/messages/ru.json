@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Альфа",
+			"blog": "Блог",
+			"docs": "Документация",
+			"about": "О проекте",
+			"whyVela": "Почему Vela",
+			"howItWorks": "Как это работает",
+			"pricing": "Цены",
+			"faq": "Вопросы и ответы",
+			"createWallet": "Получить Vela",
+			"signIn": "Войти",
+			"primary": "Основная навигация",
+			"toggleMenu": "Открыть меню"
+		},
+		"footer": {
+			"tagline": "Кошелёк Ethereum, который действительно ваш. Без seed-фразы.",
+			"label": "Подвал",
+			"columns": {
+				"resources": "Материалы",
+				"infrastructure": "Инфраструктура",
+				"community": "Сообщество",
+				"legal": "Юридическое"
+			},
+			"links": {
+				"docs": "Документация",
+				"whitepaper": "Whitepaper",
+				"audits": "Аудиты и известные проблемы",
+				"roadmap": "Дорожная карта",
+				"blog": "Блог",
+				"about": "О проекте",
+				"privacy": "Конфиденциальность",
+				"terms": "Условия"
+			}
+		},
+		"language": {
+			"label": "Язык",
+			"choose": "Выбрать язык"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Начало работы",
+				"using": "Работа с Vela",
+				"security": "Безопасность",
+				"reference": "Справочник"
+			},
+			"titles": {
+				"introduction": "Введение",
+				"why-vela": "Почему мы сделали Vela",
+				"install": "Установка Vela",
+				"create-wallet": "Создание кошелька",
+				"send-and-receive": "Отправка и получение",
+				"networks-and-fees": "Сети и комиссии",
+				"passkeys": "Как работают passkey",
+				"signers": "Подписывающие и аппаратные ключи",
+				"clear-signing": "Понятная подпись",
+				"bybit-attack": "Атака на Bybit",
+				"recovery": "Восстановление и вход",
+				"account-contract": "Контракт аккаунта",
+				"security-audits": "Аудиты и известные проблемы",
+				"whitepaper": "Whitepaper",
+				"faq": "Вопросы и ответы"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Эта страница доступна только на английском"
+		}
+	},
+	"notice": {
+		"fallback": "Эта страница ещё не переведена. Текст ниже — на английском.",
+		"offer": {
+			"message": "Эта страница доступна и на русском.",
+			"accept": "Читать по-русски",
+			"dismiss": "Закрыть"
+		}
+	}
+}

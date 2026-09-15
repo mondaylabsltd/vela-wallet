@@ -1,0 +1,79 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "알파",
+			"blog": "블로그",
+			"docs": "문서",
+			"about": "소개",
+			"whyVela": "왜 Vela인가",
+			"howItWorks": "작동 방식",
+			"pricing": "가격",
+			"faq": "자주 묻는 질문",
+			"createWallet": "Vela 받기",
+			"signIn": "로그인",
+			"primary": "기본 메뉴",
+			"toggleMenu": "메뉴 열기"
+		},
+		"footer": {
+			"tagline": "진짜 내 것이 되는 이더리움 지갑. 시드 구문이 필요 없습니다.",
+			"label": "푸터",
+			"columns": {
+				"resources": "자료",
+				"infrastructure": "인프라",
+				"community": "커뮤니티",
+				"legal": "법적 고지"
+			},
+			"links": {
+				"docs": "문서",
+				"whitepaper": "백서",
+				"audits": "감사와 알려진 문제",
+				"roadmap": "로드맵",
+				"blog": "블로그",
+				"about": "소개",
+				"privacy": "개인정보 처리방침",
+				"terms": "이용약관"
+			}
+		},
+		"language": {
+			"label": "언어",
+			"choose": "언어 선택"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "시작하기",
+				"using": "Vela 사용하기",
+				"security": "보안",
+				"reference": "레퍼런스"
+			},
+			"titles": {
+				"introduction": "소개",
+				"why-vela": "Vela를 만든 이유",
+				"install": "Vela 설치",
+				"create-wallet": "지갑 만들기",
+				"send-and-receive": "보내기와 받기",
+				"networks-and-fees": "네트워크와 수수료",
+				"passkeys": "패스키의 작동 방식",
+				"signers": "서명 키와 보안 키",
+				"clear-signing": "클리어 서명",
+				"bybit-attack": "바이비트 공격",
+				"recovery": "복구와 로그인",
+				"account-contract": "계정 컨트랙트",
+				"security-audits": "감사와 알려진 문제",
+				"whitepaper": "백서",
+				"faq": "자주 묻는 질문"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "이 페이지는 영어로만 제공됩니다"
+		}
+	},
+	"notice": {
+		"fallback": "이 페이지는 아직 번역되지 않았습니다. 아래는 영어 원문입니다.",
+		"offer": {
+			"message": "이 페이지는 한국어로도 볼 수 있습니다.",
+			"accept": "한국어로 읽기",
+			"dismiss": "닫기"
+		}
+	}
+}
