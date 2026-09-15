@@ -197,6 +197,42 @@ struct BrowserMemoryTests {
         #expect(secure == secureLabel)
     }
 
+    /// **A page that cannot be reached says so** (058).
+    ///
+    /// Both failure callbacks used to set `loading = false` and nothing else,
+    /// so an unreachable dApp was a white rectangle under an empty address
+    /// bar. On the founder's iPhone that was `app.uniswap.org`, silent, for
+    /// sixty seconds. The reason is the SYSTEM's, verbatim: "the host could
+    /// not be found" and "the request timed out" are different problems and a
+    /// person debugging their own network needs the difference.
+    @Test func aFailedNavigationIsDescribedInTheSystemsOwnWords() {
+        let timedOut = NSError(
+            domain: NSURLErrorDomain, code: NSURLErrorTimedOut,
+            userInfo: [NSLocalizedDescriptionKey: "The request timed out."]
+        )
+        let described = BrowserEngine.describe(timedOut)
+        #expect(described.contains("timed out"))
+        // The code is carried too: it is what turns "it did not work" into
+        // something somebody can look up.
+        #expect(described.contains("\(NSURLErrorTimedOut)"))
+    }
+
+    /// **A cancelled navigation is not a failure.**
+    ///
+    /// Every redirect chain and every in-flight navigation a page replaces
+    /// cancels the last one. Drawing "couldn't load" there would put an error
+    /// over a page that is loading perfectly well.
+    @Test func aCancelledNavigationIsNotAFailure() {
+        let cancelled = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled,
+                                userInfo: [:])
+        #expect(BrowserEngine.describe(cancelled) == BrowserEngine.cancelled)
+
+        // And a non-URL error keeps whatever the system called it.
+        let other = NSError(domain: "vela.test", code: 7,
+                            userInfo: [NSLocalizedDescriptionKey: "something else"])
+        #expect(BrowserEngine.describe(other) == "something else")
+    }
+
     /// A tab with no title is drawn with its host, never blank.
     @Test func aTitlelessTabIsDrawnWithItsHost() {
         let rows = ExploreLive.tabs(

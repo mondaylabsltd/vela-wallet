@@ -89,10 +89,16 @@ final class ParallelSpaceDeviceTests: XCTestCase {
         // an empty address bar and a white page).
         settle(60)
         attach(app.screenshot(), named: "space-uniswap")
+        // Either the page is there, or the app SAYS WHY it is not. Silence is
+        // the one outcome this rejects — a white rectangle under an empty
+        // address bar is what 058 found, and what the failure panel exists to
+        // make impossible.
+        let loaded = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "uniswap")).firstMatch.exists
+        let saidWhy = app.staticTexts["无法加载此页面"].exists
         XCTAssertTrue(
-            app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label CONTAINS %@", "uniswap")).firstMatch.exists,
-            "the browser never showed the page it was given"
+            loaded || saidWhy,
+            "the browser showed neither the page nor a reason — it said nothing at all"
         )
         app.terminate()
     }

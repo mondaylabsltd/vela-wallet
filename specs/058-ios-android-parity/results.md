@@ -300,22 +300,54 @@ The space works on this phone: the golden Safe opens, reads its balances
 slider that moves real money, and that is the founder's to pull.
 
 **The browser loads a real site**: `example.com` renders with `🔒 example.com`
-in the address bar. **`https://app.uniswap.org/` does not**: white page, empty
-address bar, after sixty seconds — and **no error**. The corpus has
-`connect.browser.loadFailed` ("Couldn't load this page") with a retry beside
-it, and neither appeared. So two things are owed, and the second is the worse
-one:
+in the address bar. **`https://app.uniswap.org/` did not**: white page, empty
+address bar, sixty seconds, and no error.
 
-1. why that navigation never commits;
-2. why a page that fails to load says nothing at all.
+Both halves of that are now answered, and the second one was the real bug.
 
-Recorded rather than fixed: it needs the navigation delegate read against
-`WKWebView`'s failure callbacks, which is its own cut.
+### Why a page that fails says nothing — **fixed**
+
+`didFail` and `didFailProvisionalNavigation` each did one thing:
+`update(loading: false)`. The error was dropped on the floor. And because
+`update` reads `webView.url`, which is **`nil` after a provisional failure**,
+the address bar emptied itself too — so a page that refused to come looked
+exactly like a tap that did nothing.
+
+The engine now keeps the failure and the URL it was for, and the browser draws
+`connect.browser.loadFailed` + `connect.browser.retry` — **two corpus sentences
+no client had ever resolved** — with the system's own reason under them,
+verbatim and untranslated. "The host could not be found" and "the request timed
+out" are different problems, and somebody debugging their own network needs the
+difference; wrapping them in prose of ours would be a fifth sentence to
+translate and a fact lost. The retry re-attempts the navigation rather than
+calling `WKWebView.reload()`, which reloads the current document — and a
+provisional failure left none.
+
+A cancelled navigation is **not** a failure: every redirect chain cancels the
+last request, and drawing an error there would put one over a page that is
+loading perfectly well. Asserted, both ways.
+
+### Why that navigation never committed — **answered, and it is not the app**
+
+On the founder's iPhone, with the panel in place:
+
+> **无法加载此页面** · 请求超时。(-1001) · 重试
+
+`-1001` is `NSURLErrorTimedOut`. The request to `app.uniswap.org` was never
+answered on that phone's network; the browser did everything right and had no
+way to say so. `example.com` over the same connection loads in under ten
+seconds, which is what makes this a statement about that host rather than about
+the client. The address bar now reads `🔒 app.uniswap.org` throughout.
+
+**So the dApp path is not shown working against Uniswap yet** — reaching it
+needs a network that can reach it. The connect-and-sign round trip *is* proved
+against the local test dApp (053's `BrowserAcceptanceTests`), which is the
+harness built for exactly this.
 
 ## Where this leaves the four rulers
 
 | | 057's end | now |
 |---|---|---|
-| hermetic tests | 564 | **584 in 75 suites** |
-| device tests (iOS) | 0 | **11** across three files |
+| hermetic tests | 564 | **586 in 75 suites** |
+| device tests (iOS) | 0 | **12** across three files |
 | Release / Archive | crashes the compiler | succeeds |

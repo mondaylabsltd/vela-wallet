@@ -192,8 +192,23 @@ struct ExploreScreen: View {
                     onMenu: { sheet = .siteMenu }
                 )
                 if let engine {
-                    BrowserWebView(engine: engine)
-                        .accessibilityIdentifier("explore.page")
+                    ZStack {
+                        BrowserWebView(engine: engine)
+                            .accessibilityIdentifier("explore.page")
+                        // A page that could not be reached SAYS SO. Before
+                        // 058 both failure callbacks set `loading = false` and
+                        // nothing else, so an unreachable dApp was a white
+                        // rectangle under an empty address bar — silence a
+                        // person can only read as "the app is broken".
+                        if let failure = engine.failure {
+                            BrowserFailureView(
+                                title: loc.t("connect.browser.loadFailed"),
+                                detail: failure,
+                                retry: loc.t("connect.browser.retry"),
+                                onRetry: { engine.reload() }
+                            )
+                        }
+                    }
                 } else {
                     ScrollView {
                         DemoPageView(page: model.browser.page) {
