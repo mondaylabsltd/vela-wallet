@@ -58,6 +58,20 @@ struct AllowanceChip: Identifiable {
     let state: State
 }
 
+/// The field a person types their own spending cap into.
+///
+/// **A deviation from the drawing, and a deliberate one.** The drawn editor
+/// has a 自定义 chip and nowhere to type, so choosing it selected a mode that
+/// could not be completed — and an unlimited approval must be cappable to the
+/// person's own figure, not only to their balance or to zero. Recorded in
+/// 053's results for whoever redraws this card.
+struct AllowanceInput {
+    let value: String
+    let symbol: String
+    let placeholder: String
+    var error: String?
+}
+
 struct PartyBadge {
     let text: String
     let tone: SigningTone
@@ -82,7 +96,8 @@ enum SigningBlock: Identifiable {
     case sentence(text: String, tone: SigningTone)
     case allowance(
         label: String, value: String, valueTone: SigningTone,
-        chips: [AllowanceChip], note: String? = nil, resultingTotal: SigningRow? = nil
+        chips: [AllowanceChip], note: String? = nil, resultingTotal: SigningRow? = nil,
+        custom: AllowanceInput? = nil
     )
     case party(label: String, name: String, address: String? = nil, badge: PartyBadge? = nil)
     case rows([SigningRow])
@@ -101,7 +116,7 @@ enum SigningBlock: Identifiable {
         case .swap(let pay, let receive): "swap-\(pay.value)-\(receive.value)"
         case .nft(let id, _): "nft-\(id)"
         case .sentence(let text, _): "sentence-\(text.prefix(24))"
-        case .allowance(_, let value, _, _, _, _): "allowance-\(value)"
+        case .allowance(_, let value, _, _, _, _, _): "allowance-\(value)"
         case .party(let label, let name, _, _): "party-\(label)-\(name)"
         case .rows(let rows): "rows-\(rows.first?.label ?? "")"
         case .warning(_, let text): "warning-\(text.prefix(24))"

@@ -448,6 +448,25 @@ jobs:
       - name: Build the xcframework
         if: steps.xcframework.outputs.cache-hit != 'true'
         run: ./rust/scripts/build-ios-xcframework.sh
+      # The SECOND library: the parallel space's fixed keyset (spec 052 D1).
+      #
+      # `Dev/vela_dev_fixtures.swift` is committed and compiled by the DEBUG
+      # configuration, so a Debug build needs its FFI — and
+      # `VelaDevFixturesKit/Artifacts/` is gitignored like the core's. Without
+      # this step the iOS job fails at "cannot find type 'RustBuffer' in
+      # scope", which is where it has failed on every run since 052: the same
+      # shape Android already solves with its `build-dev-fixtures.sh` step.
+      # Release links neither the keys nor the door, which is what
+      # `EXCLUDED_SOURCE_FILE_NAMES` and the archived binary's symbols prove.
+      - name: Cache the dev-fixtures xcframework
+        id: devfixtures
+        uses: actions/cache@v4
+        with:
+          path: app-ios/VelaDevFixturesKit/Artifacts
+          key: devfixtures-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock') }}
+      - name: Build the dev-fixtures xcframework
+        if: steps.devfixtures.outputs.cache-hit != 'true'
+        run: ./rust/scripts/build-ios-dev-fixtures.sh
       # The destination is RESOLVED, not spelled. Two traps, both hit while
       # writing this job:
       #   - `name=iPhone 16` is ambiguous the moment a machine has that device

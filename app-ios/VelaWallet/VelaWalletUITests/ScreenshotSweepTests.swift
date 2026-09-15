@@ -57,6 +57,16 @@ final class ScreenshotSweepTests: XCTestCase {
     func testSweepGalleryFixtures() throws {
         for (code, label) in Self.fixtures {
             let app = XCUIApplication()
+            // This launch is NOT in the parallel space.
+            //
+            // The door persists (`vela.parallelSpace`), on purpose: a device test
+            // that spans a relaunch must not fall out of the space halfway. The
+            // cost is that a session left inside it poisons every later run — which
+            // is exactly what happened here, three UI tests failing against a
+            // fixture wallet nobody had asked for. An argument-domain value
+            // outranks the persisted one WITHOUT writing anything, so each test
+            // states its own environment instead of inheriting the last one's.
+            app.launchArguments += ["-vela.parallelSpace", "0"]
             app.launchEnvironment["VELA_GALLERY"] = "1"
             app.launchEnvironment["VELA_GALLERY_FIXTURE"] = code
             app.launchEnvironment["VELA_LANG"] = Self.language
@@ -77,6 +87,16 @@ final class ScreenshotSweepTests: XCTestCase {
     /// The live app's entry point, which the gallery cannot show.
     func testWelcome() throws {
         let app = XCUIApplication()
+        // This launch is NOT in the parallel space.
+        //
+        // The door persists (`vela.parallelSpace`), on purpose: a device test
+        // that spans a relaunch must not fall out of the space halfway. The
+        // cost is that a session left inside it poisons every later run — which
+        // is exactly what happened here, three UI tests failing against a
+        // fixture wallet nobody had asked for. An argument-domain value
+        // outranks the persisted one WITHOUT writing anything, so each test
+        // states its own environment instead of inheriting the last one's.
+        app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_LANG"] = Self.language
         app.launchEnvironment["VELA_THEME"] = Self.theme
         app.launchArguments += ["-AppleLanguages", "(\(Self.language))"]

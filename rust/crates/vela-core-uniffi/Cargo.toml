@@ -30,6 +30,15 @@ uniffi = { workspace = true, features = ["cli"] }
 # code for the same payload. Android/iOS get it through `cable_qr_matrix`
 # rather than each vendoring a QR library.
 qrcode = { version = "0.14", default-features = false }
+# Multicall3's `aggregate3((address,bool,bytes)[])` — a dynamic array of tuples,
+# which the hand-rolled `abi_encode_*` primitives cannot express (spec 051
+# research D1). Added HERE rather than to `vela-core` on purpose: the wasm crate
+# does not link this one, so the web bundle pays nothing, and a `vela-core`
+# change would force a `rust/pkg-web` rebuild and commit while another session
+# holds the web client. That is a scheduling reason and it is recorded as a
+# consolidation debt, not dressed up as a design.
+alloy-dyn-abi = { workspace = true }
+alloy-primitives = { workspace = true }
 thiserror = { workspace = true }
 crux_core = { workspace = true }
 serde = { workspace = true }

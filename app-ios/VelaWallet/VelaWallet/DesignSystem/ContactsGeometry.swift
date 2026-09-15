@@ -27,6 +27,9 @@ enum ContactsGeometry {
     static let rowMinHeight: CGFloat = WalletGeometry.rowMinHeight
     /// Group-detail member rows are the tighter variant (C4 ≈57 pt pitch).
     static let memberAvatar: CGFloat = 36
+    /// The pick sheet's scrolling list (spec 054): tall enough for six rows,
+    /// short enough that the CTA stays on screen with the keyboard down.
+    static let pickSheetMaxHeight: CGFloat = 360
     static let memberRowHeight: CGFloat = 56
 
     /// A–Z letter-section header: letter + hairline running to the edge.

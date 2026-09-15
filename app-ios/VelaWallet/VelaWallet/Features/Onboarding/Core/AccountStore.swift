@@ -31,10 +31,10 @@ actor AccountStore {
     }
 
     private enum Key {
-        static let accounts = "vela.accounts"
-        static let activeIndex = "vela.activeAccountIndex"
-        static let pendingUploads = "vela.pendingUploads"
-        static let serviceEndpoints = "vela.serviceEndpoints"
+        static let accounts = VelaStore.Key.accounts
+        static let activeIndex = VelaStore.Key.activeIndex
+        static let pendingUploads = VelaStore.Key.pendingUploads
+        static let serviceEndpoints = VelaStore.Key.serviceEndpoints
     }
 
     /// Read the account list. Order is the core's, never re-sorted here.
@@ -50,6 +50,20 @@ actor AccountStore {
             accounts.append(account)
         }
         writeList(Key.accounts, accounts)
+    }
+
+    /// Remove exactly one record, by id.
+    ///
+    /// Narrow on purpose. The only caller is the parallel space's exit (spec
+    /// 052 FR-003), and the alternative it exists to prevent is a caller
+    /// rewriting the whole list: this door is opened on a phone that holds the
+    /// founder's real wallet, and a list replacement there loses it. A record
+    /// that is not there is not an error — leaving twice is leaving once.
+    func removeAccount(id: String) {
+        let accounts = loadAccounts()
+        let kept = accounts.filter { ($0["id"] as? String) != id }
+        guard kept.count != accounts.count else { return }
+        writeList(Key.accounts, kept)
     }
 
     /// Missing, garbage and negative all read as 0.
@@ -102,32 +116,50 @@ actor AccountStore {
         defaults.removeObject(forKey: Key.activeIndex)
     }
 
-    /// The passkey-index endpoint override, when the person set one.
-    func loadRegistryURL() -> String? {
+    // MARK: - `vela.serviceEndpoints`, which has two writers
+
+    /// The whole endpoints blob, as stored — camelCase, partial, absent fields
+    /// absent.
+    ///
+    /// This key is the one place onboarding and `network_admin` (spec 050) both
+    /// write, so **both go through here**. Two independent writers on one key is
+    /// how a person's custom passkey-index endpoint disappears the first time
+    /// they open 设置 → 端点 — silently, because both writes succeed.
+    func loadServiceEndpoints() -> [String: Any] {
         guard let raw = defaults.string(forKey: Key.serviceEndpoints),
               let data = raw.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        let url = object["passkeyIndexURL"] as? String
-        return (url?.isEmpty ?? true) ? nil : url
+        else { return [:] }
+        return object
     }
 
-    func saveRegistryURL(_ url: String?) {
-        var endpoints: [String: Any] = [:]
-        if let raw = defaults.string(forKey: Key.serviceEndpoints),
-           let data = raw.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            endpoints = object
-        }
-        if let url, !url.isEmpty {
-            endpoints["passkeyIndexURL"] = url
-        } else {
-            endpoints.removeValue(forKey: "passkeyIndexURL")
+    /// Merge fields in; a `nil` value removes its field.
+    ///
+    /// Merging rather than replacing is the whole point: a caller that only
+    /// knows about one endpoint must not erase the other three.
+    func saveServiceEndpoints(_ fields: [String: String?]) {
+        var endpoints = loadServiceEndpoints()
+        for (name, value) in fields {
+            if let value, !value.isEmpty {
+                endpoints[name] = value
+            } else {
+                endpoints.removeValue(forKey: name)
+            }
         }
         if let data = try? JSONSerialization.data(withJSONObject: endpoints),
            let text = String(data: data, encoding: .utf8) {
             defaults.set(text, forKey: Key.serviceEndpoints)
         }
+    }
+
+    /// The passkey-index endpoint override, when the person set one.
+    func loadRegistryURL() -> String? {
+        let url = loadServiceEndpoints()["passkeyIndexURL"] as? String
+        return (url?.isEmpty ?? true) ? nil : url
+    }
+
+    func saveRegistryURL(_ url: String?) {
+        saveServiceEndpoints(["passkeyIndexURL": url])
     }
 
     // MARK: - Raw access
@@ -138,11 +170,34 @@ actor AccountStore {
     /// write replaces the whole list anyway — but the wallet itself is not lost
     /// either way: its address derives from the passkey, so signing in rebuilds
     /// the record.
+    /// Whether the last read of `vela.accounts` FAILED, as opposed to finding
+    /// nothing.
+    ///
+    /// **They are not the same fact and a wallet must never confuse them**
+    /// (ANDROID-8, 2026-09-13: a test device's own account record went
+    /// missing). "No accounts" sends somebody to the create-a-wallet screen;
+    /// "this device's wallet data cannot be read" is a fault they can act on —
+    /// retry, or reset this device's copy. Reading the second as the first is
+    /// how a person is told they have no wallet.
+    private(set) var lastReadFailed = false
+
     private func readList(_ key: String) -> [[String: Any]] {
-        guard let raw = defaults.string(forKey: key),
-              let data = raw.data(using: .utf8),
-              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return [] }
+        guard let raw = defaults.string(forKey: key) else {
+            // Absent IS empty: a device that has never held a wallet.
+            if key == Key.accounts { lastReadFailed = false }
+            return []
+        }
+        guard let data = raw.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data),
+              let list = parsed as? [[String: Any]]
+        else {
+            // Present and unreadable. Torn, truncated, or written by something
+            // else — whatever it is, it is not "no accounts".
+            if key == Key.accounts { lastReadFailed = true }
+            print("[vela-wallet] accounts: \(key) is present and unreadable")
+            return []
+        }
+        if key == Key.accounts { lastReadFailed = false }
         return list
     }
 

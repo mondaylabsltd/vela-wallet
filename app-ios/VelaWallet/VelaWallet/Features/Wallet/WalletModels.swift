@@ -111,6 +111,9 @@ struct AssetRowModel: Identifiable {
     let balance: String
     let fiat: AssetFiatModel
     let masked: Bool
+    /// The whole mark, where the builder knows the chain and contract (058).
+    /// `nil` keeps the lettermark, which is what every fixture row draws.
+    var mark: TokenMarkModel?
 }
 
 enum SectionMode {
@@ -141,6 +144,9 @@ struct ChainRowModel: Identifiable {
     let dot: ChainDot
     let count: Int
     let selected: Bool
+    /// Which chain this row picks; `nil` is the 所有网络 row. Absent in the
+    /// fixtures, which are a picture of the list rather than a picker.
+    var chainId: Int?
 }
 
 struct ChainSheetModel {
@@ -165,12 +171,14 @@ struct WalletHomeModel {
     let state: MobileStateId
     var header: WalletHeaderModel
     let pill: NetworkPillModel
-    let balance: BalanceModel
+    var balance: BalanceModel
     let actions: ActionsModel
-    let activitySection: SectionModel
-    let activityGroups: [ActivityGroupModel]
+    // `var` since spec 051 phase 3: the activity section is a machine's now,
+    // and `WalletLive` swaps it the way it already swaps the balance.
+    var activitySection: SectionModel
+    var activityGroups: [ActivityGroupModel]
     let assetsSection: SectionModel
-    let assetRows: [AssetRowModel]
+    var assetRows: [AssetRowModel]
     let tabs: TabsModel
     var sheet: ChainSheetModel?
     /// 1 or 1.35 — multiplies wallet type roles via walletTextScale (FR-011).

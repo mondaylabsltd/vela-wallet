@@ -55,6 +55,45 @@ struct FlowPillModel {
 struct TokenMarkModel {
     let ticker: String
     let badgeColor: Color
+    /// Logo candidates from the chain-data endpoint, best first. Empty draws
+    /// the lettermark, which is what every mark on this client did before 058.
+    var logoURLs: [String] = []
+    /// The chain badge's own logo, where there is one.
+    var badgeLogoURL: String?
+    /// ETH on Ethereum: the badge would repeat the token, so there is none.
+    var badgeHidden: Bool = false
+
+    /// The mark for one holding — glyph, logo candidates and badge in one
+    /// place, so a caller cannot fill three of the four and draw a mark that
+    /// disagrees with itself.
+    static func of(
+        chainId: Int,
+        symbol: String,
+        tokenAddress: String? = nil,
+        color: Color,
+        named: [String] = []
+    ) -> TokenMarkModel {
+        let mark = Marks.token(chainId: chainId, symbol: symbol,
+                               tokenAddress: tokenAddress, named: named)
+        return TokenMarkModel(
+            ticker: symbol,
+            badgeColor: color,
+            logoURLs: mark.logoURLs,
+            badgeLogoURL: mark.badgeLogoURL,
+            badgeHidden: mark.badgeHidden
+        )
+    }
+
+    /// A NETWORK by itself — its own logo, no badge.
+    static func chain(chainId: Int, symbol: String, color: Color) -> TokenMarkModel {
+        TokenMarkModel(
+            ticker: symbol,
+            badgeColor: color,
+            logoURLs: [Marks.chainLogoURL(chainId)].compactMap { $0 },
+            badgeLogoURL: nil,
+            badgeHidden: true
+        )
+    }
 }
 
 /// Leading art on a fact row's value side.
@@ -76,6 +115,11 @@ struct FactRowModel: Identifiable {
     var mono = false
     /// Shows a copy affordance under this accessible name.
     var copy: String?
+    /// What that affordance puts on the clipboard. `nil` copies `value`, which
+    /// is right only when the value is whole — an address or a hash is shown
+    /// ELLIPSED, and copying `0x1234…abcd` gives somebody a string no chain
+    /// has ever heard of. Android's `FactRow` has carried this field since 043.
+    var copyValue: String?
 }
 
 enum StatusTone {
@@ -98,16 +142,19 @@ struct NetworkRowModel: Identifiable {
     let addressDisplay: String
     let copyLabel: String
     let qrLabel: String
+    /// The network's own logo (058). Empty keeps the coloured disc with the
+    /// coin's ticker on it — the drawing's mark, and the fallback.
+    var logoURLs: [String] = []
 }
 
 struct ReceiveListModel {
     let header: FlowHeaderModel
     /// "One address across all 8 networks".
-    let subtitle: String
+    var subtitle: String
     let searchPlaceholder: String
     /// Shown in place of the rows when the search matches nothing.
     let emptyText: String
-    let rows: [NetworkRowModel]
+    var rows: [NetworkRowModel]
 }
 
 /// The account card that sits above every QR: whose address this is.
@@ -121,32 +168,43 @@ struct AddressCardModel {
 
 struct ContractLineModel {
     let label: String
+    /// Shortened for the line; `copyValue` is what a person actually needs.
     let value: String
     let copyLabel: String
+    /// The whole contract address. A copy button that put the ELLIPSED form on
+    /// the clipboard would be worse than no button — Android carries the same
+    /// field for the same reason.
+    var copyValue: String?
 }
 
 struct ReceiveQrModel {
-    let title: String
+    var title: String
     let closeLabel: String
     /// R3 only: the token's contract, above the account card.
     var contract: ContractLineModel?
-    let account: AddressCardModel
+    var account: AddressCardModel
     /// The mark drawn in the middle of the code — the token, or the network.
-    let centre: TokenMarkModel
+    var centre: TokenMarkModel
     let warning: String
     let saveImage: String
     let viewOnExplorer: String
+    /// The real code's modules, when there is a real address to encode.
+    /// `nil` keeps the drawn demo pattern — see `QrCode`.
+    var modules: [[Bool]]?
 }
 
 /// R4 — the image "Save image" produces, not a screen someone navigates to.
 struct ShareCardModel {
     let headline: String
-    let name: String
-    let lines: [String]
-    let networkNote: String
-    let networkMark: TokenMarkModel
-    let identiconSeed: String
+    var name: String
+    var lines: [String]
+    var networkNote: String
+    var networkMark: TokenMarkModel
+    var identiconSeed: String
     let wordmark: String
+    /// The real code's modules. `nil` keeps the drawn demo pattern, which is
+    /// what the gallery renders — see `QrCode`.
+    var modules: [[Bool]]?
 }
 
 // MARK: - Scan
@@ -191,6 +249,11 @@ struct TxDetailModel {
     let positive: Bool
     let facts: [FactRowModel]
     let viewOnExplorer: String
+    /// 删除记录 — the local record, not the transaction. Absent where there is
+    /// nothing to delete (a fixture, a receipt still in flight). The web's
+    /// `TxDetail.svelte` has drawn this button since 028 and never set the
+    /// label, so it has been invisible on every client.
+    var deleteLabel: String?
 }
 
 // MARK: - Assets
@@ -267,13 +330,16 @@ struct AddTokenModel {
     /// ERC-20 only: the network the contract is looked up on.
     var network: AddTokenNetworkModel?
     let fieldLabel: String
-    let fieldValue: String
+    // `var` since spec 051 phase 4: `manage_tokens` owns what is typed, what
+    // the chains answered and whether the CTA may fire, and `FlowsLive` swaps
+    // them the way `WalletLive` swaps the balance.
+    var fieldValue: String
     let fieldPlaceholder: String
     /// Draws the field in its error state and prints this under it.
     var fieldError: String?
-    let result: AddTokenResult
+    var result: AddTokenResult
     let cta: String
-    let ctaDisabled: Bool
+    var ctaDisabled: Bool
 }
 
 // MARK: - Send
@@ -329,6 +395,13 @@ struct RecipientCardModel: Identifiable {
     let identiconSeed: String
     let amount: String
     let removeLabel: String
+    /// The core's row id, so an edit can say which row it edited. Empty in
+    /// the fixtures, which have no machine behind them.
+    var rowId: String = ""
+    /// The core's verdict on this row, if it has one — an empty amount, an
+    /// address that is not one, a duplicate. A row's problem belongs on the
+    /// row, not in a sentence at the bottom of a list of six.
+    var problem: String?
 }
 
 /// SD2d's sweep row: one token, its amount, and a Max.
@@ -352,6 +425,18 @@ struct AmountFieldModel {
     let value: String
     let fiat: String
     let denomLabel: String
+    /// Whether the ⇄ row is offered at all — the core's `denomToggleShown`.
+    /// A token with no price cannot be counted in a currency, and a chevron
+    /// there is an invitation the wallet cannot honour.
+    var denomShown = true
+    /// Offered but REFUSED, with the core's reason underneath. Different from
+    /// absent: this one says why.
+    var denomEnabled = true
+    var denomReason: String?
+    /// The amount came from a scanned code or a link and is not the person's
+    /// to change. The field goes read-only rather than silently ignoring
+    /// typing.
+    var locked = false
 }
 
 struct RecipientFieldModel {
@@ -448,7 +533,13 @@ struct FeeTokenPickModel {
 }
 
 /// SD2c — the recipient importer.
-enum BatchUnit: String {
+///
+/// `Decodable` since 054: the core's `BatchUnit` has these two cases with
+/// these two spellings, and a second identical type would be two places to
+/// change and one of them forgotten. The house rule that keeps wire types
+/// apart from display models is about shapes that can drift; this one cannot
+/// without the drift test failing first.
+enum BatchUnit: String, Decodable {
     case fiat, token
 }
 
@@ -473,9 +564,25 @@ struct BatchImportModel {
     let rateLabel: String
     let rateValue: String
     let rateHint: String
+    /// 自动 — back to the fetched rate. Shown only once somebody has typed
+    /// their own, because until then there is nothing to go back from.
+    var rateReset: String = ""
+    var rateEdited = false
+    /// Whether the amounts are being read as FIAT and converted. When they are
+    /// not, there is no rate — and the whole rate block goes away rather than
+    /// standing there saying "1 xDAI = " with nothing after it.
+    var priced = true
     let parsedLabel: String
     let rows: [BatchRowModel]
     var rejectedText: String?
+    /// The one thing the core wants said that is not a rejected row: an
+    /// unreadable file, over the balance, over the cap, or a template saved.
+    /// Mirrors Android's `note` and the desktop's `notice`.
+    var note: String?
+    /// Whether that note is a refusal. The desktop colours the same three
+    /// facts this way: a file that could not be read and a total that cannot
+    /// be paid are errors; a trimmed list and a saved template are not.
+    var noteIsError = false
     let cta: String
     let ctaDisabled: Bool
 }
@@ -497,6 +604,17 @@ struct SendConfirmModel {
     let subline: String
     let facts: [FactRowModel]
     var breakdown: [BreakdownRowModel] = []
+    /// What stopped this page, in the core's words: a depleted relayer, a
+    /// submit the relay refused, or the passkey prompt that is up right now.
+    ///
+    /// Without this the page was silent about all three — the CTA simply
+    /// stopped working and nothing said why.
+    var notice: String?
+    /// The notice's own buttons. The primary retries what the notice is about;
+    /// the secondary is 暂不, which keeps the facts and lets somebody go on
+    /// looking at the page (spec 054 US4).
+    var noticeAction: String?
+    var noticeSecondary: String?
     let cta: String
 }
 
@@ -522,6 +640,11 @@ struct SendReceiptModel {
     /// The single bottom button: "Close · keep running" or "Done".
     let cta: String
     let ctaAccent: Bool
+    /// While the passkey ceremony is up the button is 取消 and it must NOT
+    /// leave the screen: it is the core's own checkpoint (`cancel_signing`),
+    /// and navigating away from it would abandon a prompt nobody can answer.
+    /// Android has drawn this distinction since 043.
+    var ctaCancels: Bool = false
 }
 
 // MARK: - The screens
@@ -586,6 +709,16 @@ enum WalletFlowSheet: Identifiable {
     }
 }
 
+/// What a sheet has to say after an action — 已保存, 需要权限, or a failure.
+///
+/// It is drawn as the platform's alert on purpose: the mocks have no alert
+/// component, and inventing one for two sentences the corpus already carries
+/// would be a new surface where a standard one does.
+struct FlowAlertModel {
+    let title: String
+    let message: String
+}
+
 /// One state: the screen, and the sheet over it.
 ///
 /// Sheets are an overlay on a base screen rather than states of their own
@@ -593,7 +726,9 @@ enum WalletFlowSheet: Identifiable {
 /// it, and the history behind it is still the history.
 struct FlowScreenModel {
     let state: FlowStateId
-    let base: FlowBase
+    // `var` since spec 051 phase 4: `FlowsLive` swaps the assets list for the
+    // person's own holdings.
+    var base: FlowBase
     var sheet: WalletFlowSheet?
     /// 1 or 1.35 — threaded through `walletTextScale`, as spec 015's H7x is.
     var textScale: CGFloat = 1

@@ -1,0 +1,180 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vela test dApp (iOS)</title>
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; margin: 16px; }
+  button { font-size: 18px; padding: 12px 16px; margin: 6px 6px 6px 0; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 12px; }
+</style>
+<body>
+  <h1>Vela test dApp</h1>
+  <p>Spec 053's device harness. Every action prints a <code>#verdict</code> line, because XCUITest reads a WKWebView's RENDERED text and cannot see JavaScript state that was never painted.</p>
+  <pre id="last">#verdict boot waiting</pre>
+  <pre id="verdicts">#verdict boot waiting</pre>
+  <button id="connect" type="button">Connect</button>
+  <button id="chain" type="button">Chain</button>
+  <button id="block" type="button">Block number</button>
+  <button id="switch" type="button">Switch to Gnosis</button>
+  <button id="sign" type="button">Sign</button>
+  <button id="send" type="button">Send dust</button>
+  <button id="approve" type="button">Approve unlimited</button>
+  <button id="verify" type="button">Verify sign</button>
+  <button id="siwe" type="button">SIWE</button>
+  <button id="siwe-bad" type="button">SIWE (other domain)</button>
+  <button id="ethsign" type="button">eth_sign</button>
+  <pre id="out">waiting…</pre>
+  <script>
+// Keccak-256, vendored.
+//
+// Spec 053 research D12: Android's phase 5 found the CDN copy of js-sha3 did
+// not load on the phone, and the on-chain check had to be driven with a digest
+// computed on the host. A harness that needs the internet to verify a
+// signature fails for the wrong reason.
+//
+// BigInt lanes, straight from FIPS 202. Slow and short, which is the right
+// trade for a page that hashes one message per tap.
+const keccak256 = (() => {
+  const MASK = (1n << 64n) - 1n;
+  const RC = [
+    0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
+    0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+    0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
+    0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+    0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
+    0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n
+  ];
+  const R = [
+    [0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61],
+    [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]
+  ];
+  const rotl = (x, n) => n === 0 ? x : ((x << BigInt(n)) | (x >> BigInt(64 - n))) & MASK;
+
+  function permute(A) {
+    for (let round = 0; round < 24; round++) {
+      const C = [];
+      for (let x = 0; x < 5; x++) C[x] = A[x][0] ^ A[x][1] ^ A[x][2] ^ A[x][3] ^ A[x][4];
+      const D = [];
+      for (let x = 0; x < 5; x++) D[x] = C[(x + 4) % 5] ^ rotl(C[(x + 1) % 5], 1);
+      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) A[x][y] ^= D[x];
+      const B = [[], [], [], [], []];
+      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+        B[y][(2 * x + 3 * y) % 5] = rotl(A[x][y], R[x][y]);
+      }
+      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+        A[x][y] = B[x][y] ^ (~B[(x + 1) % 5][y] & MASK & B[(x + 2) % 5][y]);
+      }
+      A[0][0] ^= RC[round];
+    }
+    return A;
+  }
+
+  return function (bytes) {
+    const rate = 136; // 1088 bits, Keccak-256
+    const padded = new Uint8Array(Math.ceil((bytes.length + 1) / rate) * rate);
+    padded.set(bytes);
+    padded[bytes.length] = 0x01;          // Keccak padding, NOT SHA3's 0x06
+    padded[padded.length - 1] |= 0x80;
+    const A = [[], [], [], [], []];
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) A[x][y] = 0n;
+    for (let offset = 0; offset < padded.length; offset += rate) {
+      for (let i = 0; i < rate / 8; i++) {
+        let lane = 0n;
+        for (let b = 7; b >= 0; b--) lane = (lane << 8n) | BigInt(padded[offset + i * 8 + b]);
+        A[i % 5][Math.floor(i / 5)] ^= lane;
+      }
+      permute(A);
+    }
+    let out = '';
+    for (let i = 0; i < 4; i++) {
+      let lane = A[i % 5][Math.floor(i / 5)];
+      for (let b = 0; b < 8; b++) {
+        out += Number((lane >> BigInt(8 * b)) & 0xffn).toString(16).padStart(2, '0');
+      }
+    }
+    return out;
+  };
+})();
+
+    const out = document.getElementById('out');
+    const verdicts = document.getElementById('verdicts');
+    const last = document.getElementById('last');
+    // XCUITest reads a WKWebView's RENDERED text through the accessibility
+    // tree; JavaScript state that was never painted is invisible to it. So
+    // every outcome gets a line on the page.
+    const verdict = (name, value) => {
+      const line = '#verdict ' + name + ' ' + (typeof value === 'string' ? value : JSON.stringify(value));
+      // The last six, not all of them. XCUITest walks the whole accessibility
+      // tree on every poll, so an unbounded log makes the harness slower than
+      // the chain it is waiting for — measured at ~30s per check.
+      verdicts.textContent = (verdicts.textContent + '\n' + line)
+        .split('\n').slice(-6).join('\n');
+      // One element, one line: what the device harness reads. The log above
+      // is for a person looking at a screenshot.
+      last.textContent = line;
+    };
+    const state = { announced: [], legacy: null, results: {}, events: [] };
+    // Bounded: the full object grows with every action, and XCUITest pays for
+    // every character of it on every poll.
+    const show = () => (out.textContent = JSON.stringify(state).slice(0, 400));
+    window.addEventListener('eip6963:announceProvider', (ev) => {
+      const { info, provider } = ev.detail;
+      state.announced.push({ name: info.name, rdns: info.rdns, sameAsWindowEthereum: provider === window.ethereum, frozenInfo: Object.isFrozen(info) });
+      window.__velaProvider = provider;
+      verdict('announce', info.name + ' ' + info.rdns);
+      for (const event of ['accountsChanged', 'chainChanged', 'connect', 'disconnect']) {
+        provider.on(event, (data) => { state.events.push({ event, data }); verdict('event:' + event, data === undefined ? 'fired' : data); show(); });
+      }
+      show();
+    });
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+    state.legacy = window.ethereum ? { present: true, isMetaMask: window.ethereum.isMetaMask === true, isVela: window.ethereum.isVela === true } : { present: false };
+    verdict('legacy', state.legacy.present ? ('present isVela=' + state.legacy.isVela) : 'absent');
+    show();
+    const FOUNDER = '0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141';
+    const GNOSIS_USDC = '0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83';
+    const SPENDER = '0x1111111111111111111111111111111111111111';
+    const MAX = 'f'.repeat(64);
+    const me = () => (state.results.eth_requestAccounts && state.results.eth_requestAccounts.result || [])[0] || window.ethereum.selectedAddress;
+    window.__ask = async (method, params) => {
+      try {
+        const result = await window.ethereum.request({ method, params: params ?? [] });
+        state.results[method] = { ok: true, result };
+      } catch (error) {
+        state.results[method] = { ok: false, code: error.code, message: error.message };
+      }
+      show();
+      const r = state.results[method];
+      verdict(method, r.ok ? ('ok ' + JSON.stringify(r.result)) : ('err ' + r.code + ' ' + r.message));
+      return r;
+    };
+    document.getElementById('connect').onclick = () => window.__ask('eth_requestAccounts');
+    document.getElementById('chain').onclick = () => window.__ask('eth_chainId');
+    document.getElementById('block').onclick = () => window.__ask('eth_blockNumber');
+    document.getElementById('switch').onclick = () => window.__ask('wallet_switchEthereumChain', [{ chainId: '0x64' }]);
+    document.getElementById('sign').onclick = () => window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', me()]);
+    document.getElementById('send').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: FOUNDER, value: '0x38d7ea4c68000' }]);
+    // Spec 046 US2: a SIWE message for this page's origin, and one that names another domain.
+    const hex = (text) => '0x' + Array.from(new TextEncoder().encode(text)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const siwe = (domain, uri) => `${domain} wants you to sign in with your Ethereum account:\n${me()}\n\nSign in to the test dApp.\n\nURI: ${uri}\nVersion: 1\nChain ID: 100\nNonce: 8fj2kd93lq\nIssued At: 2026-09-12T00:00:00.000Z`;
+    document.getElementById('siwe').onclick = () => window.__ask('personal_sign', [hex(siwe(location.host, location.origin)), me()]);
+    document.getElementById('siwe-bad').onclick = () => window.__ask('personal_sign', [hex(siwe('evil.example', 'https://evil.example')), me()]);
+    document.getElementById('ethsign').onclick = () => window.__ask('eth_sign', [me(), '0x48656c6c6f2c2056656c61']);
+    // EIP-1271 through the wallet's own read proxy: isValidSignature(bytes32,bytes) must answer its selector.
+    document.getElementById('verify').onclick = async () => {
+      const sig = state.results.personal_sign && state.results.personal_sign.result;
+      if (!sig) { state.results.verify = { ok: false, message: 'sign first' }; verdict('verify', 'sign first'); show(); return; }
+      const msg = new TextEncoder().encode('Hello, Vela');
+      const prefix = new TextEncoder().encode('\x19Ethereum Signed Message:\n' + msg.length);
+      const bytes = new Uint8Array(prefix.length + msg.length); bytes.set(prefix); bytes.set(msg, prefix.length);
+      const hash = keccak256(bytes);
+      const sigHex = sig.slice(2);
+      const data = '0x1626ba7e' + hash + (64).toString(16).padStart(64, '0') + (sigHex.length / 2).toString(16).padStart(64, '0') + sigHex + '0'.repeat((64 - (sigHex.length % 64)) % 64);
+      const r = await window.__ask('eth_call', [{ to: me(), data }, 'latest']);
+      state.results.verify = { ok: r.ok, magic: r.ok ? String(r.result).slice(0, 10) : null, valid: r.ok && String(r.result).slice(0, 10) === '0x1626ba7e', error: r.ok ? null : r.message };
+      verdict('verify', state.results.verify.valid ? 'valid 0x1626ba7e' : ('invalid ' + (state.results.verify.magic || state.results.verify.error)));
+      show();
+    };
+    document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
+  </script>
+</body>

@@ -14,20 +14,55 @@ struct TokenIconView: View {
 
     let ticker: String
     let badgeColor: Color
+    /// The whole mark, where the caller has one (058). Without it this draws
+    /// exactly what it always drew — which is what keeps every fixture, board
+    /// and preview unchanged.
+    var mark: TokenMarkModel?
+
+    init(ticker: String, badgeColor: Color) {
+        self.ticker = ticker
+        self.badgeColor = badgeColor
+        self.mark = nil
+    }
+
+    init(mark: TokenMarkModel) {
+        self.ticker = mark.ticker
+        self.badgeColor = mark.badgeColor
+        self.mark = mark
+    }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            Circle()
-                .fill(theme.bgRaised)
-                .frame(width: WalletGeometry.rowIcon, height: WalletGeometry.rowIcon)
-                .overlay {
-                    Text(verbatim: String(ticker.prefix(3)).uppercased())
-                        .typeRole(Typography.tokenGlyph)
-                        .foregroundStyle(theme.fgBase)
-                }
-            ChainBadgeDot(color: badgeColor)
+            RemoteLogoView(urls: mark?.logoURLs ?? [], size: WalletGeometry.rowIcon) {
+                // The lettermark IS the fallback — a whole mark, not a hole
+                // where an asset's identity should be.
+                Circle()
+                    .fill(theme.bgRaised)
+                    .overlay {
+                        Text(verbatim: String(ticker.prefix(3)).uppercased())
+                            .typeRole(Typography.tokenGlyph)
+                            .foregroundStyle(theme.fgBase)
+                    }
+            }
+            badge
         }
         .accessibilityHidden(true)
+    }
+
+    /// The chain badge: its logo where there is one, its colour otherwise, and
+    /// **nothing** when it would repeat the token (ETH on Ethereum).
+    @ViewBuilder private var badge: some View {
+        if mark?.badgeHidden == true {
+            EmptyView()
+        } else if let url = mark?.badgeLogoURL {
+            RemoteLogoView(urls: [url], size: WalletGeometry.badge) {
+                Circle().fill(badgeColor)
+            }
+            .padding(WalletGeometry.badgeRing)
+            .background(Circle().fill(theme.bgBase))
+        } else {
+            ChainBadgeDot(color: badgeColor)
+        }
     }
 }
 

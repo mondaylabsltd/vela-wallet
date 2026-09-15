@@ -80,8 +80,10 @@ enum ContactsFixtures {
 
     /// The rail always renders the full alphabet plus `#` (research D4);
     /// letters without a section jump to the nearest existing one.
-    static let indexLetters: [String] =
-        (UnicodeScalar("A").value...UnicodeScalar("Z").value).map { String(UnicodeScalar($0)!) } + ["#"]
+    ///
+    /// Lives in `ContactsLabels` since spec 050, because the live builder
+    /// renders the same rail; the value is unchanged.
+    static let indexLetters: [String] = ContactsLabels.indexLetters
 
     /// C1f search-active query (pre-filtered by the fixture layer).
     static let searchQuery = "Ali"
@@ -165,25 +167,20 @@ enum ContactsFixtures {
             .map { GroupRowModel(name: $0.0, countLabel: count(loc, "contacts.groupMembers", $0.1)) }
     }
 
+    // Shared with `ContactsLive` since spec 050 — one implementation of what
+    // the tab bar says and how a count is composed, so a live screen and its
+    // gallery board cannot drift. Same keys, same output.
+
     private static func count(_ loc: Loc, _ key: String, _ value: Int) -> String {
-        loc.t(key, vars: ["count": String(value)])
+        ContactsLabels.count(loc, key, value)
     }
 
     private static func tabs(loc: Loc) -> TabsModel {
-        TabsModel(
-            wallet: loc.t("componentsUi.mainNav.wallet"),
-            contacts: loc.t("componentsUi.mainNav.contacts"),
-            explore: loc.t("componentsUi.mainNav.explore"),
-            settings: loc.t("componentsUi.mainNav.settings")
-        )
+        ContactsLabels.tabs(loc: loc)
     }
 
     private static func search(loc: Loc, query: String? = nil) -> ContactsSearchModel {
-        ContactsSearchModel(
-            placeholder: loc.t("contacts.searchPlaceholder"),
-            query: query,
-            clearLabel: loc.t("contacts.cancel")
-        )
+        ContactsLabels.search(loc: loc, query: query)
     }
 
     // MARK: - Menus (data-model.md §Menus)
@@ -230,12 +227,14 @@ enum ContactsFixtures {
     static func buildMobileState(_ state: ContactsStateId, loc: Loc) -> ContactsScene {
         switch state {
         case .c1: .home(home(state, loc: loc))
+        case .c7: .home(home(state, loc: loc))
+        case .c8, .c9: .detail(detail(state, loc: loc))
         case .c1s: .home(home(state, loc: loc))
         case .c1f: .home(home(state, loc: loc))
         case .c3: .home(home(state, loc: loc))
         case .c5: .home(home(state, loc: loc))
         case .c2, .c2s: .detail(detail(state, loc: loc))
-        case .c4, .c6: .group(groupDetail(state, loc: loc))
+        case .c4, .c6, .c10: .group(groupDetail(state, loc: loc))
         }
     }
 
@@ -296,6 +295,10 @@ enum ContactsFixtures {
         if state == .c5 {
             model.sheet = addMenu(loc: loc)
         }
+        // C7 — 新建联系人 over the list it will be added to.
+        if state == .c7 {
+            model.form = contactForm(loc: loc, edit: false)
+        }
         return model
     }
 
@@ -322,8 +325,40 @@ enum ContactsFixtures {
             deleteLabel: loc.t("contacts.deleteContact"),
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             editLabel: loc.t("contacts.edit"),
+            favourite: state == .c9
+                ? FavouriteControlModel(on: true, label: loc.t("contacts.sectionFavorites"))
+                : nil,
+            inspection: state == .c9
+                ? ContactInspectionModel(
+                    tag: loc.t("componentsUi.signing.walletTag"),
+                    firstTime: loc.t("componentsUi.signing.firstTimeTagNeutral")
+                )
+                : nil,
             sheet: state == .c2s ? deleteConfirm(loc: loc, name: alice.name) : nil,
+            // C8 — 编辑联系人, filled, over the contact it edits.
+            form: state == .c8 ? contactForm(loc: loc, edit: true) : nil,
             textScale: 1
+        )
+    }
+
+    /// C7 / C8 — the add form (empty, Save gated) and the edit form (filled,
+    /// address locked because an address IS the contact's identity).
+    static func contactForm(loc: Loc, edit: Bool) -> ContactFormModel {
+        let alice = contact(roster[0])
+        return ContactFormModel(
+            title: loc.t(edit ? "contacts.editTitle" : "contacts.addTitle"),
+            nameLabel: loc.t("contacts.nameLabel"),
+            namePlaceholder: loc.t("contacts.namePlaceholder"),
+            addressLabel: loc.t("contacts.addressLabel"),
+            addressPlaceholder: loc.t("contacts.addressPlaceholder"),
+            name: edit ? alice.name : "",
+            address: edit ? alice.addressFull : "",
+            error: nil,
+            save: loc.t("contacts.save"),
+            cancel: loc.t("contacts.cancel"),
+            // Nothing typed, nothing to save — the core's gate, drawn shut.
+            saveEnabled: edit,
+            addressLocked: edit
         )
     }
 
@@ -341,7 +376,31 @@ enum ContactsFixtures {
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             moreLabel: loc.t("contacts.manage"),
             sheet: state == .c6 ? groupMenu(loc: loc) : nil,
+            // C10 — 添加成员, the whole address book with the current members
+            // already ticked.
+            memberPick: state == .c10 ? memberPick(loc: loc) : nil,
             textScale: 1
+        )
+    }
+
+    /// C10 — the membership picker, as it opens on a group that already has
+    /// three of the eight people in it.
+    static func memberPick(loc: Loc) -> MultiPickModel {
+        let members = Set(familyMembers.map(\.addressFull))
+        return MultiPickModel(
+            title: loc.t("contacts.addMember"),
+            rows: roster.map { entry in
+                MultiPickRowModel(
+                    id: entry.addressFull,
+                    title: entry.name,
+                    subtitle: entry.addressDisplay,
+                    identiconSeed: entry.addressFull,
+                    picked: members.contains(entry.addressFull)
+                )
+            },
+            emptyText: loc.t("contacts.groupNoContacts"),
+            save: loc.t("contacts.save"),
+            cancel: loc.t("contacts.cancel")
         )
     }
 

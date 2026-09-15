@@ -124,6 +124,7 @@
 				23ED5E343019A42200EA9C55 /* Resources */,
 				AAC0DE00000000000000B001 /* Bundle locale catalogs */,
 				AAC0DE00000000000000C003 /* Bundle launch animations */,
+				AAC0DE00000000000000D005 /* Bundle dApp provider */,
 			);
 			buildRules = (
 			);
@@ -302,6 +303,26 @@
 			shellPath = /bin/bash;
 			shellScript = "\"$SRCROOT/../scripts/bundle-animations.sh\"\n";
 		};
+		AAC0DE00000000000000D005 /* Bundle dApp provider */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/../scripts/provider-input.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "Bundle dApp provider";
+			outputFileListPaths = (
+				"$(SRCROOT)/../scripts/provider-output.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/../scripts/bundle-provider.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -348,6 +369,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VelaWallet/VelaWallet.entitlements;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator";
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lvela_dev_fixtures",
+				);
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;
@@ -368,6 +397,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet;
+				VELA_GIT_COMMIT = unknown;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -385,6 +415,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VelaWallet/VelaWallet.entitlements;
+				EXCLUDED_SOURCE_FILE_NAMES = "vela_dev_fixtures.swift ParallelSpaceBinding.swift";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;
@@ -405,6 +436,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.getvela.VelaWallet;
+				VELA_GIT_COMMIT = unknown;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -540,6 +572,8 @@
 		23ED5E603019A42500EA9C55 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -584,6 +618,8 @@
 		23ED5E633019A42500EA9C55 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"SWIFT_INCLUDE_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64/Headers";
+				"SWIFT_INCLUDE_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../VelaDevFixturesKit/Artifacts/VelaDevFixturesFFI.xcframework/ios-arm64-simulator/Headers";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F9W689P9NE;

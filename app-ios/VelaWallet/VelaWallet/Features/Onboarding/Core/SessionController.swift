@@ -37,8 +37,19 @@ final class SessionController {
             onView: { [weak self] json in
                 guard let decoded = try? CoreJSON.decode(SessionView.self, from: json) else { return }
                 self?.view = decoded
+            },
+            onFault: { error in
+                print("[vela-wallet] session fault: \(error)")
             }
         )
+        // A refused answer becomes the machine's OWN failure, once (contract
+        // 048 §2). Without it the session sits in `restoring` forever, which a
+        // person sees as a wallet that will not open — and the one thing worse
+        // than "your accounts cannot be read" is silence where that sentence
+        // belongs.
+        driver.toFailure = { _, _ in
+            CoreJSON.string(["type": "accounts_unavailable"])
+        }
     }
 
     /// Read storage and settle on a route. Called once, at launch.

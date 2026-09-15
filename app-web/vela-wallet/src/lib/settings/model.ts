@@ -130,6 +130,8 @@ export type SettingsOverlayId =
 	| 'date-format'
 	| 'time-format'
 	| 'clear-caches'
+	/** Spec 058: one storage row's Clear, asked before it happens. */
+	| 'clear-storage-item'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'

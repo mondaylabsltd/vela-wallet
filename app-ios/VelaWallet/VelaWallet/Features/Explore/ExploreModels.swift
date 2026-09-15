@@ -118,6 +118,37 @@ struct ConnectionModel {
     let explainer: String
     let disconnect: String
     let footnote: String
+    /// Whether the origin is on TLS. Drives the padlock, and nothing else may.
+    var secure: Bool = true
+    /// The panel's **not-yet-connected** form: a site is asking, and the two
+    /// answers replace 断开连接. Same panel, because the facts a person needs
+    /// in order to decide are exactly the facts they need in order to review
+    /// — who is asking, which account, which network — and a second sheet
+    /// would be a second chance to get one of them wrong.
+    var consent: (approve: String, reject: String)?
+}
+
+/// Which of the three sheets is open.
+///
+/// Separate from `ExploreSheet` — its *contents* — because a screen must store
+/// the identity and resolve the contents at render time. Storing the contents
+/// is how a sheet ends up showing what was true when it opened.
+enum ExploreSheetKind: String, Identifiable {
+    // The hyphenated spellings the fixtures have used since spec 022 — this
+    // type took over `ExploreSheet`'s identity and must not change it.
+    case groupManage = "group-manage"
+    case siteMenu = "site-menu"
+    case connection = "connection"
+
+    var id: String { rawValue }
+
+    func resolved(in model: ExploreHomeModel) -> ExploreSheet {
+        switch self {
+        case .groupManage: model.menus.groupManage
+        case .siteMenu: model.menus.siteMenu
+        case .connection: .connection(model.menus.connection)
+        }
+    }
 }
 
 enum ExploreSheet: Identifiable {
@@ -125,11 +156,13 @@ enum ExploreSheet: Identifiable {
     case siteMenu(site: SiteModel, statusLine: String, items: [SiteMenuItem])
     case connection(ConnectionModel)
 
-    var id: String {
+    var id: String { kind.rawValue }
+
+    var kind: ExploreSheetKind {
         switch self {
-        case .groupManage: "group-manage"
-        case .siteMenu: "site-menu"
-        case .connection: "connection"
+        case .groupManage: .groupManage
+        case .siteMenu: .siteMenu
+        case .connection: .connection
         }
     }
 }

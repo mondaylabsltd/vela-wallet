@@ -37,6 +37,10 @@ enum SettingsPage: Equatable {
 enum SettingsOverlay: Equatable, Identifiable {
     case none, accounts, signOut, language, currency, numberFormat, dateFormat, timeFormat
     case clearCaches, eraseDevice, feedback, rpcFix, balanceDetail, relayer
+    /// One storage row's 清除, asked before it happens (058, the founder's
+    /// ruling): "联系人与分组 · 清除" removed the whole address book on a
+    /// single tap, with nothing in between.
+    case clearStorageItem
 
     var id: String { String(describing: self) }
 }
@@ -78,7 +82,7 @@ struct SettingsRowModel: Identifiable {
 
 struct SettingsSectionModel: Identifiable {
     let id = UUID()
-    let rows: [SettingsRowModel]
+    var rows: [SettingsRowModel]
     var label: String?
     /// ST1b: 高级 is a disclosure, and it remembers being open.
     var collapsible: Bool = false
@@ -179,6 +183,10 @@ struct ChainMarkModel {
 
 struct SettingsNetworkRowModel: Identifiable {
     let id: String
+    /// The core's key for this chain (spec 050). `nil` on a fixture row, whose
+    /// taps go nowhere by design — the id above is a slug, and a slug is not
+    /// something `network_admin` can be asked about.
+    var chainId: Int?
     let mark: ChainMarkModel
     let name: String
     /// "链 1" — the chain-id line under the name.
@@ -222,7 +230,7 @@ struct CheckItemModel: Identifiable {
 
 struct AddNetworkModel {
     let title: String
-    let subtitle: String
+    var subtitle: String
     let searchPlaceholder: String
     var results: [SettingsNetworkRowModel] = []
     var candidate: SettingsNetworkRowModel?
@@ -242,6 +250,9 @@ struct ProviderCardModel: Identifiable {
     let field: UrlFieldModel
     var support: String?
     var link: String?
+    /// 测试 — the core asks the provider whether the key works. Absent in the
+    /// gallery, where nothing can be asked.
+    var test: String?
 }
 
 struct RpcProvidersModel {
@@ -407,36 +418,46 @@ struct SettingsScreenModel {
     let rescue: Bool
     let tabs: TabsModel
     var account: SettingsAccountRowModel
-    let sections: [SettingsSectionModel]
-    let theme: SegmentedModel
-    let avatar: SegmentedModel
-    let textScale: TextScaleModel
+    var sections: [SettingsSectionModel]
+    var theme: SegmentedModel
+    var avatar: SegmentedModel
+    var textScale: TextScaleModel
     let signOutLabel: String
     let eraseTitle: String
     let eraseSubtitle: String
     let networksTitle: String
     let networksSubtitle: String
-    let networks: [SettingsNetworkRowModel]
+    var networks: [SettingsNetworkRowModel]
     let addNetworkLabel: String
-    let networkDetail: NetworkDetailModel
-    let addNetwork: AddNetworkModel
-    let rpcProviders: RpcProvidersModel
+    var networkDetail: NetworkDetailModel
+    /// One detail per network, keyed by row id (spec 050).
+    ///
+    /// Empty for the fixtures, which draw a single detail page and reach it
+    /// by state pin rather than by tapping a row. A live list fills it, so
+    /// tapping Gnosis opens Gnosis.
+    var networkDetails: [String: NetworkDetailModel] = [:]
+    var addNetwork: AddNetworkModel
+    var rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel
-    let storage: StorageModel
-    let about: AboutModel
+    /// `var` since 058: both are MEASURED now — the storage page from the
+    /// store's own keys, the about page from the running build.
+    var storage: StorageModel
+    var about: AboutModel
     var accountsSheet: AccountsSheetModel
     let signOutSheet: ConfirmSheetModel
-    let languageSheet: SelectSheetModel
-    let currencySheet: SelectSheetModel
-    let numberSheet: SelectSheetModel
-    let dateSheet: SelectSheetModel
-    let timeSheet: SelectSheetModel
+    var languageSheet: SelectSheetModel
+    var currencySheet: SelectSheetModel
+    var numberSheet: SelectSheetModel
+    var dateSheet: SelectSheetModel
+    var timeSheet: SelectSheetModel
     let clearCachesSheet: ConfirmSheetModel
     let eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
-    let rpcFix: RpcFixModel
-    let balanceDetail: BalanceDetailModel
+    /// `var` since 058: the hero's status line opens these, and what they show
+    /// is this device's chains rather than the drawing's two.
+    var rpcFix: RpcFixModel
+    var balanceDetail: BalanceDetailModel
     let relayer: RelayerModel
     let indexDown: IndexDownModel
     /// Scrim title behind a rescue sheet — "钱包", "转账", "设备存储".

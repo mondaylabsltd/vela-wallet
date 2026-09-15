@@ -180,7 +180,15 @@ fun ContactsScreen(
                         rowIndex += 1
                     }
 
-                    if (model.groups.isNotEmpty()) {
+                    // The header shows whenever there is somebody to GROUP, not
+                    // only when a group already exists: drawing it on
+                    // `groups.isNotEmpty()` put the door to the first group
+                    // behind the first group, so a person with contacts and no
+                    // groups could not make one (the founder, 2026-09-15; iOS
+                    // had the identical condition and 058 fixed both). An empty
+                    // book still draws its own invitation instead — grouping
+                    // nobody is not a thing to offer.
+                    if (model.empty == null) {
                         item {
                             SectionHeader(
                                 title = model.groupsSectionTitle,

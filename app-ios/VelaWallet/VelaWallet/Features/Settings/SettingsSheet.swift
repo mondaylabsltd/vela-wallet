@@ -17,6 +17,23 @@ struct SettingsSheet: View {
     let overlay: SettingsOverlay
     let onDismiss: () -> Void
     let onSignOut: () -> Void
+    /// A row picked in one of the five select sheets. Absent in the gallery,
+    /// where the sheets are pictures of a choice already made.
+    var onPick: ((SettingsOverlay, String) -> Void)?
+    /// 全部清除, and the erase this app will not run without a person.
+    var onClearCaches: (() -> Void)?
+    var onErase: (() -> Void)?
+    /// An account row tapped in the switcher.
+    var onSelectAccount: ((String) -> Void)?
+    /// SR2's field and its commit (058). Absent in the gallery, where the
+    /// endpoint is a picture of one already typed.
+    var rpcDraft: Binding<String>?
+    var onCommitRpc: (() -> Void)?
+    /// SR3's 立即重试, per chain id.
+    var onRetryChain: ((String) -> Void)?
+    /// The storage row waiting on an answer, and what 清除 does to it.
+    var storageConfirm: ConfirmSheetModel?
+    var onConfirmStorage: (() -> Void)?
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -28,32 +45,80 @@ struct SettingsSheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 switch overlay {
                 case .accounts:
-                    AccountsSheetBody(sheet: model.accountsSheet)
+                    AccountsSheetBody(
+                        sheet: model.accountsSheet,
+                        onSelect: { address in onSelectAccount?(address) }
+                    )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
                                      onConfirm: onSignOut, onCancel: onDismiss)
                 case .language:
-                    SelectSheetBody(sheet: model.languageSheet)
+                    SelectSheetBody(
+                        sheet: model.languageSheet,
+                        onPick: { id in onPick?(.language, id) }
+                    )
                 case .currency:
-                    SelectSheetBody(sheet: model.currencySheet)
+                    SelectSheetBody(
+                        sheet: model.currencySheet,
+                        onPick: { id in onPick?(.currency, id) }
+                    )
                 case .numberFormat:
-                    SelectSheetBody(sheet: model.numberSheet)
+                    SelectSheetBody(
+                        sheet: model.numberSheet,
+                        onPick: { id in onPick?(.numberFormat, id) }
+                    )
                 case .dateFormat:
-                    SelectSheetBody(sheet: model.dateSheet)
+                    SelectSheetBody(
+                        sheet: model.dateSheet,
+                        onPick: { id in onPick?(.dateFormat, id) }
+                    )
                 case .timeFormat:
-                    SelectSheetBody(sheet: model.timeSheet)
+                    SelectSheetBody(
+                        sheet: model.timeSheet,
+                        onPick: { id in onPick?(.timeFormat, id) }
+                    )
+                case .clearStorageItem:
+                    // Built from what the row already says — its own label, its
+                    // group's warning, its own action word. No new sentence is
+                    // invented for a question the page can already ask.
+                    if let confirm = storageConfirm {
+                        ConfirmSheetBody(
+                            sheet: confirm,
+                            onConfirm: { onConfirmStorage?(); onDismiss() },
+                            onCancel: onDismiss
+                        )
+                    }
                 case .clearCaches:
-                    ConfirmSheetBody(sheet: model.clearCachesSheet,
-                                     onConfirm: onDismiss, onCancel: onDismiss)
+                    ConfirmSheetBody(
+                        sheet: model.clearCachesSheet,
+                        onConfirm: { onClearCaches?(); onDismiss() },
+                        onCancel: onDismiss
+                    )
                 case .eraseDevice:
-                    ConfirmSheetBody(sheet: model.eraseSheet,
-                                     onConfirm: onDismiss, onCancel: onDismiss)
+                    ConfirmSheetBody(
+                        sheet: model.eraseSheet,
+                        // Wired, and **never run on the founder's phone**. The
+                        // confirm is drawn and the action exists; verifying it
+                        // means reading the code, not erasing a device with a
+                        // real wallet on it.
+                        onConfirm: { onErase?(); onDismiss() },
+                        onCancel: onDismiss
+                    )
                 case .feedback:
                     FeedbackSheetBody(model: model.feedback)
                 case .rpcFix:
-                    RpcFixSheetBody(model: model.rpcFix, onPrimary: onDismiss)
+                    RpcFixSheetBody(
+                        model: model.rpcFix,
+                        draft: rpcDraft,
+                        onPrimary: {
+                            // Save, THEN close: the primary is 保存 while the
+                            // endpoint is unproven and 完成 once it answered.
+                            onCommitRpc?()
+                            onDismiss()
+                        }
+                    )
                 case .balanceDetail:
-                    BalanceDetailSheetBody(model: model.balanceDetail)
+                    BalanceDetailSheetBody(model: model.balanceDetail, onRetry: onRetryChain)
                 case .relayer:
                     RelayerSheetBody(model: model.relayer, onPrimary: onDismiss)
                 case .none:
@@ -105,6 +170,7 @@ private struct SheetTitle: View {
 private struct SelectSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: SelectSheetModel
+    var onPick: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title, subtitle: sheet.subtitle)
@@ -113,7 +179,14 @@ private struct SelectSheetBody: View {
                                                   placeholder: placeholder))
                 .padding(.bottom, Tokens.Space.s12)
         }
-        ForEach(sheet.rows) { SelectRow(row: $0) }
+        ForEach(sheet.rows) { row in
+            if let onPick {
+                Button { onPick(row.id) } label: { SelectRow(row: row) }
+                    .buttonStyle(.plain)
+            } else {
+                SelectRow(row: row)
+            }
+        }
         if let note = sheet.footerNote {
             Text(note)
                 .typeRole(Typography.label)
@@ -163,6 +236,7 @@ private struct ConfirmSheetBody: View {
 private struct AccountsSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: AccountsSheetModel
+    var onSelect: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title)
@@ -171,9 +245,10 @@ private struct AccountsSheetBody: View {
             .foregroundStyle(theme.fgSubtle)
             .padding(.bottom, Tokens.Space.s12)
         ForEach(sheet.rows) { row in
+            Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    IdenticonAvatar(seed: row.addressFull, size: 40)
+                    IdenticonAvatar(seed: row.addressFull, size: 40, name: row.name)
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)
@@ -195,6 +270,10 @@ private struct AccountsSheetBody: View {
                 .padding(.vertical, Tokens.Space.s12)
                 SettingsDivider()
             }
+            .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelect == nil)
         }
         VelaButton(title: sheet.primary, kind: .primary) {}
             .padding(.top, Tokens.Space.s24)
@@ -245,6 +324,8 @@ private struct FeedbackSheetBody: View {
 private struct RpcFixSheetBody: View {
     @Environment(\.theme) private var theme
     let model: RpcFixModel
+    /// The URL being typed. `nil` keeps the drawn, uneditable box.
+    var draft: Binding<String>?
     let onPrimary: () -> Void
 
     var body: some View {
@@ -265,7 +346,7 @@ private struct RpcFixSheetBody: View {
         .padding(.bottom, Tokens.Space.s16)
         SettingsCallout(callout: model.callout)
             .padding(.bottom, Tokens.Space.s16)
-        SettingsUrlField(field: model.field)
+        SettingsUrlField(field: model.field, text: draft, onCommit: onPrimary)
             .padding(.bottom, Tokens.Space.s16)
         VelaButton(title: model.primary, kind: .primary, action: onPrimary)
         if let label = model.providersLabel {
@@ -298,6 +379,8 @@ private struct RpcFixSheetBody: View {
 private struct BalanceDetailSheetBody: View {
     @Environment(\.theme) private var theme
     let model: BalanceDetailModel
+    /// 立即重试 on an unreachable chain. Absent in the gallery.
+    var onRetry: ((String) -> Void)?
 
     var body: some View {
         SheetTitle(title: model.title)
@@ -338,7 +421,15 @@ private struct BalanceDetailSheetBody: View {
                 }
             }
             Spacer(minLength: Tokens.Space.s8)
-            if let action = row.action {
+            if let action = row.action, let onRetry {
+                Button { onRetry(row.id) } label: {
+                    Text(action)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.infoBase)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else if let action = row.action {
                 Text(action)
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.infoBase)

@@ -109,7 +109,13 @@ struct ReceiveQrBody: View {
                     Text(verbatim: contract.value)
                         .monoRole(Typography.monoAddress.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Button { copied = "contract" } label: {
+                    Button {
+                        // It copies. Until 058 this button showed a checkmark
+                        // and left the clipboard exactly as it was — a person
+                        // pasted whatever was there before, into a payment.
+                        velaCopy(contract.copyValue ?? contract.value)
+                        copied = "contract"
+                    } label: {
                         // The same copy affordance the address row carries, one
                         // size down: a contract is a detail ABOUT the code
                         // below, not the thing being received.
@@ -125,18 +131,26 @@ struct ReceiveQrBody: View {
             AddressCardView(
                 account: model.account,
                 copied: copied == "address",
-                onCopy: { copied = "address" }
+                // The lines ARE the address, split for the card — the same
+                // reconstruction Android's receive sheet does.
+                onCopy: {
+                    velaCopy(model.account.lines.joined())
+                    copied = "address"
+                }
             )
 
-            QrCardView(label: model.title) {
-                Circle()
-                    .fill(model.centre.badgeColor)
-                    .frame(width: WalletFlowGeometry.qrCentre, height: WalletFlowGeometry.qrCentre)
-                    .overlay {
-                        Text(verbatim: model.centre.ticker)
-                            .typeRole(Typography.tokenGlyph)
-                            .foregroundStyle(theme.onAccent)
-                    }
+            QrCardView(label: model.title, modules: model.modules) {
+                // The asset's own logo in the middle of its code (058); the
+                // coloured disc with its ticker is the fallback.
+                RemoteLogoView(urls: model.centre.logoURLs, size: WalletFlowGeometry.qrCentre) {
+                    Circle()
+                        .fill(model.centre.badgeColor)
+                        .overlay {
+                            Text(verbatim: model.centre.ticker)
+                                .typeRole(Typography.tokenGlyph)
+                                .foregroundStyle(theme.onAccent)
+                        }
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -207,6 +221,8 @@ struct TxDetailBody: View {
 
     let model: TxDetailModel
     var onExplorer: () -> Void = {}
+    /// 删除记录. Absent in the gallery, where nothing is real enough to remove.
+    var onDelete: (() -> Void)?
 
     @State private var copiedIndex: Int?
 
@@ -230,6 +246,10 @@ struct TxDetailBody: View {
             }
             VelaButton(title: model.viewOnExplorer, kind: .secondary, action: onExplorer)
                 .padding(.top, Tokens.Space.s16)
+            if let label = model.deleteLabel, let onDelete {
+                VelaButton(title: label, kind: .danger, action: onDelete)
+                    .padding(.top, Tokens.Space.s8)
+            }
         }
     }
 }
@@ -323,7 +343,7 @@ struct TokenDetailBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: model.mark.ticker, badgeColor: model.mark.badgeColor)
+                TokenIconView(mark: model.mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: model.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -394,6 +414,12 @@ struct AddTokenBody: View {
     var onTab: (String) -> Void = { _ in }
     var onNetwork: () -> Void = {}
     var onSubmit: () -> Void = {}
+    /// Present only when a machine owns the field. The gallery passes nothing
+    /// and keeps its picture.
+    var input: Binding<String>?
+    /// Shown under the CTA when a save failed — the mock has no alert, and a
+    /// tap that changes nothing has told the person nothing.
+    var errorText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -427,11 +453,20 @@ struct AddTokenBody: View {
                 .accessibilityLabel(network.pickLabel)
             }
 
-            FlowMonoField(
-                value: model.fieldValue,
-                label: model.fieldLabel,
-                error: model.fieldError
-            )
+            if let input {
+                FlowMonoInput(
+                    value: input,
+                    label: model.fieldLabel,
+                    placeholder: model.fieldPlaceholder,
+                    error: model.fieldError
+                )
+            } else {
+                FlowMonoField(
+                    value: model.fieldValue,
+                    label: model.fieldLabel,
+                    error: model.fieldError
+                )
+            }
 
             result
 
@@ -442,6 +477,12 @@ struct AddTokenBody: View {
                 action: onSubmit
             )
             .padding(.top, Tokens.Space.s4)
+
+            if let errorText {
+                Text(verbatim: errorText)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
+            }
         }
     }
 
@@ -455,7 +496,7 @@ struct AddTokenBody: View {
                 .foregroundStyle(theme.fgSubtle)
         case .token(let mark, let name, let detail, let chip):
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: mark.ticker, badgeColor: mark.badgeColor)
+                TokenIconView(mark: mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: name)
                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -474,7 +515,7 @@ struct AddTokenBody: View {
         case .network(let mark, let name, let chip, let facts, let link):
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    TokenIconView(ticker: mark.ticker, badgeColor: mark.badgeColor)
+                    TokenIconView(mark: mark)
                     Text(verbatim: name)
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
@@ -516,7 +557,9 @@ struct SendPickBody: View {
     let model: SendPickModel
     var onFilter: (String) -> Void = { _ in }
     var onSelect: (Int) -> Void = { _ in }
-    var onSelectAll: () -> Void = {}
+    /// **The rows that are on screen**, by index. A search narrows the list,
+    /// and "select all valuable" must not sweep holdings a person cannot see.
+    var onSelectAll: ([Int]) -> Void = { _ in }
     var onCta: () -> Void = {}
 
     @State private var query = ""
@@ -557,7 +600,7 @@ struct SendPickBody: View {
                 }
             }
             if let selection = model.selection {
-                Button(action: onSelectAll) {
+                Button { onSelectAll(shown.map(\.offset)) } label: {
                     Text(verbatim: selection.selectAll)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
@@ -596,6 +639,15 @@ struct SendFormBody: View {
     var onMax: (Int) -> Void = { _ in }
     var onAddRecipient: () -> Void = {}
     var onContinue: () -> Void = {}
+    /// The two live fields. Absent everywhere the form is a picture.
+    var amountText: Binding<String>?
+    var recipientText: Binding<String>?
+    /// One binding pair per split row, by the core's row id. Absent in the
+    /// gallery, where the rows are a picture of a list.
+    var rowText: ((String) -> (address: Binding<String>, amount: Binding<String>))?
+    /// The core's live refusal, under the fields.
+    var warning: String?
+    var ctaDisabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -617,16 +669,24 @@ struct SendFormBody: View {
                     masked: false
                 ))
                 .overlay(alignment: .trailing) {
-                    Button { onMax(index) } label: {
-                        Text(verbatim: row.max)
-                            .typeRole(Typography.chip.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                            .padding(.horizontal, Tokens.Space.s8)
-                            .padding(.vertical, Tokens.Space.s2)
-                            .background(Capsule().fill(theme.bgSunken))
-                            .contentShape(Capsule())
+                    // An empty label means no chip. A sweep moves the MAXIMUM
+                    // of every row by definition — the core already computes
+                    // each one net of gas — so the live form has nothing for
+                    // this control to do, and `tap_max` would move the amount
+                    // of whichever single token was selected before the sweep
+                    // began. The drawing keeps it; the live screen does not.
+                    if !row.max.isEmpty {
+                        Button { onMax(index) } label: {
+                            Text(verbatim: row.max)
+                                .typeRole(Typography.chip.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                                .padding(.horizontal, Tokens.Space.s8)
+                                .padding(.vertical, Tokens.Space.s2)
+                                .background(Capsule().fill(theme.bgSunken))
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, Tokens.Space.s12)
                 .background(
@@ -634,10 +694,20 @@ struct SendFormBody: View {
                 )
             }
             if let amount = model.amount {
-                AmountInputView(amount: amount, onDenom: onDenom)
+                AmountInputView(amount: amount, onDenom: onDenom, text: amountText)
             }
             if let recipient = model.recipient {
-                RecipientFieldView(field: recipient, onPick: onPickRecipient, onScan: onScan)
+                RecipientFieldView(
+                    field: recipient, onPick: onPickRecipient, onScan: onScan,
+                    text: recipientText
+                )
+            }
+            // The core's sentence, where the person is looking when it becomes
+            // true — not in an alert they have to dismiss to get back to it.
+            if let warning {
+                Text(verbatim: warning)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.warningBase)
             }
             if let add = model.addRecipient {
                 Button(action: onAddRecipient) {
@@ -651,7 +721,13 @@ struct SendFormBody: View {
                 .buttonStyle(.plain)
             }
             ForEach(Array(model.recipients.enumerated()), id: \.element.id) { index, recipient in
-                RecipientCardView(recipient: recipient, onRemove: { onRemoveRecipient(index) })
+                let live = rowText.map { $0(recipient.rowId) }
+                RecipientCardView(
+                    recipient: recipient,
+                    onRemove: { onRemoveRecipient(index) },
+                    address: live?.address,
+                    amount: live?.amount
+                )
             }
             if !model.recipientActions.isEmpty {
                 GhostPillRowView(items: model.recipientActions, onSelect: onRecipientAction)
@@ -661,6 +737,8 @@ struct SendFormBody: View {
             }
             FeeRowView(fee: model.fee, onOpen: onFee)
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
+                .disabled(ctaDisabled)
+                .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
         }
     }
@@ -815,6 +893,11 @@ struct BatchImportBody: View {
     var onFile: () -> Void = {}
     var onTemplate: () -> Void = {}
     var onApply: () -> Void = {}
+    /// The live fields. `nil` renders exactly as drawn, so the gallery and the
+    /// screenshot sweep stay pixel-identical.
+    var pasteText: Binding<String>?
+    var rateText: Binding<String>?
+    var onResetRate: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
@@ -826,7 +909,34 @@ struct BatchImportBody: View {
                 selectedId: model.unit.rawValue,
                 onSelect: onUnit
             )
-            FlowMonoField(value: model.pasteValue, lineLimit: 4)
+            if let pasteText {
+                // A real field: pasting a list is the whole point of this
+                // sheet, and a `Text` cannot be pasted into.
+                TextEditor(text: pasteText)
+                    .font(Typography.monoAddress.scaled(textScale).font)
+                    .foregroundStyle(theme.fgBase)
+                    .scrollContentBackground(.hidden)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .frame(minHeight: WalletGeometry.batchPasteHeight)
+                    .padding(Tokens.Space.s8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                            .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if pasteText.wrappedValue.isEmpty {
+                            Text(verbatim: model.pastePlaceholder)
+                                .monoRole(Typography.monoAddress.scaled(textScale))
+                                .foregroundStyle(theme.fgSubtle)
+                                .padding(Tokens.Space.s12)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .accessibilityIdentifier("send.batchPaste")
+            } else {
+                FlowMonoField(value: model.pasteValue, lineLimit: 4)
+            }
 
             HStack(spacing: Tokens.Space.s4) {
                 Spacer(minLength: Tokens.Space.s0)
@@ -853,23 +963,50 @@ struct BatchImportBody: View {
                 Spacer(minLength: Tokens.Space.s0)
             }
 
+            if model.priced {
             FlowDivider()
             HStack(spacing: Tokens.Space.s4) {
                 Text(verbatim: model.rateSection)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
                 Spacer(minLength: Tokens.Space.s8)
-                Text(verbatim: "\(model.rateLabel) \(model.rateValue)")
+                Text(verbatim: model.rateLabel)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                LucideIcon(.pencil, size: LucideIconSize.checkmark)
-                    .foregroundStyle(theme.fgSubtle)
+                if let rateText {
+                    // Somebody's own rate, when the wallet could not price the
+                    // currency — or when they disagree with the price it found.
+                    TextField(model.rateValue, text: rateText)
+                        .font(Typography.body.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                        .accessibilityIdentifier("send.batchRate")
+                } else {
+                    Text(verbatim: model.rateValue)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                }
+                if model.rateEdited, !model.rateReset.isEmpty {
+                    Button(action: onResetRate) {
+                        Text(verbatim: model.rateReset)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.accentBase)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    LucideIcon(.pencil, size: LucideIconSize.checkmark)
+                        .foregroundStyle(theme.fgSubtle)
+                }
             }
             .padding(.vertical, Tokens.Space.s8)
             Text(verbatim: model.rateHint)
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
                 .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text(verbatim: model.parsedLabel)
                 .typeRole(Typography.rowSub.scaled(textScale))
@@ -895,6 +1032,12 @@ struct BatchImportBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.errorBase)
             }
+            if let note = model.note {
+                Text(verbatim: note)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(model.noteIsError ? theme.errorBase : theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VelaButton(
                 title: model.cta,
@@ -919,6 +1062,8 @@ struct SendConfirmBody: View {
 
     let model: SendConfirmModel
     var onConfirm: () -> Void = {}
+    var onNoticeAction: () -> Void = {}
+    var onNoticeSecondary: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -943,6 +1088,35 @@ struct SendConfirmBody: View {
             }
             .padding(.horizontal, Tokens.Space.s12)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+
+            if let notice = model.notice {
+                VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                    NoticeBannerView(text: notice)
+                    if model.noticeAction != nil || model.noticeSecondary != nil {
+                        HStack(spacing: Tokens.Space.s8) {
+                            if let secondary = model.noticeSecondary {
+                                Button(action: onNoticeSecondary) {
+                                    Text(verbatim: secondary)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.fgMuted)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer(minLength: Tokens.Space.s8)
+                            if let action = model.noticeAction {
+                                Button(action: onNoticeAction) {
+                                    Text(verbatim: action)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.accentBase)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
 
             if !model.breakdown.isEmpty {
                 VStack(spacing: Tokens.Space.s0) {

@@ -3684,6 +3684,8 @@ dependencies = [
 name = "vela-core-uniffi"
 version = "0.1.0"
 dependencies = [
+ "alloy-dyn-abi",
+ "alloy-primitives",
  "crux_core",
  "qrcode",
  "serde",

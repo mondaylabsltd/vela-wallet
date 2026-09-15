@@ -24,17 +24,18 @@ struct NetworkRowView: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            Circle()
-                .fill(row.badgeColor)
-                .frame(width: WalletFlowGeometry.chainBadge, height: WalletFlowGeometry.chainBadge)
-                .overlay {
-                    Text(verbatim: row.code)
-                        .typeRole(Typography.tokenGlyph)
-                        // The chain colours are brand fills, dark enough for
-                        // white in both appearances — so the mode-invariant
-                        // white, not fgInverse.
-                        .foregroundStyle(theme.onAccent)
-                }
+            RemoteLogoView(urls: row.logoURLs, size: WalletFlowGeometry.chainBadge) {
+                Circle()
+                    .fill(row.badgeColor)
+                    .overlay {
+                        Text(verbatim: row.code)
+                            .typeRole(Typography.tokenGlyph)
+                            // The chain colours are brand fills, dark enough for
+                            // white in both appearances — so the mode-invariant
+                            // white, not fgInverse.
+                            .foregroundStyle(theme.onAccent)
+                    }
+            }
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: row.name)
                     .typeRole(Typography.rowTitle.scaled(textScale))
@@ -104,7 +105,13 @@ struct FactRowView: View {
             lead
             value
             if let copy = fact.copy {
-                Button(action: onCopy) {
+                Button {
+                    // It copies. Until 058 every fact row on this client — the
+                    // counterparty, the transaction hash, a token's contract —
+                    // showed a checkmark and left the clipboard untouched.
+                    velaCopy(fact.copyValue ?? fact.value)
+                    onCopy()
+                } label: {
                     LucideIcon(copied ? .check : .copy, size: LucideIconSize.checkmark)
                         .foregroundStyle(copied ? theme.successBase : theme.fgSubtle)
                         .contentShape(Rectangle())
@@ -230,31 +237,63 @@ struct RecipientCardView: View {
 
     let recipient: RecipientCardModel
     var onRemove: () -> Void = {}
+    /// The live fields. `nil` renders exactly as drawn — the gallery and the
+    /// screenshot sweep stay pixel-identical (the mode-not-a-type shape
+    /// `AmountInputView` and `RecipientFieldView` already use).
+    var address: Binding<String>?
+    var amount: Binding<String>?
 
     var body: some View {
-        HStack(spacing: Tokens.Space.s12) {
-            IdenticonAvatar(seed: recipient.identiconSeed, size: WalletGeometry.rowIcon)
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: recipient.ordinal)
-                    .typeRole(Typography.caption.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
-                Text(verbatim: recipient.name)
-                    .monoRole(Typography.monoAddressDetail.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            HStack(spacing: Tokens.Space.s12) {
+                IdenticonAvatar(seed: recipient.identiconSeed, size: WalletGeometry.rowIcon)
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(verbatim: recipient.ordinal)
+                        .typeRole(Typography.caption.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                    if let address {
+                        TextField(recipient.name, text: address)
+                            .font(Typography.monoAddressDetail.scaled(textScale).font)
+                            .foregroundStyle(theme.fgBase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .lineLimit(1)
+                    } else {
+                        Text(verbatim: recipient.name)
+                            .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: Tokens.Space.s8)
+                if let amount {
+                    TextField("0", text: amount)
+                        .font(Typography.rowValue.scaled(textScale).font)
+                        .foregroundStyle(theme.fgBase)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad)
+                        .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                } else {
+                    Text(verbatim: recipient.amount)
+                        .typeRole(Typography.rowValue.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                }
+                Button(action: onRemove) {
+                    LucideIcon(.close, size: LucideIconSize.flowRowAction)
+                        .foregroundStyle(theme.fgSubtle)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(recipient.removeLabel)
             }
-            Spacer(minLength: Tokens.Space.s8)
-            Text(verbatim: recipient.amount)
-                .typeRole(Typography.rowValue.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-            Button(action: onRemove) {
-                LucideIcon(.close, size: LucideIconSize.flowRowAction)
-                    .foregroundStyle(theme.fgSubtle)
-                    .contentShape(Rectangle())
+            // The core's verdict on THIS row. A list of six with one sentence
+            // underneath makes somebody count rows to find the bad one.
+            if let problem = recipient.problem {
+                Text(verbatim: problem)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(recipient.removeLabel)
         }
         .padding(Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
@@ -278,7 +317,7 @@ struct FeeTokenRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: row.mark.ticker, badgeColor: row.mark.badgeColor)
+                TokenIconView(mark: row.mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))

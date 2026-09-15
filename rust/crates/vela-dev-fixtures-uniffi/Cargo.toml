@@ -3,11 +3,17 @@ name = "vela-dev-fixtures-uniffi"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "The parallel space's fixed keyset for DEBUG Android builds — a second, debug-only uniffi library (spec 043, research D2)."
+description = "The parallel space's fixed keyset for DEBUG builds — a second, debug-only uniffi library (spec 043 research D2; iOS in spec 052 research D1)."
 
 [lib]
 name = "vela_dev_fixtures"
-crate-type = ["cdylib", "lib"]
+# `cdylib` for Android (a second `.so` in the debug source set), `staticlib` for
+# iOS (a second xcframework linked only by the Debug configuration), `lib` for
+# the bindgen binary. Three crate types, one reason: uniffi's bindings verify
+# every exported function against the library they load, so ONE bindings file
+# cannot serve a library with the keyset and one without it. A second library is
+# what lets a release build carry neither (spec 043 FR-001, spec 052 FR-001).
+crate-type = ["cdylib", "staticlib", "lib"]
 
 [[bin]]
 name = "uniffi-bindgen"

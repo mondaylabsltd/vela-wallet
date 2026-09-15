@@ -4,12 +4,16 @@
 //
 //  The scanner (spec 021 component 27) — S1, full screen.
 //
-//  The camera feed is out of scope here, so the frame holds an inert
-//  surface. What IS in scope is the frame itself: four corner brackets and
-//  nothing else, so the thing being aimed at stays visible. A closed
-//  rectangle around a QR code competes with the code's own quiet zone.
+//  The frame is four corner brackets and nothing else, so the thing being aimed
+//  at stays visible: a closed rectangle around a QR code competes with the
+//  code's own quiet zone.
+//
+//  Spec 055 put a camera behind it. `session` is absent in the gallery and on a
+//  device with no camera, and then the frame holds the inert surface it always
+//  did — so the drawing is still exactly the drawing.
 //
 
+import AVFoundation
 import SwiftUI
 
 struct ScanSurfaceView: View {
@@ -19,6 +23,18 @@ struct ScanSurfaceView: View {
     let model: ScanModel
     var onClose: () -> Void = {}
     var onTool: (ScanTool) -> Void = { _ in }
+    /// The live viewfinder. Absent in the gallery and wherever there is no
+    /// camera to show.
+    var session: AVCaptureSession?
+    /// Why there is no viewfinder, in the core's words. Shown under the frame,
+    /// where the aiming hint would otherwise be — because when the camera is
+    /// not running, "point the camera at a code" is advice nobody can take.
+    var refusalText: String?
+    /// The affordance that goes with the refusal: 授予权限, when that is the
+    /// thing that would help.
+    var refusalAction: (label: String, act: () -> Void)?
+    /// Whether the torch is lit, so the control can say so.
+    var torchOn = false
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -38,11 +54,23 @@ struct ScanSurfaceView: View {
             .padding(.top, Tokens.Space.s16)
 
             Spacer()
-            ScanFrame()
-            Text(verbatim: model.hint)
+            ScanFrame(session: session)
+            Text(verbatim: refusalText ?? model.hint)
                 .typeRole(Typography.body.scaled(textScale))
-                .foregroundStyle(theme.fgMuted)
+                .foregroundStyle(refusalText == nil ? theme.fgMuted : theme.warningBase)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.vertical, Tokens.Space.s16)
+            if let action = refusalAction {
+                Button(action: action.act) {
+                    Text(verbatim: action.label)
+                        .typeRole(Typography.button.scaled(textScale))
+                        .foregroundStyle(theme.accentBase)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
             Spacer()
 
             HStack(spacing: Tokens.Space.s32) {
@@ -50,7 +78,9 @@ struct ScanSurfaceView: View {
                     Button { onTool(tool.id) } label: {
                         VStack(spacing: Tokens.Space.s4) {
                             LucideIcon(glyph(for: tool.id), size: LucideIconSize.flowScanTool)
-                                .foregroundStyle(theme.fgBase)
+                                .foregroundStyle(
+                                    tool.id == .torch && torchOn ? theme.accentBase : theme.fgBase
+                                )
                                 .frame(
                                     width: WalletFlowGeometry.scanToolDisc,
                                     height: WalletFlowGeometry.scanToolDisc
@@ -84,11 +114,18 @@ struct ScanSurfaceView: View {
 private struct ScanFrame: View {
     @Environment(\.theme) private var theme
 
+    var session: AVCaptureSession?
+
     var body: some View {
         GeometryReader { proxy in
             let side = proxy.size.width
             ZStack {
-                RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(theme.bgSunken)
+                if let session {
+                    CameraPreviewView(session: session)
+                        .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.r8))
+                } else {
+                    RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(theme.bgSunken)
+                }
                 Path { path in
                     let arm = WalletFlowGeometry.scanBracketArm
                     // top-left

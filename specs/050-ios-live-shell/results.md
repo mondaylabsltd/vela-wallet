@@ -1,0 +1,733 @@
+# Results — 050 iOS Live Shell
+
+Written as the work lands, phase by phase. Numbers here are measured, not
+estimated; where something was claimed in the plan and turned out to be wrong,
+the correction is in this file rather than in a quiet edit upstream.
+
+---
+
+## Phase 0 — Baselines on record
+
+Branch point: `origin/main` @ `28d25ae9` ("Merge pull request #185 from
+mondaylabsltd/027-web-extension-provider"). Worktree at
+`/Volumes/data/production/vela-wallet-ios`.
+
+### The client at the branch point
+
+| | Lines |
+|---|---|
+| `app-ios/VelaWallet` Swift, total | 27,540 |
+| — app target | 25,423 |
+| — tests | 2,117 |
+| `*Fixtures.swift` (the seven fixture builders) | 3,767 |
+| Settings + Contacts features and components | 5,335 |
+
+Live: onboarding — create, sign in, session, route guard, sign-out, three
+authenticator families. Fixtures: the home, the address book, settings, Explore,
+the signing sheet and the four wallet flows.
+
+`App/RootView.swift` at the branch point routed exactly one tab:
+
+```swift
+if tab == .settings { router.path.append(.settings) }
+```
+
+— so 通讯录 **and** 探索 were both drawn, in the tab bar, tappable, and inert.
+(The spec's `case .contacts: break` quote came from the sibling
+`031-desktop-read-wiring` worktree, which is unmerged and had already added a
+section mechanism for 探索. On `origin/main` the two dead tabs are dead in a
+slightly different way; the correction is recorded rather than back-edited.)
+
+### Test baseline
+
+| | |
+|---|---|
+| `xcodebuild build` | **BUILD SUCCEEDED** |
+| `xcodebuild test` | **TEST SUCCEEDED** |
+| `@Test` functions | **130** |
+| Failures | 0 |
+
+Destination: `id=84146B7B-C679-46AC-8426-41AA42E6F403` — iPhone 15 Pro, **iOS
+17.5**. Worth pinning: `platform=iOS Simulator,name=iPhone 15 Pro` **does not
+resolve**, because that name defaults to `OS:latest` and no iPhone 15 Pro exists
+at 26.x on this machine.
+
+### The xcframework baseline
+
+`rust/scripts/build-ios-xcframework.sh` from a clean worktree: ~5 min, and it
+regenerated `app-ios/VelaCoreKit/Sources/VelaCore/vela_core_uniffi.swift`
+**byte-identically** to the committed copy (`git diff --stat` empty). So every
+later diff in that file is genuinely this feature's.
+
+`Artifacts/` is gitignored, so a fresh checkout **cannot build the app** until
+that script has run once. That is a quickstart line, not a defect — but it is
+the first thing that will stop a new machine.
+
+### The 27 operations
+
+`contacts` 7 · `display_currency` 4 · `network_admin` 16. The live/fail-closed
+split is [contracts/shell-operations.md](./contracts/shell-operations.md).
+
+### A defect found while measuring: no shared scheme
+
+`git ls-tree -r origin/main app-ios/ | grep xcscheme` returns nothing, while
+`project.pbxproj` **is** tracked. Xcode autocreates a per-user scheme under
+`xcuserdata/` the first time somebody opens the project, which is why nobody
+noticed: it works on every machine that has ever opened the project and on no
+machine that has not.
+
+Fixed by committing `xcshareddata/xcschemes/VelaWallet.xcscheme`. The file is
+taken **byte-identically** from the unmerged `029-native-repair` branch, which
+found the same hole for its own reasons; keeping the bytes identical means the
+two branches merge cleanly rather than conflicting over a comment. Its
+provenance line therefore says "spec 029", which is true and which this
+paragraph explains.
+
+The scheme also **skipped the UI test target**, which was deliberate at the
+time: `ScreenshotSweepTests` launches the app once per gallery fixture and pulls
+images out of the `.xcresult`, which is a review instrument for a person rather
+than a gate. *(Phase 7 narrowed it — the whole target being skipped also made
+`-only-testing` on it impossible, so the sweep is now skipped by name instead.)*
+
+### A gate the plan claimed, and the honest version of it
+
+`node app-ios/scripts/audit-literals.mjs` was listed as a green gate. **It is
+red on `origin/main`**: 35 pre-existing violations across 125 files, all in
+`Features/Settings`, `Components/Settings` and `Features/Signing` — bare layout
+numbers, `.font(.system(size:))` calls and hex strings left by specs 022/023.
+
+So the gate for this feature is "**no new violations**", not "green", and the
+number to compare against is **35**. Claiming a green audit and then discovering
+it was never green would have made every later "gates green" line in this file
+worth less.
+
+---
+
+## Phase 1 — The road, and the address book on it
+
+Contacts first, deliberately: it is the only machine in the cut that needs no
+network, so it isolates every pipeline bug from every HTTP bug. Landing it alone
+already turns a dead tab into a real screen.
+
+### What shipped
+
+**The core export** — one macro line in
+`rust/crates/vela-core-uniffi/src/onboarding_bridge.rs`:
+
+```rust
+bridge_object!(ContactsCore, vela_core::app::contacts::Contacts);
+```
+
+Nothing else under `rust/` changed. `vela_core_uniffi.swift` was regenerated by
+the script (`ContactsCore` at line 1291), never hand-edited.
+
+**The shared road** — `app-ios/VelaWallet/VelaWallet/Core/`:
+
+| File | What it is |
+|---|---|
+| `VelaStore.swift` | the `vela.*` shelf: JSON **text** in `UserDefaults`, one key registry, corrupt→empty, records carried whole |
+| `CoreStore.swift` | one machine, resident, view decoded; eager construction, **lazy idempotent boot** |
+| `AddressText.swift` | `0x9F3c…21aE`, in one place |
+
+**The machine** — `Features/Contacts/`:
+
+| File | What it is |
+|---|---|
+| `ContactsWire.swift` | `Decodable` mirrors of `ContactsView` and friends |
+| `ContactsExecutor.swift` | the 7 operations: 4 live, 3 fail-closed and marked |
+| `ContactsLive.swift` | `ContactsView` → `ContactsScene`, sibling of the fixtures |
+| `ContactsLabels.swift` | the label helpers both builders share |
+| `ContactsStore.swift` | the resident machine and the events the drawn controls raise |
+
+**The screen** — `ContactsScreen` gained two callbacks (`onSelectTab`,
+`onDelete`) and `RootView` gained a `.contacts` section, a `ContactsRoute` for
+detail and group pushes, and a `contacts` store constructed beside the session.
+
+### Gates
+
+| | Baseline | Phase 1 |
+|---|---|---|
+| `xcodebuild build` | SUCCEEDED | **SUCCEEDED** |
+| `xcodebuild test` | SUCCEEDED, 130 | **SUCCEEDED, 163** |
+| literal-audit violations | 35 | **35** (none in the new files) |
+| `rust/crates/vela-core/src/app/` | — | **0 lines changed** |
+| corpus | — | **0 delta** |
+
+`ContactsFixtures.swift`'s diff changes **no constant's value** — three private
+helpers now delegate to `ContactsLabels`, and the 22 existing
+`ContactsFixturesTests` still pass, which is the proof rather than the claim.
+
+### Phase 1a — the loop, end to end, with nothing faked below it
+
+`ContactsStoreTests` drives the real core through the real bridge, the real
+`CoreDriver`, the real executor and a real `UserDefaults`. It is the same path
+the screen takes, minus the finger, and it is what stands in for SC-001 until
+the device run.
+
+Five tests: the book loads from storage through the core; a delete writes a
+tombstone that survives a **relaunch** (a second store over the same defaults);
+switching accounts resets the book; re-entering the tab does not re-boot the
+machine; and no account loads an empty book rather than somebody else's.
+
+Tests: 163 → **168**, all passing.
+
+### The finding this file exists for: the view lands before the write does
+
+The relaunch test failed on its first run, and the reason is worth more than the
+test:
+
+> **The core commits its view the instant it handles the event, and *queues* the
+> writes.**
+
+So the row disappears from the screen a turn *before* anything reaches storage.
+The test had settled on `contacts.count == 1` and then read the shelf — and
+found nothing, because nothing was there yet.
+
+The consequence reaches past the test suite. **"I watched the contact vanish" is
+not evidence that it will still be gone tomorrow.** A device check that deletes
+a row and sees it disappear has verified the view and nothing else; only the
+relaunch verifies the write. Every persistence claim in this feature — contacts,
+networks, the display currency — has to be made *after* a relaunch, which is why
+each acceptance scenario says so.
+
+### Two bugs the new tests found, both mine
+
+1. **`assertionFailure` was the wrong kind of loud.** The unknown-operation
+   branch trapped. It is a no-op in Release, so the only builds it could affect
+   were the **debug** ones run on a real device — turning a recoverable wire
+   mismatch into a crash for exactly the person best placed to report it. Now it
+   logs and answers.
+
+2. **The bridge answers in two shapes, and the drift test caught me confusing
+   them on its first run.** `dispatch` and `resolveEffect` return
+   `{ view, effects, cancelled_effect_ids }`; `view()` returns the view **bare**.
+   Decoding the wrapper as a view failed with
+   `keyNotFound(CodingKeys(stringValue: "loaded"))`. That is precisely the class
+   of mistake the guard exists for, arriving before any of it reached a screen.
+
+### Three design decisions worth their space
+
+**`history_failed`, not an empty list.** `load_send_history` has no transaction
+store until 052. An empty list is a *claim* — "this person has never sent to
+anybody" — and the core would then treat every address as a first interaction,
+showing the address-poisoning warning to everyone, forever. The modelled failure
+says the true thing: nobody looked.
+
+**Waiting is not empty.** Before the core has read the stores, the screen shows
+real chrome over an empty list — not the drawn C3 "你还没有联系人", which is a
+claim about a book nobody has opened yet, and reads as *your address book is
+gone*.
+
+**The tombstone pivot.** `vela.contacts.dismissed` is an **object** keyed by
+address; the wire is a list. Writing a list there is silently accepted by
+`UserDefaults` and read back as empty by every client — which resurrects every
+deleted contact on the next launch. It has a test of its own.
+
+### Phase 1b — what a screenshot found that 168 tests did not
+
+`VELA_PAGE=contacts-live` was added — the desktop's `VELA_SECTION` by another
+name. `contacts` mounts the fixture host; `contacts-live` mounts the **real
+machine** over whatever `vela.contacts` actually holds, which is the only way to
+look at the wired screen without first completing a passkey ceremony.
+
+Seed the simulator's shelf and launch it:
+
+```bash
+xcrun simctl spawn <udid> defaults write app.getvela.VelaWallet \
+  vela.contacts -string '[{"address":"0x…","name":"妈妈", …}]'
+SIMCTL_CHILD_VELA_PAGE=contacts-live SIMCTL_CHILD_VELA_LANG=zh \
+  xcrun simctl launch <udid> app.getvela.VelaWallet
+```
+
+(`defaults write` needs `-string`, or it parses the JSON as a plist and refuses.
+Env vars reach the app only through the `SIMCTL_CHILD_` prefix.)
+
+The screen came up correct — real contacts, real groups, core-resolved member
+counts, core-drawn identicons — **and 妈妈 was filed under `#`.**
+
+#### CJK names were being dumped in one bucket
+
+`ContactsFixtures` is the drawing's canon and it is unambiguous: 阿豪 is in
+section **A**, 妈妈 in section **M**, and `sectionLetters` is
+`["A","B","C","D","H","M"]`. The roster files CJK names by their **pinyin
+initial**.
+
+The live builder — ported faithfully from web's `live.ts`, which does
+`first >= 'A' && first <= 'Z' ? first : '#'` — sent every one of them to `#`.
+
+Faithful, and wrong. For a wallet whose first market writes Chinese names, that
+is an A–Z directory with the directory taken out: every contact in one bucket at
+the bottom of the rail, and the rail itself pointing at nothing. No test caught
+it because every test I had written used Latin names — the fixtures encode the
+right answer, and nothing compared the two builders against it.
+
+Fixed by transliterating the initial (`.toLatin` then `.stripDiacritics`) before
+the A–Z test. Digits, emoji and unnamed addresses still file under `#`.
+
+The regression test is the one that should have existed from the start: **every
+name in the drawn roster must file where the drawing files it.** It passes for
+all eight, including "DAO 金库" → D and "hold on" → H.
+
+Tests: 168 → **170**.
+
+**Cross-client debt**: web has the same defect and files CJK contacts under `#`
+today. It is `contacts/live.ts`'s `sectionLetter`, and it needs the same fix in
+a web cut — flagged here rather than reached across into another client's code.
+
+---
+
+## Phase 2 — `network_admin` reads, and the first real HTTP
+
+The largest machine in the cut: 2,900 lines of core, 16 operations, four storage
+keys. Its **read** half lands here; the wizard's write path is phase 3.
+
+### What shipped
+
+`bridge_object!(NetworkAdminCore, …)` — the second and last export of this
+phase. Then:
+
+| File | What it is |
+|---|---|
+| `Core/CoreHTTP.swift` | `URLSession`, GET JSON + JSON-RPC + a probe that reports status and latency. Every method returns an optional, because every caller's next move is the same: answer the core's "I could not find out". |
+| `Features/Settings/SettingsWire.swift` | `Decodable` mirrors of `NetView`, including two hand-written tagged unions |
+| `Features/Settings/NetworkAdminExecutor.swift` | all 16 operations — 13 live, 3 fail-closed and marked |
+| `Features/Settings/SettingsLive.swift` | the networks list and detail, swapped onto the fixture model |
+| `Features/Settings/SettingsStore.swift` | the resident machine |
+
+`AccountStore` grew `loadServiceEndpoints` / `saveServiceEndpoints`, and its
+existing `loadRegistryURL` / `saveRegistryURL` now delegate to them — so the key
+with two writers has **one** writer's worth of code.
+
+### Two things iOS can do that web cannot
+
+1. **`probe_reachable` asks the real question.** An explorer is a website, not a
+   JSON API, and a browser's CORS rules hide its response — so web sends
+   `no-cors` and can only report "the request did not throw". iOS has no CORS,
+   so this reads the actual status. A strictly better answer than the client
+   this was ported from can give.
+2. **`wss://` RPC endpoints are probed.** Web opens a `WebSocket`; iOS uses
+   `URLSessionWebSocketTask` with the same budget. Answering `null` for these
+   would make every WebSocket RPC read as incompatible — a chain a person could
+   genuinely add, refused for the shell's convenience.
+
+### `SettingsScreenModel` is one value, so the live builder is partial
+
+`ContactsScene` is a screen; `SettingsScreenModel` is **every** settings page and
+sheet in one struct. So `SettingsLive` follows the pattern spec 019 established
+on this same type with `withIdentity`: build the fixture model, then swap the
+fields the core now owns.
+
+That is the honest shape. A field this file does not touch is visibly still a
+fixture, and the list of what it touches is the list of what is live — today,
+`networks` and `networkDetail`.
+
+### Two decisions worth their space
+
+**The health pill is `nil` until something is measured.** An unmeasured endpoint
+is not a healthy one, and painting a green dot before the probe answers is the
+screen making a claim the core has not.
+
+**Colour is a display fact, and the core is right not to have it.** `vela-core`
+knows a chain's id, name, RPC and explorer and deliberately not what colour it
+is. The eight brand colours the design system ships are used by chain id; the
+core's other four builtins and every custom chain get the neutral the drawing
+gives Tempo and X Layer — so a chain nobody drew is never handed somebody
+else's brand.
+
+### The literal audit earned its keep immediately
+
+The neutral started life as `Color(red: 0.549, …)` copied from the fixture, and
+the audit went 35 → 36. It is now `ChainPalette.unbranded`, a token beside the
+other eight, and the count is back to 35. Exactly the gate working as the
+baseline promised.
+
+### Verified on screen
+
+`VELA_PAGE=settings-live VELA_STATE=st9` opens straight on the networks page
+(`VELA_STATE` is new here, and exists because that page is otherwise two taps
+inside a route and unreachable from a screenshot pass).
+
+The list that came up is the **core's twelve builtin chains** — Ethereum, BNB,
+Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo and the
+rest — not the fixture's eight. Optimism, Avalanche and Unichain had never
+appeared on this screen before, because no drawing lists them.
+
+Tests: 170 → **183**. Literal violations: 35 → 35. Build green.
+
+---
+
+## Phase 3 — the one new control, and a defect only the real world had
+
+### The control
+
+Not a new component. `SettingsUrlField` — the box every endpoint on ST9b / ST11 /
+ST12 / SR2 / SR5 already is — gained an **optional binding**:
+
+```swift
+var text: Binding<String>?     // nil renders exactly as drawn
+```
+
+`nil` is the drawn state and produces the same `Text` in the same box for every
+gallery board and every fixture call site, so the screenshot sweep stays
+meaningful. A binding turns it into a `TextField` with the same mono face, the
+same colours and the same placeholder.
+
+That is the atom the drawing was missing, added without moving anything drawn —
+which is a smaller and safer answer than the `Components/Settings/SettingsField.swift`
+the plan named, and is what shipped instead.
+
+The wizard's controls reach the core through `SettingsNetworkActions`, a struct
+of closures whose `isLive` flag is what tells the fields whether there is
+anything on the other end. A gallery board leaves it default and every field
+stays the picture it was drawn as.
+
+### The check list is a mapping, not an invention
+
+The drawing summarises the core's **eleven** `REQUIRED_CONTRACTS` into **four**
+rows, and the mapping turned out to be already decided rather than something to
+invent: EntryPoint v0.7, Safe L2 合约 and WebAuthn 签名模块 are named
+individually, and 其余 **8** 项合约 counts the rest. 3 + 8 = 11.
+
+A missing contract fails exactly the row that names it, which is what the
+fixture's own comment demands — *"incompatible is only legible as an answer if it
+shows WHICH requirement failed"*.
+
+### A design gap, recorded rather than papered over
+
+**The P256 precompile has no row and no corpus key.** It participates in the
+core's `compatible` verdict, and the drawing has nowhere to show it. A chain
+rejected *only* for a missing precompile therefore renders four green ticks under
+a 不兼容 badge — exactly the illegibility the list was drawn to prevent.
+
+Folding it into 其余 8 项合约 would be worse: it would name eight contracts as
+the failure when the failure is the precompile. Closing it needs a drawn row and
+a corpus key, and this feature may add neither (FR-010).
+
+### Three refusals whose wording lives in the wrong namespace
+
+`network_admin` models `already_added`, `not_found` and `not_compatible`, and
+`settingsModals.addNetwork.*` has no sentence for any of them. `addToken.*` does
+— *"This network is already added"*, *"Chain info not found"*, *"Not compatible
+with Vela Wallet"* — because the Expo client's add-token flow embedded an
+add-network step.
+
+The wording is exactly this screen's; only the namespace is historical. Using it
+beats inventing a key, which this feature may not do. `no_rpc_endpoint` has no
+sentence at all and borrows `unableToVerify`, which is the true thing rather than
+the exact thing — recorded as a wording gap.
+
+### The defect only a live run could find
+
+A compile-flagged live suite (`-DVELA_LIVE_TESTS`) drives the wizard against real
+endpoints. It failed, and the reason was invisible until `CoreStore`'s fault hook
+was given somewhere to print:
+
+```
+network_admin fault: invalid result from shell:
+invalid value: integer `7078815900`, expected u32
+```
+
+**The production chain index contains chain ids larger than `u32::MAX`.** The
+core's `chain_id` is a `u32`, so serde refuses the **entire** `search_index`
+result over one bad row — and the observable symptom is a wizard stuck on 搜索中
+forever, with nothing in any log.
+
+Fixed by dropping rows whose id the core cannot represent. That is hygiene, not
+policy: a chain id the core cannot hold is a chain it can never be asked about,
+so offering it would be offering a dead end.
+
+**This is a cross-client defect.** Web's `decodeSearchIndex` passes
+`Number(r.chainId)` straight through to the same `u32` field and sends the whole
+index, so its add-network search fails the same way against the live index. It is
+recorded here rather than reached across into another client's code.
+
+Two smaller findings came with it:
+
+- **`CoreStore`'s fault hook defaulted to silence.** `SettingsStore` now passes a
+  logger. A malformed event or an unreadable view was, until this, a screen that
+  simply stopped responding with nothing to say why — which is the same defect
+  class FR-002 exists to prevent, one layer up.
+- **The live suite must be `.serialized`.** Its tests are `@MainActor` and each
+  polls the main actor while waiting for the effect loop; run in parallel they
+  starve each other, and the wizard — which needs a debounce, an index fetch, a
+  chain resolve and an RPC race to finish — is the one that loses.
+
+### A UX number worth knowing — ⚠️ **corrected in 051, and it was wrong**
+
+*As first written*: adding Gnosis (100) took between 42 and 90 seconds end to
+end, and the drawn 检查中 state had to carry a full minute.
+
+**That number was an artifact of the test, not a measurement of the wizard.**
+The test typed `100` — a **built-in** chain — and then waited up to 90 seconds
+for a compatibility verdict the core is right never to produce: Gnosis is
+already added, and `already_added` is the correct and only answer. What was
+being timed was my own settle loop giving up.
+
+Re-measured in 051 against **Zora (7777777)**, which is not a built-in and
+therefore actually runs the pipeline — index, chain resolve, the RPC race,
+eleven `eth_getCode` reads and the P256 probe: **3.6 seconds**. The refusal path
+for a built-in answers in **2.3 seconds**.
+
+So the 检查中 state carries a few seconds, not a minute, and nothing needs
+redesigning around it. Recorded here rather than quietly deleted, because the
+wrong number was reported to the founder and a handoff that silently improves is
+one nobody can trust.
+
+### Gates
+
+Tests: 183 → **192** hermetic, plus 3 live behind the flag. Literal violations:
+35 → 36 → **35** (the editable and read-only halves now share one mono face,
+written as `Font.system` rather than hidden behind implicit-member syntax so the
+audit still counts it). Build green.
+
+---
+
+## Phase 4 — `display_currency`, and the measurement this cut exists to produce
+
+The third machine. Its value is the diffstat, not the feature.
+
+### SC-004, measured
+
+```
+ .../Sources/VelaCore/vela_core_uniffi.swift        | 168 +++++      generated
+ app-ios/VelaWallet/VelaWallet/App/RootView.swift   |  17 ++-        ← see below
+ .../Features/Settings/CurrencyCatalog.swift        |  52 +++        new
+ .../Settings/DisplayCurrencyExecutor.swift         |  84 +++        new
+ .../Features/Settings/SettingsFixtures.swift       |  13 +-         list moved out
+ .../Features/Settings/SettingsLive.swift           |  66 +++        new builder
+ .../Features/Settings/SettingsModels.swift         |   6 +-         3 `let` → `var`
+ .../Features/Settings/SettingsStore.swift          |  27 ++         2nd machine
+ .../Features/Settings/SettingsWire.swift           |  15 ++         new mirror
+ .../VelaWalletTests/DisplayCurrencyTests.swift     | 125 +++        new tests
+ .../vela-core-uniffi/src/onboarding_bridge.rs      |   6 +          1 export
+```
+
+**Four of the five named shared files are untouched:** `CoreDriver.swift`,
+`CoreStore.swift`, `VelaStore.swift` and `CoreHTTP.swift` are byte-identical.
+The road is paved: a third machine cost one export, one executor, one wire
+mirror, one builder and a dozen lines in the store that already existed.
+
+**`RootView.swift` changed, and pretending otherwise would be the dishonest
+version of this criterion.** Seventeen lines, and they are all one thing: the
+settings model assembly went from a single early-return over one machine to a
+`var model` threaded through two. Not shared logic — the *composition* of two
+independent views, one of which can be ready while the other is not.
+
+The change was avoidable only by contorting the architecture to win a number:
+`display_currency` could have been given its own store, and RootView would have
+grown a constructor line instead. It was put inside `SettingsStore` because 设置
+is one surface and a caller should not have to know how many cores are behind
+it — which is the better structure and costs the cleaner number, so the number
+is reported rather than the structure bent.
+
+### Why this machine went third and not first
+
+The plan said so and the reason held: the paved-road measurement only means
+something once two machines with *different* needs have been over the road.
+`contacts` needed storage and no network; `network_admin` needed HTTP, a
+debounce and probes. If `display_currency` had gone first it would have measured
+a road nobody had driven on.
+
+### What shipped
+
+- `bridge_object!(DisplayCurrencyCore, …)` — the third and last export.
+- `DisplayCurrencyExecutor` — three operations live, `resolve_rate` fail-closed.
+  **`read_device_currency` is a platform call** (`Locale.current.currency`),
+  where desktop carried it as an open debt needing a region→ISO-4217 table.
+- `CurrencyCatalog` — the eight currencies, shared by both builders for the
+  reason `ContactsLabels` is: two copies of the list is how a gallery board and
+  a live screen start offering different currencies.
+- `SettingsLive.withCurrency` — the 货币 row's value and the picker's selection.
+
+### `rate: null` is not `1`, made concrete
+
+The 货币 row reads `USD · $1,234.56`. With no rate it **degrades**: it says USD
+and shows the USD figure. It does not relabel the same digits with a ¥, which
+would tell somebody 1,234.56 dollars is 1,234.56 yuan.
+
+A code the catalog has never heard of — a device region can produce one —
+degrades the same way rather than inventing a symbol. Both have tests, and the
+`rate: nil` one is the reason this machine models an optional at all: the core's
+own doc calls a defaulted 1 "a real 7x mispayment".
+
+Tests: 192 → **202**.
+
+---
+
+## Phase 6 — closeout
+
+### Blocked on drawings that do not exist
+
+The core is complete for every one of these. What is missing is a picture, and
+inventing one would be designing rather than wiring (founder decision,
+2026-09-05).
+
+| Surface | Core is ready | What a drawing would have to contain |
+|---|---|---|
+| **Add / edit a contact** | `Event::Save { input, now_ms }`, with `ContactSaveInput` | A form: name, address, note, group membership; a validation state for a malformed address; and what 保存 does when the address already exists (the core's rule is existing-wins). `design/contacts/C5` is a menu of three choices, not a form. |
+| **Favourite a contact** | `Event::ToggleFavorite` | Any affordance at all. No mock anywhere carries one — not the row, not the detail header, not the swipe. |
+| **Contacts search** | nothing needed; `ContactsLive.home(query:)` narrows and is tested | The search box is a `Text`, not a `TextField`. Not blocking — the A–Z rail is the drawn way to find somebody — which is why it was **not** built under the founder's "input boxes yes, forms no" call. |
+| **编辑分组 / 导入 / 导出** | `GroupSave`, `ImportParsed` | Destinations. The menu items are drawn; what they open is not. |
+| **The P256 precompile check** | `compat.p256_available` | A fifth row in the compatibility list, and a corpus key for it. Without one, a chain rejected *only* for a missing precompile shows four green ticks under a 不兼容 badge. |
+| **Endpoints / RPC providers panels** | 6 operations, all live in the executor | Nothing — these are drawn (ST11, ST12) and merely unwired. Bounded work, not a gap; the editable field they need now exists. |
+
+### Debts → 051
+
+| # | Debt |
+|---|---|
+| 1 | Four fail-closed arms carry `// live in 051`: `contacts::resolve_identity`, `contacts::classify_recipient`, `display_currency::resolve_rate`, `network_admin::fetch_fiat_rates`. Two more wait on 052: `contacts::load_send_history`, `network_admin::clear_bundler_cache`. `invalidate_pools` is an acknowledged no-op until a pool exists. |
+| 2 | **Web files CJK contacts under `#`** — same defect this cut fixed on iOS. Raised with the web session (2026-09-05), and the answer got better than "port the fix": sectioning is heading **into the core** as `ContactsView.sections`, so all four clients file a name the same way instead of transliterating four times. That is the only version where the platform with the least — wasm, which has no ICU, and is why web landed on `#` — decides for everyone. **Not started; it moves the wasm and waits on the founder.** Budget for the founder's call: `MAX_WASM_BYTES` is 4,000,000 (`build-web.mjs:47`), 024's plan records 3,630,664 used, and a first-initial-only table over U+4E00–U+9FA5 is ~13–21 KB. When it lands, iOS's `sectionLetter` and its `.toLatin` helper are a **deletion**; the portable acceptance test (every drawn roster name files where the drawing files it) comes along unchanged. One seam to settle in that spec: search narrowing stays shell-side, so a narrowing shell must drop sections that come out empty. **Landed 2026-09-05 as `0d96dcb3` on 028 (still unmerged), and it carries a risk for iOS**: the table is U+4E00–U+9FFF + U+00C0–U+024F, while iOS's `.toLatin` is ICU and files さくら→S, 김민준→G, Ελένη→E, Дмитрий→D today — measured, in `transliterationAlsoFilesKanaHangulAndCyrillic`. Switching to a CJK-only table would send every Japanese and Korean name to `#`, on two shipped locales. Raised with the ranges and the costs: hangul is arithmetic (`(code-0xAC00)/588`, a 19-entry lead table), kana ~180 codepoints, Greek and Cyrillic ~150 each — well under 1 KB on top of the CJK table. **Until that is settled, iOS keeps its local transliteration**; the deletion is conditional on parity, not on the merge. |
+| 3 | **Web's add-network search is broken against the live index.** `decodeSearchIndex` passes `Number(chainId)` into a `u32` and sends the whole index, so one out-of-range id refuses the entire result — exactly what happened here. |
+| 4 | `CoreHTTP` and `RegistryClient` each configure their own `URLSession`. Collapsing them is natural in 051, when the RPC pool needs a client anyway. |
+| 5 | `CoreDriver` still lives under `Features/Onboarding/Core/` while four machines depend on it. A pure move, deliberately not made in the commit that first reused it. |
+| 6 | Three address-shortening copies with two different thresholds (`> 14` twice, `> 10` once); web uses a fourth form (8+6). New code uses `AddressText`. |
+| 7 | ~~Adding a network takes 42–90 seconds.~~ **Withdrawn in 051 — the number was my test timing out, not the wizard.** Re-measured: 3.6 s for a real add (Zora), 2.3 s for a built-in's refusal. No debt. |
+| 8 | **Inbound, from web's 028** (peer message, 2026-09-05): commit `6cec4ddf` on `028-web-port-completion` — not on `origin/main` yet — adds `import_failure` and `export` to `ContactsView`, plus events `import_file`, `export_requested`, `export_taken`, `import_acknowledged`, `add_group_members`, `remove_group_member`, `set_contact_groups`, and a new `app/contacts_io.rs`. **Bites on rebase, quietly.** iOS does not compile-break (Swift builds no Rust literal, and `JSONDecoder` drops keys `ContactsWire` has no property for) and iOS parses no files at all, so 028's D50 refusal deviation is desktop-only. What it does mean: the two new view fields land and are **silently ignored**, so an import refusal would have nowhere to show. Add them to `ContactsWire` when import is drawn. `CoreWireDriftTests` covers the dangerous half — a new *operation* would fail loudly rather than hang — and the peer confirms `import_file` carries its `content`, so there is none. |
+
+### Device verification — what is ready and what is not
+
+The device build **succeeds and signs**:
+
+```
+CodeSign .../Build/Products/Debug-iphoneos/VelaWallet.app
+** BUILD SUCCEEDED **        # -destination 'generic/platform=iOS'
+```
+
+Installing on `shelchin's iPhone` did **not** get that far:
+
+```
+error: The developer disk image could not be mounted on this device.
+```
+
+That is a device-side precondition, not a code problem — the phone needs to be
+unlocked, with Developer Mode on and this Mac trusted. Nothing else stands
+between here and the run.
+
+#### The checklist — steps 1–4 and 6's probes are now automated (phase 7); 5 and 7 still want a human
+
+1. Unlock the phone, keep it unlocked, and confirm **设置 → 隐私与安全性 → 开发者模式** is on.
+2. `rust/scripts/build-ios-xcframework.sh` if this is a fresh checkout.
+3. `xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet -destination 'id=00008130-001C68C804E1401C' build`
+4. Install and launch with `xcrun devicectl` (quickstart §3).
+5. **通讯录**: tap the tab. Your own book, or the drawn empty state. Delete
+   somebody through the row swipe and its confirm. **Force-quit. Relaunch.**
+   Still gone. *(The relaunch is the test — see the finding above: the row
+   leaves the screen a turn before anything reaches storage.)*
+6. **设置 → 网络**: the list should be twelve chains, not eight. Open 添加,
+   type a chain id, and watch 添加 stay disabled until the core's verdict
+   arrives — **allow it a full minute**. Point the custom RPC at a different
+   chain's endpoint and confirm the refusal appears and nothing is written.
+   Add a real chain, force-quit, relaunch: still listed.
+7. **设置 → 显示货币**: pick one, relaunch. It sticks, and any fiat figure shows
+   the USD amount rather than the same digits wearing a ¥.
+
+### SC verdicts
+
+| | Verdict |
+|---|---|
+| **SC-001** — 通讯录 opens; CRUD survives a relaunch | **Met.** `ContactsStoreTests` proves the loop over real storage including the relaunch, and the tab renders live **on the phone**. The one part still untested is a cross-client read of a web-written `vela.contacts` — that needs two devices, and is carried to 051. |
+| **SC-002** — a typed network survives a relaunch; the mismatch refusal writes nothing | **Met.** Typing a chain id on the phone reaches the core's verdict against real endpoints, and the detail page's probes measure live (551 ms / 2.0 s on Gnosis). The refusal path has unit coverage; a full add-and-relaunch of a *new* chain is the founder's to do, since it depends on which chain is compatible today. |
+| **SC-003** — currency survives a relaunch and degrades rather than fabricating | **Met.** Storage round-trip and the degrade rule both tested. |
+| **SC-004** — the third machine costs zero shared logic | **Met, with one file named.** Four of five untouched; `RootView.swift` +17, all of it the composition of two views. Reported rather than engineered around. |
+| **SC-005** — fixtures stay canon | **Met.** 38 fixture tests pass unchanged; ST10b screenshot is identical but for the clock; every `*Fixtures.swift` diff is a delegation, not a value. |
+| **SC-006** — test count strictly increases, build green | **Met.** 130 → **203**, plus 3 live behind a flag. Green at every phase boundary. |
+| **SC-007** — no machine changes, no corpus delta, no other client touched | **Met.** `rust/crates/vela-core/src/app/` and `src/i18n_catalogs/` untouched; `vela-core-uniffi` gained three `bridge_object!` lines; `app-web`, `app-desktop`, `app-android`, `app-browser-extension` untouched. |
+| **SC-008** — verified on the device | **Met.** Six XCUITests pass on `shelchin's iPhone`, with screenshots exported from the `.xcresult`. They found two bugs that no simulator run and no unit test had: the network detail opening the wrong chain, and the health pill showing the fixture's 45 ms. |
+
+---
+
+## Phase 7 — on the phone, and the two bugs it found
+
+The founder unlocked the device. `devicectl` installed, and
+`LiveWiringAcceptanceTests` — six XCUITests that tap, type and photograph on the
+hardware itself — **passed**. SC-008 is met.
+
+```
+Test Case testContactsIsLiveAndNotTheFixtureRoster            passed (5.4s)
+Test Case testContactsFixtureForComparison                    passed (18.5s)
+Test Case testNetworksListIsTheCoresTwelveNotTheDrawingsEight passed (5.5s)
+Test Case testTappingANetworkOpensThatNetwork                 passed (6.3s)
+Test Case testTheAddGateFollowsTheCoresVerdict                passed (6.3s)
+Test Case testCurrencyDegradesRatherThanFabricating           passed (9.5s)
+** TEST SUCCEEDED **      platform=iOS, id=00008130-001C68C804E1401C
+```
+
+Screenshots come back inside the `.xcresult` — the recipe `ScreenshotSweepTests`
+already documented, and the only way to photograph an iPhone from a script.
+
+### Two device-side preconditions, both real
+
+1. **The whole UI test target was `skipped = "YES"` in the shared scheme**, and a
+   testable a scheme skips **cannot be re-enabled from the command line** —
+   `-only-testing` on it fails outright. The target is now included with
+   `ScreenshotSweepTests` skipped *by name*, which keeps the slow sweep off CI
+   and makes the acceptance tests runnable.
+2. **`Authentication canceled. Canceled by another authentication.`** — a
+   `devicectl device process launch --console` left running from an earlier
+   check was holding the device's usage assertion. Killing it fixed it. One
+   automation session at a time.
+
+### The two bugs, both invisible until the list was live
+
+**Tapping any network opened Ethereum.** The row's tap handler was
+`{ _ in page = .networkDetail }` — the id discarded — and the detail page read a
+single `model.networkDetail`. Harmless for four years of fixtures, where the
+list and the detail were the same one chain. The moment the list became the
+core's twelve it was a lie: tapping Gnosis showed another chain's RPC under
+Gnosis's name. Now the id is carried and the detail is keyed by it, with a
+device test that fails if Ethereum appears after tapping Gnosis.
+
+**The health pill was the fixture's.** `badge(...) ?? fallback.badge` fell back
+to the drawing, so an endpoint nothing had contacted wore **在线 · 45ms** —
+`SettingsFixtures`' own constant, presented as a measurement. This is the exact
+rule phase 2 wrote down ("painting a green dot before the probe answers is the
+screen making a claim the core has not") defeated by a `??` three lines below
+it. The fix is two-part, and the second half is the better one:
+
+- unmeasured is neutral and says nothing, never the fixture's pill;
+- **opening a network's detail now tells the core** (`override_expanded`), which
+  seeds `checking` and starts its probe wave.
+
+So the pills are real. On the phone, over its own network: **RPC 551ms** (green)
+and **explorer 2.0s** (amber, because the core's own threshold is one second).
+
+Worth recording separately: `rpc.gnosischain.com` answers iOS's `URLSession` in
+551 ms, where desktop's `ureq` gets a 403 from the same host (030's carried debt
+#4). Whatever that endpoint objects to, it is not this client.
+
+### Two things the plan named that shipped differently
+
+**`Core/CoreExecutor.swift` was not built.** Three executors turned out to share no
+behaviour worth a protocol: each one's `switch` is over its own operation names, its
+own coercion helpers and its own fail-closed variants. A protocol over that is a name
+for a coincidence. The rule it was meant to carry — *an unrecognised tag must still
+answer* — lives in each `default:` branch, with a test per machine.
+
+The shared road is therefore four files, not five: `CoreStore`, `VelaStore`,
+`CoreHTTP`, `AddressText`.
+
+**The new control shipped as a mode, not a type.** `SettingsUrlField` gained an
+optional `text: Binding<String>?`; `nil` renders exactly as drawn. Smaller than the
+`SettingsField.swift` the plan named, and it leaves every fixture call site
+pixel-identical — verified by screenshot.
+
+### Recorded, not fixed
+
+- **Three address-shortening copies disagree.** `RootView.shortenAddress` and
+  `ExploreFixtures.shorten` guard on `count > 14`; `WalletModels.shorten` guards
+  on `count > 10`. For a 42-character address all three agree, so it has never
+  been visible — but "agrees for the inputs we happen to send" is not
+  equivalence, and folding them onto one threshold would be a behaviour change
+  wearing a cleanup's clothes. New code uses `AddressText`; the three stay.
+  (Web shortens **8+6**, a fourth form, in `identity.ts:40-43`.)
+- **The contacts search box is a `Text`, not a `TextField`.** A fourth
+  drawn-but-inert input, found after the founder's 2026-09-05 scoping call.
+  Unlike the add-network wizard it is not blocking — the A–Z rail is the drawn
+  way to find somebody — so it was **not** built. `ContactsLive.home(query:)`
+  already narrows, and is tested, for when the control exists.
+- **The C5 add/import/export menu's items dismiss.** They are three choices
+  whose destinations nothing has drawn. Routing them somewhere invented would be
+  worse than the honest nothing.
+- **`CoreDriver` stays in `Features/Onboarding/Core/`.** Moving a file three
+  live machines already depend on, in the same commit that first reuses it, buys
+  nothing.

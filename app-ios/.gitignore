@@ -28,3 +28,6 @@ Carthage/Build/
 
 # VelaCoreKit binary artifacts — built by rust/scripts/build-ios-xcframework.sh
 VelaCoreKit/Artifacts/
+# The parallel space's keyset (spec 052, D1). Built by
+# rust/scripts/build-ios-dev-fixtures.sh; Debug configurations only.
+VelaDevFixturesKit/Artifacts/

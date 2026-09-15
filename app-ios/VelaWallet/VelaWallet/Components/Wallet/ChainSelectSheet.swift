@@ -16,6 +16,10 @@ struct ChainSelectSheet: View {
     @Environment(\.walletTextScale) private var textScale
 
     let model: ChainSheetModel
+    /// Picking a row. Absent in the gallery and the screenshot sweep, where
+    /// this list is a picture — a picture with a checkmark is exactly what the
+    /// mock is, and a list nobody can pick from is what it must not stay.
+    var onSelect: ((Int?) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
@@ -37,7 +41,14 @@ struct ChainSelectSheet: View {
             .padding(.vertical, Tokens.Space.s16)
 
             ForEach(model.rows) { row in
-                chainRow(row)
+                if let onSelect {
+                    Button { onSelect(row.chainId) } label: {
+                        chainRow(row).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    chainRow(row)
+                }
             }
 
             Spacer(minLength: Tokens.Space.s0)

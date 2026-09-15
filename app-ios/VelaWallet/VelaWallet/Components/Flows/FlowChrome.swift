@@ -256,6 +256,70 @@ struct FlowFilterChips: View {
 /// colours the BORDER and prints underneath rather than tinting the text,
 /// which would make the characters harder to read exactly when they most need
 /// reading.
+/// The same field, typed into.
+///
+/// A field somebody cannot type into is a picture of a field, and spec 021's
+/// flows layer was drawn as pictures. This keeps every drawn property — the
+/// mono role, the filled ground, the error stroke and the message under it —
+/// and adds the one thing the mock could not show: a cursor.
+///
+/// It exists beside `FlowMonoField` rather than replacing it so the gallery
+/// boards and the screenshot sweep keep rendering the picture (FR-004).
+struct FlowMonoInput: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    @Binding var value: String
+    var label: String?
+    var placeholder: String = ""
+    var error: String?
+    /// The well behind the field. The default is the send form's, which sits
+    /// over `bgBase`; a field on a RAISED surface needs the sunken one, or the
+    /// well and its surface are the same colour and the field disappears —
+    /// which is exactly what C7 showed.
+    var well: Color?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            if let label {
+                Text(verbatim: label)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+            }
+            TextField(
+                "",
+                text: $value,
+                prompt: Text(verbatim: placeholder).foregroundStyle(theme.fgSubtle)
+            )
+            // `monoRole` is a `Text` extension (the sanctioned styling seam);
+            // a `TextField` takes the same role's font directly.
+            .font(Typography.monoAddressDetail.scaled(textScale).font)
+            .foregroundStyle(theme.fgBase)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .textContentType(.oneTimeCode)
+            .keyboardType(.asciiCapable)
+            .submitLabel(.done)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Tokens.Space.s12)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(well ?? theme.bgRaised))
+            .overlay(
+                RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                    .stroke(
+                        error == nil ? .clear : theme.errorBase,
+                        lineWidth: Tokens.BorderWidth.hairline
+                    )
+            )
+            .accessibilityLabel(Text(verbatim: label ?? placeholder))
+            if let error {
+                Text(verbatim: error)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
+            }
+        }
+    }
+}
+
 struct FlowMonoField: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale

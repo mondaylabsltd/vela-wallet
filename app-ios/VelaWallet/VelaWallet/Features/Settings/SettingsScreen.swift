@@ -18,6 +18,26 @@
 
 import SwiftUI
 
+/// The endpoints and providers pages' live half (spec 056 US2). Eleven events
+/// the executor has answered since 050 and nothing had ever sent.
+struct SettingsEndpointActions {
+    var onEditEndpoint: (String, String) -> Void = { _, _ in }
+    var onBlurEndpoint: (String) -> Void = { _ in }
+    var onResetEndpoints: () -> Void = {}
+    var onEditProvider: (String, String) -> Void = { _, _ in }
+    var onBlurProvider: (String) -> Void = { _ in }
+    var onTestProvider: (String) -> Void = { _ in }
+    var onOpenEndpoints: () -> Void = {}
+    var onOpenProviders: () -> Void = {}
+}
+
+/// The three appearance controls' live half.
+struct SettingsAppearanceActions {
+    var onTheme: ((String) -> Void)?
+    var onAvatar: ((String) -> Void)?
+    var onTextScale: ((Int) -> Void)?
+}
+
 struct SettingsScreen: View {
     @Environment(\.theme) private var theme
     let model: SettingsScreenModel
@@ -25,23 +45,69 @@ struct SettingsScreen: View {
     var onSelectTab: (WalletTab) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenContacts: () -> Void = {}
+    /// The live half. Every closure absent in the gallery, where the page is a
+    /// picture of choices already made.
+    var appearance = SettingsAppearanceActions()
+    var onPick: ((SettingsOverlay, String) -> Void)?
+    var onClearCaches: (() -> Void)?
+    /// One storage row's 清除, by item id (058). Android clears the row's keys
+    /// on the tap, with no second question; matched here rather than inventing
+    /// a confirmation sheet nobody drew — recorded in results.md as a hazard
+    /// the founder may want a gate on.
+    var onClearStorageItem: ((String) -> Void)?
+    var onErase: (() -> Void)?
+    var onSelectAccount: ((String) -> Void)?
+    /// The endpoints and providers pages' live half.
+    var endpointActions: SettingsEndpointActions?
+    /// The switcher was opened. The balance machine reads every account's
+    /// cached total so the sheet shows numbers the instant it appears.
+    var onOpenAccounts: (() -> Void)?
+    /// What the add-network wizard raises (spec 050).
+    ///
+    /// Defaulted to no-ops so every gallery board and fixture call site is
+    /// unchanged — the wizard stays a picture there, which is what keeps the
+    /// screenshot sweep meaningful.
+    var networkActions = SettingsNetworkActions()
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
+    /// The storage row whose 清除 is waiting on an answer.
+    @State private var pendingStorageItem: StorageItemModel?
+    @State private var pendingStorageWarning = ""
     @State private var advancedOpen: Bool
+    /// Which network row was tapped, so the detail page is that chain's.
+    @State private var selectedNetwork: String?
 
     init(
         model: SettingsScreenModel,
         loc: Loc,
         onSelectTab: @escaping (WalletTab) -> Void = { _ in },
         onSignOut: @escaping () -> Void = {},
-        onOpenContacts: @escaping () -> Void = {}
+        onOpenContacts: @escaping () -> Void = {},
+        networkActions: SettingsNetworkActions = SettingsNetworkActions(),
+        appearance: SettingsAppearanceActions = SettingsAppearanceActions(),
+        onPick: ((SettingsOverlay, String) -> Void)? = nil,
+        onClearCaches: (() -> Void)? = nil,
+        onClearStorageItem: ((String) -> Void)? = nil,
+        onErase: (() -> Void)? = nil,
+        onSelectAccount: ((String) -> Void)? = nil,
+        endpointActions: SettingsEndpointActions? = nil,
+        onOpenAccounts: (() -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
         self.onSelectTab = onSelectTab
         self.onSignOut = onSignOut
         self.onOpenContacts = onOpenContacts
+        self.networkActions = networkActions
+        self.appearance = appearance
+        self.onPick = onPick
+        self.onClearCaches = onClearCaches
+        self.onClearStorageItem = onClearStorageItem
+        self.onErase = onErase
+        self.onSelectAccount = onSelectAccount
+        self.endpointActions = endpointActions
+        self.onOpenAccounts = onOpenAccounts
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -72,9 +138,41 @@ struct SettingsScreen: View {
             }
             .background(theme.bgBase.ignoresSafeArea())
             .sheet(item: sheetBinding) { overlay in
-                SettingsSheet(model: model, overlay: overlay,
-                              onDismiss: { self.overlay = .none },
-                              onSignOut: onSignOut)
+                SettingsSheet(
+                    model: model, overlay: overlay,
+                    onDismiss: { self.overlay = .none },
+                    onSignOut: onSignOut,
+                    onPick: onPick.map { pick in
+                        { kind, id in
+                            pick(kind, id)
+                            // A pick closes the sheet. Every one of these is a
+                            // single choice, and a sheet that stayed open after
+                            // it reads as a choice that did not take.
+                            self.overlay = .none
+                        }
+                    },
+                    onClearCaches: onClearCaches,
+                    onErase: onErase,
+                    onSelectAccount: onSelectAccount.map { select in
+                        { address in
+                            select(address)
+                            self.overlay = .none
+                        }
+                    },
+                    storageConfirm: pendingStorageItem.map { item in
+                        ConfirmSheetModel(
+                            title: item.label,
+                            body: pendingStorageWarning,
+                            confirm: item.action,
+                            cancel: model.clearCachesSheet.cancel,
+                            danger: item.destructive
+                        )
+                    },
+                    onConfirmStorage: {
+                        if let id = pendingStorageItem?.id { onClearStorageItem?(id) }
+                        pendingStorageItem = nil
+                    }
+                )
                     .themed(theme.scheme)
             }
         }
@@ -122,7 +220,7 @@ struct SettingsScreen: View {
     private var pageTitle: (title: String, subtitle: String?) {
         switch page {
         case .networks: (model.networksTitle, model.networksSubtitle)
-        case .networkDetail: (model.networkDetail.title, model.networkDetail.subtitle)
+        case .networkDetail: (networkDetail.title, networkDetail.subtitle)
         case .addNetwork: (model.addNetwork.title, model.addNetwork.subtitle)
         case .rpcProviders: (model.rpcProviders.title, model.rpcProviders.subtitle)
         case .endpoints: (model.endpoints.title, nil)
@@ -136,18 +234,34 @@ struct SettingsScreen: View {
         switch page {
         case .home: homeBody
         case .networks: networksBody
-        case .networkDetail: NetworkDetailBody(detail: model.networkDetail)
-        case .addNetwork: AddNetworkBody(panel: model.addNetwork)
-        case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders)
-        case .endpoints: EndpointsBody(panel: model.endpoints)
-        case .storage: StorageBody(panel: model.storage,
-                                   onClearCaches: { overlay = .clearCaches })
+        case .networkDetail: NetworkDetailBody(detail: networkDetail)
+        case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
+        case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders, actions: endpointActions)
+        case .endpoints: EndpointsBody(panel: model.endpoints, actions: endpointActions)
+        case .storage: StorageBody(
+            panel: model.storage,
+            onClearCaches: { overlay = .clearCaches },
+            // Ask first. "联系人与分组 · 清除" took the whole address book on
+            // one tap; the answer is the founder's ruling of 2026-09-15 and
+            // the sheet is built from what the row already says.
+            onClearItem: onClearStorageItem == nil ? nil : { id in
+                guard let item = model.storage.groups
+                    .flatMap(\.items).first(where: { $0.id == id }) else { return }
+                pendingStorageItem = item
+                pendingStorageWarning = model.storage.groups
+                    .first { $0.items.contains { $0.id == id } }?.label ?? ""
+                overlay = .clearStorageItem
+            }
+        )
         case .about: AboutBody(panel: model.about)
         }
     }
 
     @ViewBuilder private var homeBody: some View {
-        SettingsAccountRow(account: model.account) { overlay = .accounts }
+        SettingsAccountRow(account: model.account) {
+            onOpenAccounts?()
+            overlay = .accounts
+        }
 
         ForEach(model.sections) { section in
             if let label = section.label {
@@ -166,10 +280,10 @@ struct SettingsScreen: View {
             // The three appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
-                TextScaleSlider(model: model.textScale)
-                SettingsSegmentedControl(model: model.theme)
+                TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
+                SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
                     .padding(.bottom, Tokens.Space.s12)
-                SettingsSegmentedControl(model: model.avatar)
+                SettingsSegmentedControl(model: model.avatar, onSelect: { appearance.onAvatar?($0) })
             }
         }
 
@@ -189,8 +303,17 @@ struct SettingsScreen: View {
 
     @ViewBuilder private var networksBody: some View {
         ForEach(model.networks) { row in
-            SettingsNetworkRow(row: row, deleteLabel: model.addNetworkLabel) { _ in
+            // The tapped row's id is carried, not discarded (spec 050).
+            //
+            // It used to be `{ _ in page = .networkDetail }`, which was harmless
+            // while the list and the detail were both one fixture and became a
+            // lie the moment the list went live: every row opened Ethereum's
+            // page, so tapping Gnosis showed another chain's RPC under Gnosis's
+            // name. `selectedNetwork` is what the detail is then built from.
+            SettingsNetworkRow(row: row, deleteLabel: model.addNetworkLabel) { id in
+                selectedNetwork = id
                 page = .networkDetail
+                if let chainId = row.chainId { networkActions.onOpenNetwork(chainId) }
             }
         }
         // A link, not a CTA: adding a network is navigation, and accent is
@@ -206,6 +329,19 @@ struct SettingsScreen: View {
         .padding(.top, Tokens.Space.s24)
         .contentShape(Rectangle())
         .onTapGesture { page = .addNetwork }
+    }
+
+    /// The detail for the row that was tapped.
+    ///
+    /// Falls back to the model's own when nothing was tapped — which is the
+    /// gallery's case, where `VELA_SETTINGS_STATE=st9b` lands on this page
+    /// directly and the fixture is the whole answer.
+    private var networkDetail: NetworkDetailModel {
+        guard let selectedNetwork,
+              let row = model.networks.first(where: { $0.id == selectedNetwork }),
+              let detail = model.networkDetails[row.id]
+        else { return model.networkDetail }
+        return detail
     }
 
     /// Rows a tap navigates from; everything else opens an overlay.
@@ -294,6 +430,16 @@ private struct NetworkDetailBody: View {
 private struct AddNetworkBody: View {
     @Environment(\.theme) private var theme
     let panel: AddNetworkModel
+    var actions = SettingsNetworkActions()
+
+    /// The two editable fields' local text.
+    ///
+    /// Local, and seeded from the model, because the core is the authority on
+    /// what has been COMMITTED while a half-typed URL is nobody's business but
+    /// this view's. Committing on submit or on leaving the field is what hands
+    /// it over.
+    @State private var query = ""
+    @State private var customRpc = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -314,13 +460,19 @@ private struct AddNetworkBody: View {
                 if let title = panel.checksTitle {
                     SettingsCheckList(title: title, items: panel.checks)
                 }
-                if let custom = panel.customRpc { SettingsUrlField(field: custom) }
+                if let custom = panel.customRpc {
+                    SettingsUrlField(
+                        field: custom,
+                        text: actions.isLive ? $customRpc : nil,
+                        onCommit: { actions.onEditCustomRpc(customRpc) }
+                    )
+                }
                 if let callout = panel.callout { SettingsCallout(callout: callout) }
                 // An outline CTA plus a re-check link when it cannot be added:
                 // an action you cannot take should not be dressed as the action
                 // you came for.
                 if let primary = panel.primary {
-                    VelaButton(title: primary, kind: .primary) {}
+                    VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
                 if let secondary = panel.secondary {
                     VelaButton(title: secondary, kind: .secondary) {}
@@ -332,19 +484,60 @@ private struct AddNetworkBody: View {
                         .foregroundStyle(theme.infoBase)
                         .frame(maxWidth: .infinity)
                         .padding(.top, Tokens.Space.s8)
+                        .onTapGesture { actions.onEditCustomRpc(customRpc) }
                 }
             } else {
-                SettingsUrlField(field: UrlFieldModel(id: "search", label: "", value: "",
-                                                      placeholder: panel.searchPlaceholder))
-                ForEach(panel.results) { SettingsNetworkRow(row: $0) }
+                SettingsUrlField(
+                    field: UrlFieldModel(id: "search", label: "", value: "",
+                                         placeholder: panel.searchPlaceholder),
+                    text: actions.isLive ? $query : nil,
+                    onCommit: { actions.onSearch(query) }
+                )
+                // The core debounces the search itself, so every keystroke can
+                // go straight to it — a shell-side timer here would be a second
+                // one, racing the first.
+                .onChange(of: query) { _, value in actions.onSearch(value) }
+                ForEach(panel.results) { row in
+                    SettingsNetworkRow(row: row)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let chainId = row.chainId { actions.onSelectChain(chainId) }
+                        }
+                }
             }
         }
+        .onAppear { customRpc = panel.customRpc?.value ?? "" }
     }
+}
+
+/// What the add-network wizard can raise (spec 050).
+///
+/// A struct of closures rather than five parameters, because the wizard's
+/// controls arrive together and are wired together; `isLive` is what tells the
+/// drawn fields whether there is anything on the other end. A gallery board
+/// leaves it default, and every field stays the picture it was drawn as.
+struct SettingsNetworkActions {
+    /// A network's detail page opened — the core probes it from here.
+    var onOpenNetwork: (Int) -> Void = { _ in }
+    var onSearch: (String) -> Void = { _ in }
+    var onSelectChain: (Int) -> Void = { _ in }
+    var onEditCustomRpc: (String) -> Void = { _ in }
+    var onConfirmAdd: () -> Void = {}
+    /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
+    var isLive = false
 }
 
 private struct RpcProvidersBody: View {
     @Environment(\.theme) private var theme
     let panel: RpcProvidersModel
+    /// The live half. Absent in the gallery, where the page is a picture of
+    /// keys somebody already entered.
+    var actions: SettingsEndpointActions?
+
+    /// What is being typed, per provider. Local for the reason every field in
+    /// this app is: a field bound straight to a machine loses characters on the
+    /// round trip.
+    @State private var drafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s32) {
@@ -360,7 +553,11 @@ private struct RpcProvidersBody: View {
                         Spacer()
                         StatusPill(pill: provider.badge)
                     }
-                    SettingsUrlField(field: provider.field)
+                    SettingsUrlField(
+                        field: provider.field,
+                        text: actions.map { _ in binding(for: provider.field) },
+                        onCommit: { actions?.onBlurProvider(provider.field.id) }
+                    )
                     if let support = provider.support {
                         Text(support)
                             .typeRole(Typography.label)
@@ -371,30 +568,77 @@ private struct RpcProvidersBody: View {
                             .typeRole(Typography.label)
                             .foregroundStyle(theme.infoBase)
                     }
+                    if let actions, let test = provider.test {
+                        Button { actions.onTestProvider(provider.field.id) } label: {
+                            Text(verbatim: test)
+                                .typeRole(Typography.flowCaption)
+                                .foregroundStyle(theme.accentBase)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
+    }
+
+    private func binding(for field: UrlFieldModel) -> Binding<String> {
+        Binding(
+            get: { drafts[field.id] ?? field.value },
+            set: { value in
+                drafts[field.id] = value
+                actions?.onEditProvider(field.id, value)
+            }
+        )
     }
 }
 
 private struct EndpointsBody: View {
     @Environment(\.theme) private var theme
     let panel: EndpointsModel
+    var actions: SettingsEndpointActions?
+
+    @State private var drafts: [String: String] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s24) {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
-            ForEach(panel.fields) { SettingsUrlField(field: $0) }
-            HStack(spacing: Tokens.Space.s8) {
-                LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
-                Text(panel.reset).typeRole(Typography.flowCaption)
+            ForEach(panel.fields) { field in
+                SettingsUrlField(
+                    field: field,
+                    text: actions.map { _ in binding(for: field) },
+                    // A field is COMMITTED when the person is done saying it,
+                    // not on every keystroke: the core probes an endpoint when
+                    // it is blurred, and probing each half-typed prefix would
+                    // be a request per character.
+                    onCommit: { actions?.onBlurEndpoint(field.id) }
+                )
             }
-            .foregroundStyle(theme.fgMuted)
-            .frame(maxWidth: .infinity)
+            Button { actions?.onResetEndpoints() } label: {
+                HStack(spacing: Tokens.Space.s8) {
+                    LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
+                    Text(panel.reset).typeRole(Typography.flowCaption)
+                }
+                .foregroundStyle(theme.fgMuted)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(actions == nil)
             .padding(.top, Tokens.Space.s16)
         }
+    }
+
+    private func binding(for field: UrlFieldModel) -> Binding<String> {
+        Binding(
+            get: { drafts[field.id] ?? field.value },
+            set: { value in
+                drafts[field.id] = value
+                actions?.onEditEndpoint(field.id, value)
+            }
+        )
     }
 }
 
@@ -402,6 +646,7 @@ private struct StorageBody: View {
     @Environment(\.theme) private var theme
     let panel: StorageModel
     let onClearCaches: () -> Void
+    var onClearItem: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -420,7 +665,8 @@ private struct StorageBody: View {
             .padding(.bottom, Tokens.Space.s16)
             StorageBar(segments: panel.segments)
             ForEach(panel.groups) { group in
-                StorageGroupView(group: group, onGroupAction: onClearCaches)
+                StorageGroupView(group: group, onGroupAction: onClearCaches,
+                                 onItemAction: onClearItem)
             }
         }
     }

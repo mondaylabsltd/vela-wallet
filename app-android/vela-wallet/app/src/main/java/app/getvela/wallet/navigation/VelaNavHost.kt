@@ -906,6 +906,17 @@ fun VelaNavHost(
                         onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step -> if (step == FlowStep.Chains) chainSheetOpen = true else flows.push(step) },
                         selected = flows.selected,
+                        // 删除记录 (spec 058): the feed tombstones the record and
+                        // drops the row at once, so the detail has nothing left
+                        // to show and steps back to the list it came from — what
+                        // the web's `deleteSelectedTx` does. The CHAIN keeps the
+                        // transaction; this is the wallet forgetting it.
+                        onDeleteTx = flows.selected?.let { id ->
+                            {
+                                wallet.deleteActivity(id)
+                                flows.back()
+                            }
+                        },
                         onReceiveNetwork = { index ->
                             networks.networks.getOrNull(index)?.let { row ->
                                 pendingReceiveAsset = ReceiveAssetPick(row.chain_id.toInt(), null, row.native_symbol, 18, row.display_name)

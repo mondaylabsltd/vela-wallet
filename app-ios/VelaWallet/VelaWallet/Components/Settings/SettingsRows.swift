@@ -86,7 +86,7 @@ struct SettingsAccountRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tokens.Space.s12) {
-                IdenticonAvatar(seed: account.addressFull, size: 40)
+                IdenticonAvatar(seed: account.addressFull, size: 40, name: account.name)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(account.name)
                         .typeRole(Typography.title)
@@ -116,7 +116,16 @@ struct SettingsAccountRow: View {
 struct SelectRow: View {
     @Environment(\.theme) private var theme
     let row: SelectRowModel
-    var onTap: (String) -> Void = { _ in }
+    /// `nil` when somebody ELSE owns the tap.
+    ///
+    /// It was a defaulted no-op, and that is the whole of the bug the founder
+    /// hit on 2026-09-15: every select sheet wraps this row in a `Button`, the
+    /// row's own `onTapGesture` sat INSIDE that button and swallowed the tap,
+    /// and the no-op ran. Picking a language, a currency, or any of the three
+    /// formats did nothing at all — four settings, dead through one default
+    /// argument. An optional handler cannot do that: with no handler there is
+    /// no gesture to eat the button's.
+    var onTap: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -157,8 +166,24 @@ struct SelectRow: View {
             .frame(minHeight: 52)
             .padding(.vertical, Tokens.Space.s12)
             .contentShape(Rectangle())
-            .onTapGesture { onTap(row.id) }
+            .modifier(RowTap(onTap: onTap.map { handler in { handler(row.id) } }))
             SettingsDivider()
+        }
+    }
+}
+
+/// A tap gesture, attached only when there is something to call.
+///
+/// Attaching one unconditionally is how a row inside a `Button` stops working:
+/// the inner gesture wins and the button never hears the tap.
+private struct RowTap: ViewModifier {
+    let onTap: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onTap {
+            content.onTapGesture(perform: onTap)
+        } else {
+            content
         }
     }
 }
@@ -285,6 +310,9 @@ struct StorageGroupView: View {
     @Environment(\.theme) private var theme
     let group: StorageGroupModel
     var onGroupAction: () -> Void = {}
+    /// One row's 清除, by item id. Absent in the gallery, where nothing should
+    /// be removable by looking at it.
+    var onItemAction: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -314,9 +342,16 @@ struct StorageGroupView: View {
                         // the label wraps into whatever is left.
                         .fixedSize()
                         .layoutPriority(1)
-                    Text(item.action)
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(item.destructive ? theme.errorBase : theme.fgMuted)
+                    // The row's own action. It was a label until 058 — the
+                    // page offered to clear eight things and could clear none.
+                    Button { onItemAction?(item.id) } label: {
+                        Text(item.action)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(item.destructive ? theme.errorBase : theme.fgMuted)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onItemAction == nil)
                 }
                 .frame(minHeight: 44)
                 .padding(.vertical, Tokens.Space.s12)

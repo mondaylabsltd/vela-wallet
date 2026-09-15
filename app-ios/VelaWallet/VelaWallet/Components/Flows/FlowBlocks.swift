@@ -67,20 +67,31 @@ struct QrCardView<Centre: View>: View {
     @Environment(\.theme) private var theme
 
     let label: String
+    /// A REAL code's modules, row-major. `nil` keeps the drawn demo pattern,
+    /// which is what the gallery and the screenshot sweep render.
+    ///
+    /// There is deliberately no fallback the other way: a screen with a real
+    /// address that cannot encode it must not quietly show the demo pattern —
+    /// see `QrCode`.
+    var modules: [[Bool]]?
     @ViewBuilder let centre: () -> Centre
 
     var body: some View {
         ZStack {
             Canvas { context, size in
-                let modules = CGFloat(QrPattern.modules)
-                let module = min(size.width, size.height) / modules
-                for r in 0..<QrPattern.modules {
-                    for c in 0..<QrPattern.modules where QrPattern.cells[r][c] {
+                let cells = modules ?? QrPattern.cells
+                let count = cells.count
+                let module = min(size.width, size.height) / CGFloat(count)
+                for r in 0..<count {
+                    for c in 0..<cells[r].count where cells[r][c] {
                         let rect = CGRect(
                             x: CGFloat(c) * module,
                             y: CGFloat(r) * module,
-                            width: module,
-                            height: module
+                            // Rounded up so neighbouring modules meet: a
+                            // hairline of white between them is what a camera
+                            // reads as a broken code.
+                            width: module.rounded(.up),
+                            height: module.rounded(.up)
                         )
                         context.fill(Path(rect), with: .color(WalletGeometry.qrInk))
                     }
@@ -147,26 +158,59 @@ struct AmountInputView: View {
 
     let amount: AmountFieldModel
     var onDenom: () -> Void = {}
+    /// The live field; `nil` renders the drawn figure.
+    var text: Binding<String>?
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
-            Text(verbatim: amount.value)
-                .typeRole(Typography.amountHero.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .minimumScaleFactor(WalletGeometry.heroMinScale)
-                .lineLimit(1)
-            Button(action: onDenom) {
-                HStack(spacing: Tokens.Space.s2) {
-                    Text(verbatim: amount.fiat)
-                        .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                    LucideIcon(.chevronsUpDown, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgMuted)
-                }
-                .contentShape(Rectangle())
+            if let text, !amount.locked {
+                // `typeRole` is a `Text` extension (the sanctioned styling
+                // seam); a `TextField` takes the same role's font directly.
+                TextField("0", text: text)
+                    .font(Typography.amountHero.scaled(textScale).font)
+                    .foregroundStyle(theme.fgBase)
+                    .multilineTextAlignment(.center)
+                    .keyboardType(.decimalPad)
+                    .minimumScaleFactor(WalletGeometry.heroMinScale)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("send.amount")
+            } else {
+                Text(verbatim: amount.value)
+                    .typeRole(Typography.amountHero.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .minimumScaleFactor(WalletGeometry.heroMinScale)
+                    .lineLimit(1)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(amount.denomLabel)
+            if amount.denomShown {
+                Button(action: onDenom) {
+                    HStack(spacing: Tokens.Space.s2) {
+                        Text(verbatim: amount.fiat)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                        LucideIcon(.chevronsUpDown, size: LucideIconSize.smallChevron)
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!amount.denomEnabled)
+                .opacity(amount.denomEnabled ? 1 : Tokens.Opacity.disabled)
+                .accessibilityLabel(amount.denomLabel)
+            } else {
+                // No toggle, but the figure's own currency still reads.
+                Text(verbatim: amount.fiat)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
+            // A control that visibly DECLINES says why. Silence here is how a
+            // person taps the same chevron three times.
+            if let reason = amount.denomReason {
+                Text(verbatim: reason)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Tokens.Space.s24)
@@ -367,7 +411,7 @@ struct TokenHeaderCardView: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            TokenIconView(ticker: token.mark.ticker, badgeColor: token.mark.badgeColor)
+            TokenIconView(mark: token.mark)
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: token.symbol)
                     .typeRole(Typography.rowTitle.scaled(textScale))
@@ -409,6 +453,10 @@ struct RecipientFieldView: View {
     let field: RecipientFieldModel
     var onPick: () -> Void = {}
     var onScan: () -> Void = {}
+    /// The live field. `nil` renders exactly as drawn — which is what the
+    /// gallery and the screenshot sweep get, so they stay pixel-identical
+    /// (the same mode-not-a-type trick `SettingsUrlField` uses since 050).
+    var text: Binding<String>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
@@ -418,10 +466,23 @@ struct RecipientFieldView: View {
             HStack(spacing: Tokens.Space.s8) {
                 IdenticonAvatar(seed: field.identiconSeed, size: WalletGeometry.rowIcon)
                 VStack(alignment: .leading, spacing: Tokens.Space.s0) {
-                    ForEach(Array(field.lines.enumerated()), id: \.offset) { _, line in
-                        Text(verbatim: line)
-                            .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                    if let text {
+                        TextField("", text: text)
+                            .font(Typography.monoAddressDetail.scaled(textScale).font)
                             .foregroundStyle(theme.fgBase)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityLabel(field.label)
+                            // Named, so a test reaches THIS field rather than
+                            // whichever one happens to come first in the tree —
+                            // an earlier one typed an address into the amount.
+                            .accessibilityIdentifier("send.recipient")
+                    } else {
+                        ForEach(Array(field.lines.enumerated()), id: \.offset) { _, line in
+                            Text(verbatim: line)
+                                .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                        }
                     }
                 }
                 Spacer(minLength: Tokens.Space.s4)

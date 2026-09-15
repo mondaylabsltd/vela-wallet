@@ -2,6 +2,46 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!--
+	  探索 is a real browser (spec 053), and a browser must be able to open an
+	  http page: refusing would break a redirect chain that dips through http
+	  and would make the local test harness unreachable.
+
+	  It does NOT weaken the wallet. This key covers WEB CONTENT only — the
+	  app's own requests still require TLS (`CoreHTTP.request` refuses anything
+	  that is not https, and will keep refusing) — and `dapp_permissions`
+	  refuses to sign for an insecure origin on its own, as `insecure_origin`.
+	  So an http page can be READ and cannot ask for a signature.
+
+	  `NSAllowsLocalNetworking` is for the device harness: the UI-test runner
+	  serves the test dApp on 127.0.0.1:8137. `file://` is not an option, because
+	  `dapp_origin_of` gives a file URL no origin at all — every signature would
+	  fail closed and the harness would prove nothing.
+	-->
+	<!--
+	  The build's commit, for 关于 (spec 058). Android reads
+	  `BuildConfig.GIT_COMMIT`, which its Gradle file fills by running git at
+	  configuration time. iOS cannot: `ENABLE_USER_SCRIPT_SANDBOXING = YES`
+	  means a build phase may not read `.git`, and a phase that quietly failed
+	  would stamp a plausible wrong hash.
+
+	  So it is a build SETTING, defaulting to `unknown`, and a release passes
+	  the real one:
+
+	      xcodebuild archive … VELA_GIT_COMMIT=$(git rev-parse --short HEAD)
+
+	  When it is `unknown` the About page says `build <CFBundleVersion>`
+	  instead — true, and never a hash nobody can look up.
+	-->
+	<key>VelaGitCommit</key>
+	<string>$(VELA_GIT_COMMIT)</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>PlusJakartaSans_400Regular.ttf</string>
@@ -10,11 +50,55 @@
 		<string>PlusJakartaSans_700Bold.ttf</string>
 	</array>
 	<!--
+	  保存图片 on the receive screen (spec 051): the card is rendered in the app
+	  and written to the album, and nothing is ever read back. `addOnly` is the
+	  narrowest authorisation Photos offers, and a wallet asking to READ
+	  somebody's photos in order to save a QR code would be asking for far more
+	  than it needs.
+	-->
+	<!--
+	  The scanner (spec 055): reading a payment code, a receive code, or a
+	  WalletConnect-style URI with the camera. The system shows this sentence
+	  the first time the viewfinder is opened, and never again — so it says what
+	  the camera is FOR rather than that a camera exists.
+	-->
+	<!--
+	  `velawallet://` (spec 056). Two shapes reach the app: `pay` prefills a
+	  send, `open` hands a URL to the in-app browser. Universal links to
+	  `getvela.app` ride the `applinks:` entitlement, which has been there since
+	  019 with nothing behind it.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.getvela.VelaWallet</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>velawallet</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Vela uses the camera to scan QR codes — a payment request, or somebody's address.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Vela saves your receive QR code to your album so you can share it.</string>
+	<!--
 	  caBLE "sign in with your phone" (spec 019): the BLE scan that finds the
 	  phone that scanned our QR, and the CTAP 2.3 L2CAP channel to it. The
 	  system shows this sentence on the first scan.
 	-->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Vela uses Bluetooth to find the nearby device you sign in with after it scans the code on screen.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.getvela.VelaWallet.tracker</string>
+	</array>
 </dict>
 </plist>
