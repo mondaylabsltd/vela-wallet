@@ -245,47 +245,24 @@
 		},
 		"pricing": {
 			"heading": "Gratuita e aberta. Pague só se quiser.",
-			"intro": "Você paga por conveniência, não por acesso. Cada peça é de código aberto e auto-hospedável, então nenhuma delas é um portão.",
+			"intro": "Você paga pela comodidade, não pelo direito de usar.",
 			"cards": [
 				{
 					"title": "Carteira web",
 					"price": "Grátis",
-					"body": "Abra, autentique-se, pronto — nada para instalar e nada para pagar. Hospede o mesmo app você mesmo, se preferir não usar o nosso."
+					"body": "Abra, autentique, pronto. Ou hospede o mesmo app você mesmo."
 				},
 				{
 					"title": "Apps de desktop e celular",
+					"price": "Grátis pelo código",
+					"body": "O mesmo código aberto. Compile e instale você mesmo — todo build está no <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+				},
+				{
+					"title": "Nas lojas de aplicativos",
 					"price": "Compra única",
-					"body": "Nas lojas serão compra única — nunca assinatura. É assim que um time pequeno e independente financia construir isso às claras. Eles também são de código aberto: compile a partir do código e instale você mesmo, de graça. Até chegarem às lojas, cada build está no <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
-				},
-				{
-					"title": "Transações",
-					"price": "Gas da rede + taxa do relayer",
-					"body": "Um relayer adianta o gas e envia sua transação, e recebe o custo da rede mais uma taxa de serviço — cotada antes de você assinar, travada no que você assina, com um mínimo pequeno em transações muito baratas. Aponte a Vela para <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">o seu próprio relay</a> e você não nos paga nada."
+					"body": "Nunca assinatura. É assim que um time pequeno e independente banca construir isso à vista de todos."
 				}
-			],
-			"note": "Sem token, sem anúncios, nada vendido sobre você. Mais um custo que vale conhecer: em cada rede, sua carteira precisa de um depósito pequeno e não reembolsável para ativar a conta de relayer de gas — a Vela banca isso para carteiras novas quando dá. Os detalhes estão em <a href=\"/docs/networks-and-fees\">Redes e taxas</a>."
-		},
-		"how": {
-			"heading": "Como a Vela funciona",
-			"desc": "Três passos. Nada para anotar.",
-			"steps": [
-				{
-					"title": "Criar",
-					"body": "Face ID, uma digital ou uma chave de segurança cria uma passkey. Seu endereço é derivado dela — o mesmo endereço em toda chain. Nada a pagar antes: o contrato é implantado junto com sua primeira transação."
-				},
-				{
-					"title": "Assinar",
-					"body": "A Vela envia um desafio ao seu aparelho. O aparelho devolve uma assinatura — nunca a chave — e um relayer coloca a operação assinada on-chain."
-				},
-				{
-					"title": "Entrar de qualquer lugar",
-					"body": "Aparelho novo, a mesma conta Apple ou Google: a passkey sincroniza e a carteira está lá. Sem frase de recuperação para importar, sem chave de recuperação para digitar."
-				}
-			],
-			"stack": {
-				"label": "Por baixo do capô",
-				"link": "Ler o whitepaper"
-			}
+			]
 		},
 		"networks": {
 			"heading": "12 redes embutidas. Um endereço em todas elas.",

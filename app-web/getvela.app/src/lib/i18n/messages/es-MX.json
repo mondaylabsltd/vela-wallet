@@ -244,48 +244,25 @@
 			"note": "Nada de esto va en contra de las otras dos.\n\nLas fortalezas de MetaMask son la simplicidad y la universalidad — y una transacción EOA común es lo más barato que puedes hacer on-chain.\n\nBase Account es la que menos molesta, y donde hay soporte el gas no lo pagas tú.\n\nVela toma otro conjunto de compromisos: passkeys, varias llaves de firma independientes, y cada pieza — app, relay, servicios de backend — que puedes correr tú.\n\nNo es mejor en cada fila. En lo que insiste es en que el control de la cuenta se queda contigo, y en que lo menos posible dependa de un solo proveedor."
 		},
 		"pricing": {
-			"heading": "Gratis y abierta. Paga solo si quieres.",
-			"intro": "Pagas por comodidad, no por acceso. Cada pieza es de código abierto y autoalojable, así que ninguna es una barrera.",
+			"heading": "Gratis y abierto. Paga solo si quieres.",
+			"intro": "Pagas por la comodidad, no por el derecho a usarlo.",
 			"cards": [
 				{
-					"title": "Wallet web",
+					"title": "Cartera web",
 					"price": "Gratis",
-					"body": "Ábrela, autentícate y listo: nada que instalar y nada que pagar. Aloja tú mismo la misma app si prefieres no usar la nuestra."
+					"body": "Ábrela, autentícate, listo. O aloja la misma app tú mismo."
 				},
 				{
 					"title": "Apps de escritorio y móvil",
+					"price": "Gratis desde el código",
+					"body": "El mismo código abierto. Compílala e instálala tú — cada build está en <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+				},
+				{
+					"title": "Desde las tiendas de apps",
 					"price": "Pago único",
-					"body": "En las tiendas serán un pago único, nunca una suscripción. Así financia un equipo pequeño e independiente el construir esto a la vista de todos. También son de código abierto: compílalas desde el código e instálalas tú mismo gratis. Hasta que lleguen a las tiendas, cada build está en <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
-				},
-				{
-					"title": "Transacciones",
-					"price": "Gas de red + comisión del relayer",
-					"body": "Un relayer adelanta el gas y envía tu transacción, y cobra el costo de red más una comisión de servicio: se cotiza antes de firmar, queda fijada en lo que firmas y tiene un mínimo pequeño en transacciones muy baratas. Apunta Vela a <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">tu propio relayer</a> y no nos pagas nada."
+					"body": "Nunca una suscripción. Así financia su trabajo un equipo pequeño e independiente que construye a la vista."
 				}
-			],
-			"note": "Sin token, sin anuncios, sin vender nada sobre ti. Otro costo que conviene conocer: en cada red tu wallet necesita un depósito pequeño y no reembolsable para activar su cuenta de relayer de gas — Vela lo cubre para wallets nuevas cuando puede. Los detalles están en <a href=\"/docs/networks-and-fees\">Redes y comisiones</a>."
-		},
-		"how": {
-			"heading": "Cómo funciona Vela",
-			"desc": "Tres pasos. Nada que apuntar.",
-			"steps": [
-				{
-					"title": "Crear",
-					"body": "Face ID, una huella o una llave de seguridad crea una passkey. Tu dirección se deriva de ella — la misma dirección en cada cadena. Nada que pagar por adelantado: el contrato se despliega con tu primera transacción."
-				},
-				{
-					"title": "Firmar",
-					"body": "Vela le envía un reto a tu dispositivo. El dispositivo devuelve una firma — nunca la llave — y un relayer pone la operación firmada on-chain."
-				},
-				{
-					"title": "Inicia sesión donde sea",
-					"body": "Dispositivo nuevo, la misma cuenta de Apple o Google: la passkey se sincroniza y la wallet está ahí. Sin frase semilla que importar, sin llave de recuperación que teclear."
-				}
-			],
-			"stack": {
-				"label": "Por dentro",
-				"link": "Leer el whitepaper"
-			}
+			]
 		},
 		"networks": {
 			"heading": "12 redes integradas. Una dirección en todas.",

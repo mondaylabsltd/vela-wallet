@@ -397,49 +397,24 @@ export const en = {
 
 		pricing: {
 			heading: 'Free and open. Pay only if you want to.',
-			intro:
-				"You're paying for convenience, not for access. Every piece is open source and self-hostable, so none of it is a gate.",
+			intro: 'You pay for convenience, not for access.',
 			cards: [
 				{
 					title: 'Web wallet',
 					price: 'Free',
-					body: "Open it, authenticate, done — nothing to install and nothing to pay. Host the same app yourself if you'd rather not use ours."
+					body: 'Open it, authenticate, done. Or host the same app yourself.'
 				},
 				{
 					title: 'Desktop & mobile apps',
+					price: 'Free from source',
+					body: 'Same code, open source. Build it and install it yourself \u2014 every build is on <a href="https://github.com/mondaylabsltd/vela-wallet/releases" target="_blank" rel="noopener">GitHub</a>.'
+				},
+				{
+					title: 'From the app stores',
 					price: 'One-time purchase',
-					body: 'In the app stores they will be a one-time purchase — never a subscription. It is how a small independent team funds building this in the open. They are open source too: build from source and install it yourself for free. Until they reach the stores, every build is on <a href="https://github.com/mondaylabsltd/vela-wallet/releases" target="_blank" rel="noopener">GitHub</a>.'
-				},
-				{
-					title: 'Transactions',
-					price: 'Network gas + relayer fee',
-					body: 'A relayer fronts the gas and submits your transaction, and is paid the network cost plus a service fee — quoted before you sign, locked into what you sign, with a small minimum on very cheap transactions. Point Vela at <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">your own relay</a> and you pay us nothing.'
+					body: 'Never a subscription. It is how a small independent team funds building this in the open.'
 				}
-			],
-			note: 'No token, no ads, nothing sold about you. One more cost worth knowing: on each network your wallet needs a small, non-refundable deposit to activate its gas relayer account — Vela sponsors that for new wallets where it can. <a href="/docs/networks-and-fees">Networks &amp; fees</a> has the details.'
-		},
-
-		how: {
-			heading: 'How Vela works',
-			desc: 'Three steps. Nothing to write down.',
-			steps: [
-				{
-					title: 'Create',
-					body: 'Face ID, a fingerprint, or a security key creates a passkey. Your address is derived from it — the same address on every chain. Nothing to pay up front: the contract deploys with your first transaction.'
-				},
-				{
-					title: 'Sign',
-					body: 'Vela sends your device a challenge. The device returns a signature — never the key — and a relayer puts the signed operation on-chain.'
-				},
-				{
-					title: 'Sign in anywhere',
-					body: 'New device, same Apple or Google account: the passkey syncs, and the wallet is there. No seed phrase to import, no recovery key to type.'
-				}
-			],
-			stack: {
-				label: 'Under the hood',
-				link: 'Read the whitepaper'
-			}
+			]
 		},
 
 		networks: {

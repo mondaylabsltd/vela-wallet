@@ -644,63 +644,6 @@
 					</div>
 				{/each}
 			</div>
-
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			<p class="bm-note">{@html m.home.pricing.note}</p>
-		</div>
-	</div>
-</section>
-
-<!-- How It Works -->
-<section id="how-it-works" class="how-it-works">
-	<div class="container">
-		<h2>{m.home.how.heading}</h2>
-		<p class="section-desc">{m.home.how.desc}</p>
-
-		<ol class="steps">
-			{#each m.home.how.steps as step, i (step.title)}
-				<li class="step">
-					<span class="step-number">{String(i + 1).padStart(2, '0')}</span>
-					<h3>{step.title}</h3>
-					<p>{step.body}</p>
-				</li>
-			{/each}
-		</ol>
-
-		<!-- The spec line. Every claim above is one of these five links; the detail
-		     that used to be a six-row table now points at the pages that own it. -->
-		<div class="stack">
-			<span class="stack-label">{m.home.how.stack.label}</span>
-			<ul class="stack-list">
-				<li>
-					<a
-						href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
-						target="_blank"
-						rel="noopener">Safe v1.4.1</a
-					>
-				</li>
-				<li>
-					<a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener"
-						>ERC-4337</a
-					>
-				</li>
-				<li>
-					<a href="https://www.w3.org/TR/webauthn-2/" target="_blank" rel="noopener">WebAuthn</a> / P-256
-				</li>
-				<li>
-					<a
-						href="https://github.com/safe-global/safe-modules/tree/main/modules/passkey/contracts/4337"
-						target="_blank"
-						rel="noopener">SafeWebAuthnSharedSigner</a
-					>
-				</li>
-				<li>
-					<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
-						>GitHub</a
-					>
-				</li>
-			</ul>
-			<a class="more-link" href={L('/docs/whitepaper')}>{m.home.how.stack.link}</a>
 		</div>
 	</div>
 </section>
@@ -1183,7 +1126,6 @@
 	.network-note :global(a),
 	.compare-table td :global(a),
 	.bm-card :global(a),
-	.bm-note :global(a),
 	details :global(a) {
 		color: inherit;
 		text-decoration: underline;
@@ -1196,7 +1138,6 @@
 	.network-note :global(a:hover),
 	.compare-table td :global(a:hover),
 	.bm-card :global(a:hover),
-	.bm-note :global(a:hover),
 	details :global(a:hover) {
 		color: var(--accent);
 	}
@@ -1208,7 +1149,6 @@
 	.network-note :global(a[target='_blank']::after),
 	.compare-table td :global(a[target='_blank']::after),
 	.bm-card :global(a[target='_blank']::after),
-	.bm-note :global(a[target='_blank']::after),
 	details :global(a[target='_blank']::after) {
 		content: '';
 		display: inline-block;
@@ -1516,88 +1456,8 @@
 		line-height: 1.7;
 	}
 
-	/* ── How It Works ── */
-	.how-it-works h2,
-	.how-it-works .section-desc {
-		text-align: center;
-	}
 	.section-desc {
 		margin-bottom: 48px;
-	}
-	.steps {
-		list-style: none;
-		padding: 0;
-		margin: 0 auto;
-		max-width: 900px;
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 32px;
-	}
-	.step {
-		padding-top: 18px;
-		border-top: 1px solid var(--border);
-	}
-	.step-number {
-		display: block;
-		font-size: 0.72rem;
-		font-weight: 700;
-		letter-spacing: 0.08em;
-		color: var(--accent);
-		font-variant-numeric: tabular-nums;
-		margin-bottom: 10px;
-	}
-	.step h3 {
-		font-size: 1.05rem;
-		font-weight: 600;
-		margin-bottom: 8px;
-	}
-	.step p {
-		color: var(--text-secondary);
-		font-size: 0.92rem;
-		line-height: 1.75;
-		margin: 0;
-	}
-
-	/* The spec line: five links, one row, no table. */
-	.stack {
-		max-width: 900px;
-		margin: 48px auto 0;
-		padding-top: 20px;
-		border-top: 1px solid var(--border);
-		text-align: center;
-	}
-	.stack-label {
-		display: block;
-		font-size: 0.72rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--text-tertiary);
-		margin-bottom: 12px;
-	}
-	.stack-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 8px 0;
-		font-size: 0.85rem;
-		color: var(--text-secondary);
-	}
-	.stack-list li + li::before {
-		content: '·';
-		margin: 0 12px;
-		color: var(--text-tertiary);
-	}
-	.stack-list a {
-		color: var(--text);
-		text-decoration: underline;
-		text-underline-offset: 4px;
-	}
-	.stack-list a:hover {
-		color: var(--accent);
 	}
 
 	/* ── Compare ── */
@@ -1711,14 +1571,6 @@
 		font-size: 0.85rem;
 		line-height: 1.7;
 		margin: 0;
-	}
-	.bm-note {
-		text-align: center;
-		color: var(--text-tertiary);
-		font-size: 0.82rem;
-		line-height: 1.7;
-		max-width: 620px;
-		margin: 0 auto;
 	}
 
 	/* ── FAQ ── */
@@ -1836,7 +1688,6 @@
 		.why-content h2 {
 			font-size: 1.4rem;
 		}
-		.steps,
 		.bm-grid {
 			grid-template-columns: 1fr;
 			gap: 24px;

@@ -245,47 +245,24 @@
 		},
 		"pricing": {
 			"heading": "Kostenlos und offen. Zahlen nur, wenn du willst.",
-			"intro": "Du zahlst für Bequemlichkeit, nicht für Zugang. Jedes Teil ist quelloffen und selbst hostbar, also ist keines davon eine Schranke.",
+			"intro": "Du zahlst für Bequemlichkeit, nicht für den Zugang.",
 			"cards": [
 				{
 					"title": "Web-Wallet",
 					"price": "Kostenlos",
-					"body": "Öffnen, authentifizieren, fertig — nichts zu installieren und nichts zu zahlen. Hoste dieselbe App selbst, wenn du unsere lieber nicht nutzt."
+					"body": "Öffnen, authentifizieren, fertig. Oder hoste dieselbe App selbst."
 				},
 				{
-					"title": "Desktop- und Mobil-Apps",
+					"title": "Desktop- und Mobile-Apps",
+					"price": "Aus dem Quellcode kostenlos",
+					"body": "Derselbe offene Code. Selbst bauen und installieren — jeder Build liegt auf <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+				},
+				{
+					"title": "Aus den App-Stores",
 					"price": "Einmaliger Kauf",
-					"body": "In den App Stores werden sie ein einmaliger Kauf sein — nie ein Abo. So finanziert ein kleines unabhängiges Team, das hier offen zu entwickeln. Auch sie sind quelloffen: aus dem Quellcode bauen und selbst kostenlos installieren geht immer. Bis sie in den Stores sind, liegt jeder Build auf <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
-				},
-				{
-					"title": "Transaktionen",
-					"price": "Netzwerk-Gas + Relayer-Gebühr",
-					"body": "Ein Relayer streckt das Gas vor und reicht deine Transaktion ein; er bekommt die Netzwerkkosten plus eine Servicegebühr — vor dem Signieren genannt, in das Signierte eingeschlossen, mit einem kleinen Mindestbetrag bei sehr günstigen Transaktionen. Richte Vela auf <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, und du zahlst uns nichts."
+					"body": "Niemals ein Abo. So finanziert ein kleines unabhängiges Team die Arbeit im Offenen."
 				}
-			],
-			"note": "Kein Token, keine Werbung, nichts über dich verkauft. Eine weitere Kostenstelle, die man kennen sollte: Auf jedem Netzwerk braucht deine Wallet eine kleine, nicht erstattbare Einlage, um ihr Gas-Relayer-Konto zu aktivieren — Vela übernimmt das für neue Wallets, wo es geht. Details in <a href=\"/docs/networks-and-fees\">Netzwerke und Gebühren</a>."
-		},
-		"how": {
-			"heading": "So funktioniert Vela",
-			"desc": "Drei Schritte. Nichts zum Aufschreiben.",
-			"steps": [
-				{
-					"title": "Erstellen",
-					"body": "Face ID, ein Fingerabdruck oder ein Sicherheitsschlüssel erzeugt einen Passkey. Deine Adresse wird daraus abgeleitet — dieselbe Adresse auf jeder Chain. Vorab zahlst du nichts: Der Vertrag wird mit deiner ersten Transaktion deployt."
-				},
-				{
-					"title": "Signieren",
-					"body": "Vela schickt deinem Gerät eine Challenge. Das Gerät gibt eine Signatur zurück — nie den Schlüssel — und ein Relayer bringt die signierte Operation on-chain."
-				},
-				{
-					"title": "Überall anmelden",
-					"body": "Neues Gerät, dasselbe Apple- oder Google-Konto: Der Passkey synchronisiert, und die Wallet ist da. Keine Seed Phrase zu importieren, kein Wiederherstellungsschlüssel einzutippen."
-				}
-			],
-			"stack": {
-				"label": "Unter der Haube",
-				"link": "Whitepaper lesen"
-			}
+			]
 		},
 		"networks": {
 			"heading": "12 Netzwerke eingebaut. Eine Adresse auf allen.",

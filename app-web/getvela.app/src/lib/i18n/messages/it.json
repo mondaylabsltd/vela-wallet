@@ -244,48 +244,25 @@
 			"note": "Niente di tutto questo è contro gli altri due.\n\nI punti di forza di MetaMask sono semplicità e universalità — e una semplice transazione EOA è la cosa più economica che si possa fare on-chain.\n\nBase Account è quello che chiede meno, e dove è supportato il gas non lo paghi tu.\n\nVela sceglie altri compromessi: passkey, più chiavi di firma indipendenti, e ogni pezzo — app, relay, servizi backend — eseguibile da te.\n\nNon è migliore in ogni riga. Su cosa insiste: il controllo dell'account resta a te, e il meno possibile dipende da un unico fornitore."
 		},
 		"pricing": {
-			"heading": "Gratis e aperto. Paghi solo se vuoi.",
-			"intro": "Paghi per la comodità, non per l'accesso. Ogni pezzo è open source e self-hostable, quindi nessuno di essi è un cancello.",
+			"heading": "Gratuito e aperto. Paghi solo se vuoi.",
+			"intro": "Paghi per la comodità, non per il diritto di usarlo.",
 			"cards": [
 				{
-					"title": "Wallet web",
-					"price": "Gratis",
-					"body": "Aprilo, autenticati, fatto — niente da installare e niente da pagare. Ospita tu la stessa app, se preferisci non usare la nostra."
+					"title": "Portafoglio web",
+					"price": "Gratuito",
+					"body": "Apri, ti autentichi, fatto. Oppure ospiti tu la stessa app."
 				},
 				{
 					"title": "App desktop e mobile",
-					"price": "Acquisto unico",
-					"body": "Negli store saranno un acquisto unico — mai un abbonamento. È così che un piccolo team indipendente finanzia il costruire tutto questo allo scoperto. Anche loro sono open source: compila dal sorgente e installatele da solo, gratis. Finché non arrivano negli store, ogni build è su <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+					"price": "Gratis dai sorgenti",
+					"body": "Lo stesso codice aperto. Compila e installa da solo — ogni build è su <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
 				},
 				{
-					"title": "Transazioni",
-					"price": "Gas di rete + commissione del relayer",
-					"body": "Un relayer anticipa il gas e invia la tua transazione, e riceve il costo di rete più una commissione di servizio — quotata prima della firma, bloccata in ciò che firmi, con un piccolo minimo sulle transazioni molto economiche. Punta Vela al <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">tuo relay</a> e a noi non paghi niente."
+					"title": "Dagli app store",
+					"price": "Acquisto una tantum",
+					"body": "Mai un abbonamento. È così che una piccola squadra indipendente finanzia il lavoro allo scoperto."
 				}
-			],
-			"note": "Nessun token, nessuna pubblicità, niente di tuo messo in vendita. Un altro costo che vale la pena conoscere: su ogni rete il tuo wallet ha bisogno di un piccolo deposito non rimborsabile per attivare il suo account di relayer del gas — Vela lo copre per i wallet nuovi dove può. I dettagli in <a href=\"/docs/networks-and-fees\">Reti e commissioni</a>."
-		},
-		"how": {
-			"heading": "Come funziona Vela",
-			"desc": "Tre passi. Niente da annotare.",
-			"steps": [
-				{
-					"title": "Crea",
-					"body": "Face ID, un'impronta o una chiave di sicurezza creano una passkey. Il tuo indirizzo ne deriva — lo stesso indirizzo su ogni chain. Niente da pagare in anticipo: il contratto viene deployato con la tua prima transazione."
-				},
-				{
-					"title": "Firma",
-					"body": "Vela manda una sfida al tuo dispositivo. Il dispositivo restituisce una firma — mai la chiave — e un relayer porta l'operazione firmata on-chain."
-				},
-				{
-					"title": "Accedi ovunque",
-					"body": "Dispositivo nuovo, stesso account Apple o Google: la passkey si sincronizza e il wallet è lì. Nessuna seed phrase da importare, nessuna chiave di recupero da digitare."
-				}
-			],
-			"stack": {
-				"label": "Sotto il cofano",
-				"link": "Leggi il whitepaper"
-			}
+			]
 		},
 		"networks": {
 			"heading": "12 reti integrate. Un solo indirizzo su tutte.",

@@ -244,48 +244,25 @@
 			"note": "Rien de tout cela n'est une attaque contre les deux autres.\n\nLes forces de MetaMask sont la simplicité et l'universalité — et une simple transaction EOA est ce qu'on peut faire de moins cher on-chain.\n\nBase Account demande le moins d'efforts, et là où c'est supporté, le gas n'est pas à votre charge.\n\nVela fait d'autres arbitrages : des passkeys, plusieurs clés de signature indépendantes, et chaque pièce — app, relais, services backend — que vous pouvez faire tourner vous-même.\n\nIl n'est pas meilleur sur chaque ligne. Ce sur quoi il insiste : le contrôle du compte reste chez vous, et le moins de choses possible dépend d'un seul fournisseur."
 		},
 		"pricing": {
-			"heading": "Gratuit et ouvert. Payez seulement si vous le voulez.",
-			"intro": "Vous payez pour le confort, pas pour l'accès. Chaque brique est open source et auto-hébergeable : aucune n'est une barrière.",
+			"heading": "Gratuit et ouvert. Payez seulement si vous voulez.",
+			"intro": "Vous payez pour la commodité, pas pour le droit d’utiliser.",
 			"cards": [
 				{
 					"title": "Portefeuille web",
 					"price": "Gratuit",
-					"body": "Ouvrez, authentifiez-vous, c'est tout — rien à installer et rien à payer. Hébergez la même app vous-même si vous préférez ne pas utiliser la nôtre."
+					"body": "Ouvrez, authentifiez-vous, c’est tout. Ou hébergez la même app vous-même."
 				},
 				{
 					"title": "Applications bureau et mobile",
+					"price": "Gratuit depuis les sources",
+					"body": "Le même code ouvert. Compilez et installez vous-même — chaque build est sur <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+				},
+				{
+					"title": "Depuis les stores",
 					"price": "Achat unique",
-					"body": "Dans les boutiques, ce sera un achat unique — jamais un abonnement. C'est ainsi qu'une petite équipe indépendante finance ce travail mené au grand jour. Elles sont open source aussi : compilez depuis les sources et installez-les vous-même gratuitement. En attendant les boutiques, chaque build est sur <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
-				},
-				{
-					"title": "Transactions",
-					"price": "Gas réseau + frais de relayeur",
-					"body": "Un relayeur avance le gas et soumet votre transaction ; il perçoit le coût réseau plus des frais de service — annoncés avant la signature, verrouillés dans ce que vous signez, avec un petit minimum sur les transactions très bon marché. Pointez Vela vers <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">votre propre relais</a> et vous ne nous payez rien."
+					"body": "Jamais d’abonnement. C’est ce qui finance une petite équipe indépendante qui construit à découvert."
 				}
-			],
-			"note": "Pas de jeton, pas de publicité, rien de vendu à votre sujet. Un autre coût à connaître : sur chaque réseau, votre portefeuille a besoin d'un petit dépôt non remboursable pour activer son compte de relayeur de gas — Vela le prend en charge pour les nouveaux portefeuilles quand c'est possible. Les détails dans <a href=\"/docs/networks-and-fees\">Réseaux et frais</a>."
-		},
-		"how": {
-			"heading": "Comment fonctionne Vela",
-			"desc": "Trois étapes. Rien à noter.",
-			"steps": [
-				{
-					"title": "Créer",
-					"body": "Face ID, une empreinte ou une clé de sécurité crée une passkey. Votre adresse en est dérivée — la même adresse sur chaque chaîne. Rien à payer d'avance : le contrat est déployé avec votre première transaction."
-				},
-				{
-					"title": "Signer",
-					"body": "Vela envoie un défi à votre appareil. L'appareil renvoie une signature — jamais la clé — et un relayeur publie l'opération signée on-chain."
-				},
-				{
-					"title": "Se connecter partout",
-					"body": "Nouvel appareil, même compte Apple ou Google : la passkey se synchronise et le portefeuille est là. Aucune phrase de récupération à importer, aucune clé de récupération à saisir."
-				}
-			],
-			"stack": {
-				"label": "Sous le capot",
-				"link": "Lire le livre blanc"
-			}
+			]
 		},
 		"networks": {
 			"heading": "12 réseaux intégrés. Une seule adresse sur tous.",
