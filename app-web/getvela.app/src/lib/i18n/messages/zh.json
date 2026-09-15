@@ -1,0 +1,54 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "内测",
+			"blog": "博客",
+			"docs": "文档",
+			"about": "关于",
+			"whyVela": "为什么选 Vela",
+			"howItWorks": "工作原理",
+			"pricing": "价格",
+			"faq": "常见问题",
+			"createWallet": "创建钱包",
+			"signIn": "登录",
+			"primary": "主导航",
+			"toggleMenu": "展开菜单"
+		},
+		"footer": {
+			"tagline": "真正属于你的以太坊钱包。无需助记词。",
+			"label": "页脚",
+			"columns": {
+				"resources": "资源",
+				"infrastructure": "基础设施",
+				"community": "社区",
+				"legal": "法律"
+			},
+			"links": {
+				"docs": "文档",
+				"whitepaper": "白皮书",
+				"audits": "审计与已知问题",
+				"roadmap": "路线图",
+				"blog": "博客",
+				"about": "关于",
+				"privacy": "隐私政策",
+				"terms": "服务条款"
+			}
+		},
+		"language": {
+			"label": "语言",
+			"choose": "选择语言"
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "此页面仅有英文版"
+		}
+	},
+	"notice": {
+		"fallback": "此页面尚未翻译，以下为英文原文。",
+		"offer": {
+			"message": "这个页面也有简体中文版。",
+			"accept": "用简体中文阅读",
+			"dismiss": "不用了"
+		}
+	}
+}

@@ -27,12 +27,12 @@ from that directory (`bun`, not npm).
 **Purpose**: the vocabulary everything else is written in. No routing yet, so the
 site is untouched and everything here is independently reviewable.
 
-- [ ] T001 [P] Create `src/lib/i18n/locales.ts` — the 15 tags, `Locale` type, endonyms, `og:locale` values, `dir`, and the alias table, per [data-model.md](./data-model.md) §Locale
-- [ ] T002 [P] Create `src/lib/i18n/locales.test.ts` — assert the site's tag list equals `SUPPORTED_LOCALES` **read from `app-web/vela-wallet/src/lib/i18n/locales.ts` at test time**, not a copied array (FR-007)
-- [ ] T003 [P] Add `toLocale()` / alias resolution / `Accept-Language`-style negotiation helpers to `src/lib/i18n/locales.ts`, with cases for `pt`, `es`, `zh-CN`, `zh-Hant`, `zh-SG`, `fr-CA`, and unknown tags, tested in `src/lib/i18n/locales.test.ts`
-- [ ] T004 Create `src/lib/i18n/messages/en.ts` with the `chrome` and `notice` namespaces only (nav labels, switcher label, footer, CTA labels, fallback notice, English-only badge) — the type every later reader is checked against
-- [ ] T005 [P] Create `src/lib/i18n/messages/review.json` with all 14 non-English locales at `{"state":"drafted"}` and `en` at `{"state":"source"}`
-- [ ] T006 [P] Create `src/lib/i18n/messages/zh.json` translating `chrome` + `notice`, using the founder-approved terminology in [approved-copy.md](./approved-copy.md)
+- [X] T001 [P] Create `src/lib/i18n/locales.ts` — the 15 tags, `Locale` type, endonyms, `og:locale` values, `dir`, and the alias table, per [data-model.md](./data-model.md) §Locale
+- [X] T002 [P] Create `src/lib/i18n/locales.test.ts` — assert the site's tag list equals `SUPPORTED_LOCALES` **read from `app-web/vela-wallet/src/lib/i18n/locales.ts` at test time**, not a copied array (FR-007)
+- [X] T003 [P] Add `toLocale()` / alias resolution / `Accept-Language`-style negotiation helpers to `src/lib/i18n/locales.ts`, with cases for `pt`, `es`, `zh-CN`, `zh-Hant`, `zh-SG`, `fr-CA`, and unknown tags, tested in `src/lib/i18n/locales.test.ts`
+- [X] T004 Create `src/lib/i18n/messages/en.ts` with the `chrome` and `notice` namespaces only (nav labels, switcher label, footer, CTA labels, fallback notice, English-only badge) — the type every later reader is checked against
+- [X] T005 [P] Create `src/lib/i18n/messages/review.json` with all 14 non-English locales at `{"state":"drafted"}` and `en` at `{"state":"source"}`
+- [X] T006 [P] Create `src/lib/i18n/messages/zh.json` translating `chrome` + `notice`, using the founder-approved terminology in [approved-copy.md](./approved-copy.md)
 
 **Checkpoint**: `bun run check` passes; `bun run test:unit --run` runs T002/T003.
 The site still behaves exactly as it does today.

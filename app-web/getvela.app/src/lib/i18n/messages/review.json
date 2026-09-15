@@ -1,0 +1,18 @@
+{
+	"_comment": "Per-locale review state (spec 059 FR-028). A locale may only be 'reviewed' when specs/059-getvela-site-i18n/reviews/<tag>.md exists with no open High or Medium finding. Nothing rendered to a reader claims a review state — this is for the team.",
+	"en": { "state": "source" },
+	"zh": { "state": "drafted" },
+	"zh-TW": { "state": "drafted" },
+	"zh-HK": { "state": "drafted" },
+	"ja": { "state": "drafted" },
+	"ko": { "state": "drafted" },
+	"vi": { "state": "drafted" },
+	"id": { "state": "drafted" },
+	"tr": { "state": "drafted" },
+	"es-MX": { "state": "drafted" },
+	"pt-BR": { "state": "drafted" },
+	"fr": { "state": "drafted" },
+	"de": { "state": "drafted" },
+	"ru": { "state": "drafted" },
+	"it": { "state": "drafted" }
+}
