@@ -312,8 +312,8 @@
 		<div class="hero-text">
 			<h1>An Ethereum wallet you actually own</h1>
 			<p class="subtitle">
-				Open source, self-hostable, 12 EVM chains. Sign with Face ID or a fingerprint on an
-				unmodified Safe — and keep signing if we disappear.
+				Sign with a passkey Vela never sees. Open source and self-hostable on most EVM chains — so
+				it keeps working even if we disappear.
 			</p>
 			<div class="hero-cta">
 				<div class="hero-buttons">
