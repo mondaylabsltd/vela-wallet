@@ -1,12 +1,13 @@
 <script lang="ts">
+	import LocaleOfferBanner from '$lib/components/LocaleOfferBanner.svelte';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 
 	/**
-	 * The localized subtree's layout. It carries the locale — nothing else yet;
-	 * the switcher and the fallback notice arrive in Phase 3 (T025, T044). Its
-	 * job today is to exist so `+layout.ts` has somewhere to put `locale`, and so
-	 * every localized page shares one place to wrap chrome around later.
+	 * The localized subtree's layout. It carries the locale and the one piece of
+	 * chrome that belongs to every localized page: the offer banner (FR-013).
+	 * The fallback notice is per page, not per layout — only the page knows
+	 * whether ITS namespace fell back.
 	 */
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 </script>
@@ -16,5 +17,7 @@
 	     this is the app-level record of the same fact, for anything reading the DOM. -->
 	<meta name="content-language" content={data.locale} />
 </svelte:head>
+
+<LocaleOfferBanner locale={data.locale} />
 
 {@render children()}

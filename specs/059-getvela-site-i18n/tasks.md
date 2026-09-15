@@ -73,18 +73,18 @@ and can move between languages without losing their place.
 **Independent test**: `curl /zh/` returns Chinese copy in the HTML body with no
 JavaScript; switching language from `/docs/faq` lands on `/zh/docs/faq`.
 
-- [ ] T020 [US2] Extract the landing page's English copy from `src/routes/[[locale=locale]]/+page.svelte` into a `home` namespace in `src/lib/i18n/messages/en.ts`, leaving markup, SVGs and the on-chain counter logic in the component
-- [ ] T021 [P] [US2] Extract `about` copy into the `about` namespace in `src/lib/i18n/messages/en.ts`
-- [ ] T022 [P] [US2] Extract `roadmap` copy into the `roadmap` namespace in `src/lib/i18n/messages/en.ts`
-- [ ] T023 [US2] Create `src/lib/i18n/resolve.ts` — `catalog(L)`, `state(P, L)`, `pathFor(P, L)`, `switchTo(L, path)` per [contracts/translation-store.md](./contracts/translation-store.md)
-- [ ] T024 [US2] Create `src/lib/i18n/resolve.test.ts` — page-granular state (a namespace missing one key ⇒ `fallback`, never a half-translated page, SC-006) and `switchTo` round-trips including `/docs` ↔ `/<seg>/docs`
-- [ ] T025 [US2] Create `src/lib/components/LanguageSwitcher.svelte` — all 15 endonyms, preserves the current path, marks the active locale
-- [ ] T026 [US2] Wire the switcher into **both** headers: `src/lib/components/SiteHeader.svelte` and the landing page's own inline `<nav>` (they are separate — the landing page does not use SiteHeader)
-- [ ] T027 [US2] Create `src/lib/components/LocaleOfferBanner.svelte` — client-side `navigator.languages` offer, written in the offered language, dismissal in `localStorage`, **never navigates** (FR-013, research §7)
+- [X] T020 [US2] Extract the landing page's English copy from `src/routes/[[locale=locale]]/+page.svelte` into a `home` namespace in `src/lib/i18n/messages/en.ts`, leaving markup, SVGs and the on-chain counter logic in the component
+- [X] T021 [P] [US2] Extract `about` copy into the `about` namespace in `src/lib/i18n/messages/en.ts`
+- [X] T022 [P] [US2] Extract `roadmap` copy into the `roadmap` namespace in `src/lib/i18n/messages/en.ts`
+- [X] T023 [US2] Create `src/lib/i18n/resolve.ts` — `catalog(L)`, `state(P, L)`, `pathFor(P, L)`, `switchTo(L, path)` per [contracts/translation-store.md](./contracts/translation-store.md)
+- [X] T024 [US2] Create `src/lib/i18n/resolve.test.ts` — page-granular state (a namespace missing one key ⇒ `fallback`, never a half-translated page, SC-006) and `switchTo` round-trips including `/docs` ↔ `/<seg>/docs`
+- [X] T025 [US2] Create `src/lib/components/LanguageSwitcher.svelte` — all 15 endonyms, preserves the current path, marks the active locale
+- [X] T026 [US2] Wire the switcher into **both** headers: `src/lib/components/SiteHeader.svelte` and the landing page's own inline `<nav>` (they are separate — the landing page does not use SiteHeader)
+- [X] T027 [US2] Create `src/lib/components/LocaleOfferBanner.svelte` — client-side `navigator.languages` offer, written in the offered language, dismissal in `localStorage`, **never navigates** (FR-013, research §7)
 - [ ] T028 [P] [US2] Add the banner's strings to every locale in `messages/*.json` — it is shown to a reader who cannot read the page, so it is the one string that cannot fall back
-- [ ] T029 [US2] Translate the `home`, `about`, `roadmap` namespaces into `src/lib/i18n/messages/zh.json`, using [approved-copy.md](./approved-copy.md) verbatim for the tagline and subtitle
-- [ ] T030 [P] [US2] Create `tests/locale-render.spec.ts` (Playwright, `javaScriptEnabled: false`) — `/zh/` carries Chinese copy in the response body and `<html lang="zh">` (FR-011, FR-014)
-- [ ] T031 [P] [US2] Add a switcher e2e to `tests/locale-render.spec.ts` — from `/docs/networks-and-fees` to 简体中文 lands on `/zh/docs/networks-and-fees`, never `/zh/` (SC-003)
+- [X] T029 [US2] Translate the `home`, `about`, `roadmap` namespaces into `src/lib/i18n/messages/zh.json`, using [approved-copy.md](./approved-copy.md) verbatim for the tagline and subtitle
+- [X] T030 [P] [US2] Create `tests/locale-render.spec.ts` (Playwright, `javaScriptEnabled: false`) — `/zh/` carries Chinese copy in the response body and `<html lang="zh">` (FR-011, FR-014)
+- [X] T031 [P] [US2] Add a switcher e2e to `tests/locale-render.spec.ts` — from `/docs/networks-and-fees` to 简体中文 lands on `/zh/docs/networks-and-fees`, never `/zh/` (SC-003)
 
 **Checkpoint**: US2 is demonstrable end to end on the one locale the founder can
 read. Deployable as-is.
@@ -98,8 +98,8 @@ read. Deployable as-is.
 **Independent test**: every localized page's alternates are reciprocal, and the
 sitemap lists exactly the pages that exist.
 
-- [ ] T032 [US4] **Delete the stale hardcoded `og:title` / `twitter:title` / `og:description` / `twitter:description` from `src/app.html`** — a third retired tagline duplicated on every page (research §1, contracts/head-and-sitemap.md invariant 5)
-- [ ] T033 [US4] Extend `src/lib/components/Seo.svelte` with an `alternates` input emitting `hreflang` links + `x-default`, `og:locale`, `og:locale:alternate`, and `inLanguage` in JSON-LD
+- [X] T032 [US4] **Delete the stale hardcoded `og:title` / `twitter:title` / `og:description` / `twitter:description` from `src/app.html`** — a third retired tagline duplicated on every page (research §1, contracts/head-and-sitemap.md invariant 5)
+- [X] T033 [US4] Extend `src/lib/components/Seo.svelte` with an `alternates` input emitting `hreflang` links + `x-default`, `og:locale`, `og:locale:alternate`, and `inLanguage` in JSON-LD
 - [ ] T034 [US4] Replace the landing page's hand-written `<svelte:head>` in `src/routes/[[locale=locale]]/+page.svelte` with `Seo.svelte` so canonical/alternates come from one place
 - [ ] T035 [P] [US4] Replace the hand-written `<svelte:head>` in `roadmap/+page.svelte` with `Seo.svelte` for the same reason
 - [ ] T036 [US4] Emit alternates from `TranslationRecord` only for locales whose state is `translated`/`source` — a falling-back page is advertised by nobody, including itself (FR-018)

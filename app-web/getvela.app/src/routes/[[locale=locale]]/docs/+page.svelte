@@ -1,9 +1,13 @@
 <script lang="ts">
 	import DocArticle from '$lib/components/DocArticle.svelte';
 	import Seo from '$lib/components/Seo.svelte';
+	import { pathFor } from '$lib/i18n/locales';
 	import { getDoc } from '$lib/content/docs';
 	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
 	import { seoConfig } from '$lib/seo';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
 
 	const slug = DOCS_INDEX_SLUG;
 	const doc = getDoc(slug)!;
@@ -22,10 +26,12 @@
 <Seo
 	title={doc.meta.title}
 	description={doc.meta.description ?? 'Vela Wallet documentation.'}
-	canonical="/docs"
+	canonical={pathFor(data.locale, '/docs')}
+	locale={data.locale}
+	englishPath="/docs"
 	{jsonLd}
 />
 
-<DocArticle {slug}>
+<DocArticle {slug} locale={data.locale}>
 	<Content />
 </DocArticle>

@@ -1,25 +1,28 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { DOCS_INDEX_SLUG, sidebar } from '$lib/content/sidebar';
+	import { pathFor, splitLocalePath } from '$lib/i18n/locales';
 	import type { Snippet } from 'svelte';
+	import type { LayoutData } from './$types';
 
-	let { children }: { children: Snippet } = $props();
+	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
 	let menuOpen = $state(false);
 
+	// Sidebar links stay inside the reader's locale — following one must not
+	// silently drop them back to English.
 	function hrefFor(slug: string) {
-		return slug === DOCS_INDEX_SLUG ? resolve('/docs') : resolve(`/docs/${slug}`);
+		return pathFor(data.locale, slug === DOCS_INDEX_SLUG ? '/docs' : `/docs/${slug}`);
 	}
 	function isActive(slug: string) {
 		const target = slug === DOCS_INDEX_SLUG ? '/docs' : `/docs/${slug}`;
-		return page.url.pathname === target;
+		return splitLocalePath(page.url.pathname).path === target;
 	}
 </script>
 
-<SiteHeader />
+<SiteHeader locale={data.locale} />
 
 <div class="docs">
 	<button
@@ -60,7 +63,7 @@
 	</div>
 </div>
 
-<SiteFooter />
+<SiteFooter locale={data.locale} />
 
 <style>
 	.docs {

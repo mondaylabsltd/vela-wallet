@@ -50,5 +50,330 @@
 			"accept": "用简体中文阅读",
 			"dismiss": "不用了"
 		}
+	},
+	"home": {
+		"meta": {
+			"title": "Vela 钱包 — 真正属于你的以太坊钱包",
+			"description": "一款开源、可自行部署的以太坊钱包，支持 ETH 与 ERC-20。用通行密钥签名——没有助记词，不需要硬件钱包，也没有任何锁定。你付的是便利的钱，不是使用权的钱。",
+			"ogTitle": "Vela 钱包 — 真正属于你的以太坊钱包",
+			"ogDescription": "开源、可自行部署的 ETH 与 ERC-20 钱包。通行密钥签名，无助记词，无锁定。愿意的话，你可以自己编译它。",
+			"organization": "一款开源、可自行部署的以太坊钱包，支持 ETH 与 ERC-20 代币。用通行密钥签名——没有助记词，不需要硬件钱包，也没有任何锁定。"
+		},
+		"hero": {
+			"headline": "真正属于你的以太坊钱包",
+			"subtitle": "用通行密钥签名，Vela 永远看不到你的密钥。开源、可自部署、支持大多数 EVM 链——即使 Vela 消失，钱包照常可用。",
+			"ctaCreate": "创建钱包 — 无需助记词",
+			"ctaCode": "查看源码",
+			"signIn": "已有钱包？登录",
+			"facts": [
+				{
+					"term": "Safe v1.4.1，未经改动",
+					"detail": "经第三方审计的合约，原样部署。"
+				},
+				{
+					"term": "内置 12 条链，也能自己加",
+					"detail": "任何部署了 RIP-7212 预编译与 Safe v1.4.1 合约的 EVM 链都可以。所有链上是同一个地址。"
+				},
+				{
+					"term": "多把钥匙任一可签，支持安全密钥",
+					"detail": "通行密钥、身边的另一台设备，或 USB/NFC 安全密钥——最多七把，任意一把都能单独签名。在创建钱包时选定。"
+				}
+			]
+		},
+		"trust": {
+			"tagline": "别信我们——自己去验证。每一行代码都在 <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">GitHub</a> 上，每一个钱包都在链上，<a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"trust-tagline\">每一份审计和每一个已知问题都写在文档里</a>。",
+			"chipOpenSource": "<a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">100% 开源</a> — 应用加我们所有的服务",
+			"chipSafe": "<a href=\"https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1\" target=\"_blank\" rel=\"noopener\">Safe v1.4.1</a> — <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"trust-chip\">已审计，未改动</a>",
+			"walletsCreated": "个钱包已在链上创建",
+			"walletsLoading": "正在读取钱包数量"
+		},
+		"doesLess": {
+			"heading": "一款刻意做得更少的钱包。",
+			"p1": "没有 NFT 画廊，没有内置兑换，没有 DeFi 面板。没有任何为了把你推向下一次点击而设计的东西。",
+			"p2": "Vela 只管 ETH 和 ERC-20。想用某个 dApp 时，你通过 <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair</a> 连接你自己选的那一个。",
+			"p3": "这就是产品的全部。",
+			"p4": "因为钱包里每多一个功能，就多一段需要你信任的代码，多一层挡在你和你的钱之间的界面。Vela 刻意保持精简：可攻击的路径更少，需要审计的部件更少，点错的机会也更少。"
+		},
+		"why": {
+			"heading": "我们为什么做 Vela",
+			"p1": "我们本来没打算再做一个钱包。一切始于一个我们始终答不好的问题：",
+			"beat": "那十二个单词，到底该放在哪儿？",
+			"p2": "存进备忘录，手机一丢就出事。抄在纸上，你就得开始操心火灾、进水、搬家、室友、垃圾袋，以及未来的你还记不记得「那个安全的地方」在哪。对很多人来说，诚实的答案是：相册里的一张截图。所有人都知道这样不对，但还是这么做了——因为那个「正确」的做法，实在没法在日常里坚持下去。",
+			"p3": "后来通行密钥改变了钱包可以带来的感受。我们每天都在用 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，用 Face ID 签名这件事，是助记词从来没给过的那种理所当然——不像在处理危险品，更像在用互联网上的其它东西。但用得越久，越绕不开那些边界：一把在浏览器里生成、你只能选择相信的恢复密钥；不能加自定义网络；没法自己部署。而最让人不安的那个问题最简单——服务一旦消失，钱包也跟着消失。",
+			"p4": "于是我们做了一个自己愿意长期依赖的版本。",
+			"p5": "Vela 是<strong>一个你可以完全拥有的通行密钥钱包。</strong>你的通行密钥留在你的设备本来就在保护它的地方——iCloud 钥匙串或 Google 密码管理器。签名时，Vela 向你的设备发出一个挑战；设备完成签名，只回传签名本身。Vela 从头到尾都看不到密钥。大多数钱包仍然存在一个危险的瞬间，哪怕很短：屏幕上的单词、内存里的助记词、浏览器标签页里躺着的恢复密钥。Vela 的设计让这个瞬间根本不存在。<strong>我们无法接触你的密钥。不是「我们保证不看」——而是架构上就做不到。</strong>",
+			"p6": "我们把 Vela 开源，是为了让你能自己核实这一点；把它做成可自行部署，是为了让你的钱包永远不必依赖我们这家公司还在不在线上。我们建立在未经改动的 <a href=\"https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1\" target=\"_blank\" rel=\"noopener\">Safe 合约</a>之上，因为当涉及别人的钱时，走那条无聊却久经检验的路才是对的——正是这些合约，此刻已经守着链上数以十亿计的资产。",
+			"p7": "代价依然存在。用 Vela，你的 Apple 或 Google 账户变得很重要，因为通行密钥就住在那里。丢了那个账户，或者删掉了通行密钥，就没有助记词、没有客服重置、也没有后门。但每一个自托管钱包，都是在让你选择更愿意承担哪一种风险。助记词可以被复制、被截图、被钓鱼，也可能在凌晨一点被输进错误的网站。通行密钥不一样：没有可以泄露的单词，没有可以粘贴的秘密，也没有任何假冒网站能骗你把它交出去。你的设备只为真正的域名签名，否则它就不签。",
+			"p8": "这就是我们做 Vela 的原因——一个没有助记词要藏、没有恢复密钥要信、也没有哪家公司需要你祈祷它一直活着的钱包。"
+		},
+		"compare": {
+			"heading": "Vela 与其它钱包的差别",
+			"desc": "当你真正持有自己的密钥之后，这些差别才开始重要。",
+			"rows": [
+				{
+					"feature": "签名密钥存在哪里",
+					"vela": "Apple / Google 密码管理器",
+					"metamask": "在应用里",
+					"base": "Apple / Google 密码管理器"
+				},
+				{
+					"feature": "密钥会暴露给应用吗？",
+					"vela": "不会",
+					"metamask": "会",
+					"base": "不会"
+				},
+				{
+					"feature": "开源",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">全部开源</a>",
+					"metamask": "部分开源",
+					"base": "部分开源"
+				},
+				{
+					"feature": "账户合约",
+					"vela": "<a href=\"/docs/security-audits\">Safe v1.4.1 — 生态标准</a>",
+					"metamask": "外部账户（EOA）",
+					"base": "自研合约（已审计）"
+				},
+				{
+					"feature": "支持的网络",
+					"vela": "内置 12 条 + 自定义",
+					"metamask": "任意 EVM 链",
+					"base": "以 Base 为主，数量很少"
+				},
+				{
+					"feature": "服务方消失后还能用吗",
+					"vela": "能 — <a href=\"https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints\" target=\"_blank\" rel=\"noopener\">可自行部署</a>",
+					"metamask": "能",
+					"base": "签名依赖服务方的基础设施"
+				},
+				{
+					"feature": "你必须备份什么",
+					"vela": "什么都不用 — 通行密钥会自动同步",
+					"metamask": "助记词",
+					"base": "恢复密钥"
+				}
+			],
+			"note": "Vela 自己做的每一样东西你都可以自行部署。少数数据源（部分链的历史记录、长尾代币价格、威胁扫描）来自第三方服务商——换成你自己的节点或密钥即可。"
+		},
+		"how": {
+			"heading": "Vela 是怎么工作的",
+			"desc": "每一步到底发生了什么。",
+			"steps": [
+				{
+					"title": "创建钱包",
+					"body": "用 Face ID 或指纹验证身份。你的设备生成一把通行密钥，并由它推导出一个 <a href=\"https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1\" target=\"_blank\" rel=\"noopener\">Safe</a> 智能账户地址——在所有支持的链上都是同一个地址。前期不花任何 gas，合约会在你第一笔交易时部署上链。"
+				},
+				{
+					"title": "签署交易",
+					"body": "应用构造出交易，并向你的设备发出签名挑战。设备用通行密钥完成签名，只回传签名本身——Vela 从头到尾看不到密钥。签好的交易通过 <a href=\"https://eips.ethereum.org/EIPS/eip-4337\" target=\"_blank\" rel=\"noopener\">ERC-4337</a> 打包器上链。"
+				},
+				{
+					"title": "在新设备上登录",
+					"body": "换了新手机，用同一个 Apple 或 Google 账户登录即可。你的通行密钥会通过 iCloud 钥匙串或 Google 密码管理器自动同步。同一个地址、同样的资产、同样的链——没有助记词要导入，也没有恢复密钥要输入。"
+				}
+			],
+			"tech": {
+				"heading": "技术细节",
+				"wallet": "钱包合约",
+				"authentication": "身份验证",
+				"accountType": "账户类型",
+				"accountTypeValue": "（智能账户）",
+				"signerModule": "签名模块",
+				"networks": "网络",
+				"networksValue": "12 条 EVM 链（+ 自定义）",
+				"sourceCode": "源代码"
+			},
+			"networkNote": "自定义网络的要求不止是兼容 EVM——该链必须有 RIP-7212 P256 预编译，并且部署了 Vela 所用的 Safe + ERC-4337 合约。你添加网络时 Vela 会自动检查；对于还没有这些合约的链，<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">链部署工具</a>可以把它们部署上去——包括你自己的本地测试网。"
+		},
+		"pricing": {
+			"heading": "免费且开源。愿意付费再付。",
+			"intro": "你付的是便利的钱，不是使用权的钱。所有东西都开源、都可自行部署——没有任何东西锁住你。",
+			"cards": [
+				{
+					"title": "网页钱包",
+					"price": "免费",
+					"body": "网页钱包免费、开源、可自行部署。不用安装，不用助记词——验证一下身份就能用。"
+				},
+				{
+					"title": "手机应用",
+					"price": "支撑项目运转",
+					"body": "手机应用发布时会是付费下载，按地区定价——这是一支独立小团队在公开开发 Vela 的经费来源。它同样是开源的，所以你随时可以自己从源码编译，免费装到自己手机上。"
+				},
+				{
+					"title": "打包器 gas 费",
+					"price": "网络 gas + 服务费",
+					"body": "交易通过 ERC-4337 打包器上链。你支付网络 gas 加一笔服务费——确切金额会在你签名前报给你看，所以总额始终是先知后签。你也可以自己运行一个兼容的<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自托管打包器</a>，完全免掉这笔费用。"
+				}
+			],
+			"note": "由使用它的人供养。不想付钱？网页钱包免费用，服务自己部署，打包器自己跑——你不欠我们任何东西。"
+		},
+		"faq": {
+			"heading": "常见问题",
+			"desc": "在真正放钱进来之前，你会想知道的那些事。",
+			"items": [
+				{
+					"q": "Vela 支持哪些链？",
+					"a": "内置十二条链：以太坊、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Monad、World Chain 和 Tempo。只要目标链有 RIP-7212 P256 预编译、并部署了 Vela 所用的 Safe + ERC-4337 合约，你也可以自己添加其它 EVM 网络——添加时 Vela 会自动检查。所有链上都是同一个钱包地址。"
+				},
+				{
+					"q": "Vela 和 Coinbase 智能钱包或其它通行密钥钱包有什么不同？",
+					"a": "大多数通行密钥钱包是闭源的，跑在你无法掌控的基础设施上。公司一旦转型或关停，你就被困住了。Vela 完全开源、可自行部署——应用、打包器、以及全部后端服务都是。你可以添加自定义网络，自己运行打包器来免掉费用，甚至在 getvela.app 消失之后继续使用钱包。没有在浏览器里生成的恢复密钥，也没有供应商锁定。"
+				},
+				{
+					"q": "我能用 Vela 连 dApp 吗？",
+					"a": "可以。把手机和 <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair 扩展</a>配对，就能用手机上的通行密钥为桌面端 dApp 签名。"
+				},
+				{
+					"q": "我要比普通钱包付更多 gas 吗？",
+					"a": "是的。智能账户交易多出链上签名验证和 ERC-4337 EntryPoint 的开销，视链而定，大约是普通钱包转账的 1.5–3 倍 gas——再加上价格一节里说的打包器服务费，除非你自己跑打包器。无论哪种情况，确切总额都会在签名前显示给你。这是通行密钥签名、免助记词、以及全链同一地址所要付出的成本。"
+				},
+				{
+					"q": "手机丢了怎么办？",
+					"a": "你的通行密钥会通过 iCloud 钥匙串（iOS）或 Google 密码管理器（Android）备份——前提是那个同步开着。开着的话，换台新手机、用同一个 Apple/Google 账户登录，钱包就在那里。如果你关掉了同步，通行密钥就只存在于旧手机上，设备丢失就意味着彻底失去访问权。"
+				},
+				{
+					"q": "我不小心删掉了通行密钥怎么办？",
+					"a": "它没了——对钱包的访问权也就没了。没有任何恢复机制，这是不可逆的。以后清理密码管理器时，先弄清楚每一把通行密钥是干什么用的，再决定删不删。"
+				},
+				{
+					"q": "如果我的 Apple 或 Google 账户被入侵了呢？",
+					"a": "任何能进入你 Apple/Google 账户并使用你通行密钥的人，都可能进入你的钱包。请开启两步验证，并使用一个强而唯一的密码——你的 Apple/Google 账户本身就是钱包安全的一部分。"
+				},
+				{
+					"q": "我可以再加一把通行密钥做备份吗？",
+					"a": "可以——每个钱包最多七把签名钥匙，其中任意一把都能单独完成签名。它们可以是不同设备上的通行密钥、一台你扫码连接的身边设备，或者一把 USB/NFC 安全密钥。要注意的是：你得<strong>在创建钱包时</strong>就选定它们，因为你的地址是由这一整组钥匙推导出来的——事后再加一把，得到的会是另一个地址。在此之上，每把通行密钥还会各自通过自己的同步机制（iCloud 钥匙串、Google 密码管理器）复制到你信任的设备上。"
+				},
+				{
+					"q": "如果 Vela 关停了会怎样？",
+					"a": "你的钱包是链上的一个 Safe 智能合约——它不依赖 Vela 的服务器。应用和全部后端服务（链上数据、通行密钥索引、打包器）都是开源的，所以你可以自己部署一份 Vela 界面、自己运行这些服务。由于你的通行密钥签名器是 Vela 专属的、绑定在 getvela.app 域名上，你会继续通过 Vela 自己的开源代码签名——也就是你自建的实例，加上那个<a href=\"https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys\" target=\"_blank\" rel=\"noopener\">恢复扩展</a>——而不是某个通用的 Safe 应用。"
+				},
+				{
+					"q": "如果 getvela.app 这个域名下线了呢？",
+					"a": "无论如何，你的资金都留在链上。由于通行密钥与域名绑定，Vela 提供了一个开源的<a href=\"https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys\" target=\"_blank\" rel=\"noopener\">恢复扩展</a>，让你能在另一个域名或 localhost 上使用现有的通行密钥。"
+				},
+				{
+					"q": "代码做过审计吗？",
+					"a": "Vela 所使用的 Safe 合约和 Safe WebAuthn 签名模块已经过审计。Vela 自己的应用代码尚未接受独立审计——全部源码都<a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">公开可查</a>。我们依赖的每一个合约、它的审计报告，以及我们记录在案的已知问题，都写在<a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"faq\">审计与已知问题</a>里。"
+				}
+			]
+		},
+		"cta": {
+			"heading": "想试试看？",
+			"sub": "网页钱包已经上线，免费。不用安装，不用助记词——验证身份就能开始。",
+			"button": "创建钱包",
+			"cards": [
+				{ "title": "开源", "body": "每一行代码都在 GitHub 上。别信，去验证。" },
+				{ "title": "可自行部署", "body": "打包器和各项服务，你都可以自己跑。" },
+				{
+					"title": "久经检验",
+					"body": "你的账户就是一个<a href=\"/docs/security-audits\">经过审计</a>、未经改动的 Safe v1.4.1。"
+				},
+				{ "title": "无需助记词", "body": "用通行密钥签名。没有任何东西需要抄下来。" }
+			],
+			"divider": "手机应用即将上线",
+			"followDesc": "关注 <a href=\"https://x.com/realvelawallet\" target=\"_blank\" rel=\"noopener\">@realvelawallet</a>，iOS 与 Android 一上线我们就会发消息。",
+			"followX": "在 X 上关注",
+			"joinTelegram": "加入 Telegram"
+		}
+	},
+	"about": {
+		"meta": {
+			"title": "关于",
+			"description": "Vela 钱包背后的团队与初衷——一款自托管、开源、不用助记词的钱包，全程公开开发。",
+			"pageName": "关于 Vela 钱包"
+		},
+		"eyebrow": "关于",
+		"heading": "是谁在做 Vela。",
+		"lede": "Vela 是公开做出来的——钱包、智能合约，以及你现在看的这个网站。背后没有一家面目模糊的公司：只有你能读的真实代码，和一个你能联系上的真实的人。",
+		"team": {
+			"role": "创始人 & 工程师",
+			"bio": "从头到尾一个人做 Vela——钱包、合约，还有这个网站。过程中一边做一边写。"
+		},
+		"valuesHeading": "我们相信什么",
+		"values": [
+			{
+				"title": "真正的自托管",
+				"body": "你的密钥，你的币——这不是一句口号，而是架构本身。我们无法转移、冻结或找回你的资金，而且这是我们刻意这么建的。"
+			},
+			{
+				"title": "不用助记词",
+				"body": "加密资产丢失最主要的原因，就是一串被要求完美保管的单词。我们用通行密钥取代了它：你的面容或指纹。"
+			},
+			{
+				"title": "开源",
+				"body": "钱包代码全部公开在 GitHub 上。信任应该是可核实的，而不是张口就要的。你可以读代码，也可以跟着看我们怎么一点点把它做出来。"
+			},
+			{
+				"title": "坦诚面对取舍",
+				"body": "每一个设计选择都有代价。我们会把代价是什么、为什么这么选写下来——写在文档里和博客上——而不是假装没有成本。"
+			}
+		]
+	},
+	"roadmap": {
+		"meta": {
+			"title": "路线图 — Vela 钱包",
+			"description": "Vela 自 2026 年 4 月以来发布了什么、接下来要做什么——全程公开。是方向，不是截止日期。"
+		},
+		"heading": "路线图",
+		"lede": "自 2026 年 4 月起，Vela 一直在公开地持续发布。这里是走过的路，以及接下来的方向——是方向，不是截止日期。有想看到的功能？<a href=\"https://github.com/mondaylabsltd/vela-wallet/issues\" target=\"_blank\" rel=\"noopener\">提个 issue</a>。",
+		"upcomingHeading": "接下来",
+		"shippedHeading": "已发布",
+		"statusLabels": {
+			"now": "进行中",
+			"next": "下一步",
+			"later": "在探索"
+		},
+		"upcoming": [
+			{
+				"title": "看见每一笔收到的币",
+				"body": "一笔普通的原生币转入——或者经由内部调用到账的币（交易所提现、路由合约、多签）——不会产生链上日志，所以在今天大多数网络上，它无法显示在你的活动记录里。我们正在做一个逐块追溯的转账服务，让每一笔入账都能在每一条链上出现。"
+			},
+			{
+				"title": "更广的清晰签名覆盖",
+				"body": "让更多合约和链能以人类可读的意图呈现，减少退回盲签的交易。"
+			},
+			{
+				"title": "原生 iOS 与 Android 应用",
+				"body": "Vela 目前跑在网页上；移动端构建共用同一份代码，正在真机测试，之后会上架 App Store 和 Google Play。"
+			},
+			{
+				"title": "在你所有设备之间同步",
+				"body": "在 iOS 和 Android 上，你的账户和网络已经能通过系统备份跟着你走；在网页上它们留在浏览器里。接下来：语言、货币与格式设置，加上在新设备上一键恢复整套配置——以及一个存好的地址簿，省得你反复粘贴地址。"
+			},
+			{
+				"title": "走得更远",
+				"body": "不用手机也能在桌面端连接 dApp、更多 EVM 网络（包括为没有 P-256 预编译的链提供签名路径），以及对 Vela 的 Safe + WebAuthn 集成做一次独立安全审计。"
+			}
+		],
+		"shipped": [
+			{
+				"title": "多语言与日常打磨",
+				"body": "支持多语言即时切换（新增俄语和意大利语，目前 15 种语言）、本地货币与区域格式、动态金额显示、品牌化下拉刷新、发出即待确认的转账，以及一键应用内反馈。"
+			},
+			{
+				"title": "以支付为中心的首页",
+				"body": "首页围绕你的活动记录和余额重建。"
+			},
+			{
+				"title": "清晰签名（ERC-7730）",
+				"body": "交易会用人话显示它实际在做什么——金额、收款方、意图——而不是一串原始十六进制，并配有预览工具和测试。"
+			},
+			{
+				"title": "WalletPair dApp 连接",
+				"body": "端到端加密配对，让你用自己的钱包为桌面端 dApp 签名。"
+			},
+			{
+				"title": "dApp 签名流程",
+				"body": "连接基础设施，以及签名请求的完整体验。"
+			},
+			{
+				"title": "核心钱包体验",
+				"body": "一套真正的设计系统、gas 档位选择与重做的确认页、全屏二维码扫描，以及重建的收款、代币、添加代币和充值页面。"
+			},
+			{
+				"title": "Vela 诞生",
+				"body": "钱包在网页端发布，源自同一份也能构建 iOS 与 Android 的代码库——从第一天起就是 Safe 智能账户（ERC-4337）、通行密钥登录、以及没有助记词。"
+			}
+		]
 	}
 }

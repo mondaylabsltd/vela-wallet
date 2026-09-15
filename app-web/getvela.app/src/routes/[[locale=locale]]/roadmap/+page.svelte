@@ -1,116 +1,65 @@
 <script lang="ts">
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
+	import { catalog, namespaceState } from '$lib/i18n/resolve';
+	import type { PageData } from './$types';
 
-	type Status = 'now' | 'next' | 'later';
-	const upcoming: { status: Status; label: string; title: string; body: string }[] = [
-		{
-			status: 'now',
-			label: 'In progress',
-			title: 'See every coin you receive',
-			body: 'A plain native-coin deposit — or coins that arrive through an internal call (an exchange withdrawal, a router, a multisig) — emits no on-chain log, so it can’t show in your activity on most networks today. We’re building a transfer service that traces blocks to surface these, so every deposit appears, on every chain.'
-		},
-		{
-			status: 'now',
-			label: 'In progress',
-			title: 'Wider clear-signing coverage',
-			body: 'More contracts and chains shown as human-readable intent, so fewer transactions fall back to blind signing.'
-		},
-		{
-			status: 'next',
-			label: 'Next',
-			title: 'Native iOS & Android apps',
-			body: 'Vela runs on the web today; the mobile builds share the same code and are in real-device testing ahead of an App Store and Google Play release.'
-		},
-		{
-			status: 'next',
-			label: 'Next',
-			title: 'Sync across all your devices',
-			body: 'On iOS and Android your accounts and networks already follow you through your platform’s backup; on the web they stay in the browser. Next: your language, currency and formatting, plus one-tap restore of your whole setup on a new device — and a saved address book so you stop re-pasting addresses.'
-		},
-		{
-			status: 'later',
-			label: 'Exploring',
-			title: 'Reach further',
-			body: 'DApp Connect from the desktop without your phone, more EVM networks (including a signing path for chains without the P-256 precompile), and an independent security audit of Vela’s Safe + WebAuthn integration.'
-		}
-	];
+	let { data }: { data: PageData } = $props();
 
-	const shipped: { date: string; title: string; body: string }[] = [
-		{
-			date: 'Jun 2026',
-			title: 'Localization & everyday polish',
-			body: 'Multi-language support with instant switching (Russian and Italian added; 15 languages today), local currency and locale-aware formatting, a dynamic amount display, branded pull-to-refresh, pending-until-confirmed sends, and one-tap in-app feedback.'
-		},
-		{
-			date: 'Jun 13, 2026',
-			title: 'Payment-first home',
-			body: 'The home screen rebuilt around your activity and balances.'
-		},
-		{
-			date: 'Jun 9, 2026',
-			title: 'Clear Signing (ERC-7730)',
-			body: 'Transactions show what they actually do — amount, recipient, intent — in plain language instead of raw hex, with a preview harness and tests.'
-		},
-		{
-			date: 'Jun 4, 2026',
-			title: 'WalletPair dApp connect',
-			body: 'End-to-end-encrypted pairing so you can sign for desktop dApps from your wallet.'
-		},
-		{
-			date: 'May 28, 2026',
-			title: 'dApp signing flow',
-			body: 'Connection infrastructure and the signing-request experience.'
-		},
-		{
-			date: 'May 2026',
-			title: 'The core wallet experience',
-			body: 'A real design system, gas-tier selection and a redesigned confirm screen, a fullscreen QR scanner, and rebuilt receive, token, add-token and deposit screens.'
-		},
-		{
-			date: 'Apr 22, 2026',
-			title: 'Vela is born',
-			body: 'The wallet launches on the web, from a single codebase that also builds for iOS and Android — Safe smart accounts (ERC-4337), passkey sign-in, and no seed phrase, from day one.'
-		}
-	];
+	const m = $derived(catalog(data.locale));
+	const roadmapState = $derived(namespaceState('roadmap', data.locale));
+
+	/**
+	 * Status and date are DATA, not copy: the badge colour is a judgement and the
+	 * ship dates are facts. Neither travels through the translation files, where
+	 * a translator could localize "Jun 2026" into something the CSS cannot key
+	 * off. They are ordered to match `m.roadmap.upcoming` / `m.roadmap.shipped`.
+	 */
+	const UPCOMING_STATUS = ['now', 'now', 'next', 'next', 'later'] as const;
+	const SHIPPED_DATES = [
+		'Jun 2026',
+		'Jun 13, 2026',
+		'Jun 9, 2026',
+		'Jun 4, 2026',
+		'May 28, 2026',
+		'May 2026',
+		'Apr 22, 2026'
+	] as const;
 </script>
 
 <svelte:head>
-	<title>Roadmap — Vela Wallet</title>
-	<meta
-		name="description"
-		content="What Vela has shipped since April 2026 and what's coming next — built in the open. Directions, not deadlines."
-	/>
+	<title>{m.roadmap.meta.title}</title>
+	<meta name="description" content={m.roadmap.meta.description} />
 </svelte:head>
 
-<SiteHeader />
+{#if roadmapState === 'fallback'}
+	<TranslationNotice locale={data.locale} />
+{/if}
+
+<SiteHeader locale={data.locale} />
 
 <main class="container">
-	<h1>Roadmap</h1>
-	<p class="lede">
-		Vela has shipped continuously since April 2026, in the open. Here's the trail so far and where
-		it's headed — directions, not deadlines. Want something on it?
-		<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
-			>Open an issue</a
-		>.
-	</p>
+	<h1>{m.roadmap.heading}</h1>
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	<p class="lede">{@html m.roadmap.lede}</p>
 
-	<h2 class="phase-title">Up next</h2>
+	<h2 class="phase-title">{m.roadmap.upcomingHeading}</h2>
 	<ol class="track">
-		{#each upcoming as item (item.title)}
-			<li class="node {item.status}">
-				<span class="badge {item.status}">{item.label}</span>
+		{#each m.roadmap.upcoming as item, i (item.title)}
+			<li class="node {UPCOMING_STATUS[i]}">
+				<span class="badge {UPCOMING_STATUS[i]}">{m.roadmap.statusLabels[UPCOMING_STATUS[i]]}</span>
 				<h3>{item.title}</h3>
 				<p>{item.body}</p>
 			</li>
 		{/each}
 	</ol>
 
-	<h2 class="phase-title shipped-title">Shipped</h2>
+	<h2 class="phase-title shipped-title">{m.roadmap.shippedHeading}</h2>
 	<ol class="track">
-		{#each shipped as item (item.title)}
+		{#each m.roadmap.shipped as item, i (item.title)}
 			<li class="node ship">
-				<span class="when">{item.date}</span>
+				<span class="when">{SHIPPED_DATES[i]}</span>
 				<h3>{item.title}</h3>
 				<p>{item.body}</p>
 			</li>
@@ -118,7 +67,7 @@
 	</ol>
 </main>
 
-<SiteFooter />
+<SiteFooter locale={data.locale} />
 
 <style>
 	/* The sticky SiteHeader occupies its own flow space, so no fixed-nav offset. */
@@ -139,12 +88,12 @@
 		font-size: 0.98rem;
 		margin-bottom: 44px;
 	}
-	.lede a {
+	.lede :global(a) {
 		color: var(--text);
 		text-decoration: underline;
 		text-underline-offset: 2px;
 	}
-	.lede a:hover {
+	.lede :global(a:hover) {
 		color: var(--accent);
 	}
 

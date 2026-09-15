@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DocArticle from '$lib/components/DocArticle.svelte';
 	import Seo from '$lib/components/Seo.svelte';
+	import { pathFor } from '$lib/i18n/locales';
 	import { getDoc } from '$lib/content/docs';
 	import { seoConfig } from '$lib/seo';
 	import type { PageData } from './$types';
@@ -21,10 +22,17 @@
 	});
 </script>
 
-<Seo title={data.meta.title} {description} canonical={`/docs/${data.slug}`} {jsonLd} />
+<Seo
+	title={data.meta.title}
+	{description}
+	canonical={pathFor(data.locale, `/docs/${data.slug}`)}
+	locale={data.locale}
+	englishPath={`/docs/${data.slug}`}
+	{jsonLd}
+/>
 
 {#key data.slug}
-	<DocArticle slug={data.slug}>
+	<DocArticle slug={data.slug} locale={data.locale}>
 		<Content />
 	</DocArticle>
 {/key}

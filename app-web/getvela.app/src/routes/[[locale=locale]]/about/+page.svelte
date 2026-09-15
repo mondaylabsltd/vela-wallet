@@ -2,32 +2,23 @@
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import Seo from '$lib/components/Seo.svelte';
+	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
+	import { pathFor } from '$lib/i18n/locales';
+	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
+	import type { PageData } from './$types';
 
-	const values = [
-		{
-			title: 'Self-custody, for real',
-			body: 'Your keys, your coins — not a slogan but the architecture. We cannot move, freeze, or recover your funds, and we built it that way on purpose.'
-		},
-		{
-			title: 'No seed phrases',
-			body: 'The biggest cause of lost crypto is a string of words people were told to guard perfectly. We replaced it with a passkey: your face or fingerprint.'
-		},
-		{
-			title: 'Open source',
-			body: 'The wallet is public on GitHub. Trust should be verifiable, not asked for. Read the code, or follow along as we build it in the open.'
-		},
-		{
-			title: 'Honest about trade-offs',
-			body: "Every design choice gives something up. We write down what, and why — in the docs and on the blog — instead of pretending there's no cost."
-		}
-	];
+	let { data }: { data: PageData } = $props();
 
-	const team = [
+	const m = $derived(catalog(data.locale));
+	const aboutState = $derived(namespaceState('about', data.locale));
+	const alternates = $derived(translatedLocales('about'));
+
+	const team = $derived([
 		{
 			name: 'Shelchin',
-			role: 'Founder & Engineer',
-			bio: 'Builds Vela end to end — the wallet, the contracts, and this site. Writing about the process as it happens.',
+			role: m.about.team.role,
+			bio: m.about.team.bio,
 			initials: 'S',
 			avatar: '/shelchin-avatar.jpg',
 			links: [
@@ -35,14 +26,15 @@
 				{ label: 'X', href: 'https://x.com/atshelchin' }
 			]
 		}
-	];
+	]);
 
-	const jsonLd = [
+	const jsonLd = $derived([
 		{
 			'@context': 'https://schema.org',
 			'@type': 'AboutPage',
-			name: 'About Vela Wallet',
-			url: `${seoConfig.domain}/about`
+			name: m.about.meta.pageName,
+			inLanguage: data.locale,
+			url: `${seoConfig.domain}${pathFor(data.locale, '/about')}`
 		},
 		{
 			'@context': 'https://schema.org',
@@ -57,26 +49,30 @@
 				'https://t.me/velawallet'
 			]
 		}
-	];
+	]);
 </script>
 
 <Seo
-	title="About"
-	description="The team and mission behind Vela Wallet — a self-custodial, open-source wallet with no seed phrase, built in the open."
-	canonical="/about"
+	title={m.about.meta.title}
+	description={m.about.meta.description}
+	canonical={pathFor(data.locale, '/about')}
+	locale={data.locale}
+	{alternates}
+	englishPath="/about"
 	{jsonLd}
 />
 
-<SiteHeader />
+{#if aboutState === 'fallback'}
+	<TranslationNotice locale={data.locale} />
+{/if}
+
+<SiteHeader locale={data.locale} />
 
 <main>
 	<section class="hero">
-		<p class="eyebrow">About</p>
-		<h1>Who builds Vela.</h1>
-		<p class="lede">
-			Vela is built in the open — the wallet, the smart contracts, and this very site. No faceless
-			company behind it: just real code you can read, and a real person you can reach.
-		</p>
+		<p class="eyebrow">{m.about.eyebrow}</p>
+		<h1>{m.about.heading}</h1>
+		<p class="lede">{m.about.lede}</p>
 	</section>
 
 	<section class="team">
@@ -104,9 +100,9 @@
 	</section>
 
 	<section class="values">
-		<h2>What we believe</h2>
+		<h2>{m.about.valuesHeading}</h2>
 		<div class="value-grid">
-			{#each values as value (value.title)}
+			{#each m.about.values as value (value.title)}
 				<div class="value-card">
 					<h3>{value.title}</h3>
 					<p>{value.body}</p>
@@ -116,7 +112,7 @@
 	</section>
 </main>
 
-<SiteFooter />
+<SiteFooter locale={data.locale} />
 
 <style>
 	main {

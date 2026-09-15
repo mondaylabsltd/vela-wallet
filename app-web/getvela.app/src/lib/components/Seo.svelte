@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { DEFAULT_LOCALE, LOCALES, pathFor, type Locale } from '$lib/i18n/locales';
 	import { seoConfig } from '$lib/seo';
 
 	type JsonLd = Record<string, unknown>;
@@ -13,7 +14,10 @@
 		modified,
 		author,
 		jsonLd,
-		noindex = false
+		noindex = false,
+		locale = DEFAULT_LOCALE,
+		alternates,
+		englishPath
 	}: {
 		/** Page title — also used for the browser tab and og:title. */
 		title: string;
@@ -28,6 +32,17 @@
 		author?: string;
 		jsonLd?: JsonLd | JsonLd[];
 		noindex?: boolean;
+		/** The locale this page is rendered in. English-only pages may omit it. */
+		locale?: Locale;
+		/**
+		 * The locales that GENUINELY have this page. A page that fell back to
+		 * English is not a translation, and advertising it as one is what earns a
+		 * duplicate-content penalty — so this list comes from the translation
+		 * record, never from "all supported locales" (FR-018, FR-021).
+		 */
+		alternates?: readonly Locale[];
+		/** The unprefixed English path, used to build the alternates and x-default. */
+		englishPath?: string;
 	} = $props();
 
 	const domain = seoConfig.domain;
@@ -64,7 +79,15 @@
 		<meta name="robots" content="noindex, nofollow" />
 	{/if}
 
+	{#if alternates && englishPath}
+		{#each alternates as alt (alt)}
+			<link rel="alternate" hreflang={alt} href="{domain}{pathFor(alt, englishPath)}" />
+		{/each}
+		<link rel="alternate" hreflang="x-default" href="{domain}{englishPath}" />
+	{/if}
+
 	<meta property="og:type" content={type} />
+	<meta property="og:locale" content={LOCALES[locale].ogLocale} />
 	<meta property="og:site_name" content={seoConfig.siteName} />
 	<meta property="og:title" content={fullTitle} />
 	<meta property="og:description" content={description} />

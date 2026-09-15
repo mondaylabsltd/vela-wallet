@@ -1,18 +1,39 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { DEFAULT_LOCALE, pathFor, splitLocalePath, type Locale } from '$lib/i18n/locales';
+	import { catalog } from '$lib/i18n/resolve';
 
+	/**
+	 * The shared header.
+	 *
+	 * `locale` is NULL on the pages that have no translated version — blog,
+	 * privacy, terms, registry (R5). That is not the same as `'en'`: an English
+	 * page inside the locale subtree has fourteen siblings to switch to, and
+	 * these have none. Offering the switcher there would produce links to URLs
+	 * that 404 — which is exactly what the prerender crawler caught.
+	 *
+	 * `englishOnly` marks a destination that has no translation and never will —
+	 * the reader is told before they click, rather than discovering it when the
+	 * page arrives in a language they did not ask for (FR-020).
+	 */
+	let { locale = null }: { locale?: Locale | null } = $props();
+
+	const active = $derived(locale ?? DEFAULT_LOCALE);
+	const m = $derived(catalog(active));
 	let open = $state(false);
 
-	const links = [
-		{ href: '/blog', label: 'Blog' },
-		{ href: '/docs', label: 'Docs' },
-		{ href: '/about', label: 'About' }
-	] as const;
+	const links = $derived([
+		{ href: '/blog', label: m.chrome.nav.blog, englishOnly: true },
+		{ href: '/docs', label: m.chrome.nav.docs, englishOnly: false },
+		{ href: '/about', label: m.chrome.nav.about, englishOnly: false }
+	]);
 
 	function isActive(href: string): boolean {
-		const path = page.url.pathname;
+		// `page.url.pathname` carries the locale prefix; the links table does not.
+		const path = splitLocalePath(page.url.pathname).path;
 		return path === href || path.startsWith(href + '/');
 	}
 </script>
@@ -24,14 +45,20 @@
 			<span>Vela Wallet</span>
 		</a>
 
-		<nav class="links" class:open aria-label="Primary">
+		<nav class="links" class:open aria-label={m.chrome.nav.primary}>
 			{#each links as link (link.href)}
 				<a
-					href={resolve(link.href)}
+					href={link.englishOnly ? link.href : pathFor(active, link.href)}
+					hreflang={link.englishOnly ? 'en' : active}
 					class:active={isActive(link.href)}
 					onclick={() => (open = false)}
 				>
 					{link.label}
+					{#if link.englishOnly && active !== DEFAULT_LOCALE}
+						<span class="en-badge" title={m.chrome.englishOnly.title}
+							>{m.chrome.englishOnly.badge}</span
+						>
+					{/if}
 				</a>
 			{/each}
 			<a
@@ -47,15 +74,18 @@
 				rel="noopener"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="header"
-				onclick={() => (open = false)}>Create wallet</a
+				onclick={() => (open = false)}>{m.chrome.nav.createWallet}</a
 			>
 		</nav>
 
 		<div class="actions">
+			{#if locale}
+				<LanguageSwitcher {locale} />
+			{/if}
 			<ThemeToggle />
 			<button
 				class="menu"
-				aria-label="Toggle menu"
+				aria-label={m.chrome.nav.toggleMenu}
 				aria-expanded={open}
 				onclick={() => (open = !open)}
 			>
@@ -66,6 +96,19 @@
 </header>
 
 <style>
+	.en-badge {
+		display: inline-block;
+		margin-left: 5px;
+		padding: 1px 4px;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-size: 0.62rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		color: var(--text-tertiary);
+		vertical-align: middle;
+	}
+
 	.site-header {
 		position: sticky;
 		top: 0;

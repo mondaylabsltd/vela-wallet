@@ -1,18 +1,23 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { getAdjacentDocs, getDocEditUrl } from '$lib/content/docs';
 	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
+	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
 	import type { Snippet } from 'svelte';
 	import Prose from './Prose.svelte';
 	import Toc from './Toc.svelte';
 
-	let { slug, children }: { slug: string; children: Snippet } = $props();
+	let {
+		slug,
+		locale = DEFAULT_LOCALE,
+		children
+	}: { slug: string; locale?: Locale; children: Snippet } = $props();
 
 	const adjacent = $derived(getAdjacentDocs(slug));
 	const editUrl = $derived(getDocEditUrl(slug));
 
+	// prev/next must stay in the reader's language.
 	function hrefFor(target: string) {
-		return target === DOCS_INDEX_SLUG ? resolve('/docs') : resolve(`/docs/${target}`);
+		return pathFor(locale, target === DOCS_INDEX_SLUG ? '/docs' : `/docs/${target}`);
 	}
 </script>
 

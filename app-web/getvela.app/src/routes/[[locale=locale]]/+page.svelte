@@ -1,8 +1,38 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
+	import { LOCALES, pathFor } from '$lib/i18n/locales';
+	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+
+	// Every string on this page comes from the catalog. `home` is translated as a
+	// WHOLE or not at all — see resolve.ts — so this is either fully the reader's
+	// language or fully English under a notice, never a mixture.
+	const m = $derived(catalog(data.locale));
+	const homeState = $derived(namespaceState('home', data.locale));
+	const alternates = $derived(translatedLocales('home'));
+
+	/**
+	 * The colour of each comparison cell. Deliberately NOT in the message
+	 * catalog: "is this good or bad" is a claim we make, and a translator
+	 * shouldn't be able to change it — or silently lose it — while translating
+	 * the words. Ordered to match `m.home.compare.rows`.
+	 */
+	const COMPARE_TONES = [
+		{ vela: 'yes', metamask: 'warn', base: 'yes' },
+		{ vela: 'yes', metamask: 'warn', base: 'yes' },
+		{ vela: 'yes', metamask: 'warn', base: 'warn' },
+		{ vela: 'yes', metamask: 'warn', base: 'warn' },
+		{ vela: '', metamask: 'yes', base: 'warn' },
+		{ vela: 'yes', metamask: 'yes', base: 'warn' },
+		{ vela: 'yes', metamask: 'no', base: 'no' }
+	] as const;
 
 	// Analytics helper
 	interface RybbitWindow extends Window {
@@ -211,7 +241,7 @@
 	// "Vela Wallet", not "getvela.app") and the organization behind it — the
 	// signals that make us eligible for branded-query sitelinks. No SearchAction:
 	// Google deprecated the sitelinks searchbox in 2024.
-	const structuredData = [
+	const structuredData = $derived([
 		{
 			'@context': 'https://schema.org',
 			'@type': 'Organization',
@@ -220,8 +250,7 @@
 			legalName: 'MONDAY LABS LTD',
 			url: seoConfig.domain,
 			logo: `${seoConfig.domain}/vela-logo.png`,
-			description:
-				'An open-source, self-hostable Ethereum wallet for ETH and ERC-20 tokens. Sign with a passkey — no seed phrase, no hardware key, no lock-in.',
+			description: m.home.meta.organization,
 			sameAs: [
 				'https://github.com/mondaylabsltd/vela-wallet',
 				'https://x.com/realvelawallet',
@@ -234,38 +263,47 @@
 			'@id': `${seoConfig.domain}/#website`,
 			name: seoConfig.siteName,
 			url: seoConfig.domain,
+			inLanguage: data.locale,
 			publisher: { '@id': `${seoConfig.domain}/#organization` }
 		}
-	];
+	]);
 	// Serialize the structured data into a JSON-LD script block for the document
 	// head. The closing tag is split across two string literals ("</scr" + "ipt>")
 	// so the complete closing-script token never appears literally anywhere in this
 	// module's source — if it did, the Svelte parser would read it as the end of the
 	// component's own script block and orphan everything after it. Every less-than
 	// char in the JSON payload is escaped so the data can never break out of the tag.
-	const structuredDataHtml =
+	const structuredDataHtml = $derived(
 		`<script type="application/ld+json">${JSON.stringify(structuredData).replace(/</g, '\\u003c')}</scr` +
-		`ipt>`;
+			`ipt>`
+	);
 </script>
 
 <svelte:head>
-	<title>Vela Wallet — An Ethereum wallet you actually own</title>
-	<meta
-		name="description"
-		content="An open-source, self-hostable Ethereum wallet for ETH & ERC-20s. Sign with a passkey — no seed phrase, no hardware key, no lock-in. You pay for convenience, not access."
-	/>
-	<meta property="og:title" content="Vela Wallet — An Ethereum wallet you actually own" />
-	<meta
-		property="og:description"
-		content="Open-source, self-hostable wallet for ETH & ERC-20s. Passkey signing, no seed phrase, no lock-in. Compile it yourself if you want to."
-	/>
+	<title>{m.home.meta.title}</title>
+	<meta name="description" content={m.home.meta.description} />
+	<meta property="og:title" content={m.home.meta.ogTitle} />
+	<meta property="og:description" content={m.home.meta.ogDescription} />
 	<meta property="og:image" content="https://getvela.app/getvela-app-preview.png" />
-	<meta property="og:url" content="https://getvela.app" />
+	<meta property="og:url" content="{seoConfig.domain}{pathFor(data.locale, '/')}" />
+	<meta property="og:locale" content={LOCALES[data.locale].ogLocale} />
+	<link rel="canonical" href="{seoConfig.domain}{pathFor(data.locale, '/')}" />
+	<!-- Only the locales that genuinely HAVE this page are advertised: a page in
+	     fallback is an English page at a localized URL, and telling a crawler
+	     otherwise is what earns a duplicate-content penalty (FR-018). -->
+	{#each alternates as alt (alt)}
+		<link rel="alternate" hreflang={alt} href="{seoConfig.domain}{pathFor(alt, '/')}" />
+	{/each}
+	<link rel="alternate" hreflang="x-default" href="{seoConfig.domain}/" />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:image" content="https://getvela.app/getvela-app-preview.png" />
 	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 	{@html structuredDataHtml}
 </svelte:head>
+
+{#if homeState === 'fallback'}
+	<TranslationNotice locale={data.locale} />
+{/if}
 
 <!-- Nav -->
 <nav>
@@ -282,14 +320,14 @@
 				data-rybbit-prop-location="logo-tag"
 			>
 				<span class="logo-tag-dot"></span>
-				Alpha
+				{m.chrome.nav.alpha}
 			</a>
 		</div>
 		<div class="nav-links">
-			<a href="#why">Why Vela</a>
-			<a href="#how-it-works">How it works</a>
-			<a href="#pricing">Pricing</a>
-			<a href="#faq">FAQ</a>
+			<a href="#why">{m.chrome.nav.whyVela}</a>
+			<a href="#how-it-works">{m.chrome.nav.howItWorks}</a>
+			<a href="#pricing">{m.chrome.nav.pricing}</a>
+			<a href="#faq">{m.chrome.nav.faq}</a>
 
 			<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 				>GitHub</a
@@ -299,9 +337,10 @@
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
-				data-rybbit-prop-location="nav-signin">Sign in</a
+				data-rybbit-prop-location="nav-signin">{m.chrome.nav.signIn}</a
 			>
 		</div>
+		<LanguageSwitcher locale={data.locale} />
 		<ThemeToggle />
 	</div>
 </nav>
@@ -310,11 +349,8 @@
 <section class="hero">
 	<div class="container hero-grid">
 		<div class="hero-text">
-			<h1>An Ethereum wallet you actually own</h1>
-			<p class="subtitle">
-				Sign with a passkey Vela never sees. Open source and self-hostable on most EVM chains — so
-				it keeps working even if we disappear.
-			</p>
+			<h1>{m.home.hero.headline}</h1>
+			<p class="subtitle">{m.home.hero.subtitle}</p>
 			<div class="hero-cta">
 				<div class="hero-buttons">
 					<a
@@ -323,7 +359,7 @@
 						rel="noopener"
 						class="btn btn-primary btn-hero"
 						data-rybbit-event="cta_click"
-						data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
+						data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
 					>
 					<a
 						href="https://github.com/mondaylabsltd/vela-wallet"
@@ -331,7 +367,7 @@
 						rel="noopener"
 						class="btn btn-outline btn-hero"
 						data-rybbit-event="cta_click"
-						data-rybbit-prop-location="hero-code">Read the code</a
+						data-rybbit-prop-location="hero-code">{m.home.hero.ctaCode}</a
 					>
 				</div>
 				<a
@@ -340,7 +376,7 @@
 					rel="noopener"
 					class="hero-signin"
 					data-rybbit-event="cta_click"
-					data-rybbit-prop-location="hero-signin">Already have a wallet? Sign in</a
+					data-rybbit-prop-location="hero-signin">{m.home.hero.signIn}</a
 				>
 			</div>
 		</div>
@@ -350,24 +386,12 @@
 		     "100% open source" used to be rows of their own; both are still stated
 		     in the trust strip and the technical-details table below. -->
 		<dl class="hero-facts">
-			<div class="fact">
-				<dt>Safe v1.4.1, unmodified</dt>
-				<dd>Third-party audited contracts, deployed exactly as published.</dd>
-			</div>
-			<div class="fact">
-				<dt>12 chains built in, plus your own</dt>
-				<dd>
-					Any EVM chain with the RIP-7212 precompile and Safe v1.4.1's contracts deployed. One
-					address on every chain.
-				</dd>
-			</div>
-			<div class="fact">
-				<dt>1-of-n signers, security keys included</dt>
-				<dd>
-					Passkeys, a nearby device, or a USB/NFC key — up to seven, any one of which signs.
-					Chosen when you create the wallet.
-				</dd>
-			</div>
+			{#each m.home.hero.facts as fact (fact.term)}
+				<div class="fact">
+					<dt>{fact.term}</dt>
+					<dd>{fact.detail}</dd>
+				</div>
+			{/each}
 		</dl>
 	</div>
 	<div class="scroll-hint">
@@ -390,18 +414,8 @@
 <!-- Trust Strip -->
 <section class="trust-strip">
 	<div class="container">
-		<p class="trust-tagline">
-			Don't trust us — verify. Every line is on <a
-				href="https://github.com/mondaylabsltd/vela-wallet"
-				target="_blank"
-				rel="noopener">GitHub</a
-			>, every wallet is on-chain, and
-			<a
-				href={resolve('/docs/security-audits')}
-				data-rybbit-event="audits_open"
-				data-rybbit-prop-location="trust-tagline">every audit and known issue is documented</a
-			>.
-		</p>
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		<p class="trust-tagline">{@html m.home.trust.tagline}</p>
 		<div class="trust-row">
 			<div class="trust-chip">
 				<svg
@@ -417,9 +431,8 @@
 						stroke-linejoin="round"
 					/></svg
 				>
-				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
-					>100% open source</a
-				> — app + all our services
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html m.home.trust.chipOpenSource}
 			</div>
 			<div class="trust-chip">
 				<svg
@@ -435,17 +448,8 @@
 						stroke-linejoin="round"
 					/></svg
 				>
-				<a
-					href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
-					target="_blank"
-					rel="noopener">Safe v1.4.1</a
-				>
-				—
-				<a
-					href={resolve('/docs/security-audits')}
-					data-rybbit-event="audits_open"
-					data-rybbit-prop-location="trust-chip">audited, unmodified</a
-				>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html m.home.trust.chipSafe}
 			</div>
 			{#if !countFailed}
 				<div class="trust-chip">
@@ -455,10 +459,10 @@
 							<span class="stat-number">{displayCount.toLocaleString()}</span>
 						</a>
 					{:else}
-						<span class="stat-skeleton" aria-label="Loading wallet count"></span>
+						<span class="stat-skeleton" aria-label={m.home.trust.walletsLoading}></span>
 					{/if}
 
-					wallets created on-chain
+					{m.home.trust.walletsCreated}
 				</div>
 			{/if}
 		</div>
@@ -469,22 +473,12 @@
 <section id="minimal" class="does-less">
 	<div class="container">
 		<div class="does-less-content">
-			<h2>A wallet that does less — on purpose.</h2>
-			<p>
-				No NFT gallery. No built-in swaps. No DeFi dashboard. Nothing engineered to pull you toward
-				the next thing to click.
-			</p>
-			<p>
-				Vela holds ETH and ERC-20s. When you want to use a dApp, you connect to the one you choose
-				through
-				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>.
-			</p>
-			<p>That's the whole product.</p>
-			<p>
-				Because every extra feature inside a wallet is more code to trust and more UI standing
-				between you and your money. Vela stays small on purpose: fewer paths to attack, fewer moving
-				parts to audit, and fewer chances to make a bad click.
-			</p>
+			<h2>{m.home.doesLess.heading}</h2>
+			<p>{m.home.doesLess.p1}</p>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<p>{@html m.home.doesLess.p2}</p>
+			<p>{m.home.doesLess.p3}</p>
+			<p>{m.home.doesLess.p4}</p>
 		</div>
 	</div>
 </section>
@@ -493,64 +487,19 @@
 <section id="why" class="why">
 	<div class="container">
 		<div class="why-content">
-			<h2>Why we built Vela</h2>
-			<p>
-				We didn't set out to build another wallet. We started with a question we could never answer
-				cleanly:
-			</p>
-			<p class="why-beat">Where are you supposed to keep twelve words?</p>
-			<p>
-				Put them in Notes and you're one stolen phone away from trouble. Write them on paper, and
-				now you're thinking about fire, water, moving apartments, roommates, trash bags, and whether
-				future-you will remember where "the safe place" was. The honest answer, for a lot of people,
-				is a screenshot in the camera roll. Everyone knows it's wrong. They do it anyway — because
-				the "right" answer is too hard to live with.
-			</p>
-			<p>
-				Then passkeys changed what a wallet could feel like. We used <a
-					href="https://account.base.app"
-					target="_blank"
-					rel="noopener">Base Account</a
-				> every day, and signing with Face ID felt obvious in a way seed phrases never did — less like
-				handling hazardous material, more like using the rest of the internet. But the more we used it,
-				the more we hit edges we couldn't ignore: a recovery key generated in a browser that you just
-				had to trust, no custom networks, no way to host it ourselves. And the quiet problem was the biggest
-				one — if the service disappeared, the wallet disappeared with it.
-			</p>
-			<p>So we built the version we wanted to depend on.</p>
-			<p>
-				Vela is <strong>a passkey wallet you can fully own.</strong> Your passkey stays where your
-				device already protects it — iCloud Keychain or Google Password Manager. When you sign a
-				transaction, Vela sends a challenge to your device; your device signs it and sends back just
-				the signature. Vela never sees the key itself. Most wallets still have a dangerous moment,
-				even if it's brief: words on a screen, a seed phrase in memory, a recovery key sitting in a
-				browser tab. Vela is designed so that moment never exists.
-				<strong
-					>We can't access your keys. Not "we promise not to" — we architecturally can't.</strong
-				>
-			</p>
-			<p>
-				We made Vela open source so you can check that for yourself, and self-hostable so your
-				wallet never depends on our company staying online. And we built on unmodified <a
-					href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
-					target="_blank"
-					rel="noopener">Safe contracts</a
-				> because the boring, battle-tested path is the right one when people's money is involved — the
-				same contracts already securing billions on-chain.
-			</p>
-			<p>
-				There's still a trade-off. With Vela, your Apple or Google account matters, because that's
-				where your passkey lives. Lose that account, or delete the passkey, and there's no seed
-				phrase, no support reset, no back door. But every self-custodial wallet asks you to choose
-				which risk you'd rather live with. A seed phrase can be copied, screenshotted, phished, or
-				typed into the wrong site at 1 a.m. A passkey is different: there are no words to reveal, no
-				secret to paste, and no fake site that can trick you into handing it over. Your device signs
-				for the real domain, or it does not sign.
-			</p>
-			<p>
-				That's why we built Vela — a wallet with no seed phrase to hide, no recovery key to trust,
-				and no company you have to hope will stay around forever.
-			</p>
+			<h2>{m.home.why.heading}</h2>
+			<p>{m.home.why.p1}</p>
+			<p class="why-beat">{m.home.why.beat}</p>
+			<p>{m.home.why.p2}</p>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<p>{@html m.home.why.p3}</p>
+			<p>{m.home.why.p4}</p>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<p>{@html m.home.why.p5}</p>
+			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+			<p>{@html m.home.why.p6}</p>
+			<p>{m.home.why.p7}</p>
+			<p>{m.home.why.p8}</p>
 		</div>
 	</div>
 </section>
@@ -558,8 +507,8 @@
 <!-- Compare -->
 <section id="compare" class="compare">
 	<div class="container">
-		<h2>How Vela compares</h2>
-		<p class="section-desc">The differences that matter once you actually own your keys.</p>
+		<h2>{m.home.compare.heading}</h2>
+		<p class="section-desc">{m.home.compare.desc}</p>
 		<div class="compare-table-wrap">
 			<table class="compare-table">
 				<thead>
@@ -571,127 +520,46 @@
 					</tr>
 				</thead>
 				<tbody>
-					<tr>
-						<td>Where your signing key lives</td>
-						<td class="yes">Apple / Google Password Manager</td>
-						<td class="warn">In the app</td>
-						<td class="yes">Apple / Google Password Manager</td>
-					</tr>
-					<tr>
-						<td>Key ever exposed to the app?</td>
-						<td class="yes">No</td>
-						<td class="warn">Yes</td>
-						<td class="yes">No</td>
-					</tr>
-					<tr>
-						<td>Open source</td>
-						<td class="yes"
-							><a
-								href="https://github.com/orgs/mondaylabsltd/repositories"
-								target="_blank"
-								rel="noopener">All of it</a
-							></td
-						>
-						<td class="warn">Partial</td>
-						<td class="warn">Partial</td>
-					</tr>
-					<tr>
-						<td>Account contract</td>
-						<td class="yes"><a href="/docs/security-audits">Safe v1.4.1 — ecosystem standard</a></td
-						>
-						<td class="warn">EOA</td>
-						<td class="warn">Custom (audited)</td>
-					</tr>
-					<tr>
-						<td>Networks supported</td>
-						<td>12 built-in + custom</td>
-						<td class="yes">Any EVM</td>
-						<td class="warn">Base-first, few</td>
-					</tr>
-					<tr>
-						<td>Keeps working if the vendor disappears</td>
-						<td class="yes"
-							>Yes —
-							<a
-								href="https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints"
-								target="_blank"
-								rel="noopener">self-hostable</a
-							></td
-						>
-						<td class="yes">Yes</td>
-						<td class="warn">Signing depends on vendor infra</td>
-					</tr>
-					<tr>
-						<td>What you must back up</td>
-						<td class="yes">Nothing — your passkey syncs automatically</td>
-						<td class="no">Seed phrase</td>
-						<td class="no">Recovery key</td>
-					</tr>
+					{#each m.home.compare.rows as row, i (row.feature)}
+						<tr>
+							<td>{row.feature}</td>
+							<!-- eslint-disable svelte/no-at-html-tags -->
+							<td class={COMPARE_TONES[i]?.vela}>{@html row.vela}</td>
+							<td class={COMPARE_TONES[i]?.metamask}>{@html row.metamask}</td>
+							<td class={COMPARE_TONES[i]?.base}>{@html row.base}</td>
+							<!-- eslint-enable svelte/no-at-html-tags -->
+						</tr>
+					{/each}
 				</tbody>
 			</table>
 		</div>
-		<p class="compare-note">
-			You can self-host everything Vela builds. A few data sources (some chains' history, long-tail
-			prices, threat scanning) come from third-party providers — swap in your own node or key.
-		</p>
+		<p class="compare-note">{m.home.compare.note}</p>
 	</div>
 </section>
 
 <!-- How It Works -->
 <section id="how-it-works" class="how-it-works">
 	<div class="container">
-		<h2>How Vela works</h2>
-		<p class="section-desc">What happens at each step.</p>
+		<h2>{m.home.how.heading}</h2>
+		<p class="section-desc">{m.home.how.desc}</p>
 
-		<div class="pillar">
-			<div class="pillar-number">01</div>
-			<div class="pillar-content">
-				<h3>Create a wallet</h3>
-				<p>
-					Authenticate with Face ID or fingerprint. Your device creates a passkey and derives a <a
-						href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
-						target="_blank"
-						rel="noopener">Safe</a
-					> smart account address from it — one address across all supported chains. No gas cost upfront.
-					The contract deploys on-chain with your first transaction.
-				</p>
+		{#each m.home.how.steps as step, i (step.title)}
+			<div class="pillar">
+				<div class="pillar-number">{String(i + 1).padStart(2, '0')}</div>
+				<div class="pillar-content">
+					<h3>{step.title}</h3>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<p>{@html step.body}</p>
+				</div>
 			</div>
-		</div>
-
-		<div class="pillar">
-			<div class="pillar-number">02</div>
-			<div class="pillar-content">
-				<h3>Sign a transaction</h3>
-				<p>
-					The app builds a transaction and sends a signing challenge to your device. Your device
-					signs it with the passkey and sends back just the signature — Vela never sees the key. The
-					signed transaction goes on-chain through an <a
-						href="https://eips.ethereum.org/EIPS/eip-4337"
-						target="_blank"
-						rel="noopener">ERC-4337</a
-					> bundler.
-				</p>
-			</div>
-		</div>
-
-		<div class="pillar">
-			<div class="pillar-number">03</div>
-			<div class="pillar-content">
-				<h3>Sign in on a new device</h3>
-				<p>
-					Get a new phone, sign in with the same Apple or Google account. Your passkey syncs
-					automatically through iCloud Keychain or Google Password Manager. Same address, same
-					assets, same chains — no seed phrase to import, no recovery key to enter.
-				</p>
-			</div>
-		</div>
+		{/each}
 
 		<div class="tech-details">
-			<h3>Technical details</h3>
+			<h3>{m.home.how.tech.heading}</h3>
 			<table>
 				<tbody>
 					<tr>
-						<td>Wallet</td>
+						<td>{m.home.how.tech.wallet}</td>
 						<td
 							><a
 								href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
@@ -701,7 +569,7 @@
 						>
 					</tr>
 					<tr>
-						<td>Authentication</td>
+						<td>{m.home.how.tech.authentication}</td>
 						<td
 							><a href="https://www.w3.org/TR/webauthn-2/" target="_blank" rel="noopener"
 								>WebAuthn</a
@@ -709,15 +577,15 @@
 						>
 					</tr>
 					<tr>
-						<td>Account type</td>
+						<td>{m.home.how.tech.accountType}</td>
 						<td
 							><a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener"
 								>ERC-4337</a
-							> (Smart Account)</td
+							> {m.home.how.tech.accountTypeValue}</td
 						>
 					</tr>
 					<tr>
-						<td>Signer module</td>
+						<td>{m.home.how.tech.signerModule}</td>
 						<td
 							><a
 								href="https://github.com/safe-global/safe-modules/tree/main/modules/passkey/contracts/4337"
@@ -727,11 +595,11 @@
 						>
 					</tr>
 					<tr>
-						<td>Networks</td>
-						<td>12 EVM chains (+ custom)</td>
+						<td>{m.home.how.tech.networks}</td>
+						<td>{m.home.how.tech.networksValue}</td>
 					</tr>
 					<tr>
-						<td>Source code</td>
+						<td>{m.home.how.tech.sourceCode}</td>
 						<td
 							><a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 								>GitHub</a
@@ -757,14 +625,8 @@
 						</span>
 					{/each}
 				</div>
-				<p class="network-note">
-					Custom networks need more than EVM compatibility — the chain must have the RIP-7212 P256
-					precompile and Vela's Safe + ERC-4337 contracts deployed. Vela checks this when you add
-					one, and the
-					<a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener"
-						>Chain Setup tool</a
-					> can deploy them on chains that don't — including your own local testnet.
-				</p>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				<p class="network-note">{@html m.home.how.networkNote}</p>
 			</div>
 		</div>
 	</div>
@@ -774,48 +636,21 @@
 <section id="pricing" class="business-model">
 	<div class="container">
 		<div class="bm-content">
-			<h2>Free and open. Pay only if you want to.</h2>
-			<p class="bm-intro">
-				You're paying for convenience, not access. Everything is open source and self-hostable —
-				nothing locks you in.
-			</p>
+			<h2>{m.home.pricing.heading}</h2>
+			<p class="bm-intro">{m.home.pricing.intro}</p>
 
 			<div class="bm-grid">
-				<div class="bm-card">
-					<h4>Web wallet</h4>
-					<div class="bm-price">Free</div>
-					<p>
-						The web wallet is free, open source, and self-hostable. No install, no seed phrase —
-						just authenticate and go.
-					</p>
-				</div>
-				<div class="bm-card">
-					<h4>Mobile app</h4>
-					<div class="bm-price">Funds the project</div>
-					<p>
-						The mobile app, when it ships, will be a paid download, priced by region — it's how a
-						small, independent team funds building Vela in the open. It's open source too, so you
-						can always build it from source and install it on your own phone for free.
-					</p>
-				</div>
-				<div class="bm-card">
-					<h4>Bundler gas fee</h4>
-					<div class="bm-price">Network gas + service fee</div>
-					<p>
-						Transactions go through an ERC-4337 bundler. You pay network gas plus a service fee —
-						the exact amount is quoted and shown to you before you sign, so you always know the
-						total up front. You can skip the fee entirely by running a compatible
-						<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
-							>self-hosted bundler</a
-						>.
-					</p>
-				</div>
+				{#each m.home.pricing.cards as card (card.title)}
+					<div class="bm-card">
+						<h4>{card.title}</h4>
+						<div class="bm-price">{card.price}</div>
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						<p>{@html card.body}</p>
+					</div>
+				{/each}
 			</div>
 
-			<p class="bm-note">
-				Funded by the people who use it. Don't want to pay? Use the web wallet free, self-host the
-				services, run your own bundler — and owe us nothing.
-			</p>
+			<p class="bm-note">{m.home.pricing.note}</p>
 		</div>
 	</div>
 </section>
@@ -823,134 +658,16 @@
 <!-- FAQ -->
 <section id="faq" class="faq">
 	<div class="container">
-		<h2>FAQ</h2>
-		<p class="section-desc">What you'd want to know before putting real money in.</p>
+		<h2>{m.home.faq.heading}</h2>
+		<p class="section-desc">{m.home.faq.desc}</p>
 		<div class="faq-list">
-			<!-- Product -->
-			<details>
-				<summary>What chains does Vela support?</summary>
-				<p>
-					Twelve chains are built in: Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-					Avalanche, Gnosis, Unichain, Monad, World Chain, and Tempo. You can add other EVM networks
-					yourself if the chain has the RIP-7212 P256 precompile and Vela's Safe + ERC-4337
-					contracts deployed — Vela checks when you add one. Same wallet address across all chains.
-				</p>
-			</details>
-			<details>
-				<summary>How is Vela different from Coinbase Smart Wallet or other passkey wallets?</summary
-				>
-				<p>
-					Most passkey wallets are closed-source and run on infrastructure you can't control. If the
-					company pivots or shuts down, you're stuck. Vela is fully open source and self-hostable —
-					the app, the bundler, and all backend services. You can add custom networks, run your own
-					bundler to skip fees, and keep using your wallet even if getvela.app disappears. No
-					recovery keys generated in a browser. No vendor lock-in.
-				</p>
-			</details>
-			<details>
-				<summary>Can I use Vela with dApps?</summary>
-				<p>
-					Yes. Pair your phone with the <a
-						href="https://walletpair.org/"
-						target="_blank"
-						rel="noopener">WalletPair extension</a
-					> and sign transactions on desktop dApps using your phone's passkey.
-				</p>
-			</details>
-			<details>
-				<summary>Do I pay more gas than a regular wallet?</summary>
-				<p>
-					Yes. Smart account transactions have extra overhead from on-chain signature verification
-					and the ERC-4337 EntryPoint. Expect roughly 1.5–3x the gas of a standard wallet transfer,
-					depending on the chain — plus the bundler service fee described under pricing, unless you
-					run your own bundler. Either way, the exact total is shown before you sign. That's the
-					cost of passkey signing, no seed phrase, and one address across all chains.
-				</p>
-			</details>
-			<!-- Security & recovery -->
-			<details>
-				<summary>What if I lose my phone?</summary>
-				<p>
-					Your passkey is backed up through iCloud Keychain (iOS) or Google Password Manager
-					(Android) — as long as that sync is turned on. With it on, get a new phone, sign in with
-					the same Apple/Google account, and your wallet is right there. If you've turned that sync
-					off, your passkey stays on your old phone only, and losing the device means losing access.
-				</p>
-			</details>
-			<details>
-				<summary>What if I accidentally delete my passkey?</summary>
-				<p>
-					It's gone — and so is access to your wallet. There's no recovery mechanism. This is
-					irreversible. If you ever clean up your password manager, know what each passkey is for
-					before you remove it.
-				</p>
-			</details>
-			<details>
-				<summary>What if my Apple or Google account is compromised?</summary>
-				<p>
-					Anyone who can access your Apple/Google account and use your passkey could access your
-					wallet. Enable two-factor authentication and use a strong, unique password — your
-					Apple/Google account is part of your wallet security.
-				</p>
-			</details>
-			<details>
-				<summary>Can I add a second passkey as backup?</summary>
-				<p>
-					Yes — up to seven signers per wallet, and any one of them can sign on its own. They can
-					be passkeys on different devices, a nearby phone you scan, or a USB/NFC security key.
-					The catch: you choose them <strong>when you create the wallet</strong>, because your
-					address is derived from the full set of keys — adding one later would be a different
-					address. On top of that, each passkey is replicated by its own sync (iCloud Keychain,
-					Google Password Manager) across your trusted devices.
-				</p>
-			</details>
-			<!-- Trust & transparency -->
-			<details>
-				<summary>What happens if Vela shuts down?</summary>
-				<p>
-					Your wallet is a Safe smart contract on-chain — it doesn't depend on Vela's servers. The
-					app and all backend services (chain data, passkey index, bundler) are open source, so you
-					can deploy your own Vela interface and run your own services. Because your passkey signer
-					is Vela-specific and bound to the getvela.app domain, you keep signing through Vela's own
-					open-source code — your self-hosted instance plus the
-					<a
-						href="https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
-						target="_blank"
-						rel="noopener">recovery extension</a
-					> — not a generic Safe app.
-				</p>
-			</details>
-			<details>
-				<summary>What if the getvela.app domain goes offline?</summary>
-				<p>
-					Your funds stay on-chain regardless. Since passkeys are tied to a domain, Vela provides an
-					open-source
-					<a
-						href="https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
-						target="_blank"
-						rel="noopener">recovery extension</a
-					>
-					that lets you use your existing passkey from another domain or localhost.
-				</p>
-			</details>
-			<details>
-				<summary>Has the code been audited?</summary>
-				<p>
-					The Safe contracts and Safe WebAuthn signer module that Vela uses have been audited.
-					Vela's own app code hasn't been independently audited yet — all source code is <a
-						href="https://github.com/mondaylabsltd/vela-wallet"
-						target="_blank"
-						rel="noopener">public</a
-					>
-					for review. Every contract we depend on, its audit report, and the known issues we track are
-					documented in
-					<a
-						href={resolve('/docs/security-audits')}
-						data-rybbit-event="audits_open"
-						data-rybbit-prop-location="faq">Audits &amp; known issues</a
-					>.
-				</p>
-			</details>
+			{#each m.home.faq.items as item (item.q)}
+				<details>
+					<summary>{item.q}</summary>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<p>{@html item.a}</p>
+				</details>
+			{/each}
 		</div>
 	</div>
 </section>
@@ -958,102 +675,59 @@
 <!-- CTA -->
 <section id="notify" class="notify">
 	<div class="container">
-		<h2>Ready to try it?</h2>
-		<p class="notify-sub">
-			The web wallet is live and free. No install, no seed phrase — just authenticate and go.
-		</p>
+		<h2>{m.home.cta.heading}</h2>
+		<p class="notify-sub">{m.home.cta.sub}</p>
 		<a
 			href="https://wallet.getvela.app/"
 			target="_blank"
 			rel="noopener"
 			class="btn btn-primary btn-cta-main"
 			data-rybbit-event="cta_click"
-			data-rybbit-prop-location="bottom">Create a wallet</a
+			data-rybbit-prop-location="bottom">{m.home.cta.button}</a
 		>
 
 		<ul class="notify-cards">
-			<li class="notify-card">
-				<svg
-					width="22"
-					height="22"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M8 6l-5 6 5 6M16 6l5 6-5 6"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<h4>Open source</h4>
-				<p>Every line is on GitHub. Verify, don't trust.</p>
-			</li>
-			<li class="notify-card">
-				<svg
-					width="22"
-					height="22"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><rect x="3" y="4" width="18" height="7" rx="1.5" /><rect
-						x="3"
-						y="13"
-						width="18"
-						height="7"
-						rx="1.5"
-					/><path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" /></svg
-				>
-				<h4>Self-hostable</h4>
-				<p>Run your own bundler and services.</p>
-			</li>
-			<li class="notify-card">
-				<svg
-					width="22"
-					height="22"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<h4>Battle-tested</h4>
-				<p>
-					Your account is an <a href={resolve('/docs/security-audits')}>audited</a>, unmodified Safe
-					v1.4.1.
-				</p>
-			</li>
-			<li class="notify-card">
-				<svg
-					width="22"
-					height="22"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M7 3H5a2 2 0 00-2 2v2M17 3h2a2 2 0 012 2v2M7 21H5a2 2 0 01-2-2v-2M17 21h2a2 2 0 002-2v-2M9 10v1M15 10v1M9.5 15a3.5 3.5 0 005 0"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<h4>No seed phrase</h4>
-				<p>Sign with a passkey. Nothing to write down.</p>
-			</li>
+			{#each m.home.cta.cards as card, i (card.title)}
+				<li class="notify-card">
+					<svg
+						width="22"
+						height="22"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+						stroke-width="2"
+					>
+						{#if i === 0}
+							<path d="M8 6l-5 6 5 6M16 6l5 6-5 6" stroke-linecap="round" stroke-linejoin="round" />
+						{:else if i === 1}
+							<rect x="3" y="4" width="18" height="7" rx="1.5" />
+							<rect x="3" y="13" width="18" height="7" rx="1.5" />
+							<path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" />
+						{:else if i === 2}
+							<path
+								d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						{:else}
+							<path
+								d="M7 3H5a2 2 0 00-2 2v2M17 3h2a2 2 0 012 2v2M7 21H5a2 2 0 01-2-2v-2M17 21h2a2 2 0 002-2v-2M9 10v1M15 10v1M9.5 15a3.5 3.5 0 005 0"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						{/if}
+					</svg>
+					<h4>{card.title}</h4>
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<p>{@html card.body}</p>
+				</li>
+			{/each}
 		</ul>
 
-		<div class="notify-divider"><span>mobile apps coming soon</span></div>
+		<div class="notify-divider"><span>{m.home.cta.divider}</span></div>
 
-		<p class="notify-email-desc">
-			Follow <a href="https://x.com/realvelawallet" target="_blank" rel="noopener"
-				>@realvelawallet</a
-			> and we'll post the moment iOS &amp; Android go live.
-		</p>
+		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+		<p class="notify-email-desc">{@html m.home.cta.followDesc}</p>
 
 		<div class="notify-social">
 			<a
@@ -1062,7 +736,7 @@
 				rel="noopener"
 				class="btn btn-outline btn-social"
 				data-rybbit-event="social_click"
-				data-rybbit-prop-network="x">Follow on X</a
+				data-rybbit-prop-network="x">{m.home.cta.followX}</a
 			>
 			<a
 				href="https://t.me/velawallet"
@@ -1070,7 +744,7 @@
 				rel="noopener"
 				class="btn btn-outline btn-social"
 				data-rybbit-event="social_click"
-				data-rybbit-prop-network="telegram">Join Telegram</a
+				data-rybbit-prop-network="telegram">{m.home.cta.joinTelegram}</a
 			>
 		</div>
 	</div>
@@ -1180,6 +854,20 @@
 		   leaving one orphan word on the last line. Browsers without it simply
 		   wrap normally. */
 		text-wrap: balance;
+	}
+	/* CJK glyphs fill their em box, so a headline set at the Latin size reads
+	   noticeably larger and runs out of line much sooner — 真正属于你的以太坊钱包
+	   wrapped mid-word (你 | 的) at the Latin scale. `word-break: auto-phrase`
+	   is the nominally correct fix and measurably does nothing here, so this
+	   uses the answer CJK typography has always used: a slightly smaller scale
+	   and a little more leading. `html[lang]` is set per locale in
+	   hooks.server.ts, so this follows the page, not the browser. */
+	:global(html[lang^='zh']) h1,
+	:global(html[lang='ja']) h1,
+	:global(html[lang='ko']) h1 {
+		font-size: clamp(2.35rem, 4.6vw, 3.6rem);
+		line-height: 1.2;
+		letter-spacing: -0.01em;
 	}
 	.subtitle {
 		color: var(--text-secondary);
@@ -1405,36 +1093,36 @@
 	/* ── Text links ── */
 	/* Inline links keep the surrounding ink color — no accent highlight. The
 	   underline offset clears descenders (g, y) so the line stays unbroken. */
-	.why-content a,
-	.does-less-content a,
-	.pillar-content a,
+	.why-content :global(a),
+	.does-less-content :global(a),
+	.pillar-content :global(a),
 	.tech-details a,
-	.compare-table td a,
-	.bm-card a,
-	details a {
+	.compare-table td :global(a),
+	.bm-card :global(a),
+	details :global(a) {
 		color: inherit;
 		text-decoration: underline;
 		text-underline-offset: 4px;
 		transition: color 0.15s;
 	}
-	.why-content a:hover,
-	.does-less-content a:hover,
-	.pillar-content a:hover,
+	.why-content :global(a:hover),
+	.does-less-content :global(a:hover),
+	.pillar-content :global(a:hover),
 	.tech-details a:hover,
-	.compare-table td a:hover,
-	.bm-card a:hover,
-	details a:hover {
+	.compare-table td :global(a:hover),
+	.bm-card :global(a:hover),
+	details :global(a:hover) {
 		color: var(--accent);
 	}
 	/* External links get a trailing lucide external-link glyph, masked in
 	   currentColor so it follows the link color. */
-	.why-content a[target='_blank']::after,
-	.does-less-content a[target='_blank']::after,
-	.pillar-content a[target='_blank']::after,
+	.why-content :global(a[target='_blank']::after),
+	.does-less-content :global(a[target='_blank']::after),
+	.pillar-content :global(a[target='_blank']::after),
 	.tech-details a[target='_blank']::after,
-	.compare-table td a[target='_blank']::after,
-	.bm-card a[target='_blank']::after,
-	details a[target='_blank']::after {
+	.compare-table td :global(a[target='_blank']::after),
+	.bm-card :global(a[target='_blank']::after),
+	details :global(a[target='_blank']::after) {
 		content: '';
 		display: inline-block;
 		width: 0.72em;
@@ -1458,12 +1146,12 @@
 		max-width: 720px;
 		margin: 0 auto 20px;
 	}
-	.trust-tagline a {
+	.trust-tagline :global(a) {
 		color: var(--text);
 		text-decoration: underline;
 		text-underline-offset: 4px;
 	}
-	.trust-tagline a:hover {
+	.trust-tagline :global(a:hover) {
 		color: var(--accent);
 	}
 	.trust-row {
@@ -1487,12 +1175,12 @@
 		color: var(--text-tertiary);
 		flex-shrink: 0;
 	}
-	.trust-chip a {
+	.trust-chip :global(a) {
 		color: var(--text);
 		text-decoration: underline;
 		text-underline-offset: 4px;
 	}
-	.trust-chip a:hover {
+	.trust-chip :global(a:hover) {
 		color: var(--accent);
 	}
 
@@ -1570,7 +1258,7 @@
 		line-height: 1.8;
 		margin-bottom: 16px;
 	}
-	.why-content strong {
+	.why-content :global(strong) {
 		color: var(--text);
 	}
 	.why-content .why-beat {
