@@ -127,8 +127,8 @@
 			"lede": "三条不该用 Vela 的理由——趁钱还没放进来。",
 			"items": [
 				{
-					"title": "同样一笔转账，在这里贵好几倍。",
-					"body": "通行密钥的签名要在链上验证，交易还要过一遍 ERC-4337 EntryPoint，烧掉的 gas 本来就是普通转账的好几倍；中继器替你垫付这笔 gas，收的是它的 3 倍。总额在签名前报出，并且是你所签内容的一部分，签完不会变。<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己跑一个中继器</a>，就只剩 gas。"
+					"title": "gas 比普通转账贵，中继器还要收手续费。",
+					"body": "通行密钥的签名要在链上验证，交易还要过一遍 ERC-4337 EntryPoint，这本身就比普通转账费 gas。中继器替你垫付这笔 gas 并提交上链，它收的费用会高于真正消耗掉的 gas。总额在你签名前就显示出来，而且写在你签的这笔交易里——签的是多少就收多少，签完不会变。中继器可以在设置里换掉，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己跑一个</a>。"
 				},
 				{
 					"title": "用会同步的通行密钥，你的 Apple 或 Google 账户就是其中一把钥匙。",
@@ -315,7 +315,7 @@
 				},
 				{
 					"q": "用起来要花多少钱？",
-					"a": "钱包本身免费，也没有代币。你从自己的余额里付网络 gas，外加中继器的服务费——签名前就报价，并锁进你所签的内容里；智能账户签名意味着 gas 大约是普通转账的 1.5–3 倍。另外，每条网络还需要一笔很小的、不可退还的押金来激活它的 gas 中继账户，条件允许时 Vela 会为新钱包垫付。自己跑<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">一个中继器</a>，这笔服务费就进你自己口袋而不是我们的。完整拆解见<a href=\"/docs/networks-and-fees\">网络与费用</a>。"
+					"a": "钱包本身免费，也没有代币。你从自己的余额里付网络 gas，外加中继器的费用——签名前就报价，并锁进你所签的内容里。智能账户签名会烧掉普通转账好几倍的 gas——一次 P-256 签名要在链上验证，调用还要走一遍 ERC-4337 EntryPoint——而替你垫付这笔 gas 的中继器，拿到的是所垫金额的 3 倍。另外，每条网络还需要一笔很小的、不可退还的押金来激活它的 gas 中继账户，条件允许时 Vela 会为新钱包垫付。自己跑<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">一个中继器</a>，剩下的就只有 gas。完整拆解见<a href=\"/docs/networks-and-fees\">网络与费用</a>。"
 				},
 				{
 					"q": "它能装哪些链和哪些代币？",
@@ -476,7 +476,7 @@
 		"storeNote": "目前还没有上架任何应用商店。在那之前，每一个构建版本都在 GitHub 上。"
 	},
 	"_fingerprints": {
-		"home": "74474c1cf723",
+		"home": "b5fa0b1af9d6",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

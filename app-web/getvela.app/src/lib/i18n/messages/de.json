@@ -127,8 +127,8 @@
 			"lede": "Drei Gründe, Vela nicht zu benutzen — solange dein Geld noch woanders liegt.",
 			"items": [
 				{
-					"title": "Dieselbe Überweisung kostet hier ein Vielfaches.",
-					"body": "Eine Passkey-Signatur wird on-chain geprüft und die Transaktion läuft durch den ERC-4337-EntryPoint, verbraucht also schon von sich aus ein Vielfaches des Gases einer einfachen Überweisung — und der Relayer, der dieses Gas vorstreckt, bekommt das 3-Fache davon. Der Gesamtbetrag wird vor dem Signieren genannt und ist Teil dessen, was du signierst, kann sich danach also nicht mehr ändern. Betreibe <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, dann bleibt nur das Gas."
+					"title": "Gas kostet mehr als bei einer einfachen Überweisung, und der Relayer nimmt eine Gebühr.",
+					"body": "Eine Passkey-Signatur wird on-chain geprüft und die Transaktion läuft durch den ERC-4337-EntryPoint — das allein kostet mehr Gas als eine einfache Überweisung. Der Relayer, der dieses Gas vorstreckt und die Transaktion einreicht, bekommt mehr, als das Gas on-chain tatsächlich kostet. Den Gesamtbetrag siehst du vor dem Signieren, und er steht in der Transaktion, die du signierst — berechnet wird genau das, was du signiert hast, und danach ändert es sich nicht mehr. Den Relayer kannst du in den Einstellungen wechseln oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">selbst betreiben</a>."
 				},
 				{
 					"title": "Ein synchronisierter Passkey macht dein Apple- oder Google-Konto zu einem der Schlüssel.",
@@ -315,7 +315,7 @@
 				},
 				{
 					"q": "Was kostet die Nutzung?",
-					"a": "Die Wallet ist kostenlos und es gibt keinen Token. Du zahlst Netzwerk-Gas aus deinem eigenen Guthaben plus die Servicegebühr des Relayers — vor dem Signieren genannt und in das Signierte eingeschlossen; Smart-Account-Signaturen bedeuten grob das 1,5- bis 3-Fache des Gases einer einfachen Überweisung. Jedes Netzwerk braucht außerdem eine kleine, nicht erstattbare Einlage, um sein Gas-Relayer-Konto zu aktivieren, die Vela für neue Wallets übernimmt, wo es geht. Betreibe <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, und die Servicegebühr gehört dir, nicht uns. Vollständige Aufschlüsselung in <a href=\"/docs/networks-and-fees\">Netzwerke und Gebühren</a>."
+					"a": "Die Wallet ist kostenlos und es gibt keinen Token. Du zahlst Netzwerk-Gas aus deinem eigenen Guthaben plus die Gebühr des Relayers — vor dem Signieren genannt und in das Signierte eingeschlossen. Smart-Account-Signaturen verbrennen ein Mehrfaches des Gases einer einfachen Überweisung — eine P-256-Signatur wird on-chain geprüft und der Aufruf läuft durch den ERC-4337-EntryPoint — und der Relayer, der dieses Gas vorstreckt, bekommt das 3-Fache dessen, was er vorstreckt. Jedes Netzwerk braucht außerdem eine kleine, nicht erstattbare Einlage, um sein Gas-Relayer-Konto zu aktivieren, die Vela für neue Wallets übernimmt, wo es geht. Betreibe <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, und es bleibt nur das Gas. Vollständige Aufschlüsselung in <a href=\"/docs/networks-and-fees\">Netzwerke und Gebühren</a>."
 				},
 				{
 					"q": "Welche Chains und Token hält sie?",
@@ -476,7 +476,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "74474c1cf723",
+		"home": "b5fa0b1af9d6",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
