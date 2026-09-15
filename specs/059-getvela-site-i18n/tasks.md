@@ -47,19 +47,19 @@ in Phase 3+ can start until this is green.
 **⚠️ The riskiest phase in the feature** — it moves every localizable route file
 at once (plan §Risks).
 
-- [ ] T007 Create `src/params/locale.ts` — a matcher accepting the 14 non-English tags in canonical case **and rejecting `en`** (contracts/routing.md §Must 404)
-- [ ] T008 `git mv` the localizable routes into `src/routes/[[locale=locale]]/`: `+page.svelte`, `about/`, `roadmap/`, `docs/` — leaving `blog/`, `privacy/`, `terms/`, `registry/`, `demo/`, `api/`, `pay/`, `sitemap.xml/`, `.well-known/` at the root (R5, research §10)
-- [ ] T009 Create `src/routes/[[locale=locale]]/+layout.ts` — `export const prerender = true`, resolve `params.locale ?? 'en'` into a `Locale`, expose it and its catalog through `load`
-- [ ] T010 Create `src/routes/[[locale=locale]]/+layout.svelte` — the localized chrome wrapper (switcher slot, notice slot) shared by landing/about/roadmap/docs
-- [ ] T011 Add `entries` exports so every localized path is prerendered: `[[locale]]/+page.ts`, `about`, `roadmap`, `docs`, and `docs/[...slug]` crossing 15 locales × 11 slugs — returning `{ locale: undefined }` for English (research §2)
-- [ ] T012 Update `src/routes/[[locale=locale]]/docs/[...slug]/+page.ts` so `entries` yields the (locale, slug) product and `load` resolves both params
-- [ ] T013 Edit `src/app.html` — replace `lang="en"` with a `%lang%` placeholder
-- [ ] T014 Edit `src/hooks.server.ts` — add `transformPageChunk` filling `%lang%` from the first path segment (runs during prerender too, research §6), leaving the existing CORS logic untouched
-- [ ] T015 Edit `src/hooks.server.ts` — add the alias/case 308 redirects from contracts/routing.md §Must 308, and confirm no English path can ever match
-- [ ] T016 [P] Create `src/routes/[[locale=locale]]/+error.svelte` so an unknown prefix renders the site's 404, not a blank locale shell (FR-010)
-- [ ] T017 [P] Create `tests/routing.spec.ts` (Playwright) asserting the full status-code matrix in contracts/routing.md — including `/en/` → 404 and `/ja/blog` → 404
-- [ ] T018 Run the English-untouched curl matrix from [quickstart.md](./quickstart.md) against `bun run preview`; every pre-existing path must be `200` with no redirect (FR-009, SC-005)
-- [ ] T019 Time `bun run build` with one locale of content present and record the wall time and page count in `results.md` — the number plan §Risks says to take *before* 126,000 words exist
+- [X] T007 Create `src/params/locale.ts` — a matcher accepting the 14 non-English tags in canonical case **and rejecting `en`** (contracts/routing.md §Must 404)
+- [X] T008 `git mv` the localizable routes into `src/routes/[[locale=locale]]/`: `+page.svelte`, `about/`, `roadmap/`, `docs/` — leaving `blog/`, `privacy/`, `terms/`, `registry/`, `demo/`, `api/`, `pay/`, `sitemap.xml/`, `.well-known/` at the root (R5, research §10)
+- [X] T009 Create `src/routes/[[locale=locale]]/+layout.ts` — `export const prerender = true`, resolve `params.locale ?? 'en'` into a `Locale`, expose it and its catalog through `load`
+- [X] T010 Create `src/routes/[[locale=locale]]/+layout.svelte` — the localized chrome wrapper (switcher slot, notice slot) shared by landing/about/roadmap/docs
+- [X] T011 Add `entries` exports so every localized path is prerendered: `[[locale]]/+page.ts`, `about`, `roadmap`, `docs`, and `docs/[...slug]` crossing 15 locales × 11 slugs — returning `{ locale: undefined }` for English (research §2)
+- [X] T012 Update `src/routes/[[locale=locale]]/docs/[...slug]/+page.ts` so `entries` yields the (locale, slug) product and `load` resolves both params
+- [X] T013 Edit `src/app.html` — replace `lang="en"` with a `%lang%` placeholder
+- [X] T014 Edit `src/hooks.server.ts` — add `transformPageChunk` filling `%lang%` from the first path segment (runs during prerender too, research §6), leaving the existing CORS logic untouched
+- [X] T015 Edit `src/hooks.server.ts` — add the alias/case 308 redirects from contracts/routing.md §Must 308, and confirm no English path can ever match
+- [X] T016 [P] Create `src/routes/[[locale=locale]]/+error.svelte` so an unknown prefix renders the site's 404, not a blank locale shell (FR-010)
+- [X] T017 [P] Create `tests/routing.spec.ts` (Playwright) asserting the full status-code matrix in contracts/routing.md — including `/en/` → 404 and `/ja/blog` → 404
+- [X] T018 Run the English-untouched curl matrix from [quickstart.md](./quickstart.md) against `bun run preview`; every pre-existing path must be `200` with no redirect (FR-009, SC-005)
+- [X] T019 Time `bun run build` with one locale of content present and record the wall time and page count in `results.md` — the number plan §Risks says to take *before* 126,000 words exist
 
 **Checkpoint**: `/` and `/ja/` both render; `/en/` 404s; no English URL moved.
 

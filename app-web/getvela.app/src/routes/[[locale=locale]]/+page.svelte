@@ -344,35 +344,29 @@
 				>
 			</div>
 		</div>
-		<!-- The five facts a sceptic checks before trusting a wallet with money. Every
-		     line is verifiable from the page below it or from the repo — nothing here
-		     is a claim the docs don't already make. -->
+		<!-- The three facts a sceptic checks before trusting a wallet with money.
+		     Every line is verifiable from the page below it or from the repo —
+		     nothing here is a claim the docs don't already make. ERC-4337 and
+		     "100% open source" used to be rows of their own; both are still stated
+		     in the trust strip and the technical-details table below. -->
 		<dl class="hero-facts">
 			<div class="fact">
 				<dt>Safe v1.4.1, unmodified</dt>
-				<dd>
-					Third-party audited contracts, deployed exactly as published. Vela adds no contract of
-					its own.
-				</dd>
-			</div>
-			<div class="fact">
-				<dt>ERC-4337 smart account</dt>
-				<dd>A WebAuthn P-256 signer, and the same address on every chain.</dd>
+				<dd>Third-party audited contracts, deployed exactly as published.</dd>
 			</div>
 			<div class="fact">
 				<dt>12 chains built in, plus your own</dt>
-				<dd>Any EVM chain with the RIP-7212 precompile and Vela's contracts deployed.</dd>
-			</div>
-			<div class="fact">
-				<dt>Up to 7 signers, security keys included</dt>
 				<dd>
-					Passkeys, a nearby device, or a USB/NFC key — any one of them signs. Chosen when you
-					create the wallet.
+					Any EVM chain with the RIP-7212 precompile and Safe v1.4.1's contracts deployed. One
+					address on every chain.
 				</dd>
 			</div>
 			<div class="fact">
-				<dt>100% open source</dt>
-				<dd>The app, the bundler, the chain-data and passkey-index services. Run your own.</dd>
+				<dt>1-of-n signers, security keys included</dt>
+				<dd>
+					Passkeys, a nearby device, or a USB/NFC key — up to seven, any one of which signs.
+					Chosen when you create the wallet.
+				</dd>
 			</div>
 		</dl>
 	</div>
