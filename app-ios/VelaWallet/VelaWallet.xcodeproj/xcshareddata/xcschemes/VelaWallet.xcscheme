@@ -63,6 +63,24 @@
 
            LiveWiringAcceptanceTests runs: it is spec 050's acceptance on real
            hardware, and it is fast.
+
+           Spec 058 added three more skipped by name, and each is skipped for a
+           reason a simulator cannot argue with:
+
+           - ParallelSpaceDeviceTests enters the parallel space, which signs
+             with a fixed keyset against REAL chains. On a runner that is a
+             network dependency and a flake; on the founder's phone it is the
+             only way to see the wallet with a wallet in it.
+           - SettingsAuditDeviceTests and DeviceParityTests answer "does the
+             screen redraw when a preference changes" and "does this phone's
+             storage report itself" — questions whose answers are wall-clock
+             (`Thread.sleep` past a launch animation) and per-device. They are
+             instruments for a device pass, not gates: eight app launches on a
+             macos-15 runner is minutes billed at ten times linux for a signal
+             that flakes.
+
+           Run them with -only-testing against a real device, as their own
+           file comments spell out.
          -->
          <TestableReference
             skipped = "NO">
@@ -76,6 +94,15 @@
             <SkippedTests>
                <Test
                   Identifier = "ScreenshotSweepTests">
+               </Test>
+               <Test
+                  Identifier = "DeviceParityTests">
+               </Test>
+               <Test
+                  Identifier = "SettingsAuditDeviceTests">
+               </Test>
+               <Test
+                  Identifier = "ParallelSpaceDeviceTests">
                </Test>
             </SkippedTests>
          </TestableReference>
