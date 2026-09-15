@@ -245,23 +245,22 @@ export const en = {
 		 */
 		tradeoffs: {
 			heading: 'The trade-offs, up front',
-			lede: "We'd rather you know before you deposit.",
+			lede: 'Three reasons not to use Vela — while your money is still somewhere else.',
 			items: [
 				{
-					title: 'Gas costs more than a plain transfer.',
-					body: 'Verifying a passkey signature on-chain and passing through the ERC-4337 EntryPoint costs real gas — roughly 1.5–3× a plain transfer — plus the relayer\'s fee for fronting it. The total is quoted before you sign and is part of what you sign, so it cannot move afterwards. Run <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">your own relay</a> and the fee goes away.'
+					title: 'The same transfer costs several times more here.',
+					body: 'A passkey signature is verified on-chain and the transaction goes through the ERC-4337 EntryPoint, so it burns several times the gas of a plain transfer — and the relayer that fronts that gas is paid 3× what it fronts. The total is quoted before you sign and is part of what you sign, so it cannot move afterwards. <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">Run your own relay</a> and only the gas is left.'
 				},
 				{
-					title: 'A synced passkey makes your Apple or Google account part of your security.',
-					body: 'That is where the passkey lives, so whoever controls that account — and can unlock a device it syncs to — can sign. If you would rather it were not, create the wallet with a USB/NFC security key instead: the method is a choice for the <em>first</em> key, not just for extra ones. Extra signers buy you a way back in, not a second lock — any one of them can sign on its own.'
+					title: 'A synced passkey makes your Apple or Google account one of the keys.',
+					body: 'Whoever controls that account and can unlock a device it syncs to can sign. If that is not acceptable, create the wallet with a USB/NFC security key instead — the choice is there for the <em>first</em> key, not only for extra ones. And extra keys are extra ways in, not a second lock: any one of them signs on its own.'
 				},
 				{
-					title: "Vela's own app code has not been independently audited.",
-					body: 'The contracts it stands on have been — Safe v1.4.1 and the WebAuthn signer module, audited by third parties and deployed unmodified. Our own code is public and reviewed by us and by whoever reads it, which is not the same thing as an audit. Every contract, its report, and the issues we are watching are listed in <a href="/docs/security-audits">Audits &amp; known issues</a>. An independent audit is something we want; it is not scheduled.'
+					title: "Vela's own code has never been independently audited.",
+					body: 'The contracts underneath it have been — Safe v1.4.1 and the WebAuthn signer module, audited by third parties and deployed at their canonical addresses with nothing changed by us. Ours is public and read by anyone who wants to, which is not the same thing. <a href="/docs/security-audits">Audits &amp; known issues</a> lists every contract, every report and what we are watching. An audit is something we want and have not scheduled.'
 				}
 			],
-			close:
-				"If any of those is a dealbreaker, Vela isn't for you yet. If you've already accepted them with Base Account, keep reading."
+			close: 'If one of those is a dealbreaker, Vela is not for you yet.'
 		},
 
 		/**
