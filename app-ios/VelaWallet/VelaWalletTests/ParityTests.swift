@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 import VelaCore
 @testable import VelaWallet
@@ -328,6 +329,46 @@ struct ParityTests {
         #expect(model.groupsHeader?.action == loc.t("contacts.groupNew"))
         #expect(model.groupsHeader?.action != loc.t("contacts.manage"))
         #expect(group.name == "Team")
+    }
+
+    // MARK: - Logos (058, the founder's ask)
+
+    /// A native coin wears its OWN chain's logo — ETH on Base is Ethereum's —
+    /// and its badge disappears where it would repeat the coin.
+    @Test func aNativeCoinWearsItsOwnChainsLogoAndNoRedundantBadge() {
+        let eth = TokenMarkModel.of(chainId: 8453, symbol: "ETH", color: .clear)
+        #expect(eth.logoURLs.first?.contains("eip155-1.png") == true)
+        // On Base the badge is Base's: the coin and the chain differ.
+        #expect(eth.badgeHidden == false)
+        #expect(eth.badgeLogoURL?.contains("eip155-8453") == true)
+
+        let xdai = TokenMarkModel.of(chainId: 100, symbol: "XDAI", color: .clear)
+        #expect(xdai.badgeHidden)
+        #expect(xdai.badgeLogoURL == nil)
+    }
+
+    /// A token's logo is its contract's path, checksummed first and lowercase
+    /// second — the index carries both spellings and neither is guaranteed.
+    @Test func aTokenOffersBothSpellingsOfItsContract() {
+        let contract = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+        let mark = TokenMarkModel.of(chainId: 100, symbol: "USDC",
+                                     tokenAddress: contract, color: .clear)
+        #expect(mark.logoURLs.count == 2)
+        #expect(mark.logoURLs[0] != mark.logoURLs[1])
+        #expect(mark.logoURLs.allSatisfy { $0.lowercased().contains(contract) })
+        // A token on a chain is badged with that chain.
+        #expect(!mark.badgeHidden)
+    }
+
+    /// The core's own `logo_urls` win over any path this client guessed.
+    @Test func aStatedLogoOutranksAGuessedPath() {
+        let stated = "https://example.test/vela.png"
+        let mark = TokenMarkModel.of(
+            chainId: 1, symbol: "VELA",
+            tokenAddress: "0x1111111111111111111111111111111111111111",
+            color: .clear, named: [stated]
+        )
+        #expect(mark.logoURLs.first == stated)
     }
 
     // MARK: - 语言

@@ -199,7 +199,16 @@ enum WalletLive {
                 badgeColor: chainColor(token.chainId),
                 balance: token.balance,
                 fiat: fiat(token, hidden: view.hidden, display: display),
-                masked: view.hidden
+                masked: view.hidden,
+                // The real logo, with the lettermark behind it (058). The
+                // badge disappears where it would repeat the coin — XDAI on
+                // Gnosis is one picture, not the same picture twice.
+                mark: TokenMarkModel.of(
+                    chainId: token.chainId,
+                    symbol: token.symbol,
+                    tokenAddress: token.tokenAddress,
+                    color: chainColor(token.chainId)
+                )
             )
         }
     }

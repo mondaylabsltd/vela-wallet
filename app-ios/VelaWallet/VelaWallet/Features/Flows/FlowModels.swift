@@ -55,6 +55,45 @@ struct FlowPillModel {
 struct TokenMarkModel {
     let ticker: String
     let badgeColor: Color
+    /// Logo candidates from the chain-data endpoint, best first. Empty draws
+    /// the lettermark, which is what every mark on this client did before 058.
+    var logoURLs: [String] = []
+    /// The chain badge's own logo, where there is one.
+    var badgeLogoURL: String?
+    /// ETH on Ethereum: the badge would repeat the token, so there is none.
+    var badgeHidden: Bool = false
+
+    /// The mark for one holding — glyph, logo candidates and badge in one
+    /// place, so a caller cannot fill three of the four and draw a mark that
+    /// disagrees with itself.
+    static func of(
+        chainId: Int,
+        symbol: String,
+        tokenAddress: String? = nil,
+        color: Color,
+        named: [String] = []
+    ) -> TokenMarkModel {
+        let mark = Marks.token(chainId: chainId, symbol: symbol,
+                               tokenAddress: tokenAddress, named: named)
+        return TokenMarkModel(
+            ticker: symbol,
+            badgeColor: color,
+            logoURLs: mark.logoURLs,
+            badgeLogoURL: mark.badgeLogoURL,
+            badgeHidden: mark.badgeHidden
+        )
+    }
+
+    /// A NETWORK by itself — its own logo, no badge.
+    static func chain(chainId: Int, symbol: String, color: Color) -> TokenMarkModel {
+        TokenMarkModel(
+            ticker: symbol,
+            badgeColor: color,
+            logoURLs: [Marks.chainLogoURL(chainId)].compactMap { $0 },
+            badgeLogoURL: nil,
+            badgeHidden: true
+        )
+    }
 }
 
 /// Leading art on a fact row's value side.
@@ -103,6 +142,9 @@ struct NetworkRowModel: Identifiable {
     let addressDisplay: String
     let copyLabel: String
     let qrLabel: String
+    /// The network's own logo (058). Empty keeps the coloured disc with the
+    /// coin's ticker on it — the drawing's mark, and the fallback.
+    var logoURLs: [String] = []
 }
 
 struct ReceiveListModel {

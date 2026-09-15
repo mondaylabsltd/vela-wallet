@@ -24,17 +24,18 @@ struct NetworkRowView: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            Circle()
-                .fill(row.badgeColor)
-                .frame(width: WalletFlowGeometry.chainBadge, height: WalletFlowGeometry.chainBadge)
-                .overlay {
-                    Text(verbatim: row.code)
-                        .typeRole(Typography.tokenGlyph)
-                        // The chain colours are brand fills, dark enough for
-                        // white in both appearances — so the mode-invariant
-                        // white, not fgInverse.
-                        .foregroundStyle(theme.onAccent)
-                }
+            RemoteLogoView(urls: row.logoURLs, size: WalletFlowGeometry.chainBadge) {
+                Circle()
+                    .fill(row.badgeColor)
+                    .overlay {
+                        Text(verbatim: row.code)
+                            .typeRole(Typography.tokenGlyph)
+                            // The chain colours are brand fills, dark enough for
+                            // white in both appearances — so the mode-invariant
+                            // white, not fgInverse.
+                            .foregroundStyle(theme.onAccent)
+                    }
+            }
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: row.name)
                     .typeRole(Typography.rowTitle.scaled(textScale))
@@ -316,7 +317,7 @@ struct FeeTokenRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: row.mark.ticker, badgeColor: row.mark.badgeColor)
+                TokenIconView(mark: row.mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))

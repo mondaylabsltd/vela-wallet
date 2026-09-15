@@ -411,7 +411,7 @@ struct TokenHeaderCardView: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            TokenIconView(ticker: token.mark.ticker, badgeColor: token.mark.badgeColor)
+            TokenIconView(mark: token.mark)
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: token.symbol)
                     .typeRole(Typography.rowTitle.scaled(textScale))

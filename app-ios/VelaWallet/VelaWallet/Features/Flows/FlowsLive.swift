@@ -172,10 +172,11 @@ enum FlowsLive {
             facts.append(FactRowModel(
                 label: loc.t("componentsTx.detail.labelChain"),
                 value: chain.displayName,
-                lead: .token(TokenMarkModel(
-                    ticker: chain.nativeSymbol,
-                    badgeColor: SettingsLive.mark(chainId: chain.chainId,
-                                                 name: chain.displayName).color
+                lead: .token(TokenMarkModel.chain(
+                    chainId: chain.chainId,
+                    symbol: chain.nativeSymbol,
+                    color: SettingsLive.mark(chainId: chain.chainId,
+                                             name: chain.displayName).color
                 ))
             ))
         }
@@ -290,9 +291,11 @@ enum FlowsLive {
             .map { WalletLive.activityRow($0, loc: loc, hidden: false) }
 
         return TokenDetailModel(
-            mark: TokenMarkModel(
-                ticker: token.symbol,
-                badgeColor: SettingsLive.mark(chainId: token.chainId, name: chain).color
+            mark: TokenMarkModel.of(
+                chainId: token.chainId,
+                symbol: token.symbol,
+                tokenAddress: token.tokenAddress,
+                color: SettingsLive.mark(chainId: token.chainId, name: chain).color
             ),
             symbol: token.symbol,
             chain: chain,
@@ -343,7 +346,10 @@ enum FlowsLive {
                 // actually delivers.
                 addressDisplay: AddressText.short(address),
                 copyLabel: model.rows.first?.copyLabel ?? "",
-                qrLabel: model.rows.first?.qrLabel ?? ""
+                qrLabel: model.rows.first?.qrLabel ?? "",
+                // The network's own logo (058); the coloured disc is the
+                // fallback, so a phone with no network still names each chain.
+                logoURLs: [Marks.chainLogoURL(chain.chainId)].compactMap { $0 }
             )
         }
         return live
@@ -375,10 +381,10 @@ enum FlowsLive {
         // sentence would be a lie and the mark would back it up.
         if let chain {
             live.title = loc.t("receive.qrTitleNetwork", vars: ["network": chain.displayName])
-            live.centre = TokenMarkModel(
-                ticker: chain.nativeSymbol,
-                badgeColor: SettingsLive.mark(chainId: chain.chainId,
-                                              name: chain.displayName).color
+            live.centre = TokenMarkModel.chain(
+                chainId: chain.chainId,
+                symbol: chain.nativeSymbol,
+                color: SettingsLive.mark(chainId: chain.chainId, name: chain.displayName).color
             )
         }
         // A token's own code: the sentence names the coin, the mark in the
@@ -390,9 +396,11 @@ enum FlowsLive {
             live.title = loc.t("receive.qrTitleAsset", vars: [
                 "symbol": asset.symbol, "network": network,
             ])
-            live.centre = TokenMarkModel(
-                ticker: asset.symbol,
-                badgeColor: SettingsLive.mark(chainId: asset.chainId, name: network).color
+            live.centre = TokenMarkModel.of(
+                chainId: asset.chainId,
+                symbol: asset.symbol,
+                tokenAddress: contract,
+                color: SettingsLive.mark(chainId: asset.chainId, name: network).color
             )
             live.contract = ContractLineModel(
                 label: loc.t("receive.tokenContract"),

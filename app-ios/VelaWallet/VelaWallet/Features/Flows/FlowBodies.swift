@@ -140,14 +140,17 @@ struct ReceiveQrBody: View {
             )
 
             QrCardView(label: model.title, modules: model.modules) {
-                Circle()
-                    .fill(model.centre.badgeColor)
-                    .frame(width: WalletFlowGeometry.qrCentre, height: WalletFlowGeometry.qrCentre)
-                    .overlay {
-                        Text(verbatim: model.centre.ticker)
-                            .typeRole(Typography.tokenGlyph)
-                            .foregroundStyle(theme.onAccent)
-                    }
+                // The asset's own logo in the middle of its code (058); the
+                // coloured disc with its ticker is the fallback.
+                RemoteLogoView(urls: model.centre.logoURLs, size: WalletFlowGeometry.qrCentre) {
+                    Circle()
+                        .fill(model.centre.badgeColor)
+                        .overlay {
+                            Text(verbatim: model.centre.ticker)
+                                .typeRole(Typography.tokenGlyph)
+                                .foregroundStyle(theme.onAccent)
+                        }
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -340,7 +343,7 @@ struct TokenDetailBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: model.mark.ticker, badgeColor: model.mark.badgeColor)
+                TokenIconView(mark: model.mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: model.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -493,7 +496,7 @@ struct AddTokenBody: View {
                 .foregroundStyle(theme.fgSubtle)
         case .token(let mark, let name, let detail, let chip):
             HStack(spacing: Tokens.Space.s12) {
-                TokenIconView(ticker: mark.ticker, badgeColor: mark.badgeColor)
+                TokenIconView(mark: mark)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: name)
                         .typeRole(Typography.rowTitle.scaled(textScale))
@@ -512,7 +515,7 @@ struct AddTokenBody: View {
         case .network(let mark, let name, let chip, let facts, let link):
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    TokenIconView(ticker: mark.ticker, badgeColor: mark.badgeColor)
+                    TokenIconView(mark: mark)
                     Text(verbatim: name)
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)

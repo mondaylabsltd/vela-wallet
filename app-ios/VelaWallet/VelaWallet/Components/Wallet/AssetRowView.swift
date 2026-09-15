@@ -19,7 +19,11 @@ struct AssetRowView: View {
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            TokenIconView(ticker: model.ticker, badgeColor: model.badgeColor)
+            if let mark = model.mark {
+                TokenIconView(mark: mark)
+            } else {
+                TokenIconView(ticker: model.ticker, badgeColor: model.badgeColor)
+            }
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: model.ticker)
                     .typeRole(Typography.rowTitle.scaled(textScale))

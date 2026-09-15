@@ -111,6 +111,9 @@ struct AssetRowModel: Identifiable {
     let balance: String
     let fiat: AssetFiatModel
     let masked: Bool
+    /// The whole mark, where the builder knows the chain and contract (058).
+    /// `nil` keeps the lettermark, which is what every fixture row draws.
+    var mark: TokenMarkModel?
 }
 
 enum SectionMode {

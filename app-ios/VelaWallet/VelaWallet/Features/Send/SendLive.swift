@@ -221,7 +221,11 @@ enum SendLive {
 
         live.token = token.map { held in
             SendTokenCardModel(
-                mark: TokenMarkModel(ticker: held.symbol, badgeColor: chainColor(held.chainId)),
+                // The held token's own logo (058), with its lettermark behind.
+                mark: TokenMarkModel.of(
+                    chainId: held.chainId, symbol: held.symbol,
+                    tokenAddress: held.tokenAddress, color: chainColor(held.chainId)
+                ),
                 symbol: held.symbol,
                 detail: "\(chain) · \(trim(held.balance))",
                 max: model.token?.max
@@ -285,8 +289,9 @@ enum SendLive {
                     ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
                 }
                 return SweepRowModel(
-                    mark: TokenMarkModel(
-                        ticker: token.symbol, badgeColor: chainColor(token.chainId)
+                    mark: TokenMarkModel.of(
+                        chainId: token.chainId, symbol: token.symbol,
+                        tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
                     ),
                     symbol: token.symbol,
                     balanceLabel: "\(trim(token.balance)) \(token.symbol)",
@@ -426,9 +431,9 @@ enum SendLive {
             // The fee is paid on THIS chain. The drawing's mark was ETH, which
             // is the wrong badge on every network but one.
             mark: view.fee.map { estimate in
-                TokenMarkModel(
-                    ticker: feeTicker(estimate),
-                    badgeColor: chainColor(estimate.chainId)
+                TokenMarkModel.of(
+                    chainId: estimate.chainId, symbol: feeTicker(estimate),
+                    color: chainColor(estimate.chainId)
                 )
             } ?? fallback.mark,
             value: text ?? waiting,
@@ -744,9 +749,9 @@ enum SendLive {
     static func feeSheet(_ fee: FeeViewWire, on model: FeeTokenPickModel, loc: Loc) -> FeeTokenPickModel {
         let rows = fee.options.map { option in
             FeeTokenRowModel(
-                mark: TokenMarkModel(
-                    ticker: option.symbol,
-                    badgeColor: chainColor(fee.fee?.chainId ?? 0)
+                mark: TokenMarkModel.of(
+                    chainId: fee.fee?.chainId ?? 0, symbol: option.symbol,
+                    tokenAddress: option.contract, color: chainColor(fee.fee?.chainId ?? 0)
                 ),
                 symbol: option.symbol,
                 balanceLabel: trim(fromBase(option.balance, decimals: option.decimals)),

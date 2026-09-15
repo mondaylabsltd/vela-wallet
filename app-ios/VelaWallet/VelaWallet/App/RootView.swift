@@ -371,6 +371,10 @@ struct RootView: View {
         // it: the stored language decides which words this launch uses. Until
         // 058 nothing read `vela.language` at all.
         loc.apply(prefs.language)
+        // Which chain-data endpoint the logos come from (058). The person's
+        // own endpoint wins; the default is what every other read uses, so a
+        // wallet that can fetch balances can fetch the pictures beside them.
+        Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
         AvatarPreference.apply(prefs)
