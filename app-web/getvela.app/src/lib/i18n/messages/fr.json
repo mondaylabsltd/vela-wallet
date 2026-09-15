@@ -248,9 +248,9 @@
 			"intro": "Vous payez pour la commodité, pas pour le droit d’utiliser.",
 			"cards": [
 				{
-					"title": "Portefeuille web",
+					"title": "Portefeuille web et extension Chrome",
 					"price": "Gratuit",
-					"body": "Ouvrez, authentifiez-vous, c’est tout. Ou hébergez la même app vous-même."
+					"body": "Ouvrez, authentifiez-vous, c’est tout — dans le navigateur comme dans l’extension, les deux gratuits. Ou hébergez la même app vous-même."
 				},
 				{
 					"title": "Applications bureau et mobile",

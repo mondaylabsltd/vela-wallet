@@ -400,9 +400,9 @@ export const en = {
 			intro: 'You pay for convenience, not for access.',
 			cards: [
 				{
-					title: 'Web wallet',
+					title: 'Web wallet & Chrome extension',
 					price: 'Free',
-					body: 'Open it, authenticate, done. Or host the same app yourself.'
+					body: 'Open it, authenticate, done \u2014 in the browser or in the extension. Both free. Or host the same app yourself.'
 				},
 				{
 					title: 'Desktop & mobile apps',
