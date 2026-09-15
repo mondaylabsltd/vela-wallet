@@ -136,7 +136,7 @@
 				},
 				{
 					"title": "Vous faites confiance à des contrats Safe audités — et un audit n'est pas une garantie.",
-					"body": "Votre compte, c'est Safe v1.4.1 plus le module de signature WebAuthn : audités par des tiers, déployés à leurs adresses canoniques, sans une ligne modifiée par nous. Mais un audit porte sur une version d'un morceau de code ; il réduit le risque, il ne promet pas que rien n'ira de travers — et on-chain, aucun service client ne peut revenir en arrière. Le code applicatif autour de ces contrats est le nôtre : public, lisible, et non audité de façon indépendante ; nous le voulons, ce n'est pas programmé. <a href=\"/docs/security-audits\">Audits et problèmes connus</a> liste chaque contrat, chaque rapport et ce que nous surveillons. Le logiciel est fourni en l'état, sans garantie : le risque de ce que vous y mettez est le vôtre."
+					"body": "Votre compte, c'est Safe v1.4.1 plus le module de signature WebAuthn : audités par des tiers, déployés à leurs adresses canoniques, sans une ligne modifiée par nous. Mais un audit porte sur une version d'un morceau de code ; il réduit le risque, il ne promet pas que rien n'ira de travers — et on-chain, aucun service client ne peut revenir en arrière. Le code applicatif autour de ces contrats est le nôtre : public et lisible par tous. <a href=\"/docs/security-audits\">Audits et problèmes connus</a> liste chaque contrat, chaque rapport et ce que nous surveillons. Le logiciel est fourni en l'état, sans garantie : le risque de ce que vous y mettez est le vôtre."
 				}
 			],
 			"close": "Si l'un de ces points est rédhibitoire, Vela n'est pas encore fait pour vous."

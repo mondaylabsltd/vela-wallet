@@ -136,7 +136,7 @@
 				},
 				{
 					"title": "Ti stai fidando di contratti Safe verificati — e un audit non è una garanzia.",
-					"body": "Il tuo account è Safe v1.4.1 più il modulo di firma WebAuthn: verificati da terze parti, deployati ai loro indirizzi canonici, senza una riga cambiata da noi. Ma un audit copre una versione di un pezzo di codice: abbassa il rischio, non promette che non andrà storto nulla — e on-chain non c'è un'assistenza che possa annullare qualcosa. Il codice dell'app attorno a quei contratti è nostro: pubblico, leggibile e non verificato in modo indipendente; lo vorremmo, non è in programma. <a href=\"/docs/security-audits\">Audit e problemi noti</a> elenca ogni contratto, ogni rapporto e ciò che stiamo tenendo d'occhio. Il software è fornito così com'è, senza garanzie: il rischio di ciò che ci metti dentro è tuo."
+					"body": "Il tuo account è Safe v1.4.1 più il modulo di firma WebAuthn: verificati da terze parti, deployati ai loro indirizzi canonici, senza una riga cambiata da noi. Ma un audit copre una versione di un pezzo di codice: abbassa il rischio, non promette che non andrà storto nulla — e on-chain non c'è un'assistenza che possa annullare qualcosa. Il codice dell'app attorno a quei contratti è nostro: pubblico e leggibile da chiunque. <a href=\"/docs/security-audits\">Audit e problemi noti</a> elenca ogni contratto, ogni rapporto e ciò che stiamo tenendo d'occhio. Il software è fornito così com'è, senza garanzie: il rischio di ciò che ci metti dentro è tuo."
 				}
 			],
 			"close": "Se uno di questi è un ostacolo insormontabile, Vela non fa ancora per te."

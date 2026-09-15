@@ -136,7 +136,7 @@
 				},
 				{
 					"title": "Estás confiando en contratos Safe auditados — y una auditoría no es una garantía.",
-					"body": "Tu cuenta es Safe v1.4.1 más el módulo de firma WebAuthn: auditados por terceros, desplegados en sus direcciones canónicas, sin una línea cambiada por nosotros. Pero una auditoría cubre una versión de un pedazo de código: baja el riesgo, no promete que nada saldrá mal — y en cadena no hay soporte que pueda revertir nada. El código de la app alrededor de esos contratos es nuestro: público, legible y sin auditoría independiente; la queremos y no está agendada. <a href=\"/docs/security-audits\">Auditorías y problemas conocidos</a> lista cada contrato, cada reporte y lo que estamos vigilando. El software se entrega tal cual, sin garantías: el riesgo de lo que metas es tuyo."
+					"body": "Tu cuenta es Safe v1.4.1 más el módulo de firma WebAuthn: auditados por terceros, desplegados en sus direcciones canónicas, sin una línea cambiada por nosotros. Pero una auditoría cubre una versión de un pedazo de código: baja el riesgo, no promete que nada saldrá mal — y en cadena no hay soporte que pueda revertir nada. El código de la app alrededor de esos contratos es nuestro: público y legible por cualquiera. <a href=\"/docs/security-audits\">Auditorías y problemas conocidos</a> lista cada contrato, cada reporte y lo que estamos vigilando. El software se entrega tal cual, sin garantías: el riesgo de lo que metas es tuyo."
 				}
 			],
 			"close": "Si alguna de esas cosas es un impedimento, Vela todavía no es para ti."

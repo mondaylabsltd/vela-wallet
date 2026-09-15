@@ -257,7 +257,7 @@ export const en = {
 				},
 				{
 					title: 'You are trusting audited Safe contracts — and an audit is not a guarantee.',
-					body: 'Your account is Safe v1.4.1 plus the WebAuthn signer module: audited by third parties, deployed at their canonical addresses, not one line changed by us. But an audit covers one version of one piece of code; it lowers the risk, it does not promise nothing will go wrong — and on-chain there is no support desk to roll anything back. The app code around those contracts is ours: public, readable, and not independently audited; we want that and have not scheduled it. <a href="/docs/security-audits">Audits &amp; known issues</a> lists every contract, every report and what we are watching. The software is provided as is, without warranty: the risk of what you put in is yours.'
+					body: 'Your account is Safe v1.4.1 plus the WebAuthn signer module: audited by third parties, deployed at their canonical addresses, not one line changed by us. But an audit covers one version of one piece of code; it lowers the risk, it does not promise nothing will go wrong — and on-chain there is no support desk to roll anything back. The app code around those contracts is ours: public and readable by anyone. <a href="/docs/security-audits">Audits &amp; known issues</a> lists every contract, every report and what we are watching. The software is provided as is, without warranty: the risk of what you put in is yours.'
 				}
 			],
 			close: 'If one of those is a dealbreaker, Vela is not for you yet.'

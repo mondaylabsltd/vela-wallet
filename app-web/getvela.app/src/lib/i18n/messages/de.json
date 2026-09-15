@@ -136,7 +136,7 @@
 				},
 				{
 					"title": "Du vertraust auditierten Safe-Verträgen — und ein Audit ist keine Garantie.",
-					"body": "Dein Konto ist Safe v1.4.1 plus das WebAuthn-Signer-Modul: von Dritten auditiert, unter ihren kanonischen Adressen deployt, von uns keine Zeile geändert. Aber ein Audit deckt eine Version eines Stück Codes ab; es senkt das Risiko, es verspricht nicht, dass nichts schiefgeht — und on-chain gibt es keine Hotline, die etwas zurückrollt. Der App-Code um diese Verträge herum ist unserer: öffentlich, lesbar und nicht unabhängig auditiert; wir wollen das, terminiert ist es nicht. In <a href=\"/docs/security-audits\">Audits und bekannte Probleme</a> stehen jeder Vertrag, jeder Bericht und das, was wir beobachten. Die Software wird wie besehen bereitgestellt, ohne Gewährleistung: das Risiko dessen, was du hineinlegst, trägst du."
+					"body": "Dein Konto ist Safe v1.4.1 plus das WebAuthn-Signer-Modul: von Dritten auditiert, unter ihren kanonischen Adressen deployt, von uns keine Zeile geändert. Aber ein Audit deckt eine Version eines Stück Codes ab; es senkt das Risiko, es verspricht nicht, dass nichts schiefgeht — und on-chain gibt es keine Hotline, die etwas zurückrollt. Der App-Code um diese Verträge herum ist unserer: öffentlich und für jeden lesbar. In <a href=\"/docs/security-audits\">Audits und bekannte Probleme</a> stehen jeder Vertrag, jeder Bericht und das, was wir beobachten. Die Software wird wie besehen bereitgestellt, ohne Gewährleistung: das Risiko dessen, was du hineinlegst, trägst du."
 				}
 			],
 			"close": "Wenn eines davon für dich ein Ausschlusskriterium ist, ist Vela noch nichts für dich."
