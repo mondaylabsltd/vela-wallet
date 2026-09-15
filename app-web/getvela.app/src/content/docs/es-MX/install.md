@@ -1,6 +1,6 @@
 ---
 title: Instalar Vela
-description: Vela corre en tu navegador: sin instalación y sin tienda de apps. Abre la wallet web, o revisa primero qué necesita tu dispositivo para las passkeys.
+description: "Vela corre en tu navegador: sin instalación y sin tienda de apps. Abre la wallet web, o revisa primero qué necesita tu dispositivo para las passkeys."
 ---
 
 # Instalar Vela

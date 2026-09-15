@@ -1,6 +1,6 @@
 ---
 title: El ataque a Bybit
-description: En febrero de 2025, Bybit perdió alrededor de 1,500 millones de dólares. Los contratos Safe no fallaron: falló la interfaz. Esta página explica la ruta que usó y qué cierra el diseño de Vela.
+description: "En febrero de 2025, Bybit perdió alrededor de 1,500 millones de dólares. Los contratos Safe no fallaron: falló la interfaz. Esta página explica la ruta que usó y qué cierra el diseño de Vela."
 ---
 
 # El ataque a Bybit

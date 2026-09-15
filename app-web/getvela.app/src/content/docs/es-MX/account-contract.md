@@ -1,6 +1,6 @@
 ---
 title: El contrato de la cuenta
-description: Tu wallet Vela es un Safe v1.4.1 sin modificar. Nada en la ruta de contratos lo escribimos nosotros: aquí está qué te da eso y qué cuesta.
+description: "Tu wallet Vela es un Safe v1.4.1 sin modificar. Nada en la ruta de contratos lo escribimos nosotros: aquí está qué te da eso y qué cuesta."
 ---
 
 # El contrato de la cuenta
