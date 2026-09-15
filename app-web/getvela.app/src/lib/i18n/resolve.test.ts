@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './messages/en';
 import { SUPPORTED_LOCALES } from './locales';
-import { PAGE_NAMESPACES, __internals, catalog, namespaceState, translatedLocales } from './resolve';
+import {
+	PAGE_NAMESPACES,
+	__internals,
+	catalog,
+	namespaceState,
+	translatedLocales
+} from './resolve';
 
 const { isComplete } = __internals;
 
@@ -75,10 +81,13 @@ describe('catalog()', () => {
 	it('keeps a fallback page’s internal links inside the reader’s locale', () => {
 		// An English page at /tr must not tip the reader back out to /docs — they
 		// asked for Turkish and the rest of the site still has it.
-		expect(catalog(untranslated!).home.compare.rows[3].vela).toContain(
-			`href="/${untranslated}/docs/security-audits"`
-		);
-		expect(catalog('en').home.compare.rows[3].vela).toContain('href="/docs/security-audits"');
+		// Found by its link rather than by its index: the table is edited far more
+		// often than this test, and a row number would quietly stop testing
+		// anything the first time a row is added above it.
+		const linked = (locale: string) =>
+			catalog(locale as never).home.compare.rows.find((r) => r.vela.includes('href="'))?.vela ?? '';
+		expect(linked('en'), 'a row with an internal link').toContain('href="/docs/');
+		expect(linked(untranslated!)).toContain(`href="/${untranslated}/docs/`);
 	});
 
 	it('leaves external links and anchors alone', () => {

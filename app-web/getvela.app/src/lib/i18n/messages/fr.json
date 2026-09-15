@@ -165,77 +165,77 @@
 			}
 		},
 		"compare": {
-			"heading": "Vela face aux autres",
-			"desc": "Face aux deux portefeuilles que vous envisageriez réellement à la place.",
+			"heading": "Vela, à côté des autres",
+			"desc": "Trois types de portefeuille — une simple clé, un smart account d'éditeur, et celui-ci. Nous utilisons les trois. Aucun ne gagne toutes les lignes.",
 			"rows": [
 				{
-					"feature": "La clé de signature vit dans",
-					"vela": "Gestionnaire de mots de passe Apple / Google",
-					"base": "Gestionnaire de mots de passe Apple / Google",
-					"safe": "Gestionnaire de mots de passe Apple / Google"
+					"feature": "Type de compte",
+					"vela": "<a href=\"/docs/account-contract\">Smart account Safe v1.4.1</a>",
+					"metamask": "Un EOA — une simple clé sur la chaîne",
+					"base": "Smart account Coinbase"
 				},
 				{
-					"feature": "Signataires",
-					"vela": "1 parmi n : passkeys et clés de sécurité matérielles, jusqu'à sept",
-					"base": "Passkeys",
-					"safe": "N'importe quel propriétaire, m parmi n"
+					"feature": "Clé de signature",
+					"vela": "Passkey ou clé de sécurité — jusqu'à sept, 1-of-n",
+					"metamask": "Phrase de 12 mots ; portefeuille matériel possible",
+					"base": "Passkey"
 				},
 				{
-					"feature": "Voie indépendante « signez ce que vous voyez »",
-					"vela": "Page / extension sans dépendance, auto-déployable — en test",
-					"base": "Non",
-					"safe": "Outils tiers de vérification de hash"
+					"feature": "Gas par transaction",
+					"vela": "Le plus élevé : vérification de signature on-chain, EntryPoint, et les frais du relais",
+					"metamask": "Le plus bas : le gas de la chaîne, rien d'autre",
+					"base": "Surcoût ERC-4337, souvent pris en charge"
 				},
 				{
-					"feature": "Contrat de compte",
-					"vela": "<a href=\"/docs/security-audits\">Safe v1.4.1, non modifié</a>",
-					"base": "Sur mesure, audité",
-					"safe": "Safe"
-				},
-				{
-					"feature": "Open source",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relayeur + chaque service backend</a>",
-					"base": "Partiel",
-					"safe": "L'app seulement ; dépend de l'infrastructure de Safe"
-				},
-				{
-					"feature": "Auto-hébergeable de bout en bout",
-					"vela": "Oui",
-					"base": "Non",
-					"safe": "Frontend uniquement"
+					"feature": "Gas offert",
+					"vela": "Seulement l'activation initiale du compte, quand nous le pouvons",
+					"metamask": "Aucun — vous payez toujours",
+					"base": "Oui, sur Base et certains réseaux ; souvent gratuit pour vous"
 				},
 				{
 					"feature": "Réseaux personnalisés",
-					"vela": "Toute chaîne avec RIP-7212 — l'<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">outil de déploiement</a> installe les contrats",
-					"base": "Base d'abord, peu nombreux",
-					"safe": "Uniquement les chaînes prises en charge par Safe"
+					"vela": "Toute chaîne avec RIP-7212 — un <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">outil de configuration</a> déploie les contrats",
+					"metamask": "Toute chaîne EVM, avec votre propre RPC",
+					"base": "Base d'abord ; liste courte"
 				},
 				{
-					"feature": "Plateformes",
-					"vela": "Le web aujourd'hui ; bureau, mobile et une extension issus du même code, en test",
-					"base": "Web, mobile",
-					"safe": "Web, mobile"
+					"feature": "Si vous perdez un appareil",
+					"vela": "Signez avec n'importe laquelle de vos autres clés",
+					"metamask": "La phrase de récupération, sinon le portefeuille est perdu",
+					"base": "Synchronisation de la passkey, plus une clé de récupération générée dans le navigateur"
 				},
 				{
-					"feature": "Clé de récupération générée dans un navigateur",
-					"vela": "Non",
-					"base": "Oui",
-					"safe": "Non"
+					"feature": "Transactions groupées",
+					"vela": "Oui — plusieurs appels en une opération",
+					"metamask": "Seulement après une mise à niveau EIP-7702",
+					"base": "Oui"
 				},
 				{
-					"feature": "Continue de signer si l'éditeur disparaît",
-					"vela": "Oui — auto-hébergement, plus une extension open source de récupération de domaine",
-					"base": "Non",
-					"safe": "Dépend du service de transactions de Safe"
+					"feature": "Vérifier avant de signer",
+					"vela": "Décodé dans l'app, plus une page ou une extension que vous hébergez",
+					"metamask": "Décodé dans l'app, avec analyse de risque tierce",
+					"base": "Décodé dans l'app"
 				},
 				{
-					"feature": "Conçu pour",
-					"vela": "Ceux qui font confiance aux passkeys et veulent sortir de l'enfermement",
-					"base": "L'écosystème Base",
-					"safe": "Multisig et équipes"
+					"feature": "Auto-hébergeable de bout en bout",
+					"vela": "L'app, le relais et chaque service backend",
+					"metamask": "Compilez l'app vous-même ; pointez-la vers votre RPC",
+					"base": "Non"
+				},
+				{
+					"feature": "Open source",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relais + chaque service backend</a>",
+					"metamask": "Extension et application mobile publiées",
+					"base": "SDK oui ; le service de compte non"
+				},
+				{
+					"feature": "Ancienneté",
+					"vela": "Récent, peu d'utilisateurs. Contrats audités par des tiers ; notre code applicatif non",
+					"metamask": "Des années sur le marché, des dizaines de millions d'utilisateurs",
+					"base": "Adossé à Coinbase, audité"
 				}
 			],
-			"note": "Tout ce que Vela construit, vous pouvez l'héberger vous-même. Quelques sources de données — l'historique de certaines chaînes, les prix de jetons peu liquides, l'analyse de menaces — viennent de prestataires tiers ; remplacez-les par votre propre nœud ou votre propre clé."
+			"note": "Rien de tout cela n'est une attaque contre les deux autres. MetaMask est la façon la moins chère et la plus universelle de bouger de l'argent on-chain ; Base Account est la plus simple, et souvent gratuite. Le pari de Vela est ailleurs : utiliser des passkeys sans confier les clés à personne — et pouvoir faire tourner chaque pièce soi-même."
 		},
 		"pricing": {
 			"heading": "Gratuit et ouvert. Payez seulement si vous le voulez.",

@@ -165,77 +165,77 @@
 			}
 		},
 		"compare": {
-			"heading": "Vela는 어떻게 다른가",
-			"desc": "실제로 대신 고려할 만한 두 지갑과 놓고 봅니다.",
+			"heading": "Vela를 나란히 놓고 보면",
+			"desc": "세 종류의 지갑 — 그냥 키 하나, 벤더의 스마트 계정, 그리고 이것. 셋 다 우리가 씁니다. 모든 줄에서 이기는 지갑은 없습니다.",
 			"rows": [
 				{
-					"feature": "서명 키가 있는 곳",
-					"vela": "Apple / Google 비밀번호 관리자",
-					"base": "Apple / Google 비밀번호 관리자",
-					"safe": "Apple / Google 비밀번호 관리자"
+					"feature": "계정 종류",
+					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 스마트 계정</a>",
+					"metamask": "EOA — 체인 위의 평범한 키",
+					"base": "Coinbase 스마트 계정"
 				},
 				{
 					"feature": "서명 키",
-					"vela": "n개 중 1개: 패스키와 하드웨어 보안 키, 최대 일곱 개",
-					"base": "패스키",
-					"safe": "모든 소유자, n개 중 m개"
+					"vela": "패스키 또는 보안 키 — 최대 일곱 개, 1-of-n",
+					"metamask": "12단어 시드 문구. 하드웨어 지갑 연결 가능",
+					"base": "패스키"
 				},
 				{
-					"feature": "독립적인 ‘보이는 것에 서명’ 경로",
-					"vela": "의존성 없는 페이지 / 확장, 직접 배포 가능 — 테스트 중",
-					"base": "없음",
-					"safe": "제3자 해시 확인 도구"
+					"feature": "거래당 가스",
+					"vela": "가장 비쌈: 온체인 서명 검증, EntryPoint, 그리고 릴레이 수수료",
+					"metamask": "가장 쌈: 체인의 가스, 그것뿐",
+					"base": "ERC-4337 부담이 있지만 대납되는 경우가 많음"
 				},
 				{
-					"feature": "계정 컨트랙트",
-					"vela": "<a href=\"/docs/security-audits\">Safe v1.4.1, 수정 없음</a>",
-					"base": "자체 구현, 감사 완료",
-					"safe": "Safe"
-				},
-				{
-					"feature": "오픈소스",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">앱 + 릴레이어 + 모든 백엔드 서비스</a>",
-					"base": "일부",
-					"safe": "앱만; Safe 인프라에 의존"
-				},
-				{
-					"feature": "처음부터 끝까지 직접 호스팅 가능",
-					"vela": "가능",
-					"base": "불가",
-					"safe": "프런트엔드만"
+					"feature": "가스 대납",
+					"vela": "최초 계정 활성화만, 가능한 범위에서",
+					"metamask": "없음 — 항상 직접 부담",
+					"base": "있음. Base 등 일부 네트워크에서는 무료인 경우도"
 				},
 				{
 					"feature": "커스텀 네트워크",
-					"vela": "RIP-7212가 있는 모든 체인 — <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">설정 도구</a>가 컨트랙트를 배포합니다",
-					"base": "Base 중심, 소수",
-					"safe": "Safe가 지원하는 체인만"
+					"vela": "RIP-7212를 지원하는 모든 체인 — <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">설정 도구</a>가 컨트랙트를 배포",
+					"metamask": "모든 EVM 체인, 원하는 RPC로",
+					"base": "Base 중심, 목록이 짧음"
 				},
 				{
-					"feature": "플랫폼",
-					"vela": "지금은 웹; 데스크톱·모바일·확장이 같은 코드에서, 테스트 중",
-					"base": "웹, 모바일",
-					"safe": "웹, 모바일"
+					"feature": "기기를 잃어버리면",
+					"vela": "남은 키 중 아무거나로 서명",
+					"metamask": "시드 문구뿐. 잃으면 끝",
+					"base": "패스키 동기화와 브라우저에서 생성된 복구 키"
 				},
 				{
-					"feature": "복구 키를 브라우저에서 생성",
-					"vela": "아니오",
-					"base": "예",
-					"safe": "아니오"
+					"feature": "묶음 거래",
+					"vela": "가능 — 여러 호출을 한 번의 작업으로",
+					"metamask": "EIP-7702 업그레이드 후에만",
+					"base": "가능"
 				},
 				{
-					"feature": "공급자가 사라져도 서명 가능",
-					"vela": "가능 — 직접 호스팅, 여기에 오픈소스 도메인 복구 확장까지",
-					"base": "불가",
-					"safe": "Safe 트랜잭션 서비스에 달림"
+					"feature": "서명 전 확인",
+					"vela": "앱에서 디코딩, 그리고 직접 호스팅하는 페이지나 확장",
+					"metamask": "앱에서 디코딩, 제3자 위험 검사 포함",
+					"base": "앱에서 디코딩"
 				},
 				{
-					"feature": "누구를 위한 것인가",
-					"vela": "패스키를 신뢰하면서 공급자 종속에서 벗어나고 싶은 사람",
-					"base": "Base 생태계",
-					"safe": "멀티시그와 팀"
+					"feature": "전부 직접 호스팅",
+					"vela": "앱, 릴레이, 모든 백엔드 서비스",
+					"metamask": "앱은 직접 빌드 가능, RPC도 교체 가능",
+					"base": "불가"
+				},
+				{
+					"feature": "오픈소스",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">앱 + 릴레이 + 모든 백엔드 서비스</a>",
+					"metamask": "확장과 모바일 앱 공개",
+					"base": "SDK는 공개, 계정 서비스는 비공개"
+				},
+				{
+					"feature": "업력",
+					"vela": "새롭고 사용자도 적음. 컨트랙트는 제3자 감사, 우리 앱 코드는 미감사",
+					"metamask": "수년간, 수천만 사용자",
+					"base": "Coinbase 지원, 감사 완료"
 				}
 			],
-			"note": "Vela가 만드는 모든 것은 직접 호스팅할 수 있습니다. 일부 데이터 소스 — 몇몇 체인의 내역, 유동성이 낮은 토큰 가격, 위협 검사 — 는 제3자 제공업체에서 옵니다. 당신의 노드나 키로 바꿔 쓰세요."
+			"note": "다른 둘을 깎아내리려는 말이 아닙니다. MetaMask는 온체인 송금에서 가장 싸고 가장 널리 통합니다. Base Account는 가장 편하고 종종 무료입니다. Vela가 거는 쪽은 다른 것입니다 — 패스키를 쓰면서도 키를 누구에게도 넘기지 않고, 모든 조각을 직접 돌릴 수 있다는 것."
 		},
 		"pricing": {
 			"heading": "무료이고 열려 있습니다. 원할 때만 내세요.",

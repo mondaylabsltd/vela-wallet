@@ -165,77 +165,77 @@
 			}
 		},
 		"compare": {
-			"heading": "Come si colloca Vela",
-			"desc": "Contro i due wallet che considereresti davvero al suo posto.",
+			"heading": "Vela, messa a confronto",
+			"desc": "Tre tipi di portafoglio — una semplice chiave, uno smart account di un fornitore, e questo. Li usiamo tutti e tre. Nessuno vince ogni riga.",
 			"rows": [
 				{
-					"feature": "La chiave di firma sta in",
-					"vela": "Gestore password Apple / Google",
-					"base": "Gestore password Apple / Google",
-					"safe": "Gestore password Apple / Google"
+					"feature": "Tipo di account",
+					"vela": "<a href=\"/docs/account-contract\">Smart account Safe v1.4.1</a>",
+					"metamask": "Un EOA — una semplice chiave sulla catena",
+					"base": "Smart account Coinbase"
 				},
 				{
-					"feature": "Firmatari",
-					"vela": "1 su n: passkey e chiavi di sicurezza hardware, fino a sette",
-					"base": "Passkey",
-					"safe": "Qualsiasi proprietario, m su n"
+					"feature": "Chiave di firma",
+					"vela": "Passkey o chiave di sicurezza — fino a sette, 1-of-n",
+					"metamask": "Frase di 12 parole; portafoglio hardware opzionale",
+					"base": "Passkey"
 				},
 				{
-					"feature": "Via indipendente «firma quello che vedi»",
-					"vela": "Pagina / estensione senza dipendenze, self-deployable — in test",
-					"base": "No",
-					"safe": "Strumenti di terze parti per verificare l'hash"
+					"feature": "Gas per transazione",
+					"vela": "Il più alto: verifica della firma on-chain, EntryPoint e la commissione del relay",
+					"metamask": "Il più basso: solo il gas della catena",
+					"base": "Sovraccosto ERC-4337, spesso sponsorizzato"
 				},
 				{
-					"feature": "Contratto dell'account",
-					"vela": "<a href=\"/docs/security-audits\">Safe v1.4.1, non modificato</a>",
-					"base": "Proprietario, verificato",
-					"safe": "Safe"
-				},
-				{
-					"feature": "Open source",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relayer + ogni servizio di backend</a>",
-					"base": "Parziale",
-					"safe": "Solo l'app; dipende dall'infrastruttura di Safe"
-				},
-				{
-					"feature": "Self-hostable da capo a fondo",
-					"vela": "Sì",
-					"base": "No",
-					"safe": "Solo il frontend"
+					"feature": "Gas sponsorizzato",
+					"vela": "Solo l'attivazione iniziale dell'account, dove possiamo",
+					"metamask": "Nessuno — paghi sempre tu",
+					"base": "Sì, su Base e alcune reti; spesso gratis per te"
 				},
 				{
 					"feature": "Reti personalizzate",
-					"vela": "Qualsiasi chain con RIP-7212 — lo <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">strumento di setup</a> fa il deploy dei contratti",
-					"base": "Base in primis, poche",
-					"safe": "Solo le chain supportate da Safe"
+					"vela": "Qualsiasi catena con RIP-7212 — uno <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">strumento di setup</a> installa i contratti",
+					"metamask": "Qualsiasi catena EVM, con il tuo RPC",
+					"base": "Prima Base; elenco breve"
 				},
 				{
-					"feature": "Piattaforme",
-					"vela": "Oggi il web; desktop, mobile e un'estensione dallo stesso codice, in test",
-					"base": "Web, mobile",
-					"safe": "Web, mobile"
+					"feature": "Se perdi un dispositivo",
+					"vela": "Firmi con una qualsiasi delle altre chiavi",
+					"metamask": "La frase di recupero, altrimenti il portafoglio è perso",
+					"base": "Sincronizzazione della passkey, più una chiave di recupero generata nel browser"
 				},
 				{
-					"feature": "Chiave di recupero generata in un browser",
-					"vela": "No",
-					"base": "Sì",
-					"safe": "No"
+					"feature": "Transazioni in batch",
+					"vela": "Sì — più chiamate in una sola operazione",
+					"metamask": "Solo dopo un upgrade EIP-7702",
+					"base": "Sì"
 				},
 				{
-					"feature": "Continua a firmare se il fornitore sparisce",
-					"vela": "Sì — self-hosting, più un'estensione open source per il recupero del dominio",
-					"base": "No",
-					"safe": "Dipende dal transaction service di Safe"
+					"feature": "Controllo prima di firmare",
+					"vela": "Decodificato nell'app, più una pagina o estensione che ospiti tu",
+					"metamask": "Decodificato nell'app, con analisi del rischio di terze parti",
+					"base": "Decodificato nell'app"
 				},
 				{
-					"feature": "Pensato per",
-					"vela": "Chi si fida delle passkey e vuole uscire dal vincolo con un fornitore",
-					"base": "L'ecosistema Base",
-					"safe": "Multisig e team"
+					"feature": "Ospitabile per intero",
+					"vela": "App, relay e ogni servizio backend",
+					"metamask": "Compili l'app da solo; la punti al tuo RPC",
+					"base": "No"
+				},
+				{
+					"feature": "Open source",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App + relay + ogni servizio backend</a>",
+					"metamask": "Estensione e app mobile pubblicate",
+					"base": "SDK sì; il servizio account no"
+				},
+				{
+					"feature": "Storia",
+					"vela": "Nuovo, pochi utenti. Contratti verificati da terze parti; il nostro codice no",
+					"metamask": "Anni sul mercato, decine di milioni di utenti",
+					"base": "Sostenuto da Coinbase, verificato"
 				}
 			],
-			"note": "Tutto ciò che Vela costruisce puoi ospitarlo tu. Alcune fonti di dati — lo storico di certe chain, i prezzi dei token poco liquidi, la scansione delle minacce — arrivano da fornitori terzi; sostituiscili con il tuo nodo o la tua chiave."
+			"note": "Niente di tutto questo è contro gli altri due. MetaMask è il modo più economico e universale di muovere denaro on-chain; Base Account è il più semplice, e spesso gratuito. La scommessa di Vela è un'altra: usare le passkey senza consegnare le chiavi a nessuno — e poter far girare ogni pezzo da soli."
 		},
 		"pricing": {
 			"heading": "Gratis e aperto. Paghi solo se vuoi.",

@@ -50,18 +50,30 @@
 		}
 	] as const;
 
+	/**
+	 * The colour of each comparison cell, ordered to match `m.home.compare.rows`.
+	 * Deliberately NOT in the message catalog: "is this good or bad" is a claim
+	 * we make, and a translator shouldn't be able to change it — or silently
+	 * lose it — while translating the words. An empty string is a neutral cell.
+	 *
+	 * Vela is not green down the column, because it is not better down the
+	 * column: it is the most expensive of the three per transaction, it sponsors
+	 * almost nothing, and it is the youngest. MetaMask wins gas and track
+	 * record; Base Account wins sponsorship. A table where our column is green
+	 * eleven times is an advertisement, not a comparison.
+	 */
 	const COMPARE_TONES = [
-		{ vela: '', base: '', safe: '' },
-		{ vela: 'yes', base: '', safe: 'yes' },
-		{ vela: 'warn', base: 'no', safe: 'warn' },
-		{ vela: 'yes', base: '', safe: 'yes' },
-		{ vela: 'yes', base: 'warn', safe: 'warn' },
-		{ vela: 'yes', base: 'no', safe: 'warn' },
-		{ vela: 'yes', base: 'warn', safe: 'warn' },
-		{ vela: '', base: '', safe: '' },
-		{ vela: 'yes', base: 'no', safe: 'yes' },
-		{ vela: 'yes', base: 'no', safe: 'warn' },
-		{ vela: '', base: '', safe: '' }
+		{ vela: '', metamask: '', base: '' },
+		{ vela: 'yes', metamask: 'warn', base: 'yes' },
+		{ vela: 'warn', metamask: 'yes', base: 'yes' },
+		{ vela: 'warn', metamask: 'no', base: 'yes' },
+		{ vela: 'yes', metamask: 'yes', base: 'no' },
+		{ vela: 'yes', metamask: 'warn', base: 'warn' },
+		{ vela: 'yes', metamask: 'warn', base: 'yes' },
+		{ vela: 'yes', metamask: 'warn', base: 'warn' },
+		{ vela: 'yes', metamask: 'warn', base: 'no' },
+		{ vela: 'yes', metamask: '', base: 'warn' },
+		{ vela: 'warn', metamask: 'yes', base: 'yes' }
 	] as const;
 
 	// Analytics helper
@@ -588,8 +600,8 @@
 					<tr>
 						<th></th>
 						<th>Vela</th>
+						<th>MetaMask</th>
 						<th>Base Account</th>
-						<th>Safe&#123;Wallet&#125; + passkey</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -598,8 +610,8 @@
 							<td>{row.feature}</td>
 							<!-- eslint-disable svelte/no-at-html-tags -->
 							<td class={COMPARE_TONES[i]?.vela}>{@html row.vela}</td>
+							<td class={COMPARE_TONES[i]?.metamask}>{@html row.metamask}</td>
 							<td class={COMPARE_TONES[i]?.base}>{@html row.base}</td>
-							<td class={COMPARE_TONES[i]?.safe}>{@html row.safe}</td>
 							<!-- eslint-enable svelte/no-at-html-tags -->
 						</tr>
 					{/each}

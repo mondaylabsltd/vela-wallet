@@ -166,76 +166,76 @@
 		},
 		"compare": {
 			"heading": "Vela 和它们比起来",
-			"desc": "拿来比的，是你真正可能会选的另外两个。",
+			"desc": "三类钱包——一把普通私钥、一个厂商的智能账户，以及这一个。三个我们都在用，没有哪一个每一行都赢。",
 			"rows": [
 				{
-					"feature": "签名密钥存放在",
-					"vela": "Apple / Google 密码管理器",
-					"base": "Apple / Google 密码管理器",
-					"safe": "Apple / Google 密码管理器"
+					"feature": "账户类型",
+					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 智能账户</a>",
+					"metamask": "EOA——链上的一把普通私钥",
+					"base": "Coinbase 智能账户"
 				},
 				{
 					"feature": "签名钥匙",
-					"vela": "任一可签，最多七把：通行密钥与硬件安全密钥",
-					"base": "通行密钥",
-					"safe": "任意所有者，m-of-n"
+					"vela": "通行密钥或安全密钥——最多七把，1-of-n",
+					"metamask": "12 个助记词；可外接硬件钱包",
+					"base": "通行密钥"
 				},
 				{
-					"feature": "独立的「所见即所签」通道",
-					"vela": "零依赖页面／扩展，可自行部署",
-					"base": "没有",
-					"safe": "第三方哈希核对工具"
+					"feature": "每笔交易的 gas",
+					"vela": "最高：链上验一次签名、过 EntryPoint，再加中继服务费",
+					"metamask": "最低：只有链本身的 gas",
+					"base": "ERC-4337 的开销，但常有人代付"
 				},
 				{
-					"feature": "账户合约",
-					"vela": "<a href=\"/docs/security-audits\">Safe v1.4.1，未经改动</a>",
-					"base": "自研合约，已审计",
-					"safe": "Safe"
-				},
-				{
-					"feature": "开源",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">应用 + 中继器 + 每一项后端服务</a>",
-					"base": "部分开源",
-					"safe": "仅应用；依赖 Safe 的基础设施"
-				},
-				{
-					"feature": "端到端可自行部署",
-					"vela": "可以",
-					"base": "不行",
-					"safe": "仅前端"
+					"feature": "代付 gas",
+					"vela": "只有首次账户激活，且尽力而为",
+					"metamask": "没有——始终自己付",
+					"base": "有，在 Base 和部分网络；对你常常是免费的"
 				},
 				{
 					"feature": "自定义网络",
-					"vela": "任何有 RIP-7212 的链——<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">部署工具</a>替你把合约部署上去",
-					"base": "以 Base 为主，数量很少",
-					"safe": "仅 Safe 支持的链"
+					"vela": "任何支持 RIP-7212 的链——<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">配置工具</a>会把合约部署好",
+					"metamask": "任何 EVM 链，用你自己的 RPC",
+					"base": "以 Base 为主，数量不多"
 				},
 				{
-					"feature": "平台",
-					"vela": "零依赖页面／扩展，可自行部署",
-					"base": "网页、手机",
-					"safe": "网页、手机"
+					"feature": "设备丢了怎么办",
+					"vela": "用你其余任意一把钥匙签名",
+					"metamask": "靠助记词，丢了钱包就没了",
+					"base": "通行密钥同步，外加一把在浏览器里生成的恢复密钥"
 				},
 				{
-					"feature": "恢复密钥在浏览器里生成",
-					"vela": "不是",
-					"base": "是",
-					"safe": "不是"
+					"feature": "批量交易",
+					"vela": "支持——多笔调用打包成一次操作",
+					"metamask": "要先做 EIP-7702 升级",
+					"base": "支持"
 				},
 				{
-					"feature": "服务方消失后还能签名吗",
-					"vela": "能——自行部署，另有开源的域名恢复扩展",
-					"base": "不能",
-					"safe": "取决于 Safe 的交易服务"
+					"feature": "签名前的核对",
+					"vela": "应用内解码，另有一个你自己托管的页面或扩展",
+					"metamask": "应用内解码，并有第三方风险扫描",
+					"base": "应用内解码"
 				},
 				{
-					"feature": "为谁而做",
-					"vela": "信任通行密钥、又不想被供应商锁住的人",
-					"base": "Base 生态",
-					"safe": "多签与团队"
+					"feature": "能否完全自托管",
+					"vela": "应用、中继和每一个后端服务",
+					"metamask": "可以自己构建应用，RPC 换成你自己的",
+					"base": "不能"
+				},
+				{
+					"feature": "开源",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">应用 + 中继 + 每一个后端服务</a>",
+					"metamask": "扩展与手机应用已公开源码",
+					"base": "SDK 开源；账户服务不开源"
+				},
+				{
+					"feature": "资历",
+					"vela": "新，用户还少。合约经过第三方审计，我们自己的应用代码没有",
+					"metamask": "入场多年，几千万用户",
+					"base": "Coinbase 背书，经过审计"
 				}
 			],
-			"note": "Vela 自己做的每一样东西，你都可以自行部署。少数数据源——部分链的历史记录、长尾代币价格、威胁扫描——来自第三方服务商；换成你自己的节点或密钥即可。"
+			"note": "这里没有一句是在贬低另外两个。MetaMask 是链上转账最便宜、最通用的方式；Base Account 最省事，而且常常免费。Vela 押的是另一件事：用通行密钥的同时，钥匙不交给任何人，而且每一个环节你都能自己跑。"
 		},
 		"pricing": {
 			"heading": "免费且开源。愿意付费再付。",

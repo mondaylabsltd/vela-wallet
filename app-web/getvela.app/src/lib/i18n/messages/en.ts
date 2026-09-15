@@ -317,76 +317,76 @@ export const en = {
 
 		compare: {
 			heading: 'How Vela compares',
-			desc: "Against the two wallets you'd actually consider instead.",
+			desc: 'Three kinds of wallet \u2014 a plain key, a vendor smart account, and this one. We use all three. None of them wins every row.',
 			rows: [
 				{
-					feature: 'Signing key lives in',
-					vela: 'Apple / Google Password Manager',
-					base: 'Apple / Google Password Manager',
-					safe: 'Apple / Google Password Manager'
+					feature: 'Account type',
+					vela: '<a href="/docs/account-contract">Safe v1.4.1 smart account</a>',
+					metamask: 'An EOA \u2014 a plain key on the chain',
+					base: 'Coinbase smart account'
 				},
 				{
-					feature: 'Signers',
-					vela: '1-of-n: passkeys and hardware security keys, up to seven',
-					base: 'Passkeys',
-					safe: 'Any owner, m-of-n'
+					feature: 'Signing key',
+					vela: 'Passkey or security key \u2014 up to seven, 1-of-n',
+					metamask: 'A 12-word seed phrase; hardware wallet optional',
+					base: 'Passkey'
 				},
 				{
-					feature: 'Independent sign-what-you-see path',
-					vela: 'Zero-dependency page / extension, self-hosted',
-					base: 'No',
-					safe: 'Third-party hash-check tools'
+					feature: 'Gas per transaction',
+					vela: 'Highest: an on-chain signature check, the EntryPoint, and the relay&rsquo;s fee',
+					metamask: 'Lowest: the chain&rsquo;s own gas and nothing else',
+					base: 'ERC-4337 overhead, often sponsored'
 				},
 				{
-					feature: 'Account contract',
-					vela: '<a href="/docs/security-audits">Safe v1.4.1, unmodified</a>',
-					base: 'Custom, audited',
-					safe: 'Safe'
+					feature: 'Sponsored gas',
+					vela: 'Only the one-time account activation, where we can',
+					metamask: 'None \u2014 you always pay',
+					base: 'Yes, on Base and some networks; often free for you'
+				},
+				{
+					feature: 'Custom networks',
+					vela: 'Any chain with RIP-7212 \u2014 a <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">setup tool</a> deploys the contracts',
+					metamask: 'Any EVM chain, with your own RPC',
+					base: 'Base first; a short list'
+				},
+				{
+					feature: 'If you lose a device',
+					vela: 'Sign with any of your other keys',
+					metamask: 'The seed phrase, or the wallet is gone',
+					base: 'Passkey sync, plus a recovery key generated in a browser'
+				},
+				{
+					feature: 'Batched transactions',
+					vela: 'Yes \u2014 many calls in one operation',
+					metamask: 'Only after an EIP-7702 upgrade',
+					base: 'Yes'
+				},
+				{
+					feature: 'Checking before you sign',
+					vela: 'Decoded in the app, plus a page or extension you host yourself',
+					metamask: 'Decoded in the app, with third-party risk scanning',
+					base: 'Decoded in the app'
+				},
+				{
+					feature: 'Self-hostable end to end',
+					vela: 'App, relay and every backend service',
+					metamask: 'Build the app yourself; point it at your own RPC',
+					base: 'No'
 				},
 				{
 					feature: 'Open source',
 					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">App + relayer + every backend service</a>',
-					base: 'Partial',
-					safe: 'App only; relies on Safe infrastructure'
+					metamask: 'Extension and mobile app published',
+					base: 'SDK yes; the account service, no'
 				},
 				{
-					feature: 'Self-hostable end to end',
-					vela: 'Yes',
-					base: 'No',
-					safe: 'Frontend only'
-				},
-				{
-					feature: 'Custom networks',
-					vela: 'Any chain with RIP-7212 — the <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">setup tool</a> deploys the contracts',
-					base: 'Base-first, few',
-					safe: 'Safe-supported chains only'
-				},
-				{
-					feature: 'Platforms',
-					vela: 'Web today; desktop, mobile and an extension from the same code, in testing',
-					base: 'Web, mobile',
-					safe: 'Web, mobile'
-				},
-				{
-					feature: 'Recovery key generated in a browser',
-					vela: 'No',
-					base: 'Yes',
-					safe: 'No'
-				},
-				{
-					feature: 'Keeps signing if the vendor disappears',
-					vela: 'Yes — self-host, plus an open-source domain-recovery extension',
-					base: 'No',
-					safe: 'Depends on the Safe transaction service'
-				},
-				{
-					feature: 'Built for',
-					vela: 'People who trust passkeys and want out of vendor lock-in',
-					base: 'The Base ecosystem',
-					safe: 'Multisig and teams'
+					feature: 'Track record',
+					vela: 'New, few users. Contracts third-party audited; our app code is not',
+					metamask: 'Years in the market, tens of millions of users',
+					base: 'Coinbase-backed, audited'
 				}
 			],
-			note: "Everything Vela builds, you can self-host. A few data sources — some chains' history, long-tail prices, threat scanning — come from third-party providers; swap in your own node or key."
+			note: 'None of this is a knock on the other two. MetaMask is the cheapest and most universal way to move money on-chain; Base Account is the easiest, and often free. Vela&rsquo;s bet is that you can have passkeys without handing anyone else the keys \u2014 and run every piece of it yourself.'
 		},
 
 		pricing: {
