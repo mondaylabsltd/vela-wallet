@@ -474,9 +474,7 @@
 						     list from <ol> already, and would otherwise hear each one twice. -->
 						<span class="fact-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
 						<span class="fact-term">{fact.term}</span>
-						<span class="fact-proof">
-							{fact.link}<span class="fact-arrow" aria-hidden="true">→</span>
-						</span>
+						<span class="fact-proof">{fact.link}</span>
 					</a>
 				</li>
 			{/each}
@@ -963,13 +961,15 @@
 	.fact-row:hover .fact-proof {
 		color: var(--text-secondary);
 	}
-	.fact-arrow {
-		display: inline-block;
-		margin-left: 6px;
-		transition: transform 0.18s;
+	/* The arrow is a pseudo-element glued to the last word with a non-breaking
+	   space: as a separate span it could — and on the English row 02 did — wrap
+	   onto a line of its own, which reads as a bullet with nothing after it. */
+	.fact-proof::after {
+		content: '\00a0→';
+		transition: margin-left 0.18s;
 	}
-	.fact-row:hover .fact-arrow {
-		transform: translateX(3px);
+	.fact-row:hover .fact-proof::after {
+		margin-left: 3px;
 	}
 	/* Three columns need about 900px to hold a sentence each; below that the
 	   proof goes under its claim and keeps the number's column. This is the one

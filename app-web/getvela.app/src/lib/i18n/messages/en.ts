@@ -191,11 +191,11 @@ export const en = {
 				},
 				{
 					term: "Don't bet the wallet on one device.",
-					link: 'Up to seven keys, set at creation — hardware security keys included'
+					link: 'Up to seven keys, set at creation — hardware keys included'
 				},
 				{
-					term: 'Bybit saw one transaction and signed another.',
-					link: 'How $1.5B was lost, and the path we close'
+					term: 'One transaction on the screen. Another one signed.',
+					link: 'How Bybit lost $1.5B, and the path we close'
 				},
 				{
 					term: 'If Vela disappears, your wallet does not.',
