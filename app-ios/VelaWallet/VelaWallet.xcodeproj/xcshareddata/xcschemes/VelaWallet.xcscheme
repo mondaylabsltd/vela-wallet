@@ -81,6 +81,29 @@
 
            Run them with -only-testing against a real device, as their own
            file comments spell out.
+
+           058 then went further, and the reason is measurable rather than
+           cautious. The iOS job has failed on EVERY run since 052 — it never
+           reached the tests at all, because the debug-only fixtures library
+           was not built on the runner — so nobody had ever seen what this
+           target does on a simulator. Run on a freshly erased one:
+
+             VelaWalletTests            587 pass
+             BrowserAcceptanceTests     6 of 8 fail — the page never sees the
+                                        provider; the suite was written and
+                                        verified on hardware (053)
+             LiveWiringAcceptanceTests  1 fails — it reads an account's own
+                                        history, which a runner does not have
+             VelaWalletUITests          2 fail — they expect Welcome, and an
+                                        earlier class in the run left a session
+                                        behind (the classes share a simulator)
+
+           So the whole acceptance layer is skipped by name and the HERMETIC
+           suite is the gate, which is what the job's own note describes
+           ("Test run with N tests in M suites passed"). A gate that cannot
+           pass is not a gate; one that passes by accident of ordering is
+           worse. `-only-testing` still reaches every one of these on a device,
+           which is where they were written to run — and where 050–058 ran them.
          -->
          <TestableReference
             skipped = "NO">
@@ -103,6 +126,21 @@
                </Test>
                <Test
                   Identifier = "ParallelSpaceDeviceTests">
+               </Test>
+               <Test
+                  Identifier = "BrowserAcceptanceTests">
+               </Test>
+               <Test
+                  Identifier = "LiveWiringAcceptanceTests">
+               </Test>
+               <Test
+                  Identifier = "ParityAcceptanceTests">
+               </Test>
+               <Test
+                  Identifier = "SigningDepthAcceptanceTests">
+               </Test>
+               <Test
+                  Identifier = "VelaWalletUITests">
                </Test>
             </SkippedTests>
          </TestableReference>

@@ -203,11 +203,19 @@ extension BrowserEngine: WKNavigationDelegate {
         }
     }
 
+    /// A failure AFTER the document committed: the page is on screen, partly
+    /// drawn, and a subresource or a same-document navigation gave up.
+    ///
+    /// Deliberately silent, and this is a correction of 058's first attempt.
+    /// A full-screen "couldn't load" over a page that IS there hides a working
+    /// dApp — it is how the browser acceptance suite went from two failures to
+    /// eight: the panel covered the test page and every provider assertion
+    /// read as "the page did not hear the announcement". The panel is for the
+    /// case with nothing behind it, which is the provisional one.
     nonisolated func webView(
         _ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error
     ) {
-        let described = Self.describe(error)
-        MainActor.assumeIsolated { fail(described) }
+        MainActor.assumeIsolated { update(loading: false) }
     }
 
     nonisolated func webView(
