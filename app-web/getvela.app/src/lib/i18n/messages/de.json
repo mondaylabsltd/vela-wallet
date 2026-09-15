@@ -124,22 +124,22 @@
 		},
 		"tradeoffs": {
 			"heading": "Die Nachteile, vorweg",
-			"lede": "Uns ist lieber, du weißt es, bevor du einzahlst.",
+			"lede": "Drei Gründe, Vela nicht zu benutzen — solange dein Geld noch woanders liegt.",
 			"items": [
 				{
-					"title": "Gas kostet mehr als bei einer einfachen Überweisung.",
-					"body": "Eine Passkey-Signatur on-chain zu prüfen und durch den ERC-4337-EntryPoint zu gehen, kostet echtes Gas — grob das 1,5- bis 3-Fache einer einfachen Überweisung — plus die Gebühr des Relayers, der es vorstreckt. Der Gesamtbetrag wird vor dem Signieren genannt und ist Teil dessen, was du signierst, kann sich danach also nicht mehr ändern. Betreibe <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, und die Gebühr entfällt."
+					"title": "Dieselbe Überweisung kostet hier ein Vielfaches.",
+					"body": "Eine Passkey-Signatur wird on-chain geprüft und die Transaktion läuft durch den ERC-4337-EntryPoint, verbraucht also schon von sich aus ein Vielfaches des Gases einer einfachen Überweisung — und der Relayer, der dieses Gas vorstreckt, bekommt das 3-Fache davon. Der Gesamtbetrag wird vor dem Signieren genannt und ist Teil dessen, was du signierst, kann sich danach also nicht mehr ändern. Betreibe <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">dein eigenes Relay</a>, dann bleibt nur das Gas."
 				},
 				{
-					"title": "Ein synchronisierter Passkey macht dein Apple- oder Google-Konto zum Teil deiner Sicherheit.",
-					"body": "Dort liegt der Passkey. Wer dieses Konto kontrolliert — und ein Gerät entsperren kann, mit dem es synchronisiert — kann signieren. Wenn dir das nicht passt, lege die Wallet stattdessen mit einem USB/NFC-Sicherheitsschlüssel an: Die Methode ist schon beim <em>ersten</em> Schlüssel eine Wahl, nicht erst bei weiteren. Zusätzliche Signaturschlüssel sind ein Weg zurück, kein zweites Schloss — jeder einzelne kann allein signieren."
+					"title": "Ein synchronisierter Passkey macht dein Apple- oder Google-Konto zu einem der Schlüssel.",
+					"body": "Wer dieses Konto kontrolliert und ein Gerät entsperren kann, mit dem es synchronisiert, kann signieren. Wenn das für dich nicht in Frage kommt, lege die Wallet stattdessen mit einem USB/NFC-Sicherheitsschlüssel an — die Wahl gibt es schon beim <em>ersten</em> Schlüssel, nicht erst bei weiteren. Und weitere Schlüssel sind weitere Wege hinein, kein zweites Schloss: jeder einzelne signiert für sich allein."
 				},
 				{
-					"title": "Velas eigener App-Code wurde nicht unabhängig auditiert.",
-					"body": "Die Verträge, auf denen er steht, schon — Safe v1.4.1 und das WebAuthn-Signer-Modul, von Dritten auditiert und unverändert deployt. Unser eigener Code ist öffentlich und wird von uns und von jedem gelesen, der will, was nicht dasselbe ist wie ein Audit. Jeder Vertrag, sein Bericht und die Probleme, die wir beobachten, stehen in <a href=\"/docs/security-audits\">Audits und bekannte Probleme</a>. Ein unabhängiges Audit wollen wir; terminiert ist es nicht."
+					"title": "Velas eigener Code wurde nie unabhängig auditiert.",
+					"body": "Die Verträge darunter schon — Safe v1.4.1 und das WebAuthn-Signer-Modul, von Dritten auditiert und unter ihren kanonischen Adressen deployt, von uns unverändert. Unserer ist öffentlich und wird von jedem gelesen, der will, was nicht dasselbe ist. In <a href=\"/docs/security-audits\">Audits und bekannte Probleme</a> stehen jeder Vertrag, jeder Bericht und das, was wir beobachten. Ein Audit wollen wir; terminiert ist es nicht."
 				}
 			],
-			"close": "Wenn eines davon für dich ein Ausschlusskriterium ist, ist Vela noch nichts für dich. Wenn du es bei Base Account längst akzeptiert hast, lies weiter."
+			"close": "Wenn eines davon für dich ein Ausschlusskriterium ist, ist Vela noch nichts für dich."
 		},
 		"signing": {
 			"heading": "Signiere, was du siehst.",
