@@ -106,7 +106,7 @@ sitemap lists exactly the pages that exist.
 - [X] T037 [US4] Update `src/routes/sitemap.xml/+server.ts` — `xmlns:xhtml`, one `<url>` per (page, locale) that exists, `<xhtml:link>` alternates + `x-default`, English-only pages listed once with none
 - [X] T038 [P] [US4] Create `src/lib/i18n/hreflang.test.ts` — reciprocity, self-reference, `x-default` is English on every page, and no fallback page is advertised
 - [X] T039 [P] [US4] Create `src/lib/i18n/sitemap.test.ts` — every sitemap URL corresponds to a generated page and no generated localized page is missing (FR-025)
-- [ ] T040 [P] [US4] Assert in `tests/head.spec.ts` that a built page contains exactly one `og:title` — the regression T032 fixes
+- [X] T040 [P] [US4] Assert in `tests/head.spec.ts` that a built page contains exactly one `og:title` — the regression T032 fixes
 
 **Checkpoint**: US4 complete. Safe to let crawlers see the locale prefixes.
 
@@ -124,13 +124,13 @@ advertises that translation.
 - [X] T041 [US3] Edit `src/lib/content/docs.ts` — glob `/src/content/docs/**/*.md`, key by `(locale, slug)`, and expose `getDoc(locale, slug)` returning the translation or the English source plus a `fallback` flag
 - [X] T042 [US3] Edit `src/lib/content/docs.ts` — `getDocEditUrl` must point at the file that actually rendered (`docs/<tag>/<slug>.md` when translated, `docs/<slug>.md` when fallen back), FR-019
 - [X] T043 [US3] Edit `src/lib/content/sidebar.ts` — per-locale group and item titles, with order and slugs staying single-source (research §5)
-- [ ] T044 [P] [US3] Create `src/lib/components/FallbackNotice.svelte` — one line, in the reader's locale, from `notice.fallback`
+- [X] T044 [P] [US3] Create `src/lib/components/FallbackNotice.svelte` — one line, in the reader's locale, from `notice.fallback`
 - [X] T045 [US3] Render the notice in `src/routes/[[locale=locale]]/docs/[...slug]/+page.svelte` and `docs/+page.svelte` whenever the doc fell back
-- [ ] T046 [US3] Apply the same page-level fallback to `home`, `about` and `roadmap` so the rule is one rule, not a docs special case (SC-006)
-- [ ] T047 [P] [US3] Mark English-only destinations in `SiteHeader.svelte` / `SiteFooter.svelte` with an `EN` badge and `hreflang="en"` when the reader is in a non-English locale (FR-020)
+- [X] T046 [US3] Apply the same page-level fallback to `home`, `about` and `roadmap` so the rule is one rule, not a docs special case (SC-006)
+- [X] T047 [P] [US3] Mark English-only destinations in `SiteHeader.svelte` / `SiteFooter.svelte` with an `EN` badge and `hreflang="en"` when the reader is in a non-English locale (FR-020)
 - [X] T048 [P] [US3] Create `src/lib/content/docs.test.ts` — `(locale, slug)` resolution, fallback flag, and the edit URL following the rendered file
 - [ ] T049 [US3] Translate the 11 docs into `src/content/docs/zh/` and verify `/zh/docs/*` end to end
-- [ ] T050 [P] [US3] Add `tests/fallback.spec.ts` — with one `zh` doc removed, the page shows Chinese chrome + Chinese notice + English body, and emits no `hreflang="zh"` for it
+- [X] T050 [P] [US3] Add `tests/fallback.spec.ts` — with one `zh` doc removed, the page shows Chinese chrome + Chinese notice + English body, and emits no `hreflang="zh"` for it
 
 **Checkpoint**: one locale is complete across the whole evergreen surface. The
 machinery is done; what remains is content.
@@ -146,9 +146,9 @@ locale whose chrome is missing would print its "this page is English" notice in
 English (data-model §3).
 
 - [X] T051 [US3] Complete `chrome` + `notice` in all 13 remaining `src/lib/i18n/messages/*.json` before any page content
-- [ ] T052 [P] [US3] Draft `home` + `about` + `roadmap` for `ja`, `ko`, `zh-TW`, `zh-HK` in `src/lib/i18n/messages/*.json`
-- [ ] T053 [P] [US3] Draft `home` + `about` + `roadmap` for `de`, `fr`, `it`, `es-MX`, `pt-BR` in `src/lib/i18n/messages/*.json`
-- [ ] T054 [P] [US3] Draft `home` + `about` + `roadmap` for `ru`, `tr`, `vi`, `id` in `src/lib/i18n/messages/*.json`
+- [X] T052 [P] [US3] Draft `home` + `about` + `roadmap` for `ja`, `ko`, `zh-TW`, `zh-HK` in `src/lib/i18n/messages/*.json`
+- [X] T053 [P] [US3] Draft `home` + `about` + `roadmap` for `de`, `fr`, `it`, `es-MX`, `pt-BR` in `src/lib/i18n/messages/*.json`
+- [X] T054 [P] [US3] Draft `home` + `about` + `roadmap` for `ru`, `tr`, `vi`, `id` in `src/lib/i18n/messages/*.json`
 - [ ] T055 [P] [US3] Draft the 11 docs for `ja`, `ko`, `zh-TW`, `zh-HK` under `src/content/docs/<tag>/`
 - [ ] T056 [P] [US3] Draft the 11 docs for `de`, `fr`, `it`, `es-MX`, `pt-BR` under `src/content/docs/<tag>/`
 - [ ] T057 [P] [US3] Draft the 11 docs for `ru`, `tr`, `vi`, `id` under `src/content/docs/<tag>/`
@@ -171,7 +171,7 @@ both, and `bun run build` still succeeds.
 - [X] T061 [P] [US5] Create `src/lib/i18n/placeholders.test.ts` — placeholder, link and inline-markup sets identical to the English value (FR-031)
 - [X] T062 [US5] Add English content hashes per namespace/doc so a translation written before an English edit reports as **stale** (FR-026, data-model transitions)
 - [X] T063 [US5] Add `bun run i18n:status` to `package.json` printing the per-locale table from contracts/translation-store.md, and assert it is computable in `src/lib/i18n/status.test.ts`
-- [ ] T064 [US5] Confirm a missing translation never fails the build — add a test that a locale with an incomplete namespace builds and renders fallback (FR-027)
+- [X] T064 [US5] Confirm a missing translation never fails the build — add a test that a locale with an incomplete namespace builds and renders fallback (FR-027)
 - [X] T065 [P] [US5] Create `src/lib/i18n/honesty.test.ts` — the A02 FR-2/FR-3 claims (no third-party audit, alpha, "architecturally can't") are present and unsoftened in every locale claiming `translated` (FR-032)
 - [ ] T066 [US5] Run the R7 review on `zh` per [spec.md](./spec.md) §R7, record findings in `specs/059-getvela-site-i18n/reviews/zh.md`, repair every High and Medium, then set `review.json` to `reviewed`
 - [ ] T067 [P] [US5] Run the R7 review for `ja`, `ko`, `zh-TW`, `zh-HK` into `reviews/<tag>.md`
@@ -188,9 +188,9 @@ both, and `bun run build` still succeeds.
 - [ ] T071 [P] Re-run the full quickstart matrix from [quickstart.md](./quickstart.md) and record results in `specs/059-getvela-site-i18n/results.md`
 - [ ] T072 [P] Crawl the deployed English site before/after and diff the path set — proof for SC-005, not an assertion
 - [ ] T073 [P] Verify the landing page's on-chain wallet counter and its RPC-failure state in all 15 locales, including number formatting (SC-009, spec Edge Cases)
-- [ ] T074 [P] Update `docs/CONTENT-SOURCE-100-CLUES.md` and `docs/requirements/A02-brand-voice-honesty-audit-posture.md` to state that approved copy now exists per locale and where it lives
-- [ ] T075 [P] Add a short "adding a string / adding a locale" section to `app-web/getvela.app/README.md` — the six-step corpus procedure's equivalent for this site
-- [ ] T076 Write `specs/059-getvela-site-i18n/results.md` — what shipped, what was verified how, and what is still `drafted`
+- [X] T074 [P] Update `docs/CONTENT-SOURCE-100-CLUES.md` and `docs/requirements/A02-brand-voice-honesty-audit-posture.md` to state that approved copy now exists per locale and where it lives
+- [X] T075 [P] Add a short "adding a string / adding a locale" section to `app-web/getvela.app/README.md` — the six-step corpus procedure's equivalent for this site
+- [X] T076 Write `specs/059-getvela-site-i18n/results.md` — what shipped, what was verified how, and what is still `drafted`
 
 ---
 
