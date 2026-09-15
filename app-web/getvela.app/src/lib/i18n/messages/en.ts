@@ -106,6 +106,7 @@ export const en = {
 				passkeys: 'How passkeys work',
 				signers: 'Signers & security keys',
 				'clear-signing': 'Clear signing',
+				'clear-signing-self-host': 'Self-host the signing page',
 				'bybit-attack': 'The Bybit attack',
 				recovery: 'Recovery & sign-in',
 				'account-contract': 'The account contract',
@@ -278,23 +279,38 @@ export const en = {
 		 */
 		signing: {
 			heading: 'A passkey signs a hash, not a screen.',
-			lede: 'In February 2025, Bybit lost $1.5 billion. The people signing approved what the interface showed them; the interface had been tampered with, and every signature was valid. That gap exists in every passkey wallet, including this one: what your device signs is a hash, and the plain-language summary above it is a claim made by the software that built the transaction.',
+			lede: 'In February 2025, Bybit lost around $1.5 billion. No signature failed: what broke was the trust between what a person saw and what the machine actually signed.\n\nThat same gap exists in wallets that sign with a passkey, Vela included.\n\nWhat the device finally signs is a hash. The plain language above it — who gets it, how much, what it does — is the software\u2019s reading of the transaction data.\n\nIf the software doing the reading is tampered with, it can show you A while you sign B.',
 			today: {
 				label: 'Today',
-				title: 'Vela decodes every transaction before you approve it.',
-				body: 'What it does, how much, and to whom — in plain language instead of hex, using <a href="/docs/clear-signing">ERC-7730</a> descriptors. An approval that would grant an unlimited allowance is rewritten to a finite amount you pick, and a last check refuses to submit one that is still unlimited. When a call cannot be decoded, Vela says so instead of showing a friendly summary it cannot stand behind. That catches mistakes and hostile dApps. What it cannot do is vouch for itself: the preview and the transaction come from the same app, and that is the link that broke at Bybit.'
+				title: 'Every transaction is decoded before you approve it.',
+				body: [
+					'What it does, how much, and to whom — Vela reads the transaction through <a href="/docs/clear-signing">ERC-7730</a> descriptors and puts it in plain language instead of leaving you with a string of hex.',
+					'An approval that would grant an unlimited allowance is rewritten to a finite amount you pick, and a last check before submit refuses any that is still unlimited.',
+					'When a call cannot be decoded reliably, Vela tells you it cannot read it, instead of showing a summary that looks reassuring and cannot be verified.',
+					'That stops mistakes, and it lowers the odds that a hostile dApp talks you into a signature.',
+					'What it cannot stop is Vela itself.',
+					'The transaction and the preview still come from the same app. If that app is tampered with, it can in principle tamper with both. That is the trust boundary we would rather not pretend away.'
+				].join('\n\n')
 			},
 			next: {
-				label: 'Built and tested — not live yet',
+				label: 'Run your own copy',
 				title: 'A signing page you host yourself.',
-				body: 'A zero-dependency static page — and a Chrome extension built from the same folder — that decodes the raw transaction itself and puts the real calldata in front of you immediately before your passkey signs it. No framework, no bundler, no network calls. The point is not that our copy is safer: deploy it yourself, or run it from localhost, and the code that shows you the transaction is code you put there — replacing it means getting into your hosting, not ours. The moment an account holds money you would mind losing, this becomes how you sign — not for a particular transaction, but from then on.'
+				body: [
+					'A zero-dependency static page, and a Chrome extension built from the same folder.',
+					'It does not believe the summary Vela hands it. It takes the raw transaction, decodes the calldata again itself, and puts what the signature will actually authorise in front of you before your passkey signs.',
+					'No framework, no bundler, no network requests.',
+					'The point is not that our second copy is safer. The point is that the transaction comes from one place and the check and the signature happen in another, which you control.',
+					'Load it as a Chrome extension of your own, or host the page yourself. Then compromising the Vela app or the way it reaches you is no longer enough to forge both the transaction and what you see before signing it.',
+					'That does not abolish trust. It splits trust that used to sit in one place.',
+					'The moment an account holds money you would mind losing, signing should move onto that path — not occasionally, but from then on.'
+				].join('\n\n')
 			},
 			aside: {
 				title: 'When to start using it',
 				items: [
 					'The day the account starts holding money you would mind losing — from then on, every signature.',
-					'Not "when the amount is large": a small approval can empty an account just as thoroughly as a large transfer.',
-					'It is a way to sign, not an occasion. Sign this way every day, or you will not be signing this way on the day it matters.'
+					'Not "when the amount is large": a small approval can hand over enough to empty the account.',
+					'It is a way to sign, not an occasion. Sign this way every day, or on the day it matters you will not suddenly switch.'
 				]
 			}
 		},
@@ -317,7 +333,7 @@ export const en = {
 				},
 				{
 					feature: 'Independent sign-what-you-see path',
-					vela: 'Zero-dependency page / extension, self-deployable — in testing',
+					vela: 'Zero-dependency page / extension, self-hosted',
 					base: 'No',
 					safe: 'Third-party hash-check tools'
 				},

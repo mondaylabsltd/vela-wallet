@@ -55,6 +55,7 @@
 				"passkeys": "Passkey hoạt động thế nào",
 				"signers": "Khóa ký & khóa bảo mật",
 				"clear-signing": "Ký minh bạch",
+				"clear-signing-self-host": "Tự chạy trang ký",
 				"bybit-attack": "Vụ tấn công Bybit",
 				"recovery": "Khôi phục & đăng nhập",
 				"account-contract": "Hợp đồng tài khoản",

@@ -55,6 +55,7 @@
 				"passkeys": "Geçiş anahtarları nasıl çalışır",
 				"signers": "İmzalayıcılar ve güvenlik anahtarları",
 				"clear-signing": "Açık imzalama",
+				"clear-signing-self-host": "İmza sayfasını kendin barındır",
 				"bybit-attack": "Bybit saldırısı",
 				"recovery": "Kurtarma ve giriş",
 				"account-contract": "Hesap sözleşmesi",

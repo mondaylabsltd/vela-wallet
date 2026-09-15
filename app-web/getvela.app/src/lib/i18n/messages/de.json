@@ -55,6 +55,7 @@
 				"passkeys": "So funktionieren Passkeys",
 				"signers": "Signaturschlüssel und Sicherheitsschlüssel",
 				"clear-signing": "Klartext-Signatur",
+				"clear-signing-self-host": "Signaturseite selbst hosten",
 				"bybit-attack": "Der Bybit-Angriff",
 				"recovery": "Wiederherstellung und Anmeldung",
 				"account-contract": "Der Account-Vertrag",
@@ -150,7 +151,7 @@
 				"body": "Was sie tut, wie viel und an wen — in Klartext statt in Hex, anhand von <a href=\"/docs/clear-signing\">ERC-7730</a>-Deskriptoren. Eine Freigabe, die ein unbegrenztes Limit erteilen würde, wird auf einen endlichen Betrag deiner Wahl umgeschrieben, und eine letzte Prüfung verweigert das Absenden, solange es unbegrenzt bleibt. Lässt sich ein Aufruf nicht dekodieren, sagt Vela das — statt eine freundliche Zusammenfassung zu zeigen, für die es nicht geradestehen kann."
 			},
 			"next": {
-				"label": "Gebaut und getestet — noch nicht live",
+				"label": "Eigene Kopie betreiben",
 				"title": "Als Nächstes: ein Signaturweg, dem man nichts glauben muss.",
 				"body": "Ein zweiter, unabhängiger Weg für die Transaktionen, die du lieber selbst prüfst: eine statische Seite ohne jede Abhängigkeit — und eine Chrome-Erweiterung aus demselben Ordner —, die die rohe Transaktion selbst dekodiert und dir die echten Calldata zeigt, bevor dein Passkey signiert. Kein Framework, kein Bundler, keine Netzwerkaufrufe. Sie bleibt optional, weil sie langsamer ist. Und du musst nicht unsere nehmen: Deploye die Seite selbst oder lass sie von localhost laufen."
 			},

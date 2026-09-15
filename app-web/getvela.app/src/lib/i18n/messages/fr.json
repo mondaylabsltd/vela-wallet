@@ -55,6 +55,7 @@
 				"passkeys": "Comment fonctionnent les passkeys",
 				"signers": "Signataires et clés de sécurité",
 				"clear-signing": "Signature lisible",
+				"clear-signing-self-host": "Héberger la page de signature",
 				"bybit-attack": "L'attaque de Bybit",
 				"recovery": "Récupération et connexion",
 				"account-contract": "Le contrat de compte",
@@ -150,7 +151,7 @@
 				"body": "Ce qu'elle fait, combien, et à qui — en clair plutôt qu'en hexadécimal, à partir des descripteurs <a href=\"/docs/clear-signing\">ERC-7730</a>. Une autorisation qui accorderait un montant illimité est réécrite en un montant fini que vous choisissez, et une dernière vérification refuse d'envoyer une autorisation restée illimitée. Quand un appel ne peut pas être décodé, Vela le dit — au lieu d'afficher un résumé rassurant qu'il ne pourrait pas assumer."
 			},
 			"next": {
-				"label": "Construit et testé — pas encore en ligne",
+				"label": "Faites tourner la vôtre",
 				"title": "Ensuite : une voie de signature sans rien à croire sur parole.",
 				"body": "Une seconde voie de signature, indépendante, pour les transactions que vous préférez vérifier à la main : une page statique sans aucune dépendance — et une extension Chrome construite depuis le même dossier — qui décode elle-même la transaction brute et vous montre les vraies calldata avant que votre passkey ne signe. Pas de framework, pas de bundler, aucun appel réseau. Elle reste optionnelle, parce qu'elle est plus lente. Et vous n'aurez pas à utiliser la nôtre : déployez la page vous-même, ou lancez-la depuis localhost."
 			},

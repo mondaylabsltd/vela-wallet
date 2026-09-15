@@ -530,20 +530,40 @@
 	<div class="container">
 		<div class="signing-content">
 			<h2>{m.home.signing.heading}</h2>
-			<p class="signing-lede">{m.home.signing.lede}</p>
+			{#each m.home.signing.lede.split('\n\n') as para (para)}
+				<p class="signing-lede">{para}</p>
+			{/each}
 
 			<div class="signing-block">
 				<span class="signing-label">{m.home.signing.today.label}</span>
 				<h3>{m.home.signing.today.title}</h3>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				<p>{@html m.home.signing.today.body}</p>
+				<!-- Blank-line separated paragraphs, as in the trade-offs: prose in the
+				     catalog, markup here. -->
+				{#each m.home.signing.today.body.split('\n\n') as para (para)}
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<p>{@html para}</p>
+				{/each}
 			</div>
 
 			<div class="signing-block signing-next">
 				<span class="signing-label signing-label-soon">{m.home.signing.next.label}</span>
 				<h3>{m.home.signing.next.title}</h3>
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				<p>{@html m.home.signing.next.body}</p>
+				{#each m.home.signing.next.body.split('\n\n') as para (para)}
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					<p>{@html para}</p>
+				{/each}
+				<!-- The two docs links are markup, and their labels are the docs' own
+				     translated titles: a link added inside a message would have to be
+				     added to fifteen translations before the markup-parity test would
+				     let it through, and would go stale the moment a page is renamed. -->
+				<p class="signing-docs">
+					<a class="more-link" href={L('/docs/clear-signing-self-host')}
+						>{m.chrome.docs.titles['clear-signing-self-host']}</a
+					>
+					<a class="more-link" href={L('/docs/clear-signing')}
+						>{m.chrome.docs.titles['clear-signing']}</a
+					>
+				</p>
 				<div class="signing-aside">
 					<h4>{m.home.signing.aside.title}</h4>
 					<ul>
@@ -1441,6 +1461,20 @@
 		font-size: 0.92rem;
 		line-height: 1.75;
 		margin: 0;
+	}
+	/* The bodies are several short paragraphs now; without this they run
+	   together into the wall of text they were written to stop being. */
+	.signing-block p + p {
+		margin-top: 13px;
+	}
+	.signing-lede + .signing-lede {
+		margin-top: 13px;
+	}
+	.signing-docs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 22px;
+		margin: 18px 0 0;
 	}
 	.signing-aside {
 		margin-top: 22px;

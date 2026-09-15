@@ -55,6 +55,7 @@
 				"passkeys": "密碼金鑰點運作",
 				"signers": "簽署金鑰同安全金鑰",
 				"clear-signing": "清晰簽署",
+				"clear-signing-self-host": "自己部署簽名頁",
 				"bybit-attack": "Bybit 被攻擊嗰次",
 				"recovery": "復原同登入",
 				"account-contract": "帳戶合約",

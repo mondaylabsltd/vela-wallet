@@ -55,6 +55,7 @@
 				"passkeys": "Cómo funcionan las passkeys",
 				"signers": "Firmantes y llaves de seguridad",
 				"clear-signing": "Firma legible",
+				"clear-signing-self-host": "Aloja tú la página de firma",
 				"bybit-attack": "El ataque a Bybit",
 				"recovery": "Recuperación e inicio de sesión",
 				"account-contract": "El contrato de la cuenta",
@@ -150,7 +151,7 @@
 				"body": "Qué hace, cuánto y a quién — en lenguaje claro en vez de hexadecimal, usando descriptores <a href=\"/docs/clear-signing\">ERC-7730</a>. Una aprobación que otorgaría un permiso ilimitado se reescribe a una cantidad finita que tú eliges, y una última comprobación se niega a enviar una que siga siendo ilimitada. Cuando una llamada no se puede decodificar, Vela lo dice, en lugar de mostrar un resumen amable del que no podría responder."
 			},
 			"next": {
-				"label": "Construido y probado — todavía no en producción",
+				"label": "Corre tu propia copia",
 				"title": "Lo siguiente: una vía de firma que no exige confiar en nada.",
 				"body": "Una segunda vía de firma, independiente, para las transacciones que prefieres revisar a mano: una página estática sin ninguna dependencia — y una extensión de Chrome construida desde la misma carpeta — que decodifica la transacción cruda por su cuenta y te muestra la calldata real antes de que tu passkey firme. Sin framework, sin bundler, sin llamadas de red. Seguirá siendo opcional, porque es más lenta. Y no tendrás que usar la nuestra: despliega la página tú mismo o córrela desde localhost."
 			},

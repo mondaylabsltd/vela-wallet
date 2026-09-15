@@ -55,6 +55,7 @@
 				"passkeys": "Cara kerja passkey",
 				"signers": "Kunci penanda tangan & kunci keamanan",
 				"clear-signing": "Clear signing",
+				"clear-signing-self-host": "Hosting sendiri halaman tanda tangan",
 				"bybit-attack": "Serangan Bybit",
 				"recovery": "Pemulihan & masuk",
 				"account-contract": "Kontrak akun",

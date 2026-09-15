@@ -44,6 +44,7 @@ export const sidebar: SidebarGroup[] = [
 			{ slug: 'passkeys', title: 'How passkeys work' },
 			{ slug: 'signers', title: 'Signers & security keys' },
 			{ slug: 'clear-signing', title: 'Clear signing' },
+			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' },
 			{ slug: 'bybit-attack', title: 'The Bybit attack' },
 			{ slug: 'recovery', title: 'Recovery & sign-in' },
 			{ slug: 'account-contract', title: 'The account contract' },
