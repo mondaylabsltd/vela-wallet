@@ -432,6 +432,20 @@ struct RootView: View {
 
     private var appBody: some View {
         @Bindable var router = router
+        // Observation, not decoration.
+        //
+        // The formatters are STATICS — `Formats.current`, `UiScale` — and a
+        // static cannot invalidate a view. Every model this body builds reads
+        // them, so unless the body itself depends on the CHOICES, a new number
+        // format ticks its own settings row and leaves the wallet's figures in
+        // yesterday's shape. Reading them here is that dependency, and it is
+        // deliberately not an `.id(…)`: re-identifying the root would tear the
+        // whole tree down and take every sheet, flow and scroll position with
+        // it. (049's lesson, on this client.)
+        _ = preferences.numberFormat
+        _ = preferences.dateFormat
+        _ = preferences.timeFormat
+        _ = preferences.textScale
         // One continuous surface. Both the launch screen and Welcome sit on this
         // exact colour, which is what lets them cross-dissolve without a
         // washed-out middle where both layers are half-transparent (FR-012).
@@ -481,6 +495,9 @@ struct RootView: View {
             #endif
         }
         .themed(scheme)
+        // Every avatar in the app draws from here, so a change to the choice
+        // invalidates them — the static alone changed nothing on screen.
+        .environment(\.avatarStyle, preferences.avatarStyle)
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }

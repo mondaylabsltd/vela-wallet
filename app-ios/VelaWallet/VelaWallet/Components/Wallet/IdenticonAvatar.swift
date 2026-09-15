@@ -77,11 +77,32 @@ extension EnvironmentValues {
     }
 }
 
+/// Which artwork an avatar draws — identicon or initials.
+///
+/// **In the environment, not only in a static.** `AvatarPreference.style` is
+/// read by this view and changing it invalidates nothing, so picking 首字母
+/// stored the choice and left every avatar on screen exactly as it was (the
+/// founder, 2026-09-15; proved on the device by cropping the account row's
+/// avatar and comparing the bytes). Android has drawn from `LocalAvatarStyle`
+/// since 049 for this reason. The static remains the default, so previews and
+/// the gallery need no injection.
+private struct AvatarStyleKey: EnvironmentKey {
+    static var defaultValue: AvatarStyle { AvatarPreference.style }
+}
+
+extension EnvironmentValues {
+    var avatarStyle: AvatarStyle {
+        get { self[AvatarStyleKey.self] }
+        set { self[AvatarStyleKey.self] = newValue }
+    }
+}
+
 struct IdenticonAvatar: View {
     @Environment(\.theme) private var theme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.identiconProvider) private var provider
     @Environment(\.identiconViewer) private var openViewer
+    @Environment(\.avatarStyle) private var style
 
     let seed: String
     let size: CGFloat
@@ -106,7 +127,7 @@ struct IdenticonAvatar: View {
             // somebody had been chosen (device-found, spec 052 phase 3).
             if seed.isEmpty {
                 Circle().fill(theme.bgSunken)
-            } else if AvatarPreference.style == .initials, let initial = initial {
+            } else if style == .initials, let initial = initial {
                 // 首字母 — the style a person chose (spec 057). It was stored
                 // and read by nothing, which is the same defect Android 049
                 // found on its own settings page: a control that previews
