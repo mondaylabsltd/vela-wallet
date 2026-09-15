@@ -155,14 +155,14 @@ export const en = {
 			facts: [
 				{
 					term: 'An unmodified Safe v1.4.1.',
-					link: 'Every contract in the path, and who wrote it'
+					link: "Your account is Safe's contract, not one of ours"
 				},
 				{
-					term: 'Up to seven signers, 1-of-n — passkeys or a hardware key.',
-					link: 'YubiKey-class keys included, chosen when the wallet is created'
+					term: "Don't bet the wallet on one device.",
+					link: 'Up to seven signers — passkeys, or a YubiKey, chosen at creation'
 				},
 				{
-					term: "Bybit's signers approved what the screen showed them. It was not what they signed.",
+					term: "Bybit's signers hit approve on what the screen showed. They signed something else.",
 					link: 'How we close the path that cost them $1.5B'
 				},
 				{
