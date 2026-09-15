@@ -47,3 +47,38 @@ halves wherever they now appear.
   locale must pick its own market's term rather than copying this one
   (`zh-TW`/`zh-HK` conventions differ), and `zh-HK` is spoken Cantonese in this
   project's corpus.
+
+
+## `home.hero.headline` in all fifteen — the T058 record
+
+FR-006: **a locale keeps the English headline until its own line is approved.**
+None of these is approved by a native reader yet, so none of them is
+`founder-approved` except the two at the top of this file. They are what the site
+serves today, recorded so that "approved" and "shipped" cannot be confused.
+
+| locale | headline as shipped | state |
+|---|---|---|
+| `en` | An Ethereum wallet you actually own | **founder-approved, 2026-09-15** |
+| `zh` | 真正属于你的以太坊钱包 | drafted — R7 pass, no native reader yet |
+| `zh-TW` | 真正屬於你的以太坊錢包 | drafted — R7 pass, no native reader yet |
+| `zh-HK` | 真正屬於你嘅以太坊錢包 | drafted — R7 pass, no native reader yet |
+| `ja` | 本当にあなたのものになるイーサリアムウォレット | drafted — R7 pass, no native reader yet |
+| `ko` | 진짜 내 것이 되는 이더리움 지갑 | drafted — R7 pass, no native reader yet |
+| `vi` | Ví Ethereum thực sự là của bạn | drafted — R7 pass, no native reader yet |
+| `id` | Dompet Ethereum yang benar-benar milik Anda | drafted — R7 pass, no native reader yet |
+| `tr` | Gerçekten size ait bir Ethereum cüzdanı | drafted — R7 pass, no native reader yet |
+| `es-MX` | Una wallet de Ethereum que de verdad es tuya | drafted — R7 pass, no native reader yet |
+| `pt-BR` | Uma carteira Ethereum que é realmente sua | drafted — R7 pass, no native reader yet |
+| `fr` | Un portefeuille Ethereum qui vous appartient vraiment | drafted — R7 pass, no native reader yet |
+| `de` | Eine Ethereum-Wallet, die wirklich dir gehört | drafted — R7 pass, no native reader yet |
+| `ru` | Кошелёк Ethereum, который действительно ваш | drafted — R7 pass, no native reader yet |
+| `it` | Un wallet Ethereum davvero tuo | drafted — R7 pass, no native reader yet |
+
+The R7 pass on these lines is in
+[reviews/single-string.md](./reviews/single-string.md); the one open item is
+`ja`, whose 本当にあなたのものになる ("becomes yours") is a shade weaker than
+"you actually own" and was already logged here as a draft pending native review.
+
+Every locale in this table renders its own headline rather than falling back,
+which is the state FR-006 permits but does not require: a locale may serve the
+English line instead, and none currently does.

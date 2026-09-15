@@ -417,7 +417,11 @@
 		     created, and a dotted map would be inventing that. The number links
 		     to the registry so the claim can be checked, and the whole block is
 		     dropped when every RPC fails: a counter with no number is worse than
-		     no counter. -->
+		     no counter.
+
+		     The number is grouped by the PAGE's locale, not the browser's: a German
+		     reader on /de gets 1.234 even if their browser is set to en-US, which
+		     is the whole point of serving them /de (SC-009). -->
 		<div class="hero-globe">
 			<Globe />
 			{#if !countFailed}
@@ -428,7 +432,7 @@
 					data-rybbit-event="registry_open"
 				>
 					{#if countReady}
-						<span class="counter-count">{displayCount.toLocaleString()}</span>
+						<span class="counter-count">{displayCount.toLocaleString(data.locale)}</span>
 					{:else}
 						<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
 					{/if}

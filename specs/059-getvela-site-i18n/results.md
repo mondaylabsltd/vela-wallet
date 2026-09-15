@@ -163,3 +163,132 @@ files found nothing either time.
    locale the founder can sign off directly.
 4. R7 reviews, per `spec.md` §R7, into `reviews/<tag>.md`. A locale is
    `reviewed` only when its findings file has no open High or Medium.
+
+## Session of 2026-09-15 (evening) — the last four locales, the Chinese docs, and a miss
+
+### T059 — the build, re-measured against the T019 baseline
+
+| | T019 (one locale of content) | now |
+|---|---|---|
+| `bun run build` wall time | ~5.3 s | **8.51 s** |
+| prerendered HTML files | 216 | **306** |
+| docs per locale | 11 | 16 |
+
+306 = 15 locales × (16 docs + 4 pages) + 6 English-only (blog index + 5 posts).
+The prediction in T019 held: Shiki compiles each markdown file once, so the
+sixteen Chinese docs added ~3 s, not ~50. Nothing here is near the ~5 min budget
+in plan.md, and adding the remaining thirteen locales of docs should cost on the
+order of 10 s more, not minutes.
+
+### Delivered
+
+- **vi, id, tr, zh-HK** — the four locales that had only `chrome` and the notice
+  now carry `home`, `about`, `roadmap`, `getStarted`. Fifteen of fifteen.
+  `zh-HK` is written Cantonese, and uses 通行密鑰 where `zh-TW` uses 密碼金鑰.
+- **T049** — all sixteen docs in `src/content/docs/zh/`. `zh` is the first locale
+  at 20/20.
+- **T058** — the headline of every locale recorded in approved-copy.md with its
+  state; none claims approval it does not have.
+- **T066–T070** — R7 reviews in `reviews/`, one file per locale plus the
+  single-string pass. `zh` → `reviewed`; the other thirteen stay `drafted` on
+  purpose (see below).
+
+### Incident — a stale flag cleared without verifying it
+
+`i18n:status` reported nine locales stale for `home`. This session cleared them
+by re-stamping, reasoning that each locale file and `en.ts` were last touched in
+the **same commit**. That was true and it was not evidence: the commit in
+question had changed one pricing card, while the *signing* section and the three
+trade-off bodies had been rewritten several commits earlier and never
+translated.
+
+The result was nine locales still telling readers "Sign what you see" — the
+claim the founder had explicitly withdrawn as overstated, because a passkey
+signs a hash. It is the worst shape this class of bug takes: the stale text is
+the *more* appealing version, so nothing about reading the page suggests it is
+wrong.
+
+Two things changed because of it:
+
+1. **A gate, not a report.** `messages.test.ts` now asserts that every
+   translated string has the same paragraph count as its English source.
+   Paragraph structure is the part of a string that survives translation into
+   any language, so it catches a rewrite that a fingerprint can only flag once
+   and a stamp can silence. Those fourteen tests would have failed all nine.
+2. **A rule for the next person.** A stale row is cleared by reading the two
+   texts, or by retranslating — never by `i18n:stamp`. Stamping is what you do
+   *after* you have made the two agree.
+
+### Why thirteen locales stay `drafted` after an R7 pass
+
+Every High and Medium found is repaired, so the mechanical bar is met. The bar
+the spec actually sets is a reader who notices what a competent non-native
+cannot, and no such reader has seen them. Marking them `reviewed` would make
+`review.json` say something the project cannot back — which is the same failure
+as claiming an audit. `zh` is `reviewed` because it had a full-corpus pass and
+because the founder reads it and can overrule this file.
+
+### Still open
+
+- **T055–T057** — the sixteen docs in the other thirteen locales. ~12,000 words
+  per locale; `zh` is the worked example, including the one trap: markdown
+  bodies are not run through the catalog's link localizer, so a translated doc
+  must write `/<tag>/docs/...` itself.
+- **T071–T073** — the quickstart matrix, the crawl diff for SC-005, and the
+  on-chain counter in all fifteen locales.
+- **T034** — still deliberately skipped; see the deviations above.
+
+### T071–T073 — the verification pass · 2026-09-15
+
+Run against `bun run preview` (wrangler on 8787) with the branch as committed.
+
+**T071 — the quickstart matrix.** Every English path `200`, no redirect:
+`/ /docs /docs/faq /about /roadmap /blog /privacy /terms /registry /get-started`.
+`/ja` renders `<html lang="ja">` with Japanese in the response body and no
+JavaScript — including the corrected signing heading
+(パスキーが署名するのはハッシュであって、画面ではありません). The 404 set
+(`/en/`, `/xx/`, `/ja/blog`, `/ja/privacy`) and the 308 set (`/pt`→`/pt-BR`,
+`/pt-br/`→`/pt-BR/`, `/zh-CN`→`/zh`, `/zh-Hant`→`/zh-TW`, `/es`→`/es-MX`,
+`/fr-CA/about`→`/fr/about`) both behave. `/ja/` → 307 → `/ja` is the
+pre-existing SvelteKit trailing-slash behaviour recorded at T018, unchanged.
+
+The fallback notice follows the doc, not the locale: `/zh/docs/faq` carries none,
+`/ja/docs/faq` carries one.
+
+**T072 — the path-set diff, measured rather than asserted.** `before` is the
+**deployed** site's sitemap (getvela.app, still pre-059); `after` is this
+branch's sitemap with the fourteen locale prefixes filtered out.
+
+| | paths |
+|---|---|
+| before (deployed) | 22 |
+| after (this branch, English only) | 28 |
+| **disappeared** | **none** |
+| added | `/get-started`, `/docs/account-contract`, `/docs/bybit-attack`, `/docs/clear-signing-self-host`, `/docs/signers`, `/docs/why-vela` |
+
+SC-005 holds: no English URL moved or vanished. The six additions are new pages,
+not relocations.
+
+**T073 — the on-chain counter in fifteen locales, and a defect it surfaced.**
+
+The counter rendered in all fifteen with the right label, and the RPC-failure
+state behaves: with every RPC blocked, `/de` drops the whole block after the
+fourth failed poll (`.counter` and `.counter-skeleton` both absent) rather than
+leaving a seal with no number.
+
+The defect: `displayCount.toLocaleString()` was called with **no locale**, so the
+number was grouped by the *browser's* locale, not the page's. A German reader on
+`/de` with a US browser got `1,234` where the rest of the page is German. Fixed
+to `toLocaleString(data.locale)`.
+
+Proof, with the browser pinned to `en-US` on every page:
+
+| page | grouped by page | grouped by browser |
+|---|---|---|
+| `/de`, `/it`, `/pt-BR`, `/tr`, `/id`, `/vi` | `1.234.567` | `1,234,567` |
+| `/fr`, `/ru` | `1 234 567` | `1,234,567` |
+| `/en`, `/es-MX`, `/ja`, `/ko`, `/zh`, `/zh-TW`, `/zh-HK` | `1,234,567` | `1,234,567` |
+
+Eight of fifteen locales now render a number the browser would have got wrong.
+The seven that match are correct by coincidence of convention, not by accident of
+code.
