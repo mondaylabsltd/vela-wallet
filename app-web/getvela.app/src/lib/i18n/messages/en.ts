@@ -130,48 +130,46 @@ export const en = {
 			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
 			/**
-			 * Five hooks, ordered by the founder's own persona research
-			 * (docs/marketing/100-marketing-leads.md), not by our architecture:
+			 * Five hooks. Written for a reader who can check them, because that is
+			 * who lands here — and each one is a claim the site can be held to:
 			 *
-			 *   1. no seed phrase — ranked there as the number-one hook, and
-			 *      missing from the first draft of this list entirely
-			 *   2. losing the phone — the top objection of Persona B, the
-			 *      acquisition persona
-			 *   3. blind signing — Persona A's first concern, and Persona A is
-			 *      the revenue core
-			 *   4. nobody can freeze it — the post-FTX trust line
-			 *   5. it outlives us — the one thing no competitor in the table
-			 *      below can say
-			 *
-			 * "One address, twelve chains" was dropped from this list on purpose:
-			 * the networks have a section of their own further down, and a
-			 * convenience claim was crowding out a fear.
-			 *
-			 * The substance moved into `link`, which is both the proof and the
-			 * label of the page that carries it. The hrefs live in the component
-			 * (FACT_LINKS), so a translator translates the label and can never move
-			 * the destination.
+			 *   1. The differentiator. "No seed phrase" is table stakes for ANY
+			 *      passkey wallet and was the first draft's opening line; an
+			 *      unmodified, audited, standard account contract underneath is
+			 *      not. That is the line that separates Vela from the rest of the
+			 *      category, so it goes first.
+			 *   2. The real answer to "what if I lose my phone" — not "it syncs",
+			 *      which is a property of the OS and can be switched off, but
+			 *      up to seven signers fixed at creation, hardware keys included.
+			 *   3. Bybit, because it is the case that proves the point: the Safe
+			 *      contracts held, the INTERFACE lied, and every signer approved
+			 *      what their screen showed them.
+			 *   4. The custody claim, stated exactly as far as it is true. Vela
+			 *      cannot touch the Safe — but a stablecoin issuer can freeze its
+			 *      own token, and the earlier "no one can freeze your money, not
+			 *      even us" was simply false about USDC and USDT.
+			 *   5. The one line no wallet in the comparison below can copy.
 			 */
 			facts: [
 				{
-					term: 'No seed phrase. Nothing to write down, nothing to phish.',
-					link: 'How a passkey replaces twelve words'
+					term: 'An unmodified Safe v1.4.1. We ship no contract of our own.',
+					link: 'The same audited account contract, and its audit reports'
 				},
 				{
-					term: 'Lose your phone. Keep your wallet.',
-					link: 'What happens when you sign in on a new device'
+					term: 'Up to seven signers, 1-of-n — passkeys or a hardware key.',
+					link: 'YubiKey-class keys included, chosen when the wallet is created'
 				},
 				{
-					term: "Never sign something you can't read.",
-					link: 'Every transaction in plain language first'
+					term: "Bybit's signers approved what the screen showed them. It was not what they signed.",
+					link: 'A compromised interface, not a broken contract — and how we cut that path'
 				},
 				{
-					term: 'No one can freeze your money. Not even us.',
-					link: 'An unmodified Safe v1.4.1 holds it — we never can'
+					term: 'Vela cannot move, freeze or recover your funds.',
+					link: 'Only your passkey authorizes the Safe — though a token issuer can still freeze its own token'
 				},
 				{
 					term: 'If Vela disappears, your wallet does not.',
-					link: 'Open source — run every part of it yourself'
+					link: 'Self-host the app, the bundler and every backend service'
 				}
 			]
 		},

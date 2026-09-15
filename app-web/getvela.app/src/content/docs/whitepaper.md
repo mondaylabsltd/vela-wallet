@@ -166,6 +166,13 @@ RIP-7212 P-256 precompile; Vela checks before enabling it.
 - See your private key — it never reaches Vela; only your device can use it to sign.
 - Alter a transaction after you sign — any change invalidates the signature.
 
+**What "cannot freeze" does not cover:** the *token*. A permissioned stablecoin —
+USDC, USDT and most fiat-backed tokens — carries a blacklist function its issuer
+can call against any address, including yours. That power belongs to the issuer
+and exists whatever wallet you hold the token in; no self-custodial wallet,
+Vela included, can take it away. What self-custody gives you is that **we** are
+not a second party who can.
+
 **What you do trust:**
 
 - The **Safe contracts** (audited, widely used) and the WebAuthn signer that

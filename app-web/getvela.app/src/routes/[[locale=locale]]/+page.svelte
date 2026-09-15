@@ -18,7 +18,9 @@
 	const homeState = $derived(namespaceState('home', data.locale));
 	const alternates = $derived(translatedLocales('home'));
 	/** Internal links written English-relative, served under the reader's prefix. */
-	const L = $derived((path: string) => pathFor(data.locale, path));
+	const L = $derived((path: string) =>
+		path.startsWith('#') ? path : pathFor(data.locale, path)
+	);
 
 	/**
 	 * The colour of each comparison cell. Deliberately NOT in the message
@@ -40,10 +42,12 @@
 	 * the destination.
 	 */
 	const FACT_LINKS = [
-		{ href: '/docs/passkeys', external: false },
-		{ href: '/docs/recovery', external: false },
-		{ href: '/docs/clear-signing', external: false },
 		{ href: '/docs/security-audits', external: false },
+		{ href: '/docs/recovery', external: false },
+		// The proof of this one is a section of this same page, so the link is an
+		// anchor: nothing to load, and the reader reads the argument in place.
+		{ href: '#signing', external: false },
+		{ href: '/docs/whitepaper', external: false },
 		{
 			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
 			external: true
