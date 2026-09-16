@@ -640,7 +640,7 @@
 </section>
 
 <!-- Footer -->
-<SiteFooter />
+<SiteFooter locale={data.locale} />
 
 <style>
 	/* Palette comes entirely from the global tokens (src/lib/styles/tokens.css). */
