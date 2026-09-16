@@ -356,6 +356,7 @@ fun SettingsScreen(
                             onRow = onRow,
                             onToggleAdvanced = onToggleAdvanced,
                             onOpenOverlay = onOpenOverlay,
+                            onSignOut = onSignOut,
                             onSegment = onSegment,
                             onTextScale = onTextScale,
                         )
@@ -481,6 +482,7 @@ private fun SettingsHomeBody(
     onRow: (String) -> Unit,
     onToggleAdvanced: () -> Unit,
     onOpenOverlay: (SettingsOverlay) -> Unit,
+    onSignOut: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
 ) {
@@ -538,7 +540,13 @@ private fun SettingsHomeBody(
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenOverlay(SettingsOverlay.SignOut) }
+            // ASKS THE CORE. The session machine answers with its own sheet —
+            // the one carrying the pending-upload warning and a way back out —
+            // and that sheet IS the confirmation. Raising ST3 in front of it
+            // made leaving a wallet three taps and two sheets saying the same
+            // sentence (founder, 2026-09-16); ST3/ST3b stay the fixture boards
+            // they always were, reachable from a seeded overlay.
+            .clickable { onSignOut() }
             .padding(top = VelaSpacing.xl4, bottom = VelaSpacing.xl3),
     )
     VelaDangerCard(model.eraseTitle, model.eraseSubtitle) {

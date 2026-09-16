@@ -45,6 +45,10 @@ struct RootView: View {
     /// holdings, the cached total and a retry timer, and one that died with the
     /// screen would re-read twelve chains on every visit.
     @State private var wallet: WalletStore
+    /// The home header's account switcher (spec 047's rule, reached here at
+    /// last). A flag rather than a route: it is a sheet over the wallet, the
+    /// way the rescue overlays are.
+    @State private var homeSwitcherOpen = false
     /// The anti-scam core behind the receipt scan — resident, because the
     /// trusted-token set it builds is shared by everything that reads a chain.
     @State private var trust: TokenTrustStore
@@ -547,7 +551,14 @@ struct RootView: View {
                 name: subject.name,
                 onClose: { identiconViewer = nil }
             )
-            .presentationDetents([.medium, .large])
+            // `.large`, not `.medium`: the content is a big circle, a
+            // title, three lines of caption, a wrapped 42-character address
+            // and two buttons — taller than half a phone, so `.medium` put
+            // 关闭 under the bottom edge and the way OUT of the sheet was the
+            // part you could not reach (founder, 2026-09-16). The ScrollView
+            // inside covers the rest: a longer translation or a larger text
+            // size cannot push anything out of reach again.
+            .presentationDetents([.large])
             .themed(scheme)
         }
     }
@@ -916,6 +927,12 @@ struct RootView: View {
                         onFlow: { flows.enter($0) },
                         onToggleBalance: { wallet.togglePrivacy() },
                         onStatusTap: { openRescue() },
+                        // The name line's chevron has drawn a disclosure since
+                        // spec 015 and led nowhere on this screen until now.
+                        onOpenAccounts: {
+                            openAccountSwitcher()
+                            homeSwitcherOpen = true
+                        },
                         onRefresh: RefreshAction {
                             // `pull: true` is carried so the core can tell a
                             // person's own gesture from the 30-second tick and
@@ -938,6 +955,31 @@ struct RootView: View {
                             rpcDraft: $rpcDraft,
                             onCommitRpc: { commitRescueRpc() },
                             onRetryChain: { _ in wallet.refresh(pull: true) }
+                        )
+                        .themed(scheme)
+                    }
+                    // ONE switcher, wherever it is opened from: the same
+                    // sheet the settings page shows, over the same live model,
+                    // so the two can never drift into showing different
+                    // accounts.
+                    .sheet(isPresented: $homeSwitcherOpen) {
+                        SettingsSheet(
+                            model: settingsModel(.st1),
+                            overlay: .accounts,
+                            onDismiss: { closeHomeSwitcher() },
+                            onSignOut: {},
+                            onSelectAccount: { address in
+                                switchToAccount(address)
+                                closeHomeSwitcher()
+                            },
+                            onAccountCreate: {
+                                closeHomeSwitcher()
+                                router.path.append(.create)
+                            },
+                            onAccountSignIn: {
+                                closeHomeSwitcher()
+                                onboarding.showSignInMethods = true
+                            }
                         )
                         .themed(scheme)
                     }
@@ -2332,6 +2374,12 @@ struct RootView: View {
             },
             onErase: { eraseThisDevice() },
             onSelectAccount: { address in switchToAccount(address) },
+            // The two ways on from the switcher. Both drew and did nothing
+            // until 2026-09-16; the sign-in picker rides the ONE onboarding
+            // sheet hosted at the root, so it opens from here as readily as
+            // from Welcome.
+            onAccountCreate: { router.path.append(.create) },
+            onAccountSignIn: { onboarding.showSignInMethods = true },
             endpointActions: SettingsEndpointActions(
                 onEditEndpoint: { id, value in settings.editEndpoint(id: id, value: value) },
                 onBlurEndpoint: { id in settings.blurEndpoint(id: id) },
@@ -2372,6 +2420,16 @@ struct RootView: View {
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
         }
+        // The switcher's rows are the SESSION's, with the balance core's
+        // cached totals — after the currency, because the figures it writes
+        // wear that currency's glyph and rate.
+        model = SettingsLive.withAccounts(
+            session: session.view,
+            balances: wallet.balance?.switcher.balances ?? [],
+            display: WalletLive.Display.from(settings.currency),
+            on: model,
+            loc: loc
+        )
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
@@ -2448,6 +2506,13 @@ struct RootView: View {
             contacts.open(myAddress: address)
             wallet.refresh(pull: true)
         }
+    }
+
+    /// The home switcher closed. The balance core is told, so it stops
+    /// refreshing per-account totals nobody is looking at (`switcher_closed`).
+    private func closeHomeSwitcher() {
+        homeSwitcherOpen = false
+        wallet.switcherClosed()
     }
 
     /// The account switcher opened — from settings, or from the wallet header.

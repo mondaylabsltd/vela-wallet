@@ -46,6 +46,9 @@ struct WalletScreen: View {
     /// The hero's status line — where it goes when something is wrong with the
     /// numbers above it. Absent in the gallery.
     var onStatusTap: (() -> Void)?
+    /// The header's name line opens the account switcher (spec 047's rule, on
+    /// the shell that still lacked it). Absent = a fixture board.
+    var onOpenAccounts: (() -> Void)?
     /// Pull to refresh. Also absent in the gallery: a fixture cannot refresh,
     /// and a spinner over one would be a promise nothing keeps.
     ///
@@ -103,7 +106,14 @@ struct WalletScreen: View {
                 name: model.header.name,
                 onClose: { viewingIdenticon = false }
             )
-            .presentationDetents([.medium, .large])
+            // `.large`, not `.medium`: the content is a big circle, a
+            // title, three lines of caption, a wrapped 42-character address
+            // and two buttons — taller than half a phone, so `.medium` put
+            // 关闭 under the bottom edge and the way OUT of the sheet was the
+            // part you could not reach (founder, 2026-09-16). The ScrollView
+            // inside covers the rest: a longer translation or a larger text
+            // size cannot push anything out of reach again.
+            .presentationDetents([.large])
         }
         .onAppear { sheetShown = model.sheet != nil }
     }
@@ -141,7 +151,8 @@ struct WalletScreen: View {
         WalletHeaderView(
             model: model.header,
             onIdenticon: { viewingIdenticon = true },
-            identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen")
+            identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen"),
+            onName: onOpenAccounts
         )
     }
 

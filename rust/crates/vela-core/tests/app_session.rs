@@ -797,3 +797,121 @@ fn an_expo_era_record_restores_the_session() {
     assert_eq!(view.address, ADDR_A);
     assert_eq!(view.allowed_route, SessionRoute::Wallet);
 }
+
+// ===========================================================================
+// One wallet, one row (invariant ⑨)
+// ===========================================================================
+
+/// A wallet this device already holds is ACTIVATED, not appended again.
+///
+/// A multi-key wallet signed into with a second passkey recovers to the same
+/// ADDRESS under a different credential id, so the credential match in
+/// `login.rs` misses it. It used to arrive here as a plain `AddAccount` and
+/// land in the list twice: one wallet, two rows, both opening the same Safe.
+#[test]
+fn an_address_already_held_is_activated_not_appended() {
+    let mut sut = restored(
+        vec![legacy("c1", "Ann", ADDR_A), legacy("c2", "Bo", ADDR_B)],
+        1,
+    );
+
+    // The same wallet as `c1`, recovered under another credential.
+    let ops = sut.dispatch(Event::AccountEstablished {
+        mode: CompletionMode::AddAccount {
+            account: legacy("c1-second-key", "Ann", ADDR_A),
+        },
+    });
+
+    // Activated in place — and it IS the active one, as invariant ⑥ requires.
+    assert_eq!(ops, vec![Op::SaveActiveIndex { index: 0 }]);
+    let view = sut.view();
+    assert_eq!(view.accounts.len(), 2, "no second row for one wallet");
+    assert_eq!(view.active_index, 0);
+    assert_eq!(view.address, ADDR_A);
+    // The record that was already here is the one kept, name and all.
+    assert_eq!(view.accounts[0].account.id, "c1");
+}
+
+/// Case is not identity: the same Safe written in two checksummings is one
+/// wallet.
+#[test]
+fn an_address_held_in_another_casing_is_the_same_wallet() {
+    let mut sut = restored(vec![legacy("c1", "Ann", ADDR_A)], 0);
+    let shouted = ADDR_A.to_uppercase().replace("0X", "0x");
+    sut.dispatch(Event::AccountEstablished {
+        mode: CompletionMode::AddAccount {
+            account: legacy("c1-second-key", "Ann", &shouted),
+        },
+    });
+    assert_eq!(sut.view().accounts.len(), 1);
+}
+
+/// A genuinely different wallet still appends and still becomes active.
+#[test]
+fn a_new_address_still_appends() {
+    let mut sut = restored(vec![legacy("c1", "Ann", ADDR_A)], 0);
+    let ops = sut.dispatch(Event::AccountEstablished {
+        mode: CompletionMode::AddAccount {
+            account: legacy("c2", "Bo", ADDR_B),
+        },
+    });
+    assert_eq!(ops, vec![Op::SaveActiveIndex { index: 1 }]);
+    assert_eq!(sut.view().accounts.len(), 2);
+    assert_eq!(sut.view().address, ADDR_B);
+}
+
+/// A device that ALREADY stores the pair is healed on the next boot, and the
+/// saved index follows its wallet rather than its old slot.
+#[test]
+fn a_stored_duplicate_collapses_on_restore() {
+    // Saved index 2 points at the SECOND copy of Ann's wallet.
+    let sut = restored(
+        vec![
+            legacy("c1", "Ann", ADDR_A),
+            legacy("c2", "Bo", ADDR_B),
+            legacy("c1-second-key", "Ann", ADDR_A),
+        ],
+        2,
+    );
+    let view = sut.view();
+    assert_eq!(view.accounts.len(), 2, "one wallet, one row");
+    assert_eq!(view.accounts[0].account.id, "c1");
+    assert_eq!(view.accounts[1].account.id, "c2");
+    assert_eq!(view.address, ADDR_A, "still Ann's wallet, not Bo's");
+    assert_eq!(view.active_index, 0);
+}
+
+/// Dropping a row ABOVE the active one must not select a different account.
+#[test]
+fn collapsing_a_row_above_the_active_one_keeps_the_same_wallet() {
+    let sut = restored(
+        vec![
+            legacy("c1", "Ann", ADDR_A),
+            legacy("c1-second-key", "Ann", ADDR_A),
+            legacy("c2", "Bo", ADDR_B),
+        ],
+        2,
+    );
+    let view = sut.view();
+    assert_eq!(view.accounts.len(), 2);
+    assert_eq!(view.address, ADDR_B, "the saved index followed Bo");
+    assert_eq!(view.active_index, 1);
+}
+
+/// Invariant ③ is not weakened by the collapse: an out-of-range saved index
+/// still lands on 0 rather than on whatever row happens to be last.
+#[test]
+fn an_out_of_range_index_still_lands_on_zero_after_collapsing() {
+    let sut = restored(
+        vec![
+            legacy("c1", "Ann", ADDR_A),
+            legacy("c1-second-key", "Ann", ADDR_A),
+            legacy("c2", "Bo", ADDR_B),
+        ],
+        99,
+    );
+    let view = sut.view();
+    assert_eq!(view.accounts.len(), 2);
+    assert_eq!(view.active_index, 0);
+    assert_eq!(view.address, ADDR_A);
+}

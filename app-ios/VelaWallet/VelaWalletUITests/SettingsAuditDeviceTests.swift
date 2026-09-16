@@ -154,6 +154,155 @@ final class SettingsAuditDeviceTests: XCTestCase {
 
     // MARK: - Plumbing
 
+    /// 退出登录 — ONE tap, ONE sheet, and it is the CORE's.
+    ///
+    /// The settings screen used to raise its own ST3 confirm first and the
+    /// session machine's sheet only after it, so leaving a wallet was three
+    /// taps and two sheets saying the same sentence (founder, 2026-09-16).
+    /// What tells them apart is the body: ST3 leads with `signOut.desc`
+    /// ("此设备将退出登录…"), the core's sheet carries only `signOut.keeps`.
+    ///
+    /// **Needs a signed-in phone, and says so rather than failing on one that
+    /// is not.** The row now ASKS THE CORE, and the session machine refuses
+    /// `SignOut` unless a wallet is active — correctly, but it means an empty
+    /// device can prove nothing here. Neither `settings-live` nor
+    /// `VELA_PARALLEL_SPACE=1` stands a session up on a phone with no
+    /// credential (verified 2026-09-16 on the iPhone 11: the account row keeps
+    /// its 切换账户 chevron and shows no address).
+    ///
+    /// Cancels rather than confirming: the flow being verified is the sheet,
+    /// not the wipe.
+    func testSignOutIsOneTapAndOneSheet() throws {
+        // The app's OWN navigation, not `VELA_PAGE=settings-live`: the page
+        // override renders the settings surface outside the route the session
+        // is attached to, so its account row stands empty even on a phone with
+        // a wallet — which is exactly how this test first reported "not signed
+        // in" on a phone that was (2026-09-16).
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        settle(6)
+
+        let settingsTab = app.buttons["设置"].exists ? app.buttons["设置"] : app.staticTexts["设置"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20), "no settings tab")
+        settingsTab.tap()
+        settle(2)
+
+        // The precondition, with the evidence attached either way — so "not
+        // signed in" can be told apart from "signed in, and this locator is
+        // wrong".
+        let address = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "0x")
+        ).firstMatch
+        let signedIn = address.waitForExistence(timeout: 8)
+        attach(app.screenshot(), named: "audit-sign-out-precondition")
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "audit-sign-out-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        try XCTSkipUnless(
+            signedIn,
+            "no wallet is signed in on this device — sign in first, then re-run"
+        )
+
+        app.swipeUp()
+        app.swipeUp()
+        settle(1.0)
+
+        open(row: "退出登录", in: app)
+        attach(app.screenshot(), named: "audit-sign-out-one-sheet")
+
+        // The core's sheet, by the only thing that distinguishes it from ST3.
+        XCTAssertTrue(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "选择「我已有钱包」")
+            ).firstMatch.waitForExistence(timeout: 8),
+            "the core's sign-out sheet did not open on the first tap"
+        )
+        XCTAssertFalse(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "此设备将退出登录")
+            ).firstMatch.exists,
+            "the settings confirm is still standing in front of the core's sheet"
+        )
+
+        // Cancels rather than confirming: the flow under test is the sheet,
+        // not the wipe, and this runs on somebody's signed-in phone.
+        tap(element(labelled: "取消", in: app), in: app)
+        settle(1.5)
+        XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 8),
+                      "cancelling did not return to settings")
+        app.terminate()
+    }
+
+    /// The account switcher, everywhere it is now reachable — and the
+    /// identicon viewer, whose way out used to be off-screen.
+    ///
+    /// Four things the founder found on 2026-09-16, in one pass:
+    ///   1. the home header's chevron led nowhere,
+    ///   2. the settings switcher listed fixture accounts,
+    ///   3. 创建新账户 / 登录已有账户 had empty closures,
+    ///   4. the viewer clipped its artwork under the grabber and its 关闭
+    ///      button off the bottom of the screen.
+    func testSwitcherAndViewerOnDevice() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        settle(8)
+
+        // 1. The home header's name opens the switcher.
+        let name = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "Parallel")
+        ).firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 20), "no wallet name in the header")
+        name.tap()
+        settle(2)
+        attach(app.screenshot(), named: "shot-home-switcher")
+        // 2. And its rows are the session's, not the fixture three.
+        XCTAssertTrue(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "0x88cC")
+            ).firstMatch.waitForExistence(timeout: 8),
+            "the switcher did not open on the header tap, or shows no live row"
+        )
+        for mock in ["Ann", "Bo", "Cy"] {
+            XCTAssertFalse(app.staticTexts[mock].exists, "fixture account \(mock) is still listed")
+        }
+        // 3. The two ways on are live: 登录已有账户 raises the method picker.
+        let signIn = app.buttons.containing(
+            NSPredicate(format: "label CONTAINS %@", "登录")
+        ).firstMatch
+        if signIn.waitForExistence(timeout: 4) {
+            signIn.tap()
+            settle(2)
+            attach(app.screenshot(), named: "shot-signin-picker")
+        }
+        app.terminate()
+
+        // 4. The identicon viewer: its way out has to be ON the screen.
+        let second = XCUIApplication()
+        second.launchEnvironment["VELA_LANG"] = "zh"
+        second.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        second.launch()
+        settle(6)
+        let art = second.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "身份图")
+        ).firstMatch
+        XCTAssertTrue(art.waitForExistence(timeout: 12), "no identicon button in the header")
+        art.tap()
+        settle(2)
+        attach(second.screenshot(), named: "shot-identicon-viewer")
+        let close = second.buttons["关闭"]
+        XCTAssertTrue(close.waitForExistence(timeout: 6), "the viewer has no 关闭 button")
+        XCTAssertTrue(close.isHittable, "关闭 is off-screen — the viewer clips its own way out")
+        close.tap()
+        settle(1.5)
+        second.terminate()
+    }
+
     private func launch(
         page: String = "settings-live",
         theme: String? = "dark",

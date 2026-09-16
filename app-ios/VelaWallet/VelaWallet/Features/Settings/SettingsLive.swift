@@ -209,6 +209,65 @@ enum SettingsLive {
         return copy
     }
 
+    /// The account switcher, live — the SESSION's accounts and the balance
+    /// core's cached totals, not the fixture three.
+    ///
+    /// Until this existed, `withIdentity` swapped the real name and address
+    /// into row 0 and left the rest of the drawing standing, so a person with
+    /// one wallet was shown three and two of them were somebody's mock
+    /// (founder, 2026-09-16). Its comment said there was "no honest way to
+    /// make them real without an account list the core does not expose yet" —
+    /// the core has exposed one since 028 Phase 8, and the web and Android
+    /// have been reading it ever since.
+    ///
+    /// Totals come from the switcher cache, so the sheet opens on last-known
+    /// figures rather than spinners; an account the cache has never priced
+    /// shows an EMPTY cell, never a mocked figure and never `0`.
+    static func withAccounts(
+        session: SessionView,
+        balances: [BalanceCacheEntryWire],
+        display: WalletLive.Display,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        guard session.hasWallet else { return model }
+        let k = I18nKeys.SettingsUi.self
+
+        func money(_ usd: Double) -> String {
+            display.glyph + Formats.number(usd * display.rate,
+                                           minimumFractionDigits: 2,
+                                           maximumFractionDigits: 2)
+        }
+        /// The header's own truncation, so a row and the header above it
+        /// never disagree about the same address.
+        func shortenAddress(_ address: String) -> String {
+            guard address.count > 14 else { return address }
+            return "\(address.prefix(6))…\(address.suffix(4))"
+        }
+        func total(for address: String) -> Double? {
+            balances.first { $0.address.caseInsensitiveCompare(address) == .orderedSame }?.usd
+        }
+
+        var copy = model
+        copy.accountsSheet.rows = session.accounts.enumerated().map { index, row in
+            let address = row.account.address
+            let usd = total(for: address)
+            return AccountsSheetRowModel(
+                name: row.account.name,
+                addressDisplay: shortenAddress(address),
+                addressFull: address,
+                amount: usd.map(money) ?? "",
+                selected: index == session.activeIndex
+            )
+        }
+        copy.accountsSheet.summary =
+            loc.t(k.accountsCount, vars: ["count": String(session.accounts.count)])
+            + loc.t(k.accountsTotal, vars: [
+                "amount": money(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
+            ])
+        return copy
+    }
+
     static func withCurrency(
         _ view: CurrencyViewWire,
         on model: SettingsScreenModel,

@@ -974,3 +974,119 @@ fn an_expo_era_record_without_keys_still_opens_the_wallet() {
         other => panic!("expected the wallet to open, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// One wallet, one record
+// ---------------------------------------------------------------------------
+
+/// Signing in with a SECOND passkey of a wallet this device already holds is
+/// a sign-in, not an addition.
+///
+/// The credential match above cannot see it: the stored record was written
+/// before this key joined, so it lists neither the credential nor its key —
+/// the recovery path runs and rebuilds the wallet from the registry. What
+/// comes back has the same ADDRESS, because the address derives from the
+/// whole founding set, and `SaveAccount` upserts by `id`. So the rebuild used
+/// to be stored under the new credential's id: one wallet, two records, two
+/// rows in every switcher, and both opening the same Safe (founder-reported,
+/// 2026-09-16).
+#[test]
+fn a_wallet_already_held_is_entered_not_saved_again() {
+    let mut sut = authenticated();
+    let held = support::account("some-earlier-credential", "Ann", &multi_address());
+    sut.resolve(ShellResult::AccountsLoaded {
+        accounts: vec![held.clone()],
+    });
+    sut.resolve(ShellResult::RegistryKeyStatus {
+        registered: true,
+        unit_ids: vec![3],
+    });
+
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+    });
+
+    match next.as_slice() {
+        [ShellOperation::CompleteOnboarding {
+            mode:
+                CompletionMode::SetWallet {
+                    accounts,
+                    active_index,
+                },
+        }] => {
+            assert_eq!(accounts.len(), 1, "nothing was added");
+            assert_eq!(
+                accounts[0].id, held.id,
+                "the record already here is the one kept"
+            );
+            assert_eq!(*active_index, 0, "and it is the one entered");
+        }
+        other => panic!("expected a sign-in, not a save; got {other:?}"),
+    }
+}
+
+/// The address is the identity, not its casing.
+#[test]
+fn a_wallet_held_in_another_casing_is_still_the_same_wallet() {
+    let mut sut = authenticated();
+    let shouted = multi_address().to_uppercase().replace("0X", "0x");
+    sut.resolve(ShellResult::AccountsLoaded {
+        accounts: vec![support::account("some-earlier-credential", "Ann", &shouted)],
+    });
+    sut.resolve(ShellResult::RegistryKeyStatus {
+        registered: true,
+        unit_ids: vec![3],
+    });
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+    });
+    assert!(
+        matches!(
+            next.as_slice(),
+            [ShellOperation::CompleteOnboarding {
+                mode: CompletionMode::SetWallet { .. }
+            }]
+        ),
+        "expected a sign-in; got {next:?}"
+    );
+}
+
+/// A wallet this device does NOT hold is still saved and still added — the
+/// recovery path is untouched for everything that is genuinely new.
+#[test]
+fn an_unheld_wallet_is_still_saved_and_added() {
+    let mut sut = authenticated();
+    sut.resolve(ShellResult::AccountsLoaded {
+        accounts: vec![support::account(
+            "unrelated",
+            "Bo",
+            "0x1111111111111111111111111111111111111111",
+        )],
+    });
+    sut.resolve(ShellResult::RegistryKeyStatus {
+        registered: true,
+        unit_ids: vec![3],
+    });
+    let next = sut.resolve(ShellResult::RegistryUnit {
+        metadata_hex: unit_metadata_hex(),
+        members: unit_members(),
+    });
+    match next.as_slice() {
+        [ShellOperation::SaveAccount { account }] => {
+            assert_eq!(account.address, multi_address());
+        }
+        other => panic!("expected the reconstructed save, got {other:?}"),
+    }
+    let next = sut.resolve(ShellResult::AccountSaved);
+    assert!(
+        next.iter().any(|op| matches!(
+            op,
+            ShellOperation::CompleteOnboarding {
+                mode: CompletionMode::AddAccount { .. }
+            }
+        )),
+        "a genuinely new wallet is still ADDED; got {next:?}"
+    );
+}

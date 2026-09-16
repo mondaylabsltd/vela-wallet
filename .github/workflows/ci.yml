@@ -427,6 +427,35 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # The image's DEFAULT Xcode is not the one this source compiles under.
+      #
+      # `Core/CoreStore.swift` and `OnboardingModel.swift` carry
+      # `nonisolated deinit` — spec 058's workaround for a swift-frontend 6.2
+      # optimizer crash, so the source REQUIRES 6.2 by construction. macos-15
+      # still defaults to Xcode 16.4 (Swift 6.1), where that spelling is an
+      # experimental feature, and every run since has died on
+      # "'isolated' deinit requires frontend flag
+      # -enable-experimental-feature IsolatedDeinit" — in two files nobody was
+      # editing, which is why it read like somebody's change and was not.
+      #
+      # Pick the newest Xcode the image actually carries rather than naming a
+      # version that may not be installed, and say so out loud if it is still
+      # too old: a sentence naming the runner image beats a frontend flag
+      # error in a file the reader did not touch.
+      - name: Use the newest Xcode on this runner
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "selecting $newest"
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+          swift --version
+          major=$(swift -version 2>&1 | sed -n 's/.*Swift version \([0-9]*\)\.\([0-9]*\).*/\1/p' | head -1)
+          minor=$(swift -version 2>&1 | sed -n 's/.*Swift version \([0-9]*\)\.\([0-9]*\).*/\2/p' | head -1)
+          if [ "$major" -lt 6 ] || { [ "$major" -eq 6 ] && [ "$minor" -lt 2 ]; }; then
+            echo "::error::Swift $major.$minor is too old: app-ios needs 6.2 for \`nonisolated deinit\` (spec 058). The newest Xcode on this image is $newest — bump \`runs-on\` to an image that ships Xcode 26 or later."
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.97.1

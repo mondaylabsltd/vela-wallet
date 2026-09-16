@@ -24,6 +24,13 @@ struct WalletHeaderView: View {
     var onIdenticon: (() -> Void)?
     /// Accessible name for the artwork button.
     var identiconLabel: String?
+    /// Open the account switcher. The name line has drawn a disclosure chevron
+    /// since spec 015 and, on the home screen, it led NOWHERE until
+    /// 2026-09-16 — the switcher was three taps away inside settings, which is
+    /// the same complaint the web answered on 2026-09-05 and Android on
+    /// 2026-09-12 (spec 047). Absent = a fixture board, where the chevron is
+    /// drawing only.
+    var onName: (() -> Void)?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
@@ -40,22 +47,44 @@ struct WalletHeaderView: View {
             } else {
                 IdenticonAvatar(seed: model.identiconSeed, size: WalletGeometry.avatar)
             }
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                HStack(spacing: Tokens.Space.s4) {
-                    Text(verbatim: model.name)
-                        .typeRole(Typography.rowTitle.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    LucideIcon(.chevronDown, size: LucideIconSize.nameChevron)
-                        .foregroundStyle(theme.fgMuted)
+            nameBlock
+                .ifLet(onName) { view, open in
+                    Button(action: open) { view }
+                        .buttonStyle(.plain)
+                        // The whole block, not the glyph: a chevron is a
+                        // 12-point target, and the thing a person aims at is
+                        // the name beside it.
+                        .contentShape(Rectangle())
                 }
-                Text(verbatim: model.addressDisplay)
-                    .monoRole(Typography.monoAddress.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
-            }
         }
+    }
+
+    private var nameBlock: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+            HStack(spacing: Tokens.Space.s4) {
+                Text(verbatim: model.name)
+                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                LucideIcon(.chevronDown, size: LucideIconSize.nameChevron)
+                    .foregroundStyle(theme.fgMuted)
+            }
+            Text(verbatim: model.addressDisplay)
+                .monoRole(Typography.monoAddress.scaled(textScale))
+                .foregroundStyle(theme.fgMuted)
+                .lineLimit(1)
+        }
+    }
+}
+
+private extension View {
+    /// Wrap only when there is something to wrap in — the fixture boards hand
+    /// no handler, and a Button around a label that does nothing is a target
+    /// that lies.
+    @ViewBuilder
+    func ifLet<T>(_ value: T?, @ViewBuilder transform: (Self, T) -> some View) -> some View {
+        if let value { transform(self, value) } else { self }
     }
 }
 

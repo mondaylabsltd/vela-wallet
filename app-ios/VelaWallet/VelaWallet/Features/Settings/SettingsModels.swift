@@ -156,8 +156,9 @@ struct AccountsSheetRowModel: Identifiable {
 
 struct AccountsSheetModel {
     let title: String
-    /// "3 个账户 · 总计 $3,262.40".
-    let summary: String
+    /// "3 个账户 · 总计 $3,262.40". `var` because the live layer rewrites it
+    /// from the session's own count and the balance cache's totals.
+    var summary: String
     var rows: [AccountsSheetRowModel]
     let primary: String
     let secondary: String
