@@ -144,3 +144,55 @@ test.describe('on the wide layout', () => {
 		await expect(page).toHaveURL(/\/en\/create/);
 	});
 });
+
+/**
+ * Two records, one address — the switcher must survive it.
+ *
+ * Signing in with a passkey this device is ALREADY signed in with appends a
+ * second account (the core's `AddAccount` appends without deduping), and both
+ * records derive the same address. The switcher used to key its rows by the
+ * truncated display address, so Svelte threw `each_key_duplicate` and the
+ * settings screen died where a person had done nothing stranger than sign in
+ * twice (founder-reported, 2026-09-16).
+ *
+ * Position is the row's identity here — it is what `onselect` already sends —
+ * so the pair renders AND the second one is still selectable as its own row,
+ * which an address key could not have managed even without throwing.
+ */
+test.describe('two records deriving one address', () => {
+	test.use({ viewport: { width: 1280, height: 900 } });
+
+	const TWIN = {
+		id: 'e2e-same-credential',
+		name: 'Twice Signed In',
+		address: '0x34fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d3e',
+		public_key_hex: '04' + 'ef'.repeat(64),
+		created_at_iso: '2026-01-03T00:00:00.000Z',
+		keys: []
+	};
+
+	test('renders both rows, throws nothing, and switches by position', async ({ page }) => {
+		const pageErrors: string[] = [];
+		page.on('pageerror', (error) => pageErrors.push(error.message));
+
+		await page.addInitScript((twin) => {
+			window.localStorage.setItem('vela.accounts', JSON.stringify([twin, twin]));
+			window.localStorage.setItem('vela.activeAccountIndex', '0');
+		}, TWIN);
+
+		await page.goto('/en/settings');
+		await page.getByRole('button', { name: 'Account', exact: true }).click();
+
+		// Scoped to the panel: the sidebar header names the active account too.
+		const rows = page.getByRole('main').getByRole('button', { name: /Twice Signed In/ });
+		await expect(rows).toHaveCount(2);
+		expect(pageErrors.filter((message) => /each_key_duplicate/.test(message))).toEqual([]);
+
+		// The second of the pair is its own row, and the core persists ITS index.
+		await rows.nth(1).click();
+		await expect
+			.poll(() => page.evaluate(() => window.localStorage.getItem('vela.activeAccountIndex')))
+			.toBe('1');
+		expect(pageErrors).toEqual([]);
+	});
+});

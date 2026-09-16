@@ -30,7 +30,18 @@
 <p class="summary">{sheet.summary}</p>
 
 <ul class="accounts">
-	{#each sheet.rows as row, i (row.addressDisplay)}
+	<!-- Keyed by POSITION, which is what a row's identity already is here:
+	     `onselect` sends the position, because the session's order is what
+	     `SwitchAccount` indexes. The address cannot be the key — it is not
+	     unique. Signing in with a passkey this device is already signed in
+	     with appends a second record (the core's `AddAccount` appends without
+	     deduping), and both records derive the SAME address, so Svelte threw
+	     `each_key_duplicate` and the settings screen died where a person had
+	     done nothing stranger than sign in twice (founder-reported,
+	     2026-09-16). It was the TRUNCATED address at that, so two genuinely
+	     different accounts sharing six leading and six trailing characters
+	     would have collided too. -->
+	{#each sheet.rows as row, i (i)}
 		<li class="account">
 			<Identicon svg={row.identiconSvg} size="row" label={row.name} address={row.addressFull} />
 			<button
