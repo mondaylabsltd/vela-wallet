@@ -224,6 +224,39 @@ describe('the form', () => {
 		expect(idle.fee.value).toBe('—');
 	});
 
+	// Issue 210: `Max` on a balance the fee outruns fills `0`, and this shell
+	// used to render that zero with nothing beside it — the core's sentence was
+	// computed and dropped.
+	it('says why the amount is nothing when the fee outruns the balance', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: { ...ETH, balance: '0.00005' },
+				amount: '0',
+				token_amount: '0',
+				fee: QUOTE,
+				amount_warning: { type: 'insufficient_gas', symbol: 'ETH' }
+			})
+		);
+		expect(model.warning).toBe('Insufficient ETH for gas fees');
+	});
+
+	it('words every other reading of the money the core hands it', () => {
+		const warn = (amount_warning: SendView['amount_warning']) =>
+			liveSendForm(formModel(), inputs({ selected_token: ETH, amount_warning })).warning;
+		expect(warn({ type: 'not_enough_token', symbol: 'ETH' })).toBe(
+			'You do not have enough ETH in this account'
+		);
+		expect(warn({ type: 'insufficient_for_gas', symbol: 'ETH' })).toBe(
+			'Insufficient ETH to cover amount + gas fees'
+		);
+		expect(warn({ type: 'need_gas', symbol: 'USDT' })).toBe('You need USDT to pay gas fees');
+		expect(warn({ type: 'cannot_convert', code: 'EUR', symbol: 'ETH' })).toContain('EUR');
+		// A `null` symbol is the chain's own coin, resolved by the shell.
+		expect(warn({ type: 'insufficient_gas', symbol: null })).toBe('Insufficient ETH for gas fees');
+		expect(warn(null)).toBeUndefined();
+	});
+
 	it('is always the single-send shape in this phase (split and sweep are 026 batch)', () => {
 		const model = liveSendForm(formModel(), inputs({ selected_token: ETH }));
 		expect(model.mode).toBe('single');

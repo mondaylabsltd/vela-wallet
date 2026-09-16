@@ -190,6 +190,9 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), SendLive.formWarning(short, ctx()))
         val gas = SendView(stage = SendStage.EnterDetails, selected_token = xdai, amount_warning = SendAmountWarning.NeedGas("XDAI"))
         assertTrue(SendLive.formWarning(gas, ctx())!!.contains("XDAI"))
+        // #210: the fee alone outruns the balance — the state `Max` fills 0 for.
+        val overFee = SendView(stage = SendStage.EnterDetails, selected_token = xdai, amount_warning = SendAmountWarning.InsufficientGas("XDAI"))
+        assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "XDAI")), SendLive.formWarning(overFee, ctx()))
         assertNull(SendLive.formWarning(SendView(stage = SendStage.EnterDetails, selected_token = xdai), ctx()))
         // Device-found: the core's figures are base units; the sentence must not be.
         val ceiling = SendView(

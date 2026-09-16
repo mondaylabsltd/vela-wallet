@@ -1180,6 +1180,114 @@ fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
     assert_eq!(sut.view().amount, "3.5");
 }
 
+/// Issue #210: 0.00005 BNB against a 0.000332 BNB fee. `Max` is right to fill
+/// `0` — and has to say why, or the screen is a zero and a dead button.
+#[test]
+fn max_below_the_native_fee_fills_zero_and_says_why() {
+    let mut sut = boot(vec![eth("0.00005")]);
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: eth("0.00005").id(),
+    });
+    assert_eq!(ops.len(), 1);
+    sut.resolve(credential(Some(PK)));
+    // The fee is 6.6× the whole balance.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "no estimate needed: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("ETH".to_owned())
+        }),
+        "the zero explains itself"
+    );
+    assert!(!view.can_continue, "and the gate stays shut");
+}
+
+/// The same rule one wei the other side of the line: a balance that still
+/// clears the reserve fills a figure and says nothing.
+#[test]
+fn max_one_wei_above_the_reserve_is_silent() {
+    let mut sut = boot(vec![eth("0.000332000000000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000332000000000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0.000000000000000001");
+    assert_eq!(view.amount_warning, None);
+}
+
+/// The fee token sent as itself: the 1.5× reserve is the line, and a balance
+/// under it gets the same sentence in the fee asset's own symbol.
+#[test]
+fn max_of_the_fee_token_below_its_reserve_fills_zero_and_says_why() {
+    let mut sut = boot(vec![usdc("1.4")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("1.4").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000), // reserve = 1.5 USDC
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("USDC".to_owned())
+        })
+    );
+}
+
+/// A sponsored transfer reserves nothing, so an empty balance is an empty
+/// balance — never "the fee ate it".
+#[test]
+fn a_zero_fee_never_blames_the_fee() {
+    let mut sut = boot(vec![eth("0.000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 0),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(
+        view.amount, "0.000001",
+        "a sponsored transfer sweeps it all"
+    );
+    assert_eq!(view.amount_warning, None);
+}
+
+/// Gas paid in a separate asset: the whole balance is sendable, so a zero in
+/// the box is the person's own zero and the fee has nothing to answer for.
+#[test]
+fn a_fee_in_another_asset_never_claims_this_balance() {
+    let mut sut = boot(vec![usdc("5"), dai("0.1")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: dai("0.1").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "0".to_owned(),
+    });
+    assert_eq!(sut.view().amount_warning, None);
+}
+
 #[test]
 fn max_without_a_quote_estimates_on_demand_and_falls_back_to_full_balance() {
     let mut sut = boot(vec![eth("2")]);

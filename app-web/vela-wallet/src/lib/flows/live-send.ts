@@ -424,6 +424,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		recipient: split ? undefined : recipientBlock,
 		fee: feeRow(inputs, model.fee),
 		alert: alertWords(inputs.alert, m),
+		warning: warningWords(send, m),
 		cta: m['send.continueBtn']
 	};
 }
@@ -452,6 +453,39 @@ export function alertWords(
 			return `${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`;
 		case 'account_unavailable':
 			return m['send.alertAccountUnavailableBody'];
+	}
+}
+
+/** The phone's `t('send.warnNeedGas', { sym: ... ?? 'gas token' })` literal. */
+const GAS_TOKEN_FALLBACK = 'gas token';
+
+/**
+ * The core's live amount warning, in the corpus's words — the same sentences
+ * the desktop draws (`amount_warning_text`) and the phones raise.
+ *
+ * A `null` symbol is the chain's own coin: the core says so and leaves the
+ * shell to resolve it from its own network registry, exactly as the other
+ * three do.
+ */
+export function warningWords(send: SendView, m: WalletFlowMessages): string | undefined {
+	const warning = send.amount_warning;
+	if (!warning) return undefined;
+	const chainId = send.selected_token?.chain_id;
+	const native = () => (chainId === undefined ? '' : nativeSymbol(chainId)) || GAS_TOKEN_FALLBACK;
+	switch (warning.type) {
+		case 'not_enough_token':
+			return fill(m['send.warnNotEnoughToken'], { symbol: warning.symbol });
+		case 'insufficient_for_gas':
+			return fill(m['send.warnInsufficientForGas'], { sym: warning.symbol ?? native() });
+		case 'insufficient_gas':
+			return fill(m['send.warnInsufficientGas'], { sym: warning.symbol ?? native() });
+		case 'need_gas':
+			return fill(m['send.warnNeedGas'], { sym: warning.symbol ?? native() });
+		case 'cannot_convert':
+			return fill(m['send.warnCannotConvert'], {
+				code: warning.code,
+				symbol: warning.symbol
+			});
 	}
 }
 

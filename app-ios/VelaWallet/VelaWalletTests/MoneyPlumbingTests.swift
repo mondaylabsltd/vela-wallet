@@ -978,6 +978,11 @@ struct SendRefusalTests {
                     "type": "insufficient_for_gas",
                     "symbol": symbol.map { $0 as Any } ?? NSNull(),
                 ]
+            case .insufficientGas(let symbol):
+                object["amount_warning"] = [
+                    "type": "insufficient_gas",
+                    "symbol": symbol.map { $0 as Any } ?? NSNull(),
+                ]
             case .needGas(let symbol):
                 object["amount_warning"] = [
                     "type": "need_gas", "symbol": symbol.map { $0 as Any } ?? NSNull(),
@@ -1021,6 +1026,7 @@ struct SendRefusalTests {
         let warnings: [SendAmountWarningWire] = [
             .notEnoughToken(symbol: "XDAI"),
             .insufficientForGas(symbol: "XDAI"),
+            .insufficientGas(symbol: "XDAI"),
             .needGas(symbol: "XDAI"),
             .cannotConvert(code: "CNY", symbol: "XDAI"),
         ]

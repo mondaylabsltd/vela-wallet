@@ -186,6 +186,15 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchApply_one',
 	'send.batchApplyEmpty',
 
+	// send · the core's live amount warnings, worded. Without these the web
+	// dropped every sentence the core computed about the money — the other
+	// three shells have drawn them since spec 032 (issue 210).
+	'send.warnNotEnoughToken',
+	'send.warnInsufficientForGas',
+	'send.warnInsufficientGas',
+	'send.warnNeedGas',
+	'send.warnCannotConvert',
+
 	// send · the core's alerts, worded (spec 038 #D4)
 	'send.alertEstimateFailedTitle',
 	'send.alertEstimateFailedBody',

@@ -624,6 +624,16 @@ pub enum SendAmountWarning {
     InsufficientForGas {
         symbol: Option<String>,
     },
+    /// The fee alone is more than the whole balance of the asset that pays it:
+    /// there is no amount this account can send on this network right now.
+    ///
+    /// This is the state `Max` resolves to `"0"` — correct, and for a long time
+    /// silent. A control that fills a figure has to say why the figure is
+    /// nothing, or the person is left deciding between "the fee ate my balance"
+    /// and "the button is broken" (issue #210).
+    InsufficientGas {
+        symbol: Option<String>,
+    },
     NeedGas {
         symbol: Option<String>,
     },
@@ -2663,50 +2673,51 @@ fn full_balance(token: &SendToken) -> String {
     }
 }
 
-/// The Max fill given a fee (`useSendController.ts:801-848`).
-fn apply_max_with_fee(model: &mut Model, token: &SendToken, fee: &FeeEstimate) {
+/// What `Max` holds back, when the fee is drawn from the very asset being
+/// sent. `None` — gas is paid in a separate asset, so the whole balance is
+/// sendable.
+///
+/// One rule, two readers: the fill ([`apply_max_with_fee`]) and the sentence
+/// that explains a fill of nothing ([`fee_over_balance`]). Written twice they
+/// would eventually disagree, and the shape of that disagreement is a screen
+/// showing `0` while insisting the balance covers the fee.
+fn max_fee_reserve(token: &SendToken, fee: &FeeEstimate) -> Option<u128> {
     if token.is_native() {
-        // String-exact `balance − reserve`: `to_base_units(result) + reserve
-        // == balance`, so the gas pre-check never trips on its own Max fill
-        // (invariant ⑨).
-        match to_base_units(&token.balance, token.decimals) {
-            Some(balance_wei) => {
-                model.amount = DenominatedAmount::token(max_native_sendable(
-                    balance_wei,
-                    fee.total_wei,
-                    token.decimals,
-                ));
-            }
-            // TS `balanceToWei` would throw → catch → full balance.
-            None => model.amount = DenominatedAmount::token(full_balance(token)),
-        }
-        return;
+        return Some(fee.total_wei);
     }
-    if let (
-        Some(addr),
+    let addr = token.token_address.as_deref()?;
+    match &fee.fee_asset {
         FeeAsset::Erc20 {
             token: fee_token,
             amount,
             ..
-        },
-    ) = (token.token_address.as_deref(), &fee.fee_asset)
-    {
-        if fee_token.eq_ignore_ascii_case(addr) {
+        } if fee_token.eq_ignore_ascii_case(addr) => {
             // Reserve 1.5× the quoted fee (+50% for send-time re-quote drift).
-            let reserve = amount.saturating_mul(3) / 2;
-            match to_base_units(&token.balance, token.decimals) {
-                Some(bal) if bal > reserve => {
-                    model.amount =
-                        DenominatedAmount::token(from_base_units(bal - reserve, token.decimals));
-                }
-                Some(_) => model.amount = DenominatedAmount::token("0"),
-                None => model.amount = DenominatedAmount::token(full_balance(token)),
-            }
-            return;
+            Some(amount.saturating_mul(3) / 2)
         }
+        _ => None,
     }
-    // Gas is paid in native or a separate fee asset — full balance sendable.
-    model.amount = DenominatedAmount::token(full_balance(token));
+}
+
+/// The Max fill given a fee (`useSendController.ts:801-848`).
+fn apply_max_with_fee(model: &mut Model, token: &SendToken, fee: &FeeEstimate) {
+    // Gas paid in native or a separate fee asset — full balance sendable.
+    let Some(reserve) = max_fee_reserve(token, fee) else {
+        model.amount = DenominatedAmount::token(full_balance(token));
+        return;
+    };
+    match to_base_units(&token.balance, token.decimals) {
+        // String-exact `balance − reserve`: `to_base_units(result) + reserve
+        // == balance`, so the gas pre-check never trips on its own Max fill
+        // (invariant ⑨). A reserve at or above the balance answers `"0"`, and
+        // `derive_amount_warning` is what says so out loud.
+        Some(balance) => {
+            model.amount =
+                DenominatedAmount::token(max_native_sendable(balance, reserve, token.decimals));
+        }
+        // TS `balanceToWei` would throw → catch → full balance.
+        None => model.amount = DenominatedAmount::token(full_balance(token)),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3003,6 +3014,45 @@ fn selected_fee(model: &Model) -> Option<&FeeEstimate> {
     (fee.chain_id == token.chain_id).then_some(fee)
 }
 
+/// The chain's own coin, when the registry knows it — the symbol a `None` in
+/// [`SendAmountWarning`] leaves the shell to resolve.
+fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
+    model
+        .chains
+        .iter()
+        .find(|c| c.chain_id == chain_id)
+        .map(|c| c.native_symbol.clone())
+}
+
+/// Nothing is sendable: the fee is drawn from the asset being sent, and the
+/// reserve `Max` holds back for it meets or exceeds the whole balance.
+///
+/// Reads the same [`max_fee_reserve`] the fill reads, so this sentence appears
+/// exactly when `Max` resolves to `"0"` — never on a balance that could still
+/// pay, and never absent on one that could not.
+fn fee_over_balance(model: &Model, token: &SendToken) -> Option<SendAmountWarning> {
+    let fee = selected_fee(model)?;
+    let reserve = max_fee_reserve(token, fee)?;
+    // A quote of nothing (sponsored, or not yet priced) reserves nothing: an
+    // empty balance is then a balance, not a fee that ate it.
+    if reserve == 0 {
+        return None;
+    }
+    let balance = to_base_units(&token.balance, token.decimals)?;
+    if balance > reserve {
+        return None;
+    }
+    let symbol = if token.is_native() {
+        chain_native_symbol(model, token.chain_id)
+    } else {
+        match &fee.fee_asset {
+            FeeAsset::Erc20 { symbol, .. } => symbol.clone().or_else(|| Some(token.symbol.clone())),
+            FeeAsset::Native => chain_native_symbol(model, token.chain_id),
+        }
+    };
+    Some(SendAmountWarning::InsufficientGas { symbol })
+}
+
 /// The live amount warning (`useSendController.ts:326-398`), as a pure
 /// derivation instead of a `useEffect` + `useState` pair.
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN is an unresolved amount, not a valid one
@@ -3031,7 +3081,10 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
                 });
             }
         }
-        return None;
+        // A figure that IS zero — which is what `Max` writes when the fee has
+        // already claimed the whole balance. The zero is right; saying nothing
+        // about it is not (issue #210).
+        return fee_over_balance(model, token);
     }
     let fee = selected_fee(model);
 
@@ -3049,12 +3102,9 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
         if let Some(fee) = fee {
             // totalWei is the fully marked-up, reviewed in-band reimbursement.
             if !can_cover_native_transfer(amount_wei, balance_wei, fee.total_wei) {
-                let symbol = model
-                    .chains
-                    .iter()
-                    .find(|c| c.chain_id == token.chain_id)
-                    .map(|c| c.native_symbol.clone());
-                return Some(SendAmountWarning::InsufficientForGas { symbol });
+                return Some(SendAmountWarning::InsufficientForGas {
+                    symbol: chain_native_symbol(model, token.chain_id),
+                });
             }
         }
         return None;

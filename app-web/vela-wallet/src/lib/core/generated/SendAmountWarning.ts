@@ -4,4 +4,4 @@
  * Live amount validation (semantic; the shell owns the words and resolves a
  * `None` symbol from its chain registry).
  */
-export type SendAmountWarning = { "type": "not_enough_token", symbol: string, } | { "type": "insufficient_for_gas", symbol: string | null, } | { "type": "need_gas", symbol: string | null, } | { "type": "cannot_convert", code: string, symbol: string, };
+export type SendAmountWarning = { "type": "not_enough_token", symbol: string, } | { "type": "insufficient_for_gas", symbol: string | null, } | { "type": "insufficient_gas", symbol: string | null, } | { "type": "need_gas", symbol: string | null, } | { "type": "cannot_convert", code: string, symbol: string, };

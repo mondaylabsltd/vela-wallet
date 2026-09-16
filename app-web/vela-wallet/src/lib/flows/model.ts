@@ -444,6 +444,16 @@ export interface SendFormModel {
 	 * phone raised these as native alerts, this shell had logged them.
 	 */
 	alert?: string;
+	/**
+	 * The core's LIVE reading of the money, in the corpus's words: the balance
+	 * is short, the fee outruns it, the figure cannot be converted. Standing,
+	 * not raised — it sits under the fee row while the condition holds.
+	 *
+	 * The three native shells have drawn `amount_warning` since spec 032; this
+	 * one threw it away, so a `Max` that correctly filled `0` because the fee
+	 * was larger than the whole balance looked like a broken button (issue 210).
+	 */
+	warning?: string;
 	cta: string;
 }
 
