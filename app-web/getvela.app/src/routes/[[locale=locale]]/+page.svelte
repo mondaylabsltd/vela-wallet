@@ -871,9 +871,10 @@
 	.facts .container {
 		width: 100%;
 	}
-	/* One quiet line to say what the four rows ARE. Without it the block reads
-	   as text that fell out of the hero; with it, it is a section. Small and
-	   muted on purpose — the claims are the loud part. */
+	/* One quiet line to say WHEN the four rows are worth reading — before the
+	   deposit. Without it the block reads as text that fell out of the hero;
+	   with it, it is a section. Small and muted on purpose, and a fragment
+	   rather than a sentence — the claims are the loud part. */
 	.facts-lede {
 		max-width: 1000px;
 		margin: 0 auto 22px;

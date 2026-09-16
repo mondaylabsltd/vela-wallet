@@ -92,25 +92,25 @@
 			"ctaCode": "睇原始碼",
 			"facts": [
 				{
-					"term": "未經改動嘅 Safe v1.4.1。",
+					"term": "你個帳戶嘅合約，係未經改動嘅 Safe v1.4.1。",
 					"link": "你個帳戶用嘅係 Safe 嘅合約，唔係我哋寫嘅"
 				},
 				{
-					"term": "唔好將成個錢包押喺一部機上面。",
+					"term": "一個錢包可以有唔止一把鑰匙。",
 					"link": "開戶時最多七把鑰匙，硬件安全金鑰都得"
 				},
 				{
-					"term": "screen 上面係一筆，簽落去係另一筆。",
+					"term": "你喺 screen 上面睇到嘅，未必就係你實際簽落去嗰筆。",
 					"link": "Bybit 15 億美元就係咁樣冇咗"
 				},
 				{
-					"term": "Vela 有一日冇咗，你個錢包唔會。",
+					"term": "就算 Vela 有一日停咗，你一樣入到自己個錢包。",
 					"link": "應用、中繼同每一個後端服務，你都可以自己跑"
 				}
 			]
 		},
 		"facts": {
-			"lede": "喺將錢交畀一個錢包之前，值得自己查清楚嘅四件事。"
+			"lede": "放資產入 Vela 之前"
 		},
 		"seal": {
 			"label": "已經喺鏈上開咗嘅錢包",
@@ -460,7 +460,7 @@
 		"storeNote": "仲未上商店。喺嗰日之前，每一個 build 都喺 GitHub 上面。"
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

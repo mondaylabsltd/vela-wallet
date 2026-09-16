@@ -92,25 +92,25 @@
 			"ctaCode": "Lire le code",
 			"facts": [
 				{
-					"term": "Un Safe v1.4.1 non modifié.",
+					"term": "Votre compte est un Safe v1.4.1 non modifié.",
 					"link": "Votre compte est le contrat de Safe, pas un des nôtres"
 				},
 				{
-					"term": "Ne misez pas tout le portefeuille sur un seul appareil.",
+					"term": "Votre portefeuille peut avoir plusieurs clés de signature.",
 					"link": "Jusqu'à sept clés, fixées à la création — clés matérielles comprises"
 				},
 				{
-					"term": "Une transaction à l'écran. Une autre signée.",
+					"term": "Ce que vous voyez à l'écran n'est pas forcément ce qui est signé.",
 					"link": "Comment Bybit a perdu 1,5 Md$, et la voie que nous fermons"
 				},
 				{
-					"term": "Si Vela disparaît, votre portefeuille reste.",
+					"term": "Même si Vela cesse de fonctionner, vous gardez l'accès à votre portefeuille.",
 					"link": "Hébergez vous-même l'app, le relais et chaque service backend"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Quatre choses à vérifier avant qu'un portefeuille ne détienne votre argent."
+			"lede": "Avant de mettre vos actifs dans Vela"
 		},
 		"seal": {
 			"label": "portefeuilles créés on-chain",
@@ -460,7 +460,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

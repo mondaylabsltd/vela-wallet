@@ -191,22 +191,30 @@ export const en = {
 			 * us" (false — a stablecoin issuer can freeze any address, in any
 			 * wallet; the accurate version of that claim lives in the whitepaper
 			 * and the trade-offs section, not in a hook).
+			 *
+			 * Rewritten 2026-09-16: all four terms became plain statements of
+			 * fact. They had drifted into four different voices — a noun phrase, a
+			 * piece of advice ("Don't bet the wallet on one device"), two
+			 * fragments, and a conditional — which made the column read as a
+			 * slogan wall. A claim a reader is invited to CHECK has to be stated,
+			 * not performed; #3 also picked up the hedge it always needed, since
+			 * "isn't necessarily" is the true version and "is another" is not.
 			 */
 			facts: [
 				{
-					term: 'An unmodified Safe v1.4.1.',
+					term: 'Your account is an unmodified Safe v1.4.1.',
 					link: "Your account is Safe's contract, not one of ours"
 				},
 				{
-					term: "Don't bet the wallet on one device.",
+					term: 'Your wallet can have more than one signing key.',
 					link: 'Up to seven keys, set at creation — hardware keys included'
 				},
 				{
-					term: 'One transaction on the screen. Another one signed.',
+					term: 'What you see on screen isn’t necessarily what gets signed.',
 					link: 'How Bybit lost $1.5B, and the path we close'
 				},
 				{
-					term: 'If Vela disappears, your wallet does not.',
+					term: 'Access to your wallet doesn’t depend on Vela staying online.',
 					link: 'Self-host the app, the relay and every backend service'
 				}
 			]
@@ -216,9 +224,16 @@ export const en = {
 		 * The four hooks above get a screen of their own, and a screen needs to
 		 * say what it is. One line, and deliberately not a heading: the claims are
 		 * the loud part, this is the caption under the exhibit.
+		 *
+		 * Rewritten 2026-09-16. It used to count the rows ("Four things worth
+		 * checking…") — which the numbers already do — and to hedge behind "a
+		 * wallet", as if the four claims were about wallets in general. They are
+		 * about this one. What the line adds now is the moment: before the
+		 * deposit, while walking away is still free. No full stop; it is a
+		 * caption, not a sentence.
 		 */
 		facts: {
-			lede: 'Four things worth checking before a wallet holds your money.'
+			lede: 'Before you put assets in Vela'
 		},
 
 		/**

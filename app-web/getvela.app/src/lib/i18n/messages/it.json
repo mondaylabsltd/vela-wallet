@@ -92,25 +92,25 @@
 			"ctaCode": "Leggi il codice",
 			"facts": [
 				{
-					"term": "Un Safe v1.4.1 non modificato.",
+					"term": "Il tuo account è un Safe v1.4.1 non modificato.",
 					"link": "Il tuo account è il contratto di Safe, non uno nostro"
 				},
 				{
-					"term": "Non giocarti tutto il wallet su un solo dispositivo.",
+					"term": "Il tuo wallet può avere più di una chiave di firma.",
 					"link": "Fino a sette chiavi, fissate alla creazione — chiavi hardware comprese"
 				},
 				{
-					"term": "Una transazione sullo schermo. Un'altra firmata.",
+					"term": "Quello che vedi sullo schermo non sempre è quello che viene firmato.",
 					"link": "Come Bybit ha perso 1,5 miliardi di dollari, e la strada che chiudiamo"
 				},
 				{
-					"term": "Se Vela sparisce, il tuo wallet no.",
+					"term": "Anche se Vela smette di funzionare, continui ad accedere al tuo wallet.",
 					"link": "Ospita tu l'app, il relay e ogni servizio di backend"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Quattro cose da verificare prima che un wallet tenga i tuoi soldi."
+			"lede": "Prima di mettere i tuoi asset in Vela"
 		},
 		"seal": {
 			"label": "wallet creati on-chain",
@@ -460,7 +460,7 @@
 		"storeNote": "Non è ancora negli store. Fino ad allora, ogni build è su GitHub."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

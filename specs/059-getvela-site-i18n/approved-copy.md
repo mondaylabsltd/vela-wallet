@@ -64,6 +64,60 @@ first. The other thirteen were realigned the same day
   project's corpus.
 
 
+## `home.facts.lede` — the caption over the four claims
+
+| locale | string | approved |
+|---|---|---|
+| `en` | `Before you put assets in Vela` | founder, 2026-09-16 |
+| `zh` | `把资产放进 Vela 之前` | founder, 2026-09-16 |
+
+It used to read `Four things worth checking before a wallet holds your money.`
+Three things changed and each one is a rule for the other thirteen:
+
+- **No count.** The `<ol>` already numbers the rows; a line that says "four" has
+  to be edited the day a fifth claim is added, and says nothing meanwhile.
+- **`Vela`, not "a wallet".** The four claims are about this wallet. The hedge
+  read as though the page were handing out general advice.
+- **`assets`, not "money".** ETH, tokens, whatever is in there. Every locale
+  already had its term for this in `home.faq.items[2].a` — use that one.
+- **No full stop.** It is a caption and a fragment, in every language. A locale
+  that completes it into a sentence has changed what it is.
+
+The thirteen were realigned the same day
+([reviews/single-string.md](reviews/single-string.md)).
+
+## `home.hero.facts[*].term` — the four claims
+
+| # | `en` | `zh` | approved |
+|---|---|---|---|
+| 0 | `Your account is an unmodified Safe v1.4.1.` | `账户合约是未经改动的 Safe v1.4.1。` | founder, 2026-09-16 |
+| 1 | `Your wallet can have more than one signing key.` | `一个钱包可以有不止一把钥匙。` | founder, 2026-09-16 |
+| 2 | `What you see on screen isn’t necessarily what gets signed.` | `你在屏幕上看到的，不一定是你实际签下的。` | founder, 2026-09-16 |
+| 3 | `Access to your wallet doesn’t depend on Vela staying online.` | `即使 Vela 停止服务，你仍然可以访问自己的钱包。` | founder, 2026-09-16 |
+
+All four were rewritten from the 2026-09-15 set, which had drifted into four
+different voices — a noun phrase, a piece of advice, two fragments, a
+conditional. Rules that follow from the new set:
+
+- **They are statements, not slogans.** Each one is a claim the reader is invited
+  to go and check; a locale that turns one back into an imperative ("Don't bet
+  the wallet on one device") or a headline fragment has changed the register of
+  the whole column.
+- **#2 keeps its hedge.** `isn't necessarily` / `不一定` is the true form of the
+  claim — the decoded screen is *usually* right, and the row is about the case
+  where it is not. A locale that writes "is not" has made a false statement, and
+  a stronger-sounding one, which is how this particular error survives review.
+- **#3 is about access, not survival.** The old line said the wallet outlives the
+  company; the new one says reaching it does not depend on us being up. Do not
+  translate it back into "Vela will always be there" or "your wallet never
+  disappears".
+- **#1 says a wallet CAN have several signing keys** — a capability, not a
+  recommendation and not a claim that it already does.
+- The `link` strings underneath are unchanged and were out of scope.
+
+The thirteen were realigned the same day
+([reviews/single-string.md](reviews/single-string.md)).
+
 ## `home.hero.headline` in all fifteen — the T058 record
 
 FR-006: **a locale keeps the English headline until its own line is approved.**

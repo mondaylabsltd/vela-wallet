@@ -92,25 +92,25 @@
 			"ctaCode": "Kodu okuyun",
 			"facts": [
 				{
-					"term": "Değiştirilmemiş bir Safe v1.4.1.",
+					"term": "Hesabınız, değiştirilmemiş bir Safe v1.4.1.",
 					"link": "Hesabınız bizim değil, Safe'in sözleşmesiyle çalışır"
 				},
 				{
-					"term": "Bütün cüzdanı tek bir cihaza yaslamayın.",
+					"term": "Bir cüzdanda birden fazla imza anahtarı olabilir.",
 					"link": "Kurulumda yedi anahtara kadar — donanım güvenlik anahtarları dahil"
 				},
 				{
-					"term": "Ekranda bir işlem. İmzalanan bambaşka bir işlem.",
+					"term": "Ekranda gördüğünüz şey, imzalanan şeyle aynı olmayabilir.",
 					"link": "Bybit 1,5 milyar doları nasıl kaybetti ve biz o yolu nasıl kapatıyoruz"
 				},
 				{
-					"term": "Vela ortadan kalkarsa cüzdanınız kalkmaz.",
+					"term": "Vela hizmeti durdursa bile cüzdanınıza yine de erişebilirsiniz.",
 					"link": "Uygulamayı, relay'i ve tüm arka uç servislerini kendiniz çalıştırın"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Bir cüzdana paranızı emanet etmeden önce doğrulamaya değer dört şey."
+			"lede": "Varlıklarınızı Vela'ya koymadan önce"
 		},
 		"seal": {
 			"label": "zincir üstünde oluşturulmuş cüzdan",
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

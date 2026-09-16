@@ -92,25 +92,25 @@
 			"ctaCode": "Đọc mã nguồn",
 			"facts": [
 				{
-					"term": "Safe v1.4.1, không sửa một dòng nào.",
+					"term": "Tài khoản của bạn là một Safe v1.4.1 nguyên bản.",
 					"link": "Tài khoản của bạn chạy hợp đồng của Safe, không phải của chúng tôi"
 				},
 				{
-					"term": "Đừng đặt cả chiếc ví lên một thiết bị.",
+					"term": "Một chiếc ví có thể có nhiều hơn một khóa ký.",
 					"link": "Tối đa bảy khóa, chọn ngay khi tạo ví — kể cả khóa bảo mật phần cứng"
 				},
 				{
-					"term": "Trên màn hình là một giao dịch. Ký xuống lại là giao dịch khác.",
+					"term": "Thứ bạn thấy trên màn hình chưa chắc là thứ được ký.",
 					"link": "Bybit mất 1,5 tỷ USD như thế nào, và lối đó chúng tôi chặn ra sao"
 				},
 				{
-					"term": "Vela biến mất thì ví của bạn vẫn còn.",
+					"term": "Dù Vela ngừng hoạt động, bạn vẫn truy cập được ví của mình.",
 					"link": "Tự vận hành ứng dụng, relay và mọi dịch vụ phía sau"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Bốn điều đáng kiểm chứng trước khi giao tiền cho một chiếc ví."
+			"lede": "Trước khi nạp tài sản vào Vela"
 		},
 		"seal": {
 			"label": "ví đã được tạo on-chain",
@@ -460,7 +460,7 @@
 		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

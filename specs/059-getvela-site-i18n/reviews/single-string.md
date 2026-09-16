@@ -124,3 +124,104 @@ Technical: no placeholders, no markup, no plurals in this string; the paragraph
 gate counts `\n\n`, so two sentences in one paragraph is what every locale has.
 Longest line is `vi` at 84 characters — two lines in a 460px standfirst, three on
 a phone, which is what the English does too.
+
+---
+
+## Third pass — `home.facts.lede`
+
+Date: 2026-09-16 · 15 locales · the caption over the four fact rows
+(0.85rem, `--text-tertiary`, above an `<ol>`).
+
+**The English changed**, and this one is a rewrite rather than a rewording:
+
+| | before | after |
+|---|---|---|
+| `en` | `Four things worth checking before a wallet holds your money.` | `Before you put assets in Vela` |
+| `zh` | `在把钱交给一个钱包之前，值得核对的四件事。` | `把资产放进 Vela 之前` |
+
+Gone: the count (the `<ol>` numbers the rows already), the hedge "a wallet" (the
+four claims are about *this* wallet, not wallets in general), "money" → assets,
+and the full stop. What is left is a moment — before the deposit, while walking
+away is still free — so every locale had to become a fragment too. A locale that
+closes it back into a sentence, or keeps "four", has changed what the line is.
+
+### Realignment — all thirteen
+
+| locale | string | the call |
+|---|---|---|
+| `zh-TW` | `把資產放進 Vela 之前` | differs from `zh` only in script here, and that is the honest answer: 資產 and 放進 are what Taiwan writes too. Manufacturing a difference would be worse than sharing one |
+| `zh-HK` | `放資產入 Vela 之前` | Cantonese `放…入`, the verb frame this file already uses (`放錢入去`) — not the Mandarin 放進 |
+| `ja` | `Vela に資産を預ける前に` | `預ける` (entrust/deposit) is the verb Japanese uses for putting money anywhere that holds it; `資産` matches `faq.items[2].a` |
+| `ko` | `Vela에 자산을 넣기 전에` | `넣다` for *put in*, where the old line's `맡기다` (entrust) was carrying "holds your money" |
+| `vi` | `Trước khi nạp tài sản vào Vela` | `nạp` is the word Vietnamese crypto users actually use for funding a wallet; `bỏ`/`đưa` would both be understood and neither is the register |
+| `id` | `Sebelum menaruh aset di Vela` | `menaruh` — plain "put". No `Anda`: the English has no possessive and Indonesian does not need one to be polite here |
+| `tr` | `Varlıklarınızı Vela'ya koymadan önce` | the possessive is not an addition — bare `varlık koymadan önce` is not Turkish. `-ınız` also keeps the locale's formal register |
+| `es-MX` | `Antes de poner tus activos en Vela` | `activos` is the financial term, as in `faq.items[2].a`; tú |
+| `pt-BR` | `Antes de colocar seus ativos na Vela` | `na Vela` with the article, as this locale writes the brand |
+| `fr` | `Avant de mettre vos actifs dans Vela` | `actifs`; vous |
+| `de` | `Bevor du Vermögenswerte in Vela verwahrst` | **deliberate departure.** This file translates "assets" as `Werte` (`faq.items[2].a`), which works inside "gleiche Adresse, gleiche Werte, gleiche Chains" and does not work alone: a standalone `Werte` reads as *values* — and this site has a values page. `Vermögenswerte` is the same word made unambiguous, and `verwahren` is the custody verb German crypto actually uses |
+| `ru` | `Прежде чем положить активы в Vela` | `положить … в` is how Russian puts money somewhere; perfective, as `прежде чем` + infinitive wants |
+| `it` | `Prima di mettere i tuoi asset in Vela` | `asset` untranslated, as Italian finance writes it and as `faq.items[2].a` already does |
+
+None of the fourteen carries a count, a full stop, or a generic "a wallet".
+Terminology for *assets* is each locale's own existing one, checked against
+`home.faq.items[2].a`, with the German exception argued above.
+
+Technical: no placeholders, no markup, no plurals. Longest is `de` at 41
+characters — a caption at 0.85rem in a 1000px column, so length is not a risk in
+any locale. `i18n:stamp` re-fingerprinted `home` in all fourteen; every one of
+them was retranslated for this string in this pass.
+
+---
+
+## Fourth pass — `home.hero.facts[0..3].term`
+
+Date: 2026-09-16 · 15 locales × 4 strings · the four numbered claim rows
+(`link` siblings untouched — out of scope).
+
+**All four English terms were replaced**, and the shape of the change is the
+same every time: from performance to statement.
+
+| # | before | after |
+|---|---|---|
+| 0 | `An unmodified Safe v1.4.1.` | `Your account is an unmodified Safe v1.4.1.` |
+| 1 | `Don't bet the wallet on one device.` | `Your wallet can have more than one signing key.` |
+| 2 | `One transaction on the screen. Another one signed.` | `What you see on screen isn’t necessarily what gets signed.` |
+| 3 | `If Vela disappears, your wallet does not.` | `Access to your wallet doesn’t depend on Vela staying online.` |
+
+Three of them changed more than their wording:
+
+- **#1 stopped giving advice.** It was an imperative telling the reader what not
+  to do; it is now a capability — a wallet *can* have several signing keys. No
+  locale may keep the imperative, and none may promise the wallet already has
+  more than one.
+- **#2 gained the hedge it always needed.** "One transaction on the screen.
+  Another one signed." asserts as normal what is in fact the attack. `isn't
+  necessarily` / `不一定` is the true claim. This is the one place in this pass
+  where the wrong translation is also the more impressive one, so it is the one
+  to check: every locale had to land on its own *not necessarily* —
+  `とは限りません`, `반드시 … 것은 아닙니다`, `belum tentu`, `chưa chắc`, `未必`,
+  `pas forcément`, `nicht unbedingt`, `не обязательно`, `olmayabilir`, `nem
+  sempre`, `no siempre`, `non sempre`.
+- **#3 is now about access, not survival.** Old: the wallet outlives the company.
+  New: reaching it does not depend on us being online. Weaker on paper, and the
+  one we can actually prove with the self-hosting page it links to.
+
+### Realignment — the calls worth recording
+
+| locale | note |
+|---|---|
+| `zh-HK` | keeps the locale's `screen` loanword in #2, which this file already uses in `signing.heading`, and `未必`/`入到` for the hedge and for access — spoken Cantonese, not Mandarin transposed |
+| `zh-TW` | 畫面 for screen, 金鑰 for key, 存取 for access — three places where Taiwan and the mainland genuinely diverge, so three places this locale is not a script conversion of `zh` |
+| `ja` | #2 on `とは限りません`, the standard Japanese hedge; #1 restructured to `一つのウォレットに…複数持てます` because a literal "more than one" does not exist as a Japanese phrase |
+| `ko` | #2 on `반드시 … 것은 아닙니다`; `서명 키` for signing key |
+| `ru` | #1 uses `подписывающих ключей`, the term this file already uses in the FAQ for a signer — not a new coinage |
+| `de` | #1 `mehrere Signaturschlüssel`, since German says *several* where English says *more than one*; #3 `kommst du weiter an deine Wallet`, which is how German says you can still get at a thing |
+| `fr` | #1 `plusieurs clés de signature` for the same reason — `plus d'une` is a calque |
+| `tr` | #0 drops the `-dir` copula: `Safe v1.4.1'dir` is unreadable with a version number, and UI Turkish drops it anyway |
+| `vi` `id` `it` `es-MX` `pt-BR` | statements in the locale's own register; `nguyên bản`, `tidak diubah sama sekali`, `non modificato`, `sin modificar`, `sem modificações` all say unmodified without sounding like a spec sheet |
+
+Technical: no placeholders, no markup, no plurals; `{#each … (fact.term)}` is
+keyed on these strings, and all sixty are distinct. The curly apostrophes in the
+English (`isn’t`, `doesn’t`) are the founder's and were kept byte-for-byte.
+`i18n:stamp` re-fingerprinted `home` in all fourteen.

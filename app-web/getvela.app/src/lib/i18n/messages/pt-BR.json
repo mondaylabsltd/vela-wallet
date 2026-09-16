@@ -92,25 +92,25 @@
 			"ctaCode": "Ler o código",
 			"facts": [
 				{
-					"term": "Um Safe v1.4.1 sem modificações.",
+					"term": "Sua conta é um Safe v1.4.1 sem modificações.",
 					"link": "Sua conta é o contrato da Safe, não um contrato nosso"
 				},
 				{
-					"term": "Não aposte a carteira inteira em um só aparelho.",
+					"term": "Sua carteira pode ter mais de uma chave de assinatura.",
 					"link": "Até sete chaves, definidas na criação — chaves de hardware incluídas"
 				},
 				{
-					"term": "Uma transação na tela. Outra assinada.",
+					"term": "O que você vê na tela nem sempre é o que é assinado.",
 					"link": "Como a Bybit perdeu US$ 1,5 bilhão, e o caminho que fechamos"
 				},
 				{
-					"term": "Se a Vela sumir, sua carteira continua.",
+					"term": "Se a Vela parar de funcionar, você continua com acesso à sua carteira.",
 					"link": "Hospede você mesmo o app, o relay e cada serviço de backend"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Quatro coisas que vale conferir antes de uma carteira guardar o seu dinheiro."
+			"lede": "Antes de colocar seus ativos na Vela"
 		},
 		"seal": {
 			"label": "carteiras criadas on-chain",
@@ -460,7 +460,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

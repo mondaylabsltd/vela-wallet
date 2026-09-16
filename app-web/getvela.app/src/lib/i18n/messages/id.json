@@ -92,25 +92,25 @@
 			"ctaCode": "Baca kodenya",
 			"facts": [
 				{
-					"term": "Safe v1.4.1, tanpa satu baris pun diubah.",
+					"term": "Akun Anda adalah Safe v1.4.1 yang tidak diubah sama sekali.",
 					"link": "Akun Anda memakai kontrak milik Safe, bukan buatan kami"
 				},
 				{
-					"term": "Jangan pertaruhkan seluruh dompet pada satu perangkat.",
+					"term": "Satu dompet bisa punya lebih dari satu kunci.",
 					"link": "Sampai tujuh kunci, ditentukan saat pembuatan — termasuk kunci keamanan fisik"
 				},
 				{
-					"term": "Yang tampil di layar satu transaksi. Yang ditandatangani transaksi lain.",
+					"term": "Yang Anda lihat di layar belum tentu yang ditandatangani.",
 					"link": "Bagaimana Bybit kehilangan $1,5 miliar, dan celah yang kami tutup"
 				},
 				{
-					"term": "Kalau Vela hilang, dompet Anda tidak ikut hilang.",
+					"term": "Kalau Vela berhenti beroperasi, Anda tetap bisa mengakses dompet Anda.",
 					"link": "Hosting sendiri aplikasinya, relay-nya, dan semua layanan pendukungnya"
 				}
 			]
 		},
 		"facts": {
-			"lede": "Empat hal yang layak Anda periksa sebelum sebuah dompet memegang uang Anda."
+			"lede": "Sebelum menaruh aset di Vela"
 		},
 		"seal": {
 			"label": "dompet dibuat on-chain",
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "a8d6e4237b5a",
+		"home": "3d24cd4f2c1b",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
