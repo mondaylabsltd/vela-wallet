@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Eine Ethereum-Wallet, die wirklich dir gehört",
-			"subtitle": "Signiere mit einem Passkey, den Vela nie zu sehen bekommt.",
+			"subtitle": "Signiert wird auf deinem Gerät. Dein Passkey erreicht Vela nie.",
 			"ctaCreate": "Loslegen",
 			"ctaCode": "Code lesen",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

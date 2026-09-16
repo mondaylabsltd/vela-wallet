@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "真正屬於你的以太坊錢包",
-			"subtitle": "用密碼金鑰簽署，Vela 永遠看不到你的金鑰。",
+			"subtitle": "簽署都在你的裝置上完成，Vela 拿不到你的密碼金鑰。",
 			"ctaCreate": "開始使用",
 			"ctaCode": "查看原始碼",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "目前還沒有上架任何應用程式商店。在那之前，每一個建置版本都在 GitHub 上。"
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Dompet Ethereum yang benar-benar milik Anda",
-			"subtitle": "Tanda tangani dengan passkey yang tidak pernah dilihat Vela.",
+			"subtitle": "Penandatanganan dilakukan di perangkat Anda. Vela tidak pernah menerima passkey Anda.",
 			"ctaCreate": "Mulai",
 			"ctaCode": "Baca kodenya",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

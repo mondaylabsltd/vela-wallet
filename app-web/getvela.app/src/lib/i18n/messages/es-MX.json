@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Una wallet de Ethereum que de verdad es tuya",
-			"subtitle": "Firma con una passkey que Vela nunca llega a ver.",
+			"subtitle": "La firma ocurre en tu dispositivo. Vela nunca recibe tu passkey.",
 			"ctaCreate": "Empezar",
 			"ctaCode": "Leer el código",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, cada build está en GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

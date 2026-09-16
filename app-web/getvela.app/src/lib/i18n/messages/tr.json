@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Gerçekten size ait bir Ethereum cüzdanı",
-			"subtitle": "Vela'nın hiçbir zaman göremediği bir geçiş anahtarıyla imzalayın.",
+			"subtitle": "İmzalama cihazınızda gerçekleşir. Geçiş anahtarınız Vela'ya asla ulaşmaz.",
 			"ctaCreate": "Başlayın",
 			"ctaCode": "Kodu okuyun",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

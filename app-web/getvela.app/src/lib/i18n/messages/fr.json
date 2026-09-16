@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Un portefeuille Ethereum qui vous appartient vraiment",
-			"subtitle": "Signez avec une passkey que Vela ne voit jamais.",
+			"subtitle": "La signature a lieu sur votre appareil. Vela ne reçoit jamais votre passkey.",
 			"ctaCreate": "Commencer",
 			"ctaCode": "Lire le code",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

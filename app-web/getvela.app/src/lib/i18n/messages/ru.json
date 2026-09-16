@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Кошелёк Ethereum, который действительно ваш",
-			"subtitle": "Подписывайте с помощью passkey, который Vela никогда не видит.",
+			"subtitle": "Подпись создаётся на вашем устройстве. Vela никогда не получает ваш passkey.",
 			"ctaCreate": "Начать",
 			"ctaCode": "Посмотреть код",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Пока ни в одном магазине. До тех пор каждая сборка лежит на GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

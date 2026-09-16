@@ -30,6 +30,21 @@ stage D, marked `drafted`, and may keep the English line until reviewed (FR-006)
 and moved the rest into the hero's fact column, where it became the hook
 "If Vela disappears, your wallet does not." The notes below still govern both
 halves wherever they now appear.
+
+**Superseded again, 2026-09-16.** The current line, founder-approved and
+verbatim:
+
+| locale | string | approved |
+|---|---|---|
+| `en` | `Signing happens on your device. Vela never receives your passkey.` | founder, 2026-09-16 |
+| `zh` | `签名发生在你的设备上，Vela 拿不到你的通行密钥。` | founder, 2026-09-16 |
+
+*Never receives* replaces *never sees*, and the device is now stated rather than
+implied. The distinction is the point: "we never look" is a promise about our
+conduct, "it never arrives" is a fact about where the key lives — only the
+second one survives A02 FR-1. A locale must not translate it back into the
+first. The other thirteen were realigned the same day
+([reviews/single-string.md](reviews/single-string.md)).
 | others | — | stage D |
 
 ### Notes for translators (R7 axes)

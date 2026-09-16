@@ -837,8 +837,9 @@
 		line-height: 1.2;
 		letter-spacing: -0.01em;
 	}
-	/* One sentence now, so it can carry the weight of a standfirst rather than
-	   reading as body text under a headline. */
+	/* Two short sentences, so it can carry the weight of a standfirst rather
+	   than reading as body text under a headline. Sized for the longest locale
+	   (vi, 84 characters) at three lines on a phone. */
 	.subtitle {
 		color: var(--text-secondary);
 		font-size: 1.2rem;

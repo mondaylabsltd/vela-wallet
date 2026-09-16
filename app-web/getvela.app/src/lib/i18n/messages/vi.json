@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "Ví Ethereum thực sự là của bạn",
-			"subtitle": "Ký bằng passkey mà Vela không bao giờ nhìn thấy.",
+			"subtitle": "Việc ký diễn ra ngay trên thiết bị của bạn. Vela không bao giờ nhận được passkey đó.",
 			"ctaCreate": "Bắt đầu",
 			"ctaCode": "Đọc mã nguồn",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

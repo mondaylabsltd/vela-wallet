@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "真正屬於你嘅以太坊錢包",
-			"subtitle": "用通行密鑰簽名，Vela 永遠睇唔到你把鑰匙。",
+			"subtitle": "簽名喺你部機度做，Vela 攞唔到你嘅通行密鑰。",
 			"ctaCreate": "開始用",
 			"ctaCode": "睇原始碼",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "仲未上商店。喺嗰日之前，每一個 build 都喺 GitHub 上面。"
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

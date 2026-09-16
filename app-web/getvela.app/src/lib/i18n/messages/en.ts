@@ -157,9 +157,16 @@ export const en = {
 			 * sentence on 2026-09-15 — the rest of it ("open source and
 			 * self-hostable… even if we disappear") became a fact on the right,
 			 * where it can be a hook instead of a clause.
+			 *
+			 * Rewritten 2026-09-16 into two beats: WHERE the signing happens, then
+			 * what we never get. "Never sees" was a claim about our conduct;
+			 * "never receives" is a claim about where the key is, which is the one
+			 * we can actually stand behind — and the device is the half a reader
+			 * checks first. All fifteen locales were realigned to it the same day
+			 * (reviews/single-string.md).
 			 */
 			headline: 'An Ethereum wallet you actually own',
-			subtitle: 'Sign with a passkey Vela never sees.',
+			subtitle: 'Signing happens on your device. Vela never receives your passkey.',
 			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
 			/**

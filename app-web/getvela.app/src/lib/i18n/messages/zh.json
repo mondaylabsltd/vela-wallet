@@ -87,7 +87,7 @@
 		},
 		"hero": {
 			"headline": "真正属于你的以太坊钱包",
-			"subtitle": "用通行密钥签名，Vela 永远看不到你的密钥。",
+			"subtitle": "签名发生在你的设备上，Vela 拿不到你的通行密钥。",
 			"ctaCreate": "开始使用",
 			"ctaCode": "查看源码",
 			"facts": [
@@ -460,7 +460,7 @@
 		"storeNote": "目前还没有上架任何应用商店。在那之前，每一个构建版本都在 GitHub 上。"
 	},
 	"_fingerprints": {
-		"home": "22a7ee775855",
+		"home": "a8d6e4237b5a",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
