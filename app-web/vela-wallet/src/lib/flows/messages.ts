@@ -123,6 +123,11 @@ export const WALLET_FLOW_KEYS = [
 	// ------------------------------------------------------------------ send
 	'send.selectTokenTitle',
 	'send.searchPlaceholder',
+	// What an EMPTY list says. Both were in the corpus and neither was on a
+	// web surface: a picker that has nothing to offer showed a blank panel,
+	// which is where an account holding nothing now lands (issue 209).
+	'send.noTokensWithBalance',
+	'send.noMatchingTokens',
 	'history.filterAll',
 	'send.filterStable',
 	'send.filterGas',

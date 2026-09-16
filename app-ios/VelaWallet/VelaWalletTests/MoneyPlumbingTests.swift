@@ -1088,6 +1088,29 @@ struct SendRefusalTests {
             #expect(!text.body.contains("{{"))
         }
     }
+
+    /// **A form with no token quotes no balance** (issue #209).
+    ///
+    /// The drawn SD2 arrives carrying the mocks' "USDT · Ethereum · Balance
+    /// 53.4836", and the live form used to keep that card whenever the core
+    /// had not chosen a token — which it has not while a handed-off recipient
+    /// waits on the token list, and never will on an account that holds
+    /// nothing. The web shell showed exactly that beside a wallet reading
+    /// $0.00.
+    @Test func aFormWithoutATokenShowsNoCardAndNamesNoSymbol() throws {
+        let object = try CoreJSON.object(SendCore().view())
+        let view = try CoreJSON.decode(SendViewWire.self, from: object)
+        guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
+            Issue.record("sd2 is not a send form")
+            return
+        }
+        #expect(drawn.token != nil, "the drawn card is the thing that must not survive")
+
+        let model = SendLive.form(view, fee: nil, display: .usd, on: drawn, loc: loc)
+        #expect(view.selectedToken == nil, "a fresh core has chosen nothing")
+        #expect(model.token == nil, "no token, no balance to quote")
+        #expect(model.header.title == loc.t("tokenDetail.send"))
+    }
 }
 
 // MARK: - The three arms spec 050 and 051 left for this cut

@@ -248,6 +248,13 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 		m['componentsUi.networkFilter.pillAll'],
 		model.header.pill
 	);
+	// An empty list says WHY it is empty (issue 209). The account that holds
+	// nothing is where a hand-off from the address book now lands, and a panel
+	// with a search box and no rows explains itself to nobody; a filter that
+	// hid everything is a different sentence, and the core's own token list is
+	// what tells the two apart.
+	const empty =
+		send.tokens.length === 0 ? m['send.noTokensWithBalance'] : m['send.noMatchingTokens'];
 	if (!inputs.sweepPicking) {
 		return {
 			...model,
@@ -256,6 +263,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 			notice: undefined,
 			selection: undefined,
 			rows,
+			empty,
 			cta: { label: m['send.multiSendTitle'], accent: false }
 		};
 	}
@@ -266,6 +274,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 		...model,
 		header: { ...model.header, title: m['send.multiSendTitle'], pill },
 		filters,
+		empty,
 		notice:
 			chain === null
 				? undefined
@@ -372,9 +381,21 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 	return {
 		...model,
 		mode: split ? 'split' : 'single',
+		// No token, no token card, and no token in the title (issue 209).
+		//
+		// The drawn SD2 arrives with a card already in it — the mocks' "USDT ·
+		// Ethereum · Balance 53.4836" — and the form used to keep that card
+		// whenever the core had not named a token. But `selected_token` is
+		// null for a REACHABLE reason: the address book hands off a recipient
+		// and the core opens the form for them before the token list answers,
+		// and on an account that holds nothing it never can. So the fixture
+		// WAS the fallback: a wallet showing $0.00 and an empty Assets list
+		// opened a Send panel quoting somebody else's balance. The drawn card
+		// is a picture of a token; without one there is nothing to draw, which
+		// is what the desktop's `send_form` has always done.
 		header: {
 			...model.header,
-			title: token ? fill(m['send.sendTitle'], { symbol: token.symbol }) : model.header.title
+			title: token ? fill(m['send.sendTitle'], { symbol: token.symbol }) : m['tokenDetail.send']
 		},
 		token: token
 			? {
@@ -385,7 +406,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					})}`,
 					max: m['send.maxBtn']
 				}
-			: model.token,
+			: undefined,
 		// Split mode is the core's: it decides when one recipient becomes many,
 		// and the rows below are its drafts, not a list this file keeps.
 		addRecipient: split ? undefined : m['send.addRecipient'],

@@ -1993,7 +1993,7 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             model.step = SendStep::EnterDetails;
             return warm_estimate_start(model);
         }
-        return render();
+        return picker_without_a_token(model);
     }
 
     if let (Some(symbol), Some(network)) = (
@@ -2012,7 +2012,7 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             // picked row would (spec 028 Phase 10).
             return warm_estimate_start(model);
         }
-        return render();
+        return picker_without_a_token(model);
     }
 
     if let Some(prefilled) = model.params.prefilled_recipient.clone() {
@@ -2025,6 +2025,28 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             // armed by its landing, once an amount is typed.
             return Command::all([sync_identity(model), warm_estimate_start(model)]);
         }
+    }
+    picker_without_a_token(model)
+}
+
+/// The hand-off asked for a form and the list could not name a token for it
+/// (issue #209).
+///
+/// `open` steps to `EnterDetails` the moment a hand-off carries a recipient or
+/// a token, before the list answers — that optimism is the point: who the
+/// money is for must not wait on a fetch. But once the list HAS answered and
+/// nothing in it could be selected — an account that holds nothing, a symbol
+/// that is not held any more, ids that match no row — the optimism is spent.
+/// A form about no token is not a form: it has no balance, no chain and no
+/// Max, every shell fills those from the token, and the two that fall back to
+/// their drawn card end up showing the mocks' holdings to somebody who owns
+/// nothing. The picker is what that person actually needs, and it says "no
+/// tokens with balance" out of the very list that came back empty. The
+/// recipient stays on the model, so picking a token later lands on the form
+/// with the person still filled in.
+fn picker_without_a_token(model: &mut Model) -> Cmd {
+    if model.selected_token.is_none() {
+        model.step = SendStep::SelectToken;
     }
     render()
 }
