@@ -10,6 +10,7 @@
  */
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { WalletFlowMessages } from '$lib/flows/messages';
 import type {
@@ -19,6 +20,7 @@ import type {
 	FactRowModel,
 	FlowScreenModel,
 	FlowStateId,
+	StatusChipModel,
 	TxDetailModel
 } from '$lib/flows/model';
 import { chainMeta } from '$lib/services/chains';
@@ -39,6 +41,31 @@ export function findFeedItem(
 		if (row.type === 'item' && row.item.id === id) return row.item;
 	}
 	return undefined;
+}
+
+/**
+ * What actually happened to the record behind a feed row (issue 211).
+ *
+ * The feed is NOT settled history: a send is written the moment it is
+ * submitted and stays `pending` until the tracker resolves it, and a definite
+ * refusal or revert makes it `failed`. This screen used to stamp every row
+ * `Confirmed`, so a send that never landed — one paying its gas in a coin the
+ * account did not hold — was reported as money that had moved.
+ *
+ * A folded batch row carries the group's own status (its `id` is the shared
+ * `user_op_hash`, which matches no record id); every other row is one record.
+ * An id that resolves to nothing keeps the settled reading: rows that are not
+ * local records at all (an incoming transfer the chain already carries) have
+ * no lifecycle to report.
+ */
+export function feedItemStatus(
+	feed: FeedView | null | undefined,
+	item: FeedItem | undefined
+): FeedTxStatus {
+	if (item === undefined) return 'confirmed';
+	if (item.batch !== null) return item.batch.status;
+	const record = feed?.transactions.find((tx) => tx.id === item.id);
+	return record?.status ?? 'confirmed';
 }
 
 /**
@@ -97,8 +124,30 @@ export interface TxDetailContext {
 	wm: WalletMessages;
 	currency: CurrencyView;
 	hidden: boolean;
+	/**
+	 * The record's lifecycle, from `feedItemStatus`. Required, not defaulted:
+	 * the chip that lies is the one nobody had to think about (issue 211).
+	 */
+	status: FeedTxStatus;
 	identicon: (seed: string) => string;
 	now?: number;
+}
+
+/**
+ * The chip for a lifecycle, in the corpus's words — the same three the desktop
+ * draws (`app-desktop/.../flows/live.rs`), so a pending send reads the same on
+ * both. `info` and `error` are the tones the design system already gives a
+ * waiting and a refused state.
+ */
+function statusChip(status: FeedTxStatus, m: WalletFlowMessages): StatusChipModel {
+	switch (status) {
+		case 'pending':
+			return { text: m['componentsTx.detail.statusPending'], tone: 'info' };
+		case 'failed':
+			return { text: m['componentsTx.detail.statusFailed'], tone: 'error' };
+		case 'confirmed':
+			return { text: m['componentsTx.receipt.statusConfirmed'], tone: 'success' };
+	}
 }
 
 /** Feed timestamps are Unix seconds; a millisecond value is tolerated. */
@@ -108,7 +157,7 @@ function whenMs(item: FeedItem): number {
 
 /** One feed item as the A2 / DA2 detail. */
 export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailModel {
-	const { m, wm, currency, hidden } = ctx;
+	const { m, wm, currency, hidden, status } = ctx;
 	const received = item.direction === 'in';
 	const chain = chainMeta(item.chain_id);
 	const facts: FactRowModel[] = [];
@@ -196,8 +245,10 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		title: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
 			symbol: item.symbol
 		}),
-		// The feed holds settled history; a pending send lives in its receipt.
-		status: { text: m['componentsTx.receipt.statusConfirmed'], tone: 'success' },
+		// The record's own lifecycle — never the confirmed chip by default
+		// (issue 211). The desktop shell has read this since it was wired;
+		// this one stamped "Confirmed" on a send that never left the wallet.
+		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount: hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
 		fiat: hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`,

@@ -16,6 +16,7 @@ import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
+import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
 import { chainName, nativeSymbol } from '$lib/services/networks';
@@ -423,9 +424,47 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		amount: split ? undefined : amountBlock,
 		recipient: split ? undefined : recipientBlock,
 		fee: feeRow(inputs, model.fee),
-		alert: alertWords(inputs.alert, m),
+		// The core's live verdict on the figure, and its last refusal. The
+		// warning is the one that arrives WITHOUT a tap (issue 211: the send
+		// screen said nothing at all about a gas coin the account did not
+		// hold), so the alert — which only exists after a refused Continue —
+		// wins when both are present.
+		alert: alertWords(inputs.alert, m) ?? liveWarning(send, m),
 		cta: m['send.continueBtn']
 	};
+}
+
+/**
+ * The core's live amount verdict (`amount_warning`), worded. Android draws
+ * this under the form as `formWarning`; on web the field was never read, so a
+ * person typing an amount their gas coin cannot pay for saw nothing until they
+ * pressed Continue — and before the core measured a native fee at all, not
+ * even then.
+ */
+function liveWarning(send: SendView, m: WalletFlowMessages): string | undefined {
+	return send.amount_warning === null ? undefined : warningWords(send.amount_warning, m);
+}
+
+/**
+ * One sentence per `SendAmountWarning`, the same mapping Android's
+ * `SendLive.warningText` and the desktop's `warn_*` strings draw. The core
+ * decides THAT the money does not add up and which shape the refusal has; the
+ * corpus says it.
+ */
+export function warningWords(
+	warning: SendAmountWarning,
+	m: WalletFlowMessages
+): string | undefined {
+	switch (warning.type) {
+		case 'not_enough_token':
+			return fill(m['send.warnNotEnoughToken'], { symbol: warning.symbol });
+		case 'insufficient_for_gas':
+			return fill(m['send.warnInsufficientForGas'], { sym: warning.symbol ?? '' });
+		case 'need_gas':
+			return fill(m['send.warnNeedGas'], { sym: warning.symbol ?? '' });
+		case 'cannot_convert':
+			return fill(m['send.warnCannotConvert'], { code: warning.code, symbol: warning.symbol });
+	}
 }
 
 /**
@@ -444,6 +483,14 @@ export function alertWords(
 		case 'invalid_amount':
 			return `${m['send.alertInvalidAmountTitle']} · ${m['send.alertInvalidAmountBody']}`;
 		case 'insufficient_balance':
+			// The refusal the core carried and this shell used to drop (issue
+			// 211): "The total exceeds your balance" is a lie about a send
+			// whose token balance is fine and whose GAS coin is empty. Android
+			// and iOS have always read the warning out; web said the generic
+			// sentence and left the person to guess which balance.
+			return `${m['send.alertInsufficientBalanceTitle']} · ${
+				(kind.warning && warningWords(kind.warning, m)) ?? m['send.alertInsufficientBalanceBody']
+			}`;
 		case 'split_over_balance':
 			return `${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`;
 		case 'load_tokens_failed':
@@ -749,7 +796,14 @@ export function liveFeeTokenPick(
 				option.amount === null
 					? '—'
 					: `~${trimBalance((Number(option.amount) / 10 ** option.decimals).toString(), 4)} ${option.symbol}`,
-			selected: option.selected
+			selected: option.selected,
+			// The verdict this file's own comment promised and never passed on
+			// (issue 211): the native row is always offered, balance or not,
+			// and the core refuses to select one that cannot pay. A row that
+			// looks exactly like the others and silently does nothing is how a
+			// person ends up paying gas in a coin they do not hold.
+			insufficient: option.insufficient,
+			insufficientNote: fill(m['send.warnInsufficientGas'], { sym: option.symbol })
 		}))
 	};
 }

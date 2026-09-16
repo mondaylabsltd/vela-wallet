@@ -12,6 +12,7 @@ import { buildFlowState } from './fixtures';
 import {
 	liveFeeTokenPick,
 	liveSendConfirm,
+	alertWords,
 	liveSendForm,
 	liveSendPick,
 	liveSendReceipt,
@@ -416,6 +417,56 @@ describe('the receipt', () => {
 	});
 });
 
+/**
+ * Issue 211: a send paying gas in a coin the account did not hold went through
+ * with nothing said. The core now refuses it — and these are the sentences the
+ * shell had been dropping on the floor while it did.
+ */
+describe('what the form says about a gas coin that cannot pay', () => {
+	it("reads the core's live warning out, before any tap", () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				amount: '0.5',
+				token_amount: '0.5',
+				amount_warning: { type: 'need_gas', symbol: 'POL' }
+			})
+		);
+		expect(model.alert).toBe(m['send.warnNeedGas'].replace('{{sym}}', 'POL'));
+	});
+
+	it('and the refusal names the coin, instead of blaming the balance that is fine', () => {
+		expect(liveSendForm(formModel(), inputs({ selected_token: ETH })).alert).toBeUndefined();
+		expect(
+			alertWords(
+				{
+					type: 'insufficient_balance',
+					warning: { type: 'need_gas', symbol: 'POL' }
+				},
+				m
+			)
+		).toBe(
+			`${m['send.alertInsufficientBalanceTitle']} · ${m['send.warnNeedGas'].replace('{{sym}}', 'POL')}`
+		);
+		// A refusal the core did not qualify keeps the generic sentence.
+		expect(alertWords({ type: 'insufficient_balance', warning: null }, m)).toBe(
+			`${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`
+		);
+	});
+
+	it('an alert the person just earned outranks the standing warning', () => {
+		const model = liveSendForm(formModel(), {
+			...inputs({
+				selected_token: ETH,
+				amount_warning: { type: 'need_gas', symbol: 'POL' }
+			}),
+			alert: { type: 'invalid_address' }
+		});
+		expect(model.alert).toContain(m['send.alertInvalidAddressTitle']);
+	});
+});
+
 describe('the fee-coin sheet', () => {
 	it('lists every row the relay published, including one that cannot pay', () => {
 		const model = liveFeeTokenPick(
@@ -456,6 +507,13 @@ describe('the fee-coin sheet', () => {
 		expect(model.rows[0]).toMatchObject({ selected: true, fee: '~0.0021 ETH' });
 		// No quote for a coin that cannot pay — said, not guessed.
 		expect(model.rows[1].fee).toBe('—');
+		// …and the core's verdict travels with it (issue 211). Without this the
+		// row looked exactly like a payable one and silently did nothing.
+		expect(model.rows[0].insufficient).toBe(false);
+		expect(model.rows[1].insufficient).toBe(true);
+		expect(model.rows[1].insufficientNote).toBe(
+			m['send.warnInsufficientGas'].replace('{{sym}}', 'USDC')
+		);
 	});
 });
 

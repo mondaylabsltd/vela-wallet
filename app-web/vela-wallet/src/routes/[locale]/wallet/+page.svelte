@@ -103,6 +103,7 @@
 	import {
 		feedItemAt,
 		findFeedItem,
+		feedItemStatus,
 		liveTxDetail,
 		shownTxDetailStateDesktop,
 		shownTxDetailStateMobile,
@@ -189,6 +190,8 @@
 					wm: data.walletMessages,
 					currency: currency.view,
 					hidden: balance.view.hidden,
+					// The record's own lifecycle, not a chip this page assumes.
+					status: feedItemStatus(feed.view, selectedTx),
 					identicon: (seed) => avatarSvgForClient(seed, '')
 				})
 	);

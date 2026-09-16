@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedTxRecord } from '$lib/core/generated/FeedTxRecord';
+import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
@@ -14,6 +16,7 @@ import { buildDesktopState } from './fixtures';
 import { balanceTokenId, withLiveWalletDesktop } from './live';
 import {
 	feedItemAt,
+	feedItemStatus,
 	findFeedItem,
 	liveTxDetail,
 	shownTxDetailStateDesktop,
@@ -170,7 +173,14 @@ describe('liveTxDetail', () => {
 		expect(detail.facts.some((fact) => fact.lead?.kind === 'identicon')).toBe(false);
 	});
 
-	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const ctx = {
+		m: fm,
+		wm: m,
+		currency: USD,
+		hidden: false,
+		status: 'confirmed' as const,
+		identicon: IDENTICON
+	};
 
 	it('words the tapped transaction, not the fixture one', () => {
 		const detail = liveTxDetail(
@@ -196,6 +206,107 @@ describe('liveTxDetail', () => {
 		const detail = liveTxDetail(item('a'), { ...ctx, hidden: true });
 		expect(detail.amount).not.toContain('1.25');
 		expect(detail.fiat).not.toContain('2');
+	});
+});
+
+/**
+ * Issue 211: a send that paid its gas in a coin the account did not hold was
+ * listed as "Confirmed" in the Transaction Details panel while nothing had
+ * landed on chain and no balance had moved. The panel stamped the confirmed
+ * chip on EVERY row; the record's own lifecycle was on the wire the whole
+ * time, and the desktop shell has been reading it since it was wired.
+ */
+describe('the status a transaction detail reports (issue 211)', () => {
+	const ctx = {
+		m: fm,
+		wm: m,
+		currency: USD,
+		hidden: false,
+		status: 'confirmed' as const,
+		identicon: IDENTICON
+	};
+
+	function record(id: string, status: FeedTxStatus): FeedTxRecord {
+		return {
+			id,
+			user_op_hash: '0xop',
+			tx_hash: '',
+			from: '0x' + 'a1'.repeat(20),
+			to: '0x' + 'b1'.repeat(20),
+			to_name: null,
+			value: '1.25',
+			symbol: 'ETH',
+			decimals: 18,
+			logo_urls: null,
+			chain_id: 1,
+			timestamp: 1_700_000_000,
+			day_start_ms: 0,
+			status,
+			kind: 'send',
+			usd: null
+		};
+	}
+
+	it('a submitted send that has not landed reads Pending, not Confirmed', () => {
+		const feed: FeedView = { ...FEED, transactions: [record('a', 'pending')] };
+		const detail = liveTxDetail(item('a'), { ...ctx, status: feedItemStatus(feed, item('a')) });
+		expect(detail.status.text).toBe(fm['componentsTx.detail.statusPending']);
+		expect(detail.status.tone).toBe('info');
+	});
+
+	it('a definite refusal reads Failed', () => {
+		const feed: FeedView = { ...FEED, transactions: [record('a', 'failed')] };
+		expect(feedItemStatus(feed, item('a'))).toBe('failed');
+		const detail = liveTxDetail(item('a'), { ...ctx, status: 'failed' });
+		expect(detail.status.text).toBe(fm['componentsTx.detail.statusFailed']);
+		expect(detail.status.tone).toBe('error');
+	});
+
+	it('a settled one still reads Confirmed', () => {
+		const feed: FeedView = { ...FEED, transactions: [record('a', 'confirmed')] };
+		expect(feedItemStatus(feed, item('a'))).toBe('confirmed');
+		expect(liveTxDetail(item('a'), ctx).status.text).toBe(
+			fm['componentsTx.receipt.statusConfirmed']
+		);
+	});
+
+	it("a folded batch row answers with the group's status, not a record id", () => {
+		// The repro was a split to two recipients: the row's id is the shared
+		// user_op_hash, so no record matches it and the lookup alone would
+		// report the settled reading forever.
+		const split = item('0xop', {
+			direction: 'out',
+			counterparty: null,
+			batch: {
+				kind: 'split',
+				count: 2,
+				total_usd: 0,
+				transfers: [],
+				ids: ['s1', 's2'],
+				from: '0x' + 'a1'.repeat(20),
+				chain_id: 137,
+				timestamp: 1_700_000_000,
+				status: 'pending',
+				tx_hash: '',
+				user_op_hash: '0xop',
+				symbol: 'pUSD',
+				logo_urls: null,
+				to: null,
+				to_name: null
+			}
+		});
+		const feed: FeedView = {
+			...FEED,
+			transactions: [record('s1', 'pending'), record('s2', 'pending')]
+		};
+		expect(feedItemStatus(feed, split)).toBe('pending');
+	});
+
+	it('a row with no local record keeps the settled reading', () => {
+		// An incoming transfer the chain already carries has no lifecycle of
+		// its own to report.
+		expect(feedItemStatus(FEED, item('a'))).toBe('confirmed');
+		expect(feedItemStatus(FEED, undefined)).toBe('confirmed');
 	});
 });
 
@@ -248,7 +359,14 @@ describe('the asset column', () => {
 describe('a transaction detail with no record behind it (issue #213)', () => {
 	const drawnDesktop = buildDesktopFlowState('da2', fm, IDENTICON);
 	const drawnMobile = buildFlowState('a2', fm, IDENTICON);
-	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const ctx = {
+		m: fm,
+		wm: m,
+		currency: USD,
+		hidden: false,
+		status: 'confirmed' as const,
+		identicon: IDENTICON
+	};
 
 	it('the drawn states really do carry the mocks transaction', () => {
 		// Guards the premise: if the fixture ever stops holding a transaction,
