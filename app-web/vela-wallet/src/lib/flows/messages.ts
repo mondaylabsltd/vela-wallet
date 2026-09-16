@@ -127,6 +127,11 @@ export const WALLET_FLOW_KEYS = [
 	// ------------------------------------------------------------------ send
 	'send.selectTokenTitle',
 	'send.searchPlaceholder',
+	// What an EMPTY list says. Both were in the corpus and neither was on a
+	// web surface: a picker that has nothing to offer showed a blank panel,
+	// which is where an account holding nothing now lands (issue 209).
+	'send.noTokensWithBalance',
+	'send.noMatchingTokens',
 	'history.filterAll',
 	'send.filterStable',
 	'send.filterGas',
@@ -202,8 +207,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.alertInsufficientBalanceTitle',
 	'send.alertInsufficientBalanceBody',
 	'send.alertLoadTokensError',
-	// The core's live amount verdicts (`SendAmountWarning`), which this
-	// shell used to drop on the floor (issue 211).
+	// The core's live amount verdicts (`SendAmountWarning`), which this shell
+	// used to drop on the floor (issues 211 and 210) — the other three have
+	// drawn them since spec 032.
 	'send.warnNotEnoughToken',
 	'send.warnInsufficientForGas',
 	'send.warnInsufficientGas',

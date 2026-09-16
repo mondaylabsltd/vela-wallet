@@ -939,6 +939,59 @@ fn a_prefilled_recipient_is_shown_before_the_tokens_arrive() {
     assert!(view.selected_token.is_some());
 }
 
+/// Issue #209: a hand-off from the address book to an account that holds
+/// NOTHING must not leave a form standing. `open` steps to the form for the
+/// recipient's sake; when the list comes back with no token to send, the form
+/// has no balance, no chain and no Max to show — so the picker is what is
+/// showing, and it says so out of the same empty list.
+#[test]
+fn a_prefilled_recipient_with_nothing_to_send_falls_back_to_the_picker() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        prefilled_recipient: Some(RECIPIENT.to_owned()),
+        ..SendOpenParams::default()
+    }));
+    assert_eq!(sut.view().stage, SendStage::EnterDetails, "optimistic step");
+
+    sut.resolve(loaded(vec![]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "no token, no form");
+    assert!(view.selected_token.is_none());
+    assert!(
+        view.tokens.is_empty(),
+        "the picker says the account is empty"
+    );
+    // Who the money is for survives: picking a token later lands on the form
+    // with the person still filled in.
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// The same rule for the two other hand-offs that step to the form early: a
+/// token whose symbol is no longer held, and multi ids that match no row.
+#[test]
+fn a_preselection_that_resolves_to_nothing_falls_back_to_the_picker() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_symbol: Some("USDC".to_owned()),
+        preselected_network: Some("ethereum".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![eth("2")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "USDC is not held");
+    assert!(view.selected_token.is_none());
+
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_multi: Some("ethereum_native_WETH".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![eth("2")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "no id matched");
+    assert!(!view.multi_select_mode);
+}
+
 #[test]
 fn preselected_symbol_and_network_land_on_enter_details() {
     let mut sut = Sut::new();
@@ -1469,6 +1522,114 @@ fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
     sut.dispatch(Event::TapMax);
     // 5 − 1.5×1 = 3.5 USDC.
     assert_eq!(sut.view().amount, "3.5");
+}
+
+/// Issue #210: 0.00005 BNB against a 0.000332 BNB fee. `Max` is right to fill
+/// `0` — and has to say why, or the screen is a zero and a dead button.
+#[test]
+fn max_below_the_native_fee_fills_zero_and_says_why() {
+    let mut sut = boot(vec![eth("0.00005")]);
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: eth("0.00005").id(),
+    });
+    assert_eq!(ops.len(), 1);
+    sut.resolve(credential(Some(PK)));
+    // The fee is 6.6× the whole balance.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "no estimate needed: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("ETH".to_owned())
+        }),
+        "the zero explains itself"
+    );
+    assert!(!view.can_continue, "and the gate stays shut");
+}
+
+/// The same rule one wei the other side of the line: a balance that still
+/// clears the reserve fills a figure and says nothing.
+#[test]
+fn max_one_wei_above_the_reserve_is_silent() {
+    let mut sut = boot(vec![eth("0.000332000000000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000332000000000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0.000000000000000001");
+    assert_eq!(view.amount_warning, None);
+}
+
+/// The fee token sent as itself: the 1.5× reserve is the line, and a balance
+/// under it gets the same sentence in the fee asset's own symbol.
+#[test]
+fn max_of_the_fee_token_below_its_reserve_fills_zero_and_says_why() {
+    let mut sut = boot(vec![usdc("1.4")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("1.4").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000), // reserve = 1.5 USDC
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("USDC".to_owned())
+        })
+    );
+}
+
+/// A sponsored transfer reserves nothing, so an empty balance is an empty
+/// balance — never "the fee ate it".
+#[test]
+fn a_zero_fee_never_blames_the_fee() {
+    let mut sut = boot(vec![eth("0.000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 0),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(
+        view.amount, "0.000001",
+        "a sponsored transfer sweeps it all"
+    );
+    assert_eq!(view.amount_warning, None);
+}
+
+/// Gas paid in a separate asset: the whole balance is sendable, so a zero in
+/// the box is the person's own zero and the fee has nothing to answer for.
+#[test]
+fn a_fee_in_another_asset_never_claims_this_balance() {
+    let mut sut = boot(vec![usdc("5"), dai("0.1")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: dai("0.1").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "0".to_owned(),
+    });
+    assert_eq!(sut.view().amount_warning, None);
 }
 
 #[test]

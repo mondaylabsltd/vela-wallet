@@ -219,6 +219,14 @@ enum SendLive {
         let symbol = token?.symbol ?? ""
         let chain = token.map { ChainCatalog.meta($0.chainId)?.displayName ?? $0.network } ?? ""
 
+        // **No token, no card** (issue #209). The drawn SD2 arrives with the
+        // mocks' "USDT · Ethereum · Balance 53.4836" already in it, and
+        // falling back to it whenever the core has not named a token quoted a
+        // balance to somebody who may hold nothing — the web hand-off found
+        // it on an account showing $0.00. `selected_token` is null for
+        // reachable reasons: the form opens for a handed-off recipient before
+        // the token list answers, and a load that fails never names one. The
+        // body draws the card only when there IS one.
         live.token = token.map { held in
             SendTokenCardModel(
                 // The held token's own logo (058), with its lettermark behind.
@@ -230,7 +238,7 @@ enum SendLive {
                 detail: "\(chain) · \(trim(held.balance))",
                 max: model.token?.max
             )
-        } ?? model.token
+        }
 
         // The field shows what was typed; the line under it shows the OTHER
         // unit. When the figure is already fiat the other unit is the token's,
@@ -356,9 +364,12 @@ enum SendLive {
         return SendFormModel(
             // The title names the token being SENT. The fixture's said USDT,
             // which on a wallet holding xDAI is a sentence about somebody
-            // else's money.
+            // else's money — and with no token at all, "Send " names nothing,
+            // so the plain verb stands (#209).
             header: FlowHeaderModel(
-                title: loc.t("send.sendTitle", vars: ["symbol": symbol]),
+                title: token == nil
+                    ? loc.t("tokenDetail.send")
+                    : loc.t("send.sendTitle", vars: ["symbol": symbol]),
                 backLabel: model.header.backLabel,
                 action: model.header.action,
                 pill: model.header.pill
@@ -498,6 +509,8 @@ enum SendLive {
             return loc.t("send.alertInsufficientBalanceBody")
         case .insufficientForGas(let symbol):
             return loc.t("send.warnInsufficientForGas", vars: ["sym": symbol ?? ""])
+        case .insufficientGas(let symbol):
+            return loc.t("send.warnInsufficientGas", vars: ["sym": symbol ?? ""])
         case .needGas(let symbol):
             return loc.t("send.warnNeedGas", vars: ["sym": symbol ?? ""])
         case .cannotConvert(let code, let symbol):

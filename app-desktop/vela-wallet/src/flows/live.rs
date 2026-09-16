@@ -1283,6 +1283,12 @@ fn amount_warning_text(
             &symbol.clone().unwrap_or_else(native),
         )
         .into(),
+        SendAmountWarning::InsufficientGas { symbol } => fill(
+            &s.warn_insufficient_gas,
+            "sym",
+            &symbol.clone().unwrap_or_else(native),
+        )
+        .into(),
         SendAmountWarning::NeedGas { symbol } => fill(
             &s.warn_need_gas,
             "sym",
