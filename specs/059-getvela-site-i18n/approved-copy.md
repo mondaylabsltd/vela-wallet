@@ -190,6 +190,94 @@ Rules for the other thirteen:
 Realigned in all thirteen the same day
 ([reviews/single-string.md](reviews/single-string.md)).
 
+## `home.tradeoffs.items[1].body` — the many-keys trade-off
+
+Six paragraphs became two (founder, 2026-09-16). `en`:
+
+> You can add multiple keys when creating your wallet
+>
+> Vela is 1-of-n: any authorized key can spend from the wallet on its own.
+> Adding another key gives you another way to recover access — and another entry
+> point you need to protect.
+
+`zh`:
+
+> 创建钱包时可以设置多把钥匙
+>
+> Vela 是 1-of-n：任何一把已授权的钥匙都能独立花掉钱包里的钱。多一把钥匙意味着多一种恢复方式，也意味着多一个需要保护的入口。
+
+Gone: how passkeys sync, what that makes you trust, and the two "worried
+about…" recipes. What is left is the trade-off itself, which is what this
+section is for — the recipes belong in the docs.
+
+- **Two paragraphs, and the first has no full stop.** It is a lead-in, not a
+  sentence; the gate enforces the count and the locales follow the punctuation.
+- **`1-of-n` stays untranslated** in all fifteen. It is the property name, and
+  every locale already wrote it that way.
+- **Both halves of the second sentence must survive.** Another key is another
+  recovery path AND another spend path. A locale that keeps only the first has
+  written marketing; the sentence exists for the second.
+- **Open for the founder:** the item's `title` still reads *Wherever your keys
+  live, that place becomes part of your wallet's security* — written for the body
+  that has just been cut, and the new body does not mention where keys live.
+  Title was not in scope, so it is recorded rather than changed.
+
+Realigned in all thirteen the same day
+([reviews/single-string.md](reviews/single-string.md)).
+
+## `home.tradeoffs.items[1].title` — the many-keys title
+
+| locale | string | approved |
+|---|---|---|
+| `en` | `Every key is a way into your wallet` | founder, 2026-09-16 |
+| `zh` | `每一把钥匙，都是一个独立的钱包入口` | founder, 2026-09-16 |
+
+Replaces *Wherever your keys live, that place becomes part of your wallet's
+security.*, which was written for the six-paragraph body that had just been cut.
+The new title says what the two-paragraph body now says: each key is a way in.
+
+**Recorded, not fixed:** this title has no full stop, while `items[0]` and
+`items[2]` both do — three titles in one list, two punctuated. The founder's
+string was taken verbatim (a stray leading/trailing space in the submission was
+trimmed, since it is invisible on the page and noise in the file). Say the word
+and the period goes on in all fifteen.
+
+## `home.tradeoffs.items[2].body` — the audit trade-off
+
+Six paragraphs became two (founder, 2026-09-16). `en`:
+
+> Safe v1.4.1 and the WebAuthn module have both undergone third-party audits. We
+> use the publicly released versions without modifying the contract code.
+>
+> Audits can help identify security issues, but they are not a guarantee of
+> security and do not mean that every potential vulnerability has been found.
+
+`zh`:
+
+> Safe v1.4.1 和 WebAuthn 模块均经过第三方审计。我们使用其公开发布的版本，未修改合约代码。
+>
+> 审计可以帮助发现安全问题，但并非安全保证，也不代表所有潜在漏洞都已被发现。
+
+**The claim that must never soften (A02 FR-2/FR-3)** is the second paragraph. Not
+a guarantee; not every vulnerability found. A locale that renders it as "audited,
+so it is safe" has made a false statement about custody in a language nobody on
+the team reads. All fifteen keep both halves.
+
+What the cut removed, and where it now lives — recorded so nobody assumes it was
+lost by accident:
+
+| removed from this item | still said elsewhere? |
+|---|---|
+| "The Vela app code … is written by us and published for anyone to inspect" | yes — `home.faq` "Has the code been audited?" says our app code has **not** been independently audited and none is scheduled |
+| the `<a href="/docs/security-audits">Audits &amp; known issues</a>` link | yes — that page is still linked twice from this catalog (FAQ, and the account-contract row) |
+| "there is no support desk that can reverse … an on-chain transaction" | **no longer on the home page** |
+| "The software is provided as is, without warranty. The risk … is ultimately yours." | **no longer on the home page** |
+
+The last two are flagged, not restored: they were the founder's to cut.
+
+Realigned in all thirteen the same day
+([reviews/single-string.md](reviews/single-string.md)).
+
 ## `home.hero.headline` in all fifteen — the T058 record
 
 FR-006: **a locale keeps the English headline until its own line is approved.**

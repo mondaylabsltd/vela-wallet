@@ -132,12 +132,12 @@
 					"body": "Vela-Transaktionen prüfen Passkey-Signaturen on-chain und laufen über ERC-4337, brauchen also in der Regel mehr Gas als gewöhnliche Überweisungen.\n\nStandardmäßig zahlt der Relayer das Gas und reicht die Transaktion ein. Die Gebühr enthält die On-Chain-Kosten und ein Entgelt für den Relay-Betrieb, und sie steht fest, sobald du signierst.\n\nDen Relayer kannst du in den Einstellungen wechseln oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">selbst einen betreiben</a>."
 				},
 				{
-					"title": "Wo deine Schlüssel liegen, wird dieser Ort Teil der Sicherheit deiner Wallet.",
-					"body": "Vela nutzt Passkeys. Sie können zwischen den Geräten synchronisieren, die dein Apple- oder Google-Konto verbindet, oder auf einem USB/NFC-Sicherheitsschlüssel liegen bleiben.\n\nDas heißt: Du musst den Geräten, den Konten und der Hardware vertrauen, die diese Schlüssel halten.\n\nAngst, ein Gerät zu verlieren: Lege beim Anlegen der Wallet mehrere Schlüssel an, auf verschiedenen Geräten oder auf verschiedener Hardware. Angst, von einem einzigen Anbieter abzuhängen: Kombiniere einen synchronisierten Passkey mit einem Sicherheitsschlüssel.\n\nEine Abwägung ist dabei wirklich wichtig:\n\nJeder zusätzliche Schlüssel ist ein Weg mehr zurück in die Wallet — und ein Zugang mehr, um daraus auszugeben.\n\nVela ist 1-of-n: Jeder berechtigte Schlüssel signiert allein. Also muss jeder einzelne Schlüssel so geschützt sein wie ein Wallet-Schlüssel."
+					"title": "Jeder Schlüssel ist ein Weg in deine Wallet",
+					"body": "Beim Anlegen der Wallet kannst du mehrere Schlüssel hinterlegen\n\nVela ist 1-of-n: Jeder berechtigte Schlüssel kann allein aus der Wallet ausgeben. Ein Schlüssel mehr ist ein Weg mehr zurück in die Wallet — und ein Zugang mehr, den du schützen musst."
 				},
 				{
 					"title": "Du vertraust auditierten Safe-Verträgen — und ein Audit ist keine Garantie.",
-					"body": "Dein Konto ist Safe v1.4.1 plus das WebAuthn-Signer-Modul. Wir verwenden Verträge, die von Dritten auditiert und in ihren veröffentlichten Versionen ausgerollt wurden — ohne dass irgendetwas von uns darin geändert wäre.\n\n„Auditiert“ ist nicht dasselbe wie „es kann nichts schiefgehen“.\n\nEin Audit sieht sich eine bestimmte Version von bestimmtem Code an. Es senkt die Wahrscheinlichkeit, dass noch ein Fehler drinsteckt; es nimmt das Risiko nicht weg. Und wenn ein Smart Contract schiefgeht, gibt es keine Hotline, die eine On-Chain-Transaktion rückgängig macht.\n\nDen Vela-App-Code, der um diese Verträge herum läuft, haben wir geschrieben und veröffentlicht, damit ihn jeder prüfen kann.\n\n<a href=\"/docs/security-audits\">Audits &amp; bekannte Probleme</a> listet die beteiligten Verträge, ihre Audit-Berichte und die Probleme, die wir kennen und weiter beobachten.\n\nDie Software wird ohne Gewähr bereitgestellt, wie sie ist. Das Risiko für das Geld, das du in Vela legst, trägst am Ende du."
+					"body": "Safe v1.4.1 und das WebAuthn-Modul wurden beide von Dritten auditiert. Wir verwenden die veröffentlichten Versionen, ohne den Vertragscode zu ändern.\n\nEin Audit kann Sicherheitsprobleme aufdecken, aber es ist keine Garantie für Sicherheit und bedeutet nicht, dass jede mögliche Schwachstelle gefunden wurde."
 				}
 			],
 			"close": "Wenn eines davon für dich ein Ausschlusskriterium ist, ist Vela noch nichts für dich."
@@ -460,7 +460,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

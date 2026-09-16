@@ -132,12 +132,12 @@
 					"body": "Giao dịch Vela xác minh chữ ký passkey ngay trên chuỗi và chạy qua ERC-4337, nên thường tốn nhiều gas hơn các lệnh chuyển thông thường.\n\nMặc định, relayer trả gas và gửi giao dịch. Phí gồm chi phí trên chuỗi và phí dịch vụ relay, và được chốt ngay khi bạn ký.\n\nBạn có thể đổi relayer trong phần cài đặt, hoặc <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">tự chạy một cái</a>."
 				},
 				{
-					"title": "Khóa của bạn nằm ở đâu thì nơi đó thành một phần an toàn của ví.",
-					"body": "Vela dùng passkey. Chúng có thể đồng bộ giữa các thiết bị mà tài khoản Apple hoặc Google của bạn kết nối, hoặc được giữ trong một khóa bảo mật phần cứng USB/NFC.\n\nNghĩa là bạn phải tin vào thiết bị, tài khoản và phần cứng đang giữ những khóa đó.\n\nSợ mất thiết bị: đặt sẵn nhiều khóa lúc tạo ví, để trên các thiết bị khác nhau hoặc trên phần cứng khác nhau. Sợ phụ thuộc một nhà cung cấp duy nhất: ghép một passkey đồng bộ với một khóa bảo mật phần cứng.\n\nỞ đây có một đánh đổi thật sự đáng lưu ý:\n\nMỗi khóa thêm vào là thêm một đường lấy lại ví, và cũng là thêm một cửa để tiêu tiền trong ví.\n\nVela là 1-of-n: bất kỳ khóa nào được ủy quyền cũng ký được một mình. Vì vậy mọi khóa đều phải được bảo vệ theo đúng chuẩn của một khóa ví."
+					"title": "Mỗi khóa là một lối vào ví của bạn",
+					"body": "Bạn có thể đặt nhiều khóa ngay khi tạo ví\n\nVela là 1-of-n: bất kỳ khóa nào được ủy quyền cũng tiêu được tiền trong ví một mình. Thêm một khóa là thêm một đường lấy lại quyền truy cập — và thêm một cửa bạn phải giữ."
 				},
 				{
 					"title": "Bạn đang dựa vào hợp đồng Safe đã được kiểm toán — và kiểm toán không phải là bảo đảm.",
-					"body": "Tài khoản của bạn là Safe v1.4.1 cộng với mô-đun ký WebAuthn. Chúng tôi dùng những hợp đồng đã được bên thứ ba kiểm toán và triển khai đúng phiên bản họ công bố, không sửa gì của mình vào trong đó.\n\n\"Đã kiểm toán\" không đồng nghĩa với \"không thể có chuyện gì\".\n\nMột cuộc kiểm toán chỉ soi một phiên bản cụ thể của một đoạn mã cụ thể. Nó làm giảm khả năng còn sót lỗi, chứ không xóa được rủi ro. Và khi hợp đồng thông minh có chuyện, không có tổng đài nào đảo ngược hay hoàn tác được một giao dịch đã lên chuỗi.\n\nPhần mã ứng dụng Vela chạy quanh những hợp đồng đó là do chúng tôi viết và công khai cho bất kỳ ai soi.\n\n<a href=\"/docs/security-audits\">Kiểm toán &amp; vấn đề đã biết</a> liệt kê các hợp đồng liên quan, báo cáo kiểm toán của chúng, và những vấn đề chúng tôi biết và vẫn đang theo dõi.\n\nPhần mềm được cung cấp nguyên trạng, không kèm bảo đảm. Rủi ro với số tiền bạn đưa vào Vela, cuối cùng là của bạn."
+					"body": "Safe v1.4.1 và mô-đun WebAuthn đều đã qua kiểm toán của bên thứ ba. Chúng tôi dùng đúng bản đã công bố, không sửa mã hợp đồng.\n\nKiểm toán giúp phát hiện vấn đề bảo mật, nhưng không phải là bảo đảm an toàn và cũng không có nghĩa là mọi lỗ hổng đều đã được tìm ra."
 				}
 			],
 			"close": "Nếu một trong ba điều đó bạn không chấp nhận được, thì Vela chưa dành cho bạn."
@@ -460,7 +460,7 @@
 		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

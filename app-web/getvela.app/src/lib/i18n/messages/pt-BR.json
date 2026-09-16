@@ -132,12 +132,12 @@
 					"body": "As transações da Vela verificam assinaturas de passkey on-chain e rodam por ERC-4337, então em geral gastam mais gas do que uma transferência comum.\n\nPor padrão, o relayer paga o gas e envia a transação. A taxa inclui o custo on-chain e uma taxa pelo serviço de relay, e fica fechada no momento em que você assina.\n\nVocê pode trocar de relayer nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rodar o seu</a>."
 				},
 				{
-					"title": "Onde suas chaves moram, aquele lugar vira parte da segurança da sua carteira.",
-					"body": "A Vela usa passkeys. Elas podem sincronizar entre os aparelhos que a sua conta Apple ou Google conecta, ou podem ficar numa chave de segurança física USB/NFC.\n\nO que significa que você precisa confiar nos aparelhos, nas contas e no hardware que guardam essas chaves.\n\nCom medo de perder um aparelho: defina várias chaves na hora de criar a carteira, guardadas em aparelhos diferentes ou em hardwares diferentes. Com medo de depender de um único fornecedor: combine uma passkey sincronizada com uma chave de segurança física.\n\nExiste aqui um dilema que importa de verdade:\n\nCada chave a mais é mais um caminho de volta para a carteira, e mais uma porta de entrada para gastar dela.\n\nA Vela é 1-of-n: qualquer chave autorizada assina sozinha. Por isso toda chave precisa ser protegida no padrão de uma chave de carteira."
+					"title": "Cada chave é uma porta de entrada para a sua carteira",
+					"body": "Você pode definir várias chaves ao criar a carteira\n\nA Vela é 1-of-n: qualquer chave autorizada consegue gastar da carteira sozinha. Mais uma chave é mais um caminho para recuperar o acesso — e mais uma porta de entrada para você proteger."
 				},
 				{
 					"title": "Você está confiando em contratos Safe auditados — e uma auditoria não é uma garantia.",
-					"body": "Sua conta é o Safe v1.4.1 mais o módulo assinante WebAuthn. Usamos contratos auditados por terceiros e publicados nas versões que eles mesmos divulgaram, sem nada nosso alterado dentro.\n\n“Auditado” não é a mesma coisa que “não pode dar errado”.\n\nUma auditoria olha uma versão específica de um código específico. Ela reduz a chance de ainda haver uma falha ali; não elimina o risco. E quando um contrato inteligente dá errado, não existe atendimento que reverta ou desfaça uma transação já on-chain.\n\nO código do app da Vela que roda em volta desses contratos é escrito por nós e publicado para qualquer um inspecionar.\n\n<a href=\"/docs/security-audits\">Auditorias &amp; problemas conhecidos</a> lista os contratos envolvidos, seus relatórios de auditoria e os problemas que conhecemos e continuamos acompanhando.\n\nO software é fornecido como está, sem garantia. O risco do dinheiro que você coloca na Vela, no fim, é seu."
+					"body": "O Safe v1.4.1 e o módulo WebAuthn passaram por auditorias de terceiros. Usamos as versões publicadas, sem alterar o código dos contratos.\n\nUma auditoria ajuda a encontrar problemas de segurança, mas não é garantia de segurança e não significa que toda vulnerabilidade possível tenha sido achada."
 				}
 			],
 			"close": "Se um desses for impeditivo, a Vela ainda não é para você."
@@ -460,7 +460,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

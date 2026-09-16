@@ -352,3 +352,108 @@ Technical: exactly 3 paragraphs in all fifteen; one `<a>` per locale with the
 `vela-relay` href byte-identical; `prettier` reformatted the English string over
 two lines and the JSON files were already clean; `i18n:stamp` re-fingerprinted
 `home` in all fourteen. 189 tests pass.
+
+---
+
+## Seventh pass — `home.tradeoffs.items[1].body`
+
+Date: 2026-09-16 · 15 locales · the second trade-off (many keys). Six paragraphs
+in, two out.
+
+What the English dropped: the passkey-sync explanation, the "which means you have
+to trust the devices, the accounts and the hardware" line, and the two recipes
+("Worried about losing a device… Worried about depending on a single
+provider…"). What it kept is the only part that is actually a trade-off:
+
+> Vela is 1-of-n: any authorized key can spend from the wallet on its own.
+> Adding another key gives you another way to recover access — and another entry
+> point you need to protect.
+
+**The test for every locale was the second half of that sentence.** Another key
+is another way in — not only another way back. A translation that keeps the
+recovery half and softens the spend half has quietly turned the section's second
+admission into a feature, and it would read perfectly well. All thirteen keep
+both: `ein Zugang mehr, den du schützen musst`, `otra entrada que tienes que
+proteger`, `une entrée de plus à protéger`, `satu pintu lagi yang harus Anda
+jaga`, `korumanız gereken bir kapı daha`, `thêm một cửa bạn phải giữ`,
+`守るべき入り口も一つ増えます`, `지켜야 할 입구도 하나 늘어납니다`, `ещё один вход, который придётся
+защищать`, `多一個需要保護的入口`, `多一個要你睇實嘅入口`.
+
+Other calls:
+
+- **The first paragraph has no full stop** in English or Chinese — it is a
+  lead-in. Every locale follows, including `ja` (`…登録できます`) and `ko`
+  (`…등록할 수 있습니다`), where a bare `ます`/`습니다` without `。`/`.` is unusual in
+  prose but correct for a line that heads a paragraph.
+- **`1-of-n` is left untranslated everywhere.** It already was, in all fourteen.
+- `zh-TW` and `zh-HK` reuse their own earlier image for the recovery half —
+  `多一條把錢包拿回來的路` / `多一條攞得返個錢包嘅路` — rather than calquing 恢复方式 from `zh`.
+- `de` keeps `ein Zugang mehr`, which this locale had already coined for the
+  paragraph now deleted; the phrase survives its source.
+
+Recorded, not changed: the item's `title` still describes the cut body. Flagged
+in `approved-copy.md`.
+
+Technical: exactly 2 paragraphs in all fifteen, no links in this string, no
+placeholders. `prettier` clean, 189 tests, `i18n:stamp` re-fingerprinted `home`.
+
+---
+
+## Eighth pass — `home.tradeoffs.items[2].body` and `items[1].title`
+
+Date: 2026-09-16 · 15 locales × 2 strings. The audit trade-off goes from six
+paragraphs to two; the many-keys title is replaced to match the body cut in the
+seventh pass.
+
+### The title
+
+`Wherever your keys live, that place becomes part of your wallet's security.` →
+`Every key is a way into your wallet`
+
+The old title described the body that had just been deleted. The new one states
+the same thing the body now states, so the row reads as one claim rather than
+two. Locale notes: `de` `ein Weg in deine Wallet` and `it` `un ingresso` reuse
+the exact nouns their own bodies use two lines below, so the row rhymes with
+itself; `tr` `cüzdanınıza açılan bir kapı` (a door that opens onto your wallet)
+is the Turkish figure, where a literal *yol* would read as a route; `ja`
+「鍵はどれも、ウォレットへの入り口です」 puts `どれも` on the key rather than a count, which is
+how Japanese says *every*.
+
+No full stop, in any locale — the source has none. That leaves this list with two
+punctuated titles and one not; flagged in `approved-copy.md` rather than fixed,
+because the string is founder-approved verbatim.
+
+### The body — the one string on this site where a good translation can lie
+
+Everything else in this pass is craft. This paragraph is liability:
+
+> Audits can help identify security issues, but they are not a guarantee of
+> security and do not mean that every potential vulnerability has been found.
+
+Both halves have to survive in all fifteen, and the failure mode is not a
+mistranslation — it is a *tidier* sentence. "Audited by third parties, so your
+funds are protected" would read better than what the English says, which is
+precisely why `messages.test.ts` has a posture check and why this axis is read
+first. Checked, and all fifteen hold: `non è una garanzia di sicurezza`,
+`keine Garantie für Sicherheit`, `не гарантия безопасности`, `güvenlik garantisi
+değildir`, `bukan jaminan keamanan`, `không phải là bảo đảm an toàn`,
+`안전을 보증하지는 않으며`, `安全性の保証ではなく`, `並非安全保证`, `唔等於安全保證` — and
+each keeps the second clause too (*not every vulnerability has been found*),
+which is the half a translator drops as redundant.
+
+Terminology: each locale keeps its own audit word, unchanged from the rest of its
+file — `zh` 审计, `zh-TW` **稽核** (14×, and it has no 審計 anywhere), `zh-HK` 審計,
+`ja` 監査, `ko` 감사, `tr` denetim, `ru` аудит, the Latin-script locales `audit`.
+
+### What the cut removed
+
+The link to `/docs/security-audits` is gone from this item, along with the "as
+is, without warranty" sentence and "no support desk can reverse an on-chain
+transaction". The audits page is still linked twice elsewhere in the catalog, and
+the FAQ still says our own app code is not independently audited — so the
+honesty posture survives the cut. The two disclaimer sentences do not appear
+anywhere else on the home page. Recorded in `approved-copy.md`; not restored.
+
+Technical: this string now has **no** `<a>` in any locale, which is what the tag
+gate compares against the English; exactly 2 paragraphs everywhere; prettier
+clean, 189 tests, `i18n:stamp` re-fingerprinted `home`.

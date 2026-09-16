@@ -132,12 +132,12 @@
 					"body": "Les transactions Vela vérifient les signatures passkey on-chain et s'exécutent via ERC-4337 : elles consomment donc en général plus de gas qu'un virement ordinaire.\n\nPar défaut, le relayeur paie le gas et soumet la transaction. Les frais comprennent le coût on-chain et une commission pour le service de relais, et ils sont figés au moment où vous signez.\n\nVous pouvez changer de relayeur dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faire tourner le vôtre</a>."
 				},
 				{
-					"title": "Là où vivent vos clés, cet endroit devient une partie de la sécurité de votre portefeuille.",
-					"body": "Vela utilise des passkeys. Elles peuvent se synchroniser entre les appareils que relie votre compte Apple ou Google, ou rester sur une clé de sécurité matérielle USB/NFC.\n\nCe qui veut dire que vous devez faire confiance aux appareils, aux comptes et au matériel qui détiennent ces clés.\n\nPeur de perdre un appareil : définissez plusieurs clés à la création du portefeuille, réparties sur des appareils ou des matériels différents. Peur de dépendre d’un seul fournisseur : associez une passkey synchronisée à une clé de sécurité matérielle.\n\nIl y a ici un arbitrage qui compte vraiment :\n\nChaque clé supplémentaire est une façon de plus de récupérer le portefeuille, et une entrée de plus pour y dépenser.\n\nVela fonctionne en 1-of-n : n’importe quelle clé autorisée signe seule. Chaque clé doit donc être protégée au niveau d’une clé de portefeuille."
+					"title": "Chaque clé est une porte d'entrée dans votre portefeuille",
+					"body": "Vous pouvez définir plusieurs clés à la création de votre portefeuille\n\nVela fonctionne en 1-of-n : n'importe quelle clé autorisée peut dépenser seule depuis le portefeuille. Une clé de plus, c'est une façon de plus de récupérer l'accès — et une entrée de plus à protéger."
 				},
 				{
 					"title": "Vous faites confiance à des contrats Safe audités — et un audit n'est pas une garantie.",
-					"body": "Votre compte, c’est Safe v1.4.1 plus le module signataire WebAuthn. Nous utilisons des contrats audités par des tiers et déployés depuis leurs versions publiées, sans rien de nous à l’intérieur.\n\n« Audité » n’est pas la même chose que « rien ne peut mal tourner ».\n\nUn audit examine une version précise d’un code précis. Il réduit la probabilité qu’un défaut subsiste ; il ne supprime pas le risque. Et quand un contrat intelligent dérape, aucun service client ne peut annuler ni revenir en arrière sur une transaction déjà on-chain.\n\nLe code de l’application Vela qui tourne autour de ces contrats est écrit par nous et publié pour que n’importe qui puisse l’inspecter.\n\n<a href=\"/docs/security-audits\">Audits &amp; problèmes connus</a> énumère les contrats concernés, leurs rapports d’audit et les problèmes que nous connaissons et surveillons.\n\nLe logiciel est fourni tel quel, sans garantie. Le risque sur l’argent que vous confiez à Vela est en dernier ressort le vôtre."
+					"body": "Safe v1.4.1 et le module WebAuthn ont tous deux été audités par des tiers. Nous utilisons les versions publiées, sans modifier le code des contrats.\n\nUn audit aide à repérer des problèmes de sécurité, mais il ne garantit pas la sécurité et ne signifie pas que toutes les vulnérabilités possibles ont été trouvées."
 				}
 			],
 			"close": "Si l'un de ces points est rédhibitoire, Vela n'est pas encore fait pour vous."
@@ -460,7 +460,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

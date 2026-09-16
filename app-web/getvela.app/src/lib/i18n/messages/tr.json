@@ -132,12 +132,12 @@
 					"body": "Vela işlemleri, geçiş anahtarı imzalarını zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan transferlere göre genellikle daha fazla gas harcar.\n\nVarsayılan olarak gas'i relayer öder ve işlemi o gönderir. Ücret, zincir üstündeki maliyeti ve relay hizmet bedelini kapsar; tutar siz imzaladığınız anda sabitlenir.\n\nRelayer'ı ayarlardan değiştirebilir ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırabilirsiniz</a>."
 				},
 				{
-					"title": "Anahtarlarınız nerede duruyorsa orası cüzdanınızın güvenliğinin parçası olur.",
-					"body": "Vela geçiş anahtarları kullanır. Bunlar Apple ya da Google hesabınızın bağladığı cihazlar arasında eşitlenebilir ya da bir USB/NFC donanım güvenlik anahtarında tutulabilir.\n\nYani o anahtarları barındıran cihazlara, hesaplara ve donanıma güvenmeniz gerekir.\n\nCihazı kaybetmekten endişeleniyorsanız: cüzdanı oluştururken farklı cihazlarda ya da farklı donanımlarda duran birkaç anahtar tanımlayın. Tek bir sağlayıcıya bağlı kalmaktan endişeleniyorsanız: eşitlenen bir geçiş anahtarını bir donanım güvenlik anahtarıyla birlikte kullanın.\n\nBurada önemli bir denge var:\n\nHer ek anahtar, cüzdanı geri almanın bir yolu daha olduğu kadar, oradan harcamanın da bir kapısı daha demektir.\n\nVela 1-of-n çalışır: yetkili anahtarlardan herhangi biri tek başına imzalayabilir. Dolayısıyla her anahtar, bir cüzdan anahtarı standardında korunmalıdır."
+					"title": "Her anahtar, cüzdanınıza açılan bir kapıdır",
+					"body": "Cüzdanı oluştururken birden fazla anahtar tanımlayabilirsiniz\n\nVela 1-of-n çalışır: yetkili anahtarlardan herhangi biri tek başına cüzdandan harcama yapabilir. Her yeni anahtar, erişimi geri almanın bir yolu daha — ve korumanız gereken bir kapı daha."
 				},
 				{
 					"title": "Denetlenmiş Safe sözleşmelerine dayanıyorsunuz — ve denetim bir garanti değildir.",
-					"body": "Hesabınız, Safe v1.4.1 ve WebAuthn imzalayıcı modülünden oluşur. Üçüncü taraflarca denetlenmiş ve yayımlanan sürümlerinden dağıtılmış sözleşmeleri, içlerinde bize ait hiçbir değişiklik olmadan kullanıyoruz.\n\n\"Denetlenmiş\" ile \"hiçbir şey ters gidemez\" aynı şey değildir.\n\nBir denetim, belirli bir kodun belirli bir sürümüne bakar. İçeride hâlâ bir kusur bulunma ihtimalini azaltır; riski ortadan kaldırmaz. Ve bir akıllı sözleşme ters gittiğinde, zincir üstüne yazılmış bir işlemi geri alabilecek bir destek hattı yoktur.\n\nBu sözleşmelerin çevresinde çalışan Vela uygulama kodunu biz yazıyoruz ve herkesin inceleyebilmesi için yayımlıyoruz.\n\n<a href=\"/docs/security-audits\">Denetimler ve bilinen sorunlar</a> sayfasında ilgili sözleşmeler, denetim raporları ve bildiğimiz, takip etmeyi sürdürdüğümüz sorunlar listelenir.\n\nYazılım olduğu gibi, hiçbir garanti verilmeden sunulur. Vela'ya koyduğunuz paranın riski nihayetinde size aittir."
+					"body": "Safe v1.4.1 ve WebAuthn modülünün ikisi de üçüncü taraf denetimlerinden geçti. Yayımlanan sürümleri, sözleşme kodunu değiştirmeden kullanıyoruz.\n\nDenetim güvenlik sorunlarını bulmaya yardım eder; ama güvenlik garantisi değildir ve olası bütün açıkların bulunduğu anlamına gelmez."
 				}
 			],
 			"close": "Bu üçünden biri sizin için kabul edilemezse, Vela henüz size göre değil."
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

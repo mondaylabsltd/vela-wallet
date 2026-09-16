@@ -132,12 +132,12 @@
 					"body": "Transaksi Vela memverifikasi tanda tangan passkey on-chain dan dijalankan lewat ERC-4337, jadi umumnya memakai lebih banyak gas daripada transfer biasa.\n\nSecara bawaan, relayer yang membayar gas dan mengirim transaksinya. Biayanya mencakup ongkos on-chain dan biaya layanan relay, dan besarnya sudah tetap begitu Anda menandatangani.\n\nAnda bisa mengganti relayer di pengaturan, atau <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">menjalankan sendiri</a>."
 				},
 				{
-					"title": "Di mana pun kunci Anda disimpan, tempat itu menjadi bagian dari keamanan dompet Anda.",
-					"body": "Vela memakai passkey. Passkey bisa tersinkron di antara perangkat yang terhubung ke akun Apple atau Google Anda, atau disimpan di kunci keamanan fisik USB/NFC.\n\nArtinya Anda harus memercayai perangkat, akun, dan perangkat keras yang menyimpan kunci-kunci itu.\n\nKhawatir kehilangan perangkat: tetapkan beberapa kunci saat membuat dompet, disimpan di perangkat berbeda atau di perangkat keras berbeda. Khawatir bergantung pada satu penyedia: padukan passkey yang tersinkron dengan kunci keamanan fisik.\n\nAda satu konsekuensi penting di sini:\n\nSetiap kunci tambahan adalah satu jalan lagi untuk memulihkan dompet, sekaligus satu pintu lagi untuk membelanjakannya.\n\nVela bersifat 1-of-n: kunci mana pun yang berwenang bisa menandatangani sendirian. Jadi setiap kunci harus dijaga dengan standar kunci dompet."
+					"title": "Setiap kunci adalah satu pintu masuk ke dompet Anda",
+					"body": "Anda bisa menetapkan beberapa kunci saat membuat dompet\n\nVela bersifat 1-of-n: kunci mana pun yang berwenang bisa membelanjakan isi dompet sendirian. Satu kunci tambahan berarti satu jalan lagi untuk memulihkan akses — dan satu pintu lagi yang harus Anda jaga."
 				},
 				{
 					"title": "Anda bersandar pada kontrak Safe yang sudah diaudit — dan audit bukan jaminan.",
-					"body": "Akun Anda adalah Safe v1.4.1 ditambah modul penanda tangan WebAuthn. Kami memakai kontrak yang diaudit pihak ketiga dan dideploy dari versi yang mereka publikasikan, tanpa ada perubahan dari kami di dalamnya.\n\n\"Sudah diaudit\" tidak sama dengan \"tidak mungkin ada yang salah\".\n\nAudit menelaah satu versi tertentu dari kode tertentu. Ia menurunkan kemungkinan masih ada cacat di dalamnya; ia tidak menghapus risikonya. Dan ketika sebuah smart contract bermasalah, tidak ada layanan pelanggan yang bisa membatalkan atau memutar balik transaksi yang sudah on-chain.\n\nKode aplikasi Vela yang berjalan di sekitar kontrak-kontrak itu kami tulis sendiri dan kami publikasikan agar siapa pun bisa memeriksanya.\n\n<a href=\"/docs/security-audits\">Audit &amp; masalah yang diketahui</a> memuat daftar kontrak yang terlibat, laporan auditnya, serta masalah yang kami ketahui dan terus kami pantau.\n\nPerangkat lunak ini diberikan apa adanya, tanpa jaminan. Risiko atas uang yang Anda taruh di Vela pada akhirnya ada pada Anda."
+					"body": "Safe v1.4.1 dan modul WebAuthn sama-sama sudah melewati audit pihak ketiga. Kami memakai versi yang mereka rilis secara publik, tanpa mengubah kode kontraknya.\n\nAudit bisa membantu menemukan masalah keamanan, tapi bukan jaminan keamanan dan tidak berarti semua potensi celah sudah ketemu."
 				}
 			],
 			"close": "Kalau salah satu dari ketiganya tidak bisa Anda terima, Vela belum cocok untuk Anda."
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

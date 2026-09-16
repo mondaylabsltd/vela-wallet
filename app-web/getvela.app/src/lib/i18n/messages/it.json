@@ -132,12 +132,12 @@
 					"body": "Le transazioni Vela verificano on-chain le firme con passkey e vengono eseguite tramite ERC-4337, quindi in genere consumano più gas di un normale trasferimento.\n\nPer impostazione predefinita il relayer paga il gas e invia la transazione. La commissione comprende il costo on-chain e una commissione per il servizio di relay, ed è fissata nel momento in cui firmi.\n\nPuoi cambiare relayer nelle impostazioni, oppure <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">farne girare uno tuo</a>."
 				},
 				{
-					"title": "Ovunque stiano le tue chiavi, quel posto diventa parte della sicurezza del tuo wallet.",
-					"body": "Vela usa le passkey. Possono sincronizzarsi tra i dispositivi collegati al tuo account Apple o Google, oppure restare su una chiave di sicurezza hardware USB/NFC.\n\nIl che vuol dire che devi fidarti dei dispositivi, degli account e dell’hardware che custodiscono quelle chiavi.\n\nSe temi di perdere un dispositivo: imposta più chiavi quando crei il wallet, tenute su dispositivi diversi o su hardware diverso. Se temi di dipendere da un solo fornitore: affianca a una passkey sincronizzata una chiave di sicurezza hardware.\n\nQui c’è un compromesso che conta davvero:\n\nOgni chiave in più è un modo in più per rientrare nel wallet, e un ingresso in più per spendere da lì.\n\nVela è 1-of-n: qualsiasi chiave autorizzata firma da sola. Perciò ogni chiave va protetta come si protegge la chiave di un wallet."
+					"title": "Ogni chiave è un ingresso nel tuo wallet",
+					"body": "Puoi impostare più chiavi quando crei il wallet\n\nVela è 1-of-n: qualsiasi chiave autorizzata può spendere dal wallet da sola. Una chiave in più è un modo in più per recuperare l'accesso — e un ingresso in più da proteggere."
 				},
 				{
 					"title": "Ti stai fidando di contratti Safe verificati — e un audit non è una garanzia.",
-					"body": "Il tuo account è Safe v1.4.1 più il modulo firmatario WebAuthn. Usiamo contratti verificati da terze parti e distribuiti nelle versioni che loro hanno pubblicato, senza nulla di nostro modificato dentro.\n\n«Verificato da un audit» non è la stessa cosa di «non può andare storto nulla».\n\nUn audit guarda una versione precisa di un codice preciso. Abbassa la probabilità che un difetto sia ancora lì dentro; non elimina il rischio. E quando uno smart contract va storto, non c’è nessuna assistenza che possa annullare o riportare indietro una transazione già on-chain.\n\nIl codice dell’app Vela che gira attorno a quei contratti lo scriviamo noi ed è pubblicato perché chiunque possa esaminarlo.\n\n<a href=\"/docs/security-audits\">Audit &amp; problemi noti</a> elenca i contratti coinvolti, i loro report di audit e i problemi che conosciamo e continuiamo a tenere d’occhio.\n\nIl software è fornito così com’è, senza garanzie. Il rischio sui soldi che metti in Vela alla fine è tuo."
+					"body": "Safe v1.4.1 e il modulo WebAuthn sono stati entrambi sottoposti ad audit di terze parti. Usiamo le versioni pubblicate, senza modificare il codice dei contratti.\n\nUn audit aiuta a individuare problemi di sicurezza, ma non è una garanzia di sicurezza e non significa che ogni possibile vulnerabilità sia stata trovata."
 				}
 			],
 			"close": "Se uno di questi è un ostacolo insormontabile, Vela non fa ancora per te."
@@ -460,7 +460,7 @@
 		"storeNote": "Non è ancora negli store. Fino ad allora, ogni build è su GitHub."
 	},
 	"_fingerprints": {
-		"home": "a14d3cb9312e",
+		"home": "4affdaed7bf1",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
