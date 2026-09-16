@@ -230,6 +230,7 @@ export * from './SendAlertKind';
 export * from './SendAmountWarning';
 export * from './SendChainInfo';
 export * from './SendDisplayContext';
+export * from './SendDuplicateRowView';
 export * from './SendEstimateFailure';
 export * from './SendEvent';
 export * from './SendFeeIssueView';

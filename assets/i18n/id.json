@@ -342,6 +342,7 @@
   "selectAllValuable": "Pilih semua bernilai",
   "addRecipient": "Tambah penerima",
   "recipientN": "Penerima {{n}}",
+  "recipientDuplicate": "Alamat sama dengan Penerima {{n}}",
   "recipientCount_one": "{{count}} penerima",
   "recipientCount_other": "{{count}} penerima",
   "removeRecipient": "Hapus",

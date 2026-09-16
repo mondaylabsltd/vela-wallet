@@ -305,6 +305,7 @@
   "selectAllValuable": "Tout (avec valeur)",
   "addRecipient": "Ajouter un destinataire",
   "recipientN": "Destinataire {{n}}",
+  "recipientDuplicate": "Même adresse que le destinataire {{n}}",
   "recipientCount_one": "{{count}} destinataire",
   "recipientCount_many": "{{count}} destinataires",
   "recipientCount_other": "{{count}} destinataires",

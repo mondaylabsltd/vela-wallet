@@ -74,6 +74,7 @@
     "selectAllValuable": "Değerli olanları seç",
     "addRecipient": "Alıcı ekle",
     "recipientN": "Alıcı {{n}}",
+    "recipientDuplicate": "Alıcı {{n}} ile aynı adres",
     "recipientCount_one": "{{count}} alıcı",
     "recipientCount_other": "{{count}} alıcı",
     "removeRecipient": "Kaldır",

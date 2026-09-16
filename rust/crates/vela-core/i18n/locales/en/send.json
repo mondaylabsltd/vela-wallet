@@ -90,6 +90,7 @@
     "selectAllValuable": "Select all valuable",
     "addRecipient": "Add recipient",
     "recipientN": "Recipient {{n}}",
+    "recipientDuplicate": "Same address as recipient {{n}}",
     "recipientCount_one": "{{count}} recipient",
     "recipientCount_other": "{{count}} recipients",
     "removeRecipient": "Remove",

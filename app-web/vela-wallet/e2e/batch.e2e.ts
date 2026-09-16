@@ -124,6 +124,47 @@ test('a pasted table becomes a split send — and an unpriceable currency refuse
 	if (await apply.count()) await expect(apply.first()).toBeDisabled();
 });
 
+test('the same payee twice is named on the row that repeats it (issue 203)', async ({ page }) => {
+	await openSendForm(page);
+
+	// One recipient becomes many, and both rows are typed by hand — the path
+	// the importer's de-dupe never covered.
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	const row = (n: number) =>
+		page.getByRole('textbox', {
+			name: `${en('send.recipientN').replace('{{n}}', String(n))} · ${en('send.recipientLabel')}`
+		});
+	const amount = (n: number) =>
+		page.getByRole('textbox', {
+			name: `${en('send.recipientN').replace('{{n}}', String(n))} · ETH`
+		});
+	await row(1).fill(ALICE);
+	await amount(1).fill('0.1');
+	await row(2).fill(BOB);
+	await amount(2).fill('0.2');
+
+	const warning = page.getByText(en('send.recipientDuplicate').replace('{{n}}', '1'), {
+		exact: true
+	});
+	await expect(warning).toHaveCount(0);
+
+	// Row 2 becomes row 1's address: the second row says so, the first does not,
+	// and nothing is disabled — the batch is still exactly what was asked for.
+	await row(2).fill(ALICE);
+	await expect(warning).toBeVisible();
+	await expect(warning).toHaveCount(1);
+	// Warned, not refused: a repeated payee may be exactly what was meant, so
+	// the batch the person asked for stays sendable.
+	await expect(page.getByRole('button', { name: en('send.continueBtn') }).first()).toBeEnabled();
+
+	// Correct it and the warning goes with it.
+	await row(2).fill(BOB);
+	await expect(warning).toHaveCount(0);
+});
+
 test('SheetJS is never on the startup path', async ({ page }) => {
 	const scripts = collectScripts(page);
 	await denyOffOrigin(page);

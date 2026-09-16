@@ -4,6 +4,10 @@
 	 * every asset of a sweep by its mark (spec 038 #D2). One list, drawn the
 	 * same on the confirm, the receipt and the transaction detail, so what was
 	 * signed, what is landing and what landed read as one thing.
+	 *
+	 * A row may carry a `note` under its label — the split's confirm repeats the
+	 * form's duplicate-payee warning there (issue 203), so the last screen
+	 * before a signature says it too.
 	 */
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
@@ -39,7 +43,10 @@
 						><Identicon svg={item.identiconSvg} size="row" address={item.address} /></span
 					>
 				{/if}
-				<span class="label">{item.label}</span>
+				<span class="text">
+					<span class="label">{item.label}</span>
+					{#if item.note}<span class="note">{item.note}</span>{/if}
+				</span>
 				<span class="value">{item.value}</span>
 			</li>
 		{/each}
@@ -86,9 +93,22 @@
 		height: 100%;
 	}
 
-	.label {
+	/* Label and, when there is one, the sentence under it — one column, so
+	   the note is not swallowed by the label's ellipsis. */
+	.text {
 		flex: 1;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.note {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-warning-base);
+	}
+
+	.label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

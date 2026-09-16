@@ -74,6 +74,7 @@
     "selectAllValuable": "Tutti di valore",
     "addRecipient": "Aggiungi destinatario",
     "recipientN": "Destinatario {{n}}",
+    "recipientDuplicate": "Stesso indirizzo del destinatario {{n}}",
     "recipientCount_one": "{{count}} destinatario",
     "recipientCount_many": "{{count}} destinatari",
     "recipientCount_other": "{{count}} destinatari",
