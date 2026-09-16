@@ -1175,6 +1175,191 @@ fn sending_another_token_requires_the_fee_token_balance_to_cover() {
     );
 }
 
+/// Issue #211. The fee rides on the native coin and the account holds none of
+/// it — a zero balance never even reaches this machine, since the holdings
+/// drop it — so the fee leg would move a coin that is not there and the whole
+/// op could only revert. Before this rule the ERC-20 half of the fee check was
+/// the only half: nothing measured a NATIVE fee, so the screen said nothing
+/// and `Continue` carried a doomed send to the passkey.
+#[test]
+fn an_erc20_send_paying_a_native_fee_it_cannot_afford_warns_and_refuses() {
+    let mut sut = boot(vec![usdc("5")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 100_000_000_000_000_000),
+    });
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    // The symbol is the chain's, because there is no row to read it from.
+    let need_gas = SendAmountWarning::NeedGas {
+        symbol: Some("ETH".to_owned()),
+    };
+    assert_eq!(sut.view().amount_warning, Some(need_gas.clone()));
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InsufficientBalance {
+                warning: Some(need_gas)
+            }
+        }]
+    );
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
+}
+
+/// The mirror image, and the second half of the same hole: a NATIVE send whose
+/// gas is paid in a stablecoin the account barely holds. That branch measured
+/// only the coin being sent, so switching the fee coin said nothing at all.
+#[test]
+fn a_native_send_paying_an_erc20_fee_it_cannot_afford_warns_and_refuses() {
+    let mut sut = boot(vec![eth("2"), usdc("0.5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000), // $1 in USDC, and 0.5 is held
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    let need_gas = SendAmountWarning::NeedGas {
+        symbol: Some("USDC".to_owned()),
+    };
+    assert_eq!(sut.view().amount_warning, Some(need_gas.clone()));
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InsufficientBalance {
+                warning: Some(need_gas)
+            }
+        }]
+    );
+    // …and the whole native balance is spendable when the fee is not: Max
+    // reserves nothing for gas a different coin is paying.
+    let mut rich = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut rich);
+    rich.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    rich.dispatch(Event::TapMax);
+    assert_eq!(rich.view().amount, "2");
+    assert_eq!(rich.view().amount_warning, None);
+}
+
+/// The other side of the same rule: a native balance that DOES cover the
+/// quoted fee is not a warning. The sent token's own balance is untouched by
+/// the fee — it is not the asset paying it.
+#[test]
+fn an_erc20_send_whose_native_balance_covers_the_fee_stays_silent() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 100_000_000_000_000_000),
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "5".to_owned(),
+    });
+    assert_eq!(sut.view().amount_warning, None);
+}
+
+/// A quote for ANOTHER chain is not this form's fee (invariant ①), so it can
+/// neither price nor refuse this send.
+#[test]
+fn a_native_fee_quoted_for_another_chain_never_refuses_this_one() {
+    let mut sut = boot(vec![usdc("5")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(137, 100_000_000_000_000_000),
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    assert_eq!(sut.view().amount_warning, None);
+}
+
+/// Issue #211's own repro: a split (the −0.12 pUSD to two recipients). The
+/// split path asks its rows about the token's balance and asked nothing at all
+/// about the fee, so this refusal has to live on the `Continue` gate itself.
+#[test]
+fn a_split_paying_a_native_fee_it_cannot_afford_is_refused() {
+    let mut sut = boot(vec![usdc("5")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 100_000_000_000_000_000),
+    });
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            SendRecipientDraft {
+                id: "rcpt_1".to_owned(),
+                address: RECIPIENT.to_owned(),
+                amount: "0.06".to_owned(),
+                name: None,
+            },
+            SendRecipientDraft {
+                id: "rcpt_2".to_owned(),
+                address: RECIPIENT_B.to_owned(),
+                amount: "0.06".to_owned(),
+                name: None,
+            },
+        ],
+    });
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InsufficientBalance {
+                warning: Some(SendAmountWarning::NeedGas {
+                    symbol: Some("ETH".to_owned())
+                })
+            }
+        }]
+    );
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
+}
+
+/// And a sweep: `reserve_native_gas` drops a native line it cannot reserve
+/// from and keeps every ERC-20 one, so the batch still builds — with a fee leg
+/// nothing can pay.
+#[test]
+fn a_sweep_paying_a_native_fee_it_cannot_afford_is_refused() {
+    let mut sut = boot(vec![usdc("5"), dai("100")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleAllMultiTokens {
+        visible_ids: vec![usdc("5").id(), dai("100").id()],
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 100_000_000_000_000_000),
+    });
+    set_recipient(&mut sut, RECIPIENT);
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InsufficientBalance {
+                warning: Some(SendAmountWarning::NeedGas {
+                    symbol: Some("ETH".to_owned())
+                })
+            }
+        }]
+    );
+}
+
 #[test]
 fn empty_or_zero_amounts_never_warn() {
     let mut sut = boot(vec![eth("2")]);
@@ -1231,6 +1416,114 @@ fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
     sut.dispatch(Event::TapMax);
     // 5 − 1.5×1 = 3.5 USDC.
     assert_eq!(sut.view().amount, "3.5");
+}
+
+/// Issue #210: 0.00005 BNB against a 0.000332 BNB fee. `Max` is right to fill
+/// `0` — and has to say why, or the screen is a zero and a dead button.
+#[test]
+fn max_below_the_native_fee_fills_zero_and_says_why() {
+    let mut sut = boot(vec![eth("0.00005")]);
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: eth("0.00005").id(),
+    });
+    assert_eq!(ops.len(), 1);
+    sut.resolve(credential(Some(PK)));
+    // The fee is 6.6× the whole balance.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(ops.is_empty(), "no estimate needed: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("ETH".to_owned())
+        }),
+        "the zero explains itself"
+    );
+    assert!(!view.can_continue, "and the gate stays shut");
+}
+
+/// The same rule one wei the other side of the line: a balance that still
+/// clears the reserve fills a figure and says nothing.
+#[test]
+fn max_one_wei_above_the_reserve_is_silent() {
+    let mut sut = boot(vec![eth("0.000332000000000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000332000000000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 332_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0.000000000000000001");
+    assert_eq!(view.amount_warning, None);
+}
+
+/// The fee token sent as itself: the 1.5× reserve is the line, and a balance
+/// under it gets the same sentence in the fee asset's own symbol.
+#[test]
+fn max_of_the_fee_token_below_its_reserve_fills_zero_and_says_why() {
+    let mut sut = boot(vec![usdc("1.4")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("1.4").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000), // reserve = 1.5 USDC
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(view.amount, "0");
+    assert_eq!(
+        view.amount_warning,
+        Some(SendAmountWarning::InsufficientGas {
+            symbol: Some("USDC".to_owned())
+        })
+    );
+}
+
+/// A sponsored transfer reserves nothing, so an empty balance is an empty
+/// balance — never "the fee ate it".
+#[test]
+fn a_zero_fee_never_blames_the_fee() {
+    let mut sut = boot(vec![eth("0.000001")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: eth("0.000001").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 0),
+    });
+    sut.dispatch(Event::TapMax);
+    let view = sut.view();
+    assert_eq!(
+        view.amount, "0.000001",
+        "a sponsored transfer sweeps it all"
+    );
+    assert_eq!(view.amount_warning, None);
+}
+
+/// Gas paid in a separate asset: the whole balance is sendable, so a zero in
+/// the box is the person's own zero and the fee has nothing to answer for.
+#[test]
+fn a_fee_in_another_asset_never_claims_this_balance() {
+    let mut sut = boot(vec![usdc("5"), dai("0.1")]);
+    sut.dispatch(Event::SelectToken {
+        token_id: dai("0.1").id(),
+    });
+    sut.resolve(credential(Some(PK)));
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "0".to_owned(),
+    });
+    assert_eq!(sut.view().amount_warning, None);
 }
 
 #[test]
@@ -2538,7 +2831,10 @@ fn a_single_send_persists_one_record_then_hands_off_to_the_tracker() {
 /// USDC label) under a USD rate.
 #[test]
 fn a_receipt_shows_the_signed_amount_and_no_later_rate_can_restate_it() {
-    let mut sut = boot(vec![usdc("9000")]);
+    // The native row is here because the fee below is native: an account with
+    // no ETH cannot pay an ETH fee, and since issue #211 the slide says so
+    // instead of signing an op that could only revert.
+    let mut sut = boot(vec![eth("2"), usdc("9000")]);
     select_usdc(&mut sut);
     set_recipient(&mut sut, RECIPIENT);
     sut.dispatch(Event::DisplayChanged {

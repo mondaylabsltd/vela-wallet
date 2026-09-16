@@ -102,6 +102,8 @@ struct SendMultiSpecWire: Decodable, Equatable {
 enum SendAmountWarningWire: Equatable {
     case notEnoughToken(symbol: String)
     case insufficientForGas(symbol: String?)
+    /// The fee alone outruns the balance — the state `Max` fills `0` for.
+    case insufficientGas(symbol: String?)
     case needGas(symbol: String?)
     case cannotConvert(code: String, symbol: String)
 }
@@ -116,6 +118,8 @@ extension SendAmountWarningWire: Decodable {
             self = .notEnoughToken(symbol: try container.decode(String.self, forKey: .symbol))
         case "insufficient_for_gas":
             self = .insufficientForGas(symbol: try container.decodeIfPresent(String.self, forKey: .symbol))
+        case "insufficient_gas":
+            self = .insufficientGas(symbol: try container.decodeIfPresent(String.self, forKey: .symbol))
         case "need_gas":
             self = .needGas(symbol: try container.decodeIfPresent(String.self, forKey: .symbol))
         case "cannot_convert":

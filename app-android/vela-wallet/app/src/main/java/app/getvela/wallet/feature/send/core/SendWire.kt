@@ -246,6 +246,11 @@ sealed class SendAmountWarning {
     @SerialName("insufficient_for_gas")
     data class InsufficientForGas(val symbol: String? = null) : SendAmountWarning()
 
+    /** The fee alone outruns the balance — the state `Max` fills `0` for. */
+    @Serializable
+    @SerialName("insufficient_gas")
+    data class InsufficientGas(val symbol: String? = null) : SendAmountWarning()
+
     @Serializable
     @SerialName("need_gas")
     data class NeedGas(val symbol: String? = null) : SendAmountWarning()

@@ -485,6 +485,15 @@ export interface FeeTokenPickModel {
 		balanceLabel: string;
 		fee: string;
 		selected: boolean;
+		/**
+		 * The core's `insufficient`: this coin cannot cover the fee, so the
+		 * row is shown for context and answers to nothing (invariant ⑧). The
+		 * native row is always offered, balance or not — which is how a send
+		 * came to be paid in a coin the account did not hold (issue 211).
+		 */
+		insufficient?: boolean;
+		/** Why it cannot be chosen, when it cannot. */
+		insufficientNote?: string;
 	}[];
 }
 

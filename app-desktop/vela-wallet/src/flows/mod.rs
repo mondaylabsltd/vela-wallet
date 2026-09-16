@@ -379,6 +379,8 @@ pub struct FlowStrings {
     /// Templates carrying `{{symbol}}` / `{{sym}}` / `{{code}}`.
     pub warn_not_enough_token: String,
     pub warn_insufficient_for_gas: String,
+    /// The fee alone outruns the balance — what `Max` fills `0` for.
+    pub warn_insufficient_gas: String,
     pub warn_need_gas: String,
     pub warn_cannot_convert: String,
     /// The same-asset fee ceiling: the transfer and its fee draw on one coin.
@@ -589,6 +591,7 @@ impl FlowStrings {
 
             warn_not_enough_token: raw("send.warnNotEnoughToken"),
             warn_insufficient_for_gas: raw("send.warnInsufficientForGas"),
+            warn_insufficient_gas: raw("send.warnInsufficientGas"),
             warn_need_gas: raw("send.warnNeedGas"),
             warn_cannot_convert: raw("send.warnCannotConvert"),
             same_fee_title: raw("send.sameFeeTokenTitle"),

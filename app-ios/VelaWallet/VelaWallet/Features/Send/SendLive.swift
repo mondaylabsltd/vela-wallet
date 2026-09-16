@@ -509,6 +509,8 @@ enum SendLive {
             return loc.t("send.alertInsufficientBalanceBody")
         case .insufficientForGas(let symbol):
             return loc.t("send.warnInsufficientForGas", vars: ["sym": symbol ?? ""])
+        case .insufficientGas(let symbol):
+            return loc.t("send.warnInsufficientGas", vars: ["sym": symbol ?? ""])
         case .needGas(let symbol):
             return loc.t("send.warnNeedGas", vars: ["sym": symbol ?? ""])
         case .cannotConvert(let code, let symbol):
