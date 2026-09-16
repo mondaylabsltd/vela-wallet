@@ -9,9 +9,18 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
+import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
 import { buildDesktopState } from './fixtures';
 import { balanceTokenId, withLiveWalletDesktop } from './live';
-import { feedItemAt, findFeedItem, liveTxDetail } from './live-detail';
+import {
+	feedItemAt,
+	findFeedItem,
+	liveTxDetail,
+	shownTxDetailStateDesktop,
+	shownTxDetailStateMobile,
+	withLiveTxDetailDesktop,
+	withLiveTxDetailMobile
+} from './live-detail';
 
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
@@ -226,5 +235,61 @@ describe('the asset column', () => {
 		});
 		expect(model.initialPanel).toBe('none');
 		expect(model.panels.assetDetail).toBe(base.panels.assetDetail);
+	});
+});
+
+/**
+ * Issue #213: a Transaction Details panel drew the mocks' "+120 USDT received
+ * from 0x9F3c…21aE" for an account whose Activity list was empty. The panel is
+ * prerendered WITH that transaction in it, and the live layer only replaced it
+ * when the selection resolved — so switching accounts under an open detail (or
+ * anything else that takes the record away) left the drawn one on screen.
+ */
+describe('a transaction detail with no record behind it (issue #213)', () => {
+	const drawnDesktop = buildDesktopFlowState('da2', fm, IDENTICON);
+	const drawnMobile = buildFlowState('a2', fm, IDENTICON);
+	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+
+	it('the drawn states really do carry the mocks transaction', () => {
+		// Guards the premise: if the fixture ever stops holding a transaction,
+		// the rest of this block is testing nothing.
+		if (drawnDesktop.body.kind !== 'tx-detail' || drawnMobile.sheet?.kind !== 'tx-detail') {
+			throw new Error('a2 / da2 no longer draw a transaction');
+		}
+		expect(drawnDesktop.body.model.amount).toBe('+120 USDT');
+		expect(drawnMobile.sheet.model.amount).toBe('+120 USDT');
+	});
+
+	it('is never the state the wallet shows: the list it came from is', () => {
+		expect(shownTxDetailStateDesktop('da2', undefined)).toBe('da1');
+		expect(shownTxDetailStateMobile('a2', undefined)).toBe('a1');
+	});
+
+	it('stays the transaction screen while the record resolves', () => {
+		const detail = liveTxDetail(item('a'), ctx);
+		expect(shownTxDetailStateDesktop('da2', detail)).toBe('da2');
+		expect(shownTxDetailStateMobile('a2', detail)).toBe('a2');
+	});
+
+	it('leaves every other state alone', () => {
+		expect(shownTxDetailStateDesktop('dsd3', undefined)).toBe('dsd3');
+		expect(shownTxDetailStateDesktop(undefined, undefined)).toBeUndefined();
+		expect(shownTxDetailStateMobile('r1', undefined)).toBe('r1');
+		expect(shownTxDetailStateMobile(undefined, undefined)).toBeUndefined();
+	});
+
+	it("the phone's sheet closes rather than standing the drawn one in", () => {
+		expect(withLiveTxDetailMobile(drawnMobile, undefined).sheet).toBeUndefined();
+	});
+
+	it('the live record replaces the drawn one on both layouts', () => {
+		const detail = liveTxDetail(item('a'), ctx);
+		const desktop = withLiveTxDetailDesktop(drawnDesktop, detail);
+		const mobile = withLiveTxDetailMobile(drawnMobile, detail);
+		if (desktop.body.kind !== 'tx-detail' || mobile.sheet?.kind !== 'tx-detail') {
+			throw new Error('the transaction screen lost its transaction');
+		}
+		expect(desktop.body.model.amount).toBe('+1.25 ETH');
+		expect(mobile.sheet.model.amount).toBe('+1.25 ETH');
 	});
 });
