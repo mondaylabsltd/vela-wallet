@@ -128,7 +128,7 @@
 			"lede": "Ba lý do đừng dùng Vela — khi tiền của bạn còn đang ở chỗ khác.",
 			"items": [
 				{
-					"title": "Mỗi giao dịch phải trả thêm phí dịch vụ relay.",
+					"title": "Mỗi giao dịch phải trả thêm phí dịch vụ relay",
 					"body": "Giao dịch Vela xác minh chữ ký passkey ngay trên chuỗi và chạy qua ERC-4337, nên thường tốn nhiều gas hơn các lệnh chuyển thông thường.\n\nMặc định, relayer trả gas và gửi giao dịch. Phí gồm chi phí trên chuỗi và phí dịch vụ relay, và được chốt ngay khi bạn ký.\n\nBạn có thể đổi relayer trong phần cài đặt, hoặc <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">tự chạy một cái</a>."
 				},
 				{
@@ -136,7 +136,7 @@
 					"body": "Bạn có thể đặt nhiều khóa ngay khi tạo ví\n\nVela là 1-of-n: bất kỳ khóa nào được ủy quyền cũng tiêu được tiền trong ví một mình. Thêm một khóa là thêm một đường lấy lại quyền truy cập — và thêm một cửa bạn phải giữ."
 				},
 				{
-					"title": "Bạn đang dựa vào hợp đồng Safe đã được kiểm toán — và kiểm toán không phải là bảo đảm.",
+					"title": "Bạn đang dựa vào hợp đồng Safe đã được kiểm toán — và kiểm toán không phải là bảo đảm",
 					"body": "Safe v1.4.1 và mô-đun WebAuthn đều đã qua kiểm toán của bên thứ ba. Chúng tôi dùng đúng bản đã công bố, không sửa mã hợp đồng.\n\nKiểm toán giúp phát hiện vấn đề bảo mật, nhưng không phải là bảo đảm an toàn và cũng không có nghĩa là mọi lỗ hổng đều đã được tìm ra."
 				}
 			],
@@ -460,7 +460,7 @@
 		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
 	},
 	"_fingerprints": {
-		"home": "4affdaed7bf1",
+		"home": "3b02495e15fe",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -457,3 +457,16 @@ anywhere else on the home page. Recorded in `approved-copy.md`; not restored.
 Technical: this string now has **no** `<a>` in any locale, which is what the tag
 gate compares against the English; exactly 2 paragraphs everywhere; prettier
 clean, 189 tests, `i18n:stamp` re-fingerprinted `home`.
+
+### Addendum — the trade-off titles lose their full stops
+
+Founder's call, same day. `items[1]` arrived without one, and three `<h3>`s in
+one `<ol>` cannot be punctuated two ways. Dropping was the right direction rather
+than adding: a heading takes no terminal stop in any of the fifteen — Japanese
+and Chinese headings drop `。` by the same convention that English headings drop
+`.`, so `ja` 「…手数料がかかります」 and `ko` 「…수수료를 냅니다」 now read as headings
+instead of as sentences that wandered into a heading slot.
+
+Stripped from `items[0].title` and `items[2].title` in all fifteen. `zh` had
+never carried them and did not move — the one locale that had been right about
+this all along. Standing rule: trade-off titles take no terminal punctuation.

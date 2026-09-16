@@ -236,11 +236,23 @@ Replaces *Wherever your keys live, that place becomes part of your wallet's
 security.*, which was written for the six-paragraph body that had just been cut.
 The new title says what the two-paragraph body now says: each key is a way in.
 
-**Recorded, not fixed:** this title has no full stop, while `items[0]` and
-`items[2]` both do — three titles in one list, two punctuated. The founder's
-string was taken verbatim (a stray leading/trailing space in the submission was
-trimmed, since it is invisible on the page and noise in the file). Say the word
-and the period goes on in all fifteen.
+A stray leading/trailing space in the submission was trimmed — invisible on the
+page, noise in the file.
+
+**The other two titles lost their full stops**, founder's call, 2026-09-16: this
+one arrived without one, and three `<h3>`s in one list cannot be punctuated two
+ways. Dropping rather than adding was also the better typographic answer — a
+heading takes no terminal stop in any of the fifteen, `。` and `.` alike. So:
+
+| # | `en` title |
+|---|---|
+| 0 | `Every transaction pays an extra relay service fee` |
+| 1 | `Every key is a way into your wallet` |
+| 2 | `You are relying on audited Safe contracts — and an audit is not a guarantee` |
+
+`zh` already had no stops on any of the three, so it did not move. The rule for
+any future item: **trade-off titles take no terminal punctuation, in any
+locale.**
 
 ## `home.tradeoffs.items[2].body` — the audit trade-off
 

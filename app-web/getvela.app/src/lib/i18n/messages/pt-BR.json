@@ -128,7 +128,7 @@
 			"lede": "Três motivos para não usar a Vela — enquanto o seu dinheiro ainda está em outro lugar.",
 			"items": [
 				{
-					"title": "Cada transação paga uma taxa que mantém o relay no ar.",
+					"title": "Cada transação paga uma taxa que mantém o relay no ar",
 					"body": "As transações da Vela verificam assinaturas de passkey on-chain e rodam por ERC-4337, então em geral gastam mais gas do que uma transferência comum.\n\nPor padrão, o relayer paga o gas e envia a transação. A taxa inclui o custo on-chain e uma taxa pelo serviço de relay, e fica fechada no momento em que você assina.\n\nVocê pode trocar de relayer nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rodar o seu</a>."
 				},
 				{
@@ -136,7 +136,7 @@
 					"body": "Você pode definir várias chaves ao criar a carteira\n\nA Vela é 1-of-n: qualquer chave autorizada consegue gastar da carteira sozinha. Mais uma chave é mais um caminho para recuperar o acesso — e mais uma porta de entrada para você proteger."
 				},
 				{
-					"title": "Você está confiando em contratos Safe auditados — e uma auditoria não é uma garantia.",
+					"title": "Você está confiando em contratos Safe auditados — e uma auditoria não é uma garantia",
 					"body": "O Safe v1.4.1 e o módulo WebAuthn passaram por auditorias de terceiros. Usamos as versões publicadas, sem alterar o código dos contratos.\n\nUma auditoria ajuda a encontrar problemas de segurança, mas não é garantia de segurança e não significa que toda vulnerabilidade possível tenha sido achada."
 				}
 			],
@@ -460,7 +460,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "4affdaed7bf1",
+		"home": "3b02495e15fe",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

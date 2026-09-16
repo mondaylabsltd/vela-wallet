@@ -128,7 +128,7 @@
 			"lede": "Tiga alasan untuk tidak memakai Vela — selagi uang Anda masih di tempat lain.",
 			"items": [
 				{
-					"title": "Setiap transaksi membayar biaya layanan relay tambahan.",
+					"title": "Setiap transaksi membayar biaya layanan relay tambahan",
 					"body": "Transaksi Vela memverifikasi tanda tangan passkey on-chain dan dijalankan lewat ERC-4337, jadi umumnya memakai lebih banyak gas daripada transfer biasa.\n\nSecara bawaan, relayer yang membayar gas dan mengirim transaksinya. Biayanya mencakup ongkos on-chain dan biaya layanan relay, dan besarnya sudah tetap begitu Anda menandatangani.\n\nAnda bisa mengganti relayer di pengaturan, atau <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">menjalankan sendiri</a>."
 				},
 				{
@@ -136,7 +136,7 @@
 					"body": "Anda bisa menetapkan beberapa kunci saat membuat dompet\n\nVela bersifat 1-of-n: kunci mana pun yang berwenang bisa membelanjakan isi dompet sendirian. Satu kunci tambahan berarti satu jalan lagi untuk memulihkan akses — dan satu pintu lagi yang harus Anda jaga."
 				},
 				{
-					"title": "Anda bersandar pada kontrak Safe yang sudah diaudit — dan audit bukan jaminan.",
+					"title": "Anda bersandar pada kontrak Safe yang sudah diaudit — dan audit bukan jaminan",
 					"body": "Safe v1.4.1 dan modul WebAuthn sama-sama sudah melewati audit pihak ketiga. Kami memakai versi yang mereka rilis secara publik, tanpa mengubah kode kontraknya.\n\nAudit bisa membantu menemukan masalah keamanan, tapi bukan jaminan keamanan dan tidak berarti semua potensi celah sudah ketemu."
 				}
 			],
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "4affdaed7bf1",
+		"home": "3b02495e15fe",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

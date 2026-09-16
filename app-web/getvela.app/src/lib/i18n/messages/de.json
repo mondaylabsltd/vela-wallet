@@ -128,7 +128,7 @@
 			"lede": "Drei Gründe, Vela nicht zu benutzen — solange dein Geld noch woanders liegt.",
 			"items": [
 				{
-					"title": "Jede Transaktion zahlt eine Gebühr, die das Relay am Laufen hält.",
+					"title": "Jede Transaktion zahlt eine Gebühr, die das Relay am Laufen hält",
 					"body": "Vela-Transaktionen prüfen Passkey-Signaturen on-chain und laufen über ERC-4337, brauchen also in der Regel mehr Gas als gewöhnliche Überweisungen.\n\nStandardmäßig zahlt der Relayer das Gas und reicht die Transaktion ein. Die Gebühr enthält die On-Chain-Kosten und ein Entgelt für den Relay-Betrieb, und sie steht fest, sobald du signierst.\n\nDen Relayer kannst du in den Einstellungen wechseln oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">selbst einen betreiben</a>."
 				},
 				{
@@ -136,7 +136,7 @@
 					"body": "Beim Anlegen der Wallet kannst du mehrere Schlüssel hinterlegen\n\nVela ist 1-of-n: Jeder berechtigte Schlüssel kann allein aus der Wallet ausgeben. Ein Schlüssel mehr ist ein Weg mehr zurück in die Wallet — und ein Zugang mehr, den du schützen musst."
 				},
 				{
-					"title": "Du vertraust auditierten Safe-Verträgen — und ein Audit ist keine Garantie.",
+					"title": "Du vertraust auditierten Safe-Verträgen — und ein Audit ist keine Garantie",
 					"body": "Safe v1.4.1 und das WebAuthn-Modul wurden beide von Dritten auditiert. Wir verwenden die veröffentlichten Versionen, ohne den Vertragscode zu ändern.\n\nEin Audit kann Sicherheitsprobleme aufdecken, aber es ist keine Garantie für Sicherheit und bedeutet nicht, dass jede mögliche Schwachstelle gefunden wurde."
 				}
 			],
@@ -460,7 +460,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "4affdaed7bf1",
+		"home": "3b02495e15fe",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

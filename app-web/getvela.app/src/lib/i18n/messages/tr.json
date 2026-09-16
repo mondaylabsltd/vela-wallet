@@ -128,7 +128,7 @@
 			"lede": "Vela'yı kullanmamak için üç neden — paranız hâlâ başka yerdeyken.",
 			"items": [
 				{
-					"title": "Her işlem ayrıca bir relay hizmet ücreti öder.",
+					"title": "Her işlem ayrıca bir relay hizmet ücreti öder",
 					"body": "Vela işlemleri, geçiş anahtarı imzalarını zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan transferlere göre genellikle daha fazla gas harcar.\n\nVarsayılan olarak gas'i relayer öder ve işlemi o gönderir. Ücret, zincir üstündeki maliyeti ve relay hizmet bedelini kapsar; tutar siz imzaladığınız anda sabitlenir.\n\nRelayer'ı ayarlardan değiştirebilir ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırabilirsiniz</a>."
 				},
 				{
@@ -136,7 +136,7 @@
 					"body": "Cüzdanı oluştururken birden fazla anahtar tanımlayabilirsiniz\n\nVela 1-of-n çalışır: yetkili anahtarlardan herhangi biri tek başına cüzdandan harcama yapabilir. Her yeni anahtar, erişimi geri almanın bir yolu daha — ve korumanız gereken bir kapı daha."
 				},
 				{
-					"title": "Denetlenmiş Safe sözleşmelerine dayanıyorsunuz — ve denetim bir garanti değildir.",
+					"title": "Denetlenmiş Safe sözleşmelerine dayanıyorsunuz — ve denetim bir garanti değildir",
 					"body": "Safe v1.4.1 ve WebAuthn modülünün ikisi de üçüncü taraf denetimlerinden geçti. Yayımlanan sürümleri, sözleşme kodunu değiştirmeden kullanıyoruz.\n\nDenetim güvenlik sorunlarını bulmaya yardım eder; ama güvenlik garantisi değildir ve olası bütün açıkların bulunduğu anlamına gelmez."
 				}
 			],
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "4affdaed7bf1",
+		"home": "3b02495e15fe",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

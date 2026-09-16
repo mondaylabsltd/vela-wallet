@@ -285,7 +285,7 @@ export const en = {
 			lede: 'Three reasons not to use Vela — while your money is still somewhere else.',
 			items: [
 				{
-					title: 'Every transaction pays an extra relay service fee.',
+					title: 'Every transaction pays an extra relay service fee',
 					body: 'Vela transactions verify passkey signatures on-chain and execute through ERC-4337, so they generally use more gas than ordinary transfers.\n\nBy default, the relayer pays the gas and submits the transaction. The fee includes the on-chain cost and a relay service fee, and is fixed when you sign.\n\nYou can switch relayers in settings or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
 				},
 				{
@@ -293,7 +293,7 @@ export const en = {
 					body: 'You can add multiple keys when creating your wallet\n\nVela is 1-of-n: any authorized key can spend from the wallet on its own. Adding another key gives you another way to recover access — and another entry point you need to protect.'
 				},
 				{
-					title: 'You are relying on audited Safe contracts — and an audit is not a guarantee.',
+					title: 'You are relying on audited Safe contracts — and an audit is not a guarantee',
 					body: 'Safe v1.4.1 and the WebAuthn module have both undergone third-party audits. We use the publicly released versions without modifying the contract code.\n\nAudits can help identify security issues, but they are not a guarantee of security and do not mean that every potential vulnerability has been found.'
 				}
 			],
