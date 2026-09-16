@@ -15,8 +15,10 @@ import type { WalletFlowMessages } from '$lib/flows/messages';
 import type {
 	BreakdownRowModel,
 	DesktopFlowModel,
+	DesktopFlowStateId,
 	FactRowModel,
 	FlowScreenModel,
+	FlowStateId,
 	TxDetailModel
 } from '$lib/flows/model';
 import { chainMeta } from '$lib/services/chains';
@@ -209,7 +211,40 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	};
 }
 
-/** The desktop column showing a transaction gets the live one, if there is one. */
+/**
+ * A transaction screen is about ONE record in the open account's feed, and the
+ * state it draws arrives PRERENDERED with a drawn transaction inside it — the
+ * mocks' "+120 USDT received, from 0x9F3c…21aE". So the moment the selection
+ * stops resolving, the screen must stop being that state (issue #213):
+ * switching accounts re-points the feed under an open detail, and the drawn
+ * receipt would then stand in for a record the new account never had.
+ *
+ * The answer is the list the detail was opened from — `a1` / `da1`, the state
+ * directly beneath it on the flow stack. It is live-wired, so on an account
+ * with no activity it says so instead of inventing a receipt.
+ */
+export function shownTxDetailStateMobile(
+	state: FlowStateId | undefined,
+	detail: TxDetailModel | undefined
+): FlowStateId | undefined {
+	return state === 'a2' && detail === undefined ? 'a1' : state;
+}
+
+/** The desktop third column's half of the same rule. */
+export function shownTxDetailStateDesktop(
+	state: DesktopFlowStateId | undefined,
+	detail: TxDetailModel | undefined
+): DesktopFlowStateId | undefined {
+	return state === 'da2' && detail === undefined ? 'da1' : state;
+}
+
+/**
+ * The desktop column showing a transaction gets the live one. Without a record
+ * the column keeps the state it was handed, which is why the caller picks that
+ * state through `shownTxDetailStateDesktop` first — a `tx-detail` body with no
+ * record behind it is the drawn fixture, and this must never be the wallet's
+ * answer for a real account.
+ */
 export function withLiveTxDetailDesktop(
 	model: DesktopFlowModel,
 	detail: TxDetailModel | undefined
@@ -218,11 +253,16 @@ export function withLiveTxDetailDesktop(
 	return { ...model, body: { kind: 'tx-detail', model: detail } };
 }
 
-/** The phone's transaction sheet, likewise. */
+/**
+ * The phone's transaction sheet, likewise — except that a sheet CAN be taken
+ * away, so this one refuses the fixture on its own: no record, no sheet, and
+ * the live list it was raised over is what stays.
+ */
 export function withLiveTxDetailMobile(
 	model: FlowScreenModel,
 	detail: TxDetailModel | undefined
 ): FlowScreenModel {
-	if (detail === undefined || model.sheet?.kind !== 'tx-detail') return model;
+	if (model.sheet?.kind !== 'tx-detail') return model;
+	if (detail === undefined) return { ...model, sheet: undefined };
 	return { ...model, sheet: { kind: 'tx-detail', model: detail } };
 }

@@ -104,6 +104,8 @@
 		feedItemAt,
 		findFeedItem,
 		liveTxDetail,
+		shownTxDetailStateDesktop,
+		shownTxDetailStateMobile,
 		withLiveTxDetailDesktop,
 		withLiveTxDetailMobile
 	} from '$lib/wallet/live-detail';
@@ -827,6 +829,21 @@
 	});
 	const desktopFlow = $derived(desktopSendState ?? nav.desktopTop);
 
+	/**
+	 * Issue 213: the transaction screen only exists while its record does.
+	 * `txDetail` is that record, live; without one the prerendered state would
+	 * draw the mocks' "+120 USDT received" over whatever account is open — so
+	 * the list underneath is shown instead, and `nav` is unwound to match.
+	 */
+	const shownFlowState = $derived(shownTxDetailStateMobile(flowState, txDetail));
+	const shownDesktopFlow = $derived(shownTxDetailStateDesktop(desktopFlow, txDetail));
+	$effect(() => {
+		if (txDetail !== undefined) return;
+		if (nav.mobileTop !== 'a2' && nav.desktopTop !== 'da2') return;
+		selectedTxId = null;
+		nav.back();
+	});
+
 	// --- The scanner (spec 028 T422/T423) ------------------------------------
 	//
 	// `ScanSurface` owns no camera and knows of none: it draws a frame, a hint
@@ -1475,10 +1492,10 @@
 			<!-- `ds1` is the one flow the third column cannot host: a viewfinder
 			     in a narrow strip is the wrong shape, so the desktop shows the
 			     scanner as a centred modal (DS1L). -->
-			{#if desktopFlow !== undefined && desktopFlow !== 'ds1'}
+			{#if shownDesktopFlow !== undefined && shownDesktopFlow !== 'ds1'}
 				<FlowsPanel
 					model={withLiveTxDetailDesktop(
-						withLiveDesktopFlow(data.desktopFlows[desktopFlow], flowInputs),
+						withLiveDesktopFlow(data.desktopFlows[shownDesktopFlow], flowInputs),
 						txDetail
 					)}
 					onback={() => {
@@ -1545,9 +1562,12 @@
 		{/if}
 	{:else}
 		<main class="page">
-			{#if flowState !== undefined}
+			{#if shownFlowState !== undefined}
 				<FlowsMobile
-					model={withLiveTxDetailMobile(withLiveFlow(data.flows[flowState], flowInputs), txDetail)}
+					model={withLiveTxDetailMobile(
+						withLiveFlow(data.flows[shownFlowState], flowInputs),
+						txDetail
+					)}
 					onback={() => {
 						// Backing out of the scanner is closing the scanner, not stepping
 						// back a stage — the core opened it and the core closes it.
