@@ -201,8 +201,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.alertInsufficientBalanceTitle',
 	'send.alertInsufficientBalanceBody',
 	'send.alertLoadTokensError',
-	// The core's live amount verdicts (`SendAmountWarning`), which this
-	// shell used to drop on the floor (issue 211).
+	// The core's live amount verdicts (`SendAmountWarning`), which this shell
+	// used to drop on the floor (issues 211 and 210) — the other three have
+	// drawn them since spec 032.
 	'send.warnNotEnoughToken',
 	'send.warnInsufficientForGas',
 	'send.warnInsufficientGas',

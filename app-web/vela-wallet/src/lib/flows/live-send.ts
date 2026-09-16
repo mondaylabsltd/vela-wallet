@@ -441,8 +441,9 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// The core's live verdict on the figure, and its last refusal. The
 		// warning is the one that arrives WITHOUT a tap (issue 211: the send
 		// screen said nothing at all about a gas coin the account did not
-		// hold), so the alert — which only exists after a refused Continue —
-		// wins when both are present.
+		// hold; issue 210: `Max` correctly filling 0 because the fee outran
+		// the whole balance), so the alert — which only exists after a
+		// refused Continue — wins when both are present.
 		alert: alertWords(inputs.alert, m) ?? liveWarning(send, m),
 		cta: m['send.continueBtn']
 	};
@@ -456,7 +457,9 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
  * even then.
  */
 function liveWarning(send: SendView, m: WalletFlowMessages): string | undefined {
-	return send.amount_warning === null ? undefined : warningWords(send.amount_warning, m);
+	return send.amount_warning === null
+		? undefined
+		: warningWords(send.amount_warning, m, send.selected_token?.chain_id);
 }
 
 /**
@@ -467,15 +470,28 @@ function liveWarning(send: SendView, m: WalletFlowMessages): string | undefined 
  */
 export function warningWords(
 	warning: SendAmountWarning,
-	m: WalletFlowMessages
+	m: WalletFlowMessages,
+	/**
+	 * The network the figure belongs to. A `null` symbol is the core saying
+	 * "the chain's own coin, which your registry knows and mine may not" — so
+	 * a caller that has the chain resolves it here rather than printing a
+	 * sentence with a hole in it. Callers without one keep the phones' `""`.
+	 */
+	chainId?: number
 ): string | undefined {
+	const gasCoin = (symbol: string | null) =>
+		symbol ?? (chainId === undefined ? '' : nativeSymbol(chainId));
 	switch (warning.type) {
 		case 'not_enough_token':
 			return fill(m['send.warnNotEnoughToken'], { symbol: warning.symbol });
 		case 'insufficient_for_gas':
-			return fill(m['send.warnInsufficientForGas'], { sym: warning.symbol ?? '' });
+			return fill(m['send.warnInsufficientForGas'], { sym: gasCoin(warning.symbol) });
+		// The fee alone outruns the whole balance of the coin that pays it —
+		// the state `Max` fills `0` for (issue 210).
+		case 'insufficient_gas':
+			return fill(m['send.warnInsufficientGas'], { sym: gasCoin(warning.symbol) });
 		case 'need_gas':
-			return fill(m['send.warnNeedGas'], { sym: warning.symbol ?? '' });
+			return fill(m['send.warnNeedGas'], { sym: gasCoin(warning.symbol) });
 		case 'cannot_convert':
 			return fill(m['send.warnCannotConvert'], { code: warning.code, symbol: warning.symbol });
 	}

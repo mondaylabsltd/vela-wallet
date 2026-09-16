@@ -413,6 +413,7 @@ object SendLive {
     fun warningText(warning: SendAmountWarning, s: VelaStrings): String = when (warning) {
         is SendAmountWarning.NotEnoughToken -> s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY)
         is SendAmountWarning.InsufficientForGas -> s.t(I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS, mapOf("sym" to (warning.symbol ?: "")))
+        is SendAmountWarning.InsufficientGas -> s.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to (warning.symbol ?: "")))
         is SendAmountWarning.NeedGas -> s.t(I18nKeys.Flows.WARN_NEED_GAS, mapOf("sym" to (warning.symbol ?: "")))
         is SendAmountWarning.CannotConvert -> s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol))
     }
