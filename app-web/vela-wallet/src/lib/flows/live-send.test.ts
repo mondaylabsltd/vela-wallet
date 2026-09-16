@@ -259,6 +259,94 @@ describe('the form', () => {
 		expect(warn(null)).toBeUndefined();
 	});
 
+	// Issue 197: the ⇄ under the figure was drawn on every form and wired to
+	// nothing — `denom_toggle_shown/enabled/reason` and the one event that
+	// moves them all went unread, so the tap was swallowed in silence.
+	describe('the ⇄ denomination toggle', () => {
+		it('is offered exactly where the core offers it, and live where it can act', () => {
+			const off = liveSendForm(formModel(), inputs({ selected_token: ETH }));
+			expect(off.amount?.denomToggle).toBeUndefined();
+
+			const live = liveSendForm(
+				formModel(),
+				inputs({ selected_token: ETH, denom_toggle_shown: true, denom_toggle_enabled: true })
+			);
+			expect(live.amount?.denomToggle).toEqual({ enabled: true });
+
+			const dimmed = liveSendForm(
+				formModel(),
+				inputs({ selected_token: ETH, denom_toggle_shown: true, denom_toggle_enabled: false })
+			);
+			expect(dimmed.amount?.denomToggle).toEqual({ enabled: false });
+		});
+
+		it('says why it is inert rather than just dimming', () => {
+			const model = liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: ETH,
+					denom_toggle_shown: true,
+					denom_toggle_enabled: false,
+					denom_toggle_reason: { code: 'CNY', symbol: 'ETH' }
+				})
+			);
+			expect(model.alert).toBe('No CNY rate right now — enter the amount in ETH.');
+		});
+
+		it('yields to the money warnings, which are about the figure itself', () => {
+			const model = liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: ETH,
+					denom_toggle_shown: true,
+					denom_toggle_enabled: false,
+					denom_toggle_reason: { code: 'CNY', symbol: 'ETH' },
+					amount_warning: { type: 'not_enough_token', symbol: 'ETH' }
+				})
+			);
+			expect(model.alert).toBe('You do not have enough ETH in this account');
+		});
+
+		it('shows the OTHER denomination, so a swap is visible in the line beneath', () => {
+			// Typing tokens: the money. (The default, asserted above too.)
+			const inToken = liveSendForm(
+				formModel(),
+				inputs({ selected_token: ETH, amount: '0.5', token_amount: '0.5' })
+			);
+			expect(inToken.amount).toMatchObject({
+				value: '0.5',
+				fiat: '≈ $1,500.00',
+				denomLabel: 'ETH'
+			});
+
+			// Typing money: the tokens it buys — the core's own resolved figure,
+			// not a second conversion. Restating the fiat here made a working
+			// swap read as a dead one.
+			const inFiat = liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: ETH,
+					amount: '1500',
+					amount_fiat_code: 'USD',
+					token_amount: '0.5'
+				})
+			);
+			expect(inFiat.amount).toMatchObject({
+				value: '1500',
+				fiat: '≈ 0.5 ETH',
+				denomLabel: 'USD'
+			});
+		});
+
+		it('never invents a token line for a send with no token chosen', () => {
+			const model = liveSendForm(
+				formModel(),
+				inputs({ amount: '1500', amount_fiat_code: 'USD', token_amount: '' })
+			);
+			expect(model.amount?.fiat).toBe('');
+		});
+	});
+
 	it('is always the single-send shape in this phase (split and sweep are 026 batch)', () => {
 		const model = liveSendForm(formModel(), inputs({ selected_token: ETH }));
 		expect(model.mode).toBe('single');
