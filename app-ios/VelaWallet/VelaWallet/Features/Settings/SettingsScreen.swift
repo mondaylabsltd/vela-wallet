@@ -294,7 +294,13 @@ struct SettingsScreen: View {
             .padding(.top, Tokens.Space.s32)
             .padding(.bottom, Tokens.Space.s24)
             .contentShape(Rectangle())
-            .onTapGesture { overlay = .signOut }
+            // ASKS THE CORE. The session machine answers with its own sheet —
+            // the one carrying the pending-upload warning and a way back out —
+            // and that sheet IS the confirmation. Raising ST3 in front of it
+            // made leaving a wallet three taps and two sheets saying the same
+            // sentence (founder, 2026-09-16); ST3/ST3b stay the fixture boards
+            // they always were, reachable from a seeded overlay.
+            .onTapGesture { onSignOut() }
 
         DangerCard(title: model.eraseTitle, subtitle: model.eraseSubtitle) {
             overlay = .eraseDevice

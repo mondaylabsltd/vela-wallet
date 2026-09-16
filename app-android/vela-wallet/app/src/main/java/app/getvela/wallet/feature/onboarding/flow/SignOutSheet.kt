@@ -16,7 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
-import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
+import app.getvela.wallet.core.designsystem.components.VelaDangerButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -110,7 +110,11 @@ fun SignOutSheet(
             }
 
             Spacer(modifier = Modifier.height(VelaSpacing.xl4))
-            VelaPrimaryButton(
+            // Red, like the fixture layer's `signOutSheet` declares
+            // (`tone: danger`) and like the settings confirm this sheet now
+            // stands in place of. Accent belongs to actions that move money;
+            // leaving a wallet moves none.
+            VelaDangerButton(
                 // "Sign Out Anyway" when there is something to be anyway ABOUT;
                 // plain "Sign Out" otherwise. Wording the risk into the button
                 // is what makes the warning above more than decoration.

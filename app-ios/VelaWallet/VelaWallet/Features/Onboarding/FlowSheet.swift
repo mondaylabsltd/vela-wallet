@@ -222,11 +222,15 @@ struct SignOutSheet: View {
                 // "Sign Out Anyway" when there is something to be anyway ABOUT;
                 // plain "Sign Out" otherwise. Wording the risk into the button
                 // is what makes the warning above more than decoration.
+                // Red, like the fixture layer's `signOutSheet` declares
+                // (`tone: .danger`) and like the settings confirm this sheet
+                // now stands in place of. Accent belongs to actions that move
+                // money; leaving a wallet moves none.
                 VelaButton(
                     title: loc.t(pendingUploadWarning
                         ? "settings.signOut.anyway"
                         : "settings.signOut.button"),
-                    kind: .primary,
+                    kind: .danger,
                     action: onConfirm
                 )
                 VelaButton(

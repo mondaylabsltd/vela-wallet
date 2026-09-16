@@ -154,6 +154,72 @@ final class SettingsAuditDeviceTests: XCTestCase {
 
     // MARK: - Plumbing
 
+    /// 退出登录 — ONE tap, ONE sheet, and it is the CORE's.
+    ///
+    /// The settings screen used to raise its own ST3 confirm first and the
+    /// session machine's sheet only after it, so leaving a wallet was three
+    /// taps and two sheets saying the same sentence (founder, 2026-09-16).
+    /// What tells them apart is the body: ST3 leads with `signOut.desc`
+    /// ("此设备将退出登录…"), the core's sheet carries only `signOut.keeps`.
+    ///
+    /// **Needs a signed-in phone, and says so rather than failing on one that
+    /// is not.** The row now ASKS THE CORE, and the session machine refuses
+    /// `SignOut` unless a wallet is active — correctly, but it means an empty
+    /// device can prove nothing here. Neither `settings-live` nor
+    /// `VELA_PARALLEL_SPACE=1` stands a session up on a phone with no
+    /// credential (verified 2026-09-16 on the iPhone 11: the account row keeps
+    /// its 切换账户 chevron and shows no address).
+    ///
+    /// Cancels rather than confirming: the flow being verified is the sheet,
+    /// not the wipe.
+    func testSignOutIsOneTapAndOneSheet() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_PAGE"] = "settings-live"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 20))
+        settle()
+
+        // The precondition, stated where a reader will see it fail.
+        let signedIn = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "0x")
+        ).firstMatch
+        try XCTSkipUnless(
+            signedIn.waitForExistence(timeout: 6),
+            "no wallet is signed in on this device — sign in first, then re-run"
+        )
+
+        app.swipeUp()
+        app.swipeUp()
+        settle(1.0)
+
+        open(row: "退出登录", in: app)
+        attach(app.screenshot(), named: "audit-sign-out-one-sheet")
+
+        // The core's sheet, by the only thing that distinguishes it.
+        XCTAssertTrue(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "选择「我已有钱包」")
+            ).firstMatch.waitForExistence(timeout: 8),
+            "the core's sign-out sheet did not open on the first tap"
+        )
+        XCTAssertFalse(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "此设备将退出登录")
+            ).firstMatch.exists,
+            "the settings confirm is still standing in front of the core's sheet"
+        )
+
+        // A way back out, and it leaves the session alone.
+        tap(element(labelled: "取消", in: app), in: app)
+        settle(1.5)
+        XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 8),
+                      "cancelling did not return to settings")
+        app.terminate()
+    }
+
     private func launch(
         page: String = "settings-live",
         theme: String? = "dark",
