@@ -61,6 +61,12 @@ export const load: PageServerLoad = ({ params }) => {
 		/** 全部 in the sidebar's network list, which the live rows rebuild. */
 		allNetworksLabel: walletMessages.networkFilter.allNetworks,
 		/** The identicon viewer every artwork on this route opens. */
-		identiconViewer: walletMessages.identiconViewer
+		identiconViewer: walletMessages.identiconViewer,
+		/**
+		 * The core's sign-out dialog (issue 214). The row that opens it lives
+		 * here, so the sheet it summons has to be renderable here too — and its
+		 * words belong to the wallet corpus, where the wallet route reads them.
+		 */
+		signOut: walletMessages.signOut
 	};
 };

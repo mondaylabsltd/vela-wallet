@@ -320,7 +320,17 @@
 		>
 			<p class="dialog-body">{model.account.signOutNote}</p>
 			<div class="dialog-actions">
-				<Button variant="danger" shape="rounded" onclick={onsignout}>
+				<!-- Closes on confirm, like clear-caches below: what answers this
+				     button is the core's own sign-out sheet, and leaving this
+				     dialog standing would stack one modal on the other. -->
+				<Button
+					variant="danger"
+					shape="rounded"
+					onclick={() => {
+						onsignout?.();
+						overlay = 'none';
+					}}
+				>
 					{model.account.signOutLabel}
 				</Button>
 			</div>

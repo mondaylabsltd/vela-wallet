@@ -34,6 +34,7 @@
 	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
 	import SettingsHome from '$lib/settings/SettingsHome.svelte';
 	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
+	import SignOutHost from '$lib/session/ui/SignOutHost.svelte';
 	import { desktopWithIdentity, homeWithIdentity } from '$lib/settings/identity';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
@@ -529,6 +530,12 @@
 {/if}
 
 <IdenticonViewerHost copy={data.identiconViewer} />
+
+<!-- The way out of a signed-in wallet. The row is on this route, so the core's
+     sheet — the one carrying the pending-upload warning — has to be here too;
+     rendering it only on the wallet route left the confirm button doing
+     nothing at all (issue 214). -->
+<SignOutHost copy={data.signOut} />
 
 <style>
 	/* The phone screens are `height: 100%` of whatever holds them, and the

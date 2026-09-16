@@ -421,7 +421,17 @@
 						onsignin={onaccountsignin}
 					/>
 				{:else if overlay === 'sign-out'}
-					<ConfirmSheet sheet={model.signOutSheet} onconfirm={onsignout} oncancel={close} />
+					<!-- Closes on confirm, like clear-caches: the core's sign-out
+					     sheet is what answers this button, and two sheets at once
+					     is one sheet nobody can see. -->
+					<ConfirmSheet
+						sheet={model.signOutSheet}
+						onconfirm={() => {
+							onsignout?.();
+							close();
+						}}
+						oncancel={close}
+					/>
 				{:else if overlay === 'language'}
 					<SelectSheetBody
 						sheet={model.languageSheet}

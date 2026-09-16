@@ -26,7 +26,7 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
 	import WalletHome from '$lib/wallet/WalletHome.svelte';
-	import SignOutSheet from '$lib/session/ui/SignOutSheet.svelte';
+	import SignOutHost from '$lib/session/ui/SignOutHost.svelte';
 	import AccountSwitcher from '$lib/session/ui/AccountSwitcher.svelte';
 	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
@@ -142,8 +142,6 @@
 				}
 			: null
 	);
-
-	const signOut = $derived(view.sign_out);
 
 	/**
 	 * The account switcher (founder call, 2026-09-05), opened from the header's
@@ -1645,14 +1643,7 @@
 	/>
 {/if}
 
-{#if signOut}
-	<SignOutSheet
-		copy={data.walletMessages.signOut}
-		pendingUploadWarning={signOut.pending_upload_warning}
-		onConfirm={() => session.confirmSignOut()}
-		onDismiss={() => session.dismissSignOut()}
-	/>
-{/if}
+<SignOutHost copy={data.walletMessages.signOut} />
 
 <!-- The rescue sheets (spec 028 Phase 8): a sheet on the phone, a dialog on the desktop. -->
 {#snippet rescueBody()}
