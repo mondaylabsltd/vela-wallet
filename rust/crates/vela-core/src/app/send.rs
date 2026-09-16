@@ -44,6 +44,9 @@
 //!   same user-visible outcome the `catch` produced (noted per site).
 //! - `makeRecipientId`'s module counter became a deterministic model counter.
 
+use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
+
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
 use crux_core::{render::render, render::RenderOperation, App, Command};
@@ -163,6 +166,44 @@ pub fn recipients_are_valid(recipients: &[SendRecipientDraft]) -> bool {
         && recipients
             .iter()
             .all(|r| is_valid_address(r.address.trim()) && js_parse_float(&r.amount) > 0.0)
+}
+
+/// The split editor's repeated payees: for every row whose address a row ABOVE
+/// it already carries, that row's id and the 1-based position of the row it
+/// repeats.
+///
+/// The importer already refuses a repeat (`batch_import::derived` — de-dupe by
+/// lowercase address, first occurrence keeps the payment), but rows typed in,
+/// picked from the book or added one at a time never met that rule, so the same
+/// address could take two lines of one batch with nothing on screen saying so
+/// (issue 203). Silently DROPPING a repeat here would be worse than the bug:
+/// the importer drops rows a person pasted in bulk and reviews in a preview,
+/// while these rows were each entered deliberately, and two payments to one
+/// payee is a real thing to want. So the machine names them and leaves the
+/// batch exactly as it was asked for.
+///
+/// Matching is the importer's: trimmed, lowercased, valid addresses only — an
+/// unfinished row is not a repeat of anything, it is simply not an address yet.
+pub fn duplicate_recipient_rows(recipients: &[SendRecipientDraft]) -> Vec<SendDuplicateRowView> {
+    let mut first_seen: BTreeMap<String, u32> = BTreeMap::new();
+    let mut repeats = Vec::new();
+    for (index, row) in recipients.iter().enumerate() {
+        let address = row.address.trim();
+        if !is_valid_address(address) {
+            continue;
+        }
+        let ordinal = index as u32 + 1;
+        match first_seen.entry(address.to_lowercase()) {
+            Entry::Vacant(slot) => {
+                slot.insert(ordinal);
+            }
+            Entry::Occupied(slot) => repeats.push(SendDuplicateRowView {
+                id: row.id.clone(),
+                first_ordinal: *slot.get(),
+            }),
+        }
+    }
+    repeats
 }
 
 /// `sumSplitBaseUnits` (`batch-send.ts:100-102`). `None` when any row's amount
@@ -1302,6 +1343,16 @@ pub struct SendMultiSpecView {
     pub amount: String,
 }
 
+/// One split row that pays an address an earlier row already pays — the row's
+/// draft id and the 1-based position of the row it repeats
+/// ([`duplicate_recipient_rows`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendDuplicateRowView {
+    pub id: String,
+    pub first_ordinal: u32,
+}
+
 /// One receipt line for batch sends (`ReceiptTransfer`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -1446,6 +1497,11 @@ pub struct SendView {
     /// (`SendAlertKind::SplitOverBalance`), so the live hint and the gate can
     /// never disagree.
     pub split_over_balance: bool,
+    /// Split mode only: the rows that repeat a payee an earlier row already has
+    /// (issue 203). The batch is still exactly what was asked for — this is the
+    /// sentence beside the repeating row, not a refusal, and never flags the
+    /// first occurrence: that is the row the repeat repeats.
+    pub split_duplicates: Vec<SendDuplicateRowView>,
     pub picker_target: Option<String>,
     pub multi_select_mode: bool,
     pub multi_selected_ids: Vec<String>,
@@ -1786,6 +1842,11 @@ impl App for Send {
             split_mode: model.split_mode,
             recipients: model.recipients.clone(),
             split_over_balance,
+            split_duplicates: if model.split_mode {
+                duplicate_recipient_rows(&model.recipients)
+            } else {
+                Vec::new()
+            },
             picker_target: model.picker_target.clone(),
             multi_select_mode: model.multi_select_mode,
             multi_selected_ids: model.multi_selected_ids.clone(),

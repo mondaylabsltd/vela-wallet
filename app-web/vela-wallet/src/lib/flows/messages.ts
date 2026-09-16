@@ -142,6 +142,7 @@ export const WALLET_FLOW_KEYS = [
 	'send.balanceLabel',
 	'send.recipientLabel',
 	'send.recipientN',
+	'send.recipientDuplicate',
 	'send.recipientCount_other',
 	'send.addRecipient',
 	'send.fromContacts',

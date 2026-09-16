@@ -74,6 +74,7 @@
     "selectAllValuable": "Выбрать все ценные",
     "addRecipient": "Добавить получателя",
     "recipientN": "Получатель {{n}}",
+    "recipientDuplicate": "Тот же адрес, что и у получателя {{n}}",
     "recipientCount_one": "{{count}} получатель",
     "recipientCount_few": "{{count}} получателя",
     "recipientCount_many": "{{count}} получателей",

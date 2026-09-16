@@ -305,6 +305,7 @@
   "selectAllValuable": "Chọn tất cả có giá trị",
   "addRecipient": "Thêm người nhận",
   "recipientN": "Người nhận {{n}}",
+  "recipientDuplicate": "Cùng địa chỉ với người nhận {{n}}",
   "recipientCount_one": "{{count}} người nhận",
   "recipientCount_other": "{{count}} người nhận",
   "removeRecipient": "Xóa",

@@ -8,6 +8,7 @@ import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
+import { fill } from '$lib/wallet/messages';
 import { buildFlowState } from './fixtures';
 import {
 	liveFeeTokenPick,
@@ -75,6 +76,7 @@ const EMPTY_SEND: SendView = {
 	split_mode: false,
 	recipients: [],
 	split_over_balance: false,
+	split_duplicates: [],
 	picker_target: null,
 	multi_select_mode: false,
 	multi_selected_ids: [],
@@ -301,6 +303,46 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			})
 		);
 		expect(form.summary?.value).toBe('0.06 ETH');
+	});
+
+	// Issue #203: the same payee could take two lines of one batch with
+	// nothing on screen saying so. The core names the repeats; these two
+	// tests say the form and the signing page both repeat what it named.
+	it('a repeated payee is named on the row that repeats it, never on the first', () => {
+		const form = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.03', name: null },
+					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null },
+					{ id: 'c', address: alice, amount: '0.03', name: null }
+				],
+				split_duplicates: [{ id: 'c', first_ordinal: 1 }]
+			})
+		);
+		expect(form.recipients?.[0].duplicateNote).toBeUndefined();
+		expect(form.recipients?.[1].duplicateNote).toBeUndefined();
+		expect(form.recipients?.[2].duplicateNote).toBe(fill(m['send.recipientDuplicate'], { n: 1 }));
+	});
+
+	it('the signing page says it too — the last screen before a signature', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				confirm_amount: '0.06',
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.03', name: null },
+					{ id: 'b', address: alice, amount: '0.03', name: null }
+				],
+				split_duplicates: [{ id: 'b', first_ordinal: 1 }]
+			})
+		);
+		expect(confirm.breakdown?.[0].note).toBeUndefined();
+		expect(confirm.breakdown?.[1].note).toBe(fill(m['send.recipientDuplicate'], { n: 1 }));
 	});
 });
 

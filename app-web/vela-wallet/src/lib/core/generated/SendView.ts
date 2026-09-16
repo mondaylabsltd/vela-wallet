@@ -2,6 +2,7 @@
 import type { FeeEstimateView } from "./FeeEstimateView";
 import type { SendAddNetworkMsg } from "./SendAddNetworkMsg";
 import type { SendAmountWarning } from "./SendAmountWarning";
+import type { SendDuplicateRowView } from "./SendDuplicateRowView";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
@@ -114,7 +115,14 @@ confirm_amount: string, split_mode: boolean, recipients: Array<SendRecipientDraf
  * (`SendAlertKind::SplitOverBalance`), so the live hint and the gate can
  * never disagree.
  */
-split_over_balance: boolean, picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
+split_over_balance: boolean, 
+/**
+ * Split mode only: the rows that repeat a payee an earlier row already has
+ * (issue 203). The batch is still exactly what was asked for — this is the
+ * sentence beside the repeating row, not a refusal, and never flags the
+ * first occurrence: that is the row the repeat repeats.
+ */
+split_duplicates: Array<SendDuplicateRowView>, picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
 /**
  * Every held id on the filtered chain that "select all valuable" would
  * sweep. The picker's master tick is `visible ∩ this`, all selected — the

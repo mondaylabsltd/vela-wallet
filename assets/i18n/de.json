@@ -314,6 +314,7 @@
   "selectAllValuable": "Alle werthaltigen",
   "addRecipient": "Empfänger hinzufügen",
   "recipientN": "Empfänger {{n}}",
+  "recipientDuplicate": "Gleiche Adresse wie Empfänger {{n}}",
   "recipientCount_one": "{{count}} Empfänger",
   "recipientCount_other": "{{count}} Empfänger",
   "removeRecipient": "Entfernen",

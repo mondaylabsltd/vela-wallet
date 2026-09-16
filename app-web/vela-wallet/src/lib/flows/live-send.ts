@@ -415,7 +415,12 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					amountValue: draft.amount,
 					addressLabel: m['send.recipientLabel'],
 					pickLabel: m['send.recipientPickAria'],
-					removeLabel: m['send.removeRecipient']
+					removeLabel: m['send.removeRecipient'],
+					// The core flags a row that repeats an earlier payee and says
+					// WHICH row it repeats; this file only picks the template
+					// (issue 203). A shell that compared the addresses itself
+					// would be a second rule to keep in step with the importer's.
+					duplicateNote: duplicateNote(send, draft.id, m)
 				}))
 			: undefined,
 		recipientActions: split
@@ -524,6 +529,16 @@ function recipientLines(send: SendView): [string, string] {
 	return [address.slice(0, half), address.slice(half)];
 }
 
+/**
+ * "Same address as recipient 2", for a split row the core has flagged as a
+ * repeat of an earlier one (issue 203). `undefined` for every other row —
+ * including the FIRST occurrence, which is not the mistake.
+ */
+function duplicateNote(send: SendView, id: string, m: WalletFlowMessages): string | undefined {
+	const repeat = send.split_duplicates.find((row) => row.id === id);
+	return repeat ? fill(m['send.recipientDuplicate'], { n: repeat.first_ordinal }) : undefined;
+}
+
 function recipientNote(send: SendView, m: WalletFlowMessages): string | undefined {
 	const identity = send.recipient_identity;
 	if (identity?.name) {
@@ -611,7 +626,11 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			identiconSvg: draft.address ? identicon(draft.address) : undefined,
 			address: draft.address || undefined,
 			label: draft.name ?? shortenAddress(draft.address),
-			value: `${draft.amount} ${symbol}`.trim()
+			value: `${draft.amount} ${symbol}`.trim(),
+			// The form's repeat warning, said again on the page that signs
+			// (issue 203): two lines paying one payee are hardest to spot
+			// exactly where the avatars are identical and the sum looks right.
+			note: duplicateNote(send, draft.id, m)
 		}));
 		const countLine = fill(m['send.recipientCount_other'], { count: send.recipients.length });
 		return {

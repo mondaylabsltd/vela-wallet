@@ -13,6 +13,12 @@
 	 * fill was a dead promise. `oninput` present ⇒ the address and the amount
 	 * are fields, with the book's door beside the address, exactly as the
 	 * single form's field has one.
+	 *
+	 * A row the core has flagged as a repeat of an earlier recipient carries that
+	 * sentence under its address (issue 203): the same address could take two
+	 * lines of one batch with nothing on screen saying so, and the batch is sent
+	 * exactly as asked — so this warns, beside the row it is about, and refuses
+	 * nothing.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
@@ -31,6 +37,9 @@
 	}
 
 	let { recipient, symbol, onremove, oninput, onpick }: Props = $props();
+
+	/** Ties the warning to the field it is about, for a screen reader. */
+	const duplicateId = $props.id();
 </script>
 
 <div class="card" class:editable={oninput !== undefined}>
@@ -44,6 +53,7 @@
 					spellcheck="false"
 					autocomplete="off"
 					aria-label={`${recipient.ordinal} · ${recipient.addressLabel ?? ''}`}
+					aria-describedby={recipient.duplicateNote ? duplicateId : undefined}
 					value={recipient.address}
 					oninput={(event) => oninput({ address: event.currentTarget.value })}
 				/>
@@ -55,6 +65,9 @@
 			</span>
 		{:else}
 			<span class="name">{recipient.name}</span>
+		{/if}
+		{#if recipient.duplicateNote}
+			<span class="duplicate" id={duplicateId}>{recipient.duplicateNote}</span>
 		{/if}
 	</span>
 	{#if oninput}
@@ -125,6 +138,12 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+	/* The repeat warning: beside the row it is about, in the colour the app
+	   uses for "look at this", never the refusal red — nothing is refused. */
+	.duplicate {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-warning-base);
 	}
 	.amount {
 		grid-area: amount;

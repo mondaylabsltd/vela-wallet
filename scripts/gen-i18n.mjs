@@ -269,8 +269,14 @@ for (let i = 1; i < PATHS.length; i++) {
 //   ("Unverified") and `unverifiedWarning` describe the doubt but neither is a
 //   value a row can carry, and the row the person reads is the amount itself.
 //   No new branch — it hangs off the existing `componentsUi.signing`.
-if (PATHS.length !== 1633) fail(`expected 1633 paths (1548 leaf + 85 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1548) fail(`expected 1548 leaf paths, got ${leafSet.size}`);
+// + 1 more (issue #203): `send.recipientDuplicate` — a split row that pays an
+//   address an earlier row already pays. The importer has said "Duplicate —
+//   skipped" (`send.batchDup`) since it shipped, but that sentence is about a
+//   row that WON'T be sent; these rows will be, exactly as asked for, so the
+//   words beside them have to name which earlier recipient they repeat instead
+//   of claiming a refusal that never happens. No new branch.
+if (PATHS.length !== 1634) fail(`expected 1634 paths (1549 leaf + 85 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1549) fail(`expected 1549 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 85) fail(`expected 85 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

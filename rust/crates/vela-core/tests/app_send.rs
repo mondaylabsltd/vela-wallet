@@ -20,11 +20,11 @@ use support::DomainDriver;
 use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, FeeTier};
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
-    build_multi_token_calls, build_split_calls, is_valid_address, recipients_are_valid,
-    sum_split_base_units, Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome,
-    SendAlertKind, SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure,
-    SendFeeOutcome, SendHapticKind, SendHoldReason, SendLockError, SendOpenParams,
-    SendOperation as Op, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
+    build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
+    recipients_are_valid, sum_split_base_units, Event, ReentryLock, Send, SendAccountRef,
+    SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo, SendDisplayContext,
+    SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason, SendLockError,
+    SendOpenParams, SendOperation as Op, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
     SendRecipientDraft, SendScan, SendShellResult as Res, SendStage, SendSubmitFailure,
     SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryProbe,
     SendTreasuryStatus, SendTxErrorKey, SendTxStatus, SendUnitIssue, SendView,
@@ -684,6 +684,112 @@ fn recipients_are_valid_needs_address_and_positive_amount_each() {
         row(RECIPIENT, "1"),
         row(RECIPIENT_B, "")
     ]));
+}
+
+/// Issue 203: the importer has refused a repeated payee since it shipped, but
+/// rows typed in, picked from the book or added one at a time never met that
+/// rule — the same address could take two lines of one batch with nothing
+/// anywhere saying so.
+#[test]
+fn duplicate_recipient_rows_names_every_repeat_and_the_row_it_repeats() {
+    let row = |id: &str, addr: &str| SendRecipientDraft {
+        id: id.to_owned(),
+        address: addr.to_owned(),
+        amount: "1".to_owned(),
+        name: None,
+    };
+    // Nothing repeats.
+    assert_eq!(
+        duplicate_recipient_rows(&[row("a", RECIPIENT), row("b", RECIPIENT_B)]),
+        vec![]
+    );
+    // The reporter's batch: rows 5 and 6 repeat rows 2 and 1. The FIRST
+    // occurrence is never flagged — it is the row the repeat repeats.
+    let flagged = duplicate_recipient_rows(&[
+        row("r1", RECIPIENT),
+        row("r2", RECIPIENT_B),
+        row("r3", "0x0000000000000000000000000000000000000003"),
+        row("r4", "0x0000000000000000000000000000000000000004"),
+        row("r5", RECIPIENT_B),
+        row("r6", RECIPIENT),
+    ]);
+    assert_eq!(
+        flagged
+            .iter()
+            .map(|d| (d.id.as_str(), d.first_ordinal))
+            .collect::<Vec<_>>(),
+        vec![("r5", 2), ("r6", 1)]
+    );
+    // The importer's matching, exactly: trimmed and case-insensitive, so a
+    // checksummed address and its lowercase twin are one payee.
+    let mixed = duplicate_recipient_rows(&[
+        row("a", RECIPIENT),
+        row("b", &format!(" {} ", RECIPIENT.to_lowercase())),
+    ]);
+    assert_eq!(mixed.len(), 1);
+    assert_eq!(mixed[0].first_ordinal, 1);
+    // A row that is not an address yet repeats nothing — an empty second row
+    // is what "+ add recipient" hands you, and two of them are not a warning.
+    assert_eq!(
+        duplicate_recipient_rows(&[row("a", ""), row("b", ""), row("c", "0x123")]),
+        vec![]
+    );
+}
+
+/// The screen's warning and the rule are one thing, and it never fires outside
+/// a split: the same repeat is a warning in the editor and nothing at all in a
+/// single send, which has one recipient by construction.
+#[test]
+fn the_view_flags_repeated_payees_without_refusing_the_batch() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    assert_eq!(sut.view().split_duplicates, vec![]);
+
+    sut.dispatch(Event::EnterSplitMode);
+    let row = |id: &str, to: &str| SendRecipientDraft {
+        id: id.to_owned(),
+        address: to.to_owned(),
+        amount: "0.25".to_owned(),
+        name: None,
+    };
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            row("rcpt_1", RECIPIENT),
+            row("rcpt_2", RECIPIENT_B),
+            row("rcpt_3", RECIPIENT),
+        ],
+    });
+    let view = sut.view();
+    assert_eq!(view.split_duplicates.len(), 1);
+    assert_eq!(view.split_duplicates[0].id, "rcpt_3");
+    assert_eq!(view.split_duplicates[0].first_ordinal, 1);
+    // Warned, not refused: the batch is exactly what was asked for, and both
+    // payments are built.
+    assert!(view.can_continue);
+    let ops = sut.dispatch(Event::Continue);
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::ShowAlert { .. })),
+        "a repeat is a warning, not a refusal: {ops:?}"
+    );
+    // …and both payments to the repeated payee are in the batch that is quoted.
+    assert!(ops.iter().any(|op| matches!(
+        op,
+        Op::EstimateFee {
+            batch: Some(calls),
+            ..
+        } if calls.len() == 3
+    )));
+
+    // Fix the repeat and the warning goes with it.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            row("rcpt_1", RECIPIENT),
+            row("rcpt_2", RECIPIENT_B),
+            row("rcpt_3", "0x0000000000000000000000000000000000000009"),
+        ],
+    });
+    assert_eq!(sut.view().split_duplicates, vec![]);
 }
 
 #[test]

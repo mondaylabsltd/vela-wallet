@@ -114,6 +114,7 @@
     "selectAllValuable": "Seleccionar con valor",
     "addRecipient": "Agregar destinatario",
     "recipientN": "Destinatario {{n}}",
+    "recipientDuplicate": "Misma dirección que el destinatario {{n}}",
     "recipientCount_one": "{{count}} destinatario",
     "recipientCount_many": "{{count}} destinatarios",
     "recipientCount_other": "{{count}} destinatarios",

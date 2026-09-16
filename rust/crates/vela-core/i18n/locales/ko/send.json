@@ -74,6 +74,7 @@
     "selectAllValuable": "가치 있는 항목 전체 선택",
     "addRecipient": "받는 사람 추가",
     "recipientN": "받는 사람 {{n}}",
+    "recipientDuplicate": "받는 사람 {{n}}과(와) 주소가 같습니다",
     "recipientCount_one": "받는 사람 {{count}}명",
     "recipientCount_other": "받는 사람 {{count}}명",
     "removeRecipient": "제거",

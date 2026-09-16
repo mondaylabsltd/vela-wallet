@@ -386,6 +386,12 @@ export interface RecipientCardModel {
 	addressLabel?: string;
 	pickLabel?: string;
 	removeLabel: string;
+	/**
+	 * Live rows only (issue 203): this row pays an address an EARLIER row
+	 * already pays, and this sentence names which one. The core decides it
+	 * (`SendView.split_duplicates`); nothing here compares addresses.
+	 */
+	duplicateNote?: string;
 }
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -545,6 +551,13 @@ export interface BreakdownRowModel {
 	address?: string;
 	label: string;
 	value: string;
+	/**
+	 * A sentence under the label. The split's confirm uses it to repeat the
+	 * form's duplicate-payee warning (issue 203) on the last screen before a
+	 * signature; the receipt and the detail leave it unset — there, the batch
+	 * is already history and nothing can be edited.
+	 */
+	note?: string;
 }
 
 export type ReceiptStage = 'submitting' | 'submitted' | 'confirmed' | 'failed';

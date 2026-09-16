@@ -74,6 +74,7 @@
     "selectAllValuable": "価値のあるものを全選択",
     "addRecipient": "受取人を追加",
     "recipientN": "受取人 {{n}}",
+    "recipientDuplicate": "受取人 {{n}} と同じアドレスです",
     "recipientCount_one": "{{count}} 名の受取人",
     "recipientCount_other": "{{count}} 名の受取人",
     "removeRecipient": "削除",

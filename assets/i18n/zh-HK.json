@@ -305,6 +305,7 @@
   "selectAllValuable": "全選有價值代幣",
   "addRecipient": "新增收款人",
   "recipientN": "收款人 {{n}}",
+  "recipientDuplicate": "同收款人 {{n}} 係同一個地址",
   "recipientCount_one": "{{count}} 位收款人",
   "recipientCount_other": "{{count}} 位收款人",
   "removeRecipient": "移除",

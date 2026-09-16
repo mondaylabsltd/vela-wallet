@@ -91,6 +91,7 @@ const BASE: SendView = {
 	split_mode: false,
 	recipients: [],
 	split_over_balance: false,
+	split_duplicates: [],
 	picker_target: null,
 	multi_select_mode: false,
 	multi_selected_ids: [],
