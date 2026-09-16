@@ -98,6 +98,42 @@ export function sortAndFilterHoldings(
 }
 
 /**
+ * A chain whose RPC never answered this round. Deliberately distinct from a
+ * chain that answered with nothing: the first means "unknown", the second
+ * means "empty", and collapsing the two is what made held tokens disappear
+ * from the Assets list and from the total (issue 196).
+ */
+class ChainUnreachableError extends Error {
+	readonly chainId: number;
+	constructor(chainId: number, options?: ErrorOptions) {
+		super(`chain ${chainId} did not answer`, options);
+		this.name = 'ChainUnreachableError';
+		this.chainId = chainId;
+	}
+}
+
+/**
+ * The previous snapshot's holdings on chains that did not answer, kept
+ * alongside the ones that did.
+ *
+ * The core's streaming merge already holds a chain's last value while it is
+ * in flight (`chain_assets_arrived`, invariant ④), but the settled list
+ * replaces everything — so before this, one round in which Gnosis or Base
+ * timed out removed those tokens from the Assets list and dropped their
+ * value out of the Total balance, while the send picker, which snapshots the
+ * same fetch at a different moment, still listed them. A chain that ANSWERED
+ * stays authoritative: tokens it no longer reports really have been spent.
+ */
+export function carryOverUnansweredChains(
+	previous: readonly APIToken[],
+	fresh: readonly APIToken[],
+	answeredChainIds: ReadonlySet<number>
+): APIToken[] {
+	const carried = previous.filter((t) => !answeredChainIds.has(tokenChainId(t)));
+	return carried.length === 0 ? [...fresh] : [...fresh, ...carried];
+}
+
+/**
  * Quote-token decimals when the `decimals()` read failed — USDC's 6.
  *
  * Shell-side default for the CUSTOM-token price paths below, which the core
@@ -166,6 +202,10 @@ export async function fetchTokens(
 
 	const request = fetchAllChainTokens(
 		address,
+		// The snapshot a chain falls back to when it does not answer. The
+		// zero-balance superset is a different result set with its own
+		// (uncached) shape, so it carries nothing over.
+		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
 		options.onProgress,
 		options.onFailedChains,
 		options.includeZeroBalance
@@ -233,8 +273,11 @@ export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
 // Core: orchestrate all chains
 // ---------------------------------------------------------------------------
 
+type ChainOutcome = { answered: boolean; tokens: APIToken[] };
+
 async function fetchAllChainTokens(
 	address: string,
+	previous: readonly APIToken[],
 	onProgress?: (tokens: APIToken[]) => void,
 	onFailedChains?: (chainIds: number[]) => void,
 	includeZeroBalance?: boolean
@@ -245,8 +288,14 @@ async function fetchAllChainTokens(
 	// Phase 2: query each chain in parallel, streaming results as each chain finishes
 	const networks = getAllNetworksSync();
 	const accumulated: APIToken[] = [];
+	const answered = new Set<number>();
+	const carryable = new Set(previous.map(tokenChainId));
 
-	const sortAndFilter = () => sortAndFilterHoldings(accumulated, includeZeroBalance);
+	const sortAndFilter = () =>
+		sortAndFilterHoldings(
+			carryOverUnansweredChains(previous, accumulated, answered),
+			includeZeroBalance
+		);
 
 	// Cap each chain so one dead/slow RPC can't hold the whole fetch (a chain
 	// with no healthy endpoint can otherwise burn ~60s on sequential failover).
@@ -254,27 +303,46 @@ async function fetchAllChainTokens(
 	const PER_CHAIN_TIMEOUT_MS = 18_000;
 	await Promise.allSettled(
 		networks.map((net) => {
-			const chainTokensP = queryChainAssets(
+			const chainTokensP: Promise<ChainOutcome> = queryChainAssets(
 				address,
 				net.chainId,
 				customTokens.filter((ct) => ct.chainId === net.chainId),
 				clPrices
-			).catch(() => [] as APIToken[]);
+			).then(
+				(tokens) => ({ answered: true, tokens }),
+				() => ({ answered: false, tokens: [] })
+			);
 			const bounded = Promise.race([
 				chainTokensP,
-				new Promise<APIToken[]>((resolve) => setTimeout(() => resolve([]), PER_CHAIN_TIMEOUT_MS))
+				new Promise<ChainOutcome>((resolve) =>
+					setTimeout(() => resolve({ answered: false, tokens: [] }), PER_CHAIN_TIMEOUT_MS)
+				)
 			]);
-			return bounded.then((chainTokens) => {
-				if (chainTokens.length > 0) {
-					accumulated.push(...chainTokens);
+			return bounded.then((outcome) => {
+				// A chain that did not answer — RPC failure or the cap above —
+				// keeps whatever the previous snapshot knew it held (issue 196);
+				// only one that answered may shorten the list.
+				if (!outcome.answered) return;
+				answered.add(net.chainId);
+				accumulated.push(...outcome.tokens);
+				// An answered-empty chain still changes the list when it had
+				// something to carry over; otherwise the snapshot is unmoved
+				// and a tick would only churn the screen (issue 188).
+				if (outcome.tokens.length > 0 || carryable.has(net.chainId)) {
 					onProgress?.(sortAndFilter());
 				}
 			});
 		})
 	);
 
-	// Report chains where all RPC endpoints failed
-	const failed = networks.map((n) => n.chainId).filter((id) => getFailedRpcChains().has(id));
+	// Report every chain this round could not read: the ones whose RPC
+	// endpoints all failed, plus the ones that never answered (a rejection or
+	// the per-chain cap). The core treats a round with any of these as partial
+	// and refuses to promote its total to last-known-good — which it must,
+	// now that such a round can be carrying a chain's stale holdings forward.
+	const failed = networks
+		.map((n) => n.chainId)
+		.filter((id) => getFailedRpcChains().has(id) || !answered.has(id));
 	if (failed.length > 0) onFailedChains?.(failed);
 
 	return sortAndFilter();
@@ -461,8 +529,14 @@ async function queryChainAssets(
 		const encoded = encAggregate3(calls);
 		const raw = await ethCall(chainId, MULTICALL3, encoded);
 		results = decAggregate3(raw);
-	} catch {
-		return []; // chain unsupported or RPC failed
+	} catch (cause) {
+		// NOT `return []` (issue 196): an empty list is how a chain says "this
+		// account holds nothing here", and the core takes a settled list at
+		// its word (`balance_dashboard.rs` `accept`). Returning it for an RPC
+		// failure deleted that chain's holdings from the Assets list and from
+		// the total. Rejecting instead lets `fetchAllChainTokens` keep the
+		// last known holdings for a chain that never answered.
+		throw new ChainUnreachableError(chainId, { cause });
 	}
 
 	// 4. Resolve native price: DEX → on-chain Chainlink → Ethereum Chainlink
