@@ -180,7 +180,17 @@
 
 				<hr />
 
-				<button type="button" class="sign-out" onclick={() => (overlay = 'sign-out')}>
+				<!-- Live, this ASKS THE CORE and the core's own sheet is the
+				     confirmation — one dialog, the one carrying the pending-upload
+				     warning. The local dialog below it is the gallery's board
+				     (DST1's `sign-out` overlay), not a second step in front of the
+				     real one: two dialogs saying the same sentence cost three
+				     clicks to leave a wallet (founder, 2026-09-16). -->
+				<button
+					type="button"
+					class="sign-out"
+					onclick={() => (onsignout ? onsignout() : (overlay = 'sign-out'))}
+				>
 					<Icon icon={UTILITY_ICONS['log-out']} size="md" />
 					<span>{model.account.signOutLabel}</span>
 				</button>

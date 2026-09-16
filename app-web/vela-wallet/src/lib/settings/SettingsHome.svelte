@@ -316,7 +316,13 @@
 						{/if}
 					{/each}
 
-					<button type="button" class="sign-out" onclick={() => (overlay = 'sign-out')}>
+					<!-- Live, this ASKS THE CORE; the core's sheet is the one
+					     confirmation (ST3/ST3b stay the gallery's boards). -->
+					<button
+						type="button"
+						class="sign-out"
+						onclick={() => (onsignout ? onsignout() : (overlay = 'sign-out'))}
+					>
 						{model.signOut.label}
 					</button>
 

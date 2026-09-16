@@ -408,9 +408,8 @@
 		gap: var(--space-lg);
 	}
 
-	.methodsSheet {
-		padding: var(--space-xl) var(--layout-screenPaddingX) var(--space-3xl);
-	}
+	/* No padding of its own any more: `Sheet` pads its content, and this rule
+	   was the workaround that proved it should. */
 
 	.methodsTitle {
 		margin: 0 0 var(--space-lg);

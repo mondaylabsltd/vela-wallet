@@ -315,9 +315,21 @@
 		animation: backdrop-out var(--motion-sheet-out) ease-in both;
 	}
 
+	/* The panel PADS ITS OWN CONTENT, the way `wallet/ui/BottomSheet` does
+	   (`0 screenPaddingX screenPaddingX`).
+
+	   It used not to, and three of the four callers never noticed: each pads
+	   the `.card` of its DESKTOP branch and hands this one a bare snippet, so
+	   below the breakpoint the sign-out sheet, the prompt sheet and the
+	   identicon viewer all ran title, body and buttons flush into the screen
+	   edge (measured: the panel padded nothing, `<h2>` at x=0). The fourth caller
+	   — the welcome screen's method picker — had quietly added exactly this
+	   rule to its own content, which is the tell: the padding belongs to the
+	   sheet, not to whoever remembers. */
 	.panel {
 		position: relative;
 		width: 100%;
+		padding: var(--space-xl) var(--layout-screenPaddingX) var(--space-3xl);
 		max-height: calc(100dvh - var(--space-5xl));
 		overflow-y: auto;
 		overscroll-behavior: contain;
