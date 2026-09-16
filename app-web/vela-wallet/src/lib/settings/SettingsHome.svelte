@@ -316,7 +316,13 @@
 						{/if}
 					{/each}
 
-					<button type="button" class="sign-out" onclick={() => (overlay = 'sign-out')}>
+					<!-- Live, this ASKS THE CORE; the core's sheet is the one
+					     confirmation (ST3/ST3b stay the gallery's boards). -->
+					<button
+						type="button"
+						class="sign-out"
+						onclick={() => (onsignout ? onsignout() : (overlay = 'sign-out'))}
+					>
 						{model.signOut.label}
 					</button>
 
@@ -421,17 +427,7 @@
 						onsignin={onaccountsignin}
 					/>
 				{:else if overlay === 'sign-out'}
-					<!-- Closes on confirm, like clear-caches: the core's sign-out
-					     sheet is what answers this button, and two sheets at once
-					     is one sheet nobody can see. -->
-					<ConfirmSheet
-						sheet={model.signOutSheet}
-						onconfirm={() => {
-							onsignout?.();
-							close();
-						}}
-						oncancel={close}
-					/>
+					<ConfirmSheet sheet={model.signOutSheet} onconfirm={onsignout} oncancel={close} />
 				{:else if overlay === 'language'}
 					<SelectSheetBody
 						sheet={model.languageSheet}

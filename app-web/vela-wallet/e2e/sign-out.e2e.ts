@@ -10,9 +10,13 @@
  *
  * So the test is about the ROUTE, not the machine: start on settings, never
  * leave it, and end signed out on Welcome with the two session keys gone.
- * Both layouts, because each has its own confirm surface (the phone's bottom
- * sheet, the desktop's dialog) and the bug was invisible to whichever one you
- * did not open.
+ * Both layouts, because the sheet is a bottom sheet on one and a centred card
+ * on the other, and the bug was invisible to whichever one you did not open.
+ *
+ * The count matters too. Leaving a wallet is ONE dialog and two clicks — the
+ * row asks the core, the core's sheet confirms. The shells' own confirm
+ * surface (ST3/ST3b, DST1's overlay) is a gallery board, not a second step in
+ * front of the real one.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -48,6 +52,11 @@ function coreSheet(page: Page) {
 	return page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Cancel' }) });
 }
 
+/** The row, not a dialog's button: `exact` keeps it off the sheet's own CTA. */
+function signOutRow(page: Page) {
+	return page.getByRole('button', { name: 'Sign Out', exact: true }).first();
+}
+
 test.describe('on the phone layout', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
@@ -55,11 +64,10 @@ test.describe('on the phone layout', () => {
 		await page.goto('/en/settings');
 		await expect(page.getByText('Leaving Wallet').first()).toBeVisible();
 
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Sign Out', exact: true }).click();
+		await signOutRow(page).click();
 
-		// The core's sheet is what answers that button — and it is the ONLY thing
-		// on screen: the settings sheet closed rather than burying it.
+		// ONE dialog, and it is the core's — the row asks the machine rather
+		// than raising a confirm of its own in front of it.
 		await expect(coreSheet(page)).toBeVisible();
 		await expect(page.getByRole('dialog')).toHaveCount(1);
 
@@ -71,8 +79,7 @@ test.describe('on the phone layout', () => {
 
 	test('cancelling keeps the session, and the row still works afterwards', async ({ page }) => {
 		await page.goto('/en/settings');
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Sign Out', exact: true }).click();
+		await signOutRow(page).click();
 		await coreSheet(page).getByRole('button', { name: 'Cancel' }).click();
 
 		await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -80,8 +87,7 @@ test.describe('on the phone layout', () => {
 		expect((await storedSession(page)).accounts).not.toBeNull();
 
 		// A refusal must not latch the machine's single-flight check shut.
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Sign Out', exact: true }).click();
+		await signOutRow(page).click();
 		await expect(coreSheet(page)).toBeVisible();
 	});
 });
@@ -92,8 +98,7 @@ test.describe('on the wide layout', () => {
 	test('the account panel’s confirm signs out', async ({ page }) => {
 		await page.goto('/en/settings');
 		await page.getByRole('button', { name: 'Account', exact: true }).click();
-		await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Sign Out', exact: true }).click();
+		await signOutRow(page).click();
 
 		await expect(coreSheet(page)).toBeVisible();
 		await expect(page.getByRole('dialog')).toHaveCount(1);

@@ -73,7 +73,10 @@
 			<!-- "Sign out anyway" when there is something to be anyway ABOUT;
 			     plain "Sign out" otherwise. Wording the risk into the button is
 			     what makes the warning above more than decoration. -->
-			<Button variant="primary" shape="rounded" onclick={confirm}>
+			<!-- Red, like the fixture layer's `signOutSheet` declares (`tone:
+			     'danger'`) and like the settings dialog this is now the only
+			     sign-out confirm in place of. -->
+			<Button variant="danger" shape="rounded" onclick={confirm}>
 				{pendingUploadWarning ? copy.anyway : copy.button}
 			</Button>
 			<Button variant="secondary" shape="rounded" onclick={close}>{copy.cancel}</Button>
