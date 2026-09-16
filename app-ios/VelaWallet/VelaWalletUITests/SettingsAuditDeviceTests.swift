@@ -173,21 +173,36 @@ final class SettingsAuditDeviceTests: XCTestCase {
     /// Cancels rather than confirming: the flow being verified is the sheet,
     /// not the wipe.
     func testSignOutIsOneTapAndOneSheet() throws {
+        // The app's OWN navigation, not `VELA_PAGE=settings-live`: the page
+        // override renders the settings surface outside the route the session
+        // is attached to, so its account row stands empty even on a phone with
+        // a wallet — which is exactly how this test first reported "not signed
+        // in" on a phone that was (2026-09-16).
         let app = XCUIApplication()
-        app.launchEnvironment["VELA_PAGE"] = "settings-live"
         app.launchEnvironment["VELA_LANG"] = "zh"
-        app.launchEnvironment["VELA_THEME"] = "dark"
         app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 20))
-        settle()
+        settle(6)
 
-        // The precondition, stated where a reader will see it fail.
-        let signedIn = app.staticTexts.containing(
+        let settingsTab = app.buttons["设置"].exists ? app.buttons["设置"] : app.staticTexts["设置"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20), "no settings tab")
+        settingsTab.tap()
+        settle(2)
+
+        // The precondition, with the evidence attached either way — so "not
+        // signed in" can be told apart from "signed in, and this locator is
+        // wrong".
+        let address = app.staticTexts.containing(
             NSPredicate(format: "label BEGINSWITH %@", "0x")
         ).firstMatch
+        let signedIn = address.waitForExistence(timeout: 8)
+        attach(app.screenshot(), named: "audit-sign-out-precondition")
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "audit-sign-out-hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
         try XCTSkipUnless(
-            signedIn.waitForExistence(timeout: 6),
+            signedIn,
             "no wallet is signed in on this device — sign in first, then re-run"
         )
 
@@ -198,7 +213,7 @@ final class SettingsAuditDeviceTests: XCTestCase {
         open(row: "退出登录", in: app)
         attach(app.screenshot(), named: "audit-sign-out-one-sheet")
 
-        // The core's sheet, by the only thing that distinguishes it.
+        // The core's sheet, by the only thing that distinguishes it from ST3.
         XCTAssertTrue(
             app.staticTexts.containing(
                 NSPredicate(format: "label BEGINSWITH %@", "选择「我已有钱包」")
@@ -212,7 +227,8 @@ final class SettingsAuditDeviceTests: XCTestCase {
             "the settings confirm is still standing in front of the core's sheet"
         )
 
-        // A way back out, and it leaves the session alone.
+        // Cancels rather than confirming: the flow under test is the sheet,
+        // not the wipe, and this runs on somebody's signed-in phone.
         tap(element(labelled: "取消", in: app), in: app)
         settle(1.5)
         XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 8),
