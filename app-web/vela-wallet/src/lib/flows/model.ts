@@ -444,16 +444,6 @@ export interface SendFormModel {
 	 * phone raised these as native alerts, this shell had logged them.
 	 */
 	alert?: string;
-	/**
-	 * The core's LIVE reading of the money, in the corpus's words: the balance
-	 * is short, the fee outruns it, the figure cannot be converted. Standing,
-	 * not raised — it sits under the fee row while the condition holds.
-	 *
-	 * The three native shells have drawn `amount_warning` since spec 032; this
-	 * one threw it away, so a `Max` that correctly filled `0` because the fee
-	 * was larger than the whole balance looked like a broken button (issue 210).
-	 */
-	warning?: string;
 	cta: string;
 }
 
@@ -488,6 +478,15 @@ export interface FeeTokenPickModel {
 		balanceLabel: string;
 		fee: string;
 		selected: boolean;
+		/**
+		 * The core's `insufficient`: this coin cannot cover the fee, so the
+		 * row is shown for context and answers to nothing (invariant ⑧). The
+		 * native row is always offered, balance or not — which is how a send
+		 * came to be paid in a coin the account did not hold (issue 211).
+		 */
+		insufficient?: boolean;
+		/** Why it cannot be chosen, when it cannot. */
+		insufficientNote?: string;
 	}[];
 }
 

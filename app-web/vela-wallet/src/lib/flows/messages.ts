@@ -65,6 +65,10 @@ export const WALLET_FLOW_KEYS = [
 	'history.fromName',
 	'history.viewOnExplorer',
 	'componentsTx.receipt.statusConfirmed',
+	// A feed row is not settled history: a submitted send is pending until
+	// the tracker resolves it, and a refusal is failed (issue 211).
+	'componentsTx.detail.statusPending',
+	'componentsTx.detail.statusFailed',
 	'componentsTx.detail.from',
 	'componentsTx.detail.to',
 	'componentsTx.detail.labelChain',
@@ -186,15 +190,6 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchApply_one',
 	'send.batchApplyEmpty',
 
-	// send · the core's live amount warnings, worded. Without these the web
-	// dropped every sentence the core computed about the money — the other
-	// three shells have drawn them since spec 032 (issue 210).
-	'send.warnNotEnoughToken',
-	'send.warnInsufficientForGas',
-	'send.warnInsufficientGas',
-	'send.warnNeedGas',
-	'send.warnCannotConvert',
-
 	// send · the core's alerts, worded (spec 038 #D4)
 	'send.alertEstimateFailedTitle',
 	'send.alertEstimateFailedBody',
@@ -206,6 +201,14 @@ export const WALLET_FLOW_KEYS = [
 	'send.alertInsufficientBalanceTitle',
 	'send.alertInsufficientBalanceBody',
 	'send.alertLoadTokensError',
+	// The core's live amount verdicts (`SendAmountWarning`), which this shell
+	// used to drop on the floor (issues 211 and 210) — the other three have
+	// drawn them since spec 032.
+	'send.warnNotEnoughToken',
+	'send.warnInsufficientForGas',
+	'send.warnInsufficientGas',
+	'send.warnNeedGas',
+	'send.warnCannotConvert',
 
 	// send · confirm
 	'send.confirmTitle',

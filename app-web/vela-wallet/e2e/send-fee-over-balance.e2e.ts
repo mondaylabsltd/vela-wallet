@@ -8,7 +8,8 @@
  *
  * The same shape here on Ethereum, because that is the chain this suite's
  * stubs already speak: dust in the account, a quote that costs more than the
- * dust, and the core's own sentence on screen under the fee row.
+ * dust, and the core's own sentence on screen — on 211's live-warning line,
+ * which is where every `amount_warning` reaches this shell.
  */
 import { expect, test } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
@@ -98,9 +99,9 @@ test('Max says why it filled nothing when the fee outruns the balance', async ({
 	// The fill is `0` — correct: the reserve is larger than everything there is.
 	await expect(page.getByRole('textbox', { name: 'ETH' })).toHaveValue('0', { timeout: 30_000 });
 	// …and this is the part that did not exist: the core's sentence, on screen.
-	await expect(page.getByText(en('send.warnInsufficientGas').replace('{{sym}}', 'ETH'))).toBeVisible(
-		{ timeout: 30_000 }
-	);
+	await expect(
+		page.getByText(en('send.warnInsufficientGas').replace('{{sym}}', 'ETH'))
+	).toBeVisible({ timeout: 30_000 });
 	// The gate stays honestly shut behind it.
 	await expect(page.getByRole('button', { name: en('send.continueBtn') })).toBeDisabled();
 });

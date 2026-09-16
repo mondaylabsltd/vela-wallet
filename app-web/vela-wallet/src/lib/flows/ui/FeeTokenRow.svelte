@@ -21,11 +21,20 @@
 	let { row, estimateLabel, onselect }: Props = $props();
 </script>
 
+<!--
+	A coin that cannot cover the fee is drawn for context and answers to
+	nothing — the desktop's rule (`panels.rs`), and the core's: `select_fee_asset`
+	refuses such a row. Web drew it exactly like the others and dropped the tap
+	on the floor, so paying gas in a coin the account did not hold looked like a
+	choice that had been made (issue 211).
+-->
 <button
 	type="button"
 	class="row"
 	class:on={row.selected}
+	class:spent={row.insufficient}
 	aria-pressed={row.selected}
+	disabled={row.insufficient}
 	onclick={onselect}
 >
 	<TokenIcon
@@ -37,7 +46,11 @@
 	/>
 	<span class="text">
 		<span class="symbol">{row.symbol}</span>
-		<span class="balance">{row.balanceLabel}</span>
+		<span class="balance"
+			>{row.insufficient && row.insufficientNote !== undefined
+				? row.insufficientNote
+				: row.balanceLabel}</span
+		>
 	</span>
 	<span class="numbers">
 		<span class="fee">{row.fee}</span>
@@ -65,6 +78,11 @@
 
 	.on {
 		background: var(--color-bg-raised);
+	}
+
+	.spent {
+		opacity: 0.45;
+		cursor: default;
 	}
 
 	.text {

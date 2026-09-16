@@ -163,14 +163,6 @@
 
 	<FeeRow fee={model.fee} onopen={onfee} />
 
-	<!-- The core's standing reading of the money, under the fee it is about.
-	     `Max` filling 0 because the fee is larger than the balance is the case
-	     this exists for: the figure is right, and without the sentence it reads
-	     as a broken button (issue 210). -->
-	{#if model.warning !== undefined}
-		<p class="warning" role="status">{model.warning}</p>
-	{/if}
-
 	{#if model.alert !== undefined}
 		<p class="alert" role="alert">{model.alert}</p>
 	{/if}
@@ -260,14 +252,5 @@
 		padding-top: var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-danger-base);
-	}
-
-	/* Amber, not red: this one stands while the condition does, and the
-	   person has not asked for anything to happen yet. */
-	.warning {
-		margin: 0;
-		padding-top: var(--space-md);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-warning-base);
 	}
 </style>
