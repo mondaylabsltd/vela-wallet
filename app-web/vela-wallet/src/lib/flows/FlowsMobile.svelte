@@ -47,6 +47,12 @@
 		pickFeeToken(index: number): void;
 		/** 最大 — the core's `tap_max`: the whole balance, net of the fee it estimates. */
 		max(): void;
+		/**
+		 * ⇄ — the core's `toggle_fiat_input`: type the amount in the token or in
+		 * the display currency. Drawn since 021 and wired to nothing until now
+		 * (issue 197), which made it look like a dead icon.
+		 */
+		toggleDenom(): void;
 		done(): void;
 		/**
 		 * The picker's two sweep affordances (spec 028 T440): the master tick,
@@ -215,6 +221,7 @@
 				onpickRecipient={() => go('contact-pick')}
 				onscan={() => go('scan')}
 				onfee={() => go('fee-token')}
+				ondenom={send ? () => send.toggleDenom() : undefined}
 				onmax={send ? () => send.max() : undefined}
 				onrecipientAction={(id) => {
 					// The split form's three pills (Phase 10): a blank row, the book

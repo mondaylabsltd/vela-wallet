@@ -679,6 +679,12 @@
 					// 最大 was drawn on the token card and wired to nothing (spec 028
 					// Phase 9, T489); the core's rule fills it fee-aware.
 					max: () => sendSession?.dispatch({ type: 'tap_max' }),
+					// ⇄ was the same kind of dead drawing (issue 197): the icon under
+					// the figure had no handler at all, so a person asking to type
+					// the amount in money got nothing back. The core owns the swap —
+					// whether it is possible, and what happens to the figure that
+					// cannot come across — so the screen only says it was pressed.
+					toggleDenom: () => sendSession?.dispatch({ type: 'toggle_fiat_input' }),
 					recipientChanged: (value: string) =>
 						sendSession?.dispatch({ type: 'set_recipient', recipient: value }),
 					advance: () => sendSession?.dispatch({ type: 'continue' }),

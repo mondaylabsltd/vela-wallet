@@ -12,8 +12,17 @@
 
 	interface Props {
 		value: string;
+		/** The OTHER denomination — money while tokens are typed, and back. */
 		fiat: string;
 		denomLabel: string;
+		/**
+		 * Present ⇒ the core offers the ⇄ swap (`denom_toggle_shown`), and
+		 * `enabled` is whether pressing it would change anything
+		 * (`denom_toggle_enabled` — entering fiat needs a rate). Absent, the
+		 * line below the figure is text: issue 197 was this control drawn
+		 * unconditionally, with nothing behind it in either direction.
+		 */
+		denomToggle?: { enabled: boolean };
 		ondenom?: () => void;
 		/**
 		 * Present ⇒ the figure is TYPED here (spec 026). The gallery passes
@@ -25,7 +34,7 @@
 		placeholder?: string;
 	}
 
-	let { value, fiat, denomLabel, ondenom, oninput, placeholder }: Props = $props();
+	let { value, fiat, denomLabel, denomToggle, ondenom, oninput, placeholder }: Props = $props();
 </script>
 
 <div class="amount">
@@ -42,10 +51,17 @@
 	{:else}
 		<p class="value">{value}</p>
 	{/if}
-	<button type="button" class="fiat" aria-label={denomLabel} onclick={ondenom}>
-		<span>{fiat}</span>
-		<Icon icon={UTILITY_ICONS['chevrons-up-down']} size="sm" />
-	</button>
+	{#if denomToggle}
+		<!-- Named by what it switches TO, which is the line it shows. The old
+		     `aria-label` said the unit already being typed — a two-state
+		     control announced by the state you are leaving. -->
+		<button type="button" class="fiat" onclick={ondenom} disabled={!denomToggle.enabled}>
+			<span>{fiat}</span>
+			<Icon icon={UTILITY_ICONS['chevrons-up-down']} size="sm" />
+		</button>
+	{:else if fiat}
+		<p class="fiat">{fiat}</p>
+	{/if}
 </div>
 
 <style>
@@ -83,6 +99,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-xs);
+		margin: 0;
 		padding: var(--space-xs) var(--space-sm);
 		border: none;
 		border-radius: var(--radius-sm);
@@ -94,7 +111,19 @@
 		cursor: pointer;
 	}
 
-	.fiat:hover {
+	.fiat:hover:not(:disabled) {
 		color: var(--color-fg-base);
+	}
+
+	/* The core's refusal, made visible: no rate to enter this currency
+	   against. The sentence that says WHY rides the form's one notice line
+	   (`denom_toggle_reason`), the same slot the desktop puts it in. */
+	.fiat:disabled {
+		opacity: var(--opacity-disabled);
+		cursor: default;
+	}
+
+	p.fiat {
+		cursor: default;
 	}
 </style>

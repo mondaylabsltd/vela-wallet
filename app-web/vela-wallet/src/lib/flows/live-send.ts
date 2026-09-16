@@ -344,10 +344,31 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		token?.price_usd != null ? (parseFloat(send.token_amount) || 0) * token.price_usd : null;
 
 	const split = send.split_mode;
+	// Which unit the figure is being TYPED in. `amount_fiat_code` is the
+	// figure's OWN code, never re-derived from the display context — the core
+	// is emphatic about that, and this file only reads it.
+	const inFiat = send.amount_fiat_code !== null;
 	const amountBlock = {
 		value: send.amount || '0',
-		fiat: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
-		denomLabel: send.amount_fiat_code ?? token?.symbol ?? ''
+		// The line under the figure is the OTHER denomination (spec 021
+		// component 8; `05-screens-wallet.md:168` — "≈ $12.34" or "0.0042 ETH").
+		// It used to be the fiat value in BOTH modes, so a fiat-denominated
+		// figure was restated beneath itself and a working swap would have
+		// looked like it had done nothing at all.
+		fiat: inFiat
+			? token === null
+				? ''
+				: `≈ ${trimBalance(send.token_amount || '0')} ${token.symbol}`
+			: usd === null
+				? ''
+				: `≈ ${moneyText(usd, currency)}`,
+		denomLabel: send.amount_fiat_code ?? token?.symbol ?? '',
+		// The ⇄ row exists only where the core offers it, and is live only
+		// where pressing it would change something. Issue 197: this shell drew
+		// the control unconditionally and wired it to nothing — the one event
+		// (`toggle_fiat_input`) and all three view fields went unread, so the
+		// tap was swallowed whether or not the swap was possible.
+		denomToggle: send.denom_toggle_shown ? { enabled: send.denom_toggle_enabled } : undefined
 	};
 	const recipientBlock = {
 		label: m['send.recipientLabel'],
@@ -464,10 +485,25 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// screen said nothing at all about a gas coin the account did not
 		// hold; issue 210: `Max` correctly filling 0 because the fee outran
 		// the whole balance), so the alert — which only exists after a
-		// refused Continue — wins when both are present.
-		alert: alertWords(inputs.alert, m) ?? liveWarning(send, m),
+		// refused Continue — wins when both are present. Last comes the ⇄
+		// control's own refusal (issue 197): a dimmed toggle with no sentence
+		// is a refusal nobody can act on, which is exactly what the desktop
+		// says here too (`send_notice`).
+		alert: alertWords(inputs.alert, m) ?? liveWarning(send, m) ?? denomReason(send, m),
 		cta: m['send.continueBtn']
 	};
+}
+
+/**
+ * Why ⇄ is inert, when it is inert (`denom_toggle_reason`, `Some` exactly
+ * when the row is shown and disabled). The core decides THAT there is no rate
+ * to enter this currency against; the corpus says it.
+ */
+function denomReason(send: SendView, m: WalletFlowMessages): string | undefined {
+	const issue = send.denom_toggle_reason;
+	return issue === null
+		? undefined
+		: fill(m['send.denomToggleNoRate'], { code: issue.code, symbol: issue.symbol });
 }
 
 /**

@@ -795,7 +795,14 @@ function sendForm(
 		header,
 		mode,
 		token,
-		amount: { value: '120', fiat: '≈ $120.00', denomLabel: m['send.feeTokenLabel'] },
+		amount: {
+			value: '120',
+			fiat: '≈ $120.00',
+			denomLabel: m['send.feeTokenLabel'],
+			// Drawn live: SD2's token is priced, which is the condition the core
+			// shows the ⇄ row on.
+			denomToggle: { enabled: true }
+		},
 		recipient: {
 			label: m['send.recipientLabel'],
 			lines: addressLines(ALICE.addressFull),

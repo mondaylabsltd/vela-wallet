@@ -422,7 +422,20 @@ export interface SendFormModel {
 	sweepSummary?: string;
 	sweepRows?: SweepRowModel[];
 	/** single only: the big enterable amount. */
-	amount?: { value: string; fiat: string; denomLabel: string };
+	amount?: {
+		value: string;
+		fiat: string;
+		/** The unit the figure is TYPED in — the entry field's accessible name. */
+		denomLabel: string;
+		/**
+		 * The ⇄ row (spec 021 component 8, E07 FR-3/FR-4), when the core offers
+		 * it: `SendView.denom_toggle_shown` decides that it is there at all,
+		 * `denom_toggle_enabled` whether pressing it would change anything.
+		 * Absent ⇒ no swap on offer and the line beneath is plain text — an
+		 * affordance appears only where something can act on it.
+		 */
+		denomToggle?: { enabled: boolean };
+	};
 	/** single and sweep: one recipient field. */
 	recipient?: {
 		label: string;

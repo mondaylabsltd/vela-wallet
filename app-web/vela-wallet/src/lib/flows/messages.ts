@@ -214,6 +214,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.warnInsufficientGas',
 	'send.warnNeedGas',
 	'send.warnCannotConvert',
+	// Why ⇄ is inert: no rate to enter the display currency against. Already in
+	// the corpus for the phones; web drew the control and read none of it.
+	'send.denomToggleNoRate',
 
 	// send · confirm
 	'send.confirmTitle',

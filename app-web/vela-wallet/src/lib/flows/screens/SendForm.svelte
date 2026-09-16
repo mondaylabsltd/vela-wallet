@@ -27,6 +27,7 @@
 		onrecipientAction?: (id: 'add' | 'contacts' | 'import') => void;
 		onremoveRecipient?: (index: number) => void;
 		onfee?: () => void;
+		/** The ⇄ swap — the core's `toggle_fiat_input` (issue 197). */
 		ondenom?: () => void;
 		onmax?: (index: number) => void;
 		onaddRecipient?: () => void;
@@ -107,6 +108,7 @@
 			value={model.amount.value}
 			fiat={model.amount.fiat}
 			denomLabel={model.amount.denomLabel}
+			denomToggle={model.amount.denomToggle}
 			{ondenom}
 			oninput={onamount}
 		/>
