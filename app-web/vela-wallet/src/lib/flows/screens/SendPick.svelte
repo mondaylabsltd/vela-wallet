@@ -58,6 +58,11 @@
 		{/each}
 	</ul>
 
+	<!-- A list with nothing in it says so rather than showing a blank panel. -->
+	{#if shown.length === 0 && model.empty !== undefined}
+		<p class="empty">{model.empty}</p>
+	{/if}
+
 	{#if model.selection !== undefined}
 		<button type="button" class="select-all" onclick={onselectall}>
 			{model.selection.selectAll}
@@ -90,6 +95,15 @@
 
 	li + li {
 		border-top: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.empty {
+		margin: 0;
+		padding-block: var(--space-lg);
+		text-align: center;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	.select-all {

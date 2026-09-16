@@ -352,6 +352,13 @@ export interface SendPickModel {
 	/** SD1b: the chain lock, once the first token pins the network. */
 	notice?: { mark: TokenMarkModel; text: string };
 	rows: AssetRowModel[];
+	/**
+	 * What the list says when it has no rows to show (issue 209): "no tokens
+	 * with balance" for an account that holds nothing, "no matching tokens"
+	 * when a filter or a search hid them. Live only — the drawn picker always
+	 * has rows.
+	 */
+	empty?: string;
 	/** SD1b: which rows are chosen, and which are off-network and greyed. */
 	selection?: { selected: boolean[]; dimmed: boolean[]; selectAll: string };
 	/** SD1's "send several tokens" ghost CTA, or SD1b's accent one. */

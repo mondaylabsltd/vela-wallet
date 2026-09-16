@@ -175,6 +175,20 @@ describe('the token picker', () => {
 		expect(JSON.stringify(model)).not.toContain('0.8533');
 	});
 
+	it('says why the list is empty — nothing held, or nothing matching', () => {
+		// Rows exist but a filter hid them: "nothing matches", not "nothing held".
+		const filtered = liveSendPick(pickModel(), {
+			...inputs({ tokens: [USDT, ETH] }),
+			chainFilter: 137
+		});
+		expect(filtered.rows).toHaveLength(0);
+		expect(filtered.empty).toBe(m['send.noMatchingTokens']);
+
+		const nothing = liveSendPick(pickModel(), inputs({ tokens: [] }));
+		expect(nothing.rows).toHaveLength(0);
+		expect(nothing.empty).toBe(m['send.noTokensWithBalance']);
+	});
+
 	it('an unpriced token says so rather than showing a zero', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [{ ...ETH, price_usd: null }] }));
 		expect(model.rows[0].fiat).toEqual({ kind: 'no-price', text: '—' });
@@ -191,6 +205,19 @@ describe('the form', () => {
 		expect(model.token).toMatchObject({ symbol: 'ETH' });
 		expect(model.token?.detail).toContain('1.5');
 		expect(model.amount).toMatchObject({ value: '0.5', fiat: '≈ $1,500.00' });
+	});
+
+	/**
+	 * Issue 209: the address book opened a send on an account holding
+	 * nothing, and the drawn SD2 card — "USDT · Ethereum · Balance 53.4836" —
+	 * stood in for the token the core never named. A wallet at $0.00 with an
+	 * empty Assets list quoted a balance it does not have.
+	 */
+	it('shows no token card and names no token when the core has not chosen one', () => {
+		const model = liveSendForm(formModel(), inputs({ recipient: '0x' + 'ab'.repeat(20) }));
+		expect(model.token).toBeUndefined();
+		expect(model.header.title).not.toContain('USDT');
+		expect(JSON.stringify(model)).not.toContain('53.4836');
 	});
 
 	it('splits the recipient across the drawn two lines; empty stays empty', () => {

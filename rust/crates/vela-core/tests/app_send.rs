@@ -833,6 +833,59 @@ fn a_prefilled_recipient_is_shown_before_the_tokens_arrive() {
     assert!(view.selected_token.is_some());
 }
 
+/// Issue #209: a hand-off from the address book to an account that holds
+/// NOTHING must not leave a form standing. `open` steps to the form for the
+/// recipient's sake; when the list comes back with no token to send, the form
+/// has no balance, no chain and no Max to show — so the picker is what is
+/// showing, and it says so out of the same empty list.
+#[test]
+fn a_prefilled_recipient_with_nothing_to_send_falls_back_to_the_picker() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        prefilled_recipient: Some(RECIPIENT.to_owned()),
+        ..SendOpenParams::default()
+    }));
+    assert_eq!(sut.view().stage, SendStage::EnterDetails, "optimistic step");
+
+    sut.resolve(loaded(vec![]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "no token, no form");
+    assert!(view.selected_token.is_none());
+    assert!(
+        view.tokens.is_empty(),
+        "the picker says the account is empty"
+    );
+    // Who the money is for survives: picking a token later lands on the form
+    // with the person still filled in.
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// The same rule for the two other hand-offs that step to the form early: a
+/// token whose symbol is no longer held, and multi ids that match no row.
+#[test]
+fn a_preselection_that_resolves_to_nothing_falls_back_to_the_picker() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_symbol: Some("USDC".to_owned()),
+        preselected_network: Some("ethereum".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![eth("2")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "USDC is not held");
+    assert!(view.selected_token.is_none());
+
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        preselected_multi: Some("ethereum_native_WETH".to_owned()),
+        ..SendOpenParams::default()
+    }));
+    sut.resolve(loaded(vec![eth("2")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken, "no id matched");
+    assert!(!view.multi_select_mode);
+}
+
 #[test]
 fn preselected_symbol_and_network_land_on_enter_details() {
     let mut sut = Sut::new();
