@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "我們為什麼做它",
-			"p1": "我們每天都在用 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，也確實喜歡它。直到撞上那幾道牆：一把在瀏覽器裡產生、你只能選擇相信的復原金鑰；不能加自訂網路；沒有任何一部分可以自己部署——而服務一旦消失，錢包也跟著消失。",
-			"p2": "Vela 就是我們自己願意往裡放錢的那個版本。一樣的密碼金鑰登入，沒有任何綁定。",
+			"p1": "我們每天都在用 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，也確實喜歡它。但用久了，有幾個問題繞不過去：復原金鑰由瀏覽器產生，你只能選擇相信；不能加自訂網路；服務也不能自己部署——哪天服務沒了，錢包也就跟著沒了。",
+			"p2": "Vela 就是我們自己願意往裡放錢的那個版本。我們保留了密碼金鑰，但不想讓錢包依賴 Vela。",
 			"more": "長一點的版本——那十二個單字，到底該放在哪裡？"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "目前還沒有上架任何應用程式商店。在那之前，每一個建置版本都在 GitHub 上。"
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Pourquoi nous l'avons fait",
-			"p1": "Nous utilisions <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> tous les jours et nous l'aimions bien. Puis nous avons buté sur les murs : une clé de récupération générée dans un navigateur, à laquelle il faut simplement faire confiance, pas de réseaux personnalisés, rien que l'on puisse héberger soi-même — et si le service disparaît, le portefeuille disparaît avec lui.",
-			"p2": "Vela, c'est la version dans laquelle nous étions prêts à laisser de l'argent. La même connexion par passkey. Sans l'enfermement.",
+			"p1": "Nous utilisions <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> tous les jours et nous l'aimions bien. Puis nous nous sommes heurtés aux limites : une clé de récupération générée dans un navigateur, à laquelle il faut simplement faire confiance, pas de réseaux personnalisés, rien que l'on puisse héberger soi-même — et si le service disparaît, le portefeuille disparaît avec lui.",
+			"p2": "Vela, c'est la version dans laquelle nous étions prêts à laisser de l'argent. Nous avons gardé la signature par passkey, mais fait en sorte que le portefeuille ne dépende pas de nous.",
 			"more": "La version longue — où est-on censé ranger douze mots ?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

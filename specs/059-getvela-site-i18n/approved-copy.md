@@ -118,6 +118,40 @@ conditional. Rules that follow from the new set:
 The thirteen were realigned the same day
 ([reviews/single-string.md](reviews/single-string.md)).
 
+## `home.why.p1` / `home.why.p2` — why we built it
+
+| key | `en` | approved |
+|---|---|---|
+| `p1` | unchanged — `We used <a …>Base Account</a> every day and liked it. Then we hit the walls: …` | founder, 2026-09-15 |
+| `p2` | `Vela is the version we were willing to keep money in. We kept passkey signing, but made sure the wallet doesn’t depend on us.` | founder, 2026-09-16 |
+
+| key | `zh` | approved |
+|---|---|---|
+| `p1` | `我们每天都在用 <a …>Base Account</a>，也确实喜欢它。但用久了，有几个问题绕不过去：恢复密钥由浏览器生成，你只能选择相信；不能加自定义网络；服务也不能自己部署——哪天服务没了，钱包也就跟着没了。` | founder, 2026-09-16 |
+| `p2` | `Vela 就是我们自己愿意往里放钱的那个版本。我们保留了通行密钥，但不想让钱包依赖 Vela。` | founder, 2026-09-16 |
+
+- **`p2` stopped being a spec line.** "Same passkey sign-in. None of the lock-in."
+  claimed a result; the new sentence names the work — we kept the sign-in, and
+  then made sure the wallet does not need us. It also lines up with
+  `hero.facts[3]`, which now says access does not depend on Vela being online.
+  A locale must not turn it back into two fragments, and must not promise
+  independence as a property we were given rather than one we built.
+- **`p1`'s English did not change**, so the eleven non-Chinese locales keep its
+  detail — including *you just have to trust* and *nothing you can host
+  yourself*, which are the reasons the three complaints are complaints.
+- **The Chinese `p1` did change**: the "hit the walls" metaphor is gone, and the
+  three complaints are three short clauses. `zh-TW` and `zh-HK` follow it in
+  their own idiom.
+- **`你只能选择相信` was restored** at the founder's request, same day. The first
+  draft of the new Chinese had compressed it away, leaving `恢复密钥由浏览器生成` —
+  which states a mechanism and not a complaint. The whole objection is that you
+  cannot check what the browser generated; you can only believe it. All fifteen
+  locales now carry the clause, and the asymmetry that was open here is closed.
+  `zh-HK` says it as Cantonese does: `你唯有信佢`.
+- **"Then we hit the walls" is an English idiom**, and seven locales had
+  translated it word for word. Repaired
+  ([reviews/single-string.md](reviews/single-string.md)).
+
 ## `home.hero.headline` in all fifteen — the T058 record
 
 FR-006: **a locale keeps the English headline until its own line is approved.**

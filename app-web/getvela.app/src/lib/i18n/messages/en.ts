@@ -253,11 +253,17 @@ export const en = {
 		 * passkeys change, what we gave up — is now /docs/why-vela, because a
 		 * landing page is not where somebody reads nine paragraphs. What stays is
 		 * the part that answers "why does this exist and not just Base Account".
+		 *
+		 * p2 rewritten 2026-09-16. It was two fragments — "Same passkey sign-in.
+		 * None of the lock-in." — which read as a spec line where the paragraph
+		 * wants a sentence, and "none of the lock-in" claimed a result rather than
+		 * the work: what we actually did was keep the sign-in and then make sure
+		 * the wallet does not need us.
 		 */
 		why: {
 			heading: 'Why we built it',
 			p1: 'We used <a href="https://account.base.app" target="_blank" rel="noopener">Base Account</a> every day and liked it. Then we hit the walls: a recovery key generated in a browser you just have to trust, no custom networks, nothing you can host yourself — and if the service goes away, the wallet goes with it.',
-			p2: 'Vela is the version we were willing to keep money in. Same passkey sign-in. None of the lock-in.',
+			p2: 'Vela is the version we were willing to keep money in. We kept passkey signing, but made sure the wallet doesn’t depend on us.',
 			more: 'The long version — where are you supposed to keep twelve words?'
 		},
 

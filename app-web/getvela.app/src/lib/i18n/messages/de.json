@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Warum wir es gebaut haben",
-			"p1": "Wir haben <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> täglich benutzt und mochten es. Dann kamen die Wände: ein Wiederherstellungsschlüssel, der im Browser erzeugt wird und dem man einfach vertrauen muss, keine eigenen Netzwerke, nichts, was man selbst hosten kann — und wenn der Dienst verschwindet, verschwindet die Wallet mit ihm.",
-			"p2": "Vela ist die Version, in der wir bereit waren, Geld liegen zu lassen. Dieselbe Passkey-Anmeldung. Nichts davon, was einen festhält.",
+			"p1": "Wir haben <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> täglich benutzt und mochten es. Dann stießen wir an die Grenzen: ein Wiederherstellungsschlüssel, der im Browser erzeugt wird und dem man einfach vertrauen muss, keine eigenen Netzwerke, nichts, was man selbst hosten kann — und wenn der Dienst verschwindet, verschwindet die Wallet mit ihm.",
+			"p2": "Vela ist die Version, in der wir bereit waren, Geld liegen zu lassen. Die Passkey-Signatur haben wir behalten, aber dafür gesorgt, dass die Wallet nicht von uns abhängt.",
 			"more": "Die lange Fassung — wo soll man zwölf Wörter eigentlich aufbewahren?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "我哋點解要做佢",
-			"p1": "我哋日日都用緊 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，亦真係鍾意佢。直到撞到嗰幾道牆：一把喺瀏覽器入面生成、你只可以選擇相信嘅復原金鑰；加唔到自訂網絡；冇一部分可以自己部署——而服務一旦冇咗，錢包都跟住冇。",
-			"p2": "Vela 就係我哋自己肯放錢入去嗰個版本。一樣係通行密鑰登入，但係冇任何綁定。",
+			"p1": "我哋日日都用緊 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，亦真係鍾意佢。但用耐咗，有幾樣嘢始終避唔開：復原金鑰係瀏覽器度生成嘅，你唯有信佢；加唔到自訂網絡；服務又唔可以自己部署——第日服務冇咗，錢包都跟住冇。",
+			"p2": "Vela 就係我哋自己肯放錢入去嗰個版本。通行密鑰我哋照用，但唔想個錢包要靠住 Vela。",
 			"more": "長啲嘅版本——嗰十二個字，究竟應該放喺邊？"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "仲未上商店。喺嗰日之前，每一個 build 都喺 GitHub 上面。"
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

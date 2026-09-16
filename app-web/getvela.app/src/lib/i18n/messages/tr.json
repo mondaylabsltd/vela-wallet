@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Bunu neden yaptık",
-			"p1": "Her gün <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> kullanıyorduk ve seviyorduk da. Sonra duvarlara tosladık: tarayıcıda üretilen ve yalnızca güvenmek zorunda olduğunuz bir kurtarma anahtarı, özel ağ ekleyememe, hiçbir parçasını kendiniz barındıramama — ve servis kapanırsa cüzdan da onunla birlikte gidiyor.",
-			"p2": "Vela, kendi paramızı içinde tutmaya razı olduğumuz sürüm. Yine geçiş anahtarıyla giriş. Ama hiçbir bağımlılık yok.",
+			"p1": "Her gün <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> kullanıyorduk ve seviyorduk da. Sonra duvara tosladık: tarayıcıda üretilen ve yalnızca güvenmek zorunda olduğunuz bir kurtarma anahtarı, özel ağ ekleyememe, hiçbir parçasını kendiniz barındıramama — ve servis kapanırsa cüzdan da onunla birlikte gidiyor.",
+			"p2": "Vela, kendi paramızı içinde tutmaya razı olduğumuz sürüm. Geçiş anahtarıyla imzalamayı koruduk ama cüzdanın bize bağımlı olmamasını sağladık.",
 			"more": "Uzun hâli — o on iki kelimeyi tam olarak nerede saklayacaksınız?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Kenapa kami membuatnya",
-			"p1": "Kami memakai <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> setiap hari dan menyukainya. Lalu kami menabrak dindingnya: kunci pemulihan yang dibuat di dalam browser dan hanya bisa Anda percayai begitu saja, tidak bisa menambah jaringan sendiri, tidak ada bagian yang bisa Anda hosting sendiri — dan kalau layanannya berhenti, dompetnya ikut berhenti.",
-			"p2": "Vela adalah versi yang kami sendiri bersedia menaruh uang di dalamnya. Masuk tetap dengan passkey. Tanpa terkunci pada siapa pun.",
+			"p1": "Kami memakai <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> setiap hari dan menyukainya. Lalu kami mentok: kunci pemulihan yang dibuat di dalam browser dan hanya bisa Anda percayai begitu saja, tidak bisa menambah jaringan sendiri, tidak ada bagian yang bisa Anda hosting sendiri — dan kalau layanannya berhenti, dompetnya ikut berhenti.",
+			"p2": "Vela adalah versi yang kami sendiri bersedia menaruh uang di dalamnya. Tanda tangan dengan passkey tetap kami pertahankan, tapi dompetnya kami buat supaya tidak bergantung pada kami.",
 			"more": "Versi panjangnya — dua belas kata itu sebenarnya harus disimpan di mana?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

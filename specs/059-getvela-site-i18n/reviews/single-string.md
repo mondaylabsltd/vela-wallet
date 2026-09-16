@@ -225,3 +225,78 @@ Technical: no placeholders, no markup, no plurals; `{#each … (fact.term)}` is
 keyed on these strings, and all sixty are distinct. The curly apostrophes in the
 English (`isn’t`, `doesn’t`) are the founder's and were kept byte-for-byte.
 `i18n:stamp` re-fingerprinted `home` in all fourteen.
+
+---
+
+## Fifth pass — `home.why.p1` and `home.why.p2`
+
+Date: 2026-09-16 · 15 locales × 2 strings. `p1` carries the one inline link on
+this page (`account.base.app`), so the markup gate is live here.
+
+### `p2` — rewritten everywhere
+
+`Vela is the version we were willing to keep money in.` + **`Same passkey
+sign-in. None of the lock-in.`** → **`We kept passkey signing, but made sure the
+wallet doesn’t depend on us.`**
+
+Two fragments became one sentence, and the claim moved from a result ("none of
+the lock-in") to the work that produced it. Every locale had carried the
+fragments faithfully — `Dieselbe Passkey-Anmeldung. Nichts davon, was einen
+festhält.`, `Lo stesso accesso con passkey. Senza nessun vincolo.`, `같은 패스키
+로그인, 잠금은 하나도 없이.` — so every locale was rewritten. The `but` is the
+load-bearing word: kept one thing, changed the other. A locale that drops it
+back into two clauses loses the concession and reads as a feature list again.
+
+Calls worth recording: `ja` 「残したまま」 and `ko` 「그대로 두되」 both carry *kept …
+but* in one clause, which is how those languages join this pair; `pt-BR` `fizemos
+questão de que` (we made a point of it) is the natural Brazilian form of "made
+sure"; `de` `dafür gesorgt, dass` likewise; `zh-HK` 「通行密鑰我哋照用，但唔想個錢包要
+靠住 Vela」 keeps the spoken-Cantonese fronting this file uses throughout.
+
+### `p1` — the English did not change, and mostly neither did the locales
+
+Only the Chinese was rewritten by the founder: the 撞上那几堵墙 metaphor is gone and
+the three complaints are three short clauses. `zh-TW` and `zh-HK` follow it in
+their own idiom (`繞不過去` / `始終避唔開`, TW 產生/自訂網路, HK 第日…冇咗).
+
+The other eleven keep the English paragraph's detail, including *you just have to
+trust* and *nothing you can host yourself*. That asymmetry was flagged for the
+founder rather than guessed at — and he closed it the same day: **put the trust
+clause back into the Chinese.** It is the load-bearing half of that complaint.
+`恢复密钥由浏览器生成` on its own describes a mechanism; what makes it an objection is
+that you cannot check what came out of the browser, only believe it. So:
+
+| locale | first complaint, as it now reads |
+|---|---|
+| `zh` | `恢复密钥由浏览器生成，你只能选择相信` |
+| `zh-TW` | `復原金鑰由瀏覽器產生，你只能選擇相信` |
+| `zh-HK` | `復原金鑰係瀏覽器度生成嘅，你唯有信佢` — `唯有` is how Cantonese says *you have no other option* |
+
+All fifteen carry the clause now. The remaining Chinese compression — `服务也不能
+自己部署` where the English says *nothing you can host yourself* — was left as the
+founder wrote it: it is the same complaint about the same product, in fewer
+words.
+
+**What was repaired: `Then we hit the walls`.** It is an English idiom, and seven
+locales had it word for word — the exact failure this second methodology exists
+to catch, since a per-locale read sees a grammatical sentence and moves on.
+
+| locale | was | now | why |
+|---|---|---|---|
+| `de` | `Dann kamen die Wände:` | `Dann stießen wir an die Grenzen:` | "then the walls came" is not German; `an Grenzen stoßen` is the idiom |
+| `fr` | `Puis nous avons buté sur les murs :` | `Puis nous nous sommes heurtés aux limites :` | `se heurter à` is what French runs up against |
+| `es-MX` | `Luego chocamos con los muros:` | `Luego nos topamos con los límites:` | `toparse con` is the Mexican everyday form |
+| `pt-BR` | `Aí batemos nas paredes:` | `Aí esbarramos nos limites:` | `esbarrar em` |
+| `it` | `contro i muri` | `contro il muro` | Italian does say `sbattere contro un muro` — singular. The plural was the calque |
+| `ru` | `упёрлись в стены` | `упёрлись в стену` | same: the idiom is singular |
+| `tr` | `duvarlara tosladık` | `duvara tosladık` | same |
+| `vi` | `Rồi đụng tường:` | `Rồi chúng tôi vấp phải những giới hạn:` | `đụng tường` is not a Vietnamese figure of speech; `vấp phải giới hạn` is |
+| `id` | `Lalu kami menabrak dindingnya:` | `Lalu kami mentok:` | `mentok` is exactly this — hitting the point past which a thing will not go |
+
+`ja` 「壁に突き当たりました」 and `ko` 「벽에 부딪혔습니다」 were left alone: both
+languages have that wall as a native figure of speech, so they were never calques.
+
+Technical: the `<a href="https://account.base.app" target="_blank"
+rel="noopener">Base Account</a>` anchor is byte-identical in all fourteen — the
+href/tag gate in `messages.test.ts` covers it, and it passes. `i18n:stamp`
+re-fingerprinted `home` in all fourteen.

@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Vì sao chúng tôi làm nó",
-			"p1": "Chúng tôi dùng <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> mỗi ngày và thấy thích. Rồi đụng tường: một khóa khôi phục được tạo ra ngay trong trình duyệt mà bạn chỉ còn cách tin, không thêm được mạng tùy chọn, không phần nào tự vận hành được — và nếu dịch vụ đóng cửa thì chiếc ví đi theo.",
-			"p2": "Vela là phiên bản mà chính chúng tôi sẵn sàng để tiền vào. Vẫn đăng nhập bằng passkey. Nhưng không bị trói vào ai.",
+			"p1": "Chúng tôi dùng <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> mỗi ngày và thấy thích. Rồi chúng tôi vấp phải những giới hạn: một khóa khôi phục được tạo ra ngay trong trình duyệt mà bạn chỉ còn cách tin, không thêm được mạng tùy chọn, không phần nào tự vận hành được — và nếu dịch vụ đóng cửa thì chiếc ví đi theo.",
+			"p2": "Vela là phiên bản mà chính chúng tôi sẵn sàng để tiền vào. Chúng tôi giữ lại cách ký bằng passkey, nhưng bảo đảm chiếc ví không phụ thuộc vào chúng tôi.",
 			"more": "Bản dài hơn — mười hai từ đó thì bạn cất ở đâu?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

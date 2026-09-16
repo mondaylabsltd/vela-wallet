@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Por qué la hicimos",
-			"p1": "Usábamos <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> todos los días y nos gustaba. Luego chocamos con los muros: una llave de recuperación generada en un navegador en la que solo cabe confiar, sin redes personalizadas, nada que puedas alojar tú — y si el servicio desaparece, la wallet se va con él.",
-			"p2": "Vela es la versión en la que sí estábamos dispuestos a dejar dinero. El mismo inicio de sesión con passkey. Sin nada que te ate.",
+			"p1": "Usábamos <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> todos los días y nos gustaba. Luego nos topamos con los límites: una llave de recuperación generada en un navegador en la que solo cabe confiar, sin redes personalizadas, nada que puedas alojar tú — y si el servicio desaparece, la wallet se va con él.",
+			"p2": "Vela es la versión en la que sí estábamos dispuestos a dejar dinero. Conservamos la firma con passkey, pero nos aseguramos de que la wallet no dependa de nosotros.",
 			"more": "La versión larga: ¿dónde se supone que guardas doce palabras?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, cada build está en GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

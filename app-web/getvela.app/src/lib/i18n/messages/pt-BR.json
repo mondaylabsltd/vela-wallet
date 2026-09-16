@@ -119,8 +119,8 @@
 		},
 		"why": {
 			"heading": "Por que construímos",
-			"p1": "Usávamos a <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> todo dia e gostávamos dela. Aí batemos nas paredes: uma chave de recuperação gerada no navegador em que só dá para confiar, nada de redes personalizadas, nada que você possa hospedar — e se o serviço sumir, a carteira some junto.",
-			"p2": "A Vela é a versão em que nós mesmos aceitamos deixar dinheiro. O mesmo login com passkey. Sem nenhuma amarra.",
+			"p1": "Usávamos a <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> todo dia e gostávamos dela. Aí esbarramos nos limites: uma chave de recuperação gerada no navegador em que só dá para confiar, nada de redes personalizadas, nada que você possa hospedar — e se o serviço sumir, a carteira some junto.",
+			"p2": "A Vela é a versão em que nós mesmos aceitamos deixar dinheiro. Mantivemos a assinatura com passkey, mas fizemos questão de que a carteira não dependa de nós.",
 			"more": "A versão longa — onde é que você deveria guardar doze palavras?"
 		},
 		"tradeoffs": {
@@ -460,7 +460,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "3d24cd4f2c1b",
+		"home": "ed78e3ed7b45",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
