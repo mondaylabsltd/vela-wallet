@@ -300,3 +300,55 @@ Technical: the `<a href="https://account.base.app" target="_blank"
 rel="noopener">Base Account</a>` anchor is byte-identical in all fourteen — the
 href/tag gate in `messages.test.ts` covers it, and it passes. `i18n:stamp`
 re-fingerprinted `home` in all fourteen.
+
+---
+
+## Sixth pass — `home.tradeoffs.items[0].body`
+
+Date: 2026-09-16 · 15 locales · the first trade-off (relay fee). Four paragraphs
+in, three out, one inline link, and the paragraph gate live throughout.
+
+The English lost its third paragraph — "The full fee is shown before you sign and
+is part of the transaction you actually sign. What you signed is what you pay; it
+does not change afterwards." — to four words in the second: **`and is fixed when
+you sign`**. A trade-off that spends a quarter of itself defending the thing it
+is admitting stops reading as an admission.
+
+**The gate did its job on the way through.** With the English rewritten and the
+translations untouched, `messages.test.ts` failed fourteen times with
+`items[0].body: 3 paragraphs in English, 4 translated`. That is the drift this
+test was added for on 2026-09-15, caught the same day it was created rather than
+a week later.
+
+### What every locale had to keep
+
+Three things cost the reader money, and all three survive in all fifteen:
+
+1. the gas is higher than an ordinary transfer, and why (on-chain passkey
+   verification + ERC-4337);
+2. the fee is the on-chain cost **plus** a service fee — a locale that merges
+   them into "the fee" has turned a trade-off into a feature;
+3. you can leave: switch relayers, or run one.
+
+What must NOT come back is "shown before you sign". The source stopped saying it;
+a translator filling the sentence out to feel complete would be restoring a
+claim the founder cut.
+
+### Per-locale notes
+
+| locale | note |
+|---|---|
+| `ja` `ko` | the link now sits mid-sentence (`自分で動かす` / `직접 돌릴`) because both languages end on the verb; the anchor wraps the verb phrase, and the sentence closes outside it |
+| `tr` | same shape: `kendiniz çalıştırabilirsiniz` is the whole predicate, so the link carries it |
+| `de` | `sie steht fest, sobald du signierst` — German says a price *stands fixed*; `fixiert` would read as jargon |
+| `ru` | `фиксируется в момент подписи` — reflexive, which is how Russian states a rule rather than an action someone performs |
+| `it` | `trasferimento`, not `bonifico`: the old text called an on-chain transfer a bank transfer |
+| `zh-TW` | keeps 中繼 where `zh` has 中繼器 — this locale's existing term, not a slip |
+| `zh-HK` | 「喺你簽名嗰陣就定咗」 for *fixed when you sign*, which is the spoken form; 定咗 not 確定 |
+| `vi` | `được chốt ngay khi bạn ký` — `chốt` is the word Vietnamese uses for a number being locked in |
+| `id` | `besarnya sudah tetap begitu Anda menandatangani` — `begitu` for *the moment that*, which is tighter than `ketika` |
+
+Technical: exactly 3 paragraphs in all fifteen; one `<a>` per locale with the
+`vela-relay` href byte-identical; `prettier` reformatted the English string over
+two lines and the JSON files were already clean; `i18n:stamp` re-fingerprinted
+`home` in all fourteen. 189 tests pass.

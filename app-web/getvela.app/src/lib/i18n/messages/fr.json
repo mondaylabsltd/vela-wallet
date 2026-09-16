@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Chaque transaction paie des frais qui font tourner le relais.",
-					"body": "Une transaction Vela vérifie une signature passkey on-chain et s’exécute via ERC-4337 : elle consomme donc normalement plus de gas qu’un virement envoyé directement depuis un compte ordinaire.\n\nPar défaut, le relayeur avance ce gas et soumet la transaction à votre place. Ce que vous payez couvre le coût réel on-chain, plus ce qu’il faut pour faire tourner le service de relais.\n\nLe montant complet des frais s’affiche avant que vous ne signiez et fait partie de la transaction que vous signez réellement. Ce que vous avez signé est ce que vous payez ; cela ne change pas ensuite.\n\nVous n’êtes pas obligé d’utiliser notre relayeur. Changez-le dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faites-en tourner un vous-même</a>."
+					"body": "Les transactions Vela vérifient les signatures passkey on-chain et s'exécutent via ERC-4337 : elles consomment donc en général plus de gas qu'un virement ordinaire.\n\nPar défaut, le relayeur paie le gas et soumet la transaction. Les frais comprennent le coût on-chain et une commission pour le service de relais, et ils sont figés au moment où vous signez.\n\nVous pouvez changer de relayeur dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faire tourner le vôtre</a>."
 				},
 				{
 					"title": "Là où vivent vos clés, cet endroit devient une partie de la sécurité de votre portefeuille.",
@@ -460,7 +460,7 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

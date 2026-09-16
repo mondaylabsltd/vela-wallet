@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Cada transação paga uma taxa que mantém o relay no ar.",
-					"body": "Uma transação da Vela verifica on-chain uma assinatura de passkey e roda por ERC-4337, então normalmente gasta mais gas do que uma transferência enviada direto de uma conta comum.\n\nPor padrão, o relayer adianta esse gas e envia a transação por você. O que você paga cobre o custo real on-chain, mais o que é preciso para manter o serviço de relay de pé.\n\nA taxa completa aparece antes de você assinar e faz parte da transação que você realmente assina. O que você assinou é o que você paga; depois não muda.\n\nVocê não é obrigado a usar o nosso relayer. Troque nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode um você mesmo</a>."
+					"body": "As transações da Vela verificam assinaturas de passkey on-chain e rodam por ERC-4337, então em geral gastam mais gas do que uma transferência comum.\n\nPor padrão, o relayer paga o gas e envia a transação. A taxa inclui o custo on-chain e uma taxa pelo serviço de relay, e fica fechada no momento em que você assina.\n\nVocê pode trocar de relayer nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rodar o seu</a>."
 				},
 				{
 					"title": "Onde suas chaves moram, aquele lugar vira parte da segurança da sua carteira.",
@@ -460,7 +460,7 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

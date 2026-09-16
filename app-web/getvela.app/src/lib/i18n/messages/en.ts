@@ -271,6 +271,14 @@ export const en = {
 		 * Immediately after the pitch, on purpose. Every one of these is a reason
 		 * somebody should NOT use Vela today, written before they deposit rather
 		 * than discovered after.
+		 *
+		 * items[0] cut from four paragraphs to three on 2026-09-16. What went was
+		 * the paragraph that explained at length that the fee shown is the fee
+		 * charged; "fixed when you sign" says it in four words, and a trade-off
+		 * that spends a quarter of itself on its own defence stops reading as a
+		 * trade-off. Nothing that costs the reader money was dropped: it still
+		 * says the gas is higher, that we take a service fee on top of the
+		 * on-chain cost, and that you can leave.
 		 */
 		tradeoffs: {
 			heading: 'The trade-offs, up front',
@@ -278,7 +286,7 @@ export const en = {
 			items: [
 				{
 					title: 'Every transaction pays an extra relay service fee.',
-					body: 'A Vela transaction verifies a passkey signature on-chain and executes through ERC-4337, so it normally uses more gas than a transfer sent directly from an ordinary account.\n\nBy default the relayer pays that gas and submits the transaction for you. What you pay covers the real on-chain cost, plus what it takes to keep the relay service running.\n\nThe full fee is shown before you sign and is part of the transaction you actually sign. What you signed is what you pay; it does not change afterwards.\n\nYou do not have to use our relayer. Change it in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run one yourself</a>.'
+					body: 'Vela transactions verify passkey signatures on-chain and execute through ERC-4337, so they generally use more gas than ordinary transfers.\n\nBy default, the relayer pays the gas and submits the transaction. The fee includes the on-chain cost and a relay service fee, and is fixed when you sign.\n\nYou can switch relayers in settings or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
 				},
 				{
 					title: "Wherever your keys live, that place becomes part of your wallet's security.",

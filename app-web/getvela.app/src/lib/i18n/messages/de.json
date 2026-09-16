@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Jede Transaktion zahlt eine Gebühr, die das Relay am Laufen hält.",
-					"body": "Eine Vela-Transaktion prüft eine Passkey-Signatur on-chain und läuft über ERC-4337. Deshalb verbraucht sie in der Regel mehr Gas als eine Überweisung, die direkt von einem gewöhnlichen Konto ausgeht.\n\nStandardmäßig legt der Relayer dieses Gas aus und reicht die Transaktion für dich ein. Was du zahlst, deckt die tatsächlichen On-Chain-Kosten und das, was der Betrieb des Relays kostet.\n\nDie vollständige Gebühr steht vor dem Signieren auf dem Schirm und ist Teil der Transaktion, die du tatsächlich signierst. Was du signiert hast, zahlst du; danach ändert sich nichts mehr.\n\nDu musst unseren Relayer nicht benutzen. Tausch ihn in den Einstellungen aus, oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">betreibe selbst einen</a>."
+					"body": "Vela-Transaktionen prüfen Passkey-Signaturen on-chain und laufen über ERC-4337, brauchen also in der Regel mehr Gas als gewöhnliche Überweisungen.\n\nStandardmäßig zahlt der Relayer das Gas und reicht die Transaktion ein. Die Gebühr enthält die On-Chain-Kosten und ein Entgelt für den Relay-Betrieb, und sie steht fest, sobald du signierst.\n\nDen Relayer kannst du in den Einstellungen wechseln oder <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">selbst einen betreiben</a>."
 				},
 				{
 					"title": "Wo deine Schlüssel liegen, wird dieser Ort Teil der Sicherheit deiner Wallet.",
@@ -460,7 +460,7 @@
 		"storeNote": "Noch in keinem Store. Bis dahin liegt jeder Build auf GitHub."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

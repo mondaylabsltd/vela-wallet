@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Setiap transaksi membayar biaya layanan relay tambahan.",
-					"body": "Transaksi Vela memverifikasi tanda tangan passkey di on-chain dan dijalankan lewat ERC-4337, jadi gas-nya biasanya lebih besar daripada transfer biasa yang dikirim langsung dari akun biasa.\n\nSecara bawaan, relayer yang menalangi gas itu dan mengirimkan transaksinya untuk Anda. Yang Anda bayar mencakup biaya on-chain yang sebenarnya, ditambah biaya untuk menjaga layanan relay tetap jalan.\n\nTotal biayanya ditampilkan sebelum Anda menandatangani dan menjadi bagian dari transaksi yang benar-benar Anda tanda tangani. Apa yang Anda tanda tangani itulah yang Anda bayar; setelah itu tidak berubah lagi.\n\nAnda tidak wajib memakai relayer kami. Ganti di pengaturan, atau <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">jalankan sendiri</a>."
+					"body": "Transaksi Vela memverifikasi tanda tangan passkey on-chain dan dijalankan lewat ERC-4337, jadi umumnya memakai lebih banyak gas daripada transfer biasa.\n\nSecara bawaan, relayer yang membayar gas dan mengirim transaksinya. Biayanya mencakup ongkos on-chain dan biaya layanan relay, dan besarnya sudah tetap begitu Anda menandatangani.\n\nAnda bisa mengganti relayer di pengaturan, atau <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">menjalankan sendiri</a>."
 				},
 				{
 					"title": "Di mana pun kunci Anda disimpan, tempat itu menjadi bagian dari keamanan dompet Anda.",
@@ -460,7 +460,7 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

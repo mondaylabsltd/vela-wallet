@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "每笔交易都会额外支付中继服务费",
-					"body": "Vela 的交易需要在链上验证通行密钥签名，并通过 ERC-4337 执行，因此通常会比普通账户直接转账消耗更多 gas。\n\n默认情况下，中继器会替你支付 gas 并提交交易。你支付的费用包含实际的链上成本，以及维持中继服务的费用。\n\n完整费用会在你签名前显示，并包含在你实际签署的交易中。你签了多少，就是多少；签完不会再变。\n\n你不必使用我们的中继器。可以在设置里更换，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己运行一个</a>。"
+					"body": "Vela 的交易需要在链上验证通行密钥签名，并通过 ERC-4337 执行，因此通常会比普通账户直接转账消耗更多 gas。\n\n默认由中继器支付 gas 并提交交易。费用包括链上成本和中继服务费，并在你签名时确定。\n\n你可以在设置中更换中继器，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己运行一个</a>。"
 				},
 				{
 					"title": "钥匙放在哪里，哪里的安全就成为钱包安全的一部分",
@@ -460,7 +460,7 @@
 		"storeNote": "目前还没有上架任何应用商店。在那之前，每一个构建版本都在 GitHub 上。"
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

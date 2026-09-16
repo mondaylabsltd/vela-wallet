@@ -152,6 +152,44 @@ The thirteen were realigned the same day
   translated it word for word. Repaired
   ([reviews/single-string.md](reviews/single-string.md)).
 
+## `home.tradeoffs.items[0].body` — the relay fee trade-off
+
+Four paragraphs became three (founder, 2026-09-16). `en`:
+
+> Vela transactions verify passkey signatures on-chain and execute through
+> ERC-4337, so they generally use more gas than ordinary transfers.
+>
+> By default, the relayer pays the gas and submits the transaction. The fee
+> includes the on-chain cost and a relay service fee, and is fixed when you sign.
+>
+> You can switch relayers in settings or `<a …>run your own</a>`.
+
+`zh`:
+
+> Vela 的交易需要在链上验证通行密钥签名，并通过 ERC-4337 执行，因此通常会比普通账户直接转账消耗更多 gas。
+>
+> 默认由中继器支付 gas 并提交交易。费用包括链上成本和中继服务费，并在你签名时确定。
+>
+> 你可以在设置中更换中继器，也可以`<a …>自己运行一个</a>`。
+
+What went was the whole third paragraph — "The full fee is shown before you sign
+and is part of the transaction you actually sign. What you signed is what you
+pay; it does not change afterwards." **`is fixed when you sign` now carries it.**
+Rules for the other thirteen:
+
+- **Exactly three paragraphs.** `messages.test.ts` enforces it, and a locale that
+  keeps four is a locale still making the old argument.
+- **Nothing that costs the reader money may be dropped**: the gas is higher, we
+  take a service fee *on top of* the on-chain cost, and you can leave. A locale
+  that loses the second one has turned a trade-off into a feature.
+- **`fixed when you sign` is a claim about the moment**, not about disclosure.
+  Do not restore "shown before you sign" in a locale to make the sentence feel
+  complete — the source deliberately stopped saying it.
+- The `title` above this body was not in scope and is unchanged.
+
+Realigned in all thirteen the same day
+([reviews/single-string.md](reviews/single-string.md)).
+
 ## `home.hero.headline` in all fifteen — the T058 record
 
 FR-006: **a locale keeps the English headline until its own line is approved.**

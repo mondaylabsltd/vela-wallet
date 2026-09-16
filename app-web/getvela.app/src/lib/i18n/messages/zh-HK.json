@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "每一筆交易都要額外畀一筆中繼服務費。",
-					"body": "Vela 嘅交易要喺鏈上驗證通行密鑰簽名，再經 ERC-4337 執行，所以通常會比普通帳戶直接轉帳用多啲 gas。\n\n預設情況下，中繼器會幫你墊住 gas 同埋提交交易。你畀嘅錢，包含實際嘅鏈上成本，加上維持呢個中繼服務嘅開支。\n\n完整費用喺你簽名之前就會見到，而且係你真正簽落去嗰筆交易嘅一部分。你簽咗幾多就係幾多，簽完唔會再變。\n\n你唔一定要用我哋嘅中繼器。可以喺設定入面換，亦可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己行一個</a>。"
+					"body": "Vela 嘅交易要喺鏈上驗證通行密鑰簽名，再經 ERC-4337 執行，所以通常會比普通帳戶直接轉帳用多啲 gas。\n\n預設係中繼器幫你畀 gas 同提交交易。費用包括鏈上成本同中繼服務費，喺你簽名嗰陣就定咗。\n\n你可以喺設定入面換中繼器，亦可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己行一個</a>。"
 				},
 				{
 					"title": "你把鑰匙放喺邊，嗰個地方就成為你錢包安全嘅一部分。",
@@ -460,7 +460,7 @@
 		"storeNote": "仲未上商店。喺嗰日之前，每一個 build 都喺 GitHub 上面。"
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

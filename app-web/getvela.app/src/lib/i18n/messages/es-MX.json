@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Cada transacción paga una comisión que mantiene el relay funcionando.",
-					"body": "Una transacción de Vela verifica on-chain una firma con passkey y se ejecuta a través de ERC-4337, así que normalmente gasta más gas que una transferencia enviada directo desde una cuenta común.\n\nPor defecto, el relayer adelanta ese gas y manda la transacción por ti. Lo que pagas cubre el costo real on-chain, más lo que cuesta mantener el servicio de relay funcionando.\n\nLa comisión completa se muestra antes de que firmes y forma parte de la transacción que realmente firmas. Lo que firmaste es lo que pagas; después ya no cambia.\n\nNo tienes que usar nuestro relayer. Cámbialo en la configuración, o <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">corre uno tú mismo</a>."
+					"body": "Las transacciones de Vela verifican firmas con passkey on-chain y se ejecutan a través de ERC-4337, así que suelen gastar más gas que una transferencia común.\n\nPor defecto, el relayer paga el gas y manda la transacción. La comisión incluye el costo on-chain y una comisión por el servicio de relay, y queda fija en el momento en que firmas.\n\nPuedes cambiar de relayer en la configuración, o <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">correr el tuyo</a>."
 				},
 				{
 					"title": "Donde vivan tus llaves, ese lugar pasa a ser parte de la seguridad de tu wallet.",
@@ -460,7 +460,7 @@
 		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, cada build está en GitHub."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"

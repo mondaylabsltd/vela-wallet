@@ -129,7 +129,7 @@
 			"items": [
 				{
 					"title": "Her işlem ayrıca bir relay hizmet ücreti öder.",
-					"body": "Bir Vela işlemi, geçiş anahtarı imzasını zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan bir hesaptan doğrudan gönderilen transferden genellikle daha fazla gas harcar.\n\nVarsayılan olarak bu gas'i relayer öder ve işlemi sizin yerinize gönderir. Ödediğiniz tutar, zincir üstündeki gerçek maliyeti ve relay hizmetini ayakta tutmanın karşılığını kapsar.\n\nÜcretin tamamı imzalamadan önce gösterilir ve gerçekten imzaladığınız işlemin bir parçasıdır. Ne imzaladıysanız onu ödersiniz; sonradan değişmez.\n\nBizim relayer'ımızı kullanmak zorunda değilsiniz. Ayarlardan değiştirin ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırın</a>."
+					"body": "Vela işlemleri, geçiş anahtarı imzalarını zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan transferlere göre genellikle daha fazla gas harcar.\n\nVarsayılan olarak gas'i relayer öder ve işlemi o gönderir. Ücret, zincir üstündeki maliyeti ve relay hizmet bedelini kapsar; tutar siz imzaladığınız anda sabitlenir.\n\nRelayer'ı ayarlardan değiştirebilir ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırabilirsiniz</a>."
 				},
 				{
 					"title": "Anahtarlarınız nerede duruyorsa orası cüzdanınızın güvenliğinin parçası olur.",
@@ -460,7 +460,7 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "ed78e3ed7b45",
+		"home": "a14d3cb9312e",
 		"about": "669db59e91a0",
 		"roadmap": "df15b90319f9",
 		"getStarted": "dbbb0da3f5cc"
