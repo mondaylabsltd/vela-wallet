@@ -150,8 +150,8 @@ English (data-model §3).
 - [X] T053 [P] [US3] Draft `home` + `about` + `roadmap` for `de`, `fr`, `it`, `es-MX`, `pt-BR` in `src/lib/i18n/messages/*.json`
 - [X] T054 [P] [US3] Draft `home` + `about` + `roadmap` for `ru`, `tr`, `vi`, `id` in `src/lib/i18n/messages/*.json`
 - [X] T055 [P] [US3] Draft the **16** docs for `ja`, `ko`, `zh-TW`, `zh-HK` under `src/content/docs/<tag>/` *(11 became 16 while this was open)*
-- [ ] T056 [P] [US3] Draft the 11 docs for `de`, `fr`, `it`, `es-MX`, `pt-BR` under `src/content/docs/<tag>/`
-- [ ] T057 [P] [US3] Draft the 11 docs for `ru`, `tr`, `vi`, `id` under `src/content/docs/<tag>/`
+- [X] T056 [P] [US3] Draft the **16** docs for `de`, `fr`, `it`, `es-MX`, `pt-BR` under `src/content/docs/<tag>/` *(11 became 16 while this was open)*
+- [X] T057 [P] [US3] Draft the **16** docs for `ru`, `tr`, `vi`, `id` under `src/content/docs/<tag>/` *(11 became 16 while this was open)*
 - [X] T058 [US3] Record each locale's tagline decision in [approved-copy.md](./approved-copy.md) — a locale keeps the English headline until its own line is approved (FR-006)
 - [X] T059 [US3] Re-run `bun run build` and compare page count and wall time against the T019 baseline
 

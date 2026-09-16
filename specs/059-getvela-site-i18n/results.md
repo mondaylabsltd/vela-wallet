@@ -322,3 +322,58 @@ and zh-HK is written Cantonese in this corpus, not Traditional Mandarin.
 Build after the batch: **8.5 s, 306 pages** — unchanged from T059, because Shiki
 compiles each markdown file once. The remaining nine locales should cost roughly
 the same again.
+
+### T056 + T057 — the other nine locales, and a colon · 2026-09-16
+
+`de`, `fr`, `it`, `es-MX`, `pt-BR` (T056), then `ru`, `tr`, `vi`, `id` (T057).
+**All fifteen locales now read 20/20 with 0 fallback and 0 stale.** 447 unit
+tests pass; the build is clean; each `/<tag>/docs` directory holds 15 prerendered
+pages with no fallback notice in any of them.
+
+**The bug worth keeping: one character, five broken pages, two languages.**
+
+The build started 500'ing on `/es-MX/docs/install`, `/es-MX/docs/bybit-attack`,
+`/es-MX/docs/account-contract`, `/ru/docs/account-contract` and
+`/ru/docs/security-audits` with `Cannot read properties of undefined (reading
+'title')`. The cause was a bare **colon-space** inside an unquoted frontmatter
+value:
+
+```yaml
+description: Vela corre en tu navegador: sin instalación y sin tienda de apps.
+```
+
+YAML reads that as a nested mapping, the frontmatter block fails to parse, mdsvex
+exports the compiled body with **no `metadata`**, and the page throws at render —
+only that page, only that language. English was fine, so nothing in the English
+suite could have caught it, and es-MX had already shipped broken in T056.
+
+Two fixes, because the wording fix alone would not have found the next one:
+
+1. Quoted the five values.
+2. Added `src/lib/content/docs.test.ts`, which reads **every** docs file in every
+   locale and fails on an unquoted colon or a missing `title`/`description`.
+
+Most languages punctuate mid-sentence with a colon far more readily than English
+does, which is exactly why this class had to stop being invisible.
+
+**Terminology followed each locale's shipped catalog, not a house style.** The
+docs were written against the vocabulary already in `<tag>.json`, so the site
+does not say one thing on the landing page and another in the documentation:
+
+| locale | passkey | relay | a few anchors |
+|---|---|---|---|
+| `ru` | `passkey` (untranslated) | `релей` | кошелёк, смарт-аккаунт, Связка ключей iCloud, formal вы |
+| `tr` | geçiş anahtarı | `relay` (untranslated) | cüzdan, akıllı hesap, donanım güvenlik anahtarı, formal siz |
+| `vi` | `passkey` (untranslated) | `relay` (untranslated) | ví, tài khoản thông minh, khóa bảo mật, ký minh bạch |
+| `id` | `passkey` (untranslated) | `relay` (untranslated) | dompet, akun pintar, frasa pemulihan, clear signing, formal Anda |
+
+`tr` is the one that translates passkey, because its catalog already did (ten
+occurrences of geçiş anahtarı); `id` keeps *clear signing* and the two keychain
+product names in English for the same reason.
+
+**What is NOT done, and is now stated in every review file.** The R7 reading
+passes (T066–T070) covered the four **page** namespaces. The sixteen docs per
+locale have not been through that pass. Each `reviews/<tag>.md` now says so
+instead of the older, now-false line claiming the docs were untranslated. Every
+locale except `zh` remains `drafted`, which is its correct state: structurally
+whole, machine-written, unread by a native speaker.

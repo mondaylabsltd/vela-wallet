@@ -4,8 +4,8 @@ Date: 2026-09-15 · Method: [spec §R7](../spec.md) · Reference frame: **Englis
 and Chinese** (founder, 2026-09-15).
 
 **Scope: the four page namespaces** — `home`, `about`, `roadmap`, `getStarted`.
-The sixteen docs are not translated into `ru` yet; they render English under a
-notice, which is the designed fallback, not a finding.
+The sixteen docs were translated into `ru` afterwards (T056/T057, 2026-09-16)
+and have NOT been through this reading pass; they are drafted, not reviewed.
 
 ## Findings
 
