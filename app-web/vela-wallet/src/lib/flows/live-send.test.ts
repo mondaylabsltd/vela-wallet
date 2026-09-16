@@ -12,6 +12,7 @@ import { buildFlowState } from './fixtures';
 import {
 	liveFeeTokenPick,
 	liveSendConfirm,
+	alertWords,
 	liveSendForm,
 	liveSendPick,
 	liveSendReceipt,
@@ -416,6 +417,118 @@ describe('the receipt', () => {
 	});
 });
 
+/**
+ * Issue 211: a send paying gas in a coin the account did not hold went through
+ * with nothing said. The core now refuses it — and these are the sentences the
+ * shell had been dropping on the floor while it did.
+ */
+describe('what the form says about a gas coin that cannot pay', () => {
+	it("reads the core's live warning out, before any tap", () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				amount: '0.5',
+				token_amount: '0.5',
+				amount_warning: { type: 'need_gas', symbol: 'POL' }
+			})
+		);
+		expect(model.alert).toBe(m['send.warnNeedGas'].replace('{{sym}}', 'POL'));
+	});
+
+	it('and the refusal names the coin, instead of blaming the balance that is fine', () => {
+		expect(liveSendForm(formModel(), inputs({ selected_token: ETH })).alert).toBeUndefined();
+		expect(
+			alertWords(
+				{
+					type: 'insufficient_balance',
+					warning: { type: 'need_gas', symbol: 'POL' }
+				},
+				m
+			)
+		).toBe(
+			`${m['send.alertInsufficientBalanceTitle']} · ${m['send.warnNeedGas'].replace('{{sym}}', 'POL')}`
+		);
+		// A refusal the core did not qualify keeps the generic sentence.
+		expect(alertWords({ type: 'insufficient_balance', warning: null }, m)).toBe(
+			`${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`
+		);
+	});
+
+	it('an alert the person just earned outranks the standing warning', () => {
+		const model = liveSendForm(formModel(), {
+			...inputs({
+				selected_token: ETH,
+				amount_warning: { type: 'need_gas', symbol: 'POL' }
+			}),
+			alert: { type: 'invalid_address' }
+		});
+		expect(model.alert).toContain(m['send.alertInvalidAddressTitle']);
+	});
+});
+
+/**
+ * The follow-up report on issue 211: USDT ticked in the sheet, "0.000392 ETH"
+ * still on the row behind it. Two causes, both here — the quote reached the
+ * send machine with no symbol on it (the core now carries the relay's own),
+ * and this shell filled that gap with the CHAIN's native symbol, which names a
+ * different coin.
+ */
+describe('the fee row names the coin that is paying', () => {
+	const usdcQuote = {
+		...QUOTE,
+		total_wei: '0',
+		fee_asset: {
+			type: 'erc20' as const,
+			token: '0x' + 'cc'.repeat(20),
+			decimals: 6,
+			amount: '944000',
+			symbol: 'USDT'
+		}
+	};
+
+	it('an erc20 fee reads in that token, never in the native coin', () => {
+		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: usdcQuote }));
+		expect(model.fee.value).toBe('0.944 USDT');
+		expect(model.fee.mark.ticker).toBe('USDT');
+	});
+
+	it('a quote with no symbol falls back to the relay row, not to ETH', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs(
+				{
+					selected_token: ETH,
+					fee: { ...usdcQuote, fee_asset: { ...usdcQuote.fee_asset, symbol: null } }
+				},
+				{
+					options: [
+						{
+							symbol: 'USDT',
+							contract: '0x' + 'cc'.repeat(20),
+							decimals: 6,
+							balance: '6000000',
+							recipient: '0x1',
+							usd_balance: '6',
+							usd_price: '1',
+							amount: '944000',
+							insufficient: false,
+							selected: true
+						}
+					]
+				}
+			)
+		);
+		expect(model.fee.value).toBe('0.944 USDT');
+		expect(model.fee.mark.ticker).toBe('USDT');
+	});
+
+	it('a native fee still reads in the native coin', () => {
+		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
+		expect(model.fee.value).toBe('0.0021 ETH');
+	});
+});
+
 describe('the fee-coin sheet', () => {
 	it('lists every row the relay published, including one that cannot pay', () => {
 		const model = liveFeeTokenPick(
@@ -456,6 +569,13 @@ describe('the fee-coin sheet', () => {
 		expect(model.rows[0]).toMatchObject({ selected: true, fee: '~0.0021 ETH' });
 		// No quote for a coin that cannot pay — said, not guessed.
 		expect(model.rows[1].fee).toBe('—');
+		// …and the core's verdict travels with it (issue 211). Without this the
+		// row looked exactly like a payable one and silently did nothing.
+		expect(model.rows[0].insufficient).toBe(false);
+		expect(model.rows[1].insufficient).toBe(true);
+		expect(model.rows[1].insufficientNote).toBe(
+			m['send.warnInsufficientGas'].replace('{{sym}}', 'USDC')
+		);
 	});
 });
 
