@@ -1142,7 +1142,9 @@ fn select_fee_asset_recomputes_locally_without_rpc() {
             token: USDC.to_owned(),
             decimals: 6,
             amount: USDC_FEE_UNITS.to_string(),
-            symbol: None,
+            // The row's own ticker rides with the quote: a fee with no symbol
+            // is drawn as the native coin on every surface.
+            symbol: Some("USDC".to_owned()),
         }
     );
     // The recipient switches WITH the asset so approve/submit sends exactly
@@ -1272,7 +1274,9 @@ fn a_requested_fee_token_is_part_of_the_simulated_operation() {
             token: USDC.to_owned(),
             decimals: 6,
             amount: USDC_FEE_UNITS.to_string(),
-            symbol: None,
+            // The row's own ticker rides with the quote: a fee with no symbol
+            // is drawn as the native coin on every surface.
+            symbol: Some("USDC".to_owned()),
         }
     );
 }

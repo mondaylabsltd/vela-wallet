@@ -1159,6 +1159,45 @@ fn an_erc20_send_paying_a_native_fee_it_cannot_afford_warns_and_refuses() {
     assert_eq!(sut.view().stage, SendStage::EnterDetails);
 }
 
+/// The mirror image, and the second half of the same hole: a NATIVE send whose
+/// gas is paid in a stablecoin the account barely holds. That branch measured
+/// only the coin being sent, so switching the fee coin said nothing at all.
+#[test]
+fn a_native_send_paying_an_erc20_fee_it_cannot_afford_warns_and_refuses() {
+    let mut sut = boot(vec![eth("2"), usdc("0.5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000), // $1 in USDC, and 0.5 is held
+    });
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    let need_gas = SendAmountWarning::NeedGas {
+        symbol: Some("USDC".to_owned()),
+    };
+    assert_eq!(sut.view().amount_warning, Some(need_gas.clone()));
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InsufficientBalance {
+                warning: Some(need_gas)
+            }
+        }]
+    );
+    // …and the whole native balance is spendable when the fee is not: Max
+    // reserves nothing for gas a different coin is paying.
+    let mut rich = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut rich);
+    rich.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    rich.dispatch(Event::TapMax);
+    assert_eq!(rich.view().amount, "2");
+    assert_eq!(rich.view().amount_warning, None);
+}
+
 /// The other side of the same rule: a native balance that DOES cover the
 /// quoted fee is not a warning. The sent token's own balance is untouched by
 /// the fee — it is not the asset paying it.

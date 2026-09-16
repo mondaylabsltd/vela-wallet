@@ -175,26 +175,40 @@ function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
  * `null` while the quote is in flight — the drawn row shows the label alone
  * rather than a number nobody has agreed to yet.
  */
-function feeText(fee: FeeEstimateView | null): string {
+/**
+ * The ticker a quote is denominated in.
+ *
+ * NEVER the chain's native symbol for an ERC-20 fee: that is a different coin,
+ * and naming it there is how a USDC fee came to read "0.000392 ETH" on the row
+ * behind the sheet that had just ticked USDC. The quote carries its own symbol;
+ * the relay's published row is the fallback when an older one does not.
+ */
+function feeSymbol(fee: FeeEstimateView, options: FeeView['options']): string {
+	if (fee.fee_asset.type !== 'erc20') return nativeSymbol(fee.chain_id);
+	const contract = fee.fee_asset.token;
+	return (
+		fee.fee_asset.symbol ??
+		options.find((option) => option.contract?.toLowerCase() === contract.toLowerCase())?.symbol ??
+		''
+	);
+}
+
+function feeText(fee: FeeEstimateView | null, options: FeeView['options']): string {
 	if (!fee) return '—';
 	const asset = fee.fee_asset;
 	if (asset.type === 'erc20') {
 		const amount = Number(asset.amount) / 10 ** asset.decimals;
-		return `${trimBalance(amount.toString(), 4)} ${asset.symbol ?? ''}`.trim();
+		return `${trimBalance(amount.toString(), 4)} ${feeSymbol(fee, options)}`.trim();
 	}
 	const wei = Number(fee.total_wei) / 1e18;
-	const symbol = nativeSymbol(fee.chain_id);
-	return `${trimBalance(wei.toString(), 6)} ${symbol}`;
+	return `${trimBalance(wei.toString(), 6)} ${nativeSymbol(fee.chain_id)}`;
 }
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
 	const quote = send.fee ?? fee.fee;
 	const chainId = send.selected_token?.chain_id ?? quote?.chain_id ?? 1;
-	const symbol =
-		quote?.fee_asset.type === 'erc20'
-			? (quote.fee_asset.symbol ?? nativeSymbol(chainId))
-			: nativeSymbol(chainId);
+	const symbol = quote ? feeSymbol(quote, fee.options) : nativeSymbol(chainId);
 	return {
 		// A figure the relay did not quote — a local fallback from defaults —
 		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
@@ -209,7 +223,7 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for
 		// the frame where there is nothing to show yet.
-		value: quote ? feeText(quote) : send.fee_busy || fee.busy ? '…' : '—',
+		value: quote ? feeText(quote, fee.options) : send.fee_busy || fee.busy ? '…' : '—',
 		openLabel: template.openLabel
 	};
 }
@@ -552,7 +566,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 				(send.fee ?? inputs.fee.fee)?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeText(send.fee ?? inputs.fee.fee)
+			value: feeText(send.fee ?? inputs.fee.fee, inputs.fee.options)
 		}
 	];
 

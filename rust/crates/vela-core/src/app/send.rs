@@ -3057,7 +3057,11 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
                 return Some(SendAmountWarning::InsufficientForGas { symbol });
             }
         }
-        return None;
+        // …and when the fee rides on a DIFFERENT asset, that asset's balance
+        // is what has to cover it. This branch measured only the coin being
+        // sent, so switching the fee to a stablecoin the account barely holds
+        // left a native send with nothing said (issue #211's other half).
+        return fee_asset_shortfall(model, token.chain_id, &[None]);
     }
 
     // ERC-20: token balance first…
@@ -3070,6 +3074,8 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     // case): sending the fee asset reserves its fee; otherwise the separate
     // fee-token balance must cover it.
     if let Some(fee) = fee {
+        // Sending the fee asset itself: the amount and the fee come out of one
+        // balance, so the ceiling is their sum.
         if let FeeAsset::Erc20 {
             token: fee_token,
             amount: fee_amount,
@@ -3089,36 +3095,39 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
                         symbol: Some(fee_symbol.clone().unwrap_or_else(|| token.symbol.clone())),
                     });
                 }
-            } else {
-                let fee_row = model.tokens.iter().find(|tk| {
-                    tk.chain_id == token.chain_id
-                        && tk
-                            .token_address
-                            .as_deref()
-                            .is_some_and(|a| a.eq_ignore_ascii_case(fee_token))
-                });
-                let fee_balance = fee_row
-                    .and_then(|tk| to_base_units(&tk.balance, tk.decimals))
-                    .unwrap_or(0);
-                if fee_balance < *fee_amount {
-                    return Some(SendAmountWarning::NeedGas {
-                        symbol: fee_symbol
-                            .clone()
-                            .or_else(|| fee_row.map(|tk| tk.symbol.clone())),
-                    });
-                }
+                return None;
             }
-        } else {
-            // …and the native coin is a fee asset like any other. This half
-            // was missing (issue #211): the fee rode on POL, the account held
-            // none, nothing measured it, and the send was allowed to reach the
-            // passkey. The op can only revert — its fee leg moves a coin that
-            // is not there — so it is refused here, where every other
-            // "you cannot pay for this" sentence lives.
-            return native_fee_shortfall(model, token.chain_id);
         }
     }
-    None
+    // Any other fee asset — a second token, or the native coin, whose own
+    // balance is what must cover it. The native half was missing entirely
+    // (issue #211): the fee rode on POL, the account held none, nothing
+    // measured it, and a send that could only revert reached the passkey.
+    fee_asset_shortfall(model, token.chain_id, &[token.token_address.as_deref()])
+}
+
+/// The `Continue` / slide reading of [`fee_asset_shortfall`]: the fee coin has
+/// to be there, whatever the mode. A sweep is the exception it names — its fee
+/// asset is reserved out of the very line that would pay it
+/// (`reserve_native_gas` / `reserve_fee_token`), so a picked fee asset answers
+/// to that reserve, not to this.
+fn fee_asset_gate(model: &Model) -> Option<SendAmountWarning> {
+    let chain_id = fee_chain_id(model)?;
+    let picked;
+    let sent: Vec<Option<&str>> = if model.multi_select_mode {
+        picked = picked_tokens(model);
+        picked
+            .iter()
+            .map(|tk| tk.token_address.as_deref())
+            .collect()
+    } else {
+        model
+            .selected_token
+            .as_ref()
+            .map(|token| vec![token.token_address.as_deref()])
+            .unwrap_or_default()
+    };
+    fee_asset_shortfall(model, chain_id, &sent)
 }
 
 /// The chain this form's fee belongs to: the sweep's own network, or the
@@ -3131,42 +3140,70 @@ fn fee_chain_id(model: &Model) -> Option<u32> {
     }
 }
 
-/// The native coin pays this fee and the account's native balance is what must
-/// cover it (issue #211). `None` when the fee is not native, when no quote
-/// belongs to this chain, or when the balance covers it.
+/// The coin that pays this fee, measured against what the account holds of it
+/// (issue #211). `sent` is every asset this operation moves (`None` = the
+/// native coin); when the fee rides on one of THOSE this answers `None`,
+/// because the ceiling is then amount + fee against one balance —
+/// `can_cover_native_transfer`, `same_asset_fee_limit` and the sweep's own
+/// reserve own that, not this.
 ///
-/// A native row the account does not hold is not in `tokens` at all — zero
-/// balances are filtered out of the holdings before they reach the machine —
-/// so an absent row reads as zero, the same fail-closed reading the ERC-20
-/// branch above gives a fee token it cannot find. The sent asset is NOT
-/// measured here: a native transfer already answers to
-/// `can_cover_native_transfer`, which weighs amount + fee against one balance.
-fn native_fee_shortfall(model: &Model, chain_id: u32) -> Option<SendAmountWarning> {
+/// A row the account does not hold is not in `tokens` at all — zero balances
+/// are filtered out of the holdings before they reach the machine — so an
+/// absent row reads as zero, fail-closed.
+fn fee_asset_shortfall(
+    model: &Model,
+    chain_id: u32,
+    sent: &[Option<&str>],
+) -> Option<SendAmountWarning> {
     let fee = model
         .fee_estimate
         .as_ref()
         .filter(|fee| fee.chain_id == chain_id)?;
-    if !matches!(fee.fee_asset, FeeAsset::Native) {
+    let (contract, owed, quoted_symbol) = match &fee.fee_asset {
+        FeeAsset::Native => (None, fee.total_wei, None),
+        FeeAsset::Erc20 {
+            token,
+            amount,
+            symbol,
+            ..
+        } => (Some(token.as_str()), *amount, symbol.clone()),
+    };
+    // The fee comes out of an asset this operation is already moving: the
+    // ceiling is then amount + fee against one balance, which is the caller's
+    // own rule, not this one.
+    if sent.iter().any(|asset| match (contract, asset) {
+        (None, None) => true,
+        (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
+        _ => false,
+    }) {
         return None;
     }
-    let native = model
-        .tokens
-        .iter()
-        .find(|tk| tk.chain_id == chain_id && tk.token_address.is_none());
-    let balance = native
+    let row = model.tokens.iter().find(|tk| {
+        tk.chain_id == chain_id
+            && match (contract, tk.token_address.as_deref()) {
+                (None, None) => true,
+                (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
+                _ => false,
+            }
+    });
+    let balance = row
         .and_then(|tk| to_base_units(&tk.balance, tk.decimals))
         .unwrap_or(0);
-    if balance >= fee.total_wei {
+    if balance >= owed {
         return None;
     }
     Some(SendAmountWarning::NeedGas {
-        symbol: native.map(|tk| tk.symbol.clone()).or_else(|| {
-            model
-                .chains
-                .iter()
-                .find(|c| c.chain_id == chain_id)
-                .map(|c| c.native_symbol.clone())
-        }),
+        symbol: quoted_symbol
+            .or_else(|| row.map(|tk| tk.symbol.clone()))
+            .or_else(|| {
+                contract.is_none().then(|| {
+                    model
+                        .chains
+                        .iter()
+                        .find(|c| c.chain_id == chain_id)
+                        .map(|c| c.native_symbol.clone())
+                })?
+            }),
     })
 }
 
@@ -3283,7 +3320,7 @@ fn handle_continue(model: &mut Model) -> Cmd {
     // a split asks nothing of the fee at all, and a sweep of ERC-20s keeps
     // building its lines after `reserve_native_gas` has dropped a native one
     // it could not reserve from. All three reach the same refusal here.
-    if let Some(warning) = fee_chain_id(model).and_then(|id| native_fee_shortfall(model, id)) {
+    if let Some(warning) = fee_asset_gate(model) {
         return alert(
             model,
             SendAlertKind::InsufficientBalance {
@@ -3497,7 +3534,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     // (issue #211). This is the last gate before the passkey, so it answers
     // out loud rather than bouncing: the slide is on the confirm screen, and
     // the amount is not what is wrong.
-    if let Some(warning) = fee_chain_id(model).and_then(|id| native_fee_shortfall(model, id)) {
+    if let Some(warning) = fee_asset_gate(model) {
         return alert(
             model,
             SendAlertKind::InsufficientBalance {

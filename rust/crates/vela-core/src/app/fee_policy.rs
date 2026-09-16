@@ -1996,7 +1996,12 @@ fn price_generic(
             token: token.clone(),
             decimals: selected.decimals,
             amount: fee_amount,
-            symbol: None,
+            // The relay published this row's ticker and the quote is about
+            // THAT coin, so it travels with the fee. Left out, every surface
+            // fell back to the chain's native symbol: a USDC fee was drawn as
+            // an amount of ETH, with ETH's mark beside it (issue #211's
+            // follow-up report).
+            symbol: Some(selected.symbol.clone()),
         },
         _ => FeeAsset::Native,
     };
@@ -2168,7 +2173,10 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
                         token: contract.clone(),
                         decimals: option.decimals,
                         amount,
-                        symbol: None,
+                        // The picked row's own ticker — the switch is supposed
+                        // to be visible, and a fee with no symbol reads as the
+                        // native coin everywhere it is drawn.
+                        symbol: Some(option.symbol.clone()),
                     },
                 };
                 model.fee_token = token;

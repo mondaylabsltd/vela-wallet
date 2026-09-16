@@ -576,6 +576,10 @@
 		sweepPicking = false;
 		sendClassFilter = 'all';
 		feeQuote.dispose();
+		// The mirror below memoizes what it last told the send machine. A new
+		// session has heard nothing.
+		lastFeeStamp = null;
+		lastFeeBusy = false;
 		nav.close();
 	}
 
@@ -780,6 +784,39 @@
 	$effect(() => {
 		void sendAlertScope;
 		sendAlert = null;
+	});
+
+	/**
+	 * The fee session's later word, mirrored into the send machine — the
+	 * `sync_fee_to_send` the desktop has had since it was wired, and Android's
+	 * `SendController.init` collector. This shell never had it: the send
+	 * machine learned a fee ONLY from quotes it asked for itself, so choosing
+	 * a different fee coin left it holding the previous one. The form's fee
+	 * row reads `send.fee` first, so it went on naming ETH after USDT was
+	 * ticked — and `Max`, which subtracts `fee.total_wei`, went on reserving
+	 * native gas that the chosen coin was paying.
+	 *
+	 * The fee machine patches its estimate LOCALLY on a coin switch (no round
+	 * trip), so this is also what makes the switch instant: the re-quote the
+	 * core schedules afterwards only refines what is already on screen.
+	 */
+	let lastFeeStamp: string | null = null;
+	let lastFeeBusy = false;
+	$effect(() => {
+		const view = feeQuote.view;
+		if (!sendSession || !view) return;
+		if (view.busy !== lastFeeBusy) {
+			lastFeeBusy = view.busy;
+			sendSession.dispatch({ type: 'fee_busy_changed', busy: view.busy });
+		}
+		const estimate = view.fee;
+		if (!estimate) return;
+		// Identity is not enough: the core hands out a fresh view object every
+		// render. What the send machine cares about is WHICH quote this is.
+		const stamp = `${estimate.chain_id}|${estimate.total_wei}|${JSON.stringify(estimate.fee_asset)}|${estimate.fee_recipient ?? ''}`;
+		if (stamp === lastFeeStamp) return;
+		lastFeeStamp = stamp;
+		sendSession.dispatch({ type: 'fee_updated', estimate });
 	});
 
 	const sendInputs = $derived(
