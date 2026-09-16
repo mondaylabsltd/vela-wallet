@@ -1,7 +1,20 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
+	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
+	import { catalog } from '$lib/i18n/resolve';
 
+	/**
+	 * The shared footer. Like SiteHeader it defaults to English so the pages that
+	 * stay English (blog, legal, registry) use it unchanged.
+	 *
+	 * Links to English-only destinations keep their unprefixed URL and carry
+	 * `hreflang="en"`, so a reader in another language is not sent to a localized
+	 * URL that does not exist (R5, FR-020).
+	 */
+	let { locale = DEFAULT_LOCALE }: { locale?: Locale } = $props();
+
+	const m = $derived(catalog(locale));
 	const year = new Date().getFullYear();
+	const L = $derived((path: string) => pathFor(locale, path));
 </script>
 
 <footer class="site-footer">
@@ -11,23 +24,22 @@
 				<img src="/vela-logo.png" alt="Vela" width="24" height="24" />
 				<span>Vela Wallet</span>
 			</div>
-			<p class="tagline">Your keys. Your face. No seed phrase.</p>
+			<p class="tagline">{m.chrome.footer.tagline}</p>
 			<p class="copy">&copy; {year} MONDAY LABS LTD</p>
 		</div>
 
-		<nav class="cols" aria-label="Footer">
+		<nav class="cols" aria-label={m.chrome.footer.label}>
 			<div class="col">
-				<h3>Resources</h3>
-				<a href={resolve('/docs')}>Docs</a>
-				<a href={resolve('/docs/whitepaper')}>Whitepaper</a>
-				<a href={resolve('/docs/security-audits')}>Audits &amp; known issues</a>
-				<a href={resolve('/roadmap')}>Roadmap</a>
-				<a href={resolve('/blog')}>Blog</a>
-				<a href={resolve('/about')}>About</a>
+				<h3>{m.chrome.footer.columns.resources}</h3>
+				<a href={L('/docs')}>{m.chrome.footer.links.docs}</a>
+				<a href={L('/docs/whitepaper')}>{m.chrome.footer.links.whitepaper}</a>
+				<a href={L('/docs/security-audits')}>{m.chrome.footer.links.audits}</a>
+				<a href={L('/roadmap')}>{m.chrome.footer.links.roadmap}</a>
+				<a href="/blog" hreflang="en">{m.chrome.footer.links.blog}</a>
+				<a href={L('/about')}>{m.chrome.footer.links.about}</a>
 			</div>
 			<div class="col">
-				<h3>Infrastructure</h3>
-				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>
+				<h3>{m.chrome.footer.columns.infrastructure}</h3>
 				<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
 					>Vela Relay</a
 				>
@@ -42,7 +54,7 @@
 				>
 			</div>
 			<div class="col">
-				<h3>Community</h3>
+				<h3>{m.chrome.footer.columns.community}</h3>
 				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 					>GitHub</a
 				>
@@ -51,12 +63,12 @@
 				<a href="https://discord.gg/S6A8RyCk6" target="_blank" rel="noopener">Discord</a>
 				<!-- rss.xml is a prerendered endpoint, invisible to the client router —
 				     without a full-page load the URL falls through to blog/[slug] and 404s. -->
-				<a href={resolve('/blog/rss.xml')} data-sveltekit-reload>RSS</a>
+				<a href="/blog/rss.xml" data-sveltekit-reload>RSS</a>
 			</div>
 			<div class="col">
-				<h3>Legal</h3>
-				<a href={resolve('/privacy')}>Privacy</a>
-				<a href={resolve('/terms')}>Terms</a>
+				<h3>{m.chrome.footer.columns.legal}</h3>
+				<a href="/privacy" hreflang="en">{m.chrome.footer.links.privacy}</a>
+				<a href="/terms" hreflang="en">{m.chrome.footer.links.terms}</a>
 			</div>
 		</nav>
 	</div>

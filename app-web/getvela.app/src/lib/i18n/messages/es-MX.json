@@ -1,0 +1,424 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "Alfa",
+			"blog": "Blog",
+			"docs": "Documentación",
+			"about": "Acerca de",
+			"whyVela": "Por qué lo hicimos",
+			"howItWorks": "Cómo funciona",
+			"pricing": "Precios",
+			"faq": "Preguntas frecuentes",
+			"createWallet": "Obtener Vela",
+			"signIn": "Iniciar sesión",
+			"primary": "Navegación principal",
+			"toggleMenu": "Abrir menú"
+		},
+		"footer": {
+			"tagline": "Una wallet de Ethereum que de verdad es tuya. Sin frase semilla.",
+			"label": "Pie de página",
+			"columns": {
+				"resources": "Recursos",
+				"infrastructure": "Infraestructura",
+				"community": "Comunidad",
+				"legal": "Legal"
+			},
+			"links": {
+				"docs": "Documentación",
+				"whitepaper": "Whitepaper",
+				"audits": "Auditorías y problemas conocidos",
+				"roadmap": "Hoja de ruta",
+				"blog": "Blog",
+				"about": "Acerca de",
+				"privacy": "Privacidad",
+				"terms": "Términos"
+			}
+		},
+		"language": {
+			"label": "Idioma",
+			"choose": "Elegir idioma"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "Primeros pasos",
+				"using": "Usar Vela",
+				"security": "Seguridad",
+				"reference": "Referencia"
+			},
+			"titles": {
+				"introduction": "Introducción",
+				"why-vela": "Por qué hicimos Vela",
+				"install": "Instalar Vela",
+				"create-wallet": "Crea tu wallet",
+				"send-and-receive": "Enviar y recibir",
+				"networks-and-fees": "Redes y comisiones",
+				"passkeys": "Cómo funcionan las passkeys",
+				"signers": "Firmantes y llaves de seguridad",
+				"clear-signing": "Firma legible",
+				"clear-signing-self-host": "Aloja tú la página de firma",
+				"bybit-attack": "El ataque a Bybit",
+				"recovery": "Recuperación e inicio de sesión",
+				"account-contract": "El contrato de la cuenta",
+				"security-audits": "Auditorías y problemas conocidos",
+				"whitepaper": "Whitepaper",
+				"faq": "Preguntas frecuentes"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "Esta página solo está disponible en inglés"
+		}
+	},
+	"notice": {
+		"fallback": "Esta página aún no está traducida. El texto de abajo está en inglés.",
+		"offer": {
+			"message": "Esta página también está disponible en español.",
+			"accept": "Leer en español",
+			"dismiss": "Cerrar"
+		}
+	},
+	"home": {
+		"meta": {
+			"title": "Vela Wallet — Una wallet de Ethereum que de verdad es tuya",
+			"description": "Una wallet de Ethereum de código abierto y autoalojable para ETH y ERC-20. Firma con una passkey: sin frase semilla, sin llave de hardware, sin quedar atado a nadie. Pagas por comodidad, no por acceso.",
+			"ogTitle": "Vela Wallet — Una wallet de Ethereum que de verdad es tuya",
+			"ogDescription": "Wallet de código abierto y autoalojable para ETH y ERC-20. Firma con passkey, sin frase semilla, sin ataduras. Compílala tú mismo si quieres.",
+			"organization": "Una wallet de Ethereum de código abierto y autoalojable para ETH y tokens ERC-20. Firma con una passkey: sin frase semilla, sin llave de hardware, sin quedar atado a nadie."
+		},
+		"hero": {
+			"headline": "Una wallet de Ethereum que de verdad es tuya",
+			"subtitle": "La firma ocurre en tu dispositivo. Vela nunca recibe tu passkey.",
+			"ctaCreate": "Empezar",
+			"ctaCode": "Leer el código",
+			"facts": [
+				{
+					"term": "Tu cuenta es un Safe v1.4.1 sin modificar.",
+					"link": "Tu cuenta es el contrato de Safe, no uno nuestro"
+				},
+				{
+					"term": "Tu wallet puede tener más de una llave de firma.",
+					"link": "Hasta siete llaves, fijadas al crearla — llaves de hardware incluidas"
+				},
+				{
+					"term": "Lo que ves en pantalla no siempre es lo que se firma.",
+					"link": "Cómo Bybit perdió 1,500 millones de dólares, y el camino que cerramos"
+				},
+				{
+					"term": "Aunque Vela deje de operar, sigues teniendo acceso a tu wallet.",
+					"link": "Aloja tú mismo la app, el relayer y cada servicio de backend"
+				}
+			]
+		},
+		"facts": {
+			"lede": "Antes de poner tus activos en Vela"
+		},
+		"seal": {
+			"label": "wallets creadas on-chain",
+			"loading": "Cargando el número de wallets",
+			"verify": "Cada wallet está on-chain — ver el registro"
+		},
+		"why": {
+			"heading": "Por qué la hicimos",
+			"p1": "Usábamos <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> todos los días y nos gustaba. Luego nos topamos con los límites: una llave de recuperación generada en un navegador en la que solo cabe confiar, sin redes personalizadas, nada que puedas alojar tú — y si el servicio desaparece, la wallet se va con él.",
+			"p2": "Vela es la versión en la que sí estábamos dispuestos a dejar dinero. Conservamos la firma con passkey, pero nos aseguramos de que la wallet no dependa de nosotros.",
+			"more": "La versión larga: ¿dónde se supone que guardas doce palabras?"
+		},
+		"tradeoffs": {
+			"heading": "Las concesiones, por delante",
+			"lede": "Tres razones para no usar Vela — mientras tu dinero sigue en otra parte.",
+			"items": [
+				{
+					"title": "Cada transacción paga una comisión que mantiene el relay funcionando",
+					"body": "Las transacciones de Vela verifican firmas con passkey on-chain y se ejecutan a través de ERC-4337, así que suelen gastar más gas que una transferencia común.\n\nPor defecto, el relayer paga el gas y manda la transacción. La comisión incluye el costo on-chain y una comisión por el servicio de relay, y queda fija en el momento en que firmas.\n\nPuedes cambiar de relayer en la configuración, o <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">correr el tuyo</a>."
+				},
+				{
+					"title": "Cada llave es una entrada a tu wallet",
+					"body": "Puedes definir varias llaves al crear tu wallet\n\nVela es 1-of-n: cualquier llave autorizada puede gastar de la wallet por sí sola. Cada llave de más es otra forma de recuperar el acceso — y otra entrada que tienes que proteger."
+				},
+				{
+					"title": "Estás confiando en contratos Safe auditados — y una auditoría no es una garantía",
+					"body": "Safe v1.4.1 y el módulo WebAuthn pasaron por auditorías de terceros. Usamos las versiones publicadas, sin modificar el código de los contratos.\n\nUna auditoría ayuda a encontrar problemas de seguridad, pero no es una garantía de seguridad ni quiere decir que se haya encontrado toda posible vulnerabilidad."
+				}
+			],
+			"close": "Si alguna de esas cosas es un impedimento, Vela todavía no es para ti."
+		},
+		"compare": {
+			"heading": "Cómo se compara Vela",
+			"rows": [
+				{
+					"feature": "Tipo de cuenta",
+					"vela": "<a href=\"/docs/account-contract\">Cuenta inteligente Safe v1.4.1</a>",
+					"metamask": "EOA",
+					"base": "Cuenta inteligente de Coinbase"
+				},
+				{
+					"feature": "Llave de firma",
+					"vela": "Passkey",
+					"metamask": "La llave privada detrás de una frase de recuperación; carteras de hardware compatibles",
+					"base": "Passkey"
+				},
+				{
+					"feature": "Gas por transacción",
+					"vela": "Sobrecosto de ERC-4337, más la comisión de servicio del relay",
+					"metamask": "El gas de una transacción EOA común",
+					"base": "Sobrecosto de ERC-4337"
+				},
+				{
+					"feature": "Gas patrocinado",
+					"vela": "No se ofrece",
+					"metamask": "No se ofrece",
+					"base": "Patrocinado donde hay soporte"
+				},
+				{
+					"feature": "Redes personalizadas",
+					"vela": "Cualquier red EVM que cumpla los requisitos de Vela; los contratos puedes desplegarlos tú",
+					"metamask": "Redes EVM y RPC personalizados",
+					"base": "Un rango de redes más acotado"
+				},
+				{
+					"feature": "Si pierdes una llave",
+					"vela": "Firmas con otra llave agregada o sincronizada",
+					"metamask": "Recuperas con la frase de recuperación",
+					"base": "Firmas con otra llave agregada o sincronizada"
+				},
+				{
+					"feature": "Transacciones en lote",
+					"vela": "Compatible",
+					"metamask": "Depende de las capacidades de la cuenta — EIP-7702 y similares",
+					"base": "Compatible"
+				},
+				{
+					"feature": "Decodificado antes de firmar",
+					"vela": "Compatible",
+					"metamask": "Compatible",
+					"base": "Compatible"
+				},
+				{
+					"feature": "Revisión adicional",
+					"vela": "Con una página o extensión independiente que alojas tú",
+					"metamask": "Detección de riesgo de terceros",
+					"base": "—"
+				},
+				{
+					"feature": "Autoalojamiento completo",
+					"vela": "App, relay y servicios de backend, todo lo puedes correr tú",
+					"metamask": "El cliente y el RPC los eliges o los corres tú",
+					"base": "No disponible"
+				},
+				{
+					"feature": "Alcance del código abierto",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App, relay y servicios de backend</a>",
+					"metamask": "El cliente de la cartera",
+					"base": "SDK; algunos servicios de cuenta no están abiertos"
+				},
+				{
+					"feature": "Madurez",
+					"vela": "Nueva, pocos usuarios",
+					"metamask": "Años en el mercado, base de usuarios grande",
+					"base": "Mantenida por Coinbase"
+				}
+			]
+		},
+		"pricing": {
+			"heading": "Gratis y abierto. Paga solo si quieres.",
+			"intro": "Pagas por la comodidad, no por el derecho a usarlo.",
+			"cards": [
+				{
+					"title": "Cartera web y extensión de Chrome",
+					"price": "Gratis"
+				},
+				{
+					"title": "Apps de escritorio y móvil",
+					"price": "Gratis desde el código"
+				},
+				{
+					"title": "Desde las tiendas de apps",
+					"price": "Pago único"
+				}
+			]
+		},
+		"networks": {
+			"heading": "12 redes integradas. Agrega la tuya",
+			"body": "Tu wallet tiene la misma dirección en todas las redes. Cuando agregas otra cadena EVM, Vela verifica que tenga el soporte necesario de RIP-7212, Safe y ERC-4337. Si faltan los contratos, puedes desplegarlos con la <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">herramienta de configuración de cadenas</a>.",
+			"link": "Redes y comisiones, en detalle"
+		},
+		"faq": {
+			"heading": "Preguntas frecuentes",
+			"items": [
+				{
+					"q": "¿Qué necesito para crear una wallet?",
+					"a": "Un dispositivo que se desbloquee con Face ID o huella, o una llave de seguridad USB/NFC. Sin frase semilla y sin saldo inicial.\n\nAgrega todas las llaves que quieras al crear la wallet. Después ya no se pueden agregar más."
+				},
+				{
+					"q": "¿Puedo usar Vela con dApps?",
+					"a": "Sí. Vela pone la wallet directamente dentro de la dApp, igual que cualquier otra wallet de navegador.\n\nFunciona en las apps de iOS, Android y escritorio, y en la extensión de Vela para el navegador."
+				},
+				{
+					"q": "¿Y si pierdo el teléfono?",
+					"a": "Si tu passkey está sincronizada con el Llavero de iCloud o el Gestor de contraseñas de Google, la recuperas en un dispositivo nuevo y sigues con la misma wallet.\n\nSi no estaba sincronizada, vas a necesitar otra llave: una de las que agregaste al crear la wallet."
+				},
+				{
+					"q": "¿Y si borro mi passkey?",
+					"a": "Esa llave se pierde para siempre. Si era tu única llave, pierdes el acceso a la wallet."
+				},
+				{
+					"q": "¿Y si comprometen mi cuenta de Apple o Google?",
+					"a": "Quien llegue a tus passkeys sincronizadas probablemente llegue también a tu wallet.\n\nSi no quieres depender de Apple ni de Google, usa mejor una llave de seguridad USB/NFC."
+				},
+				{
+					"q": "¿Qué puede hacer Vela con mi dinero y qué sabe de mí?",
+					"a": "Vela no puede mover ni congelar tus fondos. Solo tus llaves controlan la wallet.\n\nNo pide correo ni cuenta de Vela. Tu llave pública, la dirección de la wallet y el nombre que le pongas son públicos on-chain. Los emisores de tokens sí pueden bloquear una dirección."
+				},
+				{
+					"q": "¿Qué pasa si Vela cierra, o si getvela.app se cae?",
+					"a": "Tu wallet sigue on-chain y no depende de los servidores de Vela. Las apps y los servicios de backend son de código abierto y pueden correr por su cuenta.\n\nSi getvela.app se cae, firma desde el navegador: la extensión de Vela, o la extensión de firma legible sin dependencias. Las llaves que ya tienes funcionan en ambas: la passkey de este dispositivo, una llave de seguridad USB o un teléfono conectado por código QR."
+				}
+			]
+		}
+	},
+	"about": {
+		"meta": {
+			"title": "Acerca de",
+			"description": "El equipo y el propósito detrás de Vela Wallet: una wallet autocustodiada, de código abierto y sin frase semilla, construida a la vista de todos.",
+			"pageName": "Acerca de Vela Wallet"
+		},
+		"eyebrow": "Acerca de",
+		"heading": "Quién construye Vela.",
+		"lede": "Vela se construye a la vista de todos: la wallet, los contratos inteligentes y este mismo sitio. Detrás no hay una empresa sin rostro: solo código real que puedes leer y una persona real con la que puedes hablar.",
+		"team": {
+			"role": "Fundador e ingeniero",
+			"bio": "Construye Vela de principio a fin: la wallet, los contratos y este sitio. Y escribe sobre el proceso mientras ocurre."
+		},
+		"valuesHeading": "En qué creemos",
+		"values": [
+			{
+				"title": "Autocustodia, de verdad",
+				"body": "Tus llaves, tus monedas: no es un eslogan, es la arquitectura. No podemos mover, congelar ni recuperar tus fondos, y lo hicimos así a propósito."
+			},
+			{
+				"title": "Sin frases semilla",
+				"body": "La mayor causa de cripto perdida es una cadena de palabras que a alguien le pidieron guardar perfectamente. La reemplazamos por una passkey: tu cara o tu huella."
+			},
+			{
+				"title": "Código abierto",
+				"body": "La wallet está pública en GitHub. La confianza debería poder verificarse, no pedirse. Lee el código, o síguenos mientras lo construimos a la vista de todos."
+			},
+			{
+				"title": "Honestos con las concesiones",
+				"body": "Toda decisión de diseño renuncia a algo. Escribimos a qué y por qué — en la documentación y en el blog — en vez de fingir que no cuesta nada."
+			}
+		]
+	},
+	"roadmap": {
+		"meta": {
+			"title": "Hoja de ruta — Vela Wallet",
+			"description": "Lo que Vela ha lanzado desde abril de 2026 y lo que viene — construido a la vista de todos. Direcciones, no fechas límite."
+		},
+		"heading": "Hoja de ruta",
+		"lede": "Vela ha lanzado sin parar desde abril de 2026, a la vista de todos. Este es el camino recorrido y hacia dónde va — direcciones, no fechas límite. ¿Quieres algo en ella? <a href=\"https://github.com/mondaylabsltd/vela-wallet/issues\" target=\"_blank\" rel=\"noopener\">Abre un issue</a>.",
+		"upcomingHeading": "Lo que sigue",
+		"shippedHeading": "Lanzado",
+		"statusLabels": {
+			"now": "En curso",
+			"next": "Siguiente",
+			"later": "Explorando"
+		},
+		"upcoming": [
+			{
+				"title": "Ver cada moneda que recibes",
+				"body": "Un depósito simple en moneda nativa — o monedas que llegan por una llamada interna (un retiro de exchange, un router, un multifirma) — no emite ningún registro on-chain, así que hoy no puede aparecer en tu actividad en la mayoría de redes. Estamos construyendo un servicio de transferencias que recorre bloques para sacarlos a la luz, de modo que cada depósito aparezca, en cada cadena."
+			},
+			{
+				"title": "Más cobertura de firma legible",
+				"body": "Más contratos y cadenas mostrados como intención legible, para que menos transacciones caigan en firma a ciegas."
+			},
+			{
+				"title": "Apps nativas de iOS y Android",
+				"body": "Vela corre hoy en la web; los builds móviles comparten el mismo código y están en pruebas en dispositivos reales, antes de publicarse en App Store y Google Play."
+			},
+			{
+				"title": "Sincronización entre todos tus dispositivos",
+				"body": "En iOS y Android tus cuentas y redes ya te siguen a través del respaldo de tu plataforma; en la web se quedan en el navegador. Lo siguiente: tu idioma, tu moneda y tus formatos, más restaurar toda tu configuración en un dispositivo nuevo con un toque — y una libreta de direcciones guardada, para que dejes de volver a pegar direcciones."
+			},
+			{
+				"title": "Llegar más lejos",
+				"body": "dApp Connect desde el escritorio sin tu teléfono, más redes EVM (incluida una vía de firma para cadenas sin el precompilado P-256), y una auditoría de seguridad independiente de la integración Safe + WebAuthn de Vela."
+			}
+		],
+		"shipped": [
+			{
+				"title": "Localización y pulido diario",
+				"body": "Soporte multiidioma con cambio instantáneo (ruso e italiano añadidos; 15 idiomas hoy), moneda local y formatos según la región, visualización dinámica de montos, tirar para refrescar con identidad propia, envíos pendientes hasta confirmarse, y comentarios dentro de la app con un toque."
+			},
+			{
+				"title": "Inicio centrado en los pagos",
+				"body": "La pantalla de inicio reconstruida alrededor de tu actividad y tus saldos."
+			},
+			{
+				"title": "Firma legible (ERC-7730)",
+				"body": "Las transacciones muestran lo que realmente hacen — monto, destinatario, intención — en lenguaje claro en vez de hexadecimal crudo, con un banco de pruebas de vista previa y tests."
+			},
+			{
+				"title": "Conexión a dApps en el navegador",
+				"body": "La wallet aparece en la página como cualquier otra wallet de navegador: por la extensión de Vela y por el navegador integrado en las apps de escritorio, iOS y Android."
+			},
+			{
+				"title": "Flujo de firma de dApps",
+				"body": "La infraestructura de conexión y la experiencia de solicitud de firma."
+			},
+			{
+				"title": "La experiencia central de la wallet",
+				"body": "Un sistema de diseño de verdad, selección de nivel de gas y una pantalla de confirmación rediseñada, un escáner QR a pantalla completa, y las pantallas de recibir, token, añadir token y depósito reconstruidas."
+			},
+			{
+				"title": "Nace Vela",
+				"body": "La wallet se lanza en la web, desde una única base de código que también compila para iOS y Android — cuentas inteligentes Safe (ERC-4337), inicio de sesión con passkey y sin frase semilla, desde el primer día."
+			}
+		]
+	},
+	"getStarted": {
+		"meta": {
+			"title": "Obtener Vela",
+			"description": "Vela corre hoy en tu navegador, con versiones de escritorio, móvil y una extensión construidas desde el mismo código. Elige la que quieras."
+		},
+		"heading": "Obtener Vela",
+		"lede": "Una wallet, una dirección, una sola base de código. Empieza en tu navegador — nada que instalar — o llévate la misma wallet a tu computadora, a tu teléfono o a la barra del navegador.",
+		"recommended": "Recomendado",
+		"availableNow": "Disponible ya",
+		"comingSoon": "Muy pronto",
+		"githubCta": "Descargar desde GitHub Releases",
+		"platforms": {
+			"web": {
+				"title": "Web",
+				"blurb": "Nada que instalar y nada que actualizar. Ábrela, autentícate con tu passkey y tu wallet está ahí — en cualquier dispositivo con un navegador reciente.",
+				"action": "Abrir la wallet web"
+			},
+			"desktop": {
+				"title": "Escritorio",
+				"systems": "macOS · Windows · Linux",
+				"blurb": "Una app nativa para cuando la wallet es algo que dejas abierto. Misma dirección, misma passkey, mismas cadenas.",
+				"stores": "Mac App Store · Microsoft Store"
+			},
+			"mobile": {
+				"title": "Móvil",
+				"systems": "iOS · Android",
+				"blurb": "Firma con Face ID o una huella en el dispositivo donde ya vive tu passkey. Los builds están en pruebas en dispositivos reales.",
+				"stores": "App Store · Google Play"
+			},
+			"extension": {
+				"title": "Extensión de navegador",
+				"systems": "Chrome · Edge · Brave",
+				"blurb": "Pone la wallet en tu barra de herramientas y deja que las dApps hablen con ella directamente — sin emparejar nada, sin un segundo dispositivo.",
+				"stores": "Chrome Web Store"
+			}
+		},
+		"fundingNote": "Las descargas en las tiendas son de pago, y así es como un equipo pequeño e independiente financia construir Vela a la vista de todos. Todo es de código abierto, así que siempre puedes compilarlo tú mismo — la misma app, sin costo.",
+		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, cada build está en GitHub."
+	},
+	"_fingerprints": {
+		"home": "978189838858",
+		"about": "669db59e91a0",
+		"roadmap": "1f9b064b5fbb",
+		"getStarted": "dbbb0da3f5cc"
+	}
+}

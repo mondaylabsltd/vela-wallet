@@ -28,9 +28,10 @@ scheduled. The brand is a solo founder building fully in the open, which is itse
 
 ## 4. Functional requirements
 
-- **FR-1** — Approved taglines used **verbatim**: "Your keys. Your face." · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify." No improvised alternatives.
+- **FR-1** — Approved taglines used **verbatim**: "An Ethereum wallet you actually own." (zh: "真正属于你的以太坊钱包") · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify." No improvised alternatives. **Retired 2026-09-15 (spec 059): "Your keys. Your face."** — it named the mechanism, not the promise; do not reinstate it anywhere.
 - **FR-2** — **Audit phrasing (mandatory):** Safe contracts are independently audited; **Vela's own integration is NOT audited and none is scheduled** — "a goal for when the project can fund one, not a commitment with a date." Never write "audit planned/coming."
 - **FR-3** — **Alpha stated honestly** ("alpha · v0.1") — **no** "tolerate bugs / beta" disclaimer banners. Trust > disclaimers.
+- **FR-1b** — Approved copy now exists **per locale**. The English source is `app-web/getvela.app/src/lib/i18n/messages/en.ts`; translations are the sibling `<tag>.json` files; founder-approved lines are recorded in `specs/059-getvela-site-i18n/approved-copy.md`. A locale is `drafted` until an R7 review is recorded in `specs/059-getvela-site-i18n/reviews/<tag>.md` — nothing rendered to a reader may claim otherwise. `bun run i18n:status` reports the state, including translations the English has since moved past.
 - **FR-4** — Canonical URLs are `getvela.app` (site) and `wallet.getvela.app` (wallet) only — treated as an anti-phishing fact.
 - **FR-5** — "No token, ever" and "no tracking" messaging aligns with A03.
 

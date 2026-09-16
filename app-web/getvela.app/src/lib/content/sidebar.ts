@@ -6,24 +6,31 @@
  */
 export interface SidebarItem {
 	slug: string;
+	/** English title. The rendered title comes from `chrome.docs.titles[slug]`. */
 	title: string;
 }
 
 export interface SidebarGroup {
+	/** Key into `chrome.docs.groups` — the group's name is translated copy. */
+	key: 'gettingStarted' | 'using' | 'security' | 'reference';
+	/** English title, kept here so this file still reads as the source of truth. */
 	title: string;
 	items: SidebarItem[];
 }
 
 export const sidebar: SidebarGroup[] = [
 	{
+		key: 'gettingStarted',
 		title: 'Getting Started',
 		items: [
 			{ slug: 'introduction', title: 'Introduction' },
+			{ slug: 'why-vela', title: 'Why we built Vela' },
 			{ slug: 'install', title: 'Install Vela' },
 			{ slug: 'create-wallet', title: 'Create your wallet' }
 		]
 	},
 	{
+		key: 'using',
 		title: 'Using Vela',
 		items: [
 			{ slug: 'send-and-receive', title: 'Send & receive' },
@@ -31,15 +38,21 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
+		key: 'security',
 		title: 'Security',
 		items: [
 			{ slug: 'passkeys', title: 'How passkeys work' },
+			{ slug: 'signers', title: 'Signers & security keys' },
 			{ slug: 'clear-signing', title: 'Clear signing' },
+			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' },
+			{ slug: 'bybit-attack', title: 'The Bybit attack' },
 			{ slug: 'recovery', title: 'Recovery & sign-in' },
+			{ slug: 'account-contract', title: 'The account contract' },
 			{ slug: 'security-audits', title: 'Audits & known issues' }
 		]
 	},
 	{
+		key: 'reference',
 		title: 'Reference',
 		items: [
 			{ slug: 'whitepaper', title: 'Whitepaper' },

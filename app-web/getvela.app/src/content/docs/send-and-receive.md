@@ -39,11 +39,11 @@ Vela doesn't just "broadcast" a transaction. Under the hood:
 1. It builds an ERC-4337 **UserOperation** for your Safe account.
 2. Your device signs it with a **WebAuthn (P-256)** assertion after your
    biometric check.
-3. The signed operation goes to the **bundler**, which submits it to the
+3. The signed operation goes to the **relay**, which submits it to the
    EntryPoint; your Safe verifies the P-256 signature **on-chain** and executes.
 
 <Callout type="info" title="The relayer can't tamper with your transaction">
-The bundler receives an <strong>already-signed</strong> UserOperation. It can
+The relay receives an <strong>already-signed</strong> UserOperation. It can
 delay or decline to relay, but it cannot change the recipient, amount, or any
 other field — any change invalidates your signature. It's a liveness helper, not
 a custodian, and it's open source so you can run your own.

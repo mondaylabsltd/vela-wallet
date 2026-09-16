@@ -1,0 +1,424 @@
+{
+	"chrome": {
+		"nav": {
+			"alpha": "測試版",
+			"blog": "部落格",
+			"docs": "文件",
+			"about": "關於",
+			"whyVela": "我們為什麼做它",
+			"howItWorks": "運作方式",
+			"pricing": "價格",
+			"faq": "常見問題",
+			"createWallet": "取得 Vela",
+			"signIn": "登入",
+			"primary": "主導覽",
+			"toggleMenu": "開啟選單"
+		},
+		"footer": {
+			"tagline": "真正屬於你的以太坊錢包。不用助記詞。",
+			"label": "頁尾",
+			"columns": {
+				"resources": "資源",
+				"infrastructure": "基礎建設",
+				"community": "社群",
+				"legal": "法律"
+			},
+			"links": {
+				"docs": "文件",
+				"whitepaper": "白皮書",
+				"audits": "稽核與已知問題",
+				"roadmap": "發展藍圖",
+				"blog": "部落格",
+				"about": "關於",
+				"privacy": "隱私權政策",
+				"terms": "服務條款"
+			}
+		},
+		"language": {
+			"label": "語言",
+			"choose": "選擇語言"
+		},
+		"docs": {
+			"groups": {
+				"gettingStarted": "開始使用",
+				"using": "使用 Vela",
+				"security": "安全",
+				"reference": "參考"
+			},
+			"titles": {
+				"introduction": "簡介",
+				"why-vela": "我們為什麼做 Vela",
+				"install": "安裝 Vela",
+				"create-wallet": "建立你的錢包",
+				"send-and-receive": "轉帳與收款",
+				"networks-and-fees": "網路與費用",
+				"passkeys": "密碼金鑰如何運作",
+				"signers": "簽署金鑰與安全金鑰",
+				"clear-signing": "清晰簽署",
+				"clear-signing-self-host": "自己部署簽名頁",
+				"bybit-attack": "Bybit 攻擊事件",
+				"recovery": "復原與登入",
+				"account-contract": "帳戶合約",
+				"security-audits": "稽核與已知問題",
+				"whitepaper": "白皮書",
+				"faq": "常見問題"
+			}
+		},
+		"englishOnly": {
+			"badge": "EN",
+			"title": "此頁面僅有英文版"
+		}
+	},
+	"notice": {
+		"fallback": "這個頁面尚未翻譯，以下為英文原文。",
+		"offer": {
+			"message": "這個頁面也有繁體中文版。",
+			"accept": "用繁體中文閱讀",
+			"dismiss": "不用了"
+		}
+	},
+	"home": {
+		"meta": {
+			"title": "Vela 錢包 — 真正屬於你的以太坊錢包",
+			"description": "一款開源、可自行部署的以太坊錢包，支援 ETH 與 ERC-20。用密碼金鑰簽署——沒有助記詞，不需要硬體錢包，也沒有任何綁定。你付的是便利的錢，不是使用權的錢。",
+			"ogTitle": "Vela 錢包 — 真正屬於你的以太坊錢包",
+			"ogDescription": "開源、可自行部署的 ETH 與 ERC-20 錢包。密碼金鑰簽署，無助記詞，無綁定。你想的話可以自己編譯它。",
+			"organization": "一款開源、可自行部署的以太坊錢包，支援 ETH 與 ERC-20 代幣。用密碼金鑰簽署——沒有助記詞，不需要硬體錢包，也沒有任何綁定。"
+		},
+		"hero": {
+			"headline": "真正屬於你的以太坊錢包",
+			"subtitle": "簽署都在你的裝置上完成，Vela 拿不到你的密碼金鑰。",
+			"ctaCreate": "開始使用",
+			"ctaCode": "查看原始碼",
+			"facts": [
+				{
+					"term": "帳戶合約是未經改動的 Safe v1.4.1。",
+					"link": "你的帳戶用的是 Safe 的合約，不是我們寫的"
+				},
+				{
+					"term": "一個錢包可以有不只一把金鑰。",
+					"link": "建立時最多七把金鑰，同時支援硬體安全金鑰"
+				},
+				{
+					"term": "你在畫面上看到的，不一定就是你實際簽下去的。",
+					"link": "Bybit 的 15 億美元就是這樣丟的"
+				},
+				{
+					"term": "即使 Vela 停止服務，你仍然能存取自己的錢包。",
+					"link": "應用程式、中繼和每一項後端服務，你都能自己跑"
+				}
+			]
+		},
+		"facts": {
+			"lede": "把資產放進 Vela 之前"
+		},
+		"seal": {
+			"label": "已在鏈上建立的錢包",
+			"loading": "正在讀取錢包數量",
+			"verify": "每一個錢包都在鏈上 — 查看鏈上登記"
+		},
+		"why": {
+			"heading": "我們為什麼做它",
+			"p1": "我們每天都在用 <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a>，也確實喜歡它。但用久了，有幾個問題繞不過去：復原金鑰由瀏覽器產生，你只能選擇相信；不能加自訂網路；服務也不能自己部署——哪天服務沒了，錢包也就跟著沒了。",
+			"p2": "Vela 就是我們自己願意往裡放錢的那個版本。我們保留了密碼金鑰，但不想讓錢包依賴 Vela。",
+			"more": "長一點的版本——那十二個單字，到底該放在哪裡？"
+		},
+		"tradeoffs": {
+			"heading": "先把代價說在前面",
+			"lede": "三條不該用 Vela 的理由——趁錢還沒放進來。",
+			"items": [
+				{
+					"title": "每一筆交易都要付一筆手續費，用來支撐中繼服務",
+					"body": "Vela 的交易需要在鏈上驗證密碼金鑰簽章，並透過 ERC-4337 執行，因此通常會比一般帳戶直接轉帳消耗更多 gas。\n\n預設由中繼替你支付 gas 並送出交易。費用包含鏈上成本與中繼服務費，並在你簽署時確定。\n\n你可以在設定裡更換中繼，也可以<a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">自己跑一個</a>。"
+				},
+				{
+					"title": "每一把金鑰，都是一個獨立的錢包入口",
+					"body": "建立錢包時可以設定多把金鑰\n\nVela 是 1-of-n：任何一把獲授權的金鑰都能單獨把錢包裡的錢花掉。多一把金鑰，就多一條把錢包拿回來的路，也多一個需要保護的入口。"
+				},
+				{
+					"title": "你信任的是稽核過的 Safe 合約——而稽核不是保證",
+					"body": "Safe v1.4.1 與 WebAuthn 模組都經過第三方稽核。我們使用其公開發布的版本，未修改合約程式碼。\n\n稽核有助於發現安全問題，但並不是安全保證，也不代表所有潛在漏洞都已經被找出來。"
+				}
+			],
+			"close": "這三條裡只要有一條你不能接受，Vela 現在就不適合你。"
+		},
+		"compare": {
+			"heading": "Vela 和它們比起來",
+			"rows": [
+				{
+					"feature": "帳戶類型",
+					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 智慧帳戶</a>",
+					"metamask": "EOA",
+					"base": "Coinbase 智慧帳戶"
+				},
+				{
+					"feature": "簽署金鑰",
+					"vela": "密碼金鑰",
+					"metamask": "助記詞對應的私鑰；支援硬體錢包",
+					"base": "密碼金鑰"
+				},
+				{
+					"feature": "交易 gas",
+					"vela": "ERC-4337 開銷 + 中繼服務費",
+					"metamask": "普通 EOA 交易 gas",
+					"base": "ERC-4337 開銷"
+				},
+				{
+					"feature": "Gas 代付",
+					"vela": "不提供",
+					"metamask": "不提供",
+					"base": "支援的場景可代付"
+				},
+				{
+					"feature": "自訂網路",
+					"vela": "任何滿足 Vela 運行條件的 EVM 網路；可自行部署所需合約",
+					"metamask": "支援自訂 EVM 網路和 RPC",
+					"base": "支援的網路範圍較有限"
+				},
+				{
+					"feature": "弄丟一把金鑰",
+					"vela": "使用其他已加入或已同步的簽署金鑰",
+					"metamask": "使用助記詞復原",
+					"base": "使用其他已加入或已同步的簽署金鑰"
+				},
+				{
+					"feature": "批次交易",
+					"vela": "支援",
+					"metamask": "取決於帳戶能力 / EIP-7702 等機制",
+					"base": "支援"
+				},
+				{
+					"feature": "簽署前解碼",
+					"vela": "支援",
+					"metamask": "支援",
+					"base": "支援"
+				},
+				{
+					"feature": "額外核對",
+					"vela": "可透過獨立、自架的頁面或擴充功能核對",
+					"metamask": "第三方風險偵測",
+					"base": "—"
+				},
+				{
+					"feature": "完整自架",
+					"vela": "應用程式、中繼與後端服務均可自行運行",
+					"metamask": "用戶端和 RPC 可自行選擇或運行",
+					"base": "不支援完整自架"
+				},
+				{
+					"feature": "開源範圍",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">應用程式、中繼與後端服務</a>",
+					"metamask": "錢包用戶端",
+					"base": "SDK；部分帳戶服務不開源"
+				},
+				{
+					"feature": "成熟度",
+					"vela": "新，使用者較少",
+					"metamask": "運行多年，使用者規模大",
+					"base": "Coinbase 維護"
+				}
+			]
+		},
+		"pricing": {
+			"heading": "免費且開源。願意付費再付。",
+			"intro": "你付的是方便的錢，不是使用權的錢。",
+			"cards": [
+				{
+					"title": "網頁錢包與 Chrome 擴充功能",
+					"price": "免費"
+				},
+				{
+					"title": "桌面與手機應用",
+					"price": "自己編譯免費"
+				},
+				{
+					"title": "從應用商店下載",
+					"price": "一次性買斷"
+				}
+			]
+		},
+		"networks": {
+			"heading": "內建 12 條網路，也可以自己新增",
+			"body": "所有網路使用同一個錢包位址。新增其他 EVM 鏈時，Vela 會檢查所需的 RIP-7212、Safe 與 ERC-4337 支援；缺少合約時，可以用<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">鏈部署工具</a>部署。",
+			"link": "網路與費用，完整說明"
+		},
+		"faq": {
+			"heading": "常見問題",
+			"items": [
+				{
+					"q": "建立錢包需要準備什麼？",
+					"a": "一台能用 Face ID 或指紋解鎖的裝置，或者一把 USB/NFC 安全金鑰。不需要助記詞，也不需要先有餘額。\n\n想用的金鑰要在建立錢包時全部加好，之後沒辦法再加。"
+				},
+				{
+					"q": "Vela 能連 dApp 嗎？",
+					"a": "可以。Vela 會把錢包直接注入 dApp，就跟其他瀏覽器錢包一樣。\n\niOS、Android、桌面應用程式和 Vela 瀏覽器擴充功能都支援。"
+				},
+				{
+					"q": "手機掉了怎麼辦？",
+					"a": "如果密碼金鑰已同步到 iCloud 鑰匙圈或 Google 密碼管理程式，就能在新裝置上取回，繼續用原本那個錢包。\n\n如果沒有同步，就得用建立錢包時加進去的另一把金鑰。"
+				},
+				{
+					"q": "如果我把密碼金鑰刪掉呢？",
+					"a": "那把金鑰就永久消失。如果它是唯一的金鑰，你也會失去錢包的存取權。"
+				},
+				{
+					"q": "Apple 或 Google 帳號被盜了怎麼辦？",
+					"a": "有人拿到你帳號裡同步的密碼金鑰，就可能進得了你的錢包。\n\n如果不想依賴 Apple 或 Google，可以改用 USB/NFC 安全金鑰。"
+				},
+				{
+					"q": "Vela 動得了我的錢嗎？它又知道我什麼？",
+					"a": "Vela 不能轉走也不能凍結你的資產，只有你的金鑰能控制錢包。\n\n不需要電子郵件，也不需要 Vela 帳號。你的公鑰、錢包位址和錢包名稱會公開在鏈上。代幣發行方仍然可以把位址列入黑名單。"
+				},
+				{
+					"q": "Vela 不做了，或者 getvela.app 打不開了怎麼辦？",
+					"a": "錢包一直在鏈上，不依賴 Vela 的伺服器。應用程式和後端服務都是開源的，也可以獨立運作。\n\n就算 getvela.app 連不上，也可以在瀏覽器裡簽署：Vela 瀏覽器擴充功能，或者零依賴的清晰簽署擴充功能。你現有的金鑰兩邊都能用——本機的密碼金鑰、USB 安全金鑰，或者掃 QR 碼連上的另一台手機。"
+				}
+			]
+		}
+	},
+	"about": {
+		"meta": {
+			"title": "關於",
+			"description": "Vela 錢包背後的團隊與初衷——一款自我保管、開源、不用助記詞的錢包，全程公開開發。",
+			"pageName": "關於 Vela 錢包"
+		},
+		"eyebrow": "關於",
+		"heading": "是誰在做 Vela。",
+		"lede": "Vela 是公開做出來的——錢包、智慧合約，以及你現在看的這個網站。背後沒有一家面目模糊的公司：只有你能讀的真實程式碼，和一個你能聯絡上的真實的人。",
+		"team": {
+			"role": "創辦人 & 工程師",
+			"bio": "從頭到尾一個人做 Vela——錢包、合約，還有這個網站。過程中一邊做一邊寫。"
+		},
+		"valuesHeading": "我們相信什麼",
+		"values": [
+			{
+				"title": "真正的自我保管",
+				"body": "你的金鑰，你的幣——這不是一句口號，而是架構本身。我們無法轉移、凍結或找回你的資金，而且這是我們刻意這麼建的。"
+			},
+			{
+				"title": "不用助記詞",
+				"body": "加密資產遺失最主要的原因，就是一串被要求完美保管的單字。我們用密碼金鑰取代了它：你的臉或指紋。"
+			},
+			{
+				"title": "開源",
+				"body": "錢包程式碼全部公開在 GitHub 上。信任應該是可查證的，而不是開口就要的。你可以讀程式碼，也可以跟著看我們怎麼一點點把它做出來。"
+			},
+			{
+				"title": "坦誠面對取捨",
+				"body": "每一個設計選擇都有代價。我們會把代價是什麼、為什麼這麼選寫下來——寫在文件裡和部落格上——而不是假裝沒有成本。"
+			}
+		]
+	},
+	"roadmap": {
+		"meta": {
+			"title": "發展藍圖 — Vela 錢包",
+			"description": "Vela 自 2026 年 4 月以來推出了什麼、接下來要做什麼——全程公開。是方向，不是截止日期。"
+		},
+		"heading": "發展藍圖",
+		"lede": "自 2026 年 4 月起，Vela 一直在公開地持續推出新版本。這裡是走過的路，以及接下來的方向——是方向，不是截止日期。有想看到的功能？<a href=\"https://github.com/mondaylabsltd/vela-wallet/issues\" target=\"_blank\" rel=\"noopener\">開一個 issue</a>。",
+		"upcomingHeading": "接下來",
+		"shippedHeading": "已推出",
+		"statusLabels": {
+			"now": "進行中",
+			"next": "下一步",
+			"later": "在探索"
+		},
+		"upcoming": [
+			{
+				"title": "看見每一筆收到的幣",
+				"body": "一筆普通的原生幣轉入——或者經由內部呼叫入帳的幣（交易所提領、路由合約、多簽）——不會產生鏈上日誌，所以在今天大多數網路上，它無法顯示在你的活動紀錄裡。我們正在做一個逐區塊追溯的轉帳服務，讓每一筆入帳都能在每一條鏈上出現。"
+			},
+			{
+				"title": "更廣的清晰簽署涵蓋範圍",
+				"body": "讓更多合約和鏈能以人類可讀的意圖呈現，減少退回盲簽的交易。"
+			},
+			{
+				"title": "原生 iOS 與 Android 應用程式",
+				"body": "Vela 目前跑在網頁上；行動版建置共用同一份程式碼，正在實機測試，之後會上架 App Store 和 Google Play。"
+			},
+			{
+				"title": "在你所有裝置之間同步",
+				"body": "在 iOS 和 Android 上，你的帳戶和網路已經能透過系統備份跟著你走；在網頁上它們留在瀏覽器裡。接下來：語言、貨幣與格式設定，加上在新裝置上一鍵還原整套設定——以及一個存好的通訊錄，省得你反覆貼上位址。"
+			},
+			{
+				"title": "走得更遠",
+				"body": "不用手機也能在桌面端連接 dApp、更多 EVM 網路（包括為沒有 P-256 預編譯的鏈提供簽署路徑），以及對 Vela 的 Safe + WebAuthn 整合做一次獨立安全稽核。"
+			}
+		],
+		"shipped": [
+			{
+				"title": "多語言與日常打磨",
+				"body": "支援多語言即時切換（新增俄文和義大利文，目前 15 種語言）、當地貨幣與區域格式、動態金額顯示、品牌化下拉重新整理、送出即待確認的轉帳，以及一鍵應用內回報。"
+			},
+			{
+				"title": "以支付為中心的首頁",
+				"body": "首頁圍繞你的活動紀錄和餘額重建。"
+			},
+			{
+				"title": "清晰簽署（ERC-7730）",
+				"body": "交易會用人話顯示它實際在做什麼——金額、收款方、意圖——而不是一串原始十六進位，並附有預覽工具和測試。"
+			},
+			{
+				"title": "瀏覽器裡的 dApp 連線",
+				"body": "錢包會像其他瀏覽器錢包一樣出現在網頁裡——透過 Vela 瀏覽器擴充功能，以及桌面、iOS 和 Android 應用程式內建的瀏覽器。"
+			},
+			{
+				"title": "dApp 簽署流程",
+				"body": "連接基礎建設，以及簽署請求的完整體驗。"
+			},
+			{
+				"title": "核心錢包體驗",
+				"body": "一套真正的設計系統、gas 級距選擇與重做的確認頁、全螢幕 QR 掃描，以及重建的收款、代幣、新增代幣和儲值頁面。"
+			},
+			{
+				"title": "Vela 誕生",
+				"body": "錢包在網頁端推出，源自同一份也能建置 iOS 與 Android 的程式碼庫——從第一天起就是 Safe 智慧帳戶（ERC-4337）、密碼金鑰登入、以及沒有助記詞。"
+			}
+		]
+	},
+	"getStarted": {
+		"meta": {
+			"title": "取得 Vela",
+			"description": "Vela 今天就能在瀏覽器裡用，桌面版、行動版和瀏覽器擴充功能都由同一份程式碼建置。挑一個你想用的。"
+		},
+		"heading": "取得 Vela",
+		"lede": "一個錢包、一個位址，出自同一份程式碼。從瀏覽器開始——不用安裝任何東西——或者把同一個錢包帶到你的電腦、手機，或瀏覽器工具列上。",
+		"recommended": "推薦",
+		"availableNow": "現已可用",
+		"comingSoon": "即將上架",
+		"githubCta": "從 GitHub Releases 下載",
+		"platforms": {
+			"web": {
+				"title": "網頁版",
+				"blurb": "不用安裝，也不用更新。打開它，用密碼金鑰驗證身分，錢包就在那裡——任何裝有較新瀏覽器的裝置都可以。",
+				"action": "開啟網頁錢包"
+			},
+			"desktop": {
+				"title": "桌面版",
+				"systems": "macOS · Windows · Linux",
+				"blurb": "當錢包是你會一直開著的東西時，就用原生應用程式。同一個位址、同一把密碼金鑰、同樣的鏈。",
+				"stores": "Mac App Store · Microsoft Store"
+			},
+			"mobile": {
+				"title": "行動版",
+				"systems": "iOS · Android",
+				"blurb": "在密碼金鑰本來就所在的那台裝置上，用 Face ID 或指紋簽署。建置版本正在實機測試中。",
+				"stores": "App Store · Google Play"
+			},
+			"extension": {
+				"title": "瀏覽器擴充功能",
+				"systems": "Chrome · Edge · Brave",
+				"blurb": "把錢包放進工具列，讓 dApp 直接和它對話——不用配對，也不用第二台裝置。",
+				"stores": "Chrome 線上應用程式商店"
+			}
+		},
+		"fundingNote": "應用程式商店裡的下載是付費的，這是一支獨立小團隊公開開發 Vela 的經費來源。所有程式碼都開源，所以你也可以自己建置——同一個應用程式，不收一分錢。",
+		"storeNote": "目前還沒有上架任何應用程式商店。在那之前，每一個建置版本都在 GitHub 上。"
+	},
+	"_fingerprints": {
+		"home": "978189838858",
+		"about": "669db59e91a0",
+		"roadmap": "1f9b064b5fbb",
+		"getStarted": "dbbb0da3f5cc"
+	}
+}

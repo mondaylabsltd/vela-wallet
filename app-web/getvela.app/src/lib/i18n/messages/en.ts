@@ -1,0 +1,662 @@
+/**
+ * The English message source — and the TYPE every other locale is checked
+ * against (spec 059, contracts/translation-store.md).
+ *
+ * Why TypeScript and not JSON: this file is the shape. A component reading
+ * `m.chrome.nav.docs` is checked by `bun run check`, so a typo is a build
+ * error rather than a blank label in production. The fourteen translations are
+ * JSON (`./<tag>.json`) so a translator never edits code and can never break
+ * the build.
+ *
+ * ## Inline markup is allowed, and is part of the string
+ *
+ * Marketing prose has links and emphasis inside sentences. Splitting a sentence
+ * into three keys around an `<a>` gives a translator fragments they cannot
+ * reorder — and every language reorders. So a value may contain `<a href>`,
+ * `<strong>` and `<em>`, and the component renders it with `{@html}`.
+ *
+ * Two consequences, both enforced rather than trusted:
+ *   - the href set and tag counts of a translation MUST match the English value
+ *     (FR-031, checked by placeholders.test.ts). A translator translates the
+ *     link TEXT, never the URL.
+ *   - nothing here may ever come from user input. These are repo files.
+ *
+ * ## What does NOT belong here
+ *
+ * Proper nouns. "GitHub", "Telegram", "MetaMask", "Safe", "Vela
+ * Relay", "RSS" are names, not words — they stay in the components where no
+ * translator will be tempted to localize them.
+ *
+ * ## chrome and notice are special
+ *
+ * They must be COMPLETE in all fifteen locales at all times, because they are
+ * what an untranslated page is wrapped in. The one sentence a reader of a
+ * fallback page must be able to read is the one telling them the rest is
+ * English — it cannot itself fall back.
+ */
+
+const GITHUB = 'https://github.com/mondaylabsltd/vela-wallet';
+const SAFE_REPO = 'https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1';
+const RECOVERY_EXT = `${GITHUB}#webauthn-proxy-extension-domain-recovery--dev-passkeys`;
+
+export const en = {
+	chrome: {
+		nav: {
+			/** The pill next to the logo. */
+			alpha: 'Alpha',
+			blog: 'Blog',
+			docs: 'Docs',
+			about: 'About',
+			whyVela: 'Why we built it',
+			howItWorks: 'How it works',
+			pricing: 'Pricing',
+			faq: 'FAQ',
+			createWallet: 'Get Vela',
+			signIn: 'Sign in',
+			/** aria-labels — read aloud, never seen. Still copy. */
+			primary: 'Primary',
+			toggleMenu: 'Toggle menu'
+		},
+		footer: {
+			tagline: 'An Ethereum wallet you actually own. No seed phrase.',
+			label: 'Footer',
+			columns: {
+				resources: 'Resources',
+				infrastructure: 'Infrastructure',
+				community: 'Community',
+				legal: 'Legal'
+			},
+			links: {
+				docs: 'Docs',
+				whitepaper: 'Whitepaper',
+				audits: 'Audits & known issues',
+				roadmap: 'Roadmap',
+				blog: 'Blog',
+				about: 'About',
+				privacy: 'Privacy',
+				terms: 'Terms'
+			}
+		},
+		language: {
+			/** Button label and aria-label for the switcher. */
+			label: 'Language',
+			choose: 'Choose a language'
+		},
+		/**
+		 * The docs sidebar. This is CHROME, not page content: it frames every docs
+		 * page including the ones still falling back to English, so it merges per
+		 * key and a missing title simply stays English rather than blanking a
+		 * navigation row. Order and slugs stay in `content/sidebar.ts` — a
+		 * translator names things, they do not reorder the docs.
+		 */
+		docs: {
+			groups: {
+				gettingStarted: 'Getting Started',
+				using: 'Using Vela',
+				security: 'Security',
+				reference: 'Reference'
+			},
+			titles: {
+				introduction: 'Introduction',
+				'why-vela': 'Why we built Vela',
+				install: 'Install Vela',
+				'create-wallet': 'Create your wallet',
+				'send-and-receive': 'Send & receive',
+				'networks-and-fees': 'Networks & fees',
+				passkeys: 'How passkeys work',
+				signers: 'Signers & security keys',
+				'clear-signing': 'Clear signing',
+				'clear-signing-self-host': 'Self-host the signing page',
+				'bybit-attack': 'The Bybit attack',
+				recovery: 'Recovery & sign-in',
+				'account-contract': 'The account contract',
+				'security-audits': 'Audits & known issues',
+				whitepaper: 'Whitepaper',
+				faq: 'FAQ'
+			}
+		},
+		englishOnly: {
+			/** Badge on a link that leads to an English-only page (FR-020). */
+			badge: 'EN',
+			title: 'This page is only available in English'
+		}
+	},
+
+	notice: {
+		/** Shown above an English body served at a localized URL (FR-017). */
+		fallback: 'This page has not been translated yet. The text below is in English.',
+		offer: {
+			/**
+			 * The offer banner (FR-013). Rendered in the language being OFFERED —
+			 * it is shown to somebody who may not read the page they are on — and it
+			 * never navigates on its own.
+			 */
+			message: 'This page is also available in English.',
+			accept: 'Read in English',
+			dismiss: 'Dismiss'
+		}
+	},
+
+	home: {
+		meta: {
+			title: 'Vela Wallet — An Ethereum wallet you actually own',
+			description:
+				'An open-source, self-hostable Ethereum wallet for ETH & ERC-20s. Sign with a passkey — no seed phrase, no hardware key, no lock-in. You pay for convenience, not access.',
+			ogTitle: 'Vela Wallet — An Ethereum wallet you actually own',
+			ogDescription:
+				'Open-source, self-hostable wallet for ETH & ERC-20s. Passkey signing, no seed phrase, no lock-in. Compile it yourself if you want to.',
+			/** schema.org Organization description (FR-024). */
+			organization:
+				'An open-source, self-hostable Ethereum wallet for ETH and ERC-20 tokens. Sign with a passkey — no seed phrase, no hardware key, no lock-in.'
+		},
+
+		hero: {
+			/**
+			 * Founder-approved. The headline is verbatim from
+			 * specs/059/approved-copy.md; the subtitle was cut down to its first
+			 * sentence on 2026-09-15 — the rest of it ("open source and
+			 * self-hostable… even if we disappear") became a fact on the right,
+			 * where it can be a hook instead of a clause.
+			 *
+			 * Rewritten 2026-09-16 into two beats: WHERE the signing happens, then
+			 * what we never get. "Never sees" was a claim about our conduct;
+			 * "never receives" is a claim about where the key is, which is the one
+			 * we can actually stand behind — and the device is the half a reader
+			 * checks first. All fifteen locales were realigned to it the same day
+			 * (reviews/single-string.md).
+			 */
+			headline: 'An Ethereum wallet you actually own',
+			subtitle: 'Signing happens on your device. Vela never receives your passkey.',
+			ctaCreate: 'Getting started',
+			ctaCode: 'Read the code',
+			/**
+			 * Four hooks. Written for a reader who can check them, because that is
+			 * who lands here — and each one links to a page that exists to prove
+			 * that single claim rather than to a doc that mentions it in passing.
+			 *
+			 *   1. The differentiator. "No seed phrase" is table stakes for ANY
+			 *      passkey wallet; an unmodified, audited, standard account
+			 *      contract underneath is not.
+			 *   2. The real answer to "what if I lose my phone" — not "it syncs",
+			 *      which is a property of the OS and can be switched off, but up
+			 *      to seven signers fixed at creation, hardware keys included.
+			 *   3. Bybit, because it is the case that proves the point: the Safe
+			 *      contracts held, the INTERFACE lied, and the hardware wallets
+			 *      signed anyway.
+			 *   4. The one line no wallet in the comparison below can copy.
+			 *
+			 * Dropped, and why: "no seed phrase" (table stakes, sells the
+			 * category not the product); "one address, every chain" (the networks
+			 * have their own section now); "no one can freeze your money, not even
+			 * us" (false — a stablecoin issuer can freeze any address, in any
+			 * wallet; the accurate version of that claim lives in the whitepaper
+			 * and the trade-offs section, not in a hook).
+			 *
+			 * Rewritten 2026-09-16: all four terms became plain statements of
+			 * fact. They had drifted into four different voices — a noun phrase, a
+			 * piece of advice ("Don't bet the wallet on one device"), two
+			 * fragments, and a conditional — which made the column read as a
+			 * slogan wall. A claim a reader is invited to CHECK has to be stated,
+			 * not performed; #3 also picked up the hedge it always needed, since
+			 * "isn't necessarily" is the true version and "is another" is not.
+			 */
+			facts: [
+				{
+					term: 'Your account is an unmodified Safe v1.4.1.',
+					link: "Your account is Safe's contract, not one of ours"
+				},
+				{
+					term: 'Your wallet can have more than one signing key.',
+					link: 'Up to seven keys, set at creation — hardware keys included'
+				},
+				{
+					term: 'What you see on screen isn’t necessarily what gets signed.',
+					link: 'How Bybit lost $1.5B, and the path we close'
+				},
+				{
+					term: 'Access to your wallet doesn’t depend on Vela staying online.',
+					link: 'Self-host the app, the relay and every backend service'
+				}
+			]
+		},
+
+		/**
+		 * The four hooks above get a screen of their own, and a screen needs to
+		 * say what it is. One line, and deliberately not a heading: the claims are
+		 * the loud part, this is the caption under the exhibit.
+		 *
+		 * Rewritten 2026-09-16. It used to count the rows ("Four things worth
+		 * checking…") — which the numbers already do — and to hedge behind "a
+		 * wallet", as if the four claims were about wallets in general. They are
+		 * about this one. What the line adds now is the moment: before the
+		 * deposit, while walking away is still free. No full stop; it is a
+		 * caption, not a sentence.
+		 */
+		facts: {
+			lede: 'Before you put assets in Vela'
+		},
+
+		/**
+		 * The on-chain wallet counter, rendered in the hero as a stamped seal.
+		 * The label is a noun phrase, not a sentence fragment: the number sits
+		 * above it, so "355 wallets created on-chain" reads as two lines, not as
+		 * a sentence cut in half.
+		 */
+		seal: {
+			label: 'wallets created on-chain',
+			loading: 'Loading wallet count',
+			verify: 'Every wallet is on-chain — see the registry'
+		},
+
+		/**
+		 * The short version. The essay that used to live here — twelve words, what
+		 * passkeys change, what we gave up — is now /docs/why-vela, because a
+		 * landing page is not where somebody reads nine paragraphs. What stays is
+		 * the part that answers "why does this exist and not just Base Account".
+		 *
+		 * p2 rewritten 2026-09-16. It was two fragments — "Same passkey sign-in.
+		 * None of the lock-in." — which read as a spec line where the paragraph
+		 * wants a sentence, and "none of the lock-in" claimed a result rather than
+		 * the work: what we actually did was keep the sign-in and then make sure
+		 * the wallet does not need us.
+		 */
+		why: {
+			heading: 'Why we built it',
+			p1: 'We used <a href="https://account.base.app" target="_blank" rel="noopener">Base Account</a> every day and liked it. Then we hit the walls: a recovery key generated in a browser you just have to trust, no custom networks, nothing you can host yourself — and if the service goes away, the wallet goes with it.',
+			p2: 'Vela is the version we were willing to keep money in. We kept passkey signing, but made sure the wallet doesn’t depend on us.',
+			more: 'The long version — where are you supposed to keep twelve words?'
+		},
+
+		/**
+		 * Immediately after the pitch, on purpose. Every one of these is a reason
+		 * somebody should NOT use Vela today, written before they deposit rather
+		 * than discovered after.
+		 *
+		 * items[0] cut from four paragraphs to three on 2026-09-16. What went was
+		 * the paragraph that explained at length that the fee shown is the fee
+		 * charged; "fixed when you sign" says it in four words, and a trade-off
+		 * that spends a quarter of itself on its own defence stops reading as a
+		 * trade-off. Nothing that costs the reader money was dropped: it still
+		 * says the gas is higher, that we take a service fee on top of the
+		 * on-chain cost, and that you can leave.
+		 */
+		tradeoffs: {
+			heading: 'The trade-offs, up front',
+			lede: 'Three reasons not to use Vela — while your money is still somewhere else.',
+			items: [
+				{
+					title: 'Every transaction pays an extra relay service fee',
+					body: 'Vela transactions verify passkey signatures on-chain and execute through ERC-4337, so they generally use more gas than ordinary transfers.\n\nBy default, the relayer pays the gas and submits the transaction. The fee includes the on-chain cost and a relay service fee, and is fixed when you sign.\n\nYou can switch relayers in settings or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>.'
+				},
+				{
+					title: 'Every key is a way into your wallet',
+					body: 'You can add multiple keys when creating your wallet\n\nVela is 1-of-n: any authorized key can spend from the wallet on its own. Adding another key gives you another way to recover access — and another entry point you need to protect.'
+				},
+				{
+					title: 'You are relying on audited Safe contracts — and an audit is not a guarantee',
+					body: 'Safe v1.4.1 and the WebAuthn module have both undergone third-party audits. We use the publicly released versions without modifying the contract code.\n\nAudits can help identify security issues, but they are not a guarantee of security and do not mean that every potential vulnerability has been found.'
+				}
+			],
+			close: 'If one of those three is unacceptable to you, Vela is not for you yet.'
+		},
+
+		compare: {
+			heading: 'How Vela compares',
+			/**
+			 * A heading and twelve rows. Nothing else, on purpose (2026-09-16).
+			 *
+			 * There used to be a `desc` above the table and a five-paragraph `note`
+			 * below it summing up what each of the three wallets is good at. Both
+			 * are gone: a reader who has just read twelve rows does not need to be
+			 * told what they say, and prose that explains a table it sits next to
+			 * reads as filler however carefully it is written.
+			 *
+			 * The rows carry the comparison. If one of them is unclear, the fix is
+			 * that row — not a paragraph around it, which would also mean fifteen
+			 * translations to keep true as rows change.
+			 */
+			rows: [
+				{
+					feature: 'Account type',
+					vela: '<a href="/docs/account-contract">Safe v1.4.1 smart account</a>',
+					metamask: 'EOA',
+					base: 'Coinbase smart account'
+				},
+				{
+					feature: 'Signing key',
+					vela: 'Passkey',
+					metamask: 'The private key behind a seed phrase; hardware wallets supported',
+					base: 'Passkey'
+				},
+				{
+					feature: 'Transaction gas',
+					vela: "ERC-4337 overhead, plus the relay's service fee",
+					metamask: "A plain EOA transaction's gas",
+					base: 'ERC-4337 overhead'
+				},
+				{
+					feature: 'Sponsored gas',
+					vela: 'Not offered',
+					metamask: 'Not offered',
+					base: 'Sponsored where supported'
+				},
+				{
+					feature: 'Custom networks',
+					vela: "Any EVM network that meets Vela's requirements; you can deploy the contracts yourself",
+					metamask: 'Custom EVM networks and RPCs',
+					base: 'A narrower range of networks'
+				},
+				{
+					feature: 'Losing one key',
+					vela: 'Sign with another key you added or synced',
+					metamask: 'Restore from the seed phrase',
+					base: 'Sign with another key you added or synced'
+				},
+				{
+					feature: 'Batched transactions',
+					vela: 'Supported',
+					metamask: 'Depends on account capabilities \u2014 EIP-7702 and the like',
+					base: 'Supported'
+				},
+				{
+					feature: 'Decoded before signing',
+					vela: 'Supported',
+					metamask: 'Supported',
+					base: 'Supported'
+				},
+				{
+					feature: 'An extra check',
+					vela: 'An independent, self-hosted page or extension',
+					metamask: 'Third-party risk detection',
+					base: '\u2014'
+				},
+				{
+					feature: 'Full self-hosting',
+					vela: 'App, relay and backend services, all runnable by you',
+					metamask: 'Client and RPC are yours to choose or run',
+					base: 'Not available'
+				},
+				{
+					feature: 'Open source',
+					vela: '<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener">App, relay and backend services</a>',
+					metamask: 'The wallet client',
+					base: 'SDK; some account services are not open'
+				},
+				{
+					feature: 'Maturity',
+					vela: 'New, few users',
+					metamask: 'Years in the market, a large user base',
+					base: 'Maintained by Coinbase'
+				}
+			]
+		},
+
+		/**
+		 * Three cards, and each one is now a title and a price. The paragraph
+		 * under each price went on 2026-09-16 with the rest of the landing page's
+		 * prose: "Open it, prove who you are, and that's it" explained a price of
+		 * "Free", which the price had already said.
+		 *
+		 * Two things went with them and are flagged, not replaced: the link to the
+		 * GitHub releases page (the hero's "view the code" button still goes to
+		 * the repo, but nothing on the site now points at the builds), and the
+		 * promise that there is never a subscription — a claim the site no longer
+		 * makes anywhere, including the docs. If either matters, it belongs in the
+		 * card's price line or in a docs page, not in a paragraph restored here.
+		 */
+		pricing: {
+			heading: 'Free and open. Pay only if you want to.',
+			intro: 'You pay for convenience, not for access.',
+			cards: [
+				{
+					title: 'Web wallet & Chrome extension',
+					price: 'Free'
+				},
+				{
+					title: 'Desktop & mobile apps',
+					price: 'Free from source'
+				},
+				{
+					title: 'From the app stores',
+					price: 'One-time purchase'
+				}
+			]
+		},
+
+		networks: {
+			heading: '12 networks built in. Add your own',
+			body: 'Your wallet has the same address on every network. When you add another EVM chain, Vela checks for the required RIP-7212, Safe, and ERC-4337 support. If the required contracts are missing, you can deploy them with the <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">chain setup tool</a>.',
+			link: 'Networks & fees, in detail'
+		},
+
+		faq: {
+			/**
+			 * Seven questions, down from eleven on 2026-09-16, and reordered so the
+			 * section answers what is LEFT rather than repeating the page above it.
+			 * Four went because the page had already answered them: seed phrase /
+			 * extension / hardware wallet (the hero), which chains and tokens (the
+			 * networks section), what it costs (the first trade-off plus the pricing
+			 * cards), whether the code is audited (the third trade-off). A fifth —
+			 * "can I add a second key?" — dissolved into 1, 3 and 5, which is where a
+			 * reader actually needs the rule that the key set is fixed at creation.
+			 *
+			 * The order widens by scope: what I have to do (1), what I can do with it
+			 * (2), the three ways it goes wrong — the device (3), my own hand (4), the
+			 * platform account behind it (5) — and then the two questions about us:
+			 * the company that could misbehave (6), and the company that could
+			 * disappear (7).
+			 *
+			 * Two paragraphs per answer, blank-line separated as in `tradeoffs`, and
+			 * no links: each of these is a complete answer, not a doorway. Two stale
+			 * claims died with the old list — the dApp answer sent people to
+			 * WalletPair, which the wallet no longer supports at all, and the shutdown answer
+			 * pointed at a "recovery extension" deleted in spec 039. What replaces
+			 * them is what ships: the provider the apps and the extension inject, and
+			 * `app-web/clearsigning`, whose relying party is still getvela.app.
+			 */
+			heading: 'FAQ',
+			items: [
+				{
+					q: 'What do I need to create a wallet?',
+					a: 'A device with Face ID or fingerprint unlock, or a USB/NFC security key. No seed phrase or starting balance required.\n\nAdd all the keys you want when creating the wallet. You cannot add more later.'
+				},
+				{
+					q: 'Can I use Vela with dApps?',
+					a: 'Yes. Vela injects the wallet directly into dApps, just like other browser wallets.\n\nThis works in the iOS, Android, and desktop apps, and in the Vela browser extension.'
+				},
+				{
+					q: 'What if I lose my phone?',
+					a: 'If your passkey is synced with iCloud Keychain or Google Password Manager, you can recover it on a new device and keep using the same wallet.\n\nIf it was not synced, you will need another key you added when creating the wallet.'
+				},
+				{
+					q: 'What if I delete my passkey?',
+					a: 'That key is permanently lost. If it was your only key, you will lose access to the wallet.'
+				},
+				{
+					q: 'What if my Apple or Google account is compromised?',
+					a: 'If someone gains access to your synced passkeys, they may be able to access your wallet.\n\nIf you do not want to rely on Apple or Google, use a USB/NFC security key instead.'
+				},
+				{
+					q: 'What can Vela do to my money, and what does it know about me?',
+					a: 'Vela cannot move or freeze your funds. Only your keys control the wallet.\n\nNo email or Vela account is required. Your public key, wallet address, and wallet name are public on-chain. Token issuers may still blocklist addresses.'
+				},
+				{
+					q: 'What if Vela shuts down or getvela.app goes offline?',
+					a: 'Your wallet stays on-chain and does not depend on Vela\u2019s servers. The apps and backend services are open source and can be run independently.\n\nIf getvela.app goes offline, sign from a browser: the Vela extension, or the dependency-free clear-signing extension. Your existing keys work in both \u2014 the passkey on this device, a USB security key, or a nearby phone reached by QR code.'
+				}
+			]
+		}
+	},
+
+	about: {
+		meta: {
+			title: 'About',
+			description:
+				'The team and mission behind Vela Wallet — a self-custodial, open-source wallet with no seed phrase, built in the open.',
+			/** schema.org AboutPage name. */
+			pageName: 'About Vela Wallet'
+		},
+		eyebrow: 'About',
+		heading: 'Who builds Vela.',
+		lede: 'Vela is built in the open — the wallet, the smart contracts, and this very site. No faceless company behind it: just real code you can read, and a real person you can reach.',
+		team: {
+			/** The person's name is a proper noun and stays in the component. */
+			role: 'Founder & Engineer',
+			bio: 'Builds Vela end to end — the wallet, the contracts, and this site. Writing about the process as it happens.'
+		},
+		valuesHeading: 'What we believe',
+		values: [
+			{
+				title: 'Self-custody, for real',
+				body: 'Your keys, your coins — not a slogan but the architecture. We cannot move, freeze, or recover your funds, and we built it that way on purpose.'
+			},
+			{
+				title: 'No seed phrases',
+				body: 'The biggest cause of lost crypto is a string of words people were told to guard perfectly. We replaced it with a passkey: your face or fingerprint.'
+			},
+			{
+				title: 'Open source',
+				body: 'The wallet is public on GitHub. Trust should be verifiable, not asked for. Read the code, or follow along as we build it in the open.'
+			},
+			{
+				title: 'Honest about trade-offs',
+				body: "Every design choice gives something up. We write down what, and why — in the docs and on the blog — instead of pretending there's no cost."
+			}
+		]
+	},
+
+	roadmap: {
+		meta: {
+			title: 'Roadmap — Vela Wallet',
+			description:
+				"What Vela has shipped since April 2026 and what's coming next — built in the open. Directions, not deadlines."
+		},
+		heading: 'Roadmap',
+		lede: 'Vela has shipped continuously since April 2026, in the open. Here\'s the trail so far and where it\'s headed — directions, not deadlines. Want something on it? <a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener">Open an issue</a>.',
+		upcomingHeading: 'Up next',
+		shippedHeading: 'Shipped',
+		statusLabels: {
+			now: 'In progress',
+			next: 'Next',
+			later: 'Exploring'
+		},
+		upcoming: [
+			{
+				title: 'See every coin you receive',
+				body: 'A plain native-coin deposit — or coins that arrive through an internal call (an exchange withdrawal, a router, a multisig) — emits no on-chain log, so it can\u2019t show in your activity on most networks today. We\u2019re building a transfer service that traces blocks to surface these, so every deposit appears, on every chain.'
+			},
+			{
+				title: 'Wider clear-signing coverage',
+				body: 'More contracts and chains shown as human-readable intent, so fewer transactions fall back to blind signing.'
+			},
+			{
+				title: 'Native iOS & Android apps',
+				body: 'Vela runs on the web today; the mobile builds share the same code and are in real-device testing ahead of an App Store and Google Play release.'
+			},
+			{
+				title: 'Sync across all your devices',
+				body: 'On iOS and Android your accounts and networks already follow you through your platform\u2019s backup; on the web they stay in the browser. Next: your language, currency and formatting, plus one-tap restore of your whole setup on a new device — and a saved address book so you stop re-pasting addresses.'
+			},
+			{
+				title: 'Reach further',
+				body: 'DApp Connect from the desktop without your phone, more EVM networks (including a signing path for chains without the P-256 precompile), and an independent security audit of Vela\u2019s Safe + WebAuthn integration.'
+			}
+		],
+		shipped: [
+			{
+				title: 'Localization & everyday polish',
+				body: 'Multi-language support with instant switching (Russian and Italian added; 15 languages today), local currency and locale-aware formatting, a dynamic amount display, branded pull-to-refresh, pending-until-confirmed sends, and one-tap in-app feedback.'
+			},
+			{
+				title: 'Payment-first home',
+				body: 'The home screen rebuilt around your activity and balances.'
+			},
+			{
+				title: 'Clear Signing (ERC-7730)',
+				body: 'Transactions show what they actually do — amount, recipient, intent — in plain language instead of raw hex, with a preview harness and tests.'
+			},
+			{
+				title: 'dApp connect in the browser',
+				body: 'The wallet appears in the page like any other browser wallet — through the Vela extension, and through the browser built into the desktop, iOS and Android apps.'
+			},
+			{
+				title: 'dApp signing flow',
+				body: 'Connection infrastructure and the signing-request experience.'
+			},
+			{
+				title: 'The core wallet experience',
+				body: 'A real design system, gas-tier selection and a redesigned confirm screen, a fullscreen QR scanner, and rebuilt receive, token, add-token and deposit screens.'
+			},
+			{
+				title: 'Vela is born',
+				body: 'The wallet launches on the web, from a single codebase that also builds for iOS and Android — Safe smart accounts (ERC-4337), passkey sign-in, and no seed phrase, from day one.'
+			}
+		]
+	},
+
+	getStarted: {
+		meta: {
+			title: 'Get Vela',
+			description:
+				'Vela runs in your browser today, with desktop, mobile and a browser extension built from the same code. Pick the one you want.'
+		},
+		heading: 'Get Vela',
+		lede: 'One wallet, one address, built from one codebase. Start in your browser — nothing to install — or take the same wallet to your desktop, your phone, or your browser toolbar.',
+		recommended: 'Recommended',
+		availableNow: 'Available now',
+		comingSoon: 'Coming soon',
+		githubCta: 'Download from GitHub Releases',
+		platforms: {
+			web: {
+				title: 'Web',
+				blurb:
+					'Nothing to install and nothing to update. Open it, authenticate with your passkey, and your wallet is there — on any device with a recent browser.',
+				action: 'Open the web wallet'
+			},
+			desktop: {
+				title: 'Desktop',
+				systems: 'macOS · Windows · Linux',
+				blurb:
+					'A native app for when the wallet is something you keep open. Same address, same passkey, same chains.',
+				stores: 'Mac App Store · Microsoft Store'
+			},
+			mobile: {
+				title: 'Mobile',
+				systems: 'iOS · Android',
+				blurb:
+					'Sign with Face ID or a fingerprint on the device your passkey already lives on. The builds are in real-device testing.',
+				stores: 'App Store · Google Play'
+			},
+			extension: {
+				title: 'Browser extension',
+				systems: 'Chrome · Edge · Brave',
+				blurb:
+					'Puts the wallet in your toolbar and lets dApps talk to it directly — no pairing step, no second device.',
+				stores: 'Chrome Web Store'
+			}
+		},
+		/**
+		 * The honest version of "please buy it from the store". A store download
+		 * is paid and it is how the project is funded; building from source is
+		 * free and always will be. Saying both is the same posture the pricing
+		 * section already takes — you pay for convenience, not access.
+		 */
+		fundingNote:
+			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. Everything is open source, so you can always build it yourself instead — same app, no charge.',
+		storeNote: 'Not on the stores yet. Until then, every build is on GitHub.'
+	}
+} as const;
+
+/** The shape of a complete catalog. Translations are checked against this. */
+export type Messages = typeof en;
+
+/** A translation may be partial; completeness is evaluated per page namespace. */
+export type PartialMessages = DeepPartial<Messages>;
+
+type DeepPartial<T> = T extends readonly (infer U)[]
+	? readonly DeepPartial<U>[]
+	: T extends object
+		? { [K in keyof T]?: DeepPartial<T[K]> }
+		: T;
+
+export default en;
