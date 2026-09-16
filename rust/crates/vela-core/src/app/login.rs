@@ -141,6 +141,11 @@ pub struct Model {
     observed_at: String,
     /// The account about to be persisted.
     pending: Option<Account>,
+    /// Every account this device already stores, kept from the credential
+    /// match so the ADDRESS match below can still see it. A wallet is its
+    /// address, and the credential check alone cannot say "this wallet is
+    /// already here" — see [`begin_save`].
+    known: Vec<Account>,
     /// Candidate public keys from the first signature still to be checked
     /// against the registry (`04‖x‖y` hex).
     candidates: Vec<String>,
@@ -308,6 +313,7 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             let Some(assertion) = model.assertion.clone() else {
                 return Command::done();
             };
+            model.known = accounts.clone();
             match accounts
                 .iter()
                 .position(|account| account.matches_credential(&assertion.credential_id))
@@ -620,7 +626,43 @@ fn resolve_name_then(
     request(model, ShellOperation::LookupLegacyName { credential_id })
 }
 
+/// Persist the recovered wallet and hand it over — unless this device already
+/// has it, in which case just enter as that account.
+///
+/// **A wallet IS its address**, and the credential match above cannot see
+/// that. The address derives from the wallet's WHOLE key set, so signing in
+/// with a second passkey of a multi-key wallet — one the stored record does
+/// not list, which is every record written before that key joined — finds no
+/// credential match, recovers the wallet from the registry, and arrives here
+/// with the SAME address under a different `id`. `SaveAccount` upserts by
+/// `id`, so that used to append: one wallet, twice in the switcher, twice in
+/// every account list, and both entries opening the same Safe. (The pair also
+/// crashed the web's switcher, which keyed its rows by address — issue 214
+/// follow-up, founder-reported 2026-09-16.)
+///
+/// So the existing record wins and stays exactly as it is: it may carry a
+/// name the user chose, and its address — the only thing that decides which
+/// Safe this is — is by definition the same. Entering through `SetWallet`
+/// rather than `AddAccount` is what makes this "sign in", not "add".
 fn begin_save(model: &mut Model, account: Account) -> Command<Effect, Event> {
+    if let Some(active_index) = model
+        .known
+        .iter()
+        .position(|existing| existing.address.eq_ignore_ascii_case(&account.address))
+    {
+        model.pending = None;
+        model.stage = Stage::Completing;
+        let accounts = model.known.clone();
+        return request(
+            model,
+            ShellOperation::CompleteOnboarding {
+                mode: CompletionMode::SetWallet {
+                    accounts,
+                    active_index,
+                },
+            },
+        );
+    }
     model.pending = Some(account.clone());
     model.stage = Stage::Saving;
     request(model, ShellOperation::SaveAccount { account })

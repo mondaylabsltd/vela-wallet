@@ -41,6 +41,13 @@
 //! - ⑧ The route guard is a VIEW derivation ([`SessionView::allowed_route`]):
 //!   the core says what is allowed, the shell decides when and how to
 //!   navigate. `Loading` means "make no redirect judgment yet".
+//! - ⑨ ONE WALLET, ONE ROW. A wallet is its ADDRESS, so an establishment
+//!   whose address the list already holds ACTIVATES that row instead of
+//!   appending a second one, and a restore collapses a pair already on disk
+//!   (with the saved index following its wallet, not its old slot). The
+//!   credential is not the identity: a multi-key wallet signed into with a
+//!   second passkey recovers to the same address under a different credential
+//!   id, which is exactly how devices ended up listing one wallet twice.
 //!
 //! Open question 2 is **decided** (spec `017`), and narrowly: signing out means
 //! *stop being signed in on this device*, not *this device is no longer mine*.
@@ -452,10 +459,23 @@ fn establish(model: &mut Model, mode: CompletionMode) -> Command<SessionEffect, 
     model.loaded_index = None;
     match mode {
         CompletionMode::AddAccount { account } => {
-            // ADD_ACCOUNT verbatim: append, and the new account MUST become
-            // active (invariant ⑥).
-            model.accounts.push(account);
-            model.active_index = model.accounts.len() - 1;
+            // ADD_ACCOUNT, and the new account MUST become active (invariant
+            // ⑥) — but a wallet this device already holds is ACTIVATED, never
+            // appended a second time (invariant ⑨). `login.rs` stops the
+            // common case before the record reaches storage; this is the
+            // machine's own guarantee, so no shell and no future caller can
+            // put one wallet in the list twice by taking another route.
+            let existing = model
+                .accounts
+                .iter()
+                .position(|held| held.address.eq_ignore_ascii_case(&account.address));
+            model.active_index = match existing {
+                Some(index) => index,
+                None => {
+                    model.accounts.push(account);
+                    model.accounts.len() - 1
+                }
+            };
             model.phase = Phase::Active;
             requests(
                 model,
@@ -622,6 +642,42 @@ fn try_finish_restore(model: &mut Model) -> Command<SessionEffect, Event> {
             }
         }
     }
+
+    // Invariant ⑨, applied to what is ALREADY on disk: one wallet, one row.
+    //
+    // Records written before `login.rs` matched on address can hold the same
+    // wallet twice — a multi-key wallet signed into with a second passkey got
+    // a second record under that credential's id. Collapsing them here is
+    // what heals a device that already has the pair; the addresses are only
+    // comparable AFTER the migration above, which is why this sits below it.
+    //
+    // The FIRST record wins, and the saved index follows its wallet rather
+    // than its old slot — dropping a row above it would otherwise silently
+    // select a different account. Storage is left alone on purpose: the
+    // machine names sentences, has no "forget this record" among them, and a
+    // row nothing reads is not worth a new operation on four shells.
+    let mut kept: Vec<Account> = Vec::with_capacity(accounts.len());
+    // NOT pre-clamped: an out-of-range saved index must still land on 0 below
+    // (invariant ③), and clamping it to the last row here would quietly
+    // select a different account instead.
+    let mut moved_index = saved_index;
+    for (slot, account) in accounts.into_iter().enumerate() {
+        let twin = kept
+            .iter()
+            .position(|held: &Account| held.address.eq_ignore_ascii_case(&account.address));
+        match twin {
+            Some(first) => {
+                if slot == moved_index {
+                    moved_index = first;
+                } else if slot < moved_index {
+                    moved_index -= 1;
+                }
+            }
+            None => kept.push(account),
+        }
+    }
+    let accounts = kept;
+    let saved_index = moved_index;
 
     // Invariant ③: clamp the saved index to the valid range.
     let active_index = if saved_index < accounts.len() {
