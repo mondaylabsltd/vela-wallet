@@ -290,6 +290,70 @@ The last two are flagged, not restored: they were the founder's to cut.
 Realigned in all thirteen the same day
 ([reviews/single-string.md](reviews/single-string.md)).
 
+## `home.compare.rows[1]` — the signing-key cells
+
+| locale group | string | approved |
+|---|---|---|
+| `en` and the nine locales that keep the English word | `Passkey` | founder, 2026-09-16 |
+| `zh` | `通行密钥` | founder, 2026-09-16 |
+| `zh-TW` · `zh-HK` · `ja` · `ko` · `tr` | their own term: 密碼金鑰 · 通行密鑰 · パスキー · 패스키 · Geçiş anahtarı | — |
+
+`Passkey or security key` in both the Vela and the Base column became `Passkey`.
+The two cells have always been identical, so the row is a tie before and after.
+
+**Recorded:** the table now mentions hardware security keys nowhere, and no other
+row covers them. Defensible — a credential on a USB/NFC key *is* a passkey — and
+`hero.facts[1]` plus the FAQ still say so in prose. Flagged in case the table was
+meant to carry it.
+
+## `home.compare.desc`, `home.compare.note` and `home.faq.desc` — deleted
+
+Founder, 2026-09-16: neither the standfirst above *How Vela compares* nor the
+five-paragraph note below the table needs to render. The table makes its own case
+row by row; a summary next to it reads as filler.
+
+The FAQ's standfirst went with them — *Roughly in the order people ask them…* —
+for the same reason: eleven visible questions do not need their running order
+explained.
+
+**Standing rule for both sections: heading and content, no prose around it.** If
+a row or a question is unclear, fix the row or the question. Every such paragraph
+is also fifteen translations to keep true as the content changes.
+
+`.section-desc` was removed from the stylesheet with them: these were its only
+two users.
+
+The key is gone from `en.ts` and from all fourteen translation files — the second
+half is not optional, since a translation holding a key the English no longer has
+fails `messages.test.ts` as a stale key. The `<p>` and the compare section's
+spacing were adjusted with it.
+
+**If it ever comes back** it is a new string in fifteen languages, and it has to
+stay true as rows are added — which is the argument for leaving the table to
+speak for itself.
+
+## `home.networks.heading` / `home.networks.body`
+
+| key | `en` | approved |
+|---|---|---|
+| `heading` | `12 networks built in. Add your own` | founder, 2026-09-16 |
+| `body` | `Your wallet has the same address on every network. When you add another EVM chain, Vela checks for the required RIP-7212, Safe, and ERC-4337 support. If the required contracts are missing, you can deploy them with the <a …>chain setup tool</a>.` | founder, 2026-09-16 |
+
+`zh`: `内置 12 条网络，也可以自己添加` / `所有网络使用同一个钱包地址。添加其他 EVM 链时，Vela 会检查所需的
+RIP-7212、Safe 和 ERC-4337 支持；缺少合约时，可以用<a …>链部署工具</a>部署。`
+
+- **The one-address claim moved, it did not go.** The heading used to carry it
+  ("One address on all of them"); the body's first sentence carries it now, and
+  the heading spends its second half on what the reader can *do*.
+- **`RIP-7212` replaces `the RIP-7212 P-256 precompile`.** The spec number is the
+  checkable thing; `P-256 precompile` was the explanation of it. No locale should
+  put the explanation back.
+- **Dropped: "including your own local testnet."** The tool still does it — it is
+  simply no longer advertised on the home page. Recorded, not restored.
+- The three spec names stay verbatim in all fifteen. The link text is now
+  sentence-case (`chain setup tool`), and each locale keeps the tool name it had.
+- `networks.link` was not in scope and is unchanged.
+
 ## `home.hero.headline` in all fifteen — the T058 record
 
 FR-006: **a locale keeps the English headline until its own line is approved.**
@@ -323,3 +387,162 @@ The R7 pass on these lines is in
 Every locale in this table renders its own headline rather than falling back,
 which is the state FR-006 permits but does not require: a locale may serve the
 English line instead, and none currently does.
+
+## `home.signing` — cut in half in the morning, cut entirely by lunch
+
+2026-09-16. The block opened `A passkey signs a hash, not a screen.` and ran to
+twenty paragraphs: the Bybit case, the gap, what today's decoding buys, what it
+cannot buy, the self-hosted signing page, and a three-line aside on when to start
+using it. It was first cut to eight paragraphs, and then **removed from the home
+page entirely** — founder's call, both times the same reason: it is written out
+at greater length in the docs, and a landing page is not where anybody reads an
+essay.
+
+Removed in all fifteen, along with its markup and CSS: `home.signing` no longer
+exists as a key. Nothing was reworded on the way out, so if the block is ever
+restored, git history holds the approved wording of every locale verbatim.
+
+Where each thing it said now lives:
+
+| the block said | still said where |
+|---|---|
+| a passkey signs a hash, not the sentence on screen | `home.hero.facts[2]` — *What you see on screen isn't necessarily what gets signed.* — whose whole row links to `/docs/bybit-attack` |
+| Bybit, February 2025, ~$1.5B | `/docs/bybit-attack`, in full |
+| ERC-7730 decoding, the unlimited-approval rewrite, the blind-sign warning | `/docs/clear-signing` |
+| the self-hosted page and extension, what it does before it signs, when to use it | `/docs/clear-signing-self-host` |
+| "What it cannot stop is Vela itself" — the trust boundary | `/docs/clear-signing-self-host`, *Which copy can sign for your wallet* |
+
+**What the removal costs, flagged not fixed:** the home page no longer links to
+`/docs/clear-signing` or `/docs/clear-signing-self-host` from anywhere. Both are
+still in the docs sidebar, and the compare table still has a *Decoded before
+signing* row and an *An extra check* row that could carry the links in their Vela
+cells the way the account-contract row already does. That is a markup change, not
+a copy change, and was not made.
+
+## `home.pricing.cards[*].body` — the three paragraphs under the prices
+
+Removed in all fifteen on 2026-09-16, same pass, same reason. A card is a title
+and a price; the paragraph under it mostly restated the price — *"Open it, prove
+who you are, and that's it"* under **Free**, *"Same code, open source. Build it
+and install it yourself"* under **Free from source**.
+
+Two claims went with them and were **not** put back anywhere:
+
+| removed | still said where |
+|---|---|
+| the link to `github.com/mondaylabsltd/vela-wallet/releases` | nowhere. The hero's *view the code* button goes to the repo root, and the compare table links the org's repositories; neither points at the builds |
+| "Never a subscription. This is how an independent team funds building Vela in the open." | nowhere on the site, docs included |
+
+Both are flagged for the founder rather than restored: if they matter, the place
+for them is a price line (`One-time purchase, never a subscription`) or a docs
+page — not a paragraph added back under the card.
+
+## `home.faq.items` — eleven questions down to seven
+
+Founder, 2026-09-16, English and `zh` both written by him and approved verbatim.
+The section had eleven questions, several of which answered something the page
+had already answered above them, and two of which were no longer true.
+
+**The rule the new list follows:** a reader arrives at the FAQ having read the
+hero, the trade-offs, the comparison table, the pricing cards and the networks
+section. The questions that belong here are the ones none of those answered.
+
+| # | question | why it is here |
+|---|---|---|
+| 1 | What do I need to create a wallet? | the only irreversible decision — the key set is fixed at creation — lands where a reader is about to make it |
+| 2 | Can I use Vela with dApps? | nothing above the FAQ says how a dApp reaches the wallet |
+| 3 | What if I lose my phone? | the device fails |
+| 4 | What if I delete my passkey? | the owner's own hand fails |
+| 5 | What if my Apple or Google account is compromised? | the platform account behind it fails |
+| 6 | What can Vela do to my money, and what does it know about me? | us, as a party that could misbehave |
+| 7 | What if Vela shuts down or getvela.app goes offline? | us, as a party that could vanish |
+
+The order widens by scope — my hand, my device, my platform account, the company,
+the company's absence — and the two questions about Vela sit together at the end,
+where a reader who has decided they want it asks who they are trusting.
+
+**Cut, and where each answer already lived:**
+
+| cut question | already answered by |
+|---|---|
+| Do I need a seed phrase, an extension, or a hardware wallet? | the hero and `home.hero.facts` |
+| Can I add a second key — another device, or a YubiKey? | `home.hero.facts[1]` and `tradeoffs.items[1]`; the "chosen at creation" rule is now inside FAQ 1, 3 and 5 |
+| What does it cost to use? | `tradeoffs.items[0]` and the pricing cards |
+| Which chains and tokens does it hold? | the networks section, directly above the FAQ |
+| Has the code been audited? | `tradeoffs.items[2]`, which links `/docs/security-audits` |
+
+**Two answers were not cut but wrong, and that is why they are gone:**
+
+- *Can I use it with dApps?* told the reader to pair with the **WalletPair**
+  extension. WalletPair is not in the codebase any more — it survives only in
+  `specs/` history and in the site's footer and roadmap, both of which are now
+  stale too and are flagged here, not fixed. What actually ships: the browser
+  extension injects an EIP-1193 / EIP-6963 provider into the page
+  (`app-web/vela-wallet/extension/`), and the desktop, iOS and Android apps open
+  dApps in a browser of their own.
+- *What happens if Vela shuts down?* offered "the open-source recovery extension"
+  as the way to use an existing passkey elsewhere. That extension was deleted in
+  spec [039](../039-retire-expo-tree/spec.md). The replacement is real and is
+  documented: `app-web/clearsigning` loaded as a Chrome extension, whose relying
+  party stays `getvela.app`, so an existing key signs in code the owner read.
+
+**Structural notes:**
+
+- Every answer is **two beats separated by a blank line** except 4, which is one.
+  The component splits on `\n\n` like `tradeoffs`; `messages.test.ts` holds every
+  locale to the same paragraph count.
+- **No links at all.** The old answers carried seven. Each of these is a complete
+  answer rather than a doorway, and the docs they used to point at are all in the
+  docs sidebar. If a link comes back it is fifteen files, so it should come back
+  for a reason.
+- The `freeze` claim survives here in its accurate form: Vela cannot freeze your
+  funds, **and** a token issuer can still blocklist an address. The old answer
+  said the first half only.
+
+**`zh` says 通行密钥, not `passkey`.** The founder's own draft wrote `passkey`
+bare; asked about it the same day, he chose the file's existing term, so FAQ 3, 4
+and 5 read 通行密钥 like every other `zh` string. The English keeps `passkey`,
+which is the word English-language readers use.
+
+## `home.faq.items[6]` — the way out, corrected
+
+Founder, 2026-09-16, after the first version shipped. The answer had claimed that
+**existing passkeys keep working in the iOS, Android and desktop apps** if the
+domain goes dark. An installed app does keep working, but Apple and Google fetch
+the app–domain association from `getvela.app`, so a fresh install on a new device
+after the domain is permanently gone is not something we can promise. The
+promise moved to the two routes that do not depend on it:
+
+| route | why it survives the domain |
+|---|---|
+| the Vela browser extension | a Chrome extension asserts `getvela.app` as its relying party through `host_permissions`, not by fetching anything from the domain |
+| `app-web/clearsigning` as an extension | same rule, and the folder is dependency-free, so what you load is what you read |
+
+And the key itself need not be the platform passkey on the machine in front of
+you: a **USB/NFC security key**, or a **nearby phone reached by QR code** (the
+WebAuthn hybrid transport), signs in either extension. That is the sentence's
+real payload — the escape hatch does not run through an Apple or Google account.
+
+`en`: *If getvela.app goes offline, sign from a browser: the Vela extension, or
+the dependency-free clear-signing extension. Your existing keys work in both —
+the passkey on this device, a USB security key, or a nearby phone reached by QR
+code.*
+
+Each locale names the clear-signing extension with its own docs-sidebar term
+(`de` Klartext-Signatur, `fr` signature lisible, `ja` クリア署名, `zh` 清晰签名 …)
+rather than transliterating the English.
+
+## WalletPair — removed from the site
+
+Founder, 2026-09-16: **the wallet does not support WalletPair any more**, so the
+site stops pointing at it. Three places carried it:
+
+| where | now |
+|---|---|
+| `home.faq` — "pair your wallet with the WalletPair extension" | replaced by the truthful dApp answer in the seven-question list |
+| `chrome` footer, *Infrastructure* column | link deleted (a proper noun in the component, so no catalog key changed) |
+| `roadmap.shipped[3]` — *WalletPair dApp connect* | rewritten in fifteen locales as **dApp connect in the browser**: *The wallet appears in the page like any other browser wallet — through the Vela extension, and through the browser built into the desktop, iOS and Android apps.* |
+
+The roadmap entry was rewritten rather than deleted because the thing it records
+did ship — it simply shipped as provider injection, not as pairing. Deleting the
+row would have left the site with no mention of dApp connect at all.

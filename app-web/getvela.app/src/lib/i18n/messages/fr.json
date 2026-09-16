@@ -142,31 +142,8 @@
 			],
 			"close": "Si l'un de ces points est rédhibitoire, Vela n'est pas encore fait pour vous."
 		},
-		"signing": {
-			"heading": "Une passkey signe un hash, pas un écran.",
-			"lede": "En février 2025, Bybit a perdu environ 1,5 milliard de dollars. Aucune signature n’a échoué : ce qui a cassé, c’est le lien de confiance entre ce qu’une personne voyait et ce que la machine signait réellement.\n\nLe même écart existe dans les portefeuilles qui signent avec une passkey, Vela compris.\n\nCe que l’appareil signe au bout du compte est un hash. Le texte lisible au-dessus — qui reçoit, combien, ce que ça fait — n’est que la lecture des données de la transaction par le logiciel.\n\nSi le logiciel qui fait cette lecture est altéré, il peut vous montrer A pendant que vous signez B.",
-			"today": {
-				"label": "Aujourd'hui",
-				"title": "Chaque transaction est décodée avant que vous l'approuviez.",
-				"body": "Ce qu’elle fait, combien, et à qui — Vela lit la transaction via les descripteurs <a href=\"/docs/clear-signing\">ERC-7730</a> et la met en langage clair, au lieu de vous laisser avec une suite d’hexadécimal.\n\nUne approbation qui accorderait une autorisation illimitée est réécrite en un montant fini que vous choisissez, et une dernière vérification avant envoi refuse tout ce qui resterait illimité.\n\nQuand un appel ne peut pas être décodé de façon fiable, Vela vous dit qu’il ne sait pas le lire, au lieu d’afficher un résumé rassurant et invérifiable.\n\nCela arrête les erreurs et réduit les chances qu’une dApp hostile vous amène à signer.\n\nCe que cela n’arrête pas, c’est Vela elle-même.\n\nLa transaction et l’aperçu viennent toujours de la même application. Si cette application est altérée, elle peut en principe altérer les deux. C’est la frontière de confiance que nous préférons ne pas escamoter."
-			},
-			"next": {
-				"label": "Faites tourner la vôtre",
-				"title": "Une page de signature que vous hébergez vous-même.",
-				"body": "Une page statique sans aucune dépendance, et une extension Chrome construite depuis le même dossier.\n\nElle ne croit pas le résumé que Vela lui tend. Elle prend la transaction brute, décode elle-même le calldata, et met devant vous ce que la signature va réellement autoriser, avant que votre passkey ne signe.\n\nPas de framework, pas d’outil de build, aucune requête réseau.\n\nL’intérêt n’est pas que notre deuxième copie soit plus sûre. L’intérêt est que la transaction vient d’un endroit, et que la vérification et la signature se passent dans un autre, que vous contrôlez.\n\nChargez-la comme votre propre extension Chrome, ou hébergez la page vous-même. Dès lors, compromettre l’application Vela ou la façon dont elle vous parvient ne suffit plus à falsifier à la fois la transaction et ce que vous voyez avant de signer.\n\nCela n’abolit pas la confiance. Cela sépare en deux une confiance qui tenait à un seul endroit.\n\nDès qu’un compte détient de l’argent dont la perte vous ennuierait, la signature devrait passer par ce chemin — pas de temps en temps, mais à partir de ce moment-là."
-			},
-			"aside": {
-				"title": "Quand commencer à l’utiliser",
-				"items": [
-					"Le jour où le compte commence à détenir de l’argent dont la perte vous ennuierait — et à partir de là, pour chaque signature.",
-					"Pas « quand le montant est élevé » : une petite approbation peut céder de quoi vider le compte.",
-					"C’est une manière de signer, pas une occasion. Signez ainsi tous les jours, sinon le jour où cela compte vous ne changerez pas de méthode d’un coup."
-				]
-			}
-		},
 		"compare": {
 			"heading": "Vela, à côté des autres",
-			"desc": "Trois types de portefeuille : un simple EOA, un smart account d'éditeur, et Vela. Nous utilisons les trois, et aucun n'est meilleur sur tous les points.",
 			"rows": [
 				{
 					"feature": "Type de compte",
@@ -176,9 +153,9 @@
 				},
 				{
 					"feature": "Clé de signature",
-					"vela": "Passkey ou clé de sécurité",
+					"vela": "Passkey",
 					"metamask": "La clé privée derrière une phrase de récupération ; portefeuilles matériels pris en charge",
-					"base": "Passkey ou clé de sécurité"
+					"base": "Passkey"
 				},
 				{
 					"feature": "Gas par transaction",
@@ -240,8 +217,7 @@
 					"metamask": "Des années sur le marché, une large base d'utilisateurs",
 					"base": "Maintenu par Coinbase"
 				}
-			],
-			"note": "Rien de tout cela n'est une attaque contre les deux autres.\n\nLes forces de MetaMask sont la simplicité et l'universalité — et une simple transaction EOA est ce qu'on peut faire de moins cher on-chain.\n\nBase Account demande le moins d'efforts, et là où c'est supporté, le gas n'est pas à votre charge.\n\nVela fait d'autres arbitrages : des passkeys, plusieurs clés de signature indépendantes, et chaque pièce — app, relais, services backend — que vous pouvez faire tourner vous-même.\n\nIl n'est pas meilleur sur chaque ligne. Ce sur quoi il insiste : le contrôle du compte reste chez vous, et le moins de choses possible dépend d'un seul fournisseur."
+			]
 		},
 		"pricing": {
 			"heading": "Gratuit et ouvert. Payez seulement si vous voulez.",
@@ -249,73 +225,53 @@
 			"cards": [
 				{
 					"title": "Portefeuille web et extension Chrome",
-					"price": "Gratuit",
-					"body": "Ouvrez, authentifiez-vous, c’est tout — dans le navigateur comme dans l’extension, les deux gratuits. Ou hébergez la même app vous-même."
+					"price": "Gratuit"
 				},
 				{
 					"title": "Applications bureau et mobile",
-					"price": "Gratuit depuis les sources",
-					"body": "Le même code ouvert. Compilez et installez vous-même — chaque build est sur <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+					"price": "Gratuit depuis les sources"
 				},
 				{
 					"title": "Depuis les stores",
-					"price": "Achat unique",
-					"body": "Jamais d’abonnement. C’est ce qui finance une petite équipe indépendante qui construit à découvert."
+					"price": "Achat unique"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 réseaux intégrés. Une seule adresse sur tous.",
-			"body": "Ajoutez n'importe quelle autre chaîne EVM disposant du précompilé RIP-7212 P-256 et sur laquelle les contrats Safe + ERC-4337 de Vela sont déployés — Vela vérifie avant de vous laisser en ajouter une. L'<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">outil de configuration de chaîne</a> peut les déployer sur une chaîne qui n'a ni l'un ni l'autre, y compris votre propre testnet local.",
+			"heading": "12 réseaux intégrés. Ajoutez le vôtre",
+			"body": "Votre portefeuille a la même adresse sur tous les réseaux. Quand vous ajoutez une autre chaîne EVM, Vela vérifie la prise en charge requise de RIP-7212, Safe et ERC-4337. Si les contrats nécessaires manquent, vous pouvez les déployer avec l'<a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">outil de configuration de chaîne</a>.",
 			"link": "Réseaux et frais, en détail"
 		},
 		"faq": {
 			"heading": "FAQ",
-			"desc": "À peu près dans l'ordre où on nous les pose — en commençant par ce que c'est, en finissant par ce qui se passe si nous disparaissons.",
 			"items": [
 				{
-					"q": "Ai-je besoin d'une phrase de récupération, d'une extension ou d'un portefeuille matériel ?",
-					"a": "D'aucun des trois. Vous créez le portefeuille avec Face ID, une empreinte ou une clé de sécurité, et cette passkey est le signataire. Il n'y a rien à noter, et le portefeuille web tourne dans un navigateur, sans rien installer."
+					"q": "De quoi ai-je besoin pour créer un portefeuille ?",
+					"a": "Un appareil déverrouillé par Face ID ou par empreinte, ou une clé de sécurité USB/NFC. Ni phrase de récupération, ni solde de départ.\n\nAjoutez toutes les clés que vous voulez au moment de créer le portefeuille. Impossible d'en ajouter ensuite."
 				},
 				{
-					"q": "Est-ce vraiment de l'auto-conservation ? Que peut faire Vela de mon argent ?",
-					"a": "Rien. Votre portefeuille est un <a href=\"/docs/security-audits\">compte intelligent Safe</a> que seule votre passkey peut actionner, et la passkey ne quitte jamais votre appareil — Vela envoie un défi et reçoit une signature, jamais une clé. Nous ne pouvons ni déplacer, ni geler, ni restaurer vos fonds. Pas « nous promettons de ne pas le faire » : aucun chemin de code ne le permettrait."
+					"q": "Puis-je utiliser Vela avec des dApps ?",
+					"a": "Oui. Vela place le portefeuille directement dans la dApp, comme n'importe quel autre portefeuille de navigateur.\n\nCela fonctionne dans les apps iOS, Android et bureau, ainsi que dans l'extension Vela pour navigateur."
 				},
 				{
 					"q": "Et si je perds mon téléphone ?",
-					"a": "Si votre passkey se synchronise via le trousseau iCloud ou le gestionnaire de mots de passe Google, connectez-vous sur un nouvel appareil avec le même compte et le portefeuille est là — même adresse, mêmes actifs, mêmes chaînes. Si vous aviez désactivé cette synchronisation, la passkey n'a jamais existé ailleurs que sur l'appareil perdu, et c'est exactement le cas que couvre un second signataire. Détails dans <a href=\"/docs/recovery\">Récupération et connexion</a>."
+					"a": "Si votre passkey est synchronisée avec le trousseau iCloud ou le gestionnaire de mots de passe Google, vous la récupérez sur un nouvel appareil et continuez avec le même portefeuille.\n\nSi elle ne l'était pas, il vous faudra une autre clé — une de celles ajoutées à la création du portefeuille."
 				},
 				{
-					"q": "Puis-je ajouter une deuxième clé — un autre appareil, ou une YubiKey ?",
-					"a": "Oui, et cela en vaut la peine. Un portefeuille peut détenir jusqu'à sept signataires, dont n'importe lequel signe seul : des passkeys sur différents appareils, un téléphone à proximité que vous scannez, ou une clé de sécurité USB/NFC. Une seule contrainte, et elle compte — votre adresse est dérivée de l'ensemble des clés, elles se choisissent donc <strong>à la création du portefeuille</strong>. En ajouter une plus tard donnerait un autre portefeuille à une autre adresse."
-				},
-				{
-					"q": "Et si je supprime la passkey ?",
-					"a": "Cette clé est perdue, et si c'était votre seul signataire, l'accès l'est aussi — pas de phrase de récupération, pas de réinitialisation par le support, pas de porte dérobée, pour personne, nous compris. C'est l'arête la plus vive de cette conception, et la réponse tient dans un second signataire choisi à la création. Si vous faites un jour le ménage dans votre gestionnaire de mots de passe, sachez à quoi sert chaque passkey avant de la retirer."
+					"q": "Et si je supprime ma passkey ?",
+					"a": "Cette clé est perdue définitivement. Si c'était votre seule clé, vous perdez l'accès au portefeuille."
 				},
 				{
 					"q": "Et si mon compte Apple ou Google est compromis ?",
-					"a": "Quelqu'un qui entre dans ce compte et peut déverrouiller un appareil synchronisé peut utiliser la passkey qui s'y trouve. Activez-y l'authentification à deux facteurs et utilisez un mot de passe unique. Si vous préférez que votre portefeuille ne dépende pas du tout de ce compte, créez-le avec une clé de sécurité matérielle comme méthode de signature — ce choix existe dès la première clé, pas seulement pour les suivantes."
+					"a": "Qui accède à vos passkeys synchronisées peut sans doute accéder à votre portefeuille.\n\nSi vous préférez ne pas dépendre d'Apple ni de Google, utilisez plutôt une clé de sécurité USB/NFC."
 				},
 				{
-					"q": "Combien ça coûte à l'usage ?",
-					"a": "Le portefeuille est gratuit et il n'y a pas de jeton. Vous payez le gas réseau depuis votre propre solde, plus les frais du relayeur. La signature par compte intelligent coûte plus de gas qu'un transfert simple — une signature P-256 est vérifiée on-chain et l'appel passe par l'EntryPoint ERC-4337 — et le relayeur qui avance ce gas est payé plus que le gas ne coûte on-chain ; la différence fait tourner le service. Le total est annoncé avant la signature et inscrit dans la transaction que vous signez : ce que vous avez signé est ce qui est facturé. Chaque réseau demande aussi un petit dépôt non remboursable pour activer son compte de relayeur de gas, que Vela prend en charge pour les nouveaux portefeuilles quand c'est possible. Le relayeur est interchangeable dans les réglages, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">faites tourner le vôtre</a>. Détail complet dans <a href=\"/docs/networks-and-fees\">Réseaux et frais</a>."
-				},
-				{
-					"q": "Quelles chaînes et quels jetons peut-il détenir ?",
-					"a": "Les monnaies natives et les ERC-20 sur les douze chaînes intégrées — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Monad, World Chain et Tempo — ainsi que toute chaîne EVM que vous ajoutez vous-même et qui remplit les conditions ci-dessus. Votre adresse est la même sur toutes."
-				},
-				{
-					"q": "Puis-je l'utiliser avec des dApps ?",
-					"a": "Oui. Appairez votre portefeuille avec l'extension <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair</a> et signez pour les dApps de bureau avec votre passkey — avec le même écran de confirmation décodé que partout ailleurs dans le portefeuille."
-				},
-				{
-					"q": "Le code a-t-il été audité ?",
-					"a": "Les contrats, oui : Safe v1.4.1, le module Safe 4337 et le module de signature WebAuthn ont été audités par des tiers, et Vela les déploie sans modification. Le code applicatif de Vela n'a pas été audité de façon indépendante et aucun audit n'est planifié — ce qui en tient lieu aujourd'hui, c'est que tout est <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">public</a>. Quels contrats, quels rapports, quels problèmes connus : <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"faq\">Audits et problèmes connus</a>."
+					"q": "Que peut faire Vela de mon argent, et que sait-elle de moi ?",
+					"a": "Vela ne peut ni déplacer ni geler vos fonds. Seules vos clés commandent le portefeuille.\n\nNi e-mail ni compte Vela. Votre clé publique, l'adresse du portefeuille et le nom que vous lui donnez sont publics on-chain. Les émetteurs de jetons, eux, peuvent toujours mettre une adresse sur liste noire."
 				},
 				{
 					"q": "Que se passe-t-il si Vela ferme, ou si getvela.app tombe ?",
-					"a": "Votre portefeuille est un contrat Safe on-chain et ne dépend pas de nos serveurs. L'app et chaque service backend — données de chaîne, index de passkeys, relayeur — sont open source : vous pouvez faire tourner les vôtres. La seule chose qui demande attention, c'est la passkey : elle est liée au domaine getvela.app, donc la signature passe par le code open source de Vela — votre instance auto-hébergée, ou l'extension open source de récupération qui permet d'utiliser une passkey existante depuis un autre domaine ou depuis localhost."
+					"a": "Votre portefeuille reste on-chain et ne dépend pas des serveurs de Vela. Les apps et les services backend sont open source et peuvent tourner de façon indépendante.\n\nSi getvela.app tombe, signez depuis un navigateur : l'extension Vela, ou l'extension de signature lisible sans dépendances. Vos clés existantes fonctionnent dans les deux — la passkey de cet appareil, une clé de sécurité USB, ou un téléphone connecté par QR code."
 				}
 			]
 		}
@@ -403,8 +359,8 @@
 				"body": "Les transactions montrent ce qu'elles font vraiment — montant, destinataire, intention — en clair plutôt qu'en hexadécimal brut, avec un banc d'essai de prévisualisation et des tests."
 			},
 			{
-				"title": "Connexion dApp par WalletPair",
-				"body": "Appairage chiffré de bout en bout, pour signer depuis votre portefeuille pour les dApps de bureau."
+				"title": "Connexion dApp dans le navigateur",
+				"body": "Le portefeuille apparaît dans la page comme n'importe quel portefeuille de navigateur — via l'extension Vela et via le navigateur intégré aux apps bureau, iOS et Android."
 			},
 			{
 				"title": "Parcours de signature dApp",
@@ -460,9 +416,9 @@
 		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
 	},
 	"_fingerprints": {
-		"home": "3b02495e15fe",
+		"home": "978189838858",
 		"about": "669db59e91a0",
-		"roadmap": "df15b90319f9",
+		"roadmap": "1f9b064b5fbb",
 		"getStarted": "dbbb0da3f5cc"
 	}
 }

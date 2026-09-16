@@ -142,31 +142,8 @@
 			],
 			"close": "Kalau salah satu dari ketiganya tidak bisa Anda terima, Vela belum cocok untuk Anda."
 		},
-		"signing": {
-			"heading": "Passkey menandatangani sebuah hash, bukan layar.",
-			"lede": "Pada Februari 2025, Bybit kehilangan sekitar $1,5 miliar. Tidak ada tanda tangan yang gagal: yang putus adalah kepercayaan antara apa yang dilihat manusia dan apa yang sebenarnya ditandatangani mesin.\n\nCelah yang sama ada di dompet mana pun yang menandatangani dengan passkey, Vela termasuk.\n\nYang akhirnya ditandatangani perangkat adalah sebuah hash. Kalimat manusiawi di atasnya — siapa penerimanya, berapa jumlahnya, apa yang dilakukannya — adalah cara perangkat lunak membaca data transaksi itu.\n\nKalau perangkat lunak yang membaca itu dirusak, ia bisa menunjukkan A sementara Anda menandatangani B.",
-			"today": {
-				"label": "Hari ini",
-				"title": "Setiap transaksi diterjemahkan sebelum Anda menyetujuinya.",
-				"body": "Apa yang dilakukannya, berapa jumlahnya, untuk siapa — Vela membaca transaksi lewat deskriptor <a href=\"/docs/clear-signing\">ERC-7730</a> dan menuliskannya dengan bahasa biasa, alih-alih meninggalkan Anda dengan deretan hex.\n\nPersetujuan yang akan memberi izin tanpa batas ditulis ulang menjadi jumlah terbatas pilihan Anda, dan satu pemeriksaan terakhir sebelum pengiriman menolak apa pun yang masih tanpa batas.\n\nKetika sebuah panggilan tidak bisa diterjemahkan dengan andal, Vela mengatakan bahwa ia tidak bisa membacanya, alih-alih menampilkan ringkasan yang terdengar menenangkan tetapi tidak bisa diverifikasi.\n\nItu menghentikan kekeliruan, dan menurunkan peluang sebuah dApp jahat membujuk Anda menandatangani.\n\nYang tidak bisa dihentikannya adalah Vela sendiri.\n\nTransaksi dan pratinjaunya tetap datang dari aplikasi yang sama. Kalau aplikasi itu dirusak, pada prinsipnya ia bisa merusak keduanya. Itulah batas kepercayaan yang tidak ingin kami pura-pura tidak ada."
-			},
-			"next": {
-				"label": "Jalankan salinan Anda sendiri",
-				"title": "Halaman penanda tangan yang Anda hosting sendiri.",
-				"body": "Sebuah halaman statis tanpa dependensi apa pun, dan sebuah ekstensi Chrome yang dibangun dari folder yang sama.\n\nIa tidak memercayai ringkasan yang disodorkan Vela. Ia mengambil transaksi mentahnya, menerjemahkan ulang calldata-nya sendiri, dan menaruh di depan Anda apa yang sebenarnya akan diizinkan oleh tanda tangan itu, sebelum passkey Anda menandatanganinya.\n\nTanpa framework, tanpa bundler, tanpa satu pun permintaan jaringan.\n\nIntinya bukan bahwa salinan kedua kami lebih aman. Intinya transaksi datang dari satu tempat, sementara pemeriksaan dan tanda tangan terjadi di tempat lain yang Anda kendalikan.\n\nMuat sebagai ekstensi Chrome milik Anda sendiri, atau hosting halamannya sendiri. Dengan begitu, menjebol aplikasi Vela atau jalur pengirimannya ke Anda tidak lagi cukup untuk memalsukan sekaligus transaksinya dan apa yang Anda lihat sebelum menandatangani.\n\nIni tidak menghapus kepercayaan. Ini memecah kepercayaan yang tadinya menumpuk di satu tempat.\n\nBegitu sebuah akun memegang uang yang kehilangannya akan Anda sesali, penandatanganan sebaiknya pindah ke jalur ini — bukan sesekali, melainkan sejak saat itu."
-			},
-			"aside": {
-				"title": "Kapan mulai memakainya",
-				"items": [
-					"Pada hari akun itu mulai memegang uang yang kehilangannya akan Anda sesali — sejak hari itu, untuk setiap tanda tangan.",
-					"Bukan \"kalau jumlahnya besar\": sebuah persetujuan kecil pun bisa menyerahkan cukup izin untuk menguras akun.",
-					"Ini cara menandatangani, bukan acara khusus. Tandatangani seperti ini setiap hari, kalau tidak, pada hari yang menentukan Anda juga tidak akan tiba-tiba berganti cara."
-				]
-			}
-		},
 		"compare": {
 			"heading": "Vela dibandingkan yang lain",
-			"desc": "Tiga jenis dompet: EOA biasa, akun pintar dari sebuah vendor, dan Vela. Kami memakai ketiganya, dan tidak ada satu pun yang unggul di segala hal.",
 			"rows": [
 				{
 					"feature": "Jenis akun",
@@ -176,9 +153,9 @@
 				},
 				{
 					"feature": "Kunci penanda tangan",
-					"vela": "Passkey atau kunci keamanan",
+					"vela": "Passkey",
 					"metamask": "Kunci privat di balik frasa pemulihan; dompet perangkat keras didukung",
-					"base": "Passkey atau kunci keamanan"
+					"base": "Passkey"
 				},
 				{
 					"feature": "Gas transaksi",
@@ -240,8 +217,7 @@
 					"metamask": "Bertahun-tahun di pasar, basis pengguna besar",
 					"base": "Dikelola Coinbase"
 				}
-			],
-			"note": "Tidak ada satu pun di atas yang dimaksudkan menjelekkan dua dompet lainnya.\n\nKekuatan MetaMask adalah kesederhanaan dan keberadaannya di mana-mana — dan transaksi EOA biasa adalah hal termurah yang bisa Anda lakukan on-chain.\n\nBase Account paling tidak merepotkan, dan di tempat yang didukung, gas-nya bisa ditanggung mereka, bukan Anda.\n\nVela memilih rangkaian konsekuensi yang berbeda: passkey, beberapa kunci penanda tangan yang saling independen, dan setiap bagian — aplikasi, relay, layanan pendukung — bisa Anda jalankan sendiri.\n\nIa tidak unggul di setiap baris. Yang ia pegang teguh adalah kendali atas akun tetap ada pada Anda, dan sesedikit mungkin hal yang bergantung pada satu penyedia."
+			]
 		},
 		"pricing": {
 			"heading": "Gratis dan terbuka. Bayar hanya kalau Anda mau.",
@@ -249,73 +225,53 @@
 			"cards": [
 				{
 					"title": "Dompet web & ekstensi Chrome",
-					"price": "Gratis",
-					"body": "Buka, autentikasi, selesai — di browser maupun di ekstensi. Keduanya gratis. Atau hosting sendiri aplikasi yang sama."
+					"price": "Gratis"
 				},
 				{
 					"title": "Aplikasi desktop & seluler",
-					"price": "Gratis kalau dikompilasi sendiri",
-					"body": "Kode yang sama, open source. Build dan pasang sendiri — setiap build ada di <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+					"price": "Gratis kalau dikompilasi sendiri"
 				},
 				{
 					"title": "Dari toko aplikasi",
-					"price": "Sekali beli",
-					"body": "Tidak pernah berlangganan. Begitulah tim kecil independen membiayai pembangunan ini secara terbuka."
+					"price": "Sekali beli"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 jaringan bawaan. Satu alamat di semuanya.",
-			"body": "Tambahkan jaringan EVM lain mana pun yang punya precompile RIP-7212 P-256 dan sudah memasang kontrak Safe + ERC-4337 milik Vela — Vela memeriksanya sebelum mengizinkan Anda menambah. Untuk jaringan yang belum punya keduanya, <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">alat Chain Setup</a> bisa memasangkannya, termasuk di testnet lokal Anda sendiri.",
+			"heading": "12 jaringan bawaan. Tambah sendiri yang lain",
+			"body": "Dompet Anda memakai alamat yang sama di semua jaringan. Saat Anda menambah jaringan EVM lain, Vela memeriksa dukungan RIP-7212, Safe, dan ERC-4337 yang diperlukan. Kalau kontraknya belum ada, Anda bisa memasangnya lewat <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">alat Chain Setup</a>.",
 			"link": "Jaringan dan biaya, selengkapnya"
 		},
 		"faq": {
 			"heading": "Tanya jawab",
-			"desc": "Kurang lebih menurut urutan yang benar-benar orang tanyakan — mulai dari ini apa, berakhir pada apa yang terjadi kalau kami tidak ada lagi.",
 			"items": [
 				{
-					"q": "Apakah saya butuh frasa pemulihan, ekstensi, atau dompet perangkat keras?",
-					"a": "Tidak satu pun dari ketiganya. Anda membuat dompet dengan Face ID, sidik jari, atau kunci keamanan, dan passkey itulah penanda tangannya. Tidak ada yang perlu dicatat, dan dompet web-nya berjalan di browser tanpa perlu memasang apa pun."
+					"q": "Apa yang saya butuhkan untuk membuat dompet?",
+					"a": "Perangkat yang bisa dibuka dengan Face ID atau sidik jari, atau sebuah kunci keamanan USB/NFC. Tanpa frasa pemulihan, tanpa saldo awal.\n\nTambahkan semua kunci yang Anda inginkan saat membuat dompet. Setelah itu tidak bisa menambah lagi."
 				},
 				{
-					"q": "Benarkah ini non-kustodial? Vela bisa berbuat apa atas uang saya?",
-					"a": "Tidak bisa apa-apa. Dompet Anda adalah <a href=\"/docs/security-audits\">akun pintar Safe</a> yang hanya bisa dioperasikan passkey Anda, dan passkey itu tidak pernah meninggalkan perangkat Anda — Vela mengirim tantangan dan menerima tanda tangan, tidak pernah kuncinya. Kami tidak bisa memindahkan, membekukan, atau memulihkan dana Anda. Bukan \"kami berjanji tidak akan\": memang tidak ada jalur kode yang bisa."
+					"q": "Bisakah saya memakai Vela dengan dApp?",
+					"a": "Bisa. Vela menaruh dompet langsung di dalam dApp, sama seperti dompet browser lain.\n\nIni berjalan di aplikasi iOS, Android, dan desktop, serta di ekstensi browser Vela."
 				},
 				{
 					"q": "Bagaimana kalau ponsel saya hilang?",
-					"a": "Kalau passkey Anda tersinkron lewat iCloud Keychain atau Google Password Manager, masuk di perangkat baru dengan akun yang sama dan dompetnya sudah ada di sana — alamat sama, aset sama, jaringan sama. Kalau sinkronisasi itu Anda matikan, passkey-nya hanya pernah ada di perangkat yang hilang, dan yang menolong dalam kasus itu adalah kunci penanda tangan kedua. Rinciannya di <a href=\"/docs/recovery\">Pemulihan &amp; masuk</a>."
+					"a": "Kalau passkey Anda tersinkron dengan iCloud Keychain atau Google Password Manager, Anda memulihkannya di perangkat baru dan tetap memakai dompet yang sama.\n\nKalau tidak tersinkron, Anda perlu kunci lain — kunci yang Anda tambahkan saat membuat dompet."
 				},
 				{
-					"q": "Bisakah saya menambah kunci kedua — perangkat lain, atau YubiKey?",
-					"a": "Bisa, dan sebaiknya begitu. Satu dompet bisa memegang sampai tujuh kunci penanda tangan, dan kunci mana pun bisa menandatangani sendirian: passkey di perangkat berbeda, ponsel di dekat Anda yang dipindai, atau kunci keamanan USB/NFC. Satu hal penting — alamat Anda diturunkan dari keseluruhan set kunci, jadi kunci-kunci itu dipilih <strong>saat Anda membuat dompet</strong>. Menambah belakangan akan menghasilkan dompet lain di alamat lain."
-				},
-				{
-					"q": "Bagaimana kalau saya menghapus passkey-nya?",
-					"a": "Maka kunci itu hilang, dan kalau ia satu-satunya penanda tangan, akses Anda ikut hilang — tanpa frasa pemulihan, tanpa reset lewat dukungan, tanpa pintu belakang, bagi siapa pun termasuk kami. Ini sisi paling tajam dari desainnya, dan jawabannya adalah kunci penanda tangan kedua yang dipilih sejak awal. Kalau suatu saat Anda membereskan pengelola kata sandi, pastikan tahu setiap passkey itu untuk apa sebelum menghapusnya."
+					"q": "Bagaimana kalau saya menghapus passkey saya?",
+					"a": "Kunci itu hilang selamanya. Kalau itu satu-satunya kunci Anda, akses ke dompet ikut hilang."
 				},
 				{
 					"q": "Bagaimana kalau akun Apple atau Google saya diretas?",
-					"a": "Orang yang masuk ke akun itu dan bisa membuka perangkat yang tersinkron dengannya bisa memakai passkey yang tersimpan di sana. Aktifkan autentikasi dua faktor di sana dan pakai kata sandi yang unik. Kalau Anda lebih suka dompet Anda sama sekali tidak bergantung pada akun itu, buat dompetnya dengan kunci keamanan fisik sebagai metode penandatanganan — pilihan itu tersedia untuk kunci pertama, bukan hanya untuk kunci tambahan."
+					"a": "Siapa pun yang bisa menjangkau passkey Anda yang tersinkron bisa saja menjangkau dompet Anda juga.\n\nKalau tidak ingin bergantung pada Apple atau Google, pakai kunci keamanan USB/NFC sebagai gantinya."
 				},
 				{
-					"q": "Berapa biayanya untuk dipakai?",
-					"a": "Dompetnya gratis dan tidak ada token apa pun. Anda membayar gas jaringan dari saldo Anda sendiri, ditambah biaya relayer. Menandatangani dengan akun pintar memakan gas lebih besar daripada transfer biasa — tanda tangan P-256 diverifikasi on-chain dan panggilannya lewat EntryPoint ERC-4337 — dan relayer yang menalangi gas itu menerima lebih besar daripada biaya gas on-chain; selisihnya itulah yang menghidupi layanannya. Totalnya ditampilkan sebelum Anda menandatangani dan ditulis ke dalam transaksi yang Anda tanda tangani, jadi apa yang Anda tanda tangani itulah yang ditagih. Setiap jaringan juga butuh deposit kecil yang tidak bisa dikembalikan untuk mengaktifkan akun relayer gas-nya; Vela menanggungnya untuk dompet baru bila memungkinkan. Relayer-nya bisa diganti di pengaturan, atau <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">jalankan sendiri</a>. Rincian lengkapnya di <a href=\"/docs/networks-and-fees\">Jaringan dan biaya</a>."
-				},
-				{
-					"q": "Rantai dan token apa saja yang bisa disimpan?",
-					"a": "Koin native dan token ERC-20 di dua belas rantai bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Monad, World Chain, dan Tempo — ditambah rantai EVM mana pun yang Anda tambahkan sendiri dan memenuhi syarat di atas. Alamat Anda sama di semuanya."
-				},
-				{
-					"q": "Bisakah saya memakainya dengan dApp?",
-					"a": "Bisa. Pasangkan dompet Anda dengan ekstensi <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair</a> lalu tandatangani untuk dApp di desktop memakai passkey Anda — dengan layar konfirmasi yang sudah diterjemahkan, sama seperti di bagian lain dompet."
-				},
-				{
-					"q": "Apakah kodenya sudah diaudit?",
-					"a": "Kontraknya sudah: Safe v1.4.1, modul Safe 4337, dan modul penanda tangan WebAuthn diaudit pihak ketiga, dan Vela mendeploy-nya tanpa modifikasi. Kode aplikasi Vela sendiri belum diaudit secara independen dan belum ada jadwalnya — yang menggantikannya hari ini adalah semuanya <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">terbuka untuk umum</a>. Kontrak mana, laporan mana, masalah apa saja yang diketahui: <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"faq\">Audit &amp; masalah yang diketahui</a>."
+					"q": "Apa yang bisa Vela lakukan terhadap uang saya, dan apa yang Vela tahu tentang saya?",
+					"a": "Vela tidak bisa memindahkan atau membekukan dana Anda. Hanya kunci Anda yang mengendalikan dompet.\n\nTidak perlu email, tidak perlu akun Vela. Kunci publik, alamat dompet, dan nama dompet Anda terbuka on-chain. Penerbit token tetap bisa memasukkan sebuah alamat ke daftar blokir."
 				},
 				{
 					"q": "Apa yang terjadi kalau Vela tutup, atau getvela.app mati?",
-					"a": "Dompet Anda adalah kontrak Safe di on-chain dan tidak bergantung pada server kami. Aplikasinya dan setiap layanan pendukung — data rantai, indeks passkey, relayer — semuanya open source, jadi Anda bisa menjalankan versi Anda sendiri. Satu hal yang perlu diperhatikan adalah passkey-nya: ia terikat pada domain getvela.app, jadi penandatanganan tetap lewat kode open source milik Vela — instance yang Anda hosting sendiri, atau ekstensi pemulihan open source yang memungkinkan passkey lama dipakai dari domain lain atau dari localhost."
+					"a": "Dompet Anda tetap ada on-chain dan tidak bergantung pada server Vela. Aplikasi dan layanan pendukungnya open source dan bisa dijalankan sendiri.\n\nKalau getvela.app mati, tanda tangani lewat browser: ekstensi Vela, atau ekstensi clear signing yang tanpa dependensi. Kunci yang sudah Anda punya berfungsi di keduanya — passkey di perangkat ini, kunci keamanan USB, atau ponsel yang dihubungkan lewat kode QR."
 				}
 			]
 		}
@@ -403,8 +359,8 @@
 				"body": "Transaksi menampilkan apa yang sebenarnya dilakukannya — jumlah, penerima, maksud — dengan bahasa biasa alih-alih hex mentah, lengkap dengan alat pratinjau dan pengujian."
 			},
 			{
-				"title": "Koneksi dApp lewat WalletPair",
-				"body": "Pemasangan terenkripsi ujung ke ujung agar Anda bisa menandatangani untuk dApp desktop dari dompet Anda."
+				"title": "Koneksi dApp di browser",
+				"body": "Dompet muncul di halaman seperti dompet browser lain — lewat ekstensi Vela, dan lewat browser bawaan di aplikasi desktop, iOS, dan Android."
 			},
 			{
 				"title": "Alur penandatanganan dApp",
@@ -460,9 +416,9 @@
 		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
 	},
 	"_fingerprints": {
-		"home": "3b02495e15fe",
+		"home": "978189838858",
 		"about": "669db59e91a0",
-		"roadmap": "df15b90319f9",
+		"roadmap": "1f9b064b5fbb",
 		"getStarted": "dbbb0da3f5cc"
 	}
 }

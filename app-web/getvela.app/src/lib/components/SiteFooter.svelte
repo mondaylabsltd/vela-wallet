@@ -40,7 +40,6 @@
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.infrastructure}</h3>
-				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>
 				<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
 					>Vela Relay</a
 				>

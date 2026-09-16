@@ -470,3 +470,269 @@ instead of as sentences that wandered into a heading slot.
 Stripped from `items[0].title` and `items[2].title` in all fifteen. `zh` had
 never carried them and did not move — the one locale that had been right about
 this all along. Standing rule: trade-off titles take no terminal punctuation.
+
+## `home.signing` in all fifteen — cut, then removed, 2026-09-16
+
+Two passes in one day, and the second one ate the first.
+
+**The cut.** Twenty paragraphs to eight, by deleting paragraphs and joining the
+survivors — no sentence rewritten, so every locale kept its approved wording.
+Paragraphs merged with a space in the eleven Latin- and Cyrillic-script locales
+and in `ko`, with nothing in `zh`, `zh-TW`, `zh-HK` and `ja`, whose sentences end
+in `。` and take no following space. One deixis had to move: `lede` said *the
+plain language **above it***, pointing at a hash sentence the cut had removed, so
+fourteen locales were changed to say *on screen* in their own idiom.
+
+**The removal.** The founder then cut the section itself. `home.signing` is gone
+from `en.ts` and from all fourteen translation files, along with its markup and
+its CSS; the record of what it said and where that content now lives is in
+[approved-copy.md](../approved-copy.md).
+
+What is worth keeping from the reading pass, because it is the general lesson and
+not about this block: **a deletion pass needs its own review in every language.**
+What breaks is not the translation but the seam — a pronoun or a demonstrative
+whose referent was in a paragraph that is no longer there, which reads perfectly
+well in English review because the reviewer remembers the deleted sentence. One
+was found here (*above it* / `darüber` / 上面), in fourteen files at once.
+
+Technical, at the point of removal: prettier clean, 448 tests, `svelte-check` 0
+errors, `i18n:stamp` re-fingerprinted `home` in all fourteen, `i18n:status`
+reports no stale namespace.
+
+---
+
+## Ninth pass — `home.compare.rows[1].vela` and `.base`
+
+Date: 2026-09-16 · 15 locales × 2 cells, both the same string.
+
+`Passkey or security key` → `Passkey`, in the Vela and the Base column alike
+(they have always held the same value — the row is a tie and stays one).
+
+A table cell is a label, not a sentence, so each locale gives the bare term it
+already uses everywhere else in its own file, capitalised as that locale
+capitalises a label: `Passkey` for the ten that keep the English word, `パスキー`,
+`패스키`, `通行密钥` / `密碼金鑰` / `通行密鑰` for the three Chinese locales that each
+have their own, and `Geçiş anahtarı` for Turkish — capitalised here because it
+stands alone, where the running text has it lowercase mid-sentence.
+
+Nothing to get wrong in the translation. What is worth recording is what the
+shorter cell no longer says: **the comparison table no longer mentions hardware
+security keys at all.** There is no other row that does. It is defensible — a
+credential on a USB/NFC key is a passkey, device-bound rather than synced — and
+`hero.facts[1]` still links to "Up to seven keys, set at creation — hardware keys
+included", with the FAQ naming YubiKey. But if the table is meant to show that
+Vela signs with hardware keys, this row was the only place it showed.
+
+---
+
+## Tenth pass — three standfirsts are deleted
+
+Date: 2026-09-16 · founder's call: the paragraph under "How Vela compares" does
+not need to render. It was `Three kinds of wallet: a plain EOA, a vendor smart
+account, and Vela. We use all three, and none of them is better at everything.`
+
+Deleting a key is not the same job as rewriting one, so, for the record, what it
+touched:
+
+1. **`en.ts`** — the key is gone and a comment stands where it was, saying why,
+   so the next person does not "restore" it as an oversight.
+2. **All fourteen translation files** — mandatory, not tidiness.
+   `messages.test.ts` fails a locale that holds a key English does not have
+   (a *stale key*: the English it translated is gone, so it can never render).
+   Leaving them would have broken the build for fourteen locales.
+3. **The markup** — `<p class="section-desc">` removed from the compare section.
+   `.section-desc` itself stays: the FAQ still uses it.
+4. **The spacing** — `.compare h2` had `margin-bottom: 12px` and relied on the
+   paragraph's own `48px` to stand off the table. The heading now carries that
+   gap itself, or the table would have come up to meet it.
+
+Verified with a production build, not just tests: `npm run build` prerenders all
+fifteen locales clean.
+
+**`home.compare.note` went the same way, minutes later** — five paragraphs under
+the table saying what each of the three wallets is good at and what Vela insists
+on. The founder's reason is the right one and worth keeping: a reader who has
+just read twelve rows does not need to be told what they say, and prose that
+summarises a table it is sitting next to reads as filler however carefully it is
+written. It cost 15 × 5 paragraphs to maintain and said nothing the rows did not.
+
+Same four steps, plus its CSS: `.compare-note` and its three descendant rules
+went with the markup, and `.section-desc` stayed because the FAQ still uses it.
+The section is now a heading and twelve rows.
+
+**`home.faq.desc` went too** — "Roughly in the order people ask them — starting
+with what it is, ending with what happens if we're gone." Same objection, and
+the same answer: a reader looking at eleven questions can see the order for
+himself; being told about it is being managed.
+
+That one took the CSS with it. `.section-desc` had exactly two users, the
+comparison table and the FAQ; with both gone the class was dead, so the base
+rule, its later `margin-bottom` override and the FAQ centring rule were removed
+rather than left as a class no element carries. Both headings — `.compare h2`
+and `.faq h2` — now hold the 48px their paragraphs used to leave above the table
+and the questions.
+
+Three strings, one instinct: **the home page stopped narrating itself.** Each
+was a paragraph telling the reader what the thing next to it was about. The
+table, the questions and the rows say it themselves, and none of the three now
+needs maintaining in fifteen languages.
+
+Nothing was translated in this pass. It is recorded because a deleted string is
+the one change that looks like nothing happened — and because the argument
+against these three applies to the next one somebody proposes.
+
+---
+
+## Eleventh pass — `home.networks.heading` and `home.networks.body`
+
+Date: 2026-09-16 · 15 locales × 2 strings, one inline link in the body.
+
+The heading traded a claim for an invitation — `One address on all of them` →
+`Add your own` — and the claim reappears as the body's first sentence, so nothing
+was lost in the move. The body also stopped explaining RIP-7212 (`the RIP-7212
+P-256 precompile` → `RIP-7212`) and stopped mentioning local testnets.
+
+Locale notes:
+
+- **Headings are short and unpunctuated at the end**, which is now this page's
+  rule. `ko` `12개 네트워크 기본 탑재. 직접 추가도 가능` ends on a noun phrase, the
+  natural Korean heading shape; `ja` 「自分でも追加できます」 keeps `ます` because the
+  heading is a statement in Japanese, where Korean prefers the nominal.
+- **`de` `Füge deine eigenen hinzu`, `es-MX` `Agrega la tuya`, `ru` `Добавьте
+  свою`** — each language picks its own number and gender for "your own"; the
+  English is ambiguous between one and many and every locale had to choose.
+  Singular reads better in all of them: you add a network, not networks.
+- **The three spec names are verbatim everywhere** — `RIP-7212`, `Safe`,
+  `ERC-4337`. `zh`/`zh-TW`/`zh-HK` use the ideographic comma `、` for that list,
+  which is the correct enumeration mark and not the `,` a careless pass leaves.
+- **The link text is sentence-case now**, and that changed one locale's grammar:
+  `ru`'s tool name was sentence-initial (`Инструмент настройки сети`) and is now
+  mid-sentence in the instrumental — `развернуть инструментом настройки сети`.
+  A locale that only lower-cased the first letter would have left it in the
+  nominative, reading as a title dropped into the middle of a clause.
+- `fr` `avec l'<a>outil…` and `it` `con lo <a>strumento…` keep the elision and
+  the article form *outside* the anchor, where they belong: the link text is the
+  tool's name, not the preposition in front of it.
+
+Technical: one paragraph, exactly one `biubiu.tools` anchor per locale, href
+byte-identical; `networks.link` untouched. 189 tests, prettier clean, production
+build prerenders all fifteen, no STALE.
+
+---
+
+## Pass — `home.faq.items`, all seven, in fifteen locales
+
+Date: 2026-09-16 · same method · reference frame **English + `zh`**, both written
+by the founder that day and treated as authoritative: every prior translation of
+the FAQ is superseded, not reconciled.
+
+The English list went from eleven questions to seven and the survivors were
+rewritten shorter, so this is not a wording review of existing strings — thirteen
+locales were written fresh against the new pair. What follows is the call made in
+each, on the axes the method names.
+
+### Accuracy — two claims that must not drift back
+
+Both of the answers this pass replaces were **factually wrong**, not merely long
+(see [approved-copy.md](../approved-copy.md)). A translator working from the old
+files would have carried both forward, so they are stated here as prohibitions:
+
+- No locale may mention **WalletPair**. The dApp answer is: the wallet is injected
+  into the page, and that works in the iOS, Android and desktop apps and in the
+  Vela browser extension.
+- No locale may offer a **recovery extension**. The shutdown answer names the
+  dependency-free Chrome extension, nothing else.
+
+`fr`/`it`/`es-MX`/`pt-BR` also had to resist "extension de récupération"-shaped
+phrasings that read naturally and would have reintroduced the deleted product.
+
+### Naturalness — the verb for *injects*
+
+English *injects the wallet directly into dApps* is developer register, and a
+literal calque is clumsy or faintly medical in most of these languages. Each
+locale took the verb its own wallet ecosystem would use:
+
+| locale | verb | why not the literal one |
+|---|---|---|
+| `de` | `bindet die Wallet direkt in die dApp ein` | *injiziert* is chemistry; *einbinden* is what software does |
+| `fr` | `place le portefeuille directement dans la dApp` | *injecte* exists in dev French but reads as jargon in a FAQ |
+| `it` | `mette il wallet direttamente dentro la dApp` | same |
+| `es-MX` | `pone la wallet directamente dentro de la dApp` | *inyecta* is understood but technical |
+| `pt-BR` | `coloca a carteira direto dentro da dApp` | same |
+| `tr` | `cüzdanı doğrudan dApp'in içine yerleştirir` | *enjekte* is a loan verb nobody writes here |
+| `ja` | `ウォレットを dApp に直接組み込みます` | 注入 is literally injection of fluid |
+| `ko` | `지갑을 dApp 안에 바로 넣어 줍니다` | 주입 reads chemical |
+| `vi` | `đưa ví thẳng vào dApp` | plainer than *tiêm* |
+| `id` | `menaruh dompet langsung di dalam dApp` | *menyuntikkan* is injection-with-a-needle |
+| `ru` | `встраивает кошелёк прямо в dApp` | *внедряет* is the dev word, but *встраивает* is what a reader expects |
+| `zh` / `zh-TW` / `zh-HK` | 注入 / 注入 / 注入 | kept — the founder's own `zh` uses it, and Chinese wallet copy does say 注入 |
+
+### Consistency — each locale's own vocabulary, not each other's
+
+Terminology was taken from each file, not from English:
+
+- **passkey**: `ja` パスキー · `ko` 패스키 · `tr` geçiş anahtarı · `zh` 通行密钥 ·
+  `zh-TW` 密碼金鑰 · `zh-HK` 通行密鑰 · everyone else keeps `passkey`. `zh` was the
+  one open question of this pass — the founder's draft wrote `passkey` bare — and
+  he closed it the same day in favour of the term the rest of the file uses.
+- **security key**: `de` Sicherheitsschlüssel · `fr` clé de sécurité · `es-MX`
+  llave de seguridad · `pt-BR` chave de segurança · `it` chiave di sicurezza ·
+  `ru` ключ безопасности · `tr` güvenlik anahtarı · `id` kunci keamanan · `vi`
+  khóa bảo mật · `zh` 安全钥匙 (the founder's word; 安全密钥 elsewhere in the file) ·
+  `zh-TW`/`zh-HK` 安全金鑰.
+- **device**: `pt-BR` aparelho, `ja` 端末, `ko` 기기, `zh-HK` 機 — each the word its
+  own file already uses, so FAQ 1 and FAQ 3 read like the rest of the page.
+- `zh-HK` is written in spoken Cantonese throughout, as the rest of that file is:
+  加唔到, 攞返出嚟, 入唔返個錢包, 執笠. It is not a transcription of `zh`, and neither
+  is `zh-TW`, which uses 建立/存取權/位址 where `zh` uses 创建/访问权/地址.
+
+### Register — unchanged per locale
+
+`de`/`it`/`es-MX` informal, `fr`/`ru`/`tr`/`id`/`pt-BR` formal, `ja`/`ko`
+です・ます / 합니다, `vi` `bạn`, the three Chinese files plain 你. FAQ questions are
+first-person in every locale ("what do **I** need"), answers second-person, which
+is the shape the English pair set.
+
+### UI fit
+
+Seven `<summary>` rows on a phone: the longest question is `id`'s *Apa yang bisa
+Vela lakukan terhadap uang saya, dan apa yang Vela tahu tentang saya?* at 88
+characters, which wraps to three lines on a 360 px screen and is still the
+shortest faithful form — Indonesian has no shorter possessive. No locale was
+padded to match English length.
+
+### Technical
+
+No locale carries markup: the new English has **no links and no tags**, so
+`href`/tag parity is trivially satisfied and every file was checked for leftovers
+from the old answers. Paragraph counts match the English exactly — 2 2 2 **1** 2
+2 2 — which is the check that catches a translator merging the two beats.
+
+448 unit tests pass, `svelte-check` clean, prettier clean, `i18n:stamp` re-run so
+`home` is fingerprinted in all fourteen (honest here: every one of them was
+retranslated in this pass).
+
+
+### Second cut — item 7 and the WalletPair removal
+
+Same day, after the founder read it back. Two changes, both accuracy:
+
+- **Item 7's second beat was rewritten in all fifteen.** The old line promised
+  that existing passkeys keep working in the native apps; the association file
+  those platforms check is fetched from `getvela.app`, so that promise cannot
+  cover a reinstall after the domain is gone. It now names the two routes that
+  survive the domain — the Vela extension and the dependency-free clear-signing
+  extension — and says the key may be a USB security key or a phone reached by QR
+  code rather than the platform passkey. Every locale took the clear-signing name
+  from its own docs sidebar (`ru` понятная подпись, `vi` ký minh bạch, `id` clear
+  signing, and so on), and "reached by QR code" was written as a connection in
+  each language — `ru` подключённый по QR-коду, `tr` QR kodla bağlanan — never as
+  "a phone you scan", which reverses who scans what.
+- **WalletPair is gone from the site**: the footer link, and `roadmap.shipped[3]`,
+  rewritten in fifteen as *dApp connect in the browser*. `zh-HK` keeps its own
+  register there (`個錢包會好似其他瀏覽器錢包噉出現喺網頁入面`), and `ja`/`ko` keep
+  the middle dot for the platform list (デスクトップ・iOS・Android).
+
+448 tests, `svelte-check` clean, prettier clean on every touched file, dev-server
+render checked in `en`, `zh` and `zh-TW`, and no `walletpair` string left in
+`src/`.

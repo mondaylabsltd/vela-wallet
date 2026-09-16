@@ -23,7 +23,7 @@
  *
  * ## What does NOT belong here
  *
- * Proper nouns. "GitHub", "Telegram", "WalletPair", "MetaMask", "Safe", "Vela
+ * Proper nouns. "GitHub", "Telegram", "MetaMask", "Safe", "Vela
  * Relay", "RSS" are names, not words — they stay in the components where no
  * translator will be tempted to localize them.
  *
@@ -300,60 +300,21 @@ export const en = {
 			close: 'If one of those three is unacceptable to you, Vela is not for you yet.'
 		},
 
-		/**
-		 * The signing story, in two halves that must not be confused.
-		 *
-		 * The correction of 2026-09-15: "Sign what you see" was the wrong claim
-		 * to lead with, because a passkey signs a HASH. The decoded summary above
-		 * it is produced by the same app that built the transaction, so by itself
-		 * it proves nothing — that is precisely the link that broke at Bybit. The
-		 * section now states the gap first, says what today's decoding does and
-		 * does not buy, and puts the self-hosted signing page where it belongs:
-		 * the only version of this that does not ask you to trust us. Its label
-		 * still carries the status (built and tested, not deployed) and is not
-		 * decoration.
-		 */
-		signing: {
-			heading: 'A passkey signs a hash, not a screen.',
-			lede: 'In February 2025, Bybit lost around $1.5 billion. No signature failed: what broke was the trust between what a person saw and what the machine actually signed.\n\nThat same gap exists in wallets that sign with a passkey, Vela included.\n\nWhat the device finally signs is a hash. The plain language above it — who gets it, how much, what it does — is the software\u2019s reading of the transaction data.\n\nIf the software doing the reading is tampered with, it can show you A while you sign B.',
-			today: {
-				label: 'Today',
-				title: 'Every transaction is decoded before you approve it.',
-				body: [
-					'What it does, how much, and to whom — Vela reads the transaction through <a href="/docs/clear-signing">ERC-7730</a> descriptors and puts it in plain language instead of leaving you with a string of hex.',
-					'An approval that would grant an unlimited allowance is rewritten to a finite amount you pick, and a last check before submit refuses any that is still unlimited.',
-					'When a call cannot be decoded reliably, Vela tells you it cannot read it, instead of showing a summary that looks reassuring and cannot be verified.',
-					'That stops mistakes, and it lowers the odds that a hostile dApp talks you into a signature.',
-					'What it cannot stop is Vela itself.',
-					'The transaction and the preview still come from the same app. If that app is tampered with, it can in principle tamper with both. That is the trust boundary we would rather not pretend away.'
-				].join('\n\n')
-			},
-			next: {
-				label: 'Run your own copy',
-				title: 'A signing page you host yourself.',
-				body: [
-					'A zero-dependency static page, and a Chrome extension built from the same folder.',
-					'It does not believe the summary Vela hands it. It takes the raw transaction, decodes the calldata again itself, and puts what the signature will actually authorise in front of you before your passkey signs.',
-					'No framework, no bundler, no network requests.',
-					'The point is not that our second copy is safer. The point is that the transaction comes from one place and the check and the signature happen in another, which you control.',
-					'Load it as a Chrome extension of your own, or host the page yourself. Then compromising the Vela app or the way it reaches you is no longer enough to forge both the transaction and what you see before signing it.',
-					'That does not abolish trust. It splits trust that used to sit in one place.',
-					'The moment an account holds money you would mind losing, signing should move onto that path — not occasionally, but from then on.'
-				].join('\n\n')
-			},
-			aside: {
-				title: 'When to start using it',
-				items: [
-					'The day the account starts holding money you would mind losing — from then on, every signature.',
-					'Not "when the amount is large": a small approval can hand over enough to empty the account.',
-					'It is a way to sign, not an occasion. Sign this way every day, or on the day it matters you will not suddenly switch.'
-				]
-			}
-		},
-
 		compare: {
 			heading: 'How Vela compares',
-			desc: 'Three kinds of wallet: a plain EOA, a vendor smart account, and Vela. We use all three, and none of them is better at everything.',
+			/**
+			 * A heading and twelve rows. Nothing else, on purpose (2026-09-16).
+			 *
+			 * There used to be a `desc` above the table and a five-paragraph `note`
+			 * below it summing up what each of the three wallets is good at. Both
+			 * are gone: a reader who has just read twelve rows does not need to be
+			 * told what they say, and prose that explains a table it sits next to
+			 * reads as filler however carefully it is written.
+			 *
+			 * The rows carry the comparison. If one of them is unclear, the fix is
+			 * that row — not a paragraph around it, which would also mean fifteen
+			 * translations to keep true as rows change.
+			 */
 			rows: [
 				{
 					feature: 'Account type',
@@ -363,9 +324,9 @@ export const en = {
 				},
 				{
 					feature: 'Signing key',
-					vela: 'Passkey or security key',
+					vela: 'Passkey',
 					metamask: 'The private key behind a seed phrase; hardware wallets supported',
-					base: 'Passkey or security key'
+					base: 'Passkey'
 				},
 				{
 					feature: 'Transaction gas',
@@ -427,85 +388,101 @@ export const en = {
 					metamask: 'Years in the market, a large user base',
 					base: 'Maintained by Coinbase'
 				}
-			],
-			note: "None of this is a knock on the other two.\n\nMetaMask's strengths are simplicity and universality \u2014 and a plain EOA transaction is the cheapest thing you can do on-chain.\n\nBase Account is the least trouble, and where it is supported the gas can be on them rather than on you.\n\nVela takes a different set of trade-offs: passkeys, several independent signing keys, and every piece \u2014 app, relay, backend services \u2014 runnable by you.\n\nIt is not better on every row. What it insists on is that control of the account stays with you, and that as little as possible depends on a single provider."
+			]
 		},
 
+		/**
+		 * Three cards, and each one is now a title and a price. The paragraph
+		 * under each price went on 2026-09-16 with the rest of the landing page's
+		 * prose: "Open it, prove who you are, and that's it" explained a price of
+		 * "Free", which the price had already said.
+		 *
+		 * Two things went with them and are flagged, not replaced: the link to the
+		 * GitHub releases page (the hero's "view the code" button still goes to
+		 * the repo, but nothing on the site now points at the builds), and the
+		 * promise that there is never a subscription — a claim the site no longer
+		 * makes anywhere, including the docs. If either matters, it belongs in the
+		 * card's price line or in a docs page, not in a paragraph restored here.
+		 */
 		pricing: {
 			heading: 'Free and open. Pay only if you want to.',
 			intro: 'You pay for convenience, not for access.',
 			cards: [
 				{
 					title: 'Web wallet & Chrome extension',
-					price: 'Free',
-					body: 'Open it, authenticate, done \u2014 in the browser or in the extension. Both free. Or host the same app yourself.'
+					price: 'Free'
 				},
 				{
 					title: 'Desktop & mobile apps',
-					price: 'Free from source',
-					body: 'Same code, open source. Build it and install it yourself \u2014 every build is on <a href="https://github.com/mondaylabsltd/vela-wallet/releases" target="_blank" rel="noopener">GitHub</a>.'
+					price: 'Free from source'
 				},
 				{
 					title: 'From the app stores',
-					price: 'One-time purchase',
-					body: 'Never a subscription. It is how a small independent team funds building this in the open.'
+					price: 'One-time purchase'
 				}
 			]
 		},
 
 		networks: {
-			heading: '12 networks built in. One address on all of them.',
-			body: 'Add any other EVM chain that has the RIP-7212 P-256 precompile and Vela\'s Safe + ERC-4337 contracts deployed — Vela checks before it lets you add one. The <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">Chain Setup tool</a> can deploy them on a chain that has neither, including your own local testnet.',
+			heading: '12 networks built in. Add your own',
+			body: 'Your wallet has the same address on every network. When you add another EVM chain, Vela checks for the required RIP-7212, Safe, and ERC-4337 support. If the required contracts are missing, you can deploy them with the <a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener">chain setup tool</a>.',
 			link: 'Networks & fees, in detail'
 		},
 
 		faq: {
+			/**
+			 * Seven questions, down from eleven on 2026-09-16, and reordered so the
+			 * section answers what is LEFT rather than repeating the page above it.
+			 * Four went because the page had already answered them: seed phrase /
+			 * extension / hardware wallet (the hero), which chains and tokens (the
+			 * networks section), what it costs (the first trade-off plus the pricing
+			 * cards), whether the code is audited (the third trade-off). A fifth —
+			 * "can I add a second key?" — dissolved into 1, 3 and 5, which is where a
+			 * reader actually needs the rule that the key set is fixed at creation.
+			 *
+			 * The order widens by scope: what I have to do (1), what I can do with it
+			 * (2), the three ways it goes wrong — the device (3), my own hand (4), the
+			 * platform account behind it (5) — and then the two questions about us:
+			 * the company that could misbehave (6), and the company that could
+			 * disappear (7).
+			 *
+			 * Two paragraphs per answer, blank-line separated as in `tradeoffs`, and
+			 * no links: each of these is a complete answer, not a doorway. Two stale
+			 * claims died with the old list — the dApp answer sent people to
+			 * WalletPair, which the wallet no longer supports at all, and the shutdown answer
+			 * pointed at a "recovery extension" deleted in spec 039. What replaces
+			 * them is what ships: the provider the apps and the extension inject, and
+			 * `app-web/clearsigning`, whose relying party is still getvela.app.
+			 */
 			heading: 'FAQ',
-			desc: "Roughly in the order people ask them — starting with what it is, ending with what happens if we're gone.",
 			items: [
 				{
-					q: 'Do I need a seed phrase, an extension, or a hardware wallet?',
-					a: 'None of the three. You create the wallet with Face ID, a fingerprint, or a security key, and that passkey is the signer. There is nothing to write down, and the web wallet runs in a browser with nothing to install.'
+					q: 'What do I need to create a wallet?',
+					a: 'A device with Face ID or fingerprint unlock, or a USB/NFC security key. No seed phrase or starting balance required.\n\nAdd all the keys you want when creating the wallet. You cannot add more later.'
 				},
 				{
-					q: 'Is it really self-custodial? What can Vela do to my money?',
-					a: 'Nothing. Your wallet is a <a href="/docs/security-audits">Safe smart account</a> that only your passkey can operate, and the passkey never leaves your device — Vela sends a challenge and gets back a signature, never a key. We cannot move, freeze, or restore your funds. Not "we promise not to": there is no code path that could.'
+					q: 'Can I use Vela with dApps?',
+					a: 'Yes. Vela injects the wallet directly into dApps, just like other browser wallets.\n\nThis works in the iOS, Android, and desktop apps, and in the Vela browser extension.'
 				},
 				{
 					q: 'What if I lose my phone?',
-					a: 'If your passkey syncs through iCloud Keychain or Google Password Manager, sign in on a new device with the same account and the wallet is there — same address, same assets, same chains. If you turned that sync off, the passkey only ever existed on the device you lost, and a second signer is what covers that case. Details in <a href="/docs/recovery">Recovery &amp; sign-in</a>.'
+					a: 'If your passkey is synced with iCloud Keychain or Google Password Manager, you can recover it on a new device and keep using the same wallet.\n\nIf it was not synced, you will need another key you added when creating the wallet.'
 				},
 				{
-					q: 'Can I add a second key — another device, or a YubiKey?',
-					a: 'Yes, and it is worth doing. A wallet can hold up to seven signers, any one of which signs on its own: passkeys on different devices, a nearby phone you scan, or a USB/NFC security key. One catch, and it matters — your address is derived from the full set of keys, so they are chosen <strong>when you create the wallet</strong>. Adding one later would be a different wallet at a different address.'
-				},
-				{
-					q: 'What if I delete the passkey?',
-					a: 'Then that key is gone, and if it was your only signer, so is access — no seed phrase, no support reset, no back door, for anyone including us. This is the sharpest edge in the design, and the answer to it is a second signer chosen at setup. If you ever tidy up your password manager, know what each passkey is for before you remove it.'
+					q: 'What if I delete my passkey?',
+					a: 'That key is permanently lost. If it was your only key, you will lose access to the wallet.'
 				},
 				{
 					q: 'What if my Apple or Google account is compromised?',
-					a: 'Someone who gets into that account and can unlock a device it syncs to can use the passkey it holds. Turn on two-factor authentication there and use a unique password. If you would rather your wallet did not depend on that account at all, create it with a hardware security key as the signing method — that choice is available for the first key, not only for extra ones.'
+					a: 'If someone gains access to your synced passkeys, they may be able to access your wallet.\n\nIf you do not want to rely on Apple or Google, use a USB/NFC security key instead.'
 				},
 				{
-					q: 'What does it cost to use?',
-					a: 'The wallet is free and there is no token. You pay network gas out of your own balance plus the relayer\'s fee. Smart-account signing costs more gas than a plain transfer — a P-256 signature is verified on-chain and the call goes through the ERC-4337 EntryPoint — and the relayer that fronts that gas is paid more than the gas costs on-chain; the difference is what runs the service. The total is quoted before you sign and written into the transaction you sign, so what you signed is what is charged. Each network also needs a small, non-refundable deposit to activate its gas relayer account, which Vela sponsors for new wallets where it can. The relayer is swappable in settings, or <a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener">run your own</a>. Full breakdown in <a href="/docs/networks-and-fees">Networks &amp; fees</a>.'
+					q: 'What can Vela do to my money, and what does it know about me?',
+					a: 'Vela cannot move or freeze your funds. Only your keys control the wallet.\n\nNo email or Vela account is required. Your public key, wallet address, and wallet name are public on-chain. Token issuers may still blocklist addresses.'
 				},
 				{
-					q: 'Which chains and tokens does it hold?',
-					a: 'Native coins and ERC-20s on the twelve built-in chains — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Monad, World Chain and Tempo — plus any EVM chain you add yourself that meets the requirements above. Your address is the same on all of them.'
-				},
-				{
-					q: 'Can I use it with dApps?',
-					a: 'Yes. Pair your wallet with the <a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a> extension and sign for desktop dApps with your passkey — with the same decoded confirmation screen you get everywhere else in the wallet.'
-				},
-				{
-					q: 'Has the code been audited?',
-					a: 'The contracts have: Safe v1.4.1, the Safe 4337 module and the WebAuthn signer module were audited by third parties, and Vela deploys them unmodified. Vela\'s own app code has not been independently audited and no audit is scheduled — what stands in for one today is that all of it is <a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener">public</a>. Which contracts, which reports, which known issues: <a href="/docs/security-audits" data-rybbit-event="audits_open" data-rybbit-prop-location="faq">Audits &amp; known issues</a>.'
-				},
-				{
-					q: 'What happens if Vela shuts down, or getvela.app goes offline?',
-					a: "Your wallet is a Safe contract on-chain and does not depend on our servers. The app and every backend service — chain data, passkey index, relayer — are open source, so you can run your own. The one thing that needs care is the passkey: it is bound to the getvela.app domain, so signing goes through Vela's own open-source code — your self-hosted instance, or the open-source recovery extension that lets an existing passkey be used from another domain or localhost."
+					q: 'What if Vela shuts down or getvela.app goes offline?',
+					a: 'Your wallet stays on-chain and does not depend on Vela\u2019s servers. The apps and backend services are open source and can be run independently.\n\nIf getvela.app goes offline, sign from a browser: the Vela extension, or the dependency-free clear-signing extension. Your existing keys work in both \u2014 the passkey on this device, a USB security key, or a nearby phone reached by QR code.'
 				}
 			]
 		}
@@ -599,8 +576,8 @@ export const en = {
 				body: 'Transactions show what they actually do — amount, recipient, intent — in plain language instead of raw hex, with a preview harness and tests.'
 			},
 			{
-				title: 'WalletPair dApp connect',
-				body: 'End-to-end-encrypted pairing so you can sign for desktop dApps from your wallet.'
+				title: 'dApp connect in the browser',
+				body: 'The wallet appears in the page like any other browser wallet — through the Vela extension, and through the browser built into the desktop, iOS and Android apps.'
 			},
 			{
 				title: 'dApp signing flow',

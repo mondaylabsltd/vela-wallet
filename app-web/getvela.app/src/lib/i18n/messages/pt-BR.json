@@ -142,31 +142,8 @@
 			],
 			"close": "Se um desses for impeditivo, a Vela ainda não é para você."
 		},
-		"signing": {
-			"heading": "Uma passkey assina um hash, não uma tela.",
-			"lede": "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Nenhuma assinatura falhou: o que quebrou foi a confiança entre o que uma pessoa via e o que a máquina de fato assinou.\n\nEssa mesma brecha existe em carteiras que assinam com passkey, inclusive a Vela.\n\nO que o aparelho assina no fim é um hash. O texto em linguagem comum acima dele — para quem vai, quanto, o que faz — é a leitura que o software faz dos dados da transação.\n\nSe o software que faz essa leitura for adulterado, ele pode mostrar A enquanto você assina B.",
-			"today": {
-				"label": "Hoje",
-				"title": "Toda transação é decodificada antes de você aprovar.",
-				"body": "O que ela faz, quanto e para quem — a Vela lê a transação pelos descritores <a href=\"/docs/clear-signing\">ERC-7730</a> e coloca em linguagem clara, em vez de deixar você com uma sequência de hexadecimal.\n\nUma aprovação que daria permissão ilimitada é reescrita para um valor finito escolhido por você, e uma última checagem antes do envio recusa qualquer uma que continue ilimitada.\n\nQuando uma chamada não pode ser decodificada com segurança, a Vela diz que não consegue lê-la, em vez de mostrar um resumo que parece tranquilizador e não dá para verificar.\n\nIsso barra enganos e diminui a chance de um dApp hostil convencer você a assinar.\n\nO que isso não barra é a própria Vela.\n\nA transação e a prévia continuam vindo do mesmo app. Se esse app for adulterado, em princípio ele pode adulterar as duas coisas. Essa é a fronteira de confiança que preferimos não fingir que não existe."
-			},
-			"next": {
-				"label": "Rode a sua própria cópia",
-				"title": "Uma página de assinatura hospedada por você.",
-				"body": "Uma página estática sem nenhuma dependência, e uma extensão do Chrome construída a partir da mesma pasta.\n\nEla não acredita no resumo que a Vela entrega. Ela pega a transação crua, decodifica o calldata de novo por conta própria e põe na sua frente o que a assinatura vai de fato autorizar, antes de a sua passkey assinar.\n\nSem framework, sem bundler, sem nenhuma requisição de rede.\n\nA questão não é a nossa segunda cópia ser mais segura. A questão é a transação vir de um lugar e a conferência e a assinatura acontecerem em outro, que você controla.\n\nCarregue como extensão do Chrome sua, ou hospede a página você mesmo. A partir daí, comprometer o app da Vela ou o caminho por onde ele chega até você não basta mais para forjar ao mesmo tempo a transação e o que você vê antes de assinar.\n\nIsso não abole a confiança. Divide em duas uma confiança que antes ficava num lugar só.\n\nNo momento em que uma conta guarda dinheiro que você lamentaria perder, a assinatura deveria migrar para esse caminho — não de vez em quando, mas dali em diante."
-			},
-			"aside": {
-				"title": "A partir de quando usar",
-				"items": [
-					"No dia em que a conta começa a guardar dinheiro que você lamentaria perder — e dali em diante, em toda assinatura.",
-					"Não é “quando o valor é alto”: uma aprovação pequena pode entregar o suficiente para esvaziar a conta.",
-					"É um jeito de assinar, não uma ocasião. Assine assim todo dia; senão, no dia que importa você também não vai mudar de método de repente."
-				]
-			}
-		},
 		"compare": {
 			"heading": "Como a Vela se compara",
-			"desc": "Três tipos de carteira: uma EOA comum, uma conta inteligente de um fornecedor, e a Vela. Usamos as três, e nenhuma é melhor em tudo.",
 			"rows": [
 				{
 					"feature": "Tipo de conta",
@@ -176,9 +153,9 @@
 				},
 				{
 					"feature": "Chave de assinatura",
-					"vela": "Passkey ou chave de segurança",
+					"vela": "Passkey",
 					"metamask": "A chave privada por trás de uma frase de recuperação; carteiras de hardware suportadas",
-					"base": "Passkey ou chave de segurança"
+					"base": "Passkey"
 				},
 				{
 					"feature": "Gas por transação",
@@ -240,8 +217,7 @@
 					"metamask": "Anos no mercado, base de usuários grande",
 					"base": "Mantida pela Coinbase"
 				}
-			],
-			"note": "Nada disso é contra as outras duas.\n\nAs forças da MetaMask são a simplicidade e a universalidade — e uma transação EOA comum é a coisa mais barata que se faz on-chain.\n\nA Base Account é a que dá menos trabalho, e onde há suporte o gas não sai do seu bolso.\n\nA Vela faz outras escolhas: passkeys, várias chaves de assinatura independentes, e cada peça — app, relay, serviços de backend — que você pode rodar.\n\nEla não é melhor em todas as linhas. No que ela insiste: o controle da conta fica com você, e o mínimo possível depende de um único fornecedor."
+			]
 		},
 		"pricing": {
 			"heading": "Gratuita e aberta. Pague só se quiser.",
@@ -249,73 +225,53 @@
 			"cards": [
 				{
 					"title": "Carteira web e extensão do Chrome",
-					"price": "Grátis",
-					"body": "Abra, autentique, pronto — no navegador ou na extensão, as duas de graça. Ou hospede o mesmo app você mesmo."
+					"price": "Grátis"
 				},
 				{
 					"title": "Apps de desktop e celular",
-					"price": "Grátis pelo código",
-					"body": "O mesmo código aberto. Compile e instale você mesmo — todo build está no <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a>."
+					"price": "Grátis pelo código"
 				},
 				{
 					"title": "Nas lojas de aplicativos",
-					"price": "Compra única",
-					"body": "Nunca assinatura. É assim que um time pequeno e independente banca construir isso à vista de todos."
+					"price": "Compra única"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 redes embutidas. Um endereço em todas elas.",
-			"body": "Adicione qualquer outra chain EVM que tenha o precompilado RIP-7212 P-256 e os contratos Safe + ERC-4337 da Vela implantados — a Vela confere antes de deixar você adicionar. A <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">ferramenta de configuração de chain</a> pode implantá-los numa chain que não tenha nenhum dos dois, inclusive na sua testnet local.",
+			"heading": "12 redes embutidas. Adicione a sua",
+			"body": "Sua carteira tem o mesmo endereço em todas as redes. Quando você adiciona outra chain EVM, a Vela confere se há o suporte necessário a RIP-7212, Safe e ERC-4337. Se os contratos estiverem faltando, você pode implantá-los com a <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">ferramenta de configuração de chain</a>.",
 			"link": "Redes e taxas, em detalhe"
 		},
 		"faq": {
 			"heading": "Perguntas frequentes",
-			"desc": "Mais ou menos na ordem em que as pessoas perguntam — começando pelo que é, terminando no que acontece se a gente sumir.",
 			"items": [
 				{
-					"q": "Preciso de frase de recuperação, extensão ou carteira de hardware?",
-					"a": "Nenhuma das três. Você cria a carteira com Face ID, uma digital ou uma chave de segurança, e essa passkey é a assinante. Não há nada para anotar, e a carteira web roda no navegador sem instalar nada."
+					"q": "Do que eu preciso para criar uma carteira?",
+					"a": "Um aparelho que abre com Face ID ou digital, ou uma chave de segurança USB/NFC. Sem frase de recuperação e sem saldo inicial.\n\nAdicione todas as chaves que quiser na hora de criar a carteira. Depois não dá para acrescentar outras."
 				},
 				{
-					"q": "É mesmo autocustódia? O que a Vela pode fazer com o meu dinheiro?",
-					"a": "Nada. Sua carteira é uma <a href=\"/docs/security-audits\">conta inteligente Safe</a> que só a sua passkey opera, e a passkey nunca sai do seu aparelho — a Vela manda um desafio e recebe uma assinatura, nunca uma chave. Não podemos mover, congelar nem restaurar seus fundos. Não é “prometemos não fazer”: não existe caminho no código que pudesse."
+					"q": "Dá para usar a Vela com dApps?",
+					"a": "Dá. A Vela coloca a carteira direto dentro da dApp, como qualquer outra carteira de navegador.\n\nIsso funciona nos apps de iOS, Android e desktop, e na extensão da Vela para navegador."
 				},
 				{
 					"q": "E se eu perder o celular?",
-					"a": "Se a sua passkey sincroniza pelo Chaveiro do iCloud ou pelo Gerenciador de senhas do Google, entre em um aparelho novo com a mesma conta e a carteira está lá — mesmo endereço, mesmos ativos, mesmas chains. Se você tinha desligado essa sincronização, a passkey só existiu no aparelho que você perdeu, e é exatamente para isso que serve um segundo assinante. Detalhes em <a href=\"/docs/recovery\">Recuperação e login</a>."
+					"a": "Se a sua passkey está sincronizada com o Chaveiro do iCloud ou o Gerenciador de senhas do Google, você a recupera em um aparelho novo e segue com a mesma carteira.\n\nSe não estava sincronizada, vai precisar de outra chave — uma das que você adicionou ao criar a carteira."
 				},
 				{
-					"q": "Posso adicionar uma segunda chave — outro aparelho, ou uma YubiKey?",
-					"a": "Pode, e vale a pena. Uma carteira pode ter até sete assinantes, e qualquer um deles assina sozinho: passkeys em aparelhos diferentes, um celular por perto que você escaneia, ou uma chave de segurança USB/NFC. Há um porém, e ele importa — seu endereço é derivado do conjunto completo de chaves, então elas são escolhidas <strong>na criação da carteira</strong>. Adicionar uma depois seria outra carteira, em outro endereço."
-				},
-				{
-					"q": "E se eu apagar a passkey?",
-					"a": "Essa chave se foi, e se era sua única assinante, o acesso também — sem frase de recuperação, sem reset pelo suporte, sem porta dos fundos, para ninguém, nós inclusive. Essa é a aresta mais afiada do projeto, e a resposta para ela é um segundo assinante escolhido na criação. Se um dia você arrumar o seu gerenciador de senhas, saiba para que serve cada passkey antes de remover."
+					"q": "E se eu apagar a minha passkey?",
+					"a": "Essa chave se perde de vez. Se era a sua única chave, você perde o acesso à carteira."
 				},
 				{
 					"q": "E se minha conta Apple ou Google for comprometida?",
-					"a": "Quem entrar nessa conta e conseguir desbloquear um aparelho sincronizado com ela pode usar a passkey que está lá. Ative a verificação em duas etapas e use uma senha exclusiva. Se você prefere que sua carteira não dependa dessa conta, crie-a com uma chave de segurança de hardware como método de assinatura — essa escolha existe já na primeira chave, não só nas adicionais."
+					"a": "Quem chegar às suas passkeys sincronizadas provavelmente chega também à sua carteira.\n\nSe você prefere não depender da Apple nem do Google, use uma chave de segurança USB/NFC."
 				},
 				{
-					"q": "Quanto custa usar?",
-					"a": "A carteira é gratuita e não há token. Você paga o gas da rede do seu próprio saldo mais a taxa do relayer. Assinar com uma conta inteligente custa mais gas que uma transferência simples — uma assinatura P-256 é verificada on-chain e a chamada passa pelo EntryPoint do ERC-4337 — e o relayer que adianta esse gas recebe mais do que o gas custa on-chain; a diferença é o que mantém o serviço. O total é cotado antes de você assinar e fica escrito na transação que você assina, então o que você assinou é o que é cobrado. Cada rede também precisa de um depósito pequeno e não reembolsável para ativar a conta de relayer de gas, que a Vela banca para carteiras novas quando dá. O relayer é trocável nas configurações, ou <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">rode o seu</a>. Detalhamento completo em <a href=\"/docs/networks-and-fees\">Redes e taxas</a>."
-				},
-				{
-					"q": "Quais chains e tokens ela guarda?",
-					"a": "Moedas nativas e ERC-20 nas doze chains embutidas — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Monad, World Chain e Tempo — mais qualquer chain EVM que você adicionar e que atenda aos requisitos acima. Seu endereço é o mesmo em todas."
-				},
-				{
-					"q": "Dá para usar com dApps?",
-					"a": "Dá. Pareie sua carteira com a extensão <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair</a> e assine para dApps de desktop com a sua passkey — com a mesma tela de confirmação decodificada que você vê no resto da carteira."
-				},
-				{
-					"q": "O código foi auditado?",
-					"a": "Os contratos foram: Safe v1.4.1, o módulo Safe 4337 e o módulo assinante WebAuthn foram auditados por terceiros, e a Vela os implanta sem modificação. O código do app da Vela não passou por auditoria independente e não há auditoria agendada — o que faz as vezes disso hoje é que tudo é <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">público</a>. Quais contratos, quais relatórios, quais problemas conhecidos: <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"faq\">Auditorias e problemas conhecidos</a>."
+					"q": "O que a Vela pode fazer com meu dinheiro, e o que ela sabe sobre mim?",
+					"a": "A Vela não pode mover nem congelar seus fundos. Só as suas chaves controlam a carteira.\n\nNão pede e-mail nem conta na Vela. Sua chave pública, o endereço da carteira e o nome que você deu a ela são públicos on-chain. Emissores de tokens ainda podem bloquear um endereço."
 				},
 				{
 					"q": "O que acontece se a Vela fechar, ou se o getvela.app cair?",
-					"a": "Sua carteira é um contrato Safe on-chain e não depende dos nossos servidores. O app e cada serviço de backend — dados de chain, índice de passkeys, relayer — são de código aberto, então você pode rodar os seus. A única coisa que exige cuidado é a passkey: ela é vinculada ao domínio getvela.app, então a assinatura passa pelo código aberto da própria Vela — a sua instância auto-hospedada, ou a extensão de recuperação de código aberto que permite usar uma passkey existente a partir de outro domínio ou do localhost."
+					"a": "Sua carteira continua on-chain e não depende dos servidores da Vela. Os apps e os serviços de backend são de código aberto e podem rodar por conta própria.\n\nSe o getvela.app cair, assine pelo navegador: a extensão da Vela, ou a extensão de assinatura legível sem dependências. As chaves que você já tem funcionam nas duas — a passkey deste aparelho, uma chave de segurança USB ou um celular conectado por QR code."
 				}
 			]
 		}
@@ -403,8 +359,8 @@
 				"body": "As transações mostram o que realmente fazem — valor, destinatário, intenção — em linguagem clara em vez de hexadecimal cru, com uma bancada de pré-visualização e testes."
 			},
 			{
-				"title": "Conexão com dApps via WalletPair",
-				"body": "Pareamento com criptografia ponta a ponta para assinar da sua carteira em dApps de desktop."
+				"title": "Conexão com dApps no navegador",
+				"body": "A carteira aparece na página como qualquer outra carteira de navegador — pela extensão da Vela e pelo navegador embutido nos apps de desktop, iOS e Android."
 			},
 			{
 				"title": "Fluxo de assinatura de dApps",
@@ -460,9 +416,9 @@
 		"storeNote": "Ainda não está nas lojas. Até lá, cada build está no GitHub."
 	},
 	"_fingerprints": {
-		"home": "3b02495e15fe",
+		"home": "978189838858",
 		"about": "669db59e91a0",
-		"roadmap": "df15b90319f9",
+		"roadmap": "1f9b064b5fbb",
 		"getStarted": "dbbb0da3f5cc"
 	}
 }

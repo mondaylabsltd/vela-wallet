@@ -142,31 +142,8 @@
 			],
 			"close": "Bu üçünden biri sizin için kabul edilemezse, Vela henüz size göre değil."
 		},
-		"signing": {
-			"heading": "Geçiş anahtarı bir özeti imzalar, ekranı değil.",
-			"lede": "Şubat 2025'te Bybit yaklaşık 1,5 milyar dolar kaybetti. Hiçbir imza başarısız olmadı: kopan şey, insanın gördüğü ile makinenin gerçekten imzaladığı arasındaki güvendi.\n\nAynı boşluk, geçiş anahtarıyla imzalayan cüzdanlarda da var; Vela dahil.\n\nCihazın sonunda imzaladığı şey bir özet (hash). Onun üstündeki sade dil — kime, ne kadar, ne yapıyor — yazılımın işlem verisini okuma biçimidir.\n\nO okumayı yapan yazılıma müdahale edilmişse, siz B'yi imzalarken size A'yı gösterebilir.",
-			"today": {
-				"label": "Bugün",
-				"title": "Her işlem, siz onaylamadan önce çözülür.",
-				"body": "Ne yaptığı, ne kadar olduğu, kime gittiği — Vela işlemi <a href=\"/docs/clear-signing\">ERC-7730</a> tanımlayıcılarıyla okur ve bir yığın hex bırakmak yerine sade dile çevirir.\n\nSınırsız yetki verecek bir onay, sizin seçtiğiniz sınırlı bir tutara yeniden yazılır; gönderimden hemen önceki son kontrol de hâlâ sınırsız olan her onayı reddeder.\n\nBir çağrı güvenilir biçimde çözülemiyorsa Vela, okuyamadığını söyler; içi rahatlatan ama doğrulanamayan bir özet göstermez.\n\nBu, hataları durdurur ve kötü niyetli bir dApp'in sizi imzaya ikna etme ihtimalini düşürür.\n\nDuduramadığı şey Vela'nın kendisidir.\n\nİşlem de önizleme de hâlâ aynı uygulamadan gelir. O uygulamaya müdahale edilirse, ilke olarak ikisine birden müdahale edebilir. Yok saymak istemediğimiz güven sınırı tam olarak burası."
-			},
-			"next": {
-				"label": "Kendi kopyanızı çalıştırın",
-				"title": "Kendi barındırdığınız bir imzalama sayfası.",
-				"body": "Hiçbir bağımlılığı olmayan statik bir sayfa ve aynı klasörden üretilen bir Chrome uzantısı.\n\nVela'nın uzattığı özete inanmaz. Ham işlemi alır, calldata'yı kendisi yeniden çözer ve imzanın gerçekte neye yetki vereceğini, geçiş anahtarınız imzalamadan önce önünüze koyar.\n\nFramework yok, bundler yok, tek bir ağ isteği bile yok.\n\nMesele ikinci kopyamızın daha güvenli olması değil. Mesele, işlemin bir yerden gelmesi; kontrolün ve imzanın ise sizin denetlediğiniz başka bir yerde olması.\n\nKendi Chrome uzantınız olarak yükleyin ya da sayfayı kendiniz barındırın. O zaman Vela uygulamasını veya size ulaşma yolunu ele geçirmek, hem işlemi hem de imzadan önce gördüğünüzü aynı anda taklit etmeye artık yetmez.\n\nBu, güveni ortadan kaldırmaz. Tek bir yerde toplanmış güveni ikiye böler.\n\nHesap, kaybetmeye üzüleceğiniz bir parayı tutmaya başladığı andan itibaren imzalama bu yola taşınmalı — ara sıra değil, o günden sonra hep."
-			},
-			"aside": {
-				"title": "Ne zaman başlamalı",
-				"items": [
-					"Hesap, kaybetmeye üzüleceğiniz parayı tutmaya başladığı gün — o günden sonra her imza.",
-					"\"Tutar büyük olduğunda\" değil: küçük bir onay bile hesabı boşaltmaya yetecek yetkiyi devredebilir.",
-					"Bu bir imzalama yöntemi, özel bir durum değil. Her gün böyle imzalayın; yoksa iş ciddileştiği gün de birden yöntem değiştirmezsiniz."
-				]
-			}
-		},
 		"compare": {
 			"heading": "Vela nasıl karşılaştırılır",
-			"desc": "Üç tür cüzdan: sıradan bir EOA, bir sağlayıcının akıllı hesabı ve Vela. Üçünü de kullanıyoruz ve hiçbiri her konuda daha iyi değil.",
 			"rows": [
 				{
 					"feature": "Hesap türü",
@@ -176,9 +153,9 @@
 				},
 				{
 					"feature": "İmzalama anahtarı",
-					"vela": "Geçiş anahtarı ya da güvenlik anahtarı",
+					"vela": "Geçiş anahtarı",
 					"metamask": "Kurtarma ifadesinin arkasındaki özel anahtar; donanım cüzdanları desteklenir",
-					"base": "Geçiş anahtarı ya da güvenlik anahtarı"
+					"base": "Geçiş anahtarı"
 				},
 				{
 					"feature": "İşlem gas'i",
@@ -240,8 +217,7 @@
 					"metamask": "Piyasada yıllar, geniş kullanıcı tabanı",
 					"base": "Coinbase tarafından sürdürülüyor"
 				}
-			],
-			"note": "Bunların hiçbiri diğer ikisini kötülemek için değil.\n\nMetaMask'in güçlü yanı sadelik ve her yerde bulunabilirlik — üstelik sıradan bir EOA işlemi, zincir üstünde yapabileceğiniz en ucuz şeydir.\n\nBase Account en az uğraştıranı; desteklediği yerlerde gas'i siz değil onlar üstlenebiliyor.\n\nVela farklı bir denge seti seçiyor: geçiş anahtarları, birbirinden bağımsız birkaç imzalama anahtarı ve her parçanın — uygulama, relay, arka uç servisleri — sizin tarafınızdan çalıştırılabilmesi.\n\nHer satırda daha iyi değil. Israrla savunduğu şey, hesabın denetiminin sizde kalması ve mümkün olduğunca az şeyin tek bir sağlayıcıya bağlı olması."
+			]
 		},
 		"pricing": {
 			"heading": "Ücretsiz ve açık. Ödemek isterseniz ödersiniz.",
@@ -249,73 +225,53 @@
 			"cards": [
 				{
 					"title": "Web cüzdanı ve Chrome uzantısı",
-					"price": "Ücretsiz",
-					"body": "Açın, kimliğinizi doğrulayın, bitti — tarayıcıda da uzantıda da aynı. İkisi de ücretsiz. Ya da aynı uygulamayı kendiniz barındırın."
+					"price": "Ücretsiz"
 				},
 				{
 					"title": "Masaüstü ve mobil uygulamalar",
-					"price": "Kendiniz derlerseniz ücretsiz",
-					"body": "Aynı kod, açık kaynak. Kendiniz derleyip kendiniz kurun — her derleme <a href=\"https://github.com/mondaylabsltd/vela-wallet/releases\" target=\"_blank\" rel=\"noopener\">GitHub</a> üzerinde."
+					"price": "Kendiniz derlerseniz ücretsiz"
 				},
 				{
 					"title": "Uygulama mağazalarından",
-					"price": "Tek seferlik satın alma",
-					"body": "Asla abonelik değil. Küçük ve bağımsız bir ekip bunu açıkta geliştirmeyi böyle finanse ediyor."
+					"price": "Tek seferlik satın alma"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 ağ hazır gelir. Hepsinde tek bir adres.",
-			"body": "RIP-7212 P-256 ön derlemesi bulunan ve Vela'nın Safe + ERC-4337 sözleşmeleri dağıtılmış her EVM zincirini ekleyebilirsiniz — Vela, eklemenize izin vermeden önce bunu denetler. İkisi de olmayan bir zincirde <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">Chain Setup aracı</a> bunları sizin için dağıtabilir; kendi yerel test ağınız da buna dahil.",
+			"heading": "12 ağ hazır gelir. Kendi ağınızı ekleyin",
+			"body": "Cüzdanınızın adresi her ağda aynıdır. Başka bir EVM zinciri eklediğinizde Vela, gereken RIP-7212, Safe ve ERC-4337 desteğinin olup olmadığını denetler. Gereken sözleşmeler yoksa bunları <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">Chain Setup aracı</a> ile dağıtabilirsiniz.",
 			"link": "Ağlar ve ücretler, ayrıntılı"
 		},
 		"faq": {
 			"heading": "Sık sorulanlar",
-			"desc": "Aşağı yukarı insanların gerçekten sorduğu sırayla — bunun ne olduğuyla başlayıp biz yokken ne olacağıyla bitiyor.",
 			"items": [
 				{
-					"q": "Kurtarma ifadesine, bir uzantıya ya da donanım cüzdanına ihtiyacım var mı?",
-					"a": "Üçüne de yok. Cüzdanı Face ID, parmak izi ya da bir güvenlik anahtarıyla oluşturursunuz ve imzalayan o geçiş anahtarıdır. Yazıp saklanacak bir şey yok; web cüzdanı da tarayıcıda, hiçbir kurulum olmadan çalışır."
+					"q": "Cüzdan oluşturmak için neye ihtiyacım var?",
+					"a": "Face ID veya parmak iziyle açılan bir cihaz ya da bir USB/NFC güvenlik anahtarı. Kurtarma ifadesi de gerekmiyor, başlangıç bakiyesi de.\n\nİstediğiniz bütün anahtarları cüzdanı oluştururken ekleyin. Sonradan yenisi eklenemiyor."
 				},
 				{
-					"q": "Gerçekten kendi saklamanızda mı? Vela paramla ne yapabilir?",
-					"a": "Hiçbir şey. Cüzdanınız, yalnızca sizin geçiş anahtarınızın çalıştırabildiği bir <a href=\"/docs/security-audits\">Safe akıllı hesabı</a>dır ve geçiş anahtarı cihazınızdan hiç çıkmaz — Vela bir meydan okuma gönderir, karşılığında bir imza alır; anahtarı asla. Paranızı taşıyamayız, donduramayız, geri getiremeyiz. \"Yapmayacağımıza söz veriyoruz\" değil: bunu yapabilecek bir kod yolu yok."
+					"q": "Vela'yı dApp'lerle kullanabilir miyim?",
+					"a": "Evet. Vela cüzdanı doğrudan dApp'in içine yerleştirir, tıpkı diğer tarayıcı cüzdanları gibi.\n\nBu; iOS, Android ve masaüstü uygulamalarında ve Vela tarayıcı uzantısında çalışır."
 				},
 				{
 					"q": "Telefonumu kaybedersem ne olur?",
-					"a": "Geçiş anahtarınız iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi üzerinden eşitleniyorsa, yeni cihazda aynı hesapla oturum açın; cüzdan orada — aynı adres, aynı varlıklar, aynı ağlar. Bu eşitlemeyi kapattıysanız, geçiş anahtarı yalnızca kaybettiğiniz cihazda vardı; bu durumu karşılayan şey ikinci bir imzalama anahtarıdır. Ayrıntılar: <a href=\"/docs/recovery\">Kurtarma ve oturum açma</a>."
+					"a": "Geçiş anahtarınız iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi ile eşitlendiyse, onu yeni bir cihazda geri alır ve aynı cüzdanı kullanmayı sürdürürsünüz.\n\nEşitlenmediyse, cüzdanı oluştururken eklediğiniz başka bir anahtar gerekir."
 				},
 				{
-					"q": "İkinci bir anahtar ekleyebilir miyim — başka bir cihaz ya da bir YubiKey?",
-					"a": "Evet ve eklemeye değer. Bir cüzdan yedi imzalama anahtarına kadar tutabilir ve her biri tek başına imzalayabilir: farklı cihazlardaki geçiş anahtarları, karekod okutarak bağladığınız bir telefon ya da bir USB/NFC güvenlik anahtarı. Önemli bir ayrıntı var — adresiniz anahtarların tamamından türetilir, bu yüzden anahtarlar <strong>cüzdanı oluştururken</strong> seçilir. Sonradan eklemek, başka bir adreste başka bir cüzdan demek olur."
-				},
-				{
-					"q": "Geçiş anahtarını silersem ne olur?",
-					"a": "O anahtar gider; tek imzalayıcınız oysa erişim de gider — kurtarma ifadesi yok, destekten sıfırlama yok, arka kapı yok; bizim için de. Tasarımın en keskin yeri burasıdır ve cevabı, kurulumda seçilmiş ikinci bir imzalama anahtarıdır. Şifre yöneticinizi toparlarken, silmeden önce her geçiş anahtarının ne işe yaradığını bilin."
+					"q": "Geçiş anahtarımı silersem ne olur?",
+					"a": "O anahtar kalıcı olarak kaybolur. Tek anahtarınız oysa cüzdana erişiminizi de kaybedersiniz."
 				},
 				{
 					"q": "Apple ya da Google hesabım ele geçirilirse ne olur?",
-					"a": "O hesaba girebilen ve hesapla eşitlenen bir cihazın kilidini açabilen biri, oradaki geçiş anahtarını kullanabilir. Orada iki adımlı doğrulamayı açın ve benzersiz bir parola kullanın. Cüzdanınızın o hesaba hiç bağlı olmamasını tercih ediyorsanız, cüzdanı imzalama yöntemi olarak bir donanım güvenlik anahtarıyla oluşturun — bu seçenek yalnızca ek anahtarlar için değil, ilk anahtar için de var."
+					"a": "Eşitlenmiş geçiş anahtarlarınıza ulaşan biri, cüzdanınıza da ulaşabilir.\n\nApple'a ya da Google'a bağlı kalmak istemiyorsanız, bunun yerine bir USB/NFC güvenlik anahtarı kullanın."
 				},
 				{
-					"q": "Kullanmak ne kadara mal olur?",
-					"a": "Cüzdan ücretsiz ve herhangi bir token yok. Ağ gas'ini kendi bakiyenizden ödersiniz, üstüne relayer'ın ücreti gelir. Akıllı hesapla imzalamak, sıradan bir transferden daha fazla gas harcar — bir P-256 imzası zincir üstünde doğrulanır ve çağrı ERC-4337 EntryPoint üzerinden geçer — ve gas'i öne çıkaran relayer, zincir üstündeki gas maliyetinden fazlasını alır; aradaki fark servisi ayakta tutan şeydir. Toplam, imzalamadan önce gösterilir ve imzaladığınız işleme yazılır; yani ne imzaladıysanız o tahsil edilir. Ayrıca her ağ, kendi gas relayer hesabını etkinleştirmek için küçük ve iade edilmeyen bir depozito ister; Vela bunu yeni cüzdanlar için mümkün olduğunda üstlenir. Relayer ayarlardan değiştirilebilir ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırabilirsiniz</a>. Tam dökümü: <a href=\"/docs/networks-and-fees\">Ağlar ve ücretler</a>."
-				},
-				{
-					"q": "Hangi zincirleri ve token'ları tutar?",
-					"a": "Yerleşik on iki zincirde yerel coin'ler ve ERC-20'ler — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Monad, World Chain ve Tempo — ayrıca yukarıdaki koşulları karşılayıp kendiniz eklediğiniz her EVM zinciri. Adresiniz hepsinde aynıdır."
-				},
-				{
-					"q": "dApp'lerle kullanabilir miyim?",
-					"a": "Evet. Cüzdanınızı <a href=\"https://walletpair.org/\" target=\"_blank\" rel=\"noopener\">WalletPair</a> uzantısıyla eşleştirin ve masaüstü dApp'leri geçiş anahtarınızla imzalayın — cüzdanın her yerinde gördüğünüz aynı çözümlenmiş onay ekranıyla."
-				},
-				{
-					"q": "Kod denetlendi mi?",
-					"a": "Sözleşmeler denetlendi: Safe v1.4.1, Safe 4337 modülü ve WebAuthn imzalayıcı modülü üçüncü taraflarca denetlendi ve Vela bunları değiştirmeden dağıtıyor. Vela'nın kendi uygulama kodu bağımsız olarak denetlenmedi ve planlanmış bir denetim de yok — bugün onun yerini tutan şey, kodun tamamının <a href=\"https://github.com/mondaylabsltd/vela-wallet\" target=\"_blank\" rel=\"noopener\">herkese açık</a> olması. Hangi sözleşmeler, hangi raporlar, hangi bilinen sorunlar: <a href=\"/docs/security-audits\" data-rybbit-event=\"audits_open\" data-rybbit-prop-location=\"faq\">Denetimler ve bilinen sorunlar</a>."
+					"q": "Vela paramla ne yapabilir, benim hakkımda ne biliyor?",
+					"a": "Vela paranızı ne taşıyabilir ne de dondurabilir. Cüzdanı yalnızca sizin anahtarlarınız yönetir.\n\nE-posta da Vela hesabı da gerekmez. Açık anahtarınız, cüzdan adresiniz ve cüzdana verdiğiniz ad zincir üstünde herkese açıktır. Token ihraççıları yine de bir adresi kara listeye alabilir."
 				},
 				{
 					"q": "Vela kapanırsa ya da getvela.app erişilemez olursa ne olur?",
-					"a": "Cüzdanınız zincir üstünde bir Safe sözleşmesidir ve sunucularımıza bağlı değildir. Uygulama ve her arka uç servisi — zincir verisi, geçiş anahtarı dizini, relayer — açık kaynaktır; kendi kopyanızı çalıştırabilirsiniz. Dikkat edilmesi gereken tek şey geçiş anahtarıdır: getvela.app alan adına bağlıdır, bu yüzden imzalama yine Vela'nın açık kaynak kodundan geçer — kendi barındırdığınız kopyadan ya da mevcut geçiş anahtarının başka bir alan adından veya localhost'tan kullanılmasını sağlayan açık kaynaklı kurtarma uzantısından."
+					"a": "Cüzdanınız zincir üstünde kalır ve Vela'nın sunucularına bağlı değildir. Uygulamalar ve arka uç servisleri açık kaynaktır; bağımsız olarak çalıştırılabilir.\n\ngetvela.app erişilemez olursa tarayıcıdan imzalayın: Vela uzantısı ya da bağımlılıksız açık imzalama uzantısı. Elinizdeki anahtarlar ikisinde de çalışır — bu cihazdaki geçiş anahtarı, bir USB güvenlik anahtarı ya da QR kodla bağlanan bir telefon."
 				}
 			]
 		}
@@ -403,8 +359,8 @@
 				"body": "İşlemler gerçekte ne yaptığını gösteriyor — tutar, alıcı, niyet — ham hex yerine sade dille; önizleme ortamı ve testleriyle birlikte."
 			},
 			{
-				"title": "WalletPair ile dApp bağlantısı",
-				"body": "Uçtan uca şifreli eşleştirme sayesinde masaüstü dApp'leri kendi cüzdanınızdan imzalayabiliyorsunuz."
+				"title": "Tarayıcıda dApp bağlantısı",
+				"body": "Cüzdan, diğer tarayıcı cüzdanları gibi sayfada belirir — Vela uzantısıyla ve masaüstü, iOS ve Android uygulamalarındaki yerleşik tarayıcıyla."
 			},
 			{
 				"title": "dApp imzalama akışı",
@@ -460,9 +416,9 @@
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
 	},
 	"_fingerprints": {
-		"home": "3b02495e15fe",
+		"home": "978189838858",
 		"about": "669db59e91a0",
-		"roadmap": "df15b90319f9",
+		"roadmap": "1f9b064b5fbb",
 		"getStarted": "dbbb0da3f5cc"
 	}
 }

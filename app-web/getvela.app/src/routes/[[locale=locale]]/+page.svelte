@@ -542,63 +542,10 @@
 	</div>
 </section>
 
-<!-- Sign what you see -->
-<section id="signing" class="signing">
-	<div class="container">
-		<div class="signing-content">
-			<h2>{m.home.signing.heading}</h2>
-			{#each m.home.signing.lede.split('\n\n') as para (para)}
-				<p class="signing-lede">{para}</p>
-			{/each}
-
-			<div class="signing-block">
-				<span class="signing-label">{m.home.signing.today.label}</span>
-				<h3>{m.home.signing.today.title}</h3>
-				<!-- Blank-line separated paragraphs, as in the trade-offs: prose in the
-				     catalog, markup here. -->
-				{#each m.home.signing.today.body.split('\n\n') as para (para)}
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<p>{@html para}</p>
-				{/each}
-			</div>
-
-			<div class="signing-block signing-next">
-				<span class="signing-label signing-label-soon">{m.home.signing.next.label}</span>
-				<h3>{m.home.signing.next.title}</h3>
-				{#each m.home.signing.next.body.split('\n\n') as para (para)}
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<p>{@html para}</p>
-				{/each}
-				<!-- The two docs links are markup, and their labels are the docs' own
-				     translated titles: a link added inside a message would have to be
-				     added to fifteen translations before the markup-parity test would
-				     let it through, and would go stale the moment a page is renamed. -->
-				<p class="signing-docs">
-					<a class="more-link" href={L('/docs/clear-signing-self-host')}
-						>{m.chrome.docs.titles['clear-signing-self-host']}</a
-					>
-					<a class="more-link" href={L('/docs/clear-signing')}
-						>{m.chrome.docs.titles['clear-signing']}</a
-					>
-				</p>
-				<div class="signing-aside">
-					<h4>{m.home.signing.aside.title}</h4>
-					<ul>
-						{#each m.home.signing.aside.items as line (line)}
-							<li>{line}</li>
-						{/each}
-					</ul>
-				</div>
-			</div>
-		</div>
-	</div>
-</section>
-
 <!-- Compare -->
 <section id="compare" class="compare">
 	<div class="container">
 		<h2>{m.home.compare.heading}</h2>
-		<p class="section-desc">{m.home.compare.desc}</p>
 		<div class="compare-table-wrap">
 			<table class="compare-table">
 				<thead>
@@ -623,11 +570,6 @@
 				</tbody>
 			</table>
 		</div>
-		<div class="compare-note">
-			{#each m.home.compare.note.split('\n\n') as para (para)}
-				<p>{para}</p>
-			{/each}
-		</div>
 	</div>
 </section>
 
@@ -643,8 +585,6 @@
 					<div class="bm-card">
 						<h4>{card.title}</h4>
 						<div class="bm-price">{card.price}</div>
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						<p>{@html card.body}</p>
 					</div>
 				{/each}
 			</div>
@@ -681,13 +621,18 @@
 <section id="faq" class="faq">
 	<div class="container">
 		<h2>{m.home.faq.heading}</h2>
-		<p class="section-desc">{m.home.faq.desc}</p>
 		<div class="faq-list">
 			{#each m.home.faq.items as item (item.q)}
 				<details>
 					<summary>{item.q}</summary>
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					<p>{@html item.a}</p>
+					<!-- Two beats per answer, blank-line separated in the catalog like
+					     the trade-offs above: the claim, then the consequence. Split
+					     here rather than carrying <p> tags a translator would have to
+					     keep in step. -->
+					{#each item.a.split('\n\n') as para (para)}
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						<p>{@html para}</p>
+					{/each}
 				</details>
 			{/each}
 		</div>
@@ -715,14 +660,6 @@
 		letter-spacing: -0.02em;
 		margin-bottom: 12px;
 		line-height: 1.2;
-	}
-
-	.section-desc {
-		color: var(--text-secondary);
-		max-width: 480px;
-		margin: 0 auto 56px;
-		font-size: 1rem;
-		line-height: 1.7;
 	}
 
 	/* ── Nav ── */
@@ -1128,10 +1065,8 @@
 	   underline offset clears descenders (g, y) so the line stays unbroken. */
 	.why-content :global(a:not(.more-link)),
 	.tradeoff :global(a),
-	.signing-block :global(a),
 	.network-note :global(a),
 	.compare-table td :global(a),
-	.bm-card :global(a),
 	details :global(a) {
 		color: inherit;
 		text-decoration: underline;
@@ -1140,10 +1075,8 @@
 	}
 	.why-content :global(a:not(.more-link):hover),
 	.tradeoff :global(a:hover),
-	.signing-block :global(a:hover),
 	.network-note :global(a:hover),
 	.compare-table td :global(a:hover),
-	.bm-card :global(a:hover),
 	details :global(a:hover) {
 		color: var(--accent);
 	}
@@ -1151,10 +1084,8 @@
 	   currentColor so it follows the link color. */
 	.why-content :global(a[target='_blank']::after),
 	.tradeoff :global(a[target='_blank']::after),
-	.signing-block :global(a[target='_blank']::after),
 	.network-note :global(a[target='_blank']::after),
 	.compare-table td :global(a[target='_blank']::after),
-	.bm-card :global(a[target='_blank']::after),
 	details :global(a[target='_blank']::after) {
 		content: '';
 		display: inline-block;
@@ -1373,129 +1304,17 @@
 		line-height: 1.7;
 	}
 
-	/* ── Sign what you see ──
-	   Two blocks that must never blur into one: what the wallet does today, and
-	   what is built but not deployed. The second one says so on its label. */
-	.signing {
-		padding: 0 0 96px;
-	}
-	.signing-content {
-		max-width: 640px;
-		margin: 0 auto;
-	}
-	.signing-lede {
-		color: var(--text-secondary);
-		font-size: 1rem;
-		line-height: 1.8;
-		margin: 16px 0 0;
-	}
-	.signing-block {
-		margin-top: 36px;
-		padding-top: 26px;
-		border-top: 1px solid var(--border);
-	}
-	.signing-label {
-		display: inline-block;
-		margin-bottom: 12px;
-		padding: 3px 9px;
-		border-radius: 999px;
-		border: 1px solid var(--border-accent, var(--border));
-		background: var(--accent-soft);
-		color: var(--accent);
-		font-size: 0.68rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-	/* Not accent-coloured: this one is a caveat, not a badge of honour. */
-	.signing-label-soon {
-		border: 1px dashed var(--border-strong, var(--border));
-		background: transparent;
-		color: var(--text-tertiary);
-	}
-	.signing-block h3 {
-		font-size: 1.05rem;
-		font-weight: 600;
-		line-height: 1.45;
-		margin-bottom: 10px;
-	}
-	.signing-block p {
-		color: var(--text-secondary);
-		font-size: 0.92rem;
-		line-height: 1.75;
-		margin: 0;
-	}
-	/* The bodies are several short paragraphs now; without this they run
-	   together into the wall of text they were written to stop being. */
-	.signing-block p + p {
-		margin-top: 13px;
-	}
-	.signing-lede + .signing-lede {
-		margin-top: 13px;
-	}
-	.signing-docs {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 22px;
-		margin: 18px 0 0;
-	}
-	.signing-aside {
-		margin-top: 22px;
-		padding: 18px 20px;
-		border-left: 2px solid var(--border-accent, var(--border));
-		background: var(--bg-raised);
-		border-radius: 0 var(--radius) var(--radius) 0;
-	}
-	.signing-aside h4 {
-		font-size: 0.78rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-secondary);
-		margin-bottom: 10px;
-	}
-	.signing-aside ul {
-		margin: 0;
-		padding-left: 18px;
-		color: var(--text-secondary);
-		font-size: 0.88rem;
-		line-height: 1.7;
-	}
-
-	.section-desc {
-		margin-bottom: 48px;
-	}
-
 	/* ── Compare ── */
-	.compare h2,
-	.compare .section-desc {
+	/* No standfirst under this heading any more, so the heading carries the gap
+	   the paragraph used to leave above the table. */
+	.compare h2 {
 		text-align: center;
+		margin-bottom: 48px;
 	}
 	.compare-table-wrap {
 		max-width: 960px;
 		margin: 0 auto;
 		overflow-x: auto;
-	}
-	/* Five short paragraphs now — the founder's summary of what each of the three
-	   is actually good at — so it is a block of prose under the table rather
-	   than one centred caption. Left-aligned at that length: centred text that
-	   wraps five times is a poster, not a paragraph. */
-	.compare-note {
-		max-width: 680px;
-		margin: 26px auto 0;
-		font-size: 0.86rem;
-		line-height: 1.7;
-		color: var(--text-secondary);
-	}
-	.compare-note p {
-		margin: 0;
-	}
-	.compare-note p + p {
-		margin-top: 11px;
-	}
-	/* The last line is the claim the whole table exists to support. */
-	.compare-note p:last-child {
-		color: var(--text);
 	}
 	.compare-table {
 		width: 100%;
@@ -1570,21 +1389,14 @@
 		font-size: 1.25rem;
 		font-weight: 700;
 		letter-spacing: -0.01em;
-		margin-bottom: 12px;
-	}
-	.bm-card p {
-		color: var(--text-secondary);
-		font-size: 0.85rem;
-		line-height: 1.7;
-		margin: 0;
 	}
 
 	/* ── FAQ ── */
+	/* No standfirst under this heading any more, so the heading carries the gap
+	   the paragraph used to leave above the questions. */
 	.faq h2 {
 		text-align: center;
-	}
-	.faq .section-desc {
-		text-align: center;
+		margin-bottom: 48px;
 	}
 	.faq-list {
 		max-width: 600px;
@@ -1613,10 +1425,18 @@
 		content: '\2212';
 	}
 	details p {
-		padding-bottom: 16px;
+		margin: 0;
 		color: var(--text-secondary);
 		line-height: 1.7;
 		font-size: 0.88rem;
+	}
+	/* The second beat is a new paragraph, not a new answer: closer together
+	   than two answers are, and only the last one pays the closing padding. */
+	details p + p {
+		margin-top: 10px;
+	}
+	details p:last-of-type {
+		padding-bottom: 16px;
 	}
 	/* ── Responsive ── */
 	@media (max-width: 768px) {
