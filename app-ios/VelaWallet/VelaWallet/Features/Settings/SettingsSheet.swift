@@ -25,6 +25,8 @@ struct SettingsSheet: View {
     var onErase: (() -> Void)?
     /// An account row tapped in the switcher.
     var onSelectAccount: ((String) -> Void)?
+    var onAccountCreate: (() -> Void)?
+    var onAccountSignIn: (() -> Void)?
     /// SR2's field and its commit (058). Absent in the gallery, where the
     /// endpoint is a picture of one already typed.
     var rpcDraft: Binding<String>?
@@ -47,7 +49,9 @@ struct SettingsSheet: View {
                 case .accounts:
                     AccountsSheetBody(
                         sheet: model.accountsSheet,
-                        onSelect: { address in onSelectAccount?(address) }
+                        onSelect: { address in onSelectAccount?(address) },
+                        onCreate: onAccountCreate,
+                        onSignIn: onAccountSignIn
                     )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
@@ -237,6 +241,10 @@ private struct AccountsSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: AccountsSheetModel
     var onSelect: ((String) -> Void)?
+    /// The two ways on from here. Absent = a fixture board, where they do
+    /// nothing on purpose; present = the live screen, where they must.
+    var onCreate: (() -> Void)?
+    var onSignIn: (() -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title)
@@ -244,7 +252,13 @@ private struct AccountsSheetBody: View {
             .typeRole(Typography.flowCaption)
             .foregroundStyle(theme.fgSubtle)
             .padding(.bottom, Tokens.Space.s12)
-        ForEach(sheet.rows) { row in
+        // Keyed by POSITION, not by address: the address is not unique. Two
+        // records can derive the same Safe (one wallet signed into with a
+        // second passkey), and `Identifiable` on `addressFull` then hands
+        // `ForEach` a duplicate id — the web's switcher threw outright on that
+        // pair (issue 214 follow-up). The core refuses to hold the pair now,
+        // and this stops the shell from depending on it.
+        ForEach(Array(sheet.rows.enumerated()), id: \.offset) { _, row in
             Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
@@ -275,10 +289,13 @@ private struct AccountsSheetBody: View {
             .buttonStyle(.plain)
             .disabled(onSelect == nil)
         }
-        VelaButton(title: sheet.primary, kind: .primary) {}
+        // Both closures were EMPTY: 创建新账户 and 登录已有账户 drew, took the
+        // tap, and did nothing (founder, 2026-09-16). They are the only two
+        // ways on from this sheet, so an empty closure is the sheet's dead end.
+        VelaButton(title: sheet.primary, kind: .primary) { onCreate?() }
             .padding(.top, Tokens.Space.s24)
             .padding(.bottom, Tokens.Space.s12)
-        VelaButton(title: sheet.secondary, kind: .secondary) {}
+        VelaButton(title: sheet.secondary, kind: .secondary) { onSignIn?() }
     }
 }
 

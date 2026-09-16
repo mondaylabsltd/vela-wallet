@@ -57,6 +57,9 @@ struct SettingsScreen: View {
     var onClearStorageItem: ((String) -> Void)?
     var onErase: (() -> Void)?
     var onSelectAccount: ((String) -> Void)?
+    /// The two ways on from the account sheet. Absent = a fixture board.
+    var onAccountCreate: (() -> Void)?
+    var onAccountSignIn: (() -> Void)?
     /// The endpoints and providers pages' live half.
     var endpointActions: SettingsEndpointActions?
     /// The switcher was opened. The balance machine reads every account's
@@ -91,6 +94,8 @@ struct SettingsScreen: View {
         onClearStorageItem: ((String) -> Void)? = nil,
         onErase: (() -> Void)? = nil,
         onSelectAccount: ((String) -> Void)? = nil,
+        onAccountCreate: (() -> Void)? = nil,
+        onAccountSignIn: (() -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil
     ) {
@@ -106,6 +111,8 @@ struct SettingsScreen: View {
         self.onClearStorageItem = onClearStorageItem
         self.onErase = onErase
         self.onSelectAccount = onSelectAccount
+        self.onAccountCreate = onAccountCreate
+        self.onAccountSignIn = onAccountSignIn
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         // Seeds, not bindings: a gallery state pins where this opens, and a
@@ -157,6 +164,21 @@ struct SettingsScreen: View {
                         { address in
                             select(address)
                             self.overlay = .none
+                        }
+                    },
+                    // Closes FIRST: both lead somewhere else (the create
+                    // journey, the sign-in picker), and a sheet left standing
+                    // is a modal raised under a modal.
+                    onAccountCreate: onAccountCreate.map { go in
+                        {
+                            self.overlay = .none
+                            go()
+                        }
+                    },
+                    onAccountSignIn: onAccountSignIn.map { go in
+                        {
+                            self.overlay = .none
+                            go()
                         }
                     },
                     storageConfirm: pendingStorageItem.map { item in

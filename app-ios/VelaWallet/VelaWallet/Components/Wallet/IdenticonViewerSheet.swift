@@ -29,6 +29,18 @@ struct IdenticonViewerSheet: View {
     @State private var copied = false
 
     var body: some View {
+        // SCROLLS, and pads past the drag indicator.
+        //
+        // The content — a big circle, a title, a wrapped 42-character address
+        // and two buttons — is taller than the `.medium` detent it opens at,
+        // and a bare `VStack` in a sheet does not scroll: it clips. On the
+        // device that read as artwork sliced by the sheet's top edge with the
+        // system grabber sitting on it, and a 关闭 button cut off below the
+        // screen — the way out of the sheet, unreachable (founder,
+        // 2026-09-16). Scrolling makes every element reachable at ANY detent,
+        // which is the property that has to hold however tall the copy runs in
+        // a language nobody has translated yet.
+        ScrollView {
         VStack(spacing: Tokens.Space.s16) {
             // Not tappable: it is already the viewer.
             IdenticonAvatar(seed: address, size: WalletGeometry.identiconViewer,
@@ -76,7 +88,13 @@ struct IdenticonViewerSheet: View {
             .padding(.top, Tokens.Space.s8)
         }
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
-        .padding(.vertical, Tokens.Space.s32)
+        // Top clears the system drag indicator, which is drawn OVER the
+        // content rather than above it.
+        .padding(.top, Tokens.Space.s32)
+        .padding(.bottom, Tokens.Space.s32)
+        .frame(maxWidth: .infinity)
+        }
+        .scrollBounceBehavior(.basedOnSize)
         .presentationDragIndicator(.visible)
         .presentationBackground(theme.bgRaised)
     }

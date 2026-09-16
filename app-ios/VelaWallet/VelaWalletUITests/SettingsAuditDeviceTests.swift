@@ -236,6 +236,73 @@ final class SettingsAuditDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    /// The account switcher, everywhere it is now reachable — and the
+    /// identicon viewer, whose way out used to be off-screen.
+    ///
+    /// Four things the founder found on 2026-09-16, in one pass:
+    ///   1. the home header's chevron led nowhere,
+    ///   2. the settings switcher listed fixture accounts,
+    ///   3. 创建新账户 / 登录已有账户 had empty closures,
+    ///   4. the viewer clipped its artwork under the grabber and its 关闭
+    ///      button off the bottom of the screen.
+    func testSwitcherAndViewerOnDevice() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        app.launch()
+        settle(8)
+
+        // 1. The home header's name opens the switcher.
+        let name = app.staticTexts.containing(
+            NSPredicate(format: "label BEGINSWITH %@", "Parallel")
+        ).firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 20), "no wallet name in the header")
+        name.tap()
+        settle(2)
+        attach(app.screenshot(), named: "shot-home-switcher")
+        // 2. And its rows are the session's, not the fixture three.
+        XCTAssertTrue(
+            app.staticTexts.containing(
+                NSPredicate(format: "label BEGINSWITH %@", "0x88cC")
+            ).firstMatch.waitForExistence(timeout: 8),
+            "the switcher did not open on the header tap, or shows no live row"
+        )
+        for mock in ["Ann", "Bo", "Cy"] {
+            XCTAssertFalse(app.staticTexts[mock].exists, "fixture account \(mock) is still listed")
+        }
+        // 3. The two ways on are live: 登录已有账户 raises the method picker.
+        let signIn = app.buttons.containing(
+            NSPredicate(format: "label CONTAINS %@", "登录")
+        ).firstMatch
+        if signIn.waitForExistence(timeout: 4) {
+            signIn.tap()
+            settle(2)
+            attach(app.screenshot(), named: "shot-signin-picker")
+        }
+        app.terminate()
+
+        // 4. The identicon viewer: its way out has to be ON the screen.
+        let second = XCUIApplication()
+        second.launchEnvironment["VELA_LANG"] = "zh"
+        second.launchArguments += ["-AppleLanguages", "(zh-Hans)"]
+        second.launch()
+        settle(6)
+        let art = second.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "身份图")
+        ).firstMatch
+        XCTAssertTrue(art.waitForExistence(timeout: 12), "no identicon button in the header")
+        art.tap()
+        settle(2)
+        attach(second.screenshot(), named: "shot-identicon-viewer")
+        let close = second.buttons["关闭"]
+        XCTAssertTrue(close.waitForExistence(timeout: 6), "the viewer has no 关闭 button")
+        XCTAssertTrue(close.isHittable, "关闭 is off-screen — the viewer clips its own way out")
+        close.tap()
+        settle(1.5)
+        second.terminate()
+    }
+
     private func launch(
         page: String = "settings-live",
         theme: String? = "dark",
