@@ -2,6 +2,7 @@
 	import ActionButtonRow from '$lib/wallet/ui/ActionButtonRow.svelte';
 	import ActivityRow from '$lib/wallet/ui/ActivityRow.svelte';
 	import EmptyState from '$lib/wallet/ui/EmptyState.svelte';
+	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import SectionHeader from '$lib/wallet/ui/SectionHeader.svelte';
 	import TabBar from '$lib/wallet/ui/TabBar.svelte';
@@ -152,6 +153,14 @@
 				/>
 				<p class="hero-name">{detail.contact.name}</p>
 				<p class="hero-address">{detail.contact.addressDisplay}</p>
+				{#if detail.nameAction !== undefined && onuievent !== undefined}
+					<!-- The header's pencil names it too; this says so in words, under
+					     the address that is standing in for a name (issue 191). -->
+					<button type="button" class="name-action" onclick={() => onuievent?.({ kind: 'edit' })}>
+						<Icon icon={UTILITY_ICONS.pencil} size="xs" />
+						<span>{detail.nameAction}</span>
+					</button>
+				{/if}
 				<GroupChips
 					chips={detail.chips}
 					addLabel={detail.addChipLabel}
@@ -356,6 +365,27 @@
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.name-action {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		height: var(--icon-xl);
+		margin-block-end: var(--space-sm);
+		padding-inline: var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-raised);
+		color: var(--color-fg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+	}
+
+	.name-action:hover {
+		opacity: var(--opacity-hover);
 	}
 
 	.detail-actions {

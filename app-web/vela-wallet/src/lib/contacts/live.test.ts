@@ -57,6 +57,42 @@ describe('displayName', () => {
 	});
 });
 
+/**
+ * Issue 191 — what an address is called, and how a row nobody named gets a
+ * name. The order is the core's (`contact_display_name`); these pin that the
+ * shell reads it the same way and offers the naming where the name is missing.
+ */
+describe('a contact nobody has named (issue 191)', () => {
+	const HISTORY_ROW = contact({ address: '0x' + '60'.repeat(20), source: 'auto', tx_count: 1 });
+
+	it('own name → resolved name (registry or name service) → address, in that order', () => {
+		const known = { ...HISTORY_ROW, resolved_name: "Bob's Vela", resolved_source: 'passkey' };
+		expect(displayName(known)).toBe("Bob's Vela");
+		expect(displayName({ ...known, name: 'Bob from the gym' })).toBe('Bob from the gym');
+		expect(displayName(HISTORY_ROW)).toMatch(/^0x606060…606060$/);
+	});
+
+	it('an empty string is a missing name, as the core reads it', () => {
+		expect(displayName({ ...HISTORY_ROW, name: '', resolved_name: 'bob.eth' })).toBe('bob.eth');
+		expect(displayName({ ...HISTORY_ROW, name: '', resolved_name: '' })).toMatch(/^0x/);
+	});
+
+	it('a history-suggested row offers "Save to contacts" under its name', () => {
+		const detail = liveContactDetail(HISTORY_ROW, VIEW, m, identicon);
+		expect(detail.nameAction).toBe(m.saveToContacts);
+	});
+
+	it('being recognised by the registry is not being named by the person', () => {
+		const known = { ...HISTORY_ROW, resolved_name: "Bob's Vela", resolved_source: 'passkey' };
+		expect(liveContactDetail(known, VIEW, m, identicon).nameAction).toBe(m.saveToContacts);
+	});
+
+	it('a saved contact without a name offers Edit; a named one offers nothing extra', () => {
+		expect(liveContactDetail(UNNAMED, VIEW, m, identicon).nameAction).toBe(m.edit);
+		expect(liveContactDetail(ALICE, VIEW, m, identicon).nameAction).toBeUndefined();
+	});
+});
+
 describe('letterSections', () => {
 	it('groups by initial, keeps core order inside a letter, 0x names go to #', () => {
 		const sections = letterSections(VIEW, identicon, '');

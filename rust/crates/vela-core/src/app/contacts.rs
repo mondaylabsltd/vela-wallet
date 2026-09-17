@@ -4,7 +4,12 @@
 //! AccountSwitched ─► ReadStore + LoadSendHistory ─► ledger {saved, tombstones, groups, history}
 //!        Save/Delete/Toggle/Group*/Import ─► mutate ledger ─► WriteStore (best effort)
 //!        view() ─► merged book = saved ⊕ history-derived (tombstone-suppressed)
+//!        book loaded ─► ResolveIdentity for the rows nobody has named (bounded, once each)
 //! ```
+//!
+//! What a row is CALLED: the person's own name → a resolved identity (a name
+//! service, or the name a Vela user registered with the passkey index) → and
+//! only then the address ([`adopt_identity`], issue 191).
 //!
 //! A contact is a *recipient* you've sent to, or one you save by hand — never a
 //! contract you merely called. The auto-suggestion source is deliberately
@@ -484,6 +489,11 @@ pub struct Model {
     /// module-level inflight merge.
     inflight_identity: BTreeSet<String>,
     inflight_classify: BTreeSet<(u32, String)>,
+    /// Addresses the BOOK has already asked about on its own this session
+    /// ([`name_the_unnamed`]). A miss is never cached, so without this every
+    /// history reload would ask about the same strangers again; an explicit
+    /// [`Event::InspectRecipient`] still re-asks, as it always has.
+    auto_asked: BTreeSet<String>,
     inspected: Option<Inspected>,
     last_import: Option<ContactImportReport>,
     import_failure: Option<ContactImportFailure>,
@@ -884,7 +894,15 @@ impl App for Contacts {
             &model.history,
             model.my_address.as_deref(),
         );
-        let contacts = sort_contacts(merged);
+        // An unnamed row is called by whatever the waterfall learned about it
+        // BEFORE it sorts and files — a known name belongs under its letter,
+        // not under `#` (issue 191).
+        let contacts = sort_contacts(
+            merged
+                .into_iter()
+                .map(|contact| adopt_identity(contact, &model.identities))
+                .collect(),
+        );
         ContactsView {
             loaded: model.loaded,
             sections: section_contacts(&contacts),
@@ -899,7 +917,9 @@ impl App for Contacts {
                     members: group
                         .members
                         .iter()
-                        .map(|addr| resolve_member(&model.saved, addr))
+                        .map(|addr| {
+                            adopt_identity(resolve_member(&model.saved, addr), &model.identities)
+                        })
                         .collect(),
                 })
                 .collect(),
@@ -933,7 +953,8 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
             model.tombstones = tombstones;
             model.groups = groups;
             model.loaded = true;
-            render()
+            let ops = name_the_unnamed(model);
+            requests(model, ops)
         }
         ContactShellResult::HistoryLoaded { txs } => {
             // `to_name` is a name captured at send time by the same waterfall,
@@ -945,7 +966,8 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
                     tx
                 })
                 .collect();
-            render()
+            let ops = name_the_unnamed(model);
+            requests(model, ops)
         }
         ContactShellResult::HistoryFailed => {
             // `loadTransactions` threw → no suggestions (contacts.ts:286-290).
@@ -1455,6 +1477,83 @@ fn derive_from_history(history: &[ContactHistoryTx], my_address: Option<&str>) -
         }
     }
     out
+}
+
+/// How many unnamed rows one load of the book asks about on its own. Each ask
+/// is the shell's whole waterfall (the passkey index, then five name services),
+/// so an unbounded book would turn opening Contacts into hundreds of calls
+/// against public RPCs. The book's own order decides who is asked first —
+/// favourites, then the most recently paid — and the rest are asked when their
+/// detail is opened, as before.
+const AUTO_IDENTITY_LIMIT: usize = 16;
+
+/// What an address is CALLED, in order: the person's own name → a resolved
+/// identity (a name service, or the name a Vela user registered with the
+/// passkey index) → nothing, and only then does a shell fall back to the short
+/// address. The address is the last resort, never the first answer.
+///
+/// A saved contact gets its resolved name written back and persisted
+/// (`IdentityResolved`). A row that exists only because of send history has no
+/// stored record to write to, so it adopts the session's identity cache here,
+/// at projection time — without this a history row could only ever show the
+/// name captured at the moment of the send, and one sent before the recipient
+/// registered a name showed a bare address for good (issue 191).
+fn adopt_identity(mut contact: Contact, identities: &BTreeMap<String, ContactIdentity>) -> Contact {
+    if contact_display_name(&contact).is_empty() {
+        if let Some(identity) = identities.get(&contact.address) {
+            contact.resolved_name = Some(identity.name.clone());
+            contact.resolved_source = Some(identity.source.clone());
+        }
+    }
+    contact
+}
+
+/// Ask who the book's unnamed rows are, once per address per session.
+///
+/// Before this, the only thing that ever asked was opening a contact's detail
+/// ([`Event::InspectRecipient`]) — so the LIST could not show a name nobody
+/// had gone looking for, and a recipient known to the passkey index sat in it
+/// as `0x6007…f4d4`. Book rows first, in the book's order, then group members
+/// that have no row of their own.
+fn name_the_unnamed(model: &mut Model) -> Vec<ContactOperation> {
+    // Until the store has answered, a saved-and-named contact is
+    // indistinguishable from a stranger in the history.
+    if !model.loaded {
+        return Vec::new();
+    }
+    let book = sort_contacts(merge_contacts(
+        &model.saved,
+        &model.tombstones,
+        &model.history,
+        model.my_address.as_deref(),
+    ));
+    let members: Vec<Contact> = model
+        .groups
+        .iter()
+        .flat_map(|group| group.members.iter())
+        .map(|addr| resolve_member(&model.saved, addr))
+        .collect();
+    let mut ops = Vec::new();
+    for contact in book.into_iter().chain(members) {
+        if ops.len() == AUTO_IDENTITY_LIMIT {
+            break;
+        }
+        let named = !contact_display_name(&contact).is_empty();
+        let addr = contact.address;
+        if named
+            || !is_address(&addr)
+            || is_zero_address(&addr)
+            || model.identities.contains_key(&addr)
+            || model.inflight_identity.contains(&addr)
+            || model.auto_asked.contains(&addr)
+        {
+            continue;
+        }
+        model.auto_asked.insert(addr.clone());
+        model.inflight_identity.insert(addr.clone());
+        ops.push(ContactOperation::ResolveIdentity { address: addr });
+    }
+    ops
 }
 
 /// `getGroupMembers`' resolution rule: a saved contact carries its name/kind,

@@ -209,6 +209,22 @@ export async function resolveRecipientIdentity(address: string): Promise<Recipie
 	// not a recipient — no identity, and it would 404 the index.
 	if (/^0x0{40}$/.test(address)) return null;
 
+	// One waterfall per address at a time. The address book and the activity
+	// feed ask about the same counterparty in the same tick on the contacts
+	// page; both missed the cache the other had not written yet, and the index
+	// and five name services were asked twice (issue 191 made the book ask on
+	// load, which is what made the doubling worth a line).
+	const key = address.toLowerCase();
+	const pending = inflight.get(key);
+	if (pending !== undefined) return pending;
+	const work = runWaterfall(address).finally(() => inflight.delete(key));
+	inflight.set(key, work);
+	return work;
+}
+
+const inflight = new Map<string, Promise<RecipientIdentity | null>>();
+
+async function runWaterfall(address: string): Promise<RecipientIdentity | null> {
 	const cached = await getCache(address);
 	if (cached !== undefined) return cached;
 
