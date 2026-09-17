@@ -159,9 +159,21 @@ async function reverseResolveRegistry(
 	}
 }
 
+/** Throws on invalid UTF-8 instead of substituting U+FFFD — see below. */
+const UTF8_STRICT = new TextDecoder('utf-8', { fatal: true });
+
 /**
  * Decode a Solidity `string` return value: offset (32 bytes) + length (32
  * bytes) + data (padded).
+ *
+ * A name is drawn next to somebody's money, so a malformed answer is REFUSED
+ * rather than shown as a plausible-looking fragment — the rule the desktop
+ * shell's `decode_name` states and tests ("non-UTF-8 bytes must not become a
+ * mojibake name", `executor/identity.rs`). `fatal: true` is what makes that
+ * true here: the default decoder substitutes U+FFFD for every byte it cannot
+ * read, and that name was then cached for a day, adopted by the address book
+ * as a contact's resolved name, written to storage and drawn in the recipient
+ * picker — where nothing ever replaced it (issue 200).
  */
 export function decodeString(hex: string): string | null {
 	try {
@@ -173,7 +185,10 @@ export function decodeString(hex: string): string | null {
 		const strHex = data.slice(offset + 64, offset + 64 + strLen * 2);
 		const bytes = new Uint8Array(strLen);
 		for (let i = 0; i < strLen; i++) bytes[i] = parseInt(strHex.slice(i * 2, i * 2 + 2), 16);
-		return new TextDecoder().decode(bytes);
+		// Throws on invalid UTF-8 — caught below, so the service answers "I do
+		// not know them" instead of naming them something they are not.
+		const name = UTF8_STRICT.decode(bytes).trim();
+		return name === '' ? null : name;
 	} catch {
 		return null;
 	}

@@ -1949,3 +1949,116 @@ fn sections_run_a_to_z_then_hash_and_keep_the_books_order_within_a_letter() {
     // The pure function agrees with the view.
     assert_eq!(section_contacts(&view.contacts), view.sections);
 }
+
+// ---------------------------------------------------------------------------
+// A name the book may keep (issue 200)
+// ---------------------------------------------------------------------------
+
+/// A name is drawn beside somebody's money, so a garbled one is no name.
+///
+/// `resolved_name` is always machine-supplied — a name service, the passkey
+/// index, a name captured at send time. A lenient UTF-8 decoder anywhere along
+/// those paths substitutes U+FFFD instead of failing, and the picker showed
+/// "jxjjx����" where a person's name belonged. The bar is `login`'s
+/// `valid_display_name`; failing it, the address introduces itself by its
+/// short form instead.
+#[test]
+fn a_resolved_name_that_cannot_be_shown_is_refused() {
+    let mut sut = booted_empty();
+    sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: A.to_owned(),
+    });
+    sut.resolve(Res::RecipientClassified {
+        chain_id: 1,
+        address: A.to_owned(),
+        code: Some("0x".to_owned()),
+    });
+    let ops = sut.resolve(Res::IdentityResolved {
+        address: A.to_owned(),
+        identity: Some(identity("jxjjx\u{fffd}\u{fffd}", "Vela")),
+    });
+    assert!(ops.is_empty(), "nothing garbled is ever persisted");
+
+    let recipient = sut.view().recipient.expect("recipient projected");
+    assert_eq!(recipient.display_name, None, "no name, not a garbled one");
+    assert!(
+        recipient.identity.is_none(),
+        "and it is not remembered either"
+    );
+
+    // Refused like a negative lookup: the next inspect asks again, so the real
+    // name still arrives once the source answers properly.
+    let ops = sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: A.to_owned(),
+    });
+    assert!(
+        ops.contains(&Op::ResolveIdentity {
+            address: A.to_owned()
+        }),
+        "a refused name is not cached"
+    );
+}
+
+/// A garbled name that is ALREADY stored — the state issue 200 reports — is
+/// dropped as the book loads, so the row shows its address rather than
+/// mojibake. The write-back only fires while a contact is unnamed, so without
+/// this the garbage would never be replaced.
+#[test]
+fn a_stored_garbled_resolved_name_is_dropped_on_load() {
+    let poisoned = Contact {
+        resolved_name: Some("\u{fffd}\u{fffd}\u{fffd}\u{fffd}".to_owned()),
+        resolved_source: Some("Vela".to_owned()),
+        ..manual(A, None, false, 1_000.0)
+    };
+    let kept = Contact {
+        resolved_name: Some("小明".to_owned()),
+        resolved_source: Some("ENS".to_owned()),
+        ..manual(B, None, false, 2_000.0)
+    };
+    let sut = booted(vec![poisoned, kept], vec![], vec![], vec![]);
+
+    let view = sut.view();
+    assert_eq!(find(&view, A).resolved_name, None);
+    assert_eq!(
+        find(&view, A).resolved_source,
+        None,
+        "a row with no name claims no source for it"
+    );
+    assert_eq!(contact_display_name(find(&view, A)), "");
+    assert_eq!(
+        find(&view, B).resolved_name.as_deref(),
+        Some("小明"),
+        "a real non-ASCII name is untouched"
+    );
+}
+
+/// The same bar on the other machine-supplied doors into the book: a name
+/// captured at send time, and one a shell carries in with a save.
+#[test]
+fn a_garbled_name_enters_the_book_by_no_door() {
+    let mut sut = booted(
+        vec![],
+        vec![],
+        vec![],
+        vec![named_send(B, 500.0, "paid\u{fffd}\u{fffd}")],
+    );
+    assert_eq!(
+        find(&sut.view(), B).resolved_name,
+        None,
+        "a suggestion inherits no garbled name from history"
+    );
+
+    let ops = sut.dispatch(Event::Save {
+        input: ContactSaveInput {
+            resolved_name: Some("\u{fffd}\u{fffd}".to_owned()),
+            resolved_source: Some("ENS".to_owned()),
+            ..save_input(A, None)
+        },
+        now_ms: 3_000.0,
+    });
+    assert!(!ops.is_empty(), "the save itself still happens");
+    assert_eq!(find(&sut.view(), A).resolved_name, None);
+    assert_eq!(find(&sut.view(), A).resolved_source, None);
+}
