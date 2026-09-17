@@ -234,6 +234,9 @@ deb_package_for_soname() {
     libdrm.so.2)                        echo "libdrm2" ;;
     libudev.so.1)                       echo "libudev1" ;;
     libsystemd.so.0)                    echo "libsystemd0" ;;
+    # btleplug's BlueZ backend talks to bluetoothd over D-Bus; the .rpm gets
+    # this from rpm's own dependency generator, the .deb has to be told.
+    libdbus-1.so.3)                     echo "libdbus-1-3" ;;
     *)                                  return 1 ;;
   esac
 }
