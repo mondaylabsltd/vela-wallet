@@ -3493,6 +3493,38 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
 }
 
 /**
+ * **Backing the founding record up to Ethereum — the next step of the walk**
+ * (spec 062). Server-free: every request is an `eth_call` against the
+ * registry contract, on Gnosis (where the record lives) or Ethereum (where
+ * the backup goes). `answers_json` is the transcript (`LookupAnswer[]`, the
+ * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
+ * requests to perform, or the verdict and, when the wallet is not backed up,
+ * the one call that would do it. No passkey is involved at any point.
+ * @param {string} address
+ * @param {string} founding_public_key_hex
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryBackupStep(address, founding_public_key_hex, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(founding_public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.registryBackupStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * **The registered name behind an address — the next step of the lookup.**
  *
  * The v2 passkey index cannot be asked about an address, so the name is
