@@ -294,7 +294,8 @@ extension WalletLive {
             unit: item.symbol,
             positive: incoming,
             masked: hidden,
-            badgeColor: chainColor(item.chainId)
+            badgeColor: chainColor(item.chainId),
+            badgeLogoURL: Marks.chainLogoURL(item.chainId)
         )
     }
 

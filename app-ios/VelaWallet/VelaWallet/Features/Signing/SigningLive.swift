@@ -24,6 +24,8 @@ enum SigningLive {
         let nativeSymbol: String
         let walletName: String
         let walletAddress: String
+        /// The display currency the fee's "≈" half is written in (issue 201).
+        var display: WalletLive.Display = .usd
         /// The page's host, for the sign-in verdict's words.
         var origin: String?
         /// What the chain said this transaction would do (spec 055). `nil`
@@ -587,7 +589,12 @@ enum SigningLive {
         if isOffChain(clear) { return .offchain(note: s(context.loc, "noNetworkFee")) }
         let value: String
         if let estimate = fee?.fee {
-            value = "~\(SendLive.fromBase(estimate.totalWei, decimals: 18)) \(context.nativeSymbol)"
+            // The send screens' own line, through the send screens' own
+            // formatter (issue 201): the coin that is ACTUALLY paying — an
+            // in-band ERC-20 fee is its own amount under its own ticker, never
+            // the native figure — and what it costs. The design sheet is
+            // explicit that these two surfaces must not drift.
+            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display)
         } else if fee?.failed != nil {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {

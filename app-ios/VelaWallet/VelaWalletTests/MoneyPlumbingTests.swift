@@ -1117,6 +1117,43 @@ struct SendRefusalTests {
         #expect(model.token == nil, "no token, no balance to quote")
         #expect(model.header.title == loc.t("tokenDetail.send"))
     }
+
+    /// Issue 201: the fee was the one figure on the send screens with no money
+    /// beside it. The amount had its "≈" line; the fee did not, so a person who
+    /// does not track the coin's price could not tell what a transfer cost.
+    @Test func theFeeSaysWhatItCostsWhenSomethingCanPriceIt() throws {
+        let quote = FeeEstimateWire(
+            chainId: 100, totalWei: "10000000000000000", maxFeePerGas: "1",
+            totalGas: "1", deployed: true, quoted: true, feeAsset: .native,
+            feeRecipient: nil
+        )
+        // Nothing can price the coin ⇒ the coin alone, never an invented figure.
+        #expect(SendLive.feeLine(quote, view: nil, fee: nil, display: .usd) == "0.01 xDAI")
+
+        // The relay's published row prices it.
+        let priced = FeeViewWire(
+            busy: false, failed: nil, fee: quote, stale: false, feeToken: nil,
+            options: [
+                FeeOptionWire(
+                    symbol: "XDAI", contract: nil, decimals: 18,
+                    balance: "480000000000000000", recipient: "0x1",
+                    usdBalance: "0.48", usdPrice: "1", amount: "10000000000000000",
+                    insufficient: false, selected: true
+                )
+            ],
+            confirmFeeReady: true
+        )
+        #expect(SendLive.feeLine(quote, view: nil, fee: priced, display: .usd) == "0.01 xDAI · ≈$0.01")
+
+        // Under half a cent the coin amount is the honest primary: "$0.00"
+        // beside a real fee reads as free.
+        let dust = FeeEstimateWire(
+            chainId: 100, totalWei: "1000000000000", maxFeePerGas: "1",
+            totalGas: "1", deployed: true, quoted: true, feeAsset: .native,
+            feeRecipient: nil
+        )
+        #expect(SendLive.feeLine(dust, view: nil, fee: priced, display: .usd) == "0.000001 xDAI")
+    }
 }
 
 // MARK: - The three arms spec 050 and 051 left for this cut

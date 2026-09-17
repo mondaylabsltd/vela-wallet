@@ -25,6 +25,7 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { avatarSvgForClient } from '$lib/wallet/identicon';
 	import { IDLE_FEE_VIEW, type FeeQuote } from '$lib/flows/core/fee-quote.svelte';
+	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 
 	interface Props {
@@ -70,6 +71,7 @@
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
 			fee: fee.view ?? IDLE_FEE_VIEW,
+			currency: currency.view,
 			m: messages,
 			identity,
 			identicon: avatarSvgForClient

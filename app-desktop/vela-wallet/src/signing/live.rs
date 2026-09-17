@@ -890,7 +890,12 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
 /// An off-chain signature costs nothing, and saying "network fee: 0" would
 /// invite the reader to look for one.
 #[must_use]
-pub fn fee_model(clear: &ClearSigningView, fee: &FeeView, s: &SigningStrings) -> FeeModel {
+pub fn fee_model(
+    clear: &ClearSigningView,
+    fee: &FeeView,
+    s: &SigningStrings,
+    locale: &str,
+) -> FeeModel {
     let off_chain = clear.result.as_ref().is_some_and(|result| {
         result.sign_type != vela_core::app::clear_signing::ClearSignType::Transaction
     });
@@ -904,7 +909,12 @@ pub fn fee_model(clear: &ClearSigningView, fee: &FeeView, s: &SigningStrings) ->
     // is shut for the same reason.
     FeeModel::OnChain {
         label: s.fee_label.clone(),
-        value: SharedString::from(crate::flows::live::fee_text(fee.fee.as_ref())),
+        value: SharedString::from(crate::flows::live::fee_line(
+            fee.fee.as_ref(),
+            None,
+            fee,
+            locale,
+        )),
         selector: None,
     }
 }

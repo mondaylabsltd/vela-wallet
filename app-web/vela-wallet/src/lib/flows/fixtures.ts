@@ -977,6 +977,7 @@ function sendConfirm(
 
 	return {
 		header,
+		mark: { ticker: 'USDT', badgeColor: CHAIN_COLORS.ethereum },
 		amount: '120 USDT',
 		subline: '≈ $120.00',
 		facts,

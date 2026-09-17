@@ -88,6 +88,12 @@ fn asset_row(
 ) -> AssetRowModel {
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     AssetRowModel {
+        logos: crate::marks::token_logos(
+            token.chain_id,
+            &token.symbol,
+            token.token_address.as_deref(),
+            &[],
+        ),
         ticker: SharedString::from(token.symbol.clone()),
         chain: SharedString::from(chain_name(token.chain_id)),
         badge: tint(token.chain_id),
@@ -357,6 +363,7 @@ pub fn tx_detail(
         lead: FactLead::Token(TokenMark {
             ticker: SharedString::from(item.symbol.clone()),
             badge: tint(item.chain_id),
+            logos: crate::marks::token_logos(item.chain_id, &item.symbol, None, &[]),
         }),
         mono: false,
         copyable: false,
@@ -467,6 +474,12 @@ pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::Ad
                 mark: TokenMark {
                     ticker: SharedString::from(found.symbol.clone()),
                     badge: tint(found.chain_id),
+                    logos: crate::marks::token_logos(
+                        found.chain_id,
+                        &found.symbol,
+                        view.input_address.as_str().into(),
+                        &[],
+                    ),
                 },
                 name: SharedString::from(found.name.clone()),
                 // The mock's own order and separators: symbol, scale, network.
@@ -485,6 +498,7 @@ pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::Ad
                 mark: TokenMark {
                     ticker: SharedString::from(""),
                     badge: gpui::rgb(0x8A_8F_98).into(),
+                    logos: crate::marks::Logos::default(),
                 },
                 name: if view.not_found {
                     s.not_found_title.clone()
@@ -606,8 +620,9 @@ pub fn receive_qr(
         // is safe on.
         can_copy: pay.can_copy,
         centre: TokenMark {
-            ticker: SharedString::from(symbol),
+            ticker: SharedString::from(symbol.clone()),
             badge: tint(chain_id),
+            logos: crate::marks::token_logos(chain_id, &symbol, None, &[]),
         },
         warning: s.warning_reminder.clone(),
         save_image: s.save_image.clone(),
@@ -798,6 +813,98 @@ pub(crate) fn fee_text(fee: Option<&FeeEstimateView>) -> String {
     }
 }
 
+/// Below this the coin amount is the honest primary and the fiat half is left
+/// off (`03-domain-components.md` §3.1): a real fee rounded to "$0.00" reads
+/// as free, which is a worse answer than no figure at all.
+const FEE_FIAT_MIN_USD: f64 = 0.005;
+
+/// The whole-token figure a price multiplies, and which coin to price.
+fn fee_units(fee: &FeeEstimateView) -> (f64, Option<String>) {
+    match &fee.fee_asset {
+        FeeAssetView::Erc20 {
+            amount,
+            decimals,
+            token,
+            ..
+        } => (
+            amount.parse::<f64>().unwrap_or(0.0) / 10f64.powi(*decimals as i32),
+            Some(token.clone()),
+        ),
+        FeeAssetView::Native => (fee.total_wei.parse::<f64>().unwrap_or(0.0) / 1e18, None),
+    }
+}
+
+/// The unit price, in USD, of the coin a quote is denominated in.
+///
+/// The relay's published row first — it priced the quote, so its number is the
+/// one the estimate converted through — then the balances the form already
+/// carries, which is where the amount's own "≈" line gets its price. `None`
+/// when neither knows the coin: a fee row that invents a price is worse than
+/// one that shows only the coin.
+pub(crate) fn fee_price_usd(
+    contract: Option<&str>,
+    chain_id: u32,
+    send: Option<&SendView>,
+    fee: &FeeView,
+) -> Option<f64> {
+    let same = |other: Option<&str>| match (contract, other) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        _ => false,
+    };
+    let published = fee
+        .options
+        .iter()
+        .find(|option| same(option.contract.as_deref()))
+        .and_then(|option| option.usd_price.as_deref())
+        .and_then(|price| price.parse::<f64>().ok())
+        .filter(|price| *price > 0.0);
+    if published.is_some() {
+        return published;
+    }
+    let send = send?;
+    send.selected_token
+        .iter()
+        .chain(send.tokens.iter())
+        .find(|token| token.chain_id == chain_id && same(token.token_address.as_deref()))
+        .and_then(|token| token.price_usd)
+        .filter(|price| *price > 0.0)
+}
+
+/// "0.0021 XDAI · ≈$0.55" — the quote's own amount, and what it costs
+/// (issue 201).
+///
+/// The fee was the one figure on the send screens with no money beside it, so
+/// a person who does not track the coin's price could not tell what a transfer
+/// cost. The amount is never re-derived here; only the price is looked up.
+pub(crate) fn fee_line(
+    quote: Option<&FeeEstimateView>,
+    send: Option<&SendView>,
+    fee: &FeeView,
+    locale: &str,
+) -> String {
+    let coin = fee_text(quote);
+    let Some(quote) = quote else { return coin };
+    let (units, contract) = fee_units(quote);
+    let Some(price) = fee_price_usd(contract.as_deref(), quote.chain_id, send, fee) else {
+        return coin;
+    };
+    let usd = units * price;
+    if !usd.is_finite() || usd < FEE_FIAT_MIN_USD {
+        return coin;
+    }
+    format!(
+        "{coin} · ≈{}",
+        format_fiat(
+            usd,
+            "USD",
+            "$",
+            locale,
+            crate::executor::format_prefs::fiat_options()
+        )
+    )
+}
+
 /// The fee coin's symbol, for the row's mark.
 fn fee_symbol(send: &SendView, fee: &FeeView) -> (String, u32) {
     let quote = send.fee.as_ref().or(fee.fee.as_ref());
@@ -828,13 +935,22 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
             i.s.network_fee.clone()
         },
         mark: TokenMark {
-            ticker: symbol.into(),
+            ticker: symbol.clone().into(),
             badge: tint(chain_id),
+            logos: crate::marks::token_logos(
+                chain_id,
+                &symbol,
+                quote.and_then(|quote| match &quote.fee_asset {
+                    FeeAssetView::Erc20 { token, .. } => Some(token.as_str()),
+                    FeeAssetView::Native => None,
+                }),
+                &[],
+            ),
         },
         value: if i.send.fee_busy || i.fee.busy {
             i.s.fee_pending.clone()
         } else {
-            SharedString::from(fee_text(quote))
+            SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale))
         },
     }
 }
@@ -847,6 +963,12 @@ fn send_token_row(
 ) -> AssetRowModel {
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     AssetRowModel {
+        logos: crate::marks::token_logos(
+            token.chain_id,
+            &token.symbol,
+            token.token_address.as_deref(),
+            &token.logo_urls,
+        ),
         ticker: SharedString::from(token.symbol.clone()),
         chain: SharedString::from(chain_name(token.chain_id)),
         badge: tint(token.chain_id),
@@ -1553,6 +1675,12 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             TokenMark {
                 ticker: token.symbol.clone().into(),
                 badge: tint(token.chain_id),
+                logos: crate::marks::token_logos(
+                    token.chain_id,
+                    &token.symbol,
+                    token.token_address.as_deref(),
+                    &token.logo_urls,
+                ),
             },
             SharedString::from(token.symbol.clone()),
             SharedString::from(format!(
@@ -1570,6 +1698,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             TokenMark {
                 ticker: "—".into(),
                 badge: tint(1),
+                logos: crate::marks::Logos::default(),
             },
             SharedString::from("—"),
             SharedString::default(),
@@ -1720,6 +1849,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             lead: FactLead::Token(TokenMark {
                 ticker: native_symbol(chain_id).into(),
                 badge: tint(chain_id),
+                logos: crate::marks::chain_logos(chain_id),
             }),
             mono: false,
             copyable: false,
@@ -1729,7 +1859,13 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             value: if send.fee_busy || i.fee.busy {
                 s.fee_pending.clone()
             } else {
-                fee_text(send.fee.as_ref().or(i.fee.fee.as_ref())).into()
+                fee_line(
+                    send.fee.as_ref().or(i.fee.fee.as_ref()),
+                    Some(send),
+                    i.fee,
+                    i.locale,
+                )
+                .into()
             },
             lead: FactLead::None,
             mono: false,
@@ -1750,6 +1886,21 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         })
     });
     SendConfirm {
+        // A sweep moves several coins; one mark would name the wrong one.
+        mark: if send.multi_select_mode {
+            None
+        } else {
+            token.map(|token| TokenMark {
+                ticker: token.symbol.clone().into(),
+                badge: tint(token.chain_id),
+                logos: crate::marks::token_logos(
+                    token.chain_id,
+                    &token.symbol,
+                    token.token_address.as_deref(),
+                    &[],
+                ),
+            })
+        },
         amount: format!("{} {symbol}", send.confirm_amount)
             .trim()
             .to_owned()
@@ -2053,6 +2204,12 @@ pub fn fee_token(i: &SendInputs<'_>) -> FeeTokenPick {
                     mark: TokenMark {
                         ticker: option.symbol.clone().into(),
                         badge: tint(chain_id),
+                        logos: crate::marks::token_logos(
+                            chain_id,
+                            &option.symbol,
+                            option.contract.as_deref(),
+                            &[],
+                        ),
                     },
                     symbol: option.symbol.clone().into(),
                     balance: fill(&i.s.balance_label, "amount", &trimmed(balance)).into(),
@@ -2293,6 +2450,57 @@ mod tests {
 
     fn wallet_strings() -> crate::wallet::WalletStrings {
         crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    /// Issue 201: the fee was the one figure on the send screens with no money
+    /// beside it — the amount had its "≈" line, the fee did not, so a person
+    /// who does not track the coin's price could not tell what a transfer
+    /// cost.
+    #[test]
+    fn a_fee_says_what_it_costs_when_something_can_price_it() {
+        use vela_core::app::fee_policy::{FeeOptionView, FeeTier};
+        let quote = FeeEstimateView {
+            chain_id: 56,
+            total_wei: "91000000000000".to_owned(),
+            max_fee_per_gas: "1".to_owned(),
+            network_fee_per_gas: "1".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "1".to_owned(),
+            in_band_gas_basis: "1".to_owned(),
+            total_gas: "1".to_owned(),
+            deployed: true,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: None,
+        };
+        let mut fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        // Nothing can price the coin: the line is the coin alone, never a
+        // figure this file invented.
+        assert_eq!(fee_line(Some(&quote), None, &fee, "en"), "0.000091 BNB");
+
+        // The relay's published row prices it.
+        fee.options = vec![FeeOptionView {
+            symbol: "BNB".to_owned(),
+            contract: None,
+            decimals: 18,
+            balance: "1500000000000000000".to_owned(),
+            recipient: "0x1".to_owned(),
+            usd_balance: "900".to_owned(),
+            usd_price: Some("600".to_owned()),
+            amount: Some("91000000000000".to_owned()),
+            insufficient: false,
+            selected: true,
+        }];
+        assert_eq!(fee_line(Some(&quote), None, &fee, "en"), "0.000091 BNB · ≈$0.05");
+
+        // Under half a cent the coin amount is the honest primary: "$0.00"
+        // beside a real fee reads as free.
+        let dust = FeeEstimateView {
+            total_wei: "1000000000000".to_owned(),
+            ..quote.clone()
+        };
+        assert_eq!(fee_line(Some(&dust), None, &fee, "en"), "0.000001 BNB");
     }
 
     /// A receipt in each of the two states the core can hold one in.

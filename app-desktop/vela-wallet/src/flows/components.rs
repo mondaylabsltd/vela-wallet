@@ -17,7 +17,7 @@ use qrcode::{Color as QrColorModule, QrCode};
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{icon_img, identicon_avatar, token_icon};
+use crate::wallet::components::{icon_img, identicon_avatar, token_icon_logos};
 
 use super::fixtures::{
     FactLead, FactRow, FeeRow, FilterChip, NetworkRow, RecipientCard, StatusChip, StatusTone,
@@ -153,7 +153,8 @@ pub fn network_pill(
 }
 
 pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
-    div()
+    let circle = div()
+        .relative()
         .w(px(INLINE_MARK))
         .h(px(INLINE_MARK))
         .rounded(px(INLINE_MARK / 2.))
@@ -170,7 +171,22 @@ pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
                 .take(3)
                 .collect::<String>()
                 .to_uppercase(),
-        ))
+        ));
+    // The logo over the glyph, never instead of it (issue 201): gpui draws
+    // nothing at all while a remote image is in flight, and an inline mark
+    // that blinks out is worse than one that never changed.
+    let Some(url) = mark.logos.logo_urls.first() else {
+        return circle;
+    };
+    circle.child(
+        gpui::img(url.clone())
+            .absolute()
+            .top_0()
+            .left_0()
+            .w(px(INLINE_MARK))
+            .h(px(INLINE_MARK))
+            .rounded(px(INLINE_MARK / 2.)),
+    )
 }
 
 /// The label-value row — the single label-value primitive for the feature.
@@ -719,7 +735,12 @@ pub fn token_header_card(
         .p(px(12.))
         .rounded(px(14.))
         .bg(theme.bg_sunken)
-        .child(token_icon(theme, mark.ticker.as_ref(), mark.badge))
+        .child(token_icon_logos(
+            theme,
+            mark.ticker.as_ref(),
+            mark.badge,
+            &mark.logos,
+        ))
         .child(
             div()
                 .flex_1()

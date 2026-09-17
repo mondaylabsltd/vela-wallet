@@ -113,12 +113,69 @@ function inputs(over: Partial<SigningLiveInputs> = {}): SigningLiveInputs {
 		clear: DECODED,
 		guard: INITIAL_GUARD_VIEW,
 		fee: QUOTED_FEE,
+		currency: { code: 'USD', rate: 1, committed: true },
 		m,
 		identity,
 		identicon,
 		...over
 	};
 }
+
+/**
+ * The sheet and the send screens quote one fee session, and the design sheet
+ * says they must not drift. This one printed the estimate's NATIVE figure
+ * beside the CHAIN's name, and never what the fee cost (issue 201).
+ */
+describe('the fee the sheet shows', () => {
+	it('reads in the coin that pays, with what it costs', () => {
+		const priced = {
+			...QUOTED_FEE,
+			options: [
+				{
+					symbol: 'ETH',
+					contract: null,
+					decimals: 18,
+					balance: '1500000000000000000',
+					recipient: '0x1',
+					usd_balance: '4500',
+					usd_price: '3000',
+					amount: '2100000000000000',
+					insufficient: false,
+					selected: true
+				}
+			]
+		};
+		const model = buildSigningModel(inputs({ fee: priced }));
+		expect(model?.fee).toEqual({
+			kind: 'onchain',
+			label: m.feeLabel,
+			value: '0.0021 ETH · ≈$6.30'
+		});
+	});
+
+	it('names the ERC-20 that is paying, in its own decimals', () => {
+		const usdt = {
+			...QUOTED_FEE,
+			fee: {
+				...QUOTED_FEE.fee!,
+				fee_asset: {
+					type: 'erc20' as const,
+					token: '0x' + 'cc'.repeat(20),
+					decimals: 6,
+					amount: '944000',
+					symbol: 'USDT'
+				}
+			}
+		};
+		const model = buildSigningModel(inputs({ fee: usdt }));
+		// Not "0.0021 Ethereum": a different coin, and eighteen decimals of it.
+		expect(model?.fee).toMatchObject({ value: '0.944 USDT' });
+	});
+
+	it('shows the coin alone when nothing can price it', () => {
+		expect(buildSigningModel(inputs())?.fee).toMatchObject({ value: '0.0021 ETH' });
+	});
+});
 
 describe('when there is nothing to sign', () => {
 	it('builds no sheet at all — not an empty one', () => {

@@ -1068,6 +1068,10 @@ struct SendConfirmBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             VStack(spacing: Tokens.Space.s2) {
+                if let mark = model.mark {
+                    TokenIconView(mark: mark)
+                    .padding(.bottom, Tokens.Space.s8)
+                }
                 Text(verbatim: model.amount)
                     .typeRole(Typography.display.scaled(textScale))
                     .foregroundStyle(theme.fgBase)

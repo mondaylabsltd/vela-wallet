@@ -121,6 +121,9 @@ pub fn address_lines(address: &str) -> (String, String) {
 pub struct TokenMark {
     pub ticker: SharedString,
     pub badge: Hsla,
+    /// The endpoint's logos for this coin (issue 201). Empty on a drawn mark:
+    /// the gallery shows the glyph, which is the documented fallback.
+    pub logos: crate::marks::Logos,
 }
 
 #[derive(Clone)]
@@ -508,6 +511,10 @@ pub struct BreakdownRow {
 
 #[derive(Clone)]
 pub struct SendConfirm {
+    /// The coin being sent, drawn above the figure (founder, 2026-09-17). The
+    /// confirm page named the asset in words only while every row beneath it
+    /// carried art. `None` on a sweep: several coins, no one mark.
+    pub mark: Option<TokenMark>,
     pub amount: SharedString,
     pub subline: SharedString,
     pub facts: Vec<FactRow>,
@@ -567,6 +574,7 @@ fn mark(ticker: &str, badge: Hsla) -> TokenMark {
     TokenMark {
         ticker: ticker.into(),
         badge,
+        logos: crate::marks::Logos::default(),
     }
 }
 
@@ -587,6 +595,7 @@ fn asset(ticker: &str, chain: &str, badge: Hsla, balance: &str, fiat: &str) -> A
         badge,
         balance: balance.into(),
         fiat: Fiat::Value(fiat.into()),
+        logos: crate::marks::Logos::default(),
     }
 }
 
@@ -690,6 +699,7 @@ fn history(s: &FlowStrings) -> Vec<HistoryGroup> {
         unit: unit.into(),
         positive,
         badge,
+        badge_logo: None,
     };
     let to = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.to_name, "name", name));
     let from = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.from_name, "name", name));
@@ -1138,6 +1148,7 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
 
 fn send_confirm(s: &FlowStrings) -> SendConfirm {
     SendConfirm {
+        mark: Some(mark("USDT", (NETWORKS[0].color)())),
         amount: "120 USDT".into(),
         subline: "≈ $120.00".into(),
         facts: vec![

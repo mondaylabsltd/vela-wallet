@@ -528,6 +528,13 @@ data class BreakdownRowModel(
 @Immutable
 data class SendConfirmModel(
     val header: FlowHeaderModel,
+    /**
+     * The coin being sent, drawn above the figure (founder, 2026-09-17).
+     * The confirm page named the asset in words only while every row beneath
+     * it carried art — the one screen where "which coin is this?" must be
+     * answerable at a glance. Absent on a sweep: several coins, no one mark.
+     */
+    val mark: TokenMarkModel? = null,
     /** "120 USDT" / "3 assets". */
     val amount: String,
     /** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
