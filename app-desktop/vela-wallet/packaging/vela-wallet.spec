@@ -87,6 +87,9 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Thu Sep 17 2026 Monday Labs <hello@getvela.app> - 0.9.1-1
+- Pre-release: the first cut whose Linux packages and iOS archive build from a tag.
+
 * Thu Sep 17 2026 Monday Labs <hello@getvela.app> - 0.9.0-1
 - Pre-release: the desktop, mobile and extension shells cut together.
 

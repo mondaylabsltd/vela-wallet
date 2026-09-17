@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.1" date="2026-09-17" type="development">
+      <description>
+        <p>Pre-release: the first cut whose Linux packages and iOS archive build from a tag.</p>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-09-17" type="development">
       <description>
         <p>Pre-release: the desktop, mobile and extension shells cut together.</p>
