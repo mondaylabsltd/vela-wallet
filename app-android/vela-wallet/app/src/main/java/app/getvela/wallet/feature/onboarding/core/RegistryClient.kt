@@ -250,29 +250,29 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
     }
 
     /**
-     * The name behind a wallet ADDRESS, if the index knows one.
+     * One raw GET, for a caller that reads the body itself: the status and the
+     * text, or `null` when the request never arrived.
      *
-     * The same `/api/query` the rest of this class uses, keyed by `walletRef` —
-     * the address as a 32-byte word. It answers the question "who is this
-     * person I am about to pay", and it is the reason a Vela wallet can show a
-     * name where every other wallet shows forty hex characters.
-     *
-     * Best-effort by construction: a slow or unreachable index degrades to
-     * "unknown recipient" and never blocks a payment. The zero address is
-     * skipped rather than sent — it is a mint or burn counterparty, and asking
-     * would spend a round trip on a certain 404.
+     * This is the transport half of "the name behind a wallet ADDRESS". The v2
+     * index cannot be asked that directly — `?walletRef=` answers 400, which is
+     * what `nameForAddress` here asked for two specs — so the name is reached
+     * through the chain, and the walk is the core's
+     * (`feature/contacts/core/RegistryNameLookup`, issue 191). Best-effort by
+     * construction: nothing here throws.
      */
-    suspend fun nameForAddress(address: String): String? {
-        if (!ADDRESS.matches(address)) return null
-        if (address.removePrefix("0x").all { it == '0' }) return null
-        val walletRef = "0x" + address.removePrefix("0x").lowercase().padStart(64, '0')
-        return try {
-            get("/api/query?walletRef=${encode(walletRef)}", READ_TIMEOUT_MS, "Wallet name")
-                .nullableString("name")
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-        } catch (_: RegistryFailure) {
+    suspend fun rawGet(path: String): Pair<Int, String>? = withContext(Dispatchers.IO) {
+        val connection = runCatching { URL(baseUrl + path).openConnection() as HttpURLConnection }.getOrNull()
+            ?: return@withContext null
+        try {
+            connection.connectTimeout = READ_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            status to (stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: "")
+        } catch (_: IOException) {
             null
+        } finally {
+            connection.disconnect()
         }
     }
 

@@ -549,6 +549,20 @@ pub fn passkey_provider_icon_data_uri(aaguid: &str, dark: bool) -> Option<String
     vela_core::passkey::provider_icon_data_uri(aaguid, dark)
 }
 
+/// **The registered name behind an address — the next step of the lookup.**
+///
+/// The v2 passkey index cannot be asked about an address, so the name is
+/// reached through the chain (`vela_core::registry_lookup`). `answers_json` is
+/// the transcript so far (`LookupAnswer[]`); the return is a `LookupStep` as
+/// JSON: requests to perform (an `eth_call`, a GET against the configured
+/// index), or the verdict and how long it may be remembered. The shell owns
+/// the transport; every rule is the core's.
+#[wasm_bindgen(js_name = registryNameStep)]
+#[must_use]
+pub fn registry_name_step(address: &str, answers_json: &str) -> String {
+    vela_core::registry_lookup::step_json(address, answers_json)
+}
+
 /// **Where to ask about a model the compiled catalog cannot name**, or
 /// `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
 /// one the catalog already answers offline.

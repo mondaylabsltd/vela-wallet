@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.browser.core.BrowserController
 import app.getvela.wallet.feature.contacts.core.ContactIdentity
 import app.getvela.wallet.feature.contacts.core.IdentityResolver
+import app.getvela.wallet.feature.contacts.core.RegistryNameLookup
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import org.json.JSONObject
 import app.getvela.wallet.feature.signing.core.SigningController
@@ -139,6 +140,35 @@ class AppContainer(private val app: Application) {
     }
 
     /**
+     * The registered name behind an ADDRESS (issue 191). The v2 index cannot be
+     * asked that directly, so the core walks chain → founding key → units and
+     * this only carries the requests. One instance: its cache is one document.
+     */
+    val registryNames: RegistryNameLookup by lazy {
+        val client = RegistryClient()
+        RegistryNameLookup(
+            store = VelaStore(app),
+            // The RAW result, bare `0x` included: a chain without the signer
+            // contract is an answer ("not here"), not a silence.
+            ethCall = { chainId, to, data ->
+                (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
+                    ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
+                    ?.takeIf { it.startsWith("0x") }
+            },
+            indexGet = { path ->
+                val got = client.rawGet(path)
+                when {
+                    got == null -> RegistryNameLookup.IndexAnswer.Failed
+                    got.first == 404 -> RegistryNameLookup.IndexAnswer.NotFound
+                    got.first in 200..299 -> RegistryNameLookup.IndexAnswer.Ok(got.second)
+                    else -> RegistryNameLookup.IndexAnswer.Failed
+                }
+            },
+            step = { address, answers -> uniffi.vela_core_uniffi.registryNameStep(address, answers) },
+        )
+    }
+
+    /**
      * A name for an address (spec 043 T048): own accounts → cache → the
      * passkey index → the name services. Contacts and send ask the same one.
      */
@@ -146,7 +176,7 @@ class AppContainer(private val app: Application) {
         IdentityResolver(
             store = VelaStore(app),
             ownAccounts = { session.view.value.accounts.map { it.address to it.name } },
-            registryName = { address -> RegistryClient().nameForAddress(address) },
+            registryName = { address -> registryNames.nameFor(address) },
             ethCall = { chainId, to, data ->
                 (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") && it != "0x" }
@@ -399,7 +429,7 @@ class AppContainer(private val app: Application) {
             // Paying another Vela user should show their name, not forty hex
             // characters. The index this asks is the same one onboarding
             // publishes to, through the same client.
-            registryName = { address -> RegistryClient().nameForAddress(address) },
+            registryName = { address -> registryNames.nameFor(address) },
             identity = { address -> identity.resolve(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
             code = { chainId, address ->
                 (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)

@@ -2,7 +2,16 @@
  * The registry name behind an ADDRESS (issue 191): chain → founding key →
  * index units → the unit that names this address. And what is remembered.
  */
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The REAL core decides every step here — that is what "written once" is
+// worth. The server-side init above has already instantiated it; only the
+// browser's fetch-and-instantiate is stood down.
+vi.mock('$lib/core/client', async (original) => ({
+	...(await original<typeof import('$lib/core/client')>()),
+	loadCore: async () => {}
+}));
 
 const kv = new Map<string, string>();
 vi.mock('$lib/services/storage', () => ({
@@ -35,9 +44,9 @@ vi.mock('$lib/services/net', () => ({
 		const path = url.replace('https://index.test', '');
 		fetched.push(path);
 		const body = index.get(path);
-		if (typeof body === 'number') return { ok: false, status: body, json: async () => ({}) };
-		if (body === undefined) return { ok: false, status: 404, json: async () => ({}) };
-		return { ok: true, status: 200, json: async () => body };
+		if (typeof body === 'number') return { ok: false, status: body, text: async () => '{}' };
+		if (body === undefined) return { ok: false, status: 404, text: async () => '{}' };
+		return { ok: true, status: 200, text: async () => JSON.stringify(body) };
 	})
 }));
 
@@ -54,7 +63,8 @@ function metadataHex(address: string, names: string[]): string {
 		version: 1,
 		address,
 		wallet_version: 'safe-1.4.1',
-		key_names: names
+		key_names: names,
+		created_at_iso: '2026-08-21T00:00:00Z'
 	});
 	return [...new TextEncoder().encode(json)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

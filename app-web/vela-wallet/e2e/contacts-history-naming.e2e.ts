@@ -79,7 +79,8 @@ function metadataHex(address: string, names: string[]): string {
 		version: 1,
 		address,
 		wallet_version: 'safe-1.4.1',
-		key_names: names
+		key_names: names,
+		created_at_iso: '2026-08-21T00:00:00Z'
 	});
 	return Buffer.from(json, 'utf8').toString('hex');
 }

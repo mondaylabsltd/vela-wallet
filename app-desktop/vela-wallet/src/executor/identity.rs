@@ -11,7 +11,8 @@
 //! 1. **The person's own accounts**, on disk, no network. A wallet that misses
 //!    its own account labels it a stranger.
 //! 2. **Cache**, positive entries only, 24 hours.
-//! 3. **The passkey index** — a Vela user, by `walletRef`.
+//! 3. **The passkey index** — the name a Vela user registered, by address
+//!    (chain → founding key → index units; `vela_core::registry_lookup`).
 //! 4. **Name services**, in priority order: `.bnb`, `.arb`, `.g`, Basename, ENS.
 //!
 //! ## Only positive results are cached
@@ -279,7 +280,7 @@ pub fn resolve(address: &str) -> Option<ContactIdentity> {
     }
 
     // 3. The passkey index.
-    if let Some(name) = registry::query_by_wallet_ref(address) {
+    if let Some(name) = registry::wallet_name_by_address(address) {
         let identity = ContactIdentity {
             name,
             source: "passkey".to_owned(),
