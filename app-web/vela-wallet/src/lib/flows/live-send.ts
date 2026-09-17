@@ -171,11 +171,6 @@ function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
 }
 
 /**
- * A settled estimate as one line: the fee coin's amount and its fiat value.
- * `null` while the quote is in flight — the drawn row shows the label alone
- * rather than a number nobody has agreed to yet.
- */
-/**
  * The ticker a quote is denominated in.
  *
  * NEVER the chain's native symbol for an ERC-20 fee: that is a different coin,
@@ -193,15 +188,69 @@ function feeSymbol(fee: FeeEstimateView, options: FeeView['options']): string {
 	);
 }
 
-function feeText(fee: FeeEstimateView | null, options: FeeView['options']): string {
+/**
+ * Below this the token amount is the honest primary and the fiat half is left
+ * off (`03-domain-components.md` §3.1): a real fee rounded to "$0.00" reads as
+ * free, which is a worse answer than no figure at all.
+ */
+const FEE_FIAT_MIN_USD = 0.005;
+
+/**
+ * The unit price, in USD, of the coin a quote is denominated in.
+ *
+ * The relay's own published row first — it priced the quote, so its number is
+ * the one the estimate itself converted through — then the balances feed the
+ * amount's own "≈" line reads. `null` when neither knows the coin: a fee row
+ * that invents a price is worse than one that shows only the coin.
+ */
+function feeUnitPriceUsd(
+	contract: string | null,
+	chainId: number,
+	inputs: SendLiveInputs
+): number | null {
+	const sameCoin = (other: string | null) =>
+		contract === null ? other === null : other?.toLowerCase() === contract.toLowerCase();
+	const published = inputs.fee.options.find((option) => sameCoin(option.contract))?.usd_price;
+	const relay = published == null ? Number.NaN : Number(published);
+	if (Number.isFinite(relay) && relay > 0) return relay;
+	const held = [inputs.send.selected_token, ...inputs.send.tokens].find(
+		(token) => token !== null && token.chain_id === chainId && sameCoin(token.token_address)
+	);
+	const price = held?.price_usd ?? null;
+	return price !== null && price > 0 ? price : null;
+}
+
+/**
+ * The fiat half of the fee line — "≈$0.55" (issue 201).
+ *
+ * The fee was the one figure on the send screen with no money beside it, so a
+ * person who does not track the coin's price could not tell what a transfer
+ * cost. The amount is the quote's own; only the PRICE comes from elsewhere,
+ * and when nothing can price the fee coin this is `null` and the line stays
+ * the coin amount alone.
+ */
+function feeFiat(fee: FeeEstimateView, inputs: SendLiveInputs): string | null {
+	const asset = fee.fee_asset;
+	const amount =
+		asset.type === 'erc20'
+			? Number(asset.amount) / 10 ** asset.decimals
+			: Number(fee.total_wei) / 1e18;
+	const price = feeUnitPriceUsd(asset.type === 'erc20' ? asset.token : null, fee.chain_id, inputs);
+	if (price === null || !Number.isFinite(amount)) return null;
+	const usd = amount * price;
+	if (usd < FEE_FIAT_MIN_USD) return null;
+	return `≈${moneyText(usd, inputs.currency)}`;
+}
+
+function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	if (!fee) return '—';
 	const asset = fee.fee_asset;
-	if (asset.type === 'erc20') {
-		const amount = Number(asset.amount) / 10 ** asset.decimals;
-		return `${trimBalance(amount.toString(), 4)} ${feeSymbol(fee, options)}`.trim();
-	}
-	const wei = Number(fee.total_wei) / 1e18;
-	return `${trimBalance(wei.toString(), 6)} ${nativeSymbol(fee.chain_id)}`;
+	const coin =
+		asset.type === 'erc20'
+			? `${trimBalance((Number(asset.amount) / 10 ** asset.decimals).toString(), 4)} ${feeSymbol(fee, inputs.fee.options)}`.trim()
+			: `${trimBalance((Number(fee.total_wei) / 1e18).toString(), 6)} ${nativeSymbol(fee.chain_id)}`;
+	const fiat = feeFiat(fee, inputs);
+	return fiat === null ? coin : `${coin} · ${fiat}`;
 }
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
@@ -223,7 +272,7 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for
 		// the frame where there is nothing to show yet.
-		value: quote ? feeText(quote, fee.options) : send.fee_busy || fee.busy ? '…' : '—',
+		value: quote ? feeText(quote, inputs) : send.fee_busy || fee.busy ? '…' : '—',
 		openLabel: template.openLabel
 	};
 }
@@ -654,7 +703,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 				(send.fee ?? inputs.fee.fee)?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeText(send.fee ?? inputs.fee.fee, inputs.fee.options)
+			value: feeText(send.fee ?? inputs.fee.fee, inputs)
 		}
 	];
 
