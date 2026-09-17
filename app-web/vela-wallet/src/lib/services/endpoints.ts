@@ -11,9 +11,9 @@
 import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
 
 export const DEFAULT_SERVICE_ENDPOINTS = {
-	ethereumDataURL: 'https://ethereum-data.awesometools.dev',
+	ethereumDataURL: 'https://ethereum-data.getvela.app',
 	passkeyIndexURL: 'https://p256-index-v2.getvela.app',
-	bundlerServiceURL: 'https://vela-relay.getvela.app',
+	bundlerServiceURL: 'https://vela-relay-cf.getvela.app',
 	// Vela's self-hosted Frankfurter instance (github.com/mondaylabsltd/vela-currency):
 	// FOSS, no key, ~160 currencies incl. VND. base=USD is required (default base is EUR).
 	fiatRatesURL: 'https://vela-currency.getvela.app/v2/rates?base=USD',

@@ -513,6 +513,19 @@ export interface RelayerModel {
 	address?: string;
 	/** The code of that address. Absent in the gallery, where the drawn placeholder stands. */
 	code?: QrCode;
+	/**
+	 * Present when this is a network Vela ships, i.e. one whose relayer the
+	 * OPERATOR is expected to keep funded. Then telling them is the fix, and
+	 * the funding path below is a secondary, folded-away option — nobody
+	 * should be nudged into paying for something that is not theirs to pay
+	 * for. Absent on a network the person added, where the operator may have
+	 * no way to hold gas at all and funding it is the only path there is.
+	 */
+	report?: {
+		label: string;
+		/** The disclosure that opens the funding half. */
+		selfFundLabel: string;
+	};
 }
 
 /** SR5: the passkey index is unreachable, and onboarding needs it. */

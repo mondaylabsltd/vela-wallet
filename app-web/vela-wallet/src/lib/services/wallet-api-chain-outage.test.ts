@@ -66,7 +66,10 @@ vi.mock('./price-service', async (importOriginal) => {
 
 vi.mock('./native-price', () => ({
 	bestNativeDexPrice: () => null,
-	chooseNativePrice: () => ({ price: null, source: 'none' })
+	chooseNativePrice: () => ({ price: null, source: 'none' }),
+	// The core's $1 peg (spec 060). `COIN` here is not a dollar coin, so the
+	// seam answers null and the ladder runs exactly as it did before.
+	peggedNativeUsd: () => null
 }));
 
 import { carryOverUnansweredChains, clearTokenCache, fetchTokens } from './wallet-api';

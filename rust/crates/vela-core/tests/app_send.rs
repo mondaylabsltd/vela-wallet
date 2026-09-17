@@ -216,6 +216,9 @@ fn treasury_status() -> SendTreasuryStatus {
         balance: "1".to_owned(),
         floor: "10".to_owned(),
         bootstrap_needed: true,
+        // The shell never judges this; the core fills it when it publishes the
+        // sheet (spec 060).
+        operator_served: false,
     }
 }
 
@@ -3788,5 +3791,35 @@ fn continue_takes_over_from_a_pending_form_quote_and_a_landed_one_is_not_asked_t
             }]
         ),
         "{ops:?}"
+    );
+}
+
+
+/// The out-of-gas sheet has to say WHO can fix it, and the core is what knows:
+/// a network Vela ships has an operator who owns that relayer, a network the
+/// person added may have nobody who can hold gas on it at all. The shell sends
+/// the probe unjudged; the answer is added here (spec 060).
+#[test]
+fn the_relayer_sheet_says_whether_the_operator_owns_this_network() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
+    // The shell reported the probe WITHOUT this verdict (`operator_served`
+    // is false in `treasury_status()`); the core supplies it.
+    assert!(sut.resolve(low_float()).is_empty());
+
+    let status = sut
+        .view()
+        .treasury_bootstrap
+        .expect("a depleted relayer opens the sheet");
+    assert!(
+        status.operator_served,
+        "chain 1 ships with Vela, so its relayer is the operator's to refill"
     );
 }

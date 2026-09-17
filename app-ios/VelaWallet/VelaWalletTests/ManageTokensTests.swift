@@ -143,13 +143,29 @@ struct ManageTokensTests {
         detecting: Bool = false,
         found: [MtokFoundWire] = [],
         notFound: Bool = false,
+        nativeAlias: Bool = false,
         saving: Bool = false,
         saveError: Bool = false
     ) -> MtokViewWire {
         MtokViewWire(
             inputAddress: input, addressValid: valid, detecting: detecting, found: found,
-            saving: saving, customTokens: [], notFound: notFound, saveError: saveError
+            saving: saving, customTokens: [], notFound: notFound, nativeAlias: nativeAlias,
+            saveError: saveError
         )
+    }
+
+    /// Arc's native coin also answers an ERC-20 interface, so the probe finds a
+    /// real token there. The refusal has to say WHY — "Not Found" would be both
+    /// wrong and unhelpful, since the balance is already on screen (spec 060).
+    @Test func theNativeCoinIsRefusedWithItsOwnReason() {
+        let model = FlowsLive.addToken(view(input: "0x3600…", valid: true, nativeAlias: true),
+                                       on: base, loc: loc)
+        guard case .notFound(let text) = model.result else {
+            Issue.record("the native alias must produce a refusal")
+            return
+        }
+        #expect(text.contains(loc.t("addToken.nativeAliasMessage")))
+        #expect(!text.contains(loc.t("addToken.notFoundMessage")))
     }
 
     private var card: MtokFoundWire {

@@ -39,6 +39,8 @@
     "errorChainNotFound": "チェーン情報が見つかりません",
     "errorNotCompatible": "Vela Wallet と互換性がありません",
     "invalidAddress": "コントラクトアドレスが正しくありません",
-    "notCompatible": "非対応"
+    "notCompatible": "非対応",
+    "nativeAliasTitle": "すでに表示中",
+    "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。"
   }
 }

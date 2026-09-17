@@ -296,6 +296,40 @@ pub fn first_grouped_quote_price(groups: &[NativeQuoteGroup]) -> Option<f64> {
     None
 }
 
+/// The USD price of a native gas coin that is a dollar stablecoin *by
+/// construction* — a chain where no DEX pool and no Chainlink feed can price
+/// the coin, because the coin is the dollar.
+///
+/// This rule used to be a `symbol == "USD"` literal written four times over:
+/// `price-service.ts:116` (web), `Prices.swift:136` (iOS),
+/// `ChainlinkPrices.kt:87` (Android) and `executor/chainlink.rs:144`
+/// (desktop). Tempo needed one symbol and the four copies agreed by luck;
+/// Arc needs a second (`USDC`, spec 060), and four hand-maintained copies of
+/// a PRICE is how a wallet starts quoting two different numbers for the same
+/// coin. So the table moved here, next to the ladder that consumes it.
+///
+/// `None` means "not pegged" and the caller falls through to the existing
+/// Chainlink/DEX ladder unchanged — this function only ever *adds* a price
+/// where there was none.
+///
+/// Why a peg and not a feed: a pegged coin's price is a protocol fact, not a
+/// market observation. It is also what makes the universal $0.01 fee floor
+/// apply — `fee_policy::calculate_in_band_fee_amount` charges "$0.01 worth of
+/// the native coin" only when the coin HAS a price, and degrades to a blind
+/// 0.001-coin floor when it does not. On Arc that degraded floor would be a
+/// tenth of a cent; with the peg, Arc gets exactly the floor Gnosis and
+/// Ethereum get.
+pub fn pegged_native_usd(symbol: &str) -> Option<f64> {
+    match symbol.trim().to_ascii_uppercase().as_str() {
+        // Tempo: gas is paid in USD stablecoins and the chain has no coin of
+        // its own; the wallet names that "USD" (`CHAINS`, `chains.ts`).
+        "USD" => Some(1.0),
+        // Arc (5042): the native coin IS USDC.
+        "USDC" => Some(1.0),
+        _ => None,
+    }
+}
+
 /// Where the chosen native price came from — mirrors `nativePriceSource`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NativePriceSource {

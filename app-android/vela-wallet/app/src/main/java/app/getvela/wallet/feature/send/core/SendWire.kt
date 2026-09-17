@@ -130,6 +130,12 @@ data class SendTreasuryStatus(
     val balance: String,
     val floor: String,
     val bootstrap_needed: Boolean,
+    /**
+     * Whether this is a network Vela ships, and so one whose relayer the
+     * OPERATOR is expected to keep funded. The core decides; it changes what
+     * the person is asked to do (spec 060).
+     */
+    val operator_served: Boolean = false,
 )
 
 /** What the relay's treasury can front on this chain — `unknown` when it could not be asked. */

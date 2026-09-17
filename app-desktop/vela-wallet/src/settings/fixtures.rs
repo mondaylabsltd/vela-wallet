@@ -343,7 +343,7 @@ pub struct EndpointFixture {
 
 pub const ENDPOINTS: [EndpointFixture; 4] = [
     EndpointFixture {
-        url: "https://ethereum-data.awesometools.dev",
+        url: "https://ethereum-data.getvela.app",
         latency_ms: 62,
     },
     EndpointFixture {
@@ -351,7 +351,7 @@ pub const ENDPOINTS: [EndpointFixture; 4] = [
         latency_ms: 88,
     },
     EndpointFixture {
-        url: "https://vela-relay.getvela.app",
+        url: "https://vela-relay-cf.getvela.app",
         latency_ms: 104,
     },
     EndpointFixture {

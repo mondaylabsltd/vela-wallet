@@ -202,6 +202,26 @@ export const CHAINS: ChainMeta[] = [
 		isL2: true,
 		rpcURL: 'https://worldchain.drpc.org',
 		explorerURL: 'https://worldscan.org'
+	},
+	{
+		// Circle's USDC-native L1 (spec 060). The native coin IS USDC: 18
+		// decimals on-chain, with a 6-decimal ERC-20 view of the SAME balance at
+		// 0x3600…0000 that must never be listed as a token. No DEX and no
+		// Chainlink deployment — the core's $1 peg prices it, which is also what
+		// earns Arc the same $0.01 fee floor every other network applies.
+		// NOT gasModel 'tempo': Tempo has no native coin at all, Arc pays gas
+		// natively; only the coin's price is special.
+		id: 'arc',
+		displayName: 'Arc',
+		chainId: 5042,
+		apiNetworkId: 'arc-mainnet',
+		nativeSymbol: 'USDC',
+		iconLabel: 'USDC',
+		iconColor: '#2775CA',
+		iconBg: '#E6F0FB',
+		isL2: false,
+		rpcURL: 'https://rpc.mainnet.arc.io',
+		explorerURL: 'https://explorer.arc.io'
 	}
 ];
 

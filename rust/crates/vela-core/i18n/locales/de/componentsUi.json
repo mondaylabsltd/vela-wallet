@@ -338,7 +338,11 @@
       "copied": "Kopiert",
       "closeBtn": "Schließen",
       "suggested": "Empfohlene Aufladung",
-      "retryBtn": "Eingezahlt · Erneut versuchen"
+      "retryBtn": "Eingezahlt · Erneut versuchen",
+      "operatorLead": "Den Relayer dieses Netzwerks betreibt der Vela-Betreiber, und ihm ist das Gas ausgegangen. Bescheid geben ist der schnellste Weg — und danach ist es für alle behoben.",
+      "reportBtn": "Das melden",
+      "selfFundToggle": "Keine Zeit? Starte ihn selbst",
+      "customLead": "Dieses Netzwerk hast du hinzugefügt; auf einer lokalen oder internen Chain kann der Vela-Betreiber womöglich gar kein Gas halten. Den Relayer zu starten liegt bei dir."
     },
     "mainNav": {
       "wallet": "Wallet",

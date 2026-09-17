@@ -523,4 +523,4 @@ class VelaWalletApplication : Application() {
 }
 
 /** `network_admin::DEFAULT_BUNDLER_SERVICE_URL` — the relay every client ships with. */
-private const val DEFAULT_BUNDLER_SERVICE_URL = "https://vela-relay.getvela.app"
+private const val DEFAULT_BUNDLER_SERVICE_URL = "https://vela-relay-cf.getvela.app"

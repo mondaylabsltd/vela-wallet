@@ -338,7 +338,11 @@
       "copyBtn": "Copy address to fund",
       "copied": "Copied",
       "retryBtn": "I've funded · Retry",
-      "closeBtn": "Close"
+      "closeBtn": "Close",
+      "operatorLead": "Vela's operator runs this network's relayer, and it is out of gas. Telling them is the fastest fix — and it stays fixed for everyone.",
+      "reportBtn": "Report this",
+      "selfFundToggle": "Can't wait? Start it yourself",
+      "customLead": "You added this network, so Vela's operator may have no way to hold gas on it — a local or private chain is nobody else's to fund. Starting its relayer is up to you."
     },
     "mainNav": {
       "wallet": "Wallet",

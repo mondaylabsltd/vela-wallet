@@ -518,7 +518,9 @@
   "errorChainNotFound": "No se encontró información de la cadena",
   "errorNotCompatible": "No es compatible con Vela Wallet",
   "invalidAddress": "Dirección de contrato no válida",
-  "notCompatible": "No compatible"
+  "notCompatible": "No compatible",
+  "nativeAliasTitle": "Ya lo tienes",
+  "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos."
  },
  "tokenDetail": {
   "send": "Enviar",
@@ -1459,7 +1461,11 @@
    "copied": "Copiado",
    "closeBtn": "Cerrar",
    "suggested": "Recarga sugerida",
-   "retryBtn": "Ya financié · Reintentar"
+   "retryBtn": "Ya financié · Reintentar",
+   "operatorLead": "El operador de Vela mantiene el relayer de esta red y se quedó sin gas. Avisarle es lo más rápido, y al arreglarse queda arreglado para todos.",
+   "reportBtn": "Reportar esto",
+   "selfFundToggle": "¿No puedes esperar? Inícialo tú",
+   "customLead": "Tú agregaste esta red, así que el operador de Vela quizá no tenga forma de tener gas ahí — una cadena local o interna no le toca a nadie más. Iniciar su relayer depende de ti."
   },
   "mainNav": {
    "wallet": "Cartera",

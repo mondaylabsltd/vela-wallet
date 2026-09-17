@@ -39,6 +39,8 @@
     "errorChainNotFound": "No se encontró información de la cadena",
     "errorNotCompatible": "No es compatible con Vela Wallet",
     "invalidAddress": "Dirección de contrato no válida",
-    "notCompatible": "No compatible"
+    "notCompatible": "No compatible",
+    "nativeAliasTitle": "Ya lo tienes",
+    "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos."
   }
 }

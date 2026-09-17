@@ -189,6 +189,7 @@ describe('safe-transaction', () => {
 	describe('deriveChainGasPrice (priority-tip inclusion)', () => {
 		test('includes the priority tip: baseFee + tip dominates a tiny eth_gasPrice (Gnosis)', () => {
 			const { gasPrice, baseFee, priorityFee, tipMeasured } = deriveChainGasPrice({
+				chainId: 100,
 				ethGasPrice: 21n,
 				baseFee: 17n,
 				priorityFee: 1202n,
@@ -203,6 +204,7 @@ describe('safe-transaction', () => {
 		test('eth_gasPrice stays a floor on min-gas-price chains (Polygon/BSC)', () => {
 			// eth_gasPrice reflects the enforced minimum, above baseFee + a small tip.
 			const { gasPrice } = deriveChainGasPrice({
+				chainId: 137,
 				ethGasPrice: 30_000_000_000n,
 				baseFee: 1_000_000_000n,
 				priorityFee: 500_000_000n
@@ -213,7 +215,7 @@ describe('safe-transaction', () => {
 		test('missing tip (0) is recovered from eth_gasPrice — never below legacy behavior', () => {
 			// When eth_maxPriorityFeePerGas is unavailable (Tempo / unsupported), tip=0 is
 			// passed and we derive it back from eth_gasPrice, matching the old result exactly.
-			const legacy = { ethGasPrice: 30n, baseFee: 10n };
+			const legacy = { chainId: 1, ethGasPrice: 30n, baseFee: 10n };
 			const derived = deriveChainGasPrice({ ...legacy, priorityFee: 0n });
 			expect(derived.gasPrice).toBe(30n); // == max(eth_gasPrice, baseFee) of the old code
 			expect(derived.priorityFee).toBe(20n); // 30 - 10
@@ -222,6 +224,7 @@ describe('safe-transaction', () => {
 
 		test('L2 with zero tip (Arbitrum/OP): no over-pricing', () => {
 			const { gasPrice } = deriveChainGasPrice({
+				chainId: 42161,
 				ethGasPrice: 100_000_000n,
 				baseFee: 100_000_000n,
 				priorityFee: 0n
@@ -250,9 +253,54 @@ describe('safe-transaction', () => {
 			});
 
 			test('NEW tip-inclusive basis is ACCEPTED', () => {
-				const newBasis = deriveChainGasPrice({ ethGasPrice, baseFee, priorityFee: tip }).gasPrice;
+				const newBasis = deriveChainGasPrice({
+					chainId: 100,
+					ethGasPrice,
+					baseFee,
+					priorityFee: tip
+				}).gasPrice;
 				expect(newBasis).toBe(chainRate);
 				expect(bundlerAccepts(newBasis)).toBe(true);
+			});
+		});
+
+		// Arc (spec 060) discards an operation priced under 20 gwei SILENTLY, so
+		// the floor is not an optimisation — it is the difference between a loud
+		// failure and a payment that looks submitted and never happens.
+		describe("Arc's 20 gwei chain floor", () => {
+			test('a read far below the floor is raised to it', () => {
+				const { gasPrice, baseFee } = deriveChainGasPrice({
+					chainId: 5042,
+					ethGasPrice: 1_000_000_000n,
+					baseFee: 1_000_000_000n,
+					priorityFee: 0n
+				});
+				expect(gasPrice).toBe(20_000_000_000n);
+				expect(baseFee).toBe(20_000_000_000n);
+			});
+
+			test('a genuine read above the floor is untouched — the floor only raises', () => {
+				const { gasPrice } = deriveChainGasPrice({
+					chainId: 5042,
+					ethGasPrice: 25_000_000_000n,
+					baseFee: 20_000_000_000n,
+					priorityFee: 1_000_000_000n,
+					tipMeasured: true
+				});
+				expect(gasPrice).toBe(25_000_000_000n);
+			});
+
+			test('no other chain gained a floor', () => {
+				for (const chainId of [1, 10, 56, 100, 130, 137, 143, 480, 4217, 8453, 42161, 43114]) {
+					const { gasPrice } = deriveChainGasPrice({
+						chainId,
+						ethGasPrice: 1_000n,
+						baseFee: 400n,
+						priorityFee: 100n,
+						tipMeasured: true
+					});
+					expect(gasPrice).toBe(1_000n);
+				}
 			});
 		});
 	});

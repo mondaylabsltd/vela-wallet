@@ -514,6 +514,13 @@ enum FlowsLive {
         if view.found.isEmpty, view.detecting {
             return .searching(loc.t("addToken.searchingNetworks"))
         }
+        // Checked before `notFound`: the probe FINDS this contract — it is a
+        // real, well-formed ERC-20 view of the network's own coin — so "not
+        // found" would be the wrong words for a refusal that has a reason.
+        if view.nativeAlias {
+            return .notFound(
+                "\(loc.t("addToken.nativeAliasTitle")) — \(loc.t("addToken.nativeAliasMessage"))")
+        }
         if view.notFound {
             return .notFound("\(loc.t("addToken.notFoundTitle")) — \(loc.t("addToken.notFoundMessage"))")
         }

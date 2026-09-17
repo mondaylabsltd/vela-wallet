@@ -191,7 +191,7 @@ struct NetworkAdminLiveTests {
         let reply = try? CoreJSON.object(await executor.perform([
             "type": "fetch_service_health",
             "field": "bundler_service",
-            "base_url": "https://vela-relay.getvela.app",
+            "base_url": "https://vela-relay-cf.getvela.app",
         ]))
         let body = reply?["body"] as? [String: Any]
         #expect(body?["type"] as? String == "identity",

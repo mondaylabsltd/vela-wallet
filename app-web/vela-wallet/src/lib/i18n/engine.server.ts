@@ -543,7 +543,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			addressLabel: k('componentsUi.treasuryBootstrap.addressLabel'),
 			disclaimer: k('componentsUi.treasuryBootstrap.disclaimer'),
 			retryBtn: k('componentsUi.treasuryBootstrap.retryBtn'),
-			copyBtn: k('componentsUi.treasuryBootstrap.copyBtn')
+			copyBtn: k('componentsUi.treasuryBootstrap.copyBtn'),
+			operatorLead: k('componentsUi.treasuryBootstrap.operatorLead'),
+			reportBtn: k('componentsUi.treasuryBootstrap.reportBtn'),
+			selfFundToggle: k('componentsUi.treasuryBootstrap.selfFundToggle'),
+			customLead: k('componentsUi.treasuryBootstrap.customLead')
 		},
 		indexDown: {
 			title: k('settings.indexDown.title'),

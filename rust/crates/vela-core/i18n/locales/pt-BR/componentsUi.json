@@ -338,7 +338,11 @@
       "copied": "Copiado",
       "closeBtn": "Fechar",
       "suggested": "Recarga sugerida",
-      "retryBtn": "Já financiei · Tentar de novo"
+      "retryBtn": "Já financiei · Tentar de novo",
+      "operatorLead": "O operador da Vela mantém o relayer desta rede, e ele ficou sem gás. Avisá-lo é o mais rápido — e, uma vez resolvido, vale para todo mundo.",
+      "reportBtn": "Relatar isso",
+      "selfFundToggle": "Não dá para esperar? Inicie você mesmo",
+      "customLead": "Você adicionou esta rede, então o operador da Vela pode não ter como manter gás nela — uma cadeia local ou interna não é de mais ninguém. Iniciar o relayer é com você."
     },
     "mainNav": {
       "wallet": "Carteira",

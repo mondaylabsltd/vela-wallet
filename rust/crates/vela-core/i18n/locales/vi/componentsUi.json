@@ -338,7 +338,11 @@
       "copied": "Đã sao chép",
       "closeBtn": "Đóng",
       "suggested": "Mức nạp đề xuất",
-      "retryBtn": "Tôi đã nạp · Thử lại"
+      "retryBtn": "Tôi đã nạp · Thử lại",
+      "operatorLead": "Bên vận hành Vela chạy relayer của mạng này, và nó đã hết gas. Báo cho họ là cách nhanh nhất — và sửa xong thì ai cũng dùng được.",
+      "reportBtn": "Báo lỗi này",
+      "selfFundToggle": "Không đợi được? Tự khởi động nó",
+      "customLead": "Bạn đã tự thêm mạng này, nên bên vận hành Vela có thể không có cách nào giữ gas trên đó — một chuỗi nội bộ hoặc cục bộ không phải việc của người khác. Khởi động relayer là tùy bạn."
     },
     "mainNav": {
       "wallet": "Ví",

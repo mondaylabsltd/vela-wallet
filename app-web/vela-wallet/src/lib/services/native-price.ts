@@ -27,7 +27,8 @@
 
 import {
 	bestNativeDexPrice as coreBestNativeDexPrice,
-	chooseNativePrice as coreChooseNativePrice
+	chooseNativePrice as coreChooseNativePrice,
+	peggedNativeUsd as corePeggedNativeUsd
 } from '$lib/core/client';
 
 /** Quote-token decimals when the `decimals()` read failed — USDC's 6. */
@@ -82,6 +83,20 @@ export function bestNativeDexPrice(groups: NativeQuoteGroup[]): number | null {
 		quoteDecimals: group.quoteDecimals ?? undefined
 	}));
 	return coreBestNativeDexPrice({ groups: wire }) ?? null;
+}
+
+/**
+ * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's `USD`,
+ * Arc's `USDC`. `null` means "not pegged": the caller falls through to the
+ * Chainlink/DEX ladder unchanged.
+ *
+ * Here, and not in `price-service`, for the same reason the rest of this module
+ * is here: it is a CORE call, and the core is loaded before the price path
+ * runs. `price-service` stays free of the core so it can be read and mocked as
+ * pure feed plumbing.
+ */
+export function peggedNativeUsd(symbol: string): number | null {
+	return corePeggedNativeUsd(symbol) ?? null;
 }
 
 export function chooseNativePrice(

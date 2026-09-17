@@ -39,6 +39,8 @@
     "errorChainNotFound": "Chain-Informationen nicht gefunden",
     "errorNotCompatible": "Nicht kompatibel mit Vela Wallet",
     "invalidAddress": "Ungültige Vertragsadresse",
-    "notCompatible": "Nicht kompatibel"
+    "notCompatible": "Nicht kompatibel",
+    "nativeAliasTitle": "Schon da",
+    "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt."
   }
 }

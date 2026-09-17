@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use vela_core::app::fee_policy::{
-    ChainGasPrice, GasSignals, derive_chain_gas_price, is_tempo_chain,
+    ChainGasPrice, GasSignals, derive_chain_gas_price, is_tempo_chain, min_gas_price_wei,
 };
 use vela_core::primitives::{abi_encode_address, function_selector, to_hex};
 use vela_core::safe::ENTRY_POINT;
@@ -180,6 +180,7 @@ pub fn chain_gas_price(chain_id: u32) -> ChainGasPrice {
         Some(eth_gas_price) => {
             let tip_measured = want_tip && signals.priority_fee.is_some();
             let derived = derive_chain_gas_price(&GasSignals {
+                chain_id,
                 eth_gas_price,
                 base_fee: parse(&signals.base_fee).unwrap_or(0),
                 priority_fee: parse(&signals.priority_fee).unwrap_or(0),
@@ -193,9 +194,14 @@ pub fn chain_gas_price(chain_id: u32) -> ChainGasPrice {
         }
         None => None,
     };
+    // The static fallback obeys the chain's floor too: on Arc, 5 gwei doubled
+    // by the bundler margin is under the 20 gwei minimum, and Arc discards an
+    // underpriced operation SILENTLY (spec 060). `min_gas_price_wei` is 0
+    // everywhere else, so this is a no-op on every other chain.
+    let floor = min_gas_price_wei(chain_id);
     let price = derived.unwrap_or(ChainGasPrice {
-        gas_price: 5_000_000_000,
-        base_fee: 5_000_000_000,
+        gas_price: 5_000_000_000u128.max(floor),
+        base_fee: 5_000_000_000u128.max(floor),
         priority_fee: 0,
         tip_measured: false,
     });

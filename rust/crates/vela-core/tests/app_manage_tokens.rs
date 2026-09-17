@@ -14,8 +14,8 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::manage_tokens::{
-    admissible_erc20_meta, token_id, Event, ManageTokens, MtokCustomToken, MtokNetwork,
-    MtokOperation as Op, MtokShellResult as Res, MtokTokenMeta,
+    admissible_erc20_meta, native_alias_token, token_id, Event, ManageTokens, MtokCustomToken,
+    MtokNetwork, MtokOperation as Op, MtokShellResult as Res, MtokTokenMeta,
 };
 
 type Sut = DomainDriver<ManageTokens>;
@@ -512,4 +512,78 @@ fn deleted_token_still_reads_added_on_its_card() {
             .is_empty(),
         "and a re-add is blocked for the session — verbatim"
     );
+}
+
+
+/// Arc's native coin wears an ERC-20 interface at `0x3600…0000` (spec 060).
+/// That contract answers `name`, `symbol` and `decimals` perfectly well, so
+/// nothing about the probe says "stop" — and listing it would show one balance
+/// as two rows and double the person's total.
+#[test]
+fn arcs_native_coin_is_refused_as_a_token_and_says_why() {
+    const ARC: u32 = 5_042;
+    let alias = native_alias_token(ARC).expect("Arc has a native alias");
+
+    let mut sut = opened(vec![]);
+    assert!(sut
+        .dispatch(Event::AddressInput {
+            s: alias.to_owned()
+        })
+        .is_empty());
+    let ops = sut.dispatch(Event::DetectRequested {
+        networks: vec![MtokNetwork {
+            chain_id: ARC,
+            name: "Arc".to_owned(),
+        }],
+    });
+    assert_eq!(
+        ops,
+        vec![Op::MulticallErc20Meta {
+            chain_id: ARC,
+            address: alias.to_owned()
+        }]
+    );
+
+    // The contract resolves — this is exactly the case a "no metadata" gate
+    // would miss.
+    sut.resolve(Res::ChainMetaResolved {
+        chain_id: ARC,
+        address: alias.to_owned(),
+        meta: Some(meta("USD Coin", "USDC", 6)),
+    });
+
+    let view = sut.view();
+    assert!(view.found.is_empty(), "the native coin is not a listable token");
+    assert!(
+        view.native_alias,
+        "the refusal must carry its reason, not read as 'not found'"
+    );
+}
+
+/// The alias is per-CHAIN data, not a banned address: the same contract on
+/// another chain is an ordinary token and must still be addable.
+#[test]
+fn the_same_address_on_another_chain_is_an_ordinary_token() {
+    assert_eq!(native_alias_token(1), None);
+    let alias = native_alias_token(5_042).unwrap();
+
+    let mut sut = opened(vec![]);
+    sut.dispatch(Event::AddressInput {
+        s: alias.to_owned(),
+    });
+    sut.dispatch(Event::DetectRequested {
+        networks: vec![MtokNetwork {
+            chain_id: 1,
+            name: "Ethereum".to_owned(),
+        }],
+    });
+    sut.resolve(Res::ChainMetaResolved {
+        chain_id: 1,
+        address: alias.to_owned(),
+        meta: Some(meta("Some Token", "SOME", 18)),
+    });
+
+    let view = sut.view();
+    assert_eq!(view.found.len(), 1);
+    assert!(!view.native_alias);
 }

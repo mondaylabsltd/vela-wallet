@@ -440,7 +440,12 @@
 	$effect(() => {
 		const view = addTokenView;
 		if (!view || !view.address_valid || view.detecting) return;
-		if (view.found.length > 0 || view.not_found) return;
+		// A settled probe is one that produced a card, a miss, OR a refusal.
+		// `native_alias` is the third: the address is a chain's native coin
+		// behind an ERC-20 interface, so there is no card and `not_found` is
+		// false — without it this effect would re-probe the same address
+		// forever (spec 060).
+		if (view.found.length > 0 || view.not_found || view.native_alias) return;
 		manageTokens?.dispatch({ type: 'detect_requested', networks: networkSnapshot() });
 	});
 

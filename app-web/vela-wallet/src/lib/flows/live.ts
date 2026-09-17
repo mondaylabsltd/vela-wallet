@@ -540,12 +540,22 @@ export function liveAddToken(model: AddTokenModel, inputs: AddTokenLiveInputs): 
 					detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
 					chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
 				}
-			: view.not_found
+			: view.native_alias
 				? {
+						// Arc's native coin also answers an ERC-20 interface, so the
+						// probe FINDS a well-formed token here. "Not Found" would be
+						// the wrong words for a refusal that has a reason — and the
+						// reason is the thing worth saying: the balance is already on
+						// screen (spec 060).
 						kind: 'not-found',
-						text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+						text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
 					}
-				: { kind: 'none' };
+				: view.not_found
+					? {
+							kind: 'not-found',
+							text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+						}
+					: { kind: 'none' };
 	return {
 		...model,
 		tab: 'erc20',

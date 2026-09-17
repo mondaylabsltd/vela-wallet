@@ -12,8 +12,10 @@ import {
 	liveEndpoints,
 	liveNetworkDetail,
 	liveNetworkRows,
+	liveRelayer,
 	liveRpcProviders
 } from './live';
+import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 
 const m = resolveSettingsMessages('en');
@@ -294,5 +296,59 @@ describe('liveAccountsSheet', () => {
 			m.accounts
 		);
 		expect(sheet.rows.map((r) => r.amount)).toEqual(['', '']);
+	});
+});
+
+// The out-of-gas relayer sheet has to answer a question before it asks for
+// anything: who can actually fix this (spec 060)? Getting it wrong is either a
+// shrug at a person who could have fixed it themselves, or a request for money
+// that was never theirs to pay.
+describe('the relayer bootstrap sheet', () => {
+	const status = (operator_served: boolean): SendTreasuryStatus => ({
+		chain_id: operator_served ? 1 : 5042002,
+		address: '0x3e59292e18417f814112f731e7163534c6d2fe3c',
+		asset: 'native',
+		balance: '0',
+		floor: '100000000000000',
+		bootstrap_needed: true,
+		operator_served
+	});
+
+	it('leads with telling the operator on a network Vela ships', () => {
+		const panel = liveRelayer(status(true), m);
+		expect(panel.report).toBeDefined();
+		expect(panel.lead).toBe(m.relayer.operatorLead);
+		expect(panel.report?.label).toBe(m.relayer.reportBtn);
+		// The funding half stays behind a disclosure: it is the operator's bill.
+		expect(panel.report?.selfFundLabel).toBe(m.relayer.selfFundToggle);
+	});
+
+	it('asks nobody to report a network only the person can reach', () => {
+		const panel = liveRelayer(status(false), m);
+		expect(panel.report).toBeUndefined();
+		expect(panel.lead).toBe(m.relayer.customLead);
+	});
+
+	it('never asks for less than 0.01 — a floor-sized top-up starts nothing', () => {
+		// The relay's float floor is 0.0001; the exact shortfall to it buys a
+		// relayer that is under the floor again after about one operation.
+		const panel = liveRelayer(status(false), m);
+		expect(panel.amountHint).toContain('0.01');
+		expect(panel.amountHint).not.toContain('0.0001');
+	});
+
+	it('asks for the real shortfall when that is the larger number', () => {
+		const panel = liveRelayer({ ...status(false), floor: '5000000000000000000' }, m);
+		expect(panel.amountHint).toContain('5');
+	});
+
+	it('keeps the non-refundable warning and the treasury address in both cases', () => {
+		for (const served of [true, false]) {
+			const panel = liveRelayer(status(served), m);
+			expect(panel.callout.text).toBe(m.relayer.disclaimer);
+			expect(panel.callout.tone).toBe('warning');
+			expect(panel.address).toBe('0x3e59292e18417f814112f731e7163534c6d2fe3c');
+			expect(panel.primary).toBe(m.relayer.retryBtn);
+		}
 	});
 });

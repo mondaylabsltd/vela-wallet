@@ -25,7 +25,12 @@ import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-t
 // The platform seam for the native-coin price rules (spec 017 wave C): web
 // resolves to `native-price.web.ts` and the CORE decides; iOS/Android resolve
 // to `native-price.ts`, the TypeScript twin, because Hermes has no wasm.
-import { bestNativeDexPrice, chooseNativePrice, type NativeQuoteGroup } from './native-price';
+import {
+	bestNativeDexPrice,
+	chooseNativePrice,
+	peggedNativeUsd,
+	type NativeQuoteGroup
+} from './native-price';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from './price-service';
 import {
 	MULTICALL3,
@@ -145,7 +150,7 @@ export const DEFAULT_QUOTE_DECIMALS = 6;
 
 // Re-exported so existing importers (and the drift gate) keep one name for the
 // native-price vocabulary. On web these ARE the core's answers.
-export { bestNativeDexPrice, chooseNativePrice } from './native-price';
+export { bestNativeDexPrice, chooseNativePrice, peggedNativeUsd } from './native-price';
 export type { NativePrice, NativePriceSource, NativeQuoteGroup } from './native-price';
 
 // ---------------------------------------------------------------------------
@@ -568,7 +573,13 @@ async function queryChainAssets(
 	}
 
 	// Try Ethereum mainnet Chainlink
-	const ethClPrice = resolveChainlinkPrice(nativeCurrency.symbol, chainlinkPrices);
+	// A coin that IS a dollar (Tempo's USD, Arc's USDC) is pegged by the core:
+	// there is no feed to read, because there is nothing to measure. The peg is
+	// also what earns such a chain the ordinary $0.01 fee floor, which is
+	// "$0.01 worth of the native coin" and needs a price to exist (spec 060).
+	const ethClPrice =
+		peggedNativeUsd(nativeCurrency.symbol) ??
+		resolveChainlinkPrice(nativeCurrency.symbol, chainlinkPrices);
 
 	// Pick best price: DEX preferred, but sanity-check against Chainlink.
 	// If DEX price deviates >50% from Chainlink, DEX likely has low liquidity → prefer Chainlink.

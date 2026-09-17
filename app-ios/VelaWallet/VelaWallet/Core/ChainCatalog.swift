@@ -96,6 +96,15 @@ enum ChainCatalog {
                   apiNetworkId: "worldchain-mainnet", nativeSymbol: "ETH", isL2: true,
                   rpcURL: "https://worldchain.drpc.org",
                   explorerURL: "https://worldscan.org", gasModel: .native),
+        // Circle's USDC-native L1 (spec 060). `gasModel: .native` on purpose:
+        // Tempo has no native coin and reimburses gas in a TIP-20, Arc pays gas
+        // natively — only the coin's PRICE is special, and the core's $1 peg
+        // handles that. The ERC-20 view of the same balance at 0x3600…0000 is
+        // never a token.
+        ChainMeta(id: "arc", displayName: "Arc", chainId: 5_042,
+                  apiNetworkId: "arc-mainnet", nativeSymbol: "USDC", isL2: false,
+                  rpcURL: "https://rpc.mainnet.arc.io",
+                  explorerURL: "https://explorer.arc.io", gasModel: .native),
     ]
 
     static func meta(_ chainId: Int) -> ChainMeta? {
@@ -136,7 +145,7 @@ enum RpcProvider: String, CaseIterable {
 
     /// `chainId` → the provider's own name for that chain. A chain missing from
     /// a provider's map means no URL is built for it there — Ankr genuinely
-    /// does not serve Unichain, World Chain, Monad or Tempo, and inventing a
+    /// does not serve Unichain, World Chain, Monad, Tempo or Arc, and inventing a
     /// slug would produce an endpoint that 404s on every call.
     private static let slugs: [RpcProvider: [Int: String]] = [
         .alchemy: [
@@ -144,12 +153,13 @@ enum RpcProvider: String, CaseIterable {
             137: "polygon-mainnet", 42_161: "arb-mainnet", 10: "opt-mainnet",
             8_453: "base-mainnet", 43_114: "avax-mainnet", 100: "gnosis-mainnet",
             130: "unichain-mainnet", 4_217: "tempo-mainnet", 143: "monad-mainnet",
-            480: "worldchain-mainnet",
+            480: "worldchain-mainnet", 5_042: "arc-mainnet",
         ],
         .drpc: [
             1: "ethereum", 56: "bsc", 137: "polygon", 42_161: "arbitrum",
             10: "optimism", 8_453: "base", 43_114: "avalanche", 100: "gnosis",
             130: "unichain", 4_217: "tempo", 143: "monad", 480: "worldchain",
+            5_042: "arc",
         ],
         .ankr: [
             1: "eth", 56: "bsc", 137: "polygon", 42_161: "arbitrum",

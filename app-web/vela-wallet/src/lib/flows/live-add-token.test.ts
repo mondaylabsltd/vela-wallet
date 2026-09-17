@@ -26,6 +26,7 @@ const EMPTY: MtokView = {
 	saving: false,
 	custom_tokens: [],
 	not_found: false,
+	native_alias: false,
 	save_error: false
 };
 
@@ -139,5 +140,22 @@ describe('the write', () => {
 		});
 		expect(model.fieldError).toBe(m['addToken.errorSaveToken']);
 		expect(model.ctaDisabled).toBe(false);
+	});
+});
+
+// Arc's native coin also answers an ERC-20 interface (spec 060), so the probe
+// finds a real token at that address. The refusal has to say why: "Not Found"
+// would be untrue, and useless — the balance is already on the assets screen.
+describe('the native coin', () => {
+	it('is refused with its own reason, not as "not found"', () => {
+		const model = live({
+			input_address: '0x3600000000000000000000000000000000000000',
+			address_valid: true,
+			native_alias: true
+		});
+		expect(model.result).toEqual({
+			kind: 'not-found',
+			text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
+		});
 	});
 });

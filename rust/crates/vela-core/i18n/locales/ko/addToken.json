@@ -39,6 +39,8 @@
     "errorChainNotFound": "체인 정보를 찾을 수 없습니다",
     "errorNotCompatible": "Vela Wallet과(와) 호환되지 않습니다",
     "invalidAddress": "잘못된 컨트랙트 주소입니다",
-    "notCompatible": "호환되지 않음"
+    "notCompatible": "호환되지 않음",
+    "nativeAliasTitle": "이미 표시됨",
+    "nativeAliasMessage": "이 주소는 해당 네트워크의 기본 코인입니다. 잔액은 이미 자산에 표시되어 있습니다."
   }
 }

@@ -1104,6 +1104,9 @@ mod treasury_tests {
                     balance: "0".to_owned(),
                     floor: "20000000000000000".to_owned(),
                     bootstrap_needed: true,
+                    // Gnosis ships with Vela, so its relayer is the operator's
+                    // to refill — the core says so when it publishes the sheet.
+                    operator_served: true,
                 }),
                 ..host.view()
             };

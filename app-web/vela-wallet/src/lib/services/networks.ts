@@ -27,9 +27,9 @@ export interface Network {
 }
 
 /** Base URL for chain logos from ethereum-data (content, as on Expo). */
-const CHAIN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/chainlogos';
+const CHAIN_LOGO_BASE = 'https://ethereum-data.getvela.app/chainlogos';
 /** Base URL of Vela's per-chain ERC-4337 bundler. */
-const BUNDLER_BASE = 'https://vela-relay.getvela.app';
+const BUNDLER_BASE = 'https://vela-relay-cf.getvela.app';
 
 /** Built-in networks, derived from the canonical CHAINS table. */
 export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({

@@ -151,12 +151,12 @@ pub const SEARCH_DEBOUNCE_MS: u32 = 300;
 /// Vela's per-chain ERC-4337 bundler base for BUILT-IN networks
 /// (network.ts:33). Custom networks use the *configurable* service endpoint
 /// instead (`getBundlerServiceURL()`).
-pub const BUNDLER_BASE: &str = "https://vela-relay.getvela.app";
+pub const BUNDLER_BASE: &str = "https://vela-relay-cf.getvela.app";
 
 // `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324).
-pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.awesometools.dev";
+pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
 pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
-pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay.getvela.app";
+pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
 
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
@@ -208,7 +208,7 @@ pub struct NetBuiltinChain {
     pub typical_inclusion_s: u16,
 }
 
-pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
+pub const BUILTIN_CHAINS: [NetBuiltinChain; 13] = [
     NetBuiltinChain {
         id: "ethereum",
         display_name: "Ethereum",
@@ -317,10 +317,36 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         explorer_url: "https://worldscan.org",
         typical_inclusion_s: 4,
     },
+    // Circle's USDC-native L1 (spec 060). The native coin IS USDC — 18 decimals
+    // on-chain, with a 6-decimal ERC-20 view of the SAME balance at
+    // 0x3600…0000 that must never be listed as a token. ~0.48 s blocks with
+    // deterministic finality, so 2 s covers the relay's inclusion depth.
+    NetBuiltinChain {
+        id: "arc",
+        display_name: "Arc",
+        chain_id: 5042,
+        native_symbol: "USDC",
+        rpc_url: "https://rpc.mainnet.arc.io",
+        explorer_url: "https://explorer.arc.io",
+        typical_inclusion_s: 2,
+    },
 ];
 
 fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
+}
+
+/// Whether this is a network Vela ships, as opposed to one a person added.
+///
+/// The distinction decides WHO can fix an out-of-gas relayer. On a network we
+/// ship, the operator runs that relayer and can refill it — the useful thing a
+/// person can do is tell them. On a network someone added — a local devnet, a
+/// company's internal chain, anything the operator cannot reach — there may be
+/// no way for the operator to hold gas there at all, and funding it is the
+/// person's own call. Offering the wrong one of those two is either a shrug or
+/// a request for money that should never have been asked for.
+pub fn is_builtin_chain(chain_id: u32) -> bool {
+    builtin(chain_id).is_some()
 }
 
 /// `PROVIDER_ORDER` (rpc-providers.ts:37).
@@ -348,6 +374,7 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             4217 => Some("tempo-mainnet"),
             143 => Some("monad-mainnet"),
             480 => Some("worldchain-mainnet"),
+            5042 => Some("arc-mainnet"),
             _ => None,
         },
         NetProviderId::Drpc => match chain_id {
@@ -363,9 +390,10 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             4217 => Some("tempo"),
             143 => Some("monad"),
             480 => Some("worldchain"),
+            5042 => Some("arc"),
             _ => None,
         },
-        // Ankr serves neither Unichain, World Chain, Monad nor Tempo.
+        // Ankr serves neither Unichain, World Chain, Monad, Tempo nor Arc.
         NetProviderId::Ankr => match chain_id {
             1 => Some("eth"),
             56 => Some("bsc"),

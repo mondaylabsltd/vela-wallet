@@ -338,7 +338,11 @@
       "copyBtn": "复制地址去充值",
       "copied": "已复制",
       "retryBtn": "我已充值 · 重试交易",
-      "closeBtn": "关闭"
+      "closeBtn": "关闭",
+      "operatorLead": "这个网络的中继由 Vela 运营方维护，现在它没有 gas 了。告诉他们是最快的办法——修好之后对所有人都有效。",
+      "reportBtn": "报告这个问题",
+      "selfFundToggle": "等不及？自己启动它",
+      "customLead": "这是你自己添加的网络，Vela 运营方可能根本没法在上面持有 gas——本地或内部的链不该由别人来充值。启动它的中继要由你自己来。"
     },
     "mainNav": {
       "wallet": "钱包",

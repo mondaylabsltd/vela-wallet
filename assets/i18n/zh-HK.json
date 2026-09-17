@@ -515,7 +515,9 @@
   "errorChainNotFound": "找不到區塊鏈資料",
   "errorNotCompatible": "與 Vela Wallet 不兼容",
   "invalidAddress": "合約地址唔啱",
-  "notCompatible": "唔兼容"
+  "notCompatible": "唔兼容",
+  "nativeAliasTitle": "已喺你嘅資產入面",
+  "nativeAliasMessage": "呢個係該網絡嘅原生代幣，餘額已經喺你嘅資產入面顯示緊。"
  },
  "tokenDetail": {
   "send": "發送",
@@ -1456,7 +1458,11 @@
    "copied": "已複製",
    "closeBtn": "關閉",
    "suggested": "建議注資額",
-   "retryBtn": "我已注資 · 重試"
+   "retryBtn": "我已注資 · 重試",
+   "operatorLead": "呢個網絡嘅中繼由 Vela 營運方維護，而家佢冇咗 gas。話俾佢哋知係最快嘅辦法——整好咗之後對所有人都有效。",
+   "reportBtn": "報告呢個問題",
+   "selfFundToggle": "等唔切？自己啟動佢",
+   "customLead": "呢個係你自己加嘅網絡，Vela 營運方可能根本冇辦法喺上面持有 gas——本地或者內部嘅鏈唔應該由第個人嚟充。啟動佢嘅中繼要由你自己嚟。"
   },
   "mainNav": {
    "wallet": "錢包",

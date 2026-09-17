@@ -122,6 +122,34 @@ const OP_STACK_STATIC_GAS_ADDER: u128 = 150_000;
 /// (`safe-transaction.ts:1983`).
 const FALLBACK_GAS_PRICE_WEI: u128 = 5_000_000_000;
 
+/// Arc mainnet (5042) and its testnet (5042002) enforce a 20 gwei minimum base
+/// fee (spec 060).
+const ARC_CHAIN_IDS: [u32; 2] = [5_042, 5_042_002];
+/// Arc's minimum base fee, in wei of its 18-decimal native USDC.
+const ARC_MIN_GAS_PRICE_WEI: u128 = 20_000_000_000;
+
+/// The lowest gas price a chain will ACCEPT.
+///
+/// On most chains an underpriced transaction sits in the mempool and can be
+/// replaced — visibly pending, recoverable. Arc does not do that: a
+/// `maxFeePerGas` below its 20 gwei floor is **discarded silently**, with no
+/// error to the sender and no trace on chain. The payment looks submitted and
+/// simply never happens, which is the worst failure this wallet can produce.
+///
+/// The trigger is not exotic. [`FALLBACK_GAS_PRICE_WEI`] is 5 gwei, so any Arc
+/// quote taken after a failed `eth_gasPrice` read would land at 10 gwei once
+/// the ×2 bundler margin is applied — under the floor, every time.
+///
+/// `0` for every other chain, which makes the floor a no-op there: the
+/// twelve pre-existing networks must price bit-identically to before.
+pub const fn min_gas_price_wei(chain_id: u32) -> u128 {
+    if ARC_CHAIN_IDS[0] == chain_id || ARC_CHAIN_IDS[1] == chain_id {
+        ARC_MIN_GAS_PRICE_WEI
+    } else {
+        0
+    }
+}
+
 /// Quote TTL. The inventory's `Timer(8s/30s TTL)`: the 8s response cache is
 /// the shell's; this 30s marks a *displayed* quote stale so the surface can
 /// offer a refresh. Staleness is advisory — it does not disable confirm,
@@ -722,6 +750,10 @@ pub fn calc_max_fee_per_gas(gas_price: u128, tier: FeeTier) -> u128 {
 /// The raw chain signals (`deriveChainGasPrice` input).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GasSignals {
+    /// The chain being priced — carried so [`derive_chain_gas_price`] can apply
+    /// that chain's [`min_gas_price_wei`] floor itself. A caller cannot forget
+    /// a floor it does not have to remember.
+    pub chain_id: u32,
     pub eth_gas_price: u128,
     pub base_fee: u128,
     pub priority_fee: u128,
@@ -748,11 +780,16 @@ pub fn derive_chain_gas_price(signals: &GasSignals) -> ChainGasPrice {
         signals.eth_gas_price.saturating_sub(signals.base_fee)
     };
     let with_tip = add(signals.base_fee, priority_fee);
-    let gas_price = signals.eth_gas_price.max(with_tip);
+    // The chain's own floor is the last word: a price under it is not a cheap
+    // transaction, it is a transaction the chain throws away without saying so
+    // (see `min_gas_price_wei`). The floor only ever RAISES a price, and it is
+    // 0 on every chain but Arc, so nothing else moves.
+    let floor = min_gas_price_wei(signals.chain_id);
+    let gas_price = signals.eth_gas_price.max(with_tip).max(floor);
     let tip_measured = signals.tip_measured.unwrap_or(signals.priority_fee > 0);
     ChainGasPrice {
         gas_price,
-        base_fee: signals.base_fee,
+        base_fee: signals.base_fee.max(floor),
         priority_fee,
         tip_measured,
     }
@@ -1554,11 +1591,10 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
                 priority_fee,
             },
         ) => {
-            let tempo = model
-                .ctx
-                .as_ref()
-                .is_some_and(|c| is_tempo_chain(c.chain_id));
+            let chain_id = model.ctx.as_ref().map(|c| c.chain_id).unwrap_or(0);
+            let tempo = is_tempo_chain(chain_id);
             model.pending.gas = Some(resolve_gas_price(
+                chain_id,
                 eth_gas_price.as_deref(),
                 base_fee.as_deref(),
                 priority_fee.as_deref(),
@@ -1597,14 +1633,20 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
 /// failed/zero `eth_gasPrice` falls to the 5-gwei default; a failed tip read
 /// just leaves `tip_measured` false.
 fn resolve_gas_price(
+    chain_id: u32,
     eth_gas_price: Option<&str>,
     base_fee: Option<&str>,
     priority_fee: Option<&str>,
     want_tip: bool,
 ) -> ChainGasPrice {
+    // The static fallback is exactly where Arc's silent-drop hazard lives: 5
+    // gwei doubled by the bundler margin is 10 gwei, under Arc's floor. So the
+    // fallback is floored too — a chain that cannot be read is still a chain
+    // whose rules apply.
+    let floor = min_gas_price_wei(chain_id);
     let fallback = ChainGasPrice {
-        gas_price: FALLBACK_GAS_PRICE_WEI,
-        base_fee: FALLBACK_GAS_PRICE_WEI,
+        gas_price: FALLBACK_GAS_PRICE_WEI.max(floor),
+        base_fee: FALLBACK_GAS_PRICE_WEI.max(floor),
         priority_fee: 0,
         tip_measured: false,
     };
@@ -1616,6 +1658,7 @@ fn resolve_gas_price(
     let tip_measured = want_tip && priority_fee.is_some();
     let tip = priority_fee.and_then(parse_units).unwrap_or(0);
     let derived = derive_chain_gas_price(&GasSignals {
+        chain_id,
         eth_gas_price: eth,
         base_fee: base,
         priority_fee: tip,

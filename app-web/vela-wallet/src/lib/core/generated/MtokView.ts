@@ -18,4 +18,10 @@ saving: boolean,
 /**
  * The manage/delete list below the form.
  */
-custom_tokens: Array<MtokCustomToken>, not_found: boolean, save_error: boolean, };
+custom_tokens: Array<MtokCustomToken>, not_found: boolean, 
+/**
+ * The searched address is this network's native coin wearing an ERC-20
+ * interface. It holds the same balance the wallet already shows, so it is
+ * refused with that reason rather than reported as "not found".
+ */
+native_alias: boolean, save_error: boolean, };

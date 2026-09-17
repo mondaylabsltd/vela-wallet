@@ -457,6 +457,15 @@ pub struct SendTreasuryStatus {
     pub balance: String,
     pub floor: String,
     pub bootstrap_needed: bool,
+    /// Whether this is a network Vela ships, and therefore one whose relayer
+    /// the OPERATOR is expected to keep funded
+    /// ([`network_admin::is_builtin_chain`]). The shell does not send this —
+    /// the core fills it when it publishes the sheet — because it decides
+    /// which of two different things the person is asked to do: tell the
+    /// operator, or fund it themselves. On a network someone added, the
+    /// operator may have no way to hold gas there at all.
+    #[serde(default)]
+    pub operator_served: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1880,7 +1889,10 @@ impl App for Send {
             tx_hash: model.tx_hash.clone(),
             user_op_hash: model.user_op_hash.clone(),
             receipt: receipt_view(model, stage),
-            treasury_bootstrap: model.treasury_bootstrap.clone(),
+            treasury_bootstrap: model.treasury_bootstrap.clone().map(|mut status| {
+                status.operator_served = super::network_admin::is_builtin_chain(status.chain_id);
+                status
+            }),
             recipient_identity: model.recipient_identity.clone(),
             recipient_risk: model.recipient_risk.clone(),
             sim_json: model.sim_json.clone(),

@@ -43,7 +43,7 @@ use crate::executor::{pool, proxy, storage};
 
 /// The built-in relay. Per-chain JSON-RPC is `{base}/{chain_id}`; REST is
 /// `{base}/v1/…`.
-pub const BUILTIN_BASE: &str = "https://vela-relay.getvela.app";
+pub const BUILTIN_BASE: &str = "https://vela-relay-cf.getvela.app";
 
 /// `NET_TIMEOUTS.bundlerRest` — the REST account and treasury lookups.
 const REST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -304,6 +304,10 @@ pub fn probe_treasury(chain_id: u32) -> SendTreasuryProbe {
         balance: big_hex(data.get("balance")).to_string(),
         floor: big_hex(data.get("floor")).to_string(),
         bootstrap_needed: data.get("bootstrapNeeded") == Some(&Value::Bool(true)),
+        // The CORE decides whether this is a network Vela ships, and therefore
+        // whose relayer the operator owns. This executor reports the probe; it
+        // does not judge it (vela-wallet spec 060).
+        operator_served: false,
     };
     if status.bootstrap_needed {
         SendTreasuryProbe::LowFloat { status }

@@ -273,6 +273,12 @@ export interface SettingsMessages {
 		disclaimer: string;
 		retryBtn: string;
 		copyBtn: string;
+		/** Shown when the OPERATOR runs this network's relayer (spec 060). */
+		operatorLead: string;
+		reportBtn: string;
+		selfFundToggle: string;
+		/** Shown when the person added the network themselves. */
+		customLead: string;
 	};
 	indexDown: {
 		title: string;
@@ -506,6 +512,10 @@ export const SETTINGS_KEYS = [
 	'componentsUi.treasuryBootstrap.addressLabel',
 	'componentsUi.treasuryBootstrap.disclaimer',
 	'componentsUi.treasuryBootstrap.retryBtn',
+	'componentsUi.treasuryBootstrap.operatorLead',
+	'componentsUi.treasuryBootstrap.reportBtn',
+	'componentsUi.treasuryBootstrap.selfFundToggle',
+	'componentsUi.treasuryBootstrap.customLead',
 	'componentsUi.treasuryBootstrap.copyBtn',
 	'settings.indexDown.title',
 	'settings.indexDown.subtitle',

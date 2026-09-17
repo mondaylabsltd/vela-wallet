@@ -39,6 +39,8 @@
     "errorChainNotFound": "找不到鏈資訊",
     "errorNotCompatible": "與 Vela Wallet 不相容",
     "invalidAddress": "無效的合約位址",
-    "notCompatible": "不相容"
+    "notCompatible": "不相容",
+    "nativeAliasTitle": "已在你的資產中",
+    "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。"
   }
 }

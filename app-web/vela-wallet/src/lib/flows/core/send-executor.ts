@@ -277,7 +277,11 @@ export function createSendExecutor(ports: SendShellPorts) {
 								asset: probe.status.asset === 'pathUSD' ? 'path_usd' : 'native',
 								balance: probe.status.balance.toString(),
 								floor: probe.status.floor.toString(),
-								bootstrap_needed: probe.status.bootstrapNeeded
+								bootstrap_needed: probe.status.bootstrapNeeded,
+								// The CORE decides whether this is a network Vela ships,
+								// and therefore whose relayer the operator owns. The shell
+								// reports the probe; it does not judge it (spec 060).
+								operator_served: false
 							}
 						}
 					};

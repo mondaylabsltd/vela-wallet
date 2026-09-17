@@ -53,6 +53,8 @@ data class MtokView(
     val saving: Boolean = false,
     val custom_tokens: List<MtokCustomToken> = emptyList(),
     val not_found: Boolean = false,
+    /** The address is a network's native coin behind an ERC-20 interface (spec 060). */
+    val native_alias: Boolean = false,
     val save_error: Boolean = false,
 )
 

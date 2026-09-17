@@ -14,6 +14,7 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::balance_dashboard::{
     best_group_price, best_native_dex_price, choose_native_price, first_grouped_quote_price,
+    pegged_native_usd,
     token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice,
     BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event, NativePriceSource,
     NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
@@ -1262,4 +1263,43 @@ fn cached_balances_without_a_pending_open_are_ignored() {
         .balances
         .iter()
         .any(|entry| entry.address == ADDR_A && entry.usd == 1.0));
+}
+
+
+/// The peg table (spec 060). It exists so the rule is written ONCE: before
+/// this, `symbol == "USD" ⇒ $1` lived in four shells in four languages, and a
+/// second pegged symbol would have meant four chances to disagree about what a
+/// coin is worth.
+#[test]
+fn pegged_native_usd_prices_dollar_native_coins() {
+    // Tempo — unchanged behaviour, the reason the rule existed at all.
+    assert_eq!(pegged_native_usd("USD"), Some(1.0));
+    assert_eq!(pegged_native_usd("usd"), Some(1.0));
+    // Arc — the native coin IS USDC.
+    assert_eq!(pegged_native_usd("USDC"), Some(1.0));
+    assert_eq!(pegged_native_usd("usdc"), Some(1.0));
+    assert_eq!(pegged_native_usd(" USDC "), Some(1.0));
+}
+
+/// A peg that answered for a volatile coin would be far worse than no peg:
+/// every holding of it would read as a dollar.
+#[test]
+fn pegged_native_usd_refuses_everything_it_cannot_prove() {
+    for symbol in ["ETH", "BNB", "POL", "AVAX", "MON", "XDAI", "WLD", "", "  ", "USDX", "EURC"] {
+        assert_eq!(
+            pegged_native_usd(symbol),
+            None,
+            "{symbol} must not be pegged to a dollar"
+        );
+    }
+}
+
+/// The peg feeds the SAME ladder every other chain uses — it supplies a price,
+/// it does not bypass the sanity band or change any rung's precedence.
+#[test]
+fn a_pegged_price_still_flows_through_the_normal_ladder() {
+    let peg = pegged_native_usd("USDC").unwrap();
+    // No DEX and no local feed on Arc: the peg is the answer.
+    let picked = choose_native_price(None, None, Some(peg)).unwrap();
+    assert_eq!(picked.price, 1.0);
 }

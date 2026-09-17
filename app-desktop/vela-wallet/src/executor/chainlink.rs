@@ -139,10 +139,13 @@ fn last_good() -> HashMap<String, f64> {
 #[must_use]
 pub fn resolve(native_symbol: &str, prices: &HashMap<String, f64>) -> Option<f64> {
     let upper = native_symbol.to_uppercase();
-    // A chain whose gas IS a stablecoin (Tempo's "USD") is pegged, and there is
-    // no feed for it because there is nothing to measure.
-    if upper == "USD" {
-        return Some(1.0);
+    // A chain whose gas coin IS a dollar stablecoin (Tempo's "USD", Arc's
+    // "USDC") is pegged, and there is no feed for it because there is nothing
+    // to measure. The table is the CORE's — this rule used to be a literal
+    // here and in three other shells, which is four chances to disagree about
+    // what a coin is worth (spec 060).
+    if let Some(pegged) = vela_core::app::balance_dashboard::pegged_native_usd(&upper) {
+        return Some(pegged);
     }
     if let Some(price) = prices.get(&upper) {
         return Some(*price);

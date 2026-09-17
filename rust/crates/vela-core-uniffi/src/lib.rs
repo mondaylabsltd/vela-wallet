@@ -1365,6 +1365,18 @@ pub fn entry_point_address() -> String {
     vela_core::safe::ENTRY_POINT.to_owned()
 }
 
+/// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
+/// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
+/// the Chainlink/DEX ladder unchanged.
+///
+/// This exists so the rule is written once. It used to be a `symbol == "USD"`
+/// literal in each of the four shells, which is four chances to disagree about
+/// what a coin is worth.
+#[uniffi::export]
+pub fn pegged_native_usd(symbol: String) -> Option<f64> {
+    vela_core::app::balance_dashboard::pegged_native_usd(&symbol)
+}
+
 /// The source ladder and its sanity band: a DEX price that disagrees with
 /// Chainlink by too much loses to Chainlink.
 #[uniffi::export]
