@@ -304,6 +304,9 @@ pub struct Model {
 pub fn native_alias_token(chain_id: u32) -> Option<&'static str> {
     match chain_id {
         5_042 | 5_042_002 => Some("0x3600000000000000000000000000000000000000"),
+        // Stable: native USDT0 (18 dp) and this 6-dp ERC-20 are one balance —
+        // verified address by address, `native ÷ 10¹² == erc20` (spec 061).
+        988 => Some("0x779Ded0c9e1022225f8E0630b35a9b54bE713736"),
         _ => None,
     }
 }

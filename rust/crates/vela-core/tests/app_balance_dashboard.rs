@@ -1277,6 +1277,8 @@ fn pegged_native_usd_prices_dollar_native_coins() {
     assert_eq!(pegged_native_usd("usd"), Some(1.0));
     // Arc — the native coin IS USDC.
     assert_eq!(pegged_native_usd("USDC"), Some(1.0));
+    // Stable — the native coin IS USDT0.
+    assert_eq!(pegged_native_usd("USDT0"), Some(1.0));
     assert_eq!(pegged_native_usd("usdc"), Some(1.0));
     assert_eq!(pegged_native_usd(" USDC "), Some(1.0));
 }
@@ -1285,7 +1287,10 @@ fn pegged_native_usd_prices_dollar_native_coins() {
 /// every holding of it would read as a dollar.
 #[test]
 fn pegged_native_usd_refuses_everything_it_cannot_prove() {
-    for symbol in ["ETH", "BNB", "POL", "AVAX", "MON", "XDAI", "WLD", "", "  ", "USDX", "EURC"] {
+    for symbol in [
+        "ETH", "BNB", "POL", "AVAX", "MON", "XDAI", "WLD", "OKB", "MNT", "KAIA", "CELO", "PLUME", "XRP",
+        "", "  ", "USDX", "EURC",
+    ] {
         assert_eq!(
             pegged_native_usd(symbol),
             None,

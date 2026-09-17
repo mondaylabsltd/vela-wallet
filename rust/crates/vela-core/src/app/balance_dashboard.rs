@@ -326,6 +326,8 @@ pub fn pegged_native_usd(symbol: &str) -> Option<f64> {
         "USD" => Some(1.0),
         // Arc (5042): the native coin IS USDC.
         "USDC" => Some(1.0),
+        // Stable (988): the native coin IS USDT0, Tether's omnichain USDT.
+        "USDT0" => Some(1.0),
         _ => None,
     }
 }

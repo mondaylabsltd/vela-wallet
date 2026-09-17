@@ -565,6 +565,11 @@ fn arcs_native_coin_is_refused_as_a_token_and_says_why() {
 #[test]
 fn the_same_address_on_another_chain_is_an_ordinary_token() {
     assert_eq!(native_alias_token(1), None);
+    // Stable's USDT0 mirror is per-chain data too.
+    assert_eq!(
+        native_alias_token(988),
+        Some("0x779Ded0c9e1022225f8E0630b35a9b54bE713736")
+    );
     let alias = native_alias_token(5_042).unwrap();
 
     let mut sut = opened(vec![]);

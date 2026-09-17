@@ -113,8 +113,10 @@ const ESTIMATION_DUMMY_DATA_LENGTH: usize = 68;
 const ESTIMATION_REQUIRED_CALLDATA: usize = 1024;
 
 // L2 rollup data-fee adders for the static fallback (`safe-transaction.ts:723-731`).
-const ARBITRUM_CHAIN_IDS: [u32; 2] = [42_161, 421_614];
-const OP_STACK_CHAIN_IDS: [u32; 4] = [10, 8_453, 11_155_420, 84_532];
+// Arbitrum Orbit chains pay the same L1 data fee shape: Robinhood (4663), Plume (98866).
+const ARBITRUM_CHAIN_IDS: [u32; 4] = [42_161, 421_614, 4_663, 98_866];
+// OP-stack (and OP-derived) L2s: Soneium (1868), Ink (57073), Celo (42220), Mantle (5000).
+const OP_STACK_CHAIN_IDS: [u32; 8] = [10, 8_453, 11_155_420, 84_532, 1_868, 57_073, 42_220, 5_000];
 const ARBITRUM_STATIC_GAS_ADDER: u128 = 600_000;
 const OP_STACK_STATIC_GAS_ADDER: u128 = 150_000;
 

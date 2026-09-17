@@ -208,7 +208,7 @@ pub struct NetBuiltinChain {
     pub typical_inclusion_s: u16,
 }
 
-pub const BUILTIN_CHAINS: [NetBuiltinChain; 13] = [
+pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
     NetBuiltinChain {
         id: "ethereum",
         display_name: "Ethereum",
@@ -329,6 +329,117 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 13] = [
         rpc_url: "https://rpc.mainnet.arc.io",
         explorer_url: "https://explorer.arc.io",
         typical_inclusion_s: 2,
+    },    // The eleven admitted together (spec 061): every one probed live for all
+    // eleven required contracts and the RIP-7212 precompile before it was listed.
+    // Polygon CDK zk-rollup; OKB is the gas coin.
+    NetBuiltinChain {
+        id: "xlayer",
+        display_name: "X Layer",
+        chain_id: 196,
+        native_symbol: "OKB",
+        rpc_url: "https://rpc.xlayer.tech",
+        explorer_url: "https://www.oklink.com/xlayer",
+        typical_inclusion_s: 3,
+    },
+    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
+    NetBuiltinChain {
+        id: "stable",
+        display_name: "Stable",
+        chain_id: 988,
+        native_symbol: "USDT0",
+        rpc_url: "https://rpc.stable.xyz",
+        explorer_url: "https://stablescan.xyz",
+        typical_inclusion_s: 2,
+    },
+    // OP-stack L2 (Sony).
+    NetBuiltinChain {
+        id: "soneium",
+        display_name: "Soneium",
+        chain_id: 1868,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.soneium.org",
+        explorer_url: "https://soneium.blockscout.com",
+        typical_inclusion_s: 6,
+    },
+    // Real-time L2; ~1 s blocks at the RPC boundary.
+    NetBuiltinChain {
+        id: "megaeth",
+        display_name: "MegaETH",
+        chain_id: 4326,
+        native_symbol: "ETH",
+        rpc_url: "https://megaeth.drpc.org",
+        explorer_url: "https://megaeth.blockscout.com",
+        typical_inclusion_s: 3,
+    },
+    // Arbitrum Orbit L2; ~0.1 s blocks.
+    NetBuiltinChain {
+        id: "robinhood",
+        display_name: "Robinhood Chain",
+        chain_id: 4663,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
+        explorer_url: "https://robinhoodchain.blockscout.com",
+        typical_inclusion_s: 2,
+    },
+    // OP-derived L2 with its own token-ratio gas metering; MNT is the gas coin.
+    NetBuiltinChain {
+        id: "mantle",
+        display_name: "Mantle",
+        chain_id: 5000,
+        native_symbol: "MNT",
+        rpc_url: "https://rpc.mantle.xyz",
+        explorer_url: "https://mantlescan.xyz",
+        typical_inclusion_s: 6,
+    },
+    // Kaia (ex-Klaytn) L1, 1 s blocks.
+    NetBuiltinChain {
+        id: "kaia",
+        display_name: "Kaia",
+        chain_id: 8217,
+        native_symbol: "KAIA",
+        rpc_url: "https://public-en.node.kaia.io",
+        explorer_url: "https://kaiascope.com",
+        typical_inclusion_s: 3,
+    },
+    // OP-stack L2 since 2025; CELO is the gas coin.
+    NetBuiltinChain {
+        id: "celo",
+        display_name: "Celo",
+        chain_id: 42220,
+        native_symbol: "CELO",
+        rpc_url: "https://forno.celo.org",
+        explorer_url: "https://celoscan.io",
+        typical_inclusion_s: 3,
+    },
+    // OP-stack L2 (Kraken).
+    NetBuiltinChain {
+        id: "ink",
+        display_name: "Ink",
+        chain_id: 57073,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc-gel.inkonchain.com",
+        explorer_url: "https://explorer.inkonchain.com",
+        typical_inclusion_s: 3,
+    },
+    // Arbitrum Orbit L2; PLUME is the gas coin.
+    NetBuiltinChain {
+        id: "plume",
+        display_name: "Plume",
+        chain_id: 98866,
+        native_symbol: "PLUME",
+        rpc_url: "https://rpc.plume.org",
+        explorer_url: "https://explorer.plume.org",
+        typical_inclusion_s: 2,
+    },
+    // Cosmos-EVM sidechain, ~6 s blocks; XRP is the gas coin. No provider serves it.
+    NetBuiltinChain {
+        id: "xrplevm",
+        display_name: "XRPL EVM",
+        chain_id: 1440000,
+        native_symbol: "XRP",
+        rpc_url: "https://rpc.xrplevm.org",
+        explorer_url: "https://explorer.xrplevm.org",
+        typical_inclusion_s: 18,
     },
 ];
 
@@ -375,6 +486,15 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             143 => Some("monad-mainnet"),
             480 => Some("worldchain-mainnet"),
             5042 => Some("arc-mainnet"),
+            988 => Some("stable-mainnet"),
+            1868 => Some("soneium-mainnet"),
+            4326 => Some("megaeth-mainnet"),
+            4663 => Some("robinhood-mainnet"),
+            5000 => Some("mantle-mainnet"),
+            8217 => Some("kaia-mainnet"),
+            42220 => Some("celo-mainnet"),
+            57073 => Some("ink-mainnet"),
+            98866 => Some("plume-mainnet"),
             _ => None,
         },
         NetProviderId::Drpc => match chain_id {
@@ -391,9 +511,20 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             143 => Some("monad"),
             480 => Some("worldchain"),
             5042 => Some("arc"),
+            196 => Some("xlayer"),
+            988 => Some("stable"),
+            1868 => Some("soneium"),
+            4326 => Some("megaeth"),
+            4663 => Some("robinhood"),
+            5000 => Some("mantle"),
+            8217 => Some("kaia"),
+            42220 => Some("celo"),
+            57073 => Some("ink"),
+            98866 => Some("plume"),
             _ => None,
         },
-        // Ankr serves neither Unichain, World Chain, Monad, Tempo nor Arc.
+        // Ankr serves none of the chains added since Gnosis; a slug is listed only
+        // once its endpoint has been seen to answer (spec 060 R5), so none are.
         NetProviderId::Ankr => match chain_id {
             1 => Some("eth"),
             56 => Some("bsc"),

@@ -319,7 +319,10 @@ fn arc_gas_price_never_falls_below_the_chain_floor() {
 /// another chain would silently change what people pay.
 #[test]
 fn no_other_chain_gained_a_gas_floor() {
-    for chain_id in [1u32, 10, 56, 100, 130, 137, 143, 480, 4_217, 8_453, 42_161, 43_114] {
+    for chain_id in [
+        1u32, 10, 56, 100, 130, 137, 143, 480, 4_217, 8_453, 42_161, 43_114, 196, 988, 1_868, 4_326,
+        4_663, 5_000, 8_217, 42_220, 57_073, 98_866, 1_440_000,
+    ] {
         assert_eq!(
             min_gas_price_wei(chain_id),
             0,

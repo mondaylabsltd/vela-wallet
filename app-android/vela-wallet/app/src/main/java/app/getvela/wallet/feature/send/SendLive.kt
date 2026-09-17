@@ -732,5 +732,8 @@ object SendLive {
         // Arc's gas coin IS USDC; defaulting it to ETH would name the wrong
         // asset on the send sheet (spec 060).
         "Arc" to "USDC",
+        "X Layer" to "OKB", "Stable" to "USDT0", "Soneium" to "ETH", "MegaETH" to "ETH",
+        "Robinhood Chain" to "ETH", "Mantle" to "MNT", "Kaia" to "KAIA", "Celo" to "CELO",
+        "Ink" to "ETH", "Plume" to "PLUME", "XRPL EVM" to "XRP",
     )
 }

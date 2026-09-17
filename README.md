@@ -10,7 +10,7 @@ It is built as **one shared Rust core and one native shell per platform** — Sw
 
 - **Passkey authentication** — Sign transactions with Face ID, Touch ID, a fingerprint, a security key or a phone across the room (caBLE). No seed phrases or private key management.
 - **Smart contract wallet** — Built on [Safe](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) with ERC-4337 account abstraction. Your wallet is a Safe smart account.
-- **13 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc. Custom networks supported.
+- **24 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM. Custom networks supported.
 - **Multi-chain portfolio** — Balances and fiat values across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
 - **Deposit detection** — Balance monitoring that notices incoming transfers as they land.
