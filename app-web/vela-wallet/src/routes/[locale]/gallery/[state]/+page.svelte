@@ -66,12 +66,13 @@
 	</div>
 {:else if data.kind === 'flow-desktop'}
 	<!-- The panel is only ever seen beside the wallet it opened from, so the
-	     stage draws the same two columns the real window has. -->
+	     stage draws it where the real window does: as the frame's third
+	     column, through the same `column` slot the wallet route fills. -->
+	{#snippet flowColumn()}
+		<FlowsPanel model={data.model} />
+	{/snippet}
 	<div class="desktop-stage flow">
-		<WalletDesktop model={data.wallet} />
-		{#if state !== 'ds1'}
-			<FlowsPanel model={data.model} />
-		{/if}
+		<WalletDesktop model={data.wallet} column={state !== 'ds1' ? flowColumn : undefined} />
 	</div>
 	{#if state === 'ds1'}
 		<div class="scan-scrim" role="presentation">
@@ -145,7 +146,6 @@
 	}
 
 	.desktop-stage.flow {
-		display: flex;
 		overflow: hidden;
 	}
 

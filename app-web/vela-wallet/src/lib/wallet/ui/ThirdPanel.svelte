@@ -116,6 +116,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
+		scrollbar-gutter: stable;
 		padding: 0 var(--space-3xl) var(--space-3xl);
 	}
 </style>
