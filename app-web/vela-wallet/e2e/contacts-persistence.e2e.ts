@@ -93,3 +93,65 @@ test('a group is created, joined to the book, and survives restart', async ({ pa
 	await page.reload();
 	await expect(page.getByText('Payroll', { exact: true })).toBeVisible();
 });
+
+/**
+ * Issue 200 — a book already holding a garbled resolved name.
+ *
+ * The name never came from the person: a resolve answered with one, and the
+ * book adopted it, wrote it and drew it. Because the write-back only fires
+ * while a contact is UNNAMED, the mojibake was never replaced. The core drops
+ * it as the store loads, so the row introduces itself by its address instead —
+ * and a real non-ASCII name beside it is untouched.
+ *
+ * This runs the SHIPPED wasm in a real browser, which is the half no unit test
+ * covers: `displayName` here is the same one the send flow's picker uses.
+ */
+test('a stored replacement-character name shows the address, not mojibake', async ({ page }) => {
+	const GARBLED = '0x' + 'd4'.repeat(20);
+	const REAL = '0x' + '14'.repeat(20);
+	await page.addInitScript(
+		([garbled, real]) => {
+			const open = indexedDB.open('vela', 1);
+			open.onupgradeneeded = () => open.result.createObjectStore('kv');
+			open.onsuccess = () => {
+				open.result
+					.transaction('kv', 'readwrite')
+					.objectStore('kv')
+					.put(
+						JSON.stringify([
+							{
+								address: garbled,
+								resolvedName: 'jxjjx����',
+								resolvedSource: 'passkey',
+								kind: 'unknown',
+								favorite: false,
+								txCount: 0,
+								lastUsed: 2000,
+								firstSeen: 2000,
+								source: 'auto'
+							},
+							{
+								address: real,
+								resolvedName: '小明.eth',
+								resolvedSource: 'ENS',
+								kind: 'unknown',
+								favorite: false,
+								txCount: 0,
+								lastUsed: 1000,
+								firstSeen: 1000,
+								source: 'auto'
+							}
+						]),
+						'vela.contacts'
+					);
+			};
+		},
+		[GARBLED, REAL] as const
+	);
+
+	await openContacts(page);
+	await expect(page.getByText('小明.eth', { exact: true })).toBeVisible();
+	await expect(page.getByText(/�/)).toHaveCount(0);
+	// `shortenAddress`: first 8 characters, an ellipsis, the last 6.
+	await expect(page.getByText('0xd4d4d4…d4d4d4', { exact: true }).first()).toBeVisible();
+});

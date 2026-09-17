@@ -41,6 +41,7 @@ pub use super::contacts_initials::initial_of;
 use super::contacts_initials::{section_letter, section_rank};
 use super::contacts_io;
 pub use super::contacts_io::ContactImportFailure;
+use super::valid_display_name;
 
 // ---------------------------------------------------------------------------
 // Wire value types
@@ -924,14 +925,26 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
             tombstones,
             groups,
         } => {
-            model.saved = contacts;
+            // A book written before the guard below existed can hold a
+            // resolved name that is no longer showable; it is dropped on the
+            // way in, so every reader downstream is clean by construction and
+            // the next write persists the row without it.
+            model.saved = contacts.into_iter().map(keep_resolved).collect();
             model.tombstones = tombstones;
             model.groups = groups;
             model.loaded = true;
             render()
         }
         ContactShellResult::HistoryLoaded { txs } => {
-            model.history = txs;
+            // `to_name` is a name captured at send time by the same waterfall,
+            // and suggestions inherit it — same source, same bar.
+            model.history = txs
+                .into_iter()
+                .map(|mut tx| {
+                    tx.to_name = keepable_resolved_name(tx.to_name);
+                    tx
+                })
+                .collect();
             render()
         }
         ContactShellResult::HistoryFailed => {
@@ -942,7 +955,11 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
         ContactShellResult::IdentityResolved { address, identity } => {
             let addr = address.to_lowercase();
             model.inflight_identity.remove(&addr);
-            let Some(identity) = identity else {
+            // A name that cannot be shown is not an answer. Refused like a
+            // negative lookup rather than remembered, so the address keeps
+            // introducing itself by its short form and a later ask can still
+            // bring back the real name.
+            let Some(identity) = identity.filter(|id| valid_display_name(&id.name)) else {
                 // Negative/failed lookups are never cached — a later inspect
                 // asks again (recipient-identity.ts caches positives only).
                 return Command::done();
@@ -1044,6 +1061,9 @@ fn apply_save(model: &mut Model, input: ContactSaveInput, now_ms: f64) -> SaveOu
             source: ContactSource::Manual,
         },
     };
+    // The shell may carry a resolved name in with the save (the inspect sheet
+    // saves what it resolved); it is machine-supplied like any other.
+    let merged = keep_resolved(merged);
     model.saved.retain(|c| c.address != addr);
     model.saved.insert(0, merged);
     // Re-adding an address clears any prior deletion tombstone.
@@ -1616,6 +1636,38 @@ fn js_parse_int(s: &str) -> Option<i64> {
 
 fn is_blank(value: &Option<String>) -> bool {
     value.as_deref().is_none_or(str::is_empty)
+}
+
+/// A resolved name the book may keep, or nothing.
+///
+/// `resolved_name` is never the person's word: it is whatever a name service,
+/// the passkey index or an earlier send captured — sources this core does not
+/// control and cannot re-encode. A lenient UTF-8 decoder anywhere along that
+/// path substitutes U+FFFD instead of failing, and the book used to adopt
+/// that, persist it, and draw it beside somebody's money for good: the
+/// write-back only fires while a contact is UNNAMED, so garbage, once stored,
+/// was never replaced by the real name that arrived later.
+///
+/// The bar is the one `login` already holds a server-recovered wallet name to
+/// ([`valid_display_name`]). A name that does not clear it is no name, and the
+/// shells introduce the address by its short form — the same answer they give
+/// for a recipient nobody has named. Names the PERSON typed are not judged
+/// here; this is about what machines hand us.
+fn keepable_resolved_name(name: Option<String>) -> Option<String> {
+    name.filter(|name| valid_display_name(name))
+}
+
+/// The same rule applied to a whole row: a name that cannot be shown takes its
+/// source label with it, so a stored contact never claims an "ENS" name it has
+/// no name for.
+fn keep_resolved(mut contact: Contact) -> Contact {
+    if contact.resolved_name.is_some() {
+        contact.resolved_name = keepable_resolved_name(contact.resolved_name.take());
+        if contact.resolved_name.is_none() {
+            contact.resolved_source = None;
+        }
+    }
+    contact
 }
 
 /// User name → resolved identity → `""` (caller falls back to a short

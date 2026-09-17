@@ -19,6 +19,7 @@ mod identicon;
 mod intro;
 mod intro_art;
 mod loc;
+mod marks;
 mod onboarding;
 mod onboarding_flow;
 mod outcome;
@@ -262,6 +263,10 @@ fn main() {
         if let Err(error) = cx.text_system().add_fonts(fonts) {
             eprintln!("[vela-wallet] bundled fonts could not be loaded: {error}");
         }
+        // Remote images (token and chain logos) reach gpui's image cache
+        // through this: its default client answers nothing, which is why the
+        // desktop drew lettermarks where every other shell draws logos.
+        cx.set_http_client(crate::executor::gpui_http::AppHttpClient::shared());
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

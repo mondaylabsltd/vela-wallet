@@ -1783,7 +1783,7 @@ struct RootView: View {
             if case .sendConfirm(let confirm) = model.base {
                 model.base = .sendConfirm(SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
-                    display: display, on: confirm, loc: loc
+                    display: display, on: confirm, loc: loc, fee: fees.view
                 ))
             }
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
@@ -1954,6 +1954,7 @@ struct RootView: View {
             nativeSymbol: ChainCatalog.meta(chain)?.nativeSymbol ?? "",
             walletName: session.view.activeName,
             walletAddress: session.view.address,
+            display: WalletLive.Display.from(settings.currency),
             origin: live.request?.origin,
             // What the chain said this transaction would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it.

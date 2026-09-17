@@ -471,7 +471,25 @@ pub fn section_header_parts(
 }
 
 fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div {
-    div()
+    lead_circle_logos(theme, inner, badge, &crate::marks::Logos::default())
+}
+
+/// The lead circle with the endpoint's logos over it (issue 201).
+///
+/// The logo is drawn OVER the glyph the shell would draw anyway, not instead
+/// of it: gpui renders nothing at all while a remote image is in flight or
+/// after it 404s, so a row whose only content was the picture would be a hole
+/// where an asset's identity belongs. Only the FIRST candidate is asked for —
+/// gpui's image element takes one source, and the second path exists for a
+/// checksum spelling the index may not have; a miss there simply leaves the
+/// glyph, which is the documented fallback.
+fn lead_circle_logos(
+    theme: &Theme,
+    inner: impl IntoElement,
+    badge: gpui::Hsla,
+    logos: &crate::marks::Logos,
+) -> Div {
+    let mut circle = div()
         .relative()
         .w(px(WALLET_ROW_ICON))
         .h(px(WALLET_ROW_ICON))
@@ -486,19 +504,40 @@ fn lead_circle(theme: &Theme, inner: impl IntoElement, badge: gpui::Hsla) -> Div
                 .items_center()
                 .justify_center()
                 .child(inner),
-        )
-        .child(
-            div()
+        );
+    if let Some(url) = logos.logo_urls.first() {
+        circle = circle.child(
+            gpui::img(url.clone())
                 .absolute()
-                .bottom_0()
-                .right_0()
-                .w(px(WALLET_BADGE))
-                .h(px(WALLET_BADGE))
-                .rounded(px(WALLET_BADGE / 2.))
-                .bg(badge)
-                .border_2()
-                .border_color(theme.bg_base),
-        )
+                .top_0()
+                .left_0()
+                .w(px(WALLET_ROW_ICON))
+                .h(px(WALLET_ROW_ICON))
+                .rounded(px(WALLET_ROW_ICON / 2.)),
+        );
+    }
+    if logos.badge_hidden {
+        return circle;
+    }
+    let mut dot = div()
+        .absolute()
+        .bottom_0()
+        .right_0()
+        .w(px(WALLET_BADGE))
+        .h(px(WALLET_BADGE))
+        .rounded(px(WALLET_BADGE / 2.))
+        .bg(badge)
+        .border_2()
+        .border_color(theme.bg_base);
+    if let Some(url) = &logos.badge_logo {
+        dot = dot.child(
+            gpui::img(url.clone())
+                .w_full()
+                .h_full()
+                .rounded(px(WALLET_BADGE / 2.)),
+        );
+    }
+    circle.child(dot)
 }
 
 /// Activity row (mock H1/D1): direction glyph + chain badge, title/subtitle,
@@ -519,10 +558,17 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
         .items_center()
         .gap(px(12.))
         .py(px(10.))
-        .child(lead_circle(
+        .child(lead_circle_logos(
             theme,
             icon_img(icons, glyph, false, theme.fg_muted, 18.),
             row.badge,
+            // The avatar is the direction glyph; the BADGE is where the chain
+            // is named, and it was a colour until issue 201.
+            &crate::marks::Logos {
+                logo_urls: Vec::new(),
+                badge_logo: row.badge_logo.clone(),
+                badge_hidden: false,
+            },
         ))
         .child(
             div()
@@ -583,6 +629,16 @@ pub fn token_icon(theme: &Theme, ticker: &str, badge: gpui::Hsla) -> Div {
     lead_circle(theme, token_glyph(theme, ticker), badge)
 }
 
+/// The same icon wearing the endpoint's logos (issue 201).
+pub fn token_icon_logos(
+    theme: &Theme,
+    ticker: &str,
+    badge: gpui::Hsla,
+    logos: &crate::marks::Logos,
+) -> Div {
+    lead_circle_logos(theme, token_glyph(theme, ticker), badge, logos)
+}
+
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
 pub fn asset_row(
     id: impl Into<ElementId>,
@@ -616,7 +672,12 @@ pub fn asset_row(
         .rounded(px(10.))
         .cursor_pointer()
         .hover(|el| el.bg(theme.bg_raised))
-        .child(token_icon(theme, row.ticker.as_ref(), row.badge))
+        .child(token_icon_logos(
+            theme,
+            row.ticker.as_ref(),
+            row.badge,
+            &row.logos,
+        ))
         .child(
             div()
                 .flex_1()

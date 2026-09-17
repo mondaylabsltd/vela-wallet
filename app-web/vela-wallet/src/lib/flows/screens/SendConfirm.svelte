@@ -11,6 +11,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import type { SendConfirmModel } from '../model';
 
 	interface Props {
@@ -23,6 +24,15 @@
 
 <div class="confirm">
 	<div class="hero">
+		{#if model.mark !== undefined}
+			<TokenIcon
+				ticker={model.mark.ticker}
+				badgeColor={model.mark.badgeColor}
+				logoUrls={model.mark.logoUrls}
+				badgeLogoUrl={model.mark.badgeLogoUrl}
+				badgeHidden={model.mark.badgeHidden}
+			/>
+		{/if}
 		<p class="amount">{model.amount}</p>
 		<p class="subline">{model.subline}</p>
 	</div>
@@ -55,6 +65,10 @@
 	}
 
 	.hero {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-md);
 		text-align: center;
 		padding-block: var(--space-lg) var(--space-xl);
 	}

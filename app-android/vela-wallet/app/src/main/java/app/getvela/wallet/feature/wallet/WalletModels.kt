@@ -76,6 +76,13 @@ data class ActivityRowModel(
     val positive: Boolean,
     val masked: Boolean,
     val badgeColor: Color,
+    /**
+     * The chain's logo for the avatar's badge (spec 047's rule, §8.3's
+     * drawing): the row draws the network it happened on, and the coloured
+     * dot is what is left when the endpoint has no logo. Without this the
+     * badge was ALWAYS the dot — a colour nobody can read as a network.
+     */
+    val badgeLogoUrl: String? = null,
 )
 
 @Immutable

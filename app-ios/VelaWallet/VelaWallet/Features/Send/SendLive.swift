@@ -384,7 +384,7 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, loc: loc),
+            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc),
             cta: live.cta
         )
     }
@@ -427,10 +427,11 @@ enum SendLive {
     }
 
     private static func feeRow(
-        _ fallback: FeeRowModel, view: SendViewWire, fee: FeeViewWire?, loc: Loc
+        _ fallback: FeeRowModel, view: SendViewWire, fee: FeeViewWire?,
+        display: WalletLive.Display, loc: Loc
     ) -> FeeRowModel {
         let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
-        let text = view.fee.map { feeText($0) }
+        let text = view.fee.map { feeLine($0, view: view, fee: fee, display: display) }
         // With no estimate, the row says so — it does NOT fall back to the
         // drawing's value. The fixture's "0.0021 ETH · ≈$0.55" appeared on a
         // Gnosis send on the founder's iPhone while the quote was still in
@@ -467,6 +468,67 @@ enum SendLive {
         case .erc20(_, let decimals, let amount, let symbol):
             return "\(fromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
         }
+    }
+
+    /// Below half a cent the coin amount is the honest primary and the fiat
+    /// half is left off (`03-domain-components.md` §3.1): a real fee rounded to
+    /// "$0.00" reads as free, which is a worse answer than no figure at all.
+    static let feeFiatMinUSD = 0.005
+
+    /// The whole-token figure a price multiplies, and which coin to price.
+    private static func feeUnits(_ estimate: FeeEstimateWire) -> (units: Double?, contract: String?) {
+        switch estimate.feeAsset {
+        case .native:
+            return (Double(estimate.totalWei).map { $0 / 1e18 }, nil)
+        case .erc20(let token, let decimals, let amount, _):
+            return (Double(amount).map { $0 / pow(10, Double(decimals)) }, token)
+        }
+    }
+
+    /// The unit price, in USD, of the coin a quote is denominated in.
+    ///
+    /// The relay's published row first — it priced the quote, so its number is
+    /// the one the estimate converted through — then the balances the form
+    /// already carries, which is where the amount's own "≈" line gets its
+    /// price. `nil` when neither knows the coin: a fee row that invents a
+    /// price is worse than one that shows only the coin.
+    static func feePriceUSD(
+        contract: String?, chainId: Int, view: SendViewWire?, fee: FeeViewWire?
+    ) -> Double? {
+        func same(_ other: String?) -> Bool {
+            guard let contract else { return other == nil }
+            return other?.lowercased() == contract.lowercased()
+        }
+        if let published = fee?.options.first(where: { same($0.contract) })?.usdPrice,
+           let price = Double(published), price > 0 {
+            return price
+        }
+        guard let view else { return nil }
+        let held = ([view.selectedToken].compactMap { $0 } + view.tokens)
+            .first { $0.chainId == chainId && same($0.tokenAddress) }
+        guard let price = held?.priceUsd, price > 0 else { return nil }
+        return price
+    }
+
+    /// "0.0021 XDAI · ≈$0.55" — the quote's own amount, and what it costs
+    /// (issue 201). The fee was the one figure on the send screens with no
+    /// money beside it; the amount is never re-derived here, only the price is
+    /// looked up.
+    static func feeLine(
+        _ estimate: FeeEstimateWire, view: SendViewWire?, fee: FeeViewWire?,
+        display: WalletLive.Display
+    ) -> String {
+        let coin = feeText(estimate)
+        let (units, contract) = feeUnits(estimate)
+        guard let units,
+              let price = feePriceUSD(
+                  contract: contract, chainId: estimate.chainId, view: view, fee: fee
+              )
+        else { return coin }
+        let usd = units * price
+        guard usd >= feeFiatMinUSD, usd.isFinite else { return coin }
+        let money = usd * display.rate
+        return "\(coin) · ≈\(display.glyph)\(Formats.number(money, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
     /// The symbol the fee is charged in.
@@ -525,7 +587,8 @@ enum SendLive {
         from: (address: String, name: String?),
         display: WalletLive.Display,
         on model: SendConfirmModel,
-        loc: Loc
+        loc: Loc,
+        fee: FeeViewWire? = nil
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
@@ -549,11 +612,20 @@ enum SendLive {
             ),
             FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
-                value: view.fee.map { "~\(feeText($0))" } ?? (model.facts.count > 3 ? model.facts[3].value : "—")
+                value: view.fee.map { "~\(feeLine($0, view: view, fee: fee, display: display))" }
+                    ?? (model.facts.count > 3 ? model.facts[3].value : "—")
             ),
         ]
         return SendConfirmModel(
             header: live.header,
+            // A sweep moves several coins; one mark would name the wrong one.
+            mark: view.multiSelectMode ? nil : token.map { token in
+                TokenMarkModel.of(
+                    chainId: token.chainId, symbol: token.symbol,
+                    tokenAddress: token.tokenAddress, color: chainColor(token.chainId),
+                    named: token.logoUrls
+                )
+            },
             // `confirm_amount` and nothing else. It is the figure the money
             // gates measured and the batch is built from — a shell that
             // re-derived it would put a number on the signing page nothing

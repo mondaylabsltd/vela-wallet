@@ -98,7 +98,7 @@ use super::WalletStrings;
 use super::components::{
     action_pill, activity_row, asset_row, balance_display, chain_row, empty_state, icon_img,
     identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
-    section_header_row, sidebar_search, skeleton_row, token_icon, wallet_header,
+    section_header_row, sidebar_search, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
 use crate::flows::components::mono_field;
@@ -2732,6 +2732,7 @@ impl WalletPage {
             // asset somebody is looking at, and the next thing they do on this
             // panel is send it.
             .unwrap_or_else(|| fixtures::AssetDetailModel {
+                logos: crate::marks::Logos::default(),
                 ticker: SharedString::from(""),
                 badge: gpui::rgb(0x8A_8F_98).into(),
                 amount: SharedString::from(""),
@@ -4523,7 +4524,12 @@ impl WalletPage {
             .flex()
             .items_center()
             .gap(px(12.))
-            .child(token_icon(theme, model.ticker.as_ref(), model.badge))
+            .child(token_icon_logos(
+                theme,
+                model.ticker.as_ref(),
+                model.badge,
+                &model.logos,
+            ))
             .child(
                 div()
                     .flex()
@@ -8860,7 +8866,7 @@ impl WalletPage {
             // said Ethereum over a Gnosis fee.
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
-            model.fee = signing_live::fee_model(&host.clear_view, fee, &self.signing);
+            model.fee = signing_live::fee_model(&host.clear_view, fee, &self.signing, &self.locale);
             model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
             model.confirm_enabled =
                 signing_live::confirm_enabled(&host.view, &host.guard_view, fee);

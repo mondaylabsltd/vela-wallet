@@ -868,6 +868,7 @@ object FlowFixtures {
             )
             SendFormMode.Split -> SendConfirmModel(
                 header = header,
+                mark = TokenMarkModel("USDT", WalletFixtures.ChainColors.ethereum),
                 amount = "120 USDT",
                 subline = "≈ $120.00",
                 facts = facts,
@@ -892,6 +893,7 @@ object FlowFixtures {
             )
             SendFormMode.Single -> SendConfirmModel(
                 header = header,
+                mark = TokenMarkModel("USDT", WalletFixtures.ChainColors.ethereum),
                 amount = "120 USDT",
                 subline = "≈ $120.00",
                 facts = facts,

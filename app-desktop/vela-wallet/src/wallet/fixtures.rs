@@ -55,6 +55,9 @@ pub struct ActivityRowModel {
     pub unit: SharedString,
     pub positive: bool,
     pub badge: Hsla,
+    /// The chain's logo for the avatar's badge (§8.3; issue 201). `None` on a
+    /// drawn row — the coloured dot is the fallback, not the intent.
+    pub badge_logo: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -71,6 +74,8 @@ pub struct AssetRowModel {
     pub badge: Hsla,
     pub balance: SharedString,
     pub fiat: Fiat,
+    /// The endpoint's logos for this holding (issue 201).
+    pub logos: crate::marks::Logos,
 }
 
 #[derive(Clone)]
@@ -215,6 +220,7 @@ fn row(
         unit: unit.into(),
         positive,
         badge,
+        badge_logo: None,
     }
 }
 
@@ -288,6 +294,7 @@ pub fn assets_default(s: &WalletStrings) -> Vec<AssetRowModel> {
         badge,
         balance: balance.into(),
         fiat,
+        logos: crate::marks::Logos::default(),
     };
     let _ = s;
     vec![
@@ -327,6 +334,7 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             badge: chain_bnb(),
             balance: "18.20".into(),
             fiat: Fiat::NoPrice(s.no_price.clone()),
+            logos: crate::marks::Logos::default(),
         },
         AssetRowModel {
             ticker: "BNB".into(),
@@ -334,6 +342,7 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             badge: chain_bnb(),
             balance: MASK.into(),
             fiat: Fiat::Masked,
+            logos: crate::marks::Logos::default(),
         },
         AssetRowModel {
             ticker: "WBTC".into(),
@@ -341,6 +350,7 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             badge: chain_ethereum(),
             balance: "0.00000042".into(),
             fiat: Fiat::Value("$0.03".into()),
+            logos: crate::marks::Logos::default(),
         },
         AssetRowModel {
             ticker: "USDT".into(),
@@ -348,6 +358,7 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
             badge: chain_ethereum(),
             balance: "1,234,567.8901".into(),
             fiat: Fiat::Value("$1,234,567.89".into()),
+            logos: crate::marks::Logos::default(),
         },
     ]
 }
@@ -412,6 +423,8 @@ pub fn bnb_activity(s: &WalletStrings) -> Vec<ActivityRowModel> {
 pub struct AssetDetailModel {
     pub ticker: SharedString,
     pub badge: Hsla,
+    /// The endpoint's logos for this holding (issue 201).
+    pub logos: crate::marks::Logos,
     /// `0.8533 BNB`.
     pub amount: SharedString,
     /// `$496.46 · BNB Chain`.
@@ -424,6 +437,7 @@ pub struct AssetDetailModel {
 #[must_use]
 pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
     AssetDetailModel {
+        logos: crate::marks::Logos::default(),
         ticker: "BNB".into(),
         badge: chain_bnb(),
         amount: "0.8533 BNB".into(),

@@ -106,4 +106,31 @@ describe('decodeString', () => {
 		expect(decodeString('0x' + word('20') + word('0'))).toBeNull();
 		expect(decodeString('0x1234')).toBeNull();
 	});
+
+	it('a multibyte name survives whole', () => {
+		expect(decodeString(abiString('小明.eth'))).toBe('小明.eth');
+		expect(decodeString(abiString('jxjjx\u{1f600}'))).toBe('jxjjx\u{1f600}');
+	});
+
+	/**
+	 * Issue 200. The lenient decoder turned every unreadable byte into U+FFFD,
+	 * and that name was cached, adopted as a contact's resolved name and drawn
+	 * in the picker — "jxjjx????" where a person's name belonged. A name beside
+	 * somebody's money is the real one or nothing, the rule the desktop shell's
+	 * `decode_name` already states and tests.
+	 */
+	it('refuses non-UTF-8 bytes rather than naming someone with replacement characters', () => {
+		const bytes = (hex: string) =>
+			'0x' + word('20') + word((hex.length / 2).toString(16)) + hex.padEnd(64, '0');
+		// A truncated 4-byte sequence (an emoji cut in half) and a lone
+		// continuation byte: both decode leniently to U+FFFD.
+		expect(decodeString(bytes('6a786a6a78f09f'))).toBeNull();
+		expect(decodeString(bytes('ff'))).toBeNull();
+		expect(decodeString(bytes('e4bda0ff'))).toBeNull();
+	});
+
+	it('a name that is only whitespace is no name', () => {
+		expect(decodeString(abiString('   '))).toBeNull();
+		expect(decodeString(abiString('  vitalik.eth '))).toBe('vitalik.eth');
+	});
 });

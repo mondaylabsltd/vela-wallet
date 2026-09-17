@@ -249,7 +249,7 @@ describe('the form', () => {
 		const waiting = liveSendForm(formModel(), inputs({ fee_busy: true, selected_token: ETH }));
 		expect(waiting.fee.value).toBe('…');
 		const quoted = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
-		expect(quoted.fee.value).toBe('0.0021 ETH');
+		expect(quoted.fee.value).toBe('0.0021 ETH · ≈$6.30');
 		const idle = liveSendForm(formModel(), inputs({ selected_token: ETH }));
 		expect(idle.fee.value).toBe('—');
 	});
@@ -400,7 +400,7 @@ describe('the confirm screen', () => {
 		const byLabel = new Map(model.facts.map((f) => [f.label, f.value]));
 		expect(byLabel.get(m['send.fromLabel'])).toBe('My Wallet');
 		expect(byLabel.get(m['send.toLabel'])).toMatch(/^0xabab/);
-		expect(byLabel.get(m['send.estFeeLabel'])).toBe('0.0021 ETH');
+		expect(byLabel.get(m['send.estFeeLabel'])).toBe('0.0021 ETH · ≈$6.30');
 		expect(model.breakdown).toBeUndefined();
 	});
 
@@ -710,13 +710,112 @@ describe('the fee row names the coin that is paying', () => {
 				}
 			)
 		);
-		expect(model.fee.value).toBe('0.944 USDT');
+		expect(model.fee.value).toBe('0.944 USDT · ≈$0.94');
 		expect(model.fee.mark.ticker).toBe('USDT');
 	});
 
 	it('a native fee still reads in the native coin', () => {
 		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
-		expect(model.fee.value).toBe('0.0021 ETH');
+		expect(model.fee.value).toBe('0.0021 ETH · ≈$6.30');
+	});
+});
+
+/**
+ * Issue 201: the fee was the one figure on the send screen with no money
+ * beside it. The amount's "≈" line had one, the fee's did not, so a person who
+ * does not track the coin's price could not tell what the transfer cost.
+ */
+describe('the fee row says what the fee costs', () => {
+	const cheapChain: SendToken = { ...ETH, chain_id: 56, symbol: 'BNB', price_usd: 600 };
+	const bnbQuote = { ...QUOTE, chain_id: 56, total_wei: '91000000000000' };
+
+	it('prices a native fee from the relay row that published the quote', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs(
+				{ selected_token: cheapChain, fee: bnbQuote },
+				{
+					options: [
+						{
+							symbol: 'BNB',
+							contract: null,
+							decimals: 18,
+							balance: '1500000000000000000',
+							recipient: '0x1',
+							usd_balance: '900',
+							usd_price: '600',
+							amount: '91000000000000',
+							insufficient: false,
+							selected: true
+						}
+					]
+				}
+			)
+		);
+		expect(model.fee.value).toBe('0.000091 BNB · ≈$0.05');
+	});
+
+	it('falls back to the balances feed when the relay published no price', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote })
+		);
+		expect(model.fee.value).toBe('0.000091 BNB · ≈$0.05');
+	});
+
+	it('shows the coin alone when nothing can price it', () => {
+		const unpriced = { ...cheapChain, price_usd: null };
+		const model = liveSendForm(
+			formModel(),
+			inputs({ tokens: [unpriced], selected_token: unpriced, fee: bnbQuote })
+		);
+		expect(model.fee.value).toBe('0.000091 BNB');
+	});
+
+	// Half a cent is where the fiat half stops helping: "$0.00" beside a real
+	// fee reads as free, and the token amount is the honest primary.
+	it('leaves off a figure that would round to nothing', () => {
+		const dust = { ...bnbQuote, total_wei: '1000000000000' };
+		const model = liveSendForm(
+			formModel(),
+			inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: dust })
+		);
+		expect(model.fee.value).toBe('0.000001 BNB');
+	});
+
+	it('converts into the display currency, at the committed rate only', () => {
+		const model = liveSendForm(formModel(), {
+			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
+			currency: { code: 'EUR', rate: 2, committed: true }
+		});
+		expect(model.fee.value).toBe('0.000091 BNB · ≈€0.11');
+		const unpriced = liveSendForm(formModel(), {
+			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
+			currency: { code: 'EUR', rate: null, committed: false }
+		});
+		expect(unpriced.fee.value).toBe('0.000091 BNB · ≈$0.05');
+	});
+});
+
+/**
+ * The founder's ruling of 2026-09-17: the confirm page named the coin in words
+ * while every row beneath it carried art.
+ */
+describe('the confirm page draws the coin it is about to send', () => {
+	it("carries the selected token's mark", () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: USDT, confirm_amount: '5', recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(model.mark?.ticker).toBe('USDT');
+	});
+
+	it('carries none on a sweep, where one mark would name the wrong coin', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: USDT, multi_select_mode: true, tokens: [USDT, ETH] })
+		);
+		expect(model.mark).toBeUndefined();
 	});
 });
 

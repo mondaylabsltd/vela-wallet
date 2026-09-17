@@ -14,7 +14,9 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{activity_row, asset_row, empty_state, icon_img, token_icon};
+use crate::wallet::components::{
+    activity_row, asset_row, empty_state, icon_img, token_icon_logos,
+};
 
 use super::components::{
     accent_button, address_card, fact_row, fee_row, filter_chips, flow_search, ghost_button,
@@ -398,10 +400,11 @@ fn receive_qr(
         // drawn against the LIGHT theme rather than the active one —
         // the dark palette's disc would punch an unreadable hole in a
         // code that a camera still has to resolve.
-        Some(token_icon(
+        Some(token_icon_logos(
             &Theme::light(),
             model.centre.ticker.as_ref(),
             model.centre.badge,
+            &model.centre.logos,
         )),
         model.qr_payload.as_deref(),
     )))
@@ -755,7 +758,12 @@ fn add_token(
                 .rounded(px(12.))
                 .border_1()
                 .border_color(theme.border_card)
-                .child(token_icon(theme, mark.ticker.as_ref(), mark.badge))
+                .child(token_icon_logos(
+                    theme,
+                    mark.ticker.as_ref(),
+                    mark.badge,
+                    &mark.logos,
+                ))
                 .child(
                     div()
                         .flex_1()
@@ -794,7 +802,12 @@ fn add_token(
                         .flex()
                         .items_center()
                         .gap(px(12.))
-                        .child(token_icon(theme, mark.ticker.as_ref(), mark.badge))
+                        .child(token_icon_logos(
+                            theme,
+                            mark.ticker.as_ref(),
+                            mark.badge,
+                            &mark.logos,
+                        ))
                         .child(
                             div()
                                 .flex_1()
@@ -1494,7 +1507,12 @@ fn fee_token(
             shell
         };
         let mut entry = shell
-            .child(token_icon(theme, row.mark.ticker.as_ref(), row.mark.badge))
+            .child(token_icon_logos(
+                theme,
+                row.mark.ticker.as_ref(),
+                row.mark.badge,
+                &row.mark.logos,
+            ))
             .child(
                 div()
                     .flex_1()
@@ -1768,25 +1786,36 @@ fn send_confirm(
     notice_action: Option<Click>,
     notice_dismiss: Option<Click>,
 ) -> Div {
+    let mut hero = div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(8.))
+        .py(px(12.));
+    // The coin, drawn (founder, 2026-09-17): the confirm page named it in
+    // words while every row beneath it carried art.
+    if let Some(mark) = &model.mark {
+        hero = hero.child(token_icon_logos(
+            theme,
+            mark.ticker.as_ref(),
+            mark.badge,
+            &mark.logos,
+        ));
+    }
     let mut col = column().child(
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .py(px(12.))
-            .child(
-                div()
-                    .text_size(theme::text_balance_hero())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme.fg_base)
-                    .child(model.amount.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_subtle)
-                    .child(model.subline.clone()),
-            ),
+        hero.child(
+            div()
+                .text_size(theme::text_balance_hero())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme.fg_base)
+                .child(model.amount.clone()),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(model.subline.clone()),
+        ),
     );
 
     let mut card = div()

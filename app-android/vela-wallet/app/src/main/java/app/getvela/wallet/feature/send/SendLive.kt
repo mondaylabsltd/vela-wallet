@@ -277,7 +277,7 @@ object SendLive {
             recipientActions = emptyList(),
             summary = null,
             recipient = recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT)),
-            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, ctx),
+            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx),
             cta = s.t(I18nKeys.Flows.CONTINUE),
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
@@ -340,7 +340,7 @@ object SendLive {
                 emptyList()
             },
             summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
-            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, ctx),
+            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx),
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
         )
@@ -430,8 +430,8 @@ object SendLive {
         SendAlertKind.AccountUnavailable -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ACCOUNT_UNAVAILABLE_BODY)
     }
 
-    private fun feeRow(fallback: FeeRowModel, estimate: FeeEstimateView?, busy: Boolean, ctx: Context): FeeRowModel {
-        val (text, mark) = feeText(estimate, ctx)
+    private fun feeRow(fallback: FeeRowModel, estimate: FeeEstimateView?, busy: Boolean, view: SendView, fee: FeeView?, ctx: Context): FeeRowModel {
+        val (text, mark) = feeText(estimate, view, fee, ctx)
         return fallback.copy(
             mark = mark ?: fallback.mark,
             value = when {
@@ -442,19 +442,90 @@ object SendLive {
         )
     }
 
-    /** "0.0021 XDAI" from the estimate: the fee asset's own units, never re-priced here. */
-    private fun feeText(estimate: FeeEstimateView?, ctx: Context): Pair<String, TokenMarkModel?> {
+    /**
+     * Below half a cent the coin amount is the honest primary and the fiat
+     * half is left off (`03-domain-components.md` §3.1): a real fee rounded to
+     * "$0.00" reads as free, which is a worse answer than no figure at all.
+     */
+    private const val FEE_FIAT_MIN_USD = 0.005
+
+    /**
+     * The unit price, in USD, of the coin a quote is denominated in.
+     *
+     * The relay's published row first — it priced the quote, so its number is
+     * the one the estimate converted through — then the balances the form
+     * already carries, which is where the amount's own "≈" line gets its
+     * price. `null` when neither knows the coin: a fee row that invents a
+     * price is worse than one that shows only the coin.
+     */
+    private fun feeUnitPriceUsd(contract: String?, chainId: Int, view: SendView, fee: FeeView?): Double? {
+        fun same(other: String?) = if (contract == null) other == null else other?.equals(contract, ignoreCase = true) == true
+        val published = fee?.let { feePriceUsd(contract, it) }
+        if (published != null) return published
+        val held = (listOfNotNull(view.selected_token) + view.tokens)
+            .firstOrNull { it.chain_id == chainId && same(it.token_address) }
+        return held?.price_usd?.takeIf { it > 0.0 }
+    }
+
+    /**
+     * "0.0021 XDAI · ≈$0.55" from the estimate: the fee asset's own units,
+     * **never re-priced here**, plus what that costs (issue 201).
+     *
+     * The amount is the quote's; only the PRICE is looked up. The fee was the
+     * one figure on the send screen with no money beside it, so a person who
+     * does not track the coin's price could not tell what a transfer cost —
+     * the drawn row has read "0.0021 ETH · ≈$0.55" since it was drawn.
+     */
+    private fun feeText(estimate: FeeEstimateView?, view: SendView, fee: FeeView?, ctx: Context): Pair<String, TokenMarkModel?> {
         if (estimate == null) return "—" to null
-        return when (val asset = estimate.fee_asset) {
-            is FeeAssetView.Native -> {
-                val symbol = nativeSymbol(estimate.chain_id, ctx)
-                "${fromBase(estimate.total_wei, 18)} $symbol" to WalletLive.mark(estimate.chain_id.toInt(), symbol, null)
-            }
-            is FeeAssetView.Erc20 -> {
-                val symbol = asset.symbol ?: "TOKEN"
-                "${fromBase(asset.amount, asset.decimals)} $symbol" to WalletLive.mark(estimate.chain_id.toInt(), symbol, asset.token)
-            }
+        val parts = feeParts(estimate, nativeSymbol(estimate.chain_id, ctx))
+        val price = feeUnitPriceUsd(parts.contract, estimate.chain_id, view, fee)
+        return feeLine(parts, price, ctx.money) to parts.mark
+    }
+
+    /**
+     * One fee line for every surface that prices the same operation — the send
+     * screens and the dApp signing sheet. Two formatters would be two answers
+     * about what a transaction costs.
+     */
+    internal fun feeLine(parts: FeeParts, priceUsd: Double?, money: WalletLive.Money): String {
+        val usd = if (parts.units == null || priceUsd == null) null else parts.units * priceUsd
+        return if (usd != null && usd >= FEE_FIAT_MIN_USD) "${parts.coin} · ≈${money.fiat(usd)}" else parts.coin
+    }
+
+    /**
+     * The estimate split into what a row needs: the coin amount as words, its
+     * mark, the units that a price multiplies, and which coin to price.
+     *
+     * `total_wei` is the NATIVE figure even when an ERC-20 pays; reading it
+     * where the token's own `amount` belongs prints a six-decimal stablecoin
+     * fee as an eighteen-decimal number, under the wrong ticker.
+     */
+    internal fun feeParts(estimate: FeeEstimateView, nativeSymbol: String): FeeParts = when (val asset = estimate.fee_asset) {
+        is FeeAssetView.Native -> FeeParts(
+            coin = "${fromBase(estimate.total_wei, 18)} $nativeSymbol",
+            mark = WalletLive.mark(estimate.chain_id, nativeSymbol, null),
+            units = estimate.total_wei.toBigDecimalOrNull()?.movePointLeft(18)?.toDouble(),
+            contract = null,
+        )
+        is FeeAssetView.Erc20 -> {
+            val symbol = asset.symbol ?: "TOKEN"
+            FeeParts(
+                coin = "${fromBase(asset.amount, asset.decimals)} $symbol",
+                mark = WalletLive.mark(estimate.chain_id, symbol, asset.token),
+                units = asset.amount.toBigDecimalOrNull()?.movePointLeft(asset.decimals)?.toDouble(),
+                contract = asset.token,
+            )
         }
+    }
+
+    /** The parts of a fee line: what it reads, its mark, and what prices it. */
+    internal data class FeeParts(val coin: String, val mark: TokenMarkModel?, val units: Double?, val contract: String?)
+
+    /** The price of the coin ONE published quote row is charged in — the signing sheet's lookup, which has no form behind it. */
+    internal fun feePriceUsd(contract: String?, fee: FeeView): Double? {
+        fun same(other: String?) = if (contract == null) other == null else other?.equals(contract, ignoreCase = true) == true
+        return fee.options.firstOrNull { same(it.contract) }?.usd_price?.toDoubleOrNull()?.takeIf { it > 0.0 }
     }
 
     // -- SD2F --------------------------------------------------------------------
@@ -494,7 +565,7 @@ object SendLive {
 
     // -- SD3 ---------------------------------------------------------------------
 
-    internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context): SendConfirmModel {
+    internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView? = null): SendConfirmModel {
         val s = ctx.strings
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
@@ -503,10 +574,12 @@ object SendLive {
             val amount = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
             "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(amount.toDouble() * price))}"
         } ?: ""
-        val (feeLine, _) = feeText(view.fee, ctx)
+        val (feeLine, _) = feeText(view.fee, view, fee, ctx)
         val recipientName = view.recipient_identity?.name
         val split = view.split_mode && view.recipients.isNotEmpty()
         return fallback.copy(
+            // A sweep moves several coins; one mark would name the wrong one.
+            mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
             amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             facts = listOf(
