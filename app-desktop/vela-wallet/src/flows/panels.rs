@@ -14,9 +14,7 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{
-    activity_row, asset_row, empty_state, icon_img, token_icon_logos,
-};
+use crate::wallet::components::{activity_row, asset_row, empty_state, icon_img, token_icon_logos};
 
 use super::components::{
     accent_button, address_card, fact_row, fee_row, filter_chips, flow_search, ghost_button,

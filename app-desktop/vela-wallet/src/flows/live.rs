@@ -2492,7 +2492,10 @@ mod tests {
             insufficient: false,
             selected: true,
         }];
-        assert_eq!(fee_line(Some(&quote), None, &fee, "en"), "0.000091 BNB · ≈$0.05");
+        assert_eq!(
+            fee_line(Some(&quote), None, &fee, "en"),
+            "0.000091 BNB · ≈$0.05"
+        );
 
         // Under half a cent the coin amount is the honest primary: "$0.00"
         // beside a real fee reads as free.
