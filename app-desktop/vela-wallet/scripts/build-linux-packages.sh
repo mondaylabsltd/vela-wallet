@@ -310,7 +310,12 @@ build_deb() {
   rm -rf "$work"
   mkdir -p "$work/control"
 
-  sed -e "s|@VERSION@|$version|" \
+  # A Debian control file has NO comment syntax — dpkg-deb reads a leading `#`
+  # as a field name and stops with "field name '#' must be followed by colon".
+  # control.in carries comments anyway, because the reasoning behind a
+  # Recommends belongs next to it; they are stripped here, on the way out.
+  sed -e '/^#/d' \
+      -e "s|@VERSION@|$version|" \
       -e "s|@DEB_ARCH@|$deb_arch|" \
       -e "s|@INSTALLED_SIZE@|$installed_size_kb|" \
       -e "s|@DEPENDS@|$depends|" \
