@@ -487,6 +487,22 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// **Backing the founding record up to Ethereum — the next step of the walk**
+/// (spec 062). Server-free: every request is an `eth_call` against the
+/// registry contract, on Gnosis (where the record lives) or Ethereum (where
+/// the backup goes). `answers_json` is the transcript (`LookupAnswer[]`, the
+/// same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
+/// requests to perform, or the verdict and, when the wallet is not backed up,
+/// the one call that would do it. No passkey is involved at any point.
+#[uniffi::export]
+pub fn registry_backup_step(
+    address: String,
+    founding_public_key_hex: String,
+    answers_json: String,
+) -> String {
+    vela_core::registry_backup::step_json(&address, &founding_public_key_hex, &answers_json)
+}
+
 /// **The registered name behind an address — the next step of the lookup.**
 ///
 /// The v2 passkey index cannot be asked about an address, so the name is

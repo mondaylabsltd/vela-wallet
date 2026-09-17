@@ -9556,6 +9556,25 @@ public func recoverPublicKeyFromAssertions(a: WebAuthnAssertion, b: WebAuthnAsse
 })
 }
 /**
+ * **Backing the founding record up to Ethereum — the next step of the walk**
+ * (spec 062). Server-free: every request is an `eth_call` against the
+ * registry contract, on Gnosis (where the record lives) or Ethereum (where
+ * the backup goes). `answers_json` is the transcript (`LookupAnswer[]`, the
+ * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
+ * requests to perform, or the verdict and, when the wallet is not backed up,
+ * the one call that would do it. No passkey is involved at any point.
+ */
+public func registryBackupStep(address: String, foundingPublicKeyHex: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_backup_step(
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(foundingPublicKeyHex),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The group's closing proof, as `{"groupPublicKey": …, "proof": { … }}`.
  */
 public func registryBuildGroupProof(seedHex: String, rpId: String, challengeHex: String)throws  -> String  {
@@ -10243,6 +10262,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_recover_public_key_from_assertions() != 37092) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_backup_step() != 7482) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_build_group_proof() != 16094) {
