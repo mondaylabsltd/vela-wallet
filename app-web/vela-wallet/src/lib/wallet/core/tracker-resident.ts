@@ -43,6 +43,7 @@
  * would type-check against a native module that does not exist.
  */
 
+import { balance } from '$lib/wallet/core/balance.svelte';
 import { feed } from '$lib/wallet/core/feed.svelte';
 import { notifyReceiptLogsConfirmed } from './token-trust-resident';
 import { loadCore } from '$lib/core/client';
@@ -170,7 +171,12 @@ export function ensureTxTracker(): Promise<void> {
 				feedReconciled: (count: number) => {
 					if (count > 0) feed.liveTick();
 				},
-				receiptLogsConfirmed: notifyReceiptLogsConfirmed
+				receiptLogsConfirmed: notifyReceiptLogsConfirmed,
+				// Money left: the hero total refetches past the token cache, so
+				// the figure follows a send the moment its receipt lands (issue 188).
+				// A dropped dispatch (balance not booted yet) costs nothing — the
+				// boot's own `account_changed` fetches fresh anyway.
+				confirmed: () => balance.refresh(true)
 			}
 		});
 

@@ -14,8 +14,12 @@
 //! ```
 //!
 //! The display rule (`useHomeController.ts:167-188`): never a confidently-wrong
-//! smaller number — a partial live sum renders as `max(live, cached)`; nothing
-//! known at all renders as a skeleton, never a fake `$0` that later jumps.
+//! smaller number — a live sum missing a chain renders as `max(live, cached)`;
+//! nothing known at all renders as a skeleton, never a fake `$0` that later
+//! jumps. The floor is for chains that did NOT answer (#188): a held token
+//! that merely has no price is a fact about the price source, not about the
+//! wallet, so the priced sum is shown as it is — otherwise a wallet holding
+//! one unpriced token could never show a total going DOWN after a send.
 //!
 //! Faithful port of the TypeScript sources — behavior aligned line by line:
 //!
@@ -612,7 +616,8 @@ pub struct Model {
     /// NOT cleared on account change — ported verbatim (the reset effect at
     /// `useHomeController.ts:399-416` never touches it).
     rate_limited_chain_ids: Vec<u32>,
-    /// Last-known-good complete total (the `max(live, cached)` floor).
+    /// Last-known-good total from a round EVERY chain answered (the
+    /// `max(live, cached)` floor for rounds that miss one).
     cached_total: Option<f64>,
     /// First fetch for this account has settled (either way) — skeleton off.
     bootstrapped: bool,
@@ -806,10 +811,12 @@ impl App for BalanceDashboard {
     fn view(&self, model: &Model) -> BalanceView {
         let partial = balance_partial(model);
         let total = display_total(model);
-        // Nothing known yet → skeleton, never a fake $0 (invariant ②,
-        // `useHomeController.ts:186-188`).
-        let unknown =
-            model.tokens.is_empty() && model.cached_total.is_none() && !model.bootstrapped;
+        // Nothing settled and nothing cached → skeleton, never a fake $0
+        // (invariant ②, `useHomeController.ts:186-188`). The LIST may already
+        // be streaming: a first load with no cache has no figure to hold
+        // (#188), so the hero stays a skeleton until the fetch settles rather
+        // than climbing $62 → $98 as seven networks answer one by one.
+        let unknown = model.cached_total.is_none() && !model.bootstrapped;
         // Never mid-refresh: before prices arrive every token is unpriced,
         // and "some tokens couldn't be priced" flashing while chains are still
         // answering was #188's second half.
@@ -888,7 +895,11 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.notice_allowed = false;
     model.live_timer = None; // drop any pending retry from the old account
     model.pending_pulls = 0; // stale pull settles are dropped by attempt
-    model.fetch_in_flight = false;
+
+    // The fetch issued below is out from this moment (#188): the figure holds
+    // at the cached total (seeded into `last_settled_total` when it lands)
+    // and the notice waits, exactly as they do for every later refresh.
+    model.fetch_in_flight = true;
     model.last_settled_total = None;
     model.errored_without_data = false;
     model.switcher_open = false;
@@ -1021,17 +1032,18 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.rate_limited_chain_ids = rate_limited_chain_ids;
             model.fetch_in_flight = false;
             model.errored_without_data = false;
-            // The figure this settle produced, under the same rule the screen
-            // reads — held through the NEXT refresh (#188).
-            model.last_settled_total = Some(display_total(model));
 
             let unpriced = has_unpriced(&model.tokens);
             let partial = !model.failed_chain_ids.is_empty() || unpriced;
             let mut operations = Vec::new();
-            if !partial {
-                // Invariant ⑥: only a COMPLETE total may become the new
-                // last-known-good — a partial write would poison the
-                // `max(live, cached)` floor (`:342-348`).
+            if !coverage_partial(model) {
+                // Invariant ⑥: only a total EVERY chain answered may become
+                // the new last-known-good — a write from a round missing a
+                // chain would poison the `max(live, cached)` floor
+                // (`:342-348`). An unpriced token does not hold the write
+                // back (#188): the priced sum is what the hero shows, and the
+                // switcher row and the next boot's first paint must agree
+                // with it — including after a send has lowered it.
                 let usd = live_total(&model.tokens);
                 operations.push(BalanceOperation::WriteBalanceCache {
                     address: address.clone(),
@@ -1046,6 +1058,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                 // number, every screen.
                 upsert_balance(&mut model.switcher_balances, &address, usd);
             }
+            // The figure this settle produced, under the same rule the screen
+            // reads — held through the NEXT refresh (#188). Taken after the
+            // floor moved, so a wallet emptied by a send holds at its new $0,
+            // not at the total it had before.
+            model.last_settled_total = Some(display_total(model));
             // `clearTimeout` at every settle (`:352`): a previously armed
             // retry may no longer fire.
             model.live_timer = None;
@@ -1175,9 +1192,16 @@ fn balance_partial(model: &Model) -> bool {
     !model.failed_chain_ids.is_empty() || (!model.tokens.is_empty() && has_unpriced(&model.tokens))
 }
 
+/// A chain did not answer this round — the one case where the live sum is a
+/// known undercount. (`balance_partial` also counts an unpriced holding; that
+/// drives the retries and the notice, not the floor.)
+fn coverage_partial(model: &Model) -> bool {
+    !model.failed_chain_ids.is_empty()
+}
+
 /// The display rule (invariants ① and the cache fallback): no live data →
-/// cached; partial → `max(live, cached)` — never the confident undercount;
-/// otherwise the live sum.
+/// cached; a chain missing → `max(live, cached)` — never the confident
+/// undercount; otherwise the live sum, unpriced holdings and all (#188).
 fn display_total(model: &Model) -> f64 {
     // #188: while a fetch is out the figure holds at the last settle. Live
     // replaces it once, at settle. (A first fetch with nothing settled and
@@ -1191,7 +1215,7 @@ fn display_total(model: &Model) -> f64 {
     let has_live = !model.tokens.is_empty();
     match model.cached_total {
         Some(cached) if !has_live => cached,
-        Some(cached) if balance_partial(model) => live.max(cached),
+        Some(cached) if coverage_partial(model) => live.max(cached),
         _ => live,
     }
 }

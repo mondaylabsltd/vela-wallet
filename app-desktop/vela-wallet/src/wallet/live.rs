@@ -776,24 +776,28 @@ mod tests {
     /// the real network and renders the real hero model, so what it proves is
     /// the whole chain — pool routing, the multicall, the price ladder, the
     /// core's total, and the split into the figure the screen draws.
-    /// The fetch reports money before it settles.
+    /// The fetch lists money before it settles; the figure waits.
     ///
     /// The point of the streaming fetch is that twelve chains are read on
     /// twelve threads and the settle waits for all of them, so an unreachable
-    /// RPC used to hold the screen on its skeleton (or on yesterday's cached
-    /// total) for its entire timeout while eleven chains sat answered and
-    /// unused.
+    /// RPC used to hold the whole screen on its skeleton for its entire
+    /// timeout while eleven chains sat answered and unused. What streams is
+    /// the LIST: each chain's holdings show as they land. The hero's figure
+    /// does not (#188): a total that climbs as chains answer is a number
+    /// nobody can read, so on a first load with nothing cached the hero stays
+    /// a skeleton and shows the figure once, at settle (with a cached total
+    /// it holds that instead).
     ///
     /// **What this test proves and what it does not.** It proves the reports
-    /// exist, that each chain reports for itself, and that the first one
-    /// already puts a drawable total in the core's hands — before the settle.
-    /// It does NOT prove the wall-clock earliness, because the driver here is
+    /// exist, that each chain reports for itself, that one of them already
+    /// lists holdings before the settle, and that none of them carries a
+    /// figure. It does NOT prove the wall-clock earliness, because the driver here is
     /// `run_streaming`, which keeps the ORDER and drops the concurrency (its
     /// own doc says so). The timing is the async pump's, and this repo has no
     /// gpui harness to drive it.
     #[test]
     #[ignore = "reads every chain for a real address"]
-    fn the_fetch_reports_money_before_it_settles() {
+    fn the_fetch_lists_money_before_it_settles_and_the_figure_waits() {
         crate::executor::storage::tests::with_temp_state("hero-stream", || {
             crate::executor::chain_tokens::invalidate();
             crate::executor::chainlink::invalidate();
@@ -807,22 +811,32 @@ mod tests {
             );
             // This Safe holds xDAI on Gnosis and nothing anywhere else, so
             // most reports are correctly empty — the claim is that one of
-            // them, before the settle, already had a total the hero can draw.
+            // them, before the settle, already lists the holding.
             let funded = per_report
                 .iter()
-                .position(|view| {
-                    !view.tokens.is_empty() && view.display_total_usd.is_some_and(|usd| usd > 0.0)
-                })
+                .position(|view| !view.tokens.is_empty())
                 .unwrap_or_else(|| {
-                    unreachable!("no report carried money before the settle: {per_report:?}")
+                    unreachable!("no report listed money before the settle: {per_report:?}")
                 });
             assert!(
                 funded < per_report.len(),
                 "and it arrived as a report, not as the settle"
             );
+            // The figure waits for the settle (#188): nothing was cached in
+            // this temp state, so no report may paint a total.
+            assert!(
+                per_report
+                    .iter()
+                    .all(|view| view.display_total_usd.is_none() && view.balance_unknown),
+                "a report painted a total before the settle: {per_report:?}"
+            );
             // The settle is still the complete picture — streaming adds to
             // what the screen sees early, it does not replace the settle.
             assert!(settled.tokens.len() >= per_report[funded].tokens.len());
+            assert!(
+                settled.display_total_usd.is_some_and(|usd| usd > 0.0),
+                "the settle carries the figure"
+            );
         });
     }
 

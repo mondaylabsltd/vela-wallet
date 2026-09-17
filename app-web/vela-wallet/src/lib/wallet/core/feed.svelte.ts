@@ -12,6 +12,7 @@
 import { loadCore } from '$lib/core/client';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
+import { balance } from '$lib/wallet/core/balance.svelte';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -37,6 +38,13 @@ class Feed {
 				}))
 			);
 			subscribeActivityFeed((view) => {
+				// A transfer the scan just found moved the balances too: the hero
+				// refetches past the token cache (issue 188). The core celebrates only
+				// a genuinely-new incoming record, never the first pass, so this
+				// fires once per arrival — the row glows, the figure follows.
+				if (view.new_item_id !== null && view.new_item_id !== this.view.new_item_id) {
+					balance.refresh(true);
+				}
 				this.view = view;
 			});
 			this.view = activityFeedView();
