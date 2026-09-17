@@ -192,6 +192,20 @@ describe('withLiveWallet', () => {
 		});
 		expect(model.assetsSection.mode).toBe('empty');
 	});
+
+	it('a first load streams the list under a skeleton hero (issue 188)', () => {
+		// Nothing cached, nothing settled, one chain answered: the core keeps
+		// the figure withheld while the holdings already list.
+		const model = withLiveWallet(base, {
+			balance: { ...PRISTINE, tokens: [ETH] },
+			currency: USD,
+			m
+		});
+		expect(model.balance.state).toBe('loading');
+		expect(model.balance.integer).toBeUndefined();
+		expect(model.assetsSection.mode).toBe('rows');
+		expect(model.assetRows.map((r) => r.ticker)).toEqual(['ETH']);
+	});
 });
 
 describe('liveBalance — the decimal mark is the preset’s (spec 028 Phase 9, T480)', () => {

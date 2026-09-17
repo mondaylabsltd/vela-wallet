@@ -447,9 +447,9 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
         tokens: vec![token(1, "ETH", "15", Some(1.0))],
     });
     let view = sut.view();
-    // Spec 038 #188: the LIST streams (56 kept its last value, 1 updated),
-    // but the FIGURE holds at the last settle until this refresh settles.
-    assert_eq!(view.display_total_usd, Some(30.0), "held until settle");
+    // #188: the LIST streams (56 kept its last value, 1 updated), and the
+    // figure follows it UP — what is already known shows at once.
+    assert_eq!(view.display_total_usd, Some(35.0), "rose with the stream");
     assert_eq!(view.tokens.len(), 2);
     assert_eq!(view.tokens[0].symbol, "BNB", "sorted by USD value desc");
     assert!(view.refreshing);
@@ -465,35 +465,40 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
     assert_eq!(
         sut.view().display_total_usd,
         Some(35.0),
-        "moved once, at settle"
+        "and the settle agrees"
     );
 }
 
-/// Spec 038 #188, the first load: seven chains answering one by one must not
-/// paint seven different totals, and "some tokens couldn't be priced" must
-/// not flash before the prices have arrived.
+/// #188, a first load over a cached total: the figure starts at the cache and
+/// only RISES as chains answer, and "some tokens couldn't be priced" must not
+/// flash before the prices have arrived.
 #[test]
-fn the_figure_moves_once_per_refresh_and_unpriced_waits_for_settle() {
+fn the_figure_only_rises_while_loading_and_unpriced_waits_for_settle() {
     let mut sut = boot(ADDR_A);
     sut.resolve(Res::CachedTotalLoaded {
         address: ADDR_A.to_owned(),
         usd: Some(62.0),
     });
-    // Two chains land, one still unpriced.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
         tokens: vec![token(1, "ETH", "50", Some(1.0))],
     });
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(62.0),
+        "below the cache: the cache holds"
+    );
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
-        tokens: vec![token(56, "BNB", "40", None)],
+        tokens: vec![token(56, "BNB", "40", Some(1.0))],
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(137, "MATIC", "5", None)],
     });
     let view = sut.view();
-    assert_eq!(
-        view.display_total_usd,
-        Some(62.0),
-        "the cached figure holds"
-    );
+    assert_eq!(view.display_total_usd, Some(90.0), "rose past the cache");
+    assert_eq!(view.tokens.len(), 3, "the list streams");
     assert_eq!(view.notice, None, "no unpriced notice mid-stream");
     // Settle: everything priced now.
     sut.resolve(settled(
@@ -501,14 +506,209 @@ fn the_figure_moves_once_per_refresh_and_unpriced_waits_for_settle() {
         vec![
             token(1, "ETH", "50", Some(1.0)),
             token(56, "BNB", "40", Some(1.0)),
+            token(137, "MATIC", "5", Some(1.0)),
         ],
         vec![],
         vec![],
     ));
     let view = sut.view();
-    assert_eq!(view.display_total_usd, Some(90.0));
+    assert_eq!(view.display_total_usd, Some(95.0));
     assert_eq!(view.notice, None);
     assert!(!view.unreachable);
+}
+
+/// #188, the cold first load — the reporter's screen, made fast: the first
+/// chain with a holding ends the skeleton, and the figure grows as the others
+/// answer. It never steps down mid-load.
+#[test]
+fn a_cold_first_load_shows_what_it_has_and_only_grows() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    assert_eq!(
+        sut.view().display_total_usd,
+        None,
+        "nothing known: skeleton"
+    );
+    // A chain that lists only an unpriced token is no figure yet: the
+    // skeleton stays, never a $0.00.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(137, "MYSTERY", "5", None)],
+    });
+    let view = sut.view();
+    assert!(view.balance_unknown);
+    assert_eq!(view.display_total_usd, None, "still a skeleton, not $0.00");
+    assert_eq!(view.tokens.len(), 1, "the list streams");
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "50", Some(1.0))],
+    });
+    let view = sut.view();
+    assert!(!view.balance_unknown);
+    assert_eq!(view.display_total_usd, Some(50.0), "shown at once");
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(56, "BNB", "40", Some(1.0))],
+    });
+    assert_eq!(sut.view().display_total_usd, Some(90.0), "grew");
+    // A later snapshot re-reports chain 1 lower: the list follows, the figure
+    // does not step down before the settle.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "20", Some(1.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(90.0), "never down mid-load");
+    assert_eq!(view.notice, None);
+    sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "20", Some(1.0)),
+            token(56, "BNB", "40", Some(1.0)),
+        ],
+        vec![],
+        vec![],
+    ));
+    assert_eq!(sut.view().display_total_usd, Some(60.0), "the settle rules");
+}
+
+/// #188's second half — "after a send the total keeps the old number". A
+/// wallet holding one unpriced token is `balance_partial` for ever, and the
+/// `max(live, cached)` floor pinned its total at the pre-send figure. The
+/// floor is for chains that did NOT answer; every chain answered here, so
+/// the priced sum is shown, persisted, and the switcher row moves with it.
+#[test]
+fn a_send_lowers_the_figure_even_with_an_unpriced_token_held() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(150.0),
+    });
+    let ops = sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "100", Some(1.0)),
+            token(1, "MYSTERY", "5", None),
+        ],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert!(
+        view.balance_partial,
+        "the unpriced token still marks partial"
+    );
+    assert_eq!(
+        view.display_total_usd,
+        Some(100.0),
+        "the priced sum, not the stale floor"
+    );
+    assert!(
+        ops.contains(&Op::WriteBalanceCache {
+            address: ADDR_A.to_owned(),
+            usd: 100.0
+        }),
+        "every chain answered: persisted — {ops:?}"
+    );
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
+        "the unpriced token still earns its silent retries — {ops:?}"
+    );
+    assert_eq!(view.cached_total_usd, Some(100.0));
+
+    // 40 ETH leaves; the refresh the confirmation triggers settles lower.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![
+            token(1, "ETH", "60", Some(1.0)),
+            token(1, "MYSTERY", "5", None),
+        ],
+    });
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(100.0),
+        "held while the fetch is out — down only at settle"
+    );
+    let ops = sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "60", Some(1.0)),
+            token(1, "MYSTERY", "5", None),
+        ],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(60.0), "the send shows");
+    assert!(ops.contains(&Op::WriteBalanceCache {
+        address: ADDR_A.to_owned(),
+        usd: 60.0
+    }));
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 60.0
+    }));
+
+    // A chain that did NOT answer is a different matter: the floor stands.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled(
+        ADDR_A,
+        vec![token(1, "ETH", "10", Some(1.0))],
+        vec![56],
+        vec![],
+    ));
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(60.0),
+        "max(live, cached)"
+    );
+    assert!(
+        ops.iter()
+            .all(|op| !matches!(op, Op::WriteBalanceCache { .. })),
+        "a round missing a chain is never persisted — {ops:?}"
+    );
+}
+
+/// A wallet emptied by a send is a live $0, and the figure the NEXT refresh
+/// holds at is that $0 — not the total it had before.
+#[test]
+fn an_emptied_wallet_holds_at_its_new_zero() {
+    let mut sut = booted(
+        ADDR_A,
+        Some(100.0),
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "100", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled(ADDR_A, vec![], vec![], vec![]));
+    assert_eq!(sut.view().display_total_usd, Some(0.0));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(0.0),
+        "held at the new zero, not the old total"
+    );
 }
 
 /// Spec 038 finding 15: a first launch with the network cut is "unreachable",

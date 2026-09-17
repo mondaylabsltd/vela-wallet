@@ -1113,6 +1113,16 @@
 		return () => clearInterval(id);
 	});
 
+	// The 10-minute aggregate poll the Expo home ran too (the core's
+	// `AUTO_REFRESH_MS`; the timer is the shell's). A transfer nothing else
+	// notices — a native coin arriving while the home sits open — is at most
+	// this stale (issue 188). Not forced: the core drops it while backgrounded,
+	// and the 5-minute token cache has expired by then anyway.
+	onMount(() => {
+		const id = setInterval(() => balance.refresh(false), 600_000);
+		return () => clearInterval(id);
+	});
+
 	/**
 	 * The deposit watcher lives exactly as long as a receive screen is showing
 	 * (research D12): created on entry with THIS address, disposed on leave.

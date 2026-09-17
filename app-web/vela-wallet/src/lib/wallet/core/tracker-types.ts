@@ -36,6 +36,15 @@ export interface TrackShellPorts {
 	 * carries no payload of its own: the shell already holds them.
 	 */
 	receiptLogsConfirmed(from: string, chainId: number, logs: TrustReceiptLog[]): void;
+	/**
+	 * A submission confirmed on-chain — money left this wallet, and the hero
+	 * total must follow (issue 188). Reached from `NotifyConfirmed` for EVERY
+	 * confirmation, logs or not. The balance core's refresh has to be forced:
+	 * the send flow clears the token cache at submit, before the op has
+	 * landed, so a silent refresh in between re-fills it with the pre-send
+	 * balances for five minutes.
+	 */
+	confirmed(chainId: number): void;
 }
 
 export type TxTrackerSessionOptions = SessionOptions<TrackView> & {
