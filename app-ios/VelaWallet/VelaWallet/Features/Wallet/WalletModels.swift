@@ -84,6 +84,11 @@ struct ActivityRowModel: Identifiable {
     let positive: Bool
     let masked: Bool
     let badgeColor: Color
+    /// The chain's logo for the avatar's badge (§8.3 draws an 18 px chain-LOGO
+    /// there, and `RemoteLogoView` has existed since spec 047). Without it the
+    /// badge was always the coloured dot — a colour nobody can read as a
+    /// network.
+    var badgeLogoURL: String?
 }
 
 struct ActivityGroupModel: Identifiable {

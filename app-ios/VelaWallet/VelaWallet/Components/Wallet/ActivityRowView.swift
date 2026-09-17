@@ -89,7 +89,15 @@ struct ActivityRowView: View {
                     LucideIcon(glyph, size: LucideIconSize.rowGlyph)
                         .foregroundStyle(model.kind == .received ? theme.successBase : theme.fgBase)
                 }
-            ChainBadgeDot(color: model.badgeColor)
+            if let url = model.badgeLogoURL {
+                RemoteLogoView(urls: [url], size: WalletGeometry.badge) {
+                    Circle().fill(model.badgeColor)
+                }
+                .padding(WalletGeometry.badgeRing)
+                .background(Circle().fill(theme.bgBase))
+            } else {
+                ChainBadgeDot(color: model.badgeColor)
+            }
         }
     }
 }

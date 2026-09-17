@@ -598,6 +598,11 @@ struct BreakdownRowModel: Identifiable {
 
 struct SendConfirmModel {
     let header: FlowHeaderModel
+    /// The coin being sent, drawn above the figure (founder, 2026-09-17). The
+    /// confirm page named the asset in words only while every row beneath it
+    /// carried art — the one screen where "which coin is this?" must be
+    /// answerable at a glance. `nil` on a sweep: several coins, no one mark.
+    var mark: TokenMarkModel?
     /// "120 USDT" / "3 assets".
     let amount: String
     /// "≈ $120.00" / "Total ≈ $200.90 · Ethereum".

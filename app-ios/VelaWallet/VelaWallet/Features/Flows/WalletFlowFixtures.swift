@@ -762,6 +762,7 @@ enum WalletFlowFixtures {
         case .single:
             return SendConfirmModel(
                 header: header,
+                mark: TokenMarkModel.of(chainId: 1, symbol: "USDT", color: ChainPalette.ethereum),
                 amount: "120 USDT",
                 subline: "≈ $120.00",
                 facts: facts,
