@@ -313,8 +313,7 @@ pub fn native_alias_token(chain_id: u32) -> Option<&'static str> {
 
 /// Whether this address is the chain's native coin wearing an ERC-20 interface.
 fn is_native_alias(chain_id: u32, address: &str) -> bool {
-    native_alias_token(chain_id)
-        .is_some_and(|alias| alias.eq_ignore_ascii_case(address.trim()))
+    native_alias_token(chain_id).is_some_and(|alias| alias.eq_ignore_ascii_case(address.trim()))
 }
 
 // ---------------------------------------------------------------------------

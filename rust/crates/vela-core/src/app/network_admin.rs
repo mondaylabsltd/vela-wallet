@@ -329,7 +329,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
         rpc_url: "https://rpc.mainnet.arc.io",
         explorer_url: "https://explorer.arc.io",
         typical_inclusion_s: 2,
-    },    // The eleven admitted together (spec 061): every one probed live for all
+    }, // The eleven admitted together (spec 061): every one probed live for all
     // eleven required contracts and the RIP-7212 precompile before it was listed.
     // Polygon CDK zk-rollup; OKB is the gas coin.
     NetBuiltinChain {

@@ -346,7 +346,11 @@ mod tests {
             }
         }
         assert_eq!(builtin_dex(4217), None, "Tempo has no DEX to quote");
-        assert_eq!(builtin_dex(5042), None, "Arc has no DEX; its coin is pegged");
+        assert_eq!(
+            builtin_dex(5042),
+            None,
+            "Arc has no DEX; its coin is pegged"
+        );
     }
 
     /// The live index, for one chain.

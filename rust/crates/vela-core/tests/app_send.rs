@@ -3794,7 +3794,6 @@ fn continue_takes_over_from_a_pending_form_quote_and_a_landed_one_is_not_asked_t
     );
 }
 
-
 /// The out-of-gas sheet has to say WHO can fix it, and the core is what knows:
 /// a network Vela ships has an operator who owns that relayer, a network the
 /// person added may have nobody who can hold gas on it at all. The shell sends

@@ -20,14 +20,12 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::network_admin::{
     build_provider_rpc_url, clean_endpoint_value, explorer_base_url, is_builtin_chain,
-    is_code_deployed,
-    is_localhost_http, p256_call_indicates_support, provider_chain_ids, rank_search, Event,
-    NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig,
-    NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys,
-    NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
+    is_code_deployed, is_localhost_http, p256_call_indicates_support, provider_chain_ids,
+    rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
+    NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
+    NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
     NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
-    BUNDLER_BASE,
-    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    BUNDLER_BASE, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
     DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE, REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 
@@ -1557,7 +1555,11 @@ fn opening_the_provider_modal_auto_tests_configured_providers() {
         })
         .collect();
     assert_eq!(ops, expected, "one unified probe per supported chain");
-    assert_eq!(ops.len(), 23, "one probe per Alchemy-served built-in; XRPL EVM has no slug");
+    assert_eq!(
+        ops.len(),
+        23,
+        "one probe per Alchemy-served built-in; XRPL EVM has no slug"
+    );
 }
 
 /// Invariant ⑦ core: ok requires reported == target — a probe answering the
@@ -1771,7 +1773,6 @@ fn provider_urls_follow_the_slug_maps() {
     );
 }
 
-
 /// Arc (spec 060) — the thirteenth built-in network. Every field here is load
 /// bearing: the native symbol drives the $1 peg (and therefore the $0.01 fee
 /// floor), and the RPC and explorer are what a person actually reaches.
@@ -1812,18 +1813,26 @@ fn arc_provider_slugs_match_the_providers_that_actually_serve_it() {
         Some("https://lb.drpc.org/ogrpc?network=arc&dkey=key".to_owned())
     );
     // Ankr does not serve Arc, so it must not be offered for it.
-    assert_eq!(build_provider_rpc_url(NetProviderId::Ankr, 5_042, "key"), None);
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Ankr, 5_042, "key"),
+        None
+    );
 }
 
 /// The services moved to `getvela.app` (spec 060). These constants are what a
 /// clean install reaches on first run.
 #[test]
 fn builtin_service_endpoints_point_at_the_cloudflare_deployments() {
-    assert_eq!(DEFAULT_ETHEREUM_DATA_URL, "https://ethereum-data.getvela.app");
+    assert_eq!(
+        DEFAULT_ETHEREUM_DATA_URL,
+        "https://ethereum-data.getvela.app"
+    );
     assert_eq!(BUNDLER_BASE, "https://vela-relay-cf.getvela.app");
-    assert_eq!(DEFAULT_BUNDLER_SERVICE_URL, "https://vela-relay-cf.getvela.app");
+    assert_eq!(
+        DEFAULT_BUNDLER_SERVICE_URL,
+        "https://vela-relay-cf.getvela.app"
+    );
 }
-
 
 /// Who can fix an out-of-gas relayer (spec 060). On a network Vela ships the
 /// operator owns it; on one a person added — a devnet, an internal chain —
@@ -1835,20 +1844,30 @@ fn a_builtin_network_is_one_whose_relayer_the_operator_owns() {
         1, 10, 56, 100, 130, 137, 143, 480, 4_217, 5_042, 8_453, 42_161, 43_114, 196, 988, 1_868,
         4_326, 4_663, 5_000, 8_217, 42_220, 57_073, 98_866, 1_440_000,
     ] {
-        assert!(is_builtin_chain(chain_id), "chain {chain_id} ships with Vela");
+        assert!(
+            is_builtin_chain(chain_id),
+            "chain {chain_id} ships with Vela"
+        );
     }
     // Arc TESTNET is added by hand, like any local or internal chain.
     assert!(!is_builtin_chain(5_042_002));
-    assert!(!is_builtin_chain(31_337), "a local devnet is nobody else's to fund");
+    assert!(
+        !is_builtin_chain(31_337),
+        "a local devnet is nobody else's to fund"
+    );
     assert!(!is_builtin_chain(1_337));
 }
-
 
 /// The eleven admitted with spec 061. Each field is what a person reaches or
 /// what a money rule reads; XRPL EVM is the one no provider serves.
 #[test]
 fn the_eleven_are_built_in_with_verified_provider_slugs() {
-    let by_id = |id: u32| BUILTIN_CHAINS.iter().find(|c| c.chain_id == id).expect("built in");
+    let by_id = |id: u32| {
+        BUILTIN_CHAINS
+            .iter()
+            .find(|c| c.chain_id == id)
+            .expect("built in")
+    };
     assert_eq!(by_id(988).native_symbol, "USDT0");
     assert_eq!(by_id(196).native_symbol, "OKB");
     assert_eq!(by_id(1_440_000).native_symbol, "XRP");
@@ -1857,6 +1876,12 @@ fn the_eleven_are_built_in_with_verified_provider_slugs() {
         Some("https://xlayer-mainnet.g.alchemy.com/v2/k".to_owned()),
         "X Layer's slug was dead data until the chain was built in"
     );
-    assert_eq!(build_provider_rpc_url(NetProviderId::Alchemy, 1_440_000, "k"), None);
-    assert_eq!(build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"), None);
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Alchemy, 1_440_000, "k"),
+        None
+    );
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"),
+        None
+    );
 }

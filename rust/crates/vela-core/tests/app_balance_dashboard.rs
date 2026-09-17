@@ -14,10 +14,10 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::balance_dashboard::{
     best_group_price, best_native_dex_price, choose_native_price, first_grouped_quote_price,
-    pegged_native_usd,
-    token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice,
-    BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event, NativePriceSource,
-    NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
+    pegged_native_usd, token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard,
+    BalanceNotice, BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event,
+    NativePriceSource, NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES,
+    PARTIAL_RETRY_DELAYS_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -1265,7 +1265,6 @@ fn cached_balances_without_a_pending_open_are_ignored() {
         .any(|entry| entry.address == ADDR_A && entry.usd == 1.0));
 }
 
-
 /// The peg table (spec 060). It exists so the rule is written ONCE: before
 /// this, `symbol == "USD" ⇒ $1` lived in four shells in four languages, and a
 /// second pegged symbol would have meant four chances to disagree about what a
@@ -1288,8 +1287,8 @@ fn pegged_native_usd_prices_dollar_native_coins() {
 #[test]
 fn pegged_native_usd_refuses_everything_it_cannot_prove() {
     for symbol in [
-        "ETH", "BNB", "POL", "AVAX", "MON", "XDAI", "WLD", "OKB", "MNT", "KAIA", "CELO", "PLUME", "XRP",
-        "", "  ", "USDX", "EURC",
+        "ETH", "BNB", "POL", "AVAX", "MON", "XDAI", "WLD", "OKB", "MNT", "KAIA", "CELO", "PLUME",
+        "XRP", "", "  ", "USDX", "EURC",
     ] {
         assert_eq!(
             pegged_native_usd(symbol),

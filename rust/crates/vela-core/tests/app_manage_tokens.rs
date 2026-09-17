@@ -514,7 +514,6 @@ fn deleted_token_still_reads_added_on_its_card() {
     );
 }
 
-
 /// Arc's native coin wears an ERC-20 interface at `0x3600…0000` (spec 060).
 /// That contract answers `name`, `symbol` and `decimals` perfectly well, so
 /// nothing about the probe says "stop" — and listing it would show one balance
@@ -553,7 +552,10 @@ fn arcs_native_coin_is_refused_as_a_token_and_says_why() {
     });
 
     let view = sut.view();
-    assert!(view.found.is_empty(), "the native coin is not a listable token");
+    assert!(
+        view.found.is_empty(),
+        "the native coin is not a listable token"
+    );
     assert!(
         view.native_alias,
         "the refusal must carry its reason, not read as 'not found'"
