@@ -33,7 +33,7 @@ for (const [path, value] of Object.entries(files)) {
 }
 
 /** The page namespaces — the localizable pages that are not docs. */
-export const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted'] as const;
+export const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted', 'chainSetup'] as const;
 export type PageNamespace = (typeof PAGE_NAMESPACES)[number];
 
 /** Namespaces that must be complete in every locale (data-model §3). */
@@ -94,9 +94,7 @@ function localizeTree(value: unknown, locale: Locale): unknown {
 	if (typeof value === 'string') return localizeLinks(value, locale);
 	if (Array.isArray(value)) return value.map((v) => localizeTree(v, locale));
 	if (typeof value === 'object' && value !== null) {
-		return Object.fromEntries(
-			Object.entries(value).map(([k, v]) => [k, localizeTree(v, locale)])
-		);
+		return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, localizeTree(v, locale)]));
 	}
 	return value;
 }

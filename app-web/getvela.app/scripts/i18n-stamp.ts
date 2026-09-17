@@ -18,7 +18,7 @@ import { en } from '../src/lib/i18n/messages/en.ts';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE } from '../src/lib/i18n/locales.ts';
 
 const here = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
-const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted'] as const;
+const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted', 'chainSetup'] as const;
 
 function isComplete(source: unknown, value: unknown): boolean {
 	if (Array.isArray(source)) {

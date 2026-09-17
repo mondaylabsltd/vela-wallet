@@ -22,7 +22,7 @@ const here = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
 
 const MESSAGES = 'src/lib/i18n/messages';
 const DOCS = 'src/content/docs';
-const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted'] as const;
+const PAGE_NAMESPACES = ['home', 'about', 'roadmap', 'getStarted', 'chainSetup'] as const;
 
 type Review = { state: 'source' | 'drafted' | 'reviewed'; date?: string };
 const review: Record<string, Review> = JSON.parse(
