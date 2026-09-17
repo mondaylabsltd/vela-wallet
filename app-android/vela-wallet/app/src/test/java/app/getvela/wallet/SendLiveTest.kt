@@ -67,7 +67,7 @@ class SendLiveTest {
 
     private fun ctx(currency: CurrencyView = CurrencyView(code = "USD")) = SendLive.Context(
         strings = strings,
-        chainNames = mapOf(100 to "Gnosis"),
+        chainNames = mapOf(100 to "Gnosis", 56 to "BNB Chain"),
         explorers = mapOf(100 to "https://gnosisscan.io"),
         money = WalletLive.Money.of(currency),
         fromName = "Me",
@@ -80,6 +80,60 @@ class SendLiveTest {
         chain_id = 100, total_wei = "2100000000000000", max_fee_per_gas = "1", network_fee_per_gas = "1", relayer_fee_per_gas = "1",
         bundler_gas_price = "1", in_band_gas_basis = "1", total_gas = "1", deployed = true, tier = FeeTier.Fast, quoted = true,
         fee_asset = FeeAssetView.Native, fee_recipient = "0x2222222222222222222222222222222222222222",
+    )
+
+    /**
+     * Issue 201: the fee was the one figure on the send screens with no money
+     * beside it. The amount had its "≈" line; the fee did not, so a person who
+     * does not track the coin's price could not tell what a transfer cost.
+     */
+    @Test
+    fun `the fee row says what the fee costs, in money as well as in the coin`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val bnb = xdai.copy(chain_id = 56, symbol = "BNB", price_usd = 600.0)
+        val quote = fee().copy(chain_id = 56, total_wei = "91000000000000")
+        // The fee names the chain's own coin; this ctx knows chain 56 by name.
+        val view = SendView(stage = SendStage.EnterDetails, selected_token = bnb, tokens = listOf(bnb), recipient = recipient, amount = "0.001", fee = quote)
+
+        // The relay's published row prices it…
+        val published = FeeView(options = listOf(feeOption(symbol = "BNB", contract = null, usdPrice = "600")))
+        val live = SendLive.form(drawn.model, view, published, ctx())
+        assertEquals("0.000091 BNB · ≈$0.05", live.fee.value)
+
+        // …and with no published price, the balances the form already carries.
+        assertEquals("0.000091 BNB · ≈$0.05", SendLive.form(drawn.model, view, FeeView(), ctx()).fee.value)
+
+        // Nothing can price it ⇒ the coin alone, never an invented figure.
+        val blind = view.copy(selected_token = bnb.copy(price_usd = null), tokens = listOf(bnb.copy(price_usd = null)))
+        assertEquals("0.000091 BNB", SendLive.form(drawn.model, blind, FeeView(), ctx()).fee.value)
+
+        // Under half a cent the coin amount is the honest primary.
+        val dust = view.copy(fee = quote.copy(total_wei = "1000000000000"))
+        assertEquals("0.000001 BNB", SendLive.form(drawn.model, dust, FeeView(), ctx()).fee.value)
+
+        // The person's own currency, at the committed rate only.
+        val eur = ctx(CurrencyView(code = "EUR", rate = 2.0, committed = true))
+        // ×2 on 0.0546 USD, written with the preset's own two places.
+        assertEquals("0.000091 BNB · ≈€0.10", SendLive.form(drawn.model, view, FeeView(), eur).fee.value)
+    }
+
+    /**
+     * The founder's ruling of 2026-09-17: the confirm page named the coin in
+     * words while every row beneath it carried art.
+     */
+    @Test
+    fun `the confirm page draws the coin it is about to send`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val view = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        assertEquals("XDAI", SendLive.confirm(drawn.model, view, ctx()).mark?.ticker)
+        // A sweep moves several coins; one mark would name the wrong one.
+        assertNull(SendLive.confirm(drawn.model, view.copy(multi_select_mode = true), ctx()).mark)
+    }
+
+    private fun feeOption(symbol: String, contract: String?, usdPrice: String?) = FeeOptionView(
+        symbol = symbol, contract = contract, decimals = 18, balance = "1500000000000000000",
+        recipient = recipient, usd_balance = "900", usd_price = usdPrice, amount = "91000000000000",
+        insufficient = false, selected = true,
     )
 
     @Test

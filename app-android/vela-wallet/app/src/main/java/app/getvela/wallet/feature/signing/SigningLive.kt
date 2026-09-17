@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
@@ -43,6 +44,8 @@ object SigningLive {
         val nativeSymbol: String,
         val walletName: String,
         val walletAddress: String,
+        /** The display currency the fee's "≈" half is written in (issue 201). */
+        val money: WalletLive.Money = WalletLive.Money.dollars(),
         /** The page's host, for the SIWE verdict's words (spec 046). */
         val origin: String? = null,
     )
@@ -347,7 +350,15 @@ object SigningLive {
         if (offChain) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))
         val estimate = fee.fee
         val value = when {
-            estimate != null -> "~${SendLive.fromBase(estimate.total_wei, 18)} ${ctx.nativeSymbol}"
+            // The send screens' own line (issue 201): the coin that is ACTUALLY
+            // paying — an in-band ERC-20 fee is its own amount under its own
+            // ticker, never the native figure — and what it costs in money.
+            // One formatter, because two surfaces pricing one operation must
+            // not give two answers.
+            estimate != null -> {
+                val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)
+                "~" + SendLive.feeLine(parts, SendLive.feePriceUsd(parts.contract, fee), ctx.money)
+            }
             fee.failed != null -> ctx.strings.t("componentsUi.gas.estimateFailed")
             else -> ctx.strings.t("componentsUi.gas.estimating")
         }

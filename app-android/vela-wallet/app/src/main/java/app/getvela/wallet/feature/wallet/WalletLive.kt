@@ -166,6 +166,7 @@ object WalletLive {
             positive = received,
             masked = false,
             badgeColor = badgeColour(item.chain_id),
+            badgeLogoUrl = Marks.chainLogoUrl(item.chain_id),
         )
     }
 
@@ -447,6 +448,9 @@ object WalletLive {
         fun fiat(usd: Double): String = symbol + Formats.current.fixed2(convert(usd))
 
         companion object {
+            /** Dollars, unconverted — the default before a currency is known. */
+            fun dollars(): Money = Money("USD", "$", null)
+
             fun of(view: CurrencyView): Money {
                 val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
                 // No rate, or no settled choice, means dollars — and saying so.

@@ -81,7 +81,7 @@ fun ActivityRow(model: ActivityRowModel, modifier: Modifier = Modifier) {
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
-            ChainBadge(color = model.badgeColor)
+            ChainBadge(color = model.badgeColor, logoUrl = model.badgeLogoUrl)
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {

@@ -1368,6 +1368,10 @@ fun SendConfirmBody(
                 .padding(top = VelaSpacing.lg, bottom = VelaSpacing.xl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            model.mark?.let { mark ->
+                TokenIcon(mark = mark)
+                Spacer(modifier = Modifier.height(VelaSpacing.md))
+            }
             Text(
                 text = model.amount,
                 color = colors.fgBase,

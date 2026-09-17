@@ -570,6 +570,7 @@ fun VelaNavHost(
                         nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                         walletName = session.activeName,
                         walletAddress = session.address,
+                        money = WalletLive.Money.of(currency),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                     )
                     signRequest?.let { request ->
@@ -714,7 +715,7 @@ fun VelaNavHost(
                         val base = when (val base = drawn.base) {
                             is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking, sendView.multi_chain_id ?: chainFilter, classFilter))
                             is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
-                            is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
+                            is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx, feeView))
                             is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
                             else -> base
                         }
