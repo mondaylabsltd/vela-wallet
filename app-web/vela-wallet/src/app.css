@@ -23,6 +23,25 @@ a {
 }
 
 /*
+ * Scrollbars. macOS overlays them and shows them only while you scroll;
+ * Windows and Linux draw a classic 17px track that is always on screen, and
+ * in a column layout it stood as a grey bar down the middle of a 4 K display
+ * (founder, 2026-09-17). Every scroller gets one thin, quiet thumb and no
+ * track, in the theme's own ink — so a dark theme over a light OS does not
+ * get a white rail either. The mock (docs/design/onboarding-desktop-b.html)
+ * draws its thumb at 15 % ink. `scrollbar-color` inherits; `scrollbar-width`
+ * does not, hence the two selectors. Rows that hide theirs (the chip strip)
+ * keep doing so — a class outranks `*`.
+ */
+:root {
+	scrollbar-color: color-mix(in srgb, var(--color-fg-base) 18%, transparent) transparent;
+}
+
+* {
+	scrollbar-width: thin;
+}
+
+/*
  * Keyboard focus, for controls that have no edge of their own: buttons,
  * links, rows, tabs. Text entry is NOT one of them — a field is its own edge,
  * and this halo around a field drew a second ring outside the first (founder,

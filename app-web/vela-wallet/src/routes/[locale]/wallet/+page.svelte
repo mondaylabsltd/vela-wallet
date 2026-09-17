@@ -1519,11 +1519,72 @@
 	/>
 {/snippet}
 
+{#snippet flowColumn()}
+	<!-- `ds1` is the one flow the third column cannot host: a viewfinder
+	     in a narrow strip is the wrong shape, so the desktop shows the
+	     scanner as a centred modal (DS1L). -->
+	<FlowsPanel
+		model={withLiveTxDetailDesktop(
+			withLiveDesktopFlow(data.desktopFlows[shownDesktopFlow!], flowInputs),
+			txDetail
+		)}
+		onback={() => {
+			if (sendView) {
+				// The sheets the phone raises are panels here; leaving one is
+				// closing it, not stepping the core back a stage.
+				if (feeSheetOpen) feeSheetOpen = false;
+				else if (batchView) closeBatch();
+				else if (sendView.show_contact_picker)
+					sendSession?.dispatch({ type: 'close_contact_picker' });
+				else sendSession?.dispatch({ type: 'back' });
+				return;
+			}
+			if (nav.desktopTop === 'dt3') closeAddToken();
+			nav.back();
+		}}
+		onclose={() => {
+			if (sendView) {
+				closeSend();
+				return;
+			}
+			closeAddToken();
+			nav.close();
+		}}
+		onnavigate={(to, index) => {
+			noteTarget(to, index);
+			// The picker opens through the core, as the scanner does.
+			if (to === 'contact-pick' && sendSession) {
+				sendSession.dispatch({ type: 'open_contact_picker', target: null });
+				return;
+			}
+			// No desktop token screen exists: the asset detail column is
+			// it (nav.svelte.ts), and it opens through the model.
+			if (to === 'token-detail') {
+				nav.close();
+				return;
+			}
+			nav.push(to);
+			if (to === 'add-token') void openAddToken();
+		}}
+		addToken={addTokenActions}
+		send={sendActions}
+		batch={batchActions}
+		ondeletetx={deleteSelectedTx}
+	/>
+{/snippet}
+
 {#if identity}
 	{#if wide.current}
 		<div class="desktop-shell">
+			<!-- The flow column is the frame's third column (WalletDesktop
+			     `column`), not a sibling of the frame: a sibling sat at the
+			     window's edge while the frame centred in what was left, and
+			     past `--layout-frameMax` the two drifted apart. -->
 			<WalletDesktop
 				model={liveDesktop}
+				column={shownDesktopFlow !== undefined && shownDesktopFlow !== 'ds1'
+					? flowColumn
+					: undefined}
 				onnav={select}
 				onaccounts={() => (switching = true)}
 				onflow={enter}
@@ -1540,59 +1601,6 @@
 				onassetclose={() => (selectedAssetId = null)}
 				onactivity={(row) => (selectedTxId = row.id ?? null)}
 			/>
-			<!-- `ds1` is the one flow the third column cannot host: a viewfinder
-			     in a narrow strip is the wrong shape, so the desktop shows the
-			     scanner as a centred modal (DS1L). -->
-			{#if shownDesktopFlow !== undefined && shownDesktopFlow !== 'ds1'}
-				<FlowsPanel
-					model={withLiveTxDetailDesktop(
-						withLiveDesktopFlow(data.desktopFlows[shownDesktopFlow], flowInputs),
-						txDetail
-					)}
-					onback={() => {
-						if (sendView) {
-							// The sheets the phone raises are panels here; leaving one is
-							// closing it, not stepping the core back a stage.
-							if (feeSheetOpen) feeSheetOpen = false;
-							else if (batchView) closeBatch();
-							else if (sendView.show_contact_picker)
-								sendSession?.dispatch({ type: 'close_contact_picker' });
-							else sendSession?.dispatch({ type: 'back' });
-							return;
-						}
-						if (nav.desktopTop === 'dt3') closeAddToken();
-						nav.back();
-					}}
-					onclose={() => {
-						if (sendView) {
-							closeSend();
-							return;
-						}
-						closeAddToken();
-						nav.close();
-					}}
-					onnavigate={(to, index) => {
-						noteTarget(to, index);
-						// The picker opens through the core, as the scanner does.
-						if (to === 'contact-pick' && sendSession) {
-							sendSession.dispatch({ type: 'open_contact_picker', target: null });
-							return;
-						}
-						// No desktop token screen exists: the asset detail column is
-						// it (nav.svelte.ts), and it opens through the model.
-						if (to === 'token-detail') {
-							nav.close();
-							return;
-						}
-						nav.push(to);
-						if (to === 'add-token') void openAddToken();
-					}}
-					addToken={addTokenActions}
-					send={sendActions}
-					batch={batchActions}
-					ondeletetx={deleteSelectedTx}
-				/>
-			{/if}
 		</div>
 		{#if desktopFlow === 'ds1'}
 			<div class="scan-scrim" role="presentation">
@@ -1773,22 +1781,12 @@
 		background: var(--color-bg-base);
 	}
 
-	/* The desktop keeps the wallet visible behind the third column — that is
-	   the whole point of a column over a pushed screen. */
+	/* The three columns are `height: 100%` of this frame (the settings and
+	   contacts routes frame theirs the same way). The flow column lives
+	   inside the frame now, so there is nothing to lay out beside it. */
 	.desktop-shell {
-		display: flex;
 		height: 100dvh;
 		overflow: hidden;
-	}
-
-	/* The wallet is a flex ITEM here, beside the flow column, and a flex item
-	   given no `flex` is as wide as its content — which with a skeleton
-	   balance and an empty feed was a strip down the left of the screen. It
-	   takes every column the flow panel leaves, as the gallery's block stage
-	   gives it for free. */
-	.desktop-shell > :global(.desktop) {
-		flex: 1;
-		min-width: 0;
 	}
 
 	.scan-scrim {

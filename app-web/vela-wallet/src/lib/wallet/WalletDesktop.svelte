@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { ActivityRowModel, AssetRowModel, PanelId, WalletDesktopModel } from './model';
 	import ActionButtonRow from './ui/ActionButtonRow.svelte';
 	import ActivityRow from './ui/ActivityRow.svelte';
@@ -44,6 +45,16 @@
 		onassetclose?: () => void;
 		/** An activity row was tapped (live): which one, before the flow opens. */
 		onactivity?: (row: ActivityRowModel) => void;
+		/**
+		 * The flow host's column (spec 021), drawn INSIDE this frame. It used
+		 * to stand beside the frame as a sibling, which held on a 1440 window
+		 * and fell apart past `--layout-frameMax`: the frame centred in what
+		 * the column left over, so the whole composition jumped sideways each
+		 * time a flow opened or closed, while the asset column (inside) did
+		 * not (founder, 2026-09-17, a 4 K display at 150 %). One column, one
+		 * mount point, whichever of the two is showing.
+		 */
+		column?: Snippet;
 	}
 
 	let {
@@ -56,7 +67,8 @@
 		onasset,
 		onassetclose,
 		onactivity,
-		onstatus
+		onstatus,
+		column
 	}: Props = $props();
 
 	// The third column replaces the mobile bottom sheet (research.md D5).
@@ -150,8 +162,10 @@
 				onselect={(row) => onactivity?.(row)}
 			/>
 		</ThirdPanel>
+	{:else if column !== undefined}
+		{@render column()}
 	{:else if onflow !== undefined}
-		<!-- the flow host draws the column -->
+		<!-- the flow host owns the column and has nothing open in it -->
 	{:else if panel === 'receive'}
 		<ThirdPanel
 			title={model.panels.receive.title}
@@ -180,6 +194,10 @@
 		flex: 1;
 		min-width: 0;
 		overflow-y: auto;
+		/* Classic (Windows) scrollbars take their width from the content when
+		   they appear; reserving it keeps the column the same width whether or
+		   not the feed is long enough to scroll. Overlay scrollbars ignore it. */
+		scrollbar-gutter: stable;
 	}
 
 	.content {
