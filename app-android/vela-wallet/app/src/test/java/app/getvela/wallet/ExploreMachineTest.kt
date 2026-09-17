@@ -2,12 +2,14 @@ package app.getvela.wallet
 
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.feature.browser.core.BhistEvent
 import app.getvela.wallet.feature.browser.core.BhistExecutor
 import app.getvela.wallet.feature.browser.core.BhistOperation
 import app.getvela.wallet.feature.browser.core.BhistShellResult
 import app.getvela.wallet.feature.browser.core.BhistView
+import app.getvela.wallet.feature.browser.core.ExploreDoc
 import app.getvela.wallet.feature.browser.core.ExploreEvent
 import app.getvela.wallet.feature.browser.core.ExploreExecutor
 import app.getvela.wallet.feature.browser.core.ExploreOperation
@@ -86,13 +88,27 @@ class ExploreMachineTest {
         assertNull("the start page tab has no url", two.tabs[1].url)
         assertEquals(two.tabs[1].id, two.selected_tab)
         // A second host over the same bytes: what the next launch would see.
+        //
+        // The bytes trail the view — the core updates its model and THEN asks
+        // the shell to persist, the same trap the recents test below names.
+        // A host restores from the STORE, so opening the second one off a view
+        // that has raced ahead of the write reads a doc that is one dispatch
+        // short: green on a fast machine, red on a loaded runner. Wait for the
+        // write the restore is about (the second tab, whose doc carries the
+        // favourite and the group with it) before reading it back.
+        withTimeout(10_000) {
+            while (
+                store.values[ExploreExecutor.KEY]
+                    ?.let { runCatching { Wire.json.decodeFromString(ExploreDoc.serializer(), it) }.getOrNull() }
+                    ?.tabs?.size != 2
+            ) kotlinx.coroutines.delay(20)
+        }
         val again = explore()
         val restored = withTimeout(10_000) { again.view.first { it.ready } }
         assertEquals(listOf("Uniswap"), restored.favorites.map { it.name })
         assertEquals(listOf("交易"), restored.groups.map { it.name })
         assertEquals(2, restored.tabs.size)
         assertEquals(two.selected_tab, restored.selected_tab)
-        withTimeout(10_000) { while (store.values[ExploreExecutor.KEY]?.contains("\"favorites\"") != true) kotlinx.coroutines.delay(20) }
     }
 
     @Test
