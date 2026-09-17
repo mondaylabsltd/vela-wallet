@@ -933,6 +933,12 @@ pub fn asset_rows(
             );
             let amount = token.balance.parse::<f64>().unwrap_or(0.0);
             AssetRowModel {
+                logos: crate::marks::token_logos(
+                    token.chain_id,
+                    &token.symbol,
+                    token.token_address.as_deref(),
+                    &[],
+                ),
                 ticker: SharedString::from(token.symbol.clone()),
                 chain: SharedString::from(crate::executor::custom_tokens::network_name(
                     token.chain_id,
@@ -1129,6 +1135,12 @@ pub fn asset_detail(
     ));
 
     Some(AssetDetailModel {
+        logos: crate::marks::token_logos(
+            token.chain_id,
+            &token.symbol,
+            token.token_address.as_deref(),
+            &[],
+        ),
         ticker: SharedString::from(token.symbol.clone()),
         badge: badge(token.chain_id),
         amount: if view.hidden {
@@ -1255,6 +1267,10 @@ pub(crate) fn activity_row(
             ActivityKind::Dapp => s.label_dapp.clone(),
         },
         subtitle,
+        // The chain this happened on, drawn as its logo where the endpoint has
+        // one (§8.3; issue 201): the badge used to be a colour, and a colour
+        // is not a network anyone can name.
+        badge_logo: crate::marks::chain_logo_url(item.chain_id),
         // Privacy masks the FIGURE and keeps the unit — H5's rule, and the same
         // mask the hero uses, because a leak in one surface defeats it
         // everywhere (the core's invariant ④ on the balance side).

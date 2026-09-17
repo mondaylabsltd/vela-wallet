@@ -235,6 +235,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             unit: "USDC".into(),
             positive: true,
             badge: chain_ethereum(),
+            badge_logo: None,
         },
         ActivityRowModel {
             kind: ActivityKind::Sent,
@@ -244,6 +245,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             unit: "ETH".into(),
             positive: false,
             badge: chain_arbitrum(),
+            badge_logo: None,
         },
     ]
 }

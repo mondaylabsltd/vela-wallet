@@ -46,6 +46,7 @@ pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;
 pub mod format_prefs;
+pub mod gpui_http;
 pub mod identity;
 pub mod manage_tokens;
 pub mod network_admin;
