@@ -343,28 +343,21 @@ actor RegistryClient {
         }
     }
 
-    /// `/api/query?walletRef=` — the index's display name for a WALLET
-    /// address, which is how a Vela user shows up as a name rather than as
-    /// hexadecimal on somebody else's screen.
+    /// One raw GET, for a caller that reads the body itself: the status and the
+    /// text, or `nil` when the request never arrived.
     ///
-    /// Best-effort by construction: identity is enrichment, so a slow or
-    /// unreachable index degrades to "unknown recipient" and never blocks a
-    /// screen. The zero address is skipped — it is a mint/burn counterparty,
-    /// and asking is a 404 nobody needs.
-    func queryByWalletRef(_ address: String) async -> String? {
-        let stripped = address.lowercased().hasPrefix("0x")
-            ? String(address.lowercased().dropFirst(2)) : address.lowercased()
-        guard stripped.count == 40, stripped.contains(where: { $0 != "0" }) else { return nil }
-        let walletRef = "0x" + String(repeating: "0", count: 24) + stripped
-        let record = try? await request(
-            "/api/query?walletRef=\(Self.escape(walletRef))",
-            body: nil,
-            timeout: Self.readTimeout,
-            label: "Identity"
-        )
-        let name = (record?["name"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return (name?.isEmpty ?? true) ? nil : name
+    /// This is the transport half of "the name behind a wallet ADDRESS". The v2
+    /// index cannot be asked that directly — `?walletRef=` answers 400, which
+    /// is what `queryByWalletRef` here asked for two specs — so the name is
+    /// reached through the chain, and the walk is the core's
+    /// (`Core/RegistryNameLookup`, issue 191). Best-effort: nothing here throws.
+    func rawGet(_ path: String) async -> (status: Int, body: String)? {
+        guard let url = URL(string: baseURL + path) else { return nil }
+        let request = URLRequest(url: url, timeoutInterval: Self.readTimeout)
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return nil }
+        return (http.statusCode, String(decoding: data, as: UTF8.self))
     }
 
     /// The v1 index's display name for a credential — the only place a v1-era

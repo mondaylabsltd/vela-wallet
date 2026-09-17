@@ -140,10 +140,26 @@ fn booted(
         tombstones,
         groups,
     });
-    assert!(ops.is_empty());
+    nobody_knows_them(&mut sut, ops);
     let ops = sut.resolve(Res::HistoryLoaded { txs: history });
-    assert!(ops.is_empty());
+    nobody_knows_them(&mut sut, ops);
     sut
+}
+
+/// The book asks who its unnamed rows are as it loads (issue 191). Every rule
+/// below that is not ABOUT that starts from the quiet state it always had: the
+/// waterfall knew none of them, and nothing is left outstanding.
+fn nobody_knows_them(sut: &mut Sut, ops: Vec<Op>) {
+    for op in ops {
+        let Op::ResolveIdentity { address } = op else {
+            panic!("a loading book only ever asks for names, got {op:?}");
+        };
+        let ops = sut.resolve(Res::IdentityResolved {
+            address,
+            identity: None,
+        });
+        assert!(ops.is_empty(), "a miss must not trigger new work");
+    }
 }
 
 fn booted_empty() -> Sut {
@@ -2061,4 +2077,199 @@ fn a_garbled_name_enters_the_book_by_no_door() {
     assert!(!ops.is_empty(), "the save itself still happens");
     assert_eq!(find(&sut.view(), A).resolved_name, None);
     assert_eq!(find(&sut.view(), A).resolved_source, None);
+}
+
+// ---------------------------------------------------------------------------
+// What an address is called (issue 191)
+// ---------------------------------------------------------------------------
+//
+// The person's own name → a resolved identity (a name service, or the name a
+// Vela user registered with the passkey index) → and only then the address.
+// A history row used to stop at the first step it could reach on its own: the
+// name captured at the moment of the send. Nothing else ever asked, and what
+// an inspect learned was written back to SAVED contacts only — so a recipient
+// the index knew by name sat in the list as `0x6007…f4d4`.
+
+/// Boot without answering the book's own lookups — these rules are about them.
+fn booted_asking(
+    saved: Vec<Contact>,
+    groups: Vec<ContactGroup>,
+    history: Vec<ContactHistoryTx>,
+) -> (Sut, Vec<Op>) {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        my_address: Some(ME.to_owned()),
+    });
+    let mut asked = sut.resolve(Res::StoreLoaded {
+        contacts: saved,
+        tombstones: vec![],
+        groups,
+    });
+    // The FIFO driver's oldest request is now `LoadSendHistory`.
+    asked.extend(sut.resolve_matching(
+        |op| matches!(op, Op::LoadSendHistory),
+        Res::HistoryLoaded { txs: history },
+    ));
+    (sut, asked)
+}
+
+fn ask(address: &str) -> Op {
+    Op::ResolveIdentity {
+        address: address.to_owned(),
+    }
+}
+
+fn answer(sut: &mut Sut, address: &str, identity: Option<ContactIdentity>) -> Vec<Op> {
+    let wanted = address.to_owned();
+    sut.resolve_matching(
+        move |op| matches!(op, Op::ResolveIdentity { address } if *address == wanted),
+        Res::IdentityResolved {
+            address: address.to_owned(),
+            identity,
+        },
+    )
+}
+
+#[test]
+fn a_history_row_is_called_by_its_registry_name_not_its_address() {
+    let (mut sut, asked) = booted_asking(vec![], vec![], vec![send(A, 500.0)]);
+    assert_eq!(asked, vec![ask(A)], "the book asks who its unnamed row is");
+    assert_eq!(
+        sut.view().sections[0].letter,
+        "#",
+        "until somebody answers, an address files under #"
+    );
+
+    let ops = answer(&mut sut, A, Some(identity("Bob's Vela", "passkey")));
+    assert!(
+        ops.is_empty(),
+        "a history row has no stored record — nothing to write"
+    );
+
+    let view = sut.view();
+    let row = find(&view, A);
+    assert_eq!(contact_display_name(row), "Bob's Vela");
+    assert_eq!(row.resolved_source.as_deref(), Some("passkey"));
+    assert_eq!(
+        row.source,
+        ContactSource::Auto,
+        "being recognised is not being saved"
+    );
+    assert_eq!(
+        view.sections[0].letter, "B",
+        "a known name files under its letter"
+    );
+}
+
+#[test]
+fn the_persons_own_name_outranks_any_resolved_one() {
+    let (mut sut, asked) = booted_asking(
+        vec![manual(A, Some("Mum"), false, 100.0)],
+        vec![],
+        vec![send(A, 500.0), named_send(B, 400.0, "bob.eth")],
+    );
+    assert!(
+        asked.is_empty(),
+        "a row that already has a name is not asked about: {asked:?}"
+    );
+
+    // An inspect still resolves A; what it learns never renames her.
+    sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: A.to_owned(),
+    });
+    answer(&mut sut, A, Some(identity("somebody.eth", "ENS")));
+    let view = sut.view();
+    assert_eq!(contact_display_name(find(&view, A)), "Mum");
+    assert_eq!(find(&view, A).resolved_name, None);
+    assert_eq!(contact_display_name(find(&view, B)), "bob.eth");
+}
+
+#[test]
+fn the_book_asks_once_per_address_per_session() {
+    let (mut sut, asked) = booted_asking(vec![], vec![], vec![send(A, 500.0)]);
+    assert_eq!(asked, vec![ask(A)]);
+    answer(&mut sut, A, None);
+
+    // A send lands: history reloads with A still a stranger, and B new.
+    let ops = sut.dispatch(Event::HistoryChanged);
+    assert_eq!(ops, vec![Op::LoadSendHistory]);
+    let ops = sut.resolve(Res::HistoryLoaded {
+        txs: vec![send(A, 500.0), send(B, 900.0)],
+    });
+    assert_eq!(
+        ops,
+        vec![ask(B)],
+        "a miss is not cached, but the book does not nag"
+    );
+
+    // Opening A's detail is the person asking, and that always re-asks.
+    let ops = sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: A.to_owned(),
+    });
+    assert!(ops.contains(&ask(A)), "an inspect still asks: {ops:?}");
+}
+
+#[test]
+fn a_loading_book_asks_about_a_bounded_number_of_rows() {
+    let history: Vec<ContactHistoryTx> = (0..40u32)
+        .map(|i| send(&format!("0x{:040x}", 0xA000 + i), 1_000.0 + f64::from(i)))
+        .collect();
+    let (_sut, asked) = booted_asking(vec![], vec![], history);
+    assert_eq!(asked.len(), 16, "one load asks about sixteen rows at most");
+    assert_eq!(
+        asked[0],
+        ask(&format!("0x{:040x}", 0xA000 + 39)),
+        "in the book's order: the most recently paid first"
+    );
+}
+
+#[test]
+fn nothing_is_asked_until_the_store_has_answered() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        my_address: Some(ME.to_owned()),
+    });
+    // History lands FIRST. A might be saved under a name — the core cannot
+    // know yet, and asking now would spend a waterfall on a named contact.
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::LoadSendHistory),
+        Res::HistoryLoaded {
+            txs: vec![send(A, 500.0), send(B, 400.0)],
+        },
+    );
+    assert!(ops.is_empty(), "asked before the store answered: {ops:?}");
+
+    let ops = sut.resolve(Res::StoreLoaded {
+        contacts: vec![manual(A, Some("Mum"), false, 100.0)],
+        tombstones: vec![],
+        groups: vec![],
+    });
+    assert_eq!(ops, vec![ask(B)], "only the row nobody has named");
+}
+
+#[test]
+fn a_group_member_without_a_row_is_called_by_its_name_too() {
+    let (mut sut, asked) = booted_asking(vec![], vec![group("grp_1", "Payroll", &[C])], vec![]);
+    assert_eq!(asked, vec![ask(C)]);
+    answer(&mut sut, C, Some(identity("carol", "passkey")));
+    let view = sut.view();
+    assert_eq!(contact_display_name(&view.groups[0].members[0]), "carol");
+}
+
+#[test]
+fn saving_a_recognised_history_row_keeps_the_persons_word_on_top() {
+    let (mut sut, _) = booted_asking(vec![], vec![], vec![send(A, 500.0)]);
+    answer(&mut sut, A, Some(identity("Bob's Vela", "passkey")));
+
+    sut.dispatch(Event::Save {
+        input: save_input(A, Some("Bob from the gym")),
+        now_ms: 9_000.0,
+    });
+    let view = sut.view();
+    let row = find(&view, A);
+    assert_eq!(contact_display_name(row), "Bob from the gym");
+    assert_eq!(row.source, ContactSource::Manual, "naming a row saves it");
+    assert_eq!(row.tx_count, 1, "and it keeps its history");
 }

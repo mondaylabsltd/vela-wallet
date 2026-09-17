@@ -112,6 +112,7 @@ pub fn registry_url() -> String {
 /// (`proxy::with_candidates`) so a refused route is retried on the next one
 /// rather than reported as the index being down. See that module's note.
 use super::proxy::{self, Transport};
+use super::{pool, storage};
 
 /// Turn a transport failure into the two bits of classification the core
 /// needs.
@@ -252,39 +253,163 @@ pub fn query_by_public_key(public_key_hex: &str) -> Result<KeyStatus> {
     })
 }
 
-/// One index record, of which the identity waterfall wants exactly one field.
-#[derive(Debug, Deserialize)]
-struct WalletRefRecord {
-    #[serde(default)]
-    name: String,
+// ---------------------------------------------------------------------------
+// The name behind an ADDRESS — transport for `vela_core::registry_lookup`
+// ---------------------------------------------------------------------------
+
+use vela_core::registry_lookup::{
+    self as lookup, LookupAnswer, LookupOutcome, LookupRemember, LookupRequest, LookupStep,
+};
+
+/// `vela.indexName` — `{ "0xlowercase": { name, publicKey } | { missAt } }`.
+/// One document, as `identity.rs` keeps its cache: this store is a single file.
+const NAME_CACHE_KEY: &str = "vela.indexName";
+/// A lookup is a handful of rounds; this only stops a contract bug from spinning.
+const MAX_LOOKUP_ROUNDS: usize = 16;
+
+fn cached_name(address: &str, now_ms: f64) -> Option<Option<String>> {
+    let store = storage::read_value(NAME_CACHE_KEY).ok().flatten()?;
+    let entry = store.get(address)?;
+    if let Some(name) = entry.get("name").and_then(serde_json::Value::as_str) {
+        return Some(Some(name.to_owned()));
+    }
+    let miss_at = entry.get("missAt").and_then(serde_json::Value::as_f64)?;
+    (now_ms - miss_at < lookup::MISS_TTL_MS).then_some(None)
 }
 
-/// The Vela name behind an address, if the index knows one.
-///
-/// `walletRef` is the address left-padded to 32 bytes, which is how the index
-/// stores it (`public-key-index.ts:174`).
-///
-/// Every failure — unreachable, timed out, 404, unparseable, an empty name — is
-/// `None`. This is best-effort enrichment for a badge; it must never be the
-/// reason something else does not happen.
-pub fn query_by_wallet_ref(address: &str) -> Option<String> {
-    let stripped = address.trim_start_matches("0x").to_lowercase();
-    if stripped.len() != 40 || !stripped.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
+fn remember_name(address: &str, entry: serde_json::Value) {
+    let mut map = match storage::read_value(NAME_CACHE_KEY) {
+        Ok(Some(serde_json::Value::Object(map))) => map,
+        _ => serde_json::Map::new(),
+    };
+    map.insert(address.to_owned(), entry);
+    let _ = storage::write_value(NAME_CACHE_KEY, serde_json::Value::Object(map));
+}
+
+/// Perform one request the core handed over. Every failure is `Failed` — the
+/// core decides what that means — except the index's own 404, which is an
+/// answer.
+fn perform(request: &LookupRequest) -> LookupAnswer {
+    let failed = |id: &str| LookupAnswer {
+        id: id.to_owned(),
+        outcome: LookupOutcome::Failed,
+        body: None,
+    };
+    match request {
+        LookupRequest::EthCall {
+            id,
+            chain_id,
+            to,
+            data,
+        } => {
+            let params = serde_json::json!([{ "to": to, "data": data }, "latest"]);
+            // The pool hands back the JSON-RPC envelope; an `error` member has
+            // no `result`, which is how a revert reads as "nobody answered".
+            let result = pool::call(*chain_id, "eth_call", params)
+                .ok()
+                .and_then(|envelope| {
+                    envelope
+                        .get("result")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                });
+            match result {
+                Some(result) => LookupAnswer {
+                    id: id.clone(),
+                    outcome: LookupOutcome::Ok,
+                    body: Some(result),
+                },
+                None => failed(id),
+            }
+        }
+        LookupRequest::IndexGet { id, path } => {
+            let url = format!("{}{path}", registry_url());
+            match proxy::with_candidates(READ_TIMEOUT, |agent| agent.get(&url).call()) {
+                Ok(mut response) => match response.body_mut().read_to_string() {
+                    Ok(body) => LookupAnswer {
+                        id: id.clone(),
+                        outcome: LookupOutcome::Ok,
+                        body: Some(body),
+                    },
+                    Err(_) => failed(id),
+                },
+                Err(failure) => match failure.error {
+                    ureq::Error::StatusCode(404) => LookupAnswer {
+                        id: id.clone(),
+                        outcome: LookupOutcome::NotFound,
+                        body: None,
+                    },
+                    _ => failed(id),
+                },
+            }
+        }
     }
-    // The zero address has no entry, and asking is a doomed 404
-    // (`public-key-index.ts:180`).
-    if stripped.bytes().all(|b| b == b'0') {
-        return None;
+}
+
+/// The name a Vela user registered for the wallet at `address`, if any.
+///
+/// The v2 index cannot be asked about an address (`?walletRef=` answers 400 —
+/// this function asked exactly that for two specs, and the registry step of
+/// the waterfall never answered). The name is reached through the chain
+/// instead, and every rule of that walk — which chain first, which unit is
+/// believed, how long a verdict may be kept — is `vela_core::registry_lookup`,
+/// shared with the other three shells (issue 191). This is only the transport.
+///
+/// Every failure is `None`. This is best-effort enrichment for a badge; it
+/// must never be the reason something else does not happen.
+pub fn wallet_name_by_address(address: &str) -> Option<String> {
+    let address = address.to_lowercase();
+    let now_ms = super::now_ms();
+    if let Some(known) = cached_name(&address, now_ms) {
+        return known;
     }
-    let wallet_ref = format!("0x{stripped:0>64}");
-    let record: WalletRefRecord = get_json(
-        &format!("/api/query?walletRef={}", urlencode(&wallet_ref)),
-        "Query",
-        READ_TIMEOUT,
-    )
-    .ok()?;
-    (!record.name.trim().is_empty()).then(|| record.name)
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..MAX_LOOKUP_ROUNDS {
+        match lookup::step(&address, &answers) {
+            LookupStep::Ask { requests } => {
+                // "Together, if the shell can": the second tier is six chains,
+                // and six sequential timeouts is a minute nobody asked for.
+                let round: Vec<LookupAnswer> = std::thread::scope(|scope| {
+                    let handles: Vec<_> = requests
+                        .iter()
+                        .map(|request| scope.spawn(move || perform(request)))
+                        .collect();
+                    handles
+                        .into_iter()
+                        .zip(&requests)
+                        .map(|(handle, request)| {
+                            handle.join().unwrap_or_else(|_| perform_failed(request))
+                        })
+                        .collect()
+                });
+                answers.extend(round);
+            }
+            LookupStep::Done { found, remember } => {
+                match (&found, remember) {
+                    (Some(hit), LookupRemember::Forever) => remember_name(
+                        &address,
+                        serde_json::json!({ "name": hit.name, "publicKey": hit.public_key }),
+                    ),
+                    (None, LookupRemember::Briefly) => {
+                        remember_name(&address, serde_json::json!({ "missAt": now_ms }));
+                    }
+                    _ => {}
+                }
+                return found.map(|hit| hit.name);
+            }
+        }
+    }
+    None
+}
+
+/// A worker that panicked answered nothing.
+fn perform_failed(request: &LookupRequest) -> LookupAnswer {
+    let (LookupRequest::EthCall { id, .. } | LookupRequest::IndexGet { id, .. }) = request;
+    LookupAnswer {
+        id: id.clone(),
+        outcome: LookupOutcome::Failed,
+        body: None,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -830,6 +955,29 @@ mod tests {
         assert_eq!(urlencode("abc123"), "abc123");
         assert_eq!(urlencode("a&b=c"), "a%26b%3Dc");
         assert_eq!(urlencode("a b"), "a%20b");
+    }
+
+    /// The walk the v2 index forces: chain → founding key → units → the unit
+    /// that names this address. `0x88cC…6894` is the golden multi-key Safe,
+    /// deployed on Gnosis and registered as "Interleave" (unit 10).
+    #[test]
+    #[ignore = "reads Gnosis and the deployed passkey index"]
+    fn a_registered_wallet_is_named_by_its_address() {
+        storage::tests::with_temp_state("registry-name-by-address", || {
+            set_registry_url(DEFAULT_REGISTRY_URL);
+            let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+            assert_eq!(wallet_name_by_address(safe).as_deref(), Some("Interleave"));
+            // Kept for good: the second ask is answered from disk.
+            assert_eq!(
+                cached_name(&safe.to_lowercase(), 0.0),
+                Some(Some("Interleave".to_owned()))
+            );
+            // A plain EOA is nobody the index knows.
+            assert_eq!(
+                wallet_name_by_address("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
+                None
+            );
+        });
     }
 
     /// The live registry, reached for real.

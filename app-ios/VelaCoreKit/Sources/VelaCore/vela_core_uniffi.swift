@@ -9595,6 +9595,25 @@ public func registryGroupPublicKeyFromSeed(seedHex: String)throws  -> String  {
 })
 }
 /**
+ * **The registered name behind an address — the next step of the lookup.**
+ *
+ * The v2 passkey index cannot be asked about an address, so the name is
+ * reached through the chain (`vela_core::registry_lookup`). `answers_json` is
+ * the transcript so far (`LookupAnswer[]`); the return is a `LookupStep` as
+ * JSON: requests to perform (an `eth_call`, a GET against the configured
+ * index), or the verdict and how long it may be remembered. The shell owns
+ * the transport; every rule is the core's.
+ */
+public func registryNameStep(address: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_name_step(
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
  * `parseBundlerError`: the JSON-RPC `error` member as one sentence.
  */
 public func relayErrorMessage(errorJson: String) -> String  {
@@ -10233,6 +10252,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_group_public_key_from_seed() != 7492) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_name_step() != 50136) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_relay_error_message() != 61806) {

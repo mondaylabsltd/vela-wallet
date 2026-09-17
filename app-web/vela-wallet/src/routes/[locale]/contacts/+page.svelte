@@ -145,7 +145,7 @@
 		| { kind: 'none' }
 		| { kind: 'add-menu' }
 		| { kind: 'add' }
-		| { kind: 'edit'; name: string; address: string }
+		| { kind: 'edit'; name: string; address: string; unsaved: boolean }
 		| { kind: 'group-new' }
 		| { kind: 'group-rename'; id: string; name: string }
 		| { kind: 'group-menu'; id: string }
@@ -339,8 +339,15 @@
 
 	function openEdit(address: string | undefined): void {
 		const contact = view?.contacts.find((c) => c.address === address);
+		// `auto` = history suggested this row and nothing is stored for it yet:
+		// the same form, under a title that says what saving will do (issue 191).
 		if (contact !== undefined)
-			sheet = { kind: 'edit', name: contact.name ?? '', address: contact.address };
+			sheet = {
+				kind: 'edit',
+				name: contact.name ?? '',
+				address: contact.address,
+				unsaved: contact.source === 'auto'
+			};
 	}
 
 	function askDelete(address: string): void {
@@ -613,9 +620,11 @@
 	}
 
 	/** The forms' copy — the same strings whichever container draws them. */
-	function contactCopy(kind: 'add' | 'edit'): ContactFormCopy {
+	function contactCopy(from: SheetState): ContactFormCopy {
+		const title =
+			from.kind === 'edit' ? (from.unsaved ? m.saveToContacts : m.editTitle) : m.addTitle;
 		return {
-			title: kind === 'add' ? m.addTitle : m.editTitle,
+			title,
 			nameLabel: m.nameLabel,
 			namePlaceholder: m.namePlaceholder,
 			addressLabel: m.addressLabel,
@@ -649,7 +658,7 @@
 				onaccounts={() => (switching = true)}
 				contactForm={sheet.kind === 'add' || sheet.kind === 'edit'
 					? {
-							copy: contactCopy(sheet.kind),
+							copy: contactCopy(sheet),
 							initial:
 								sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined,
 							onsave: saveContact,
@@ -690,7 +699,7 @@
 
 		{#if sheet.kind === 'add' || sheet.kind === 'edit'}
 			<ContactEditSheet
-				copy={contactCopy(sheet.kind)}
+				copy={contactCopy(sheet)}
 				initial={sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined}
 				onsave={saveContact}
 				onclose={closeSheet}
