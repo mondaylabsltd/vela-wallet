@@ -43,7 +43,7 @@
 				<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
 					>Vela Relay</a
 				>
-				<a href="https://ethereum-data.awesometools.dev/" target="_blank" rel="noopener"
+				<a href="https://ethereum-data.getvela.app/" target="_blank" rel="noopener"
 					>Chain Data Index</a
 				>
 				<a href="https://webauthnp256-publickey-index.biubiu.tools/" target="_blank" rel="noopener"
@@ -52,6 +52,7 @@
 				<a href="https://github.com/mondaylabsltd/vela-currency" target="_blank" rel="noopener"
 					>Vela Currency</a
 				>
+				<a href={L('/chain-setup')}>{m.chrome.footer.links.chainSetup}</a>
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.community}</h3>

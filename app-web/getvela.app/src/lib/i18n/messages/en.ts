@@ -73,6 +73,7 @@ export const en = {
 				roadmap: 'Roadmap',
 				blog: 'Blog',
 				about: 'About',
+				chainSetup: 'Chain setup',
 				privacy: 'Privacy',
 				terms: 'Terms'
 			}
@@ -644,6 +645,161 @@ export const en = {
 		fundingNote:
 			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. Everything is open source, so you can always build it yourself instead — same app, no charge.',
 		storeNote: 'Not on the stores yet. Until then, every build is on GitHub.'
+	},
+	/**
+	 * Chain setup — the page an operator uses to find out whether Vela can run
+	 * on their chain, and to put the missing pieces there if it can.
+	 *
+	 * The order of the copy is the order of the page: verdict first, then what
+	 * is missing, then only the steps that lead somewhere. A person should be
+	 * able to read the first card and stop.
+	 */
+	chainSetup: {
+		meta: {
+			title: 'Set up a chain for Vela',
+			description:
+				'Check whether an EVM chain has everything Vela needs — the eleven contracts and the P-256 precompile — and deploy what is missing.'
+		},
+		heading: 'Set up a chain for Vela',
+		lede: 'Vela runs on any EVM chain that has eleven known contracts and one precompile. Enter a chain and this page will tell you which of those it has, which it lacks, and who can put them there.',
+		input: {
+			label: 'Chain, by name, ID or symbol — or an RPC URL',
+			placeholder: 'e.g. Arc, 5042, USDC — or https://rpc.example.org',
+			action: 'Check',
+			suggestions: 'Matching chains',
+			hint: 'Names, IDs and gas-coin symbols are looked up in the chain directory. An RPC URL is used as given, so this works for a private or local chain too.'
+		},
+		resolving: 'Finding endpoints…',
+		checking: 'Checking the chain…',
+		rpcUsed: 'Reading from {{host}} · {{ms}} ms',
+		changeRpc: 'Change endpoint',
+		recheck: 'Check again',
+		errors: {
+			'not-a-chain': 'Enter a numeric chain ID, or an RPC URL starting with https://.',
+			'no-rpc': 'No public endpoint is known for this chain. Paste an RPC URL instead.',
+			'rpc-unreachable':
+				'None of the endpoints answered for this chain. Paste an RPC URL that does.',
+			unknown: 'Something failed while checking. Try again.'
+		},
+		verdict: {
+			ready: {
+				title: 'Vela works here',
+				body: 'Every contract Vela needs is deployed and the P-256 precompile answers. Add this chain in the wallet and it will work — same address as everywhere else.',
+				action: 'How to add it in Vela'
+			},
+			needsSetup: {
+				title: '{{count}} of 11 contracts missing',
+				body: 'The P-256 precompile is present, so this chain can be made ready. The steps below are exactly what is missing, in the order they have to happen, each with who can do it.'
+			},
+			blocked: {
+				title: 'Vela cannot run here',
+				body: 'This chain has no P-256 verifier at 0x100 (RIP-7212). That is not something anyone can deploy: the address is part of how every Vela address is derived, so a different verifier would mean different addresses on every chain, for everyone. Only the chain itself can add the precompile.',
+				link: 'What RIP-7212 is'
+			},
+			provisional:
+				'Some reads did not answer, so this verdict is provisional. Try another endpoint or check again.',
+			mismatch:
+				'Something else is deployed at this address. Vela cannot use this chain until the chain resolves that; nothing here can be deployed over it.'
+		},
+		checklist: {
+			heading: 'What Vela needs',
+			p256: 'P-256 precompile (RIP-7212)',
+			p256What:
+				'Verifies passkey signatures. Native on this chain, or a contract at 0x100 — either works.',
+			present: 'Present',
+			missing: 'Missing',
+			unknown: 'Could not read',
+			mismatch: 'Wrong contract'
+		},
+		plan: {
+			heading: 'Set up',
+			lede: 'Two of the contracts are deployed by broadcasting a transaction that was signed once, years ago, with no key — anyone can send it after funding its sender. One can only be deployed by Safe. The rest go through a factory, from a throwaway key made in this browser.',
+			who: {
+				anyone: 'Anyone — including you, now',
+				safe: 'Only Safe',
+				deployer: 'The throwaway key below'
+			},
+			fund: {
+				sendTo: 'Send exactly {{amount}} {{symbol}} to',
+				balance: 'Has {{amount}} {{symbol}}',
+				waiting: 'Waiting for the funds to arrive…',
+				ready: 'Funded — ready to broadcast',
+				action: 'Broadcast',
+				why: 'The transaction is pre-signed and pays a fixed fee; the sender address has no owner, so anything beyond that amount is lost. Send exactly the amount.'
+			},
+			external: {
+				body: 'Safe signs a fresh deployment for each chain from an address they hold. Open a request, then come back and check again once it lands.',
+				action: 'Request it from Safe',
+				guide: 'How Safe adds a chain',
+				blocked: 'Waiting on this before the {{count}} Safe contracts below can be deployed.'
+			},
+			create2: {
+				blockedBy: 'Needs {{name}} first',
+				action: 'Deploy',
+				all: 'Deploy all {{count}}',
+				deploying: 'Deploying…'
+			},
+			deployer: {
+				heading: 'Throwaway deployer',
+				body: 'A key generated in this browser, kept in this browser, for these deployments only. Fund it with a little gas; sweep the leftover back when you are done.',
+				create: 'Create a deployer key',
+				address: 'Address',
+				balance: 'Balance',
+				estimate: 'About {{amount}} {{symbol}} should cover the remaining steps',
+				export: 'Save the key',
+				sweep: 'Sweep leftover back',
+				sweepTo: 'Your address',
+				swept: 'Sent — the leftover is on its way.',
+				nothingToSweep: 'Nothing worth sweeping.',
+				forget: 'Forget this key',
+				forgetWarn: 'Only after sweeping: a forgotten key with funds on it is money gone.',
+				keyWarn:
+					'This key is stored in your browser. Anyone with it can spend what is on it — which should only ever be the gas you sent for this page.'
+			},
+			status: {
+				sending: 'Sending…',
+				confirming: 'Confirming…',
+				done: 'Deployed',
+				failed: 'Failed',
+				view: 'View transaction'
+			},
+			failures: {
+				'insufficient-funds': 'Not enough gas on the sender. Top it up and try again.',
+				'already-sent': 'A transaction is already pending. Wait for it, then check again.',
+				nonce: 'An earlier transaction from this key is still pending. Wait, then retry.',
+				reverted: 'The transaction reverted. Check it on the explorer.',
+				'not-mined': 'Not mined within two minutes. It may still land — check again in a moment.',
+				'no-code': 'The transaction was mined but no code appeared. Check it on the explorer.',
+				'blocked-by-factory': 'Its factory is not deployed yet.'
+			},
+			complete: {
+				title: 'All set',
+				body: 'Every contract is now on this chain, and the verdict above says so. Add the chain in Vela — same address as everywhere else — and sweep the leftover gas back to yourself.'
+			}
+		},
+		copy: 'Copy',
+		copied: 'Copied',
+		about: {
+			heading: 'What this page checks, and why',
+			items: [
+				{
+					q: 'Why these eleven contracts?',
+					a: 'They are the exact set the wallet itself checks before it lets you add a network: the account contract and its factory, the ERC-4337 EntryPoint and Safe’s module for it, the passkey signer, and the two CREATE2 factories everything else is deployed through. The list on this page is read from the wallet’s source, so the two cannot disagree.'
+				},
+				{
+					q: 'Why is the same address used on every chain?',
+					a: 'Every contract here is deployed to a deterministic address — either a keyless transaction whose sender is fixed, or CREATE2 through a factory. Because the addresses are the same everywhere, a Vela account has the same address on every chain, and a passkey created once works on all of them.'
+				},
+				{
+					q: 'Why can’t the P-256 precompile be deployed?',
+					a: 'The verifier’s address, 0x100, is written into the setup data every Vela address is derived from. Pointing at a verifier contract somewhere else would change every address on every chain, for everyone. So a chain either has RIP-7212 or Vela cannot run on it — and only the chain’s operators can change that.'
+				},
+				{
+					q: 'Is the gas I send refundable?',
+					a: 'For the two keyless deployments, no: their sender has no owner, and the pre-signed transaction spends a fixed fee. Send exactly what the step says. For the throwaway deployer, yes — sweep the leftover back to yourself when you are done.'
+				}
+			]
+		}
 	}
 } as const;
 
