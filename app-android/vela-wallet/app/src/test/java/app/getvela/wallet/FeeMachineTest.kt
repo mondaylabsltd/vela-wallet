@@ -98,7 +98,15 @@ class FeeMachineTest {
         scriptRelay()
         val host = host()
         host.dispatch(request(), FeeEvent.serializer())
-        val settled = withTimeout(15_000) { host.view.first { !it.busy && (it.fee != null || it.failed != null) } }
+        // `options` rides a SEPARATE arm (`vela_getInBandGasQuote`) from the
+        // estimate, so a not-busy view can already carry the fee while the
+        // in-band list is still a frame behind. Waiting only on `fee != null`
+        // takes whichever emission won that race — green on a fast machine,
+        // red on a loaded runner, which is what it was doing. The quote this
+        // test is about is the one that has both.
+        val settled = withTimeout(15_000) {
+            host.view.first { !it.busy && (it.failed != null || (it.fee != null && it.options.isNotEmpty())) }
+        }
         val fee = settled.fee
         assertNotNull("the relay answered every arm, so the core must price", fee)
         assertEquals(100, fee!!.chain_id)

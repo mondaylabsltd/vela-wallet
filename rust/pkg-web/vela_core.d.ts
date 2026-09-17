@@ -783,6 +783,18 @@ export function peggedNativeUsd(symbol: string): number | undefined;
  */
 export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array, a_client_data_json: Uint8Array, a_signature_der: Uint8Array, b_authenticator_data: Uint8Array, b_client_data_json: Uint8Array, b_signature_der: Uint8Array): P256PublicKey | undefined;
 
+/**
+ * **The registered name behind an address — the next step of the lookup.**
+ *
+ * The v2 passkey index cannot be asked about an address, so the name is
+ * reached through the chain (`vela_core::registry_lookup`). `answers_json` is
+ * the transcript so far (`LookupAnswer[]`); the return is a `LookupStep` as
+ * JSON: requests to perform (an `eth_call`, a GET against the configured
+ * index), or the verdict and how long it may be remembered. The shell owns
+ * the transport; every rule is the core's.
+ */
+export function registryNameStep(address: string, answers_json: string): string;
+
 export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
@@ -965,6 +977,7 @@ export interface InitOutput {
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
+    readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

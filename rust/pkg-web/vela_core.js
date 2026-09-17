@@ -3493,6 +3493,36 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
 }
 
 /**
+ * **The registered name behind an address — the next step of the lookup.**
+ *
+ * The v2 passkey index cannot be asked about an address, so the name is
+ * reached through the chain (`vela_core::registry_lookup`). `answers_json` is
+ * the transcript so far (`LookupAnswer[]`); the return is a `LookupStep` as
+ * JSON: requests to perform (an `eth_call`, a GET against the configured
+ * index), or the verdict and how long it may be remembered. The shell owns
+ * the transport; every rule is the core's.
+ * @param {string} address
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryNameStep(address, answers_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.registryNameStep(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @returns {string}
  */
 export function safeProxyRuntimeCode() {

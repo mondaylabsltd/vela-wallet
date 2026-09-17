@@ -57,6 +57,7 @@ import init, {
 	PaymentRequestCore,
 	peggedNativeUsd,
 	ReceiveWatchCore,
+	registryNameStep,
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
@@ -106,6 +107,7 @@ export { minGasPriceWei, peggedNativeUsd };
 export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
+export { registryNameStep };
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a

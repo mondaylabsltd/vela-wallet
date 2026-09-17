@@ -220,6 +220,7 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addMember: k('contacts.addMember'),
 		addContact: k('contacts.addContact'),
 		addTitle: k('contacts.addTitle'),
+		saveToContacts: k('contacts.saveToContacts'),
 		editTitle: k('contacts.editTitle'),
 		nameLabel: k('contacts.nameLabel'),
 		namePlaceholder: k('contacts.namePlaceholder'),

@@ -126,6 +126,13 @@ export interface ContactDetailModel {
 	emptyActivity?: string;
 	editLabel: string;
 	deleteLabel: string;
+	/**
+	 * Live only, and only while the person has not named this contact: the
+	 * action drawn right under the name, where the missing name is noticed —
+	 * "Save to contacts" for a row history suggested, "Edit" for a saved one.
+	 * It opens the same name form the footer's Edit does (issue 191).
+	 */
+	nameAction?: string;
 }
 
 export interface GroupDetailModel {

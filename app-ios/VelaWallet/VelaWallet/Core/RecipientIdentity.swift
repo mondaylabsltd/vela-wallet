@@ -126,13 +126,38 @@ final class RecipientIdentity {
 
     // MARK: - The rungs
 
-    /// The passkey index's name for a Vela wallet.
+    /// The passkey index's name for a Vela wallet — by ADDRESS, which the v2
+    /// index cannot be asked directly, so the core walks chain → founding key
+    /// → units (`RegistryNameLookup`, issue 191) and this only carries the
+    /// requests. The index URL is read per lookup: a settings edit reaches the
+    /// next one.
     private func passkeyName(_ address: String) async -> String? {
-        let base = await accounts.loadRegistryURL()
-        let client = RegistryClient()
-        if let base, !base.isEmpty { await client.setBaseURL(base) }
-        return await client.queryByWalletRef(address)
+        await registryNames.name(for: address)
     }
+
+    private lazy var registryNames = RegistryNameLookup(
+        store: store,
+        ethCall: { [pool] chainId, to, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_call",
+                params: [["to": to, "data": data], "latest"]
+            )
+            // The RAW result, a bare `0x` included: a chain without the signer
+            // contract is an answer ("not here"), not a silence.
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+            else { return nil }
+            return hex
+        },
+        indexGet: { [accounts] path in
+            let client = RegistryClient()
+            if let base = await accounts.loadRegistryURL(), !base.isEmpty {
+                await client.setBaseURL(base)
+            }
+            guard let got = await client.rawGet(path) else { return .failed }
+            if got.status == 404 { return .notFound }
+            return (200..<300).contains(got.status) ? .ok(got.body) : .failed
+        }
+    )
 
     /// `registry.resolver(node)` → `resolver.name(node)`, the ENS reverse
     /// pattern, entirely on-chain.

@@ -21,7 +21,7 @@ vi.mock('$lib/core/client', () => ({
 }));
 const index = { record: null as { name: string } | null, calls: 0 };
 vi.mock('$lib/services/public-key-index', () => ({
-	queryByWalletRef: vi.fn(async () => {
+	queryWalletName: vi.fn(async () => {
 		index.calls += 1;
 		return index.record;
 	})
@@ -97,6 +97,22 @@ describe('resolveRecipientIdentity', () => {
 		expect([...kv.keys()].some((k) => k.startsWith('recipient_id:'))).toBe(false);
 		index.record = { name: 'Late' };
 		expect(await resolveRecipientIdentity(ADDR)).toEqual({ name: 'Late', source: 'passkey' });
+	});
+
+	it('two askers in the same tick share ONE waterfall (the book and the feed, issue 191)', async () => {
+		// Casing differs on purpose: the feed hands over a checksummed address.
+		const [a, b] = await Promise.all([
+			resolveRecipientIdentity(ADDR),
+			resolveRecipientIdentity('0x' + ADDR.slice(2).toUpperCase())
+		]);
+		expect(a).toBeNull();
+		expect(b).toBeNull();
+		expect(index.calls).toBe(1);
+		expect(rpcCalls).toHaveLength(5); // one reverse lookup per name service, not ten
+
+		// Coalescing is not caching: a miss is asked again the next time.
+		await resolveRecipientIdentity(ADDR);
+		expect(index.calls).toBe(2);
 	});
 });
 

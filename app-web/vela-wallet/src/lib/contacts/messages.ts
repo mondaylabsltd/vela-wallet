@@ -30,6 +30,8 @@ export interface ContactsMessages {
 	addMember: string;
 	addContact: string;
 	addTitle: string;
+	/** What an unsaved (history-suggested) row's detail offers — it opens the name form (issue 191). */
+	saveToContacts: string;
 	/** The add/edit form (live wiring, spec 024) — corpus keys from 018. */
 	editTitle: string;
 	nameLabel: string;
@@ -131,6 +133,7 @@ export const CONTACTS_KEYS = [
 	'contacts.groupNameLabel',
 	'contacts.groupNamePlaceholder',
 	'contacts.addTitle',
+	'contacts.saveToContacts',
 	'contacts.edit',
 	'contacts.empty',
 	'contacts.emptyHint',

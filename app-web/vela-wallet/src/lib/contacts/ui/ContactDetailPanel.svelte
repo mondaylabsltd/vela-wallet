@@ -36,6 +36,14 @@
 		/>
 		<div class="who">
 			<p class="name">{detail.contact.name}</p>
+			{#if detail.nameAction !== undefined && onedit !== undefined}
+				<!-- Nobody has named this contact: the way to do it sits where the
+				     missing name is noticed, not only in the footer (issue 191). -->
+				<button type="button" class="name-action" onclick={onedit}>
+					<Icon icon={UTILITY_ICONS.pencil} size="xs" />
+					<span>{detail.nameAction}</span>
+				</button>
+			{/if}
 			<div class="chips">
 				{#each detail.chips as chip (chip)}
 					<span class="chip">{chip}</span>
@@ -119,6 +127,27 @@
 		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
+	}
+
+	.name-action {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		height: var(--icon-xl);
+		padding-inline: var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-raised);
+		color: var(--color-fg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+	}
+
+	.name-action:hover {
+		opacity: var(--opacity-hover);
 	}
 
 	.chips {

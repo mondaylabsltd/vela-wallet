@@ -124,7 +124,21 @@ type Identicon = (seed: string, name?: string) => string;
 /** What the person calls this contact — their name wins over a resolved one,
  *  and an unnamed address introduces itself as its short form. */
 export function displayName(contact: Contact): string {
-	return contact.name ?? contact.resolved_name ?? shortenAddress(contact.address);
+	// `||`, not `??`: an empty string is a missing name, exactly as the core's
+	// `contact_display_name` reads it.
+	return contact.name || contact.resolved_name || shortenAddress(contact.address);
+}
+
+/**
+ * The action under an unnamed contact's name. A history-suggested row showed
+ * its address where a name goes, and the only way to name it was a muted
+ * "Edit" at the far end of the column — reported as "cannot be named"
+ * (issue 191). The words are a label over the core's facts, not a rule: `auto`
+ * is the core saying the row is not saved yet.
+ */
+function nameAction(contact: Contact, m: ContactsMessages): string | undefined {
+	if (contact.name) return undefined;
+	return contact.source === 'auto' ? m.saveToContacts : m.edit;
 }
 
 function toContactModel(contact: Contact, view: ContactsView, identicon: Identicon): ContactModel {
@@ -246,7 +260,8 @@ export function liveContactDetail(
 		rows: shown.map((item) => contactActivityRow(item, m, extras.now)),
 		emptyActivity: items.length === 0 ? m.noActivity : undefined,
 		editLabel: m.edit,
-		deleteLabel: m.deleteContact
+		deleteLabel: m.deleteContact,
+		nameAction: nameAction(contact, m)
 	};
 }
 
