@@ -19,10 +19,12 @@
  *    requester with 4001.
  */
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
+import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
+import { feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -44,6 +46,8 @@ export interface SigningLiveInputs {
 	clear: ClearSigningView;
 	guard: GuardView;
 	fee: FeeView;
+	/** The display currency the fee's "≈" half is written in (issue 201). */
+	currency: CurrencyView;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -275,11 +279,14 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		return { kind: 'offchain', note: m.okNoNetworkFee };
 	}
 	if (!fee.fee) return { kind: 'hidden' };
-	const asset = fee.fee.fee_asset;
-	const value =
-		asset.type === 'erc20'
-			? `${Number(asset.amount) / 10 ** asset.decimals} ${asset.symbol ?? ''}`.trim()
-			: `${Number(fee.fee.total_wei) / 1e18} ${chainName(fee.fee.chain_id)}`;
+	// The send screens' own line, through the send screens' own formatter: the
+	// coin that is ACTUALLY paying, trimmed, and what it costs (issue 201).
+	// This sheet used to print the estimate's NATIVE figure beside the CHAIN's
+	// name — "0.0021 Ethereum" — and an in-band stablecoin fee came out as an
+	// eighteen-decimal number under a coin nobody was spending. The design
+	// sheet is explicit that these two surfaces must not drift.
+	const parts = feeParts(fee.fee, fee.options);
+	const value = feeLine(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
 	return { kind: 'onchain', label: m.feeLabel, value };
 }
 

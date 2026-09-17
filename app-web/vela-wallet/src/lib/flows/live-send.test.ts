@@ -797,6 +797,28 @@ describe('the fee row says what the fee costs', () => {
 	});
 });
 
+/**
+ * The founder's ruling of 2026-09-17: the confirm page named the coin in words
+ * while every row beneath it carried art.
+ */
+describe('the confirm page draws the coin it is about to send', () => {
+	it("carries the selected token's mark", () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: USDT, confirm_amount: '5', recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(model.mark?.ticker).toBe('USDT');
+	});
+
+	it('carries none on a sweep, where one mark would name the wrong coin', () => {
+		const model = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: USDT, multi_select_mode: true, tokens: [USDT, ETH] })
+		);
+		expect(model.mark).toBeUndefined();
+	});
+});
+
 describe('the fee-coin sheet', () => {
 	it('lists every row the relay published, including one that cannot pay', () => {
 		const model = liveFeeTokenPick(

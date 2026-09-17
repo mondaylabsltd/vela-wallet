@@ -26,6 +26,7 @@ import { shortenAddress } from '$lib/wallet/identity';
 import { moneyText, trimBalance } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
+import { feeLine, feeOptionPriceUsd, feeParts, feeSymbol } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
 import type {
 	FactRowModel,
@@ -171,31 +172,6 @@ function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
 }
 
 /**
- * The ticker a quote is denominated in.
- *
- * NEVER the chain's native symbol for an ERC-20 fee: that is a different coin,
- * and naming it there is how a USDC fee came to read "0.000392 ETH" on the row
- * behind the sheet that had just ticked USDC. The quote carries its own symbol;
- * the relay's published row is the fallback when an older one does not.
- */
-function feeSymbol(fee: FeeEstimateView, options: FeeView['options']): string {
-	if (fee.fee_asset.type !== 'erc20') return nativeSymbol(fee.chain_id);
-	const contract = fee.fee_asset.token;
-	return (
-		fee.fee_asset.symbol ??
-		options.find((option) => option.contract?.toLowerCase() === contract.toLowerCase())?.symbol ??
-		''
-	);
-}
-
-/**
- * Below this the token amount is the honest primary and the fiat half is left
- * off (`03-domain-components.md` §3.1): a real fee rounded to "$0.00" reads as
- * free, which is a worse answer than no figure at all.
- */
-const FEE_FIAT_MIN_USD = 0.005;
-
-/**
  * The unit price, in USD, of the coin a quote is denominated in.
  *
  * The relay's own published row first — it priced the quote, so its number is
@@ -208,11 +184,10 @@ function feeUnitPriceUsd(
 	chainId: number,
 	inputs: SendLiveInputs
 ): number | null {
+	const published = feeOptionPriceUsd(contract, inputs.fee.options);
+	if (published !== null) return published;
 	const sameCoin = (other: string | null) =>
 		contract === null ? other === null : other?.toLowerCase() === contract.toLowerCase();
-	const published = inputs.fee.options.find((option) => sameCoin(option.contract))?.usd_price;
-	const relay = published == null ? Number.NaN : Number(published);
-	if (Number.isFinite(relay) && relay > 0) return relay;
 	const held = [inputs.send.selected_token, ...inputs.send.tokens].find(
 		(token) => token !== null && token.chain_id === chainId && sameCoin(token.token_address)
 	);
@@ -221,36 +196,17 @@ function feeUnitPriceUsd(
 }
 
 /**
- * The fiat half of the fee line — "≈$0.55" (issue 201).
+ * A settled estimate as one line — "0.0021 ETH · ≈$0.55" (issue 201).
  *
- * The fee was the one figure on the send screen with no money beside it, so a
+ * The fee was the one figure on the send screens with no money beside it, so a
  * person who does not track the coin's price could not tell what a transfer
- * cost. The amount is the quote's own; only the PRICE comes from elsewhere,
- * and when nothing can price the fee coin this is `null` and the line stays
- * the coin amount alone.
+ * cost. The words and the threshold are `fee-line.ts`'s, shared with the
+ * signing sheet; what this adds is the send form's own second price source.
  */
-function feeFiat(fee: FeeEstimateView, inputs: SendLiveInputs): string | null {
-	const asset = fee.fee_asset;
-	const amount =
-		asset.type === 'erc20'
-			? Number(asset.amount) / 10 ** asset.decimals
-			: Number(fee.total_wei) / 1e18;
-	const price = feeUnitPriceUsd(asset.type === 'erc20' ? asset.token : null, fee.chain_id, inputs);
-	if (price === null || !Number.isFinite(amount)) return null;
-	const usd = amount * price;
-	if (usd < FEE_FIAT_MIN_USD) return null;
-	return `≈${moneyText(usd, inputs.currency)}`;
-}
-
 function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	if (!fee) return '—';
-	const asset = fee.fee_asset;
-	const coin =
-		asset.type === 'erc20'
-			? `${trimBalance((Number(asset.amount) / 10 ** asset.decimals).toString(), 4)} ${feeSymbol(fee, inputs.fee.options)}`.trim()
-			: `${trimBalance((Number(fee.total_wei) / 1e18).toString(), 6)} ${nativeSymbol(fee.chain_id)}`;
-	const fiat = feeFiat(fee, inputs);
-	return fiat === null ? coin : `${coin} · ${fiat}`;
+	const parts = feeParts(fee, inputs.fee.options);
+	return feeLine(parts, feeUnitPriceUsd(parts.contract, fee.chain_id, inputs), inputs.currency);
 }
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
@@ -681,6 +637,17 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
 	const chainId = token?.chain_id ?? 1;
 
+	// A sweep moves several coins; one mark would name the wrong one.
+	const heroMark =
+		send.multi_select_mode || token == null
+			? undefined
+			: tokenMarkFor(
+					token.chain_id,
+					token.symbol,
+					token.token_address,
+					token.logo_urls ?? undefined
+				);
+
 	const facts: FactRowModel[] = [
 		{
 			label: m['send.fromLabel'],
@@ -727,6 +694,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		});
 		return {
 			...model,
+			mark: heroMark,
 			amount: fill(m['componentsTx.receipt.assetsCount'], { n: picked.length }),
 			subline: fill(m['send.confirmTotalLine'], {
 				fiat: moneyText(totalUsd, currency),
@@ -757,6 +725,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		const countLine = fill(m['send.recipientCount_other'], { count: send.recipients.length });
 		return {
 			...model,
+			mark: heroMark,
 			amount: `${send.confirm_amount} ${symbol}`.trim(),
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
@@ -768,6 +737,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 
 	return {
 		...model,
+		mark: heroMark,
 		amount: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim(),
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
