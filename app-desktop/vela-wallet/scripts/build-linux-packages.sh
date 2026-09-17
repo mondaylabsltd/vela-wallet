@@ -234,6 +234,9 @@ deb_package_for_soname() {
     libdrm.so.2)                        echo "libdrm2" ;;
     libudev.so.1)                       echo "libudev1" ;;
     libsystemd.so.0)                    echo "libsystemd0" ;;
+    # btleplug's BlueZ backend talks to bluetoothd over D-Bus; the .rpm gets
+    # this from rpm's own dependency generator, the .deb has to be told.
+    libdbus-1.so.3)                     echo "libdbus-1-3" ;;
     *)                                  return 1 ;;
   esac
 }
@@ -307,7 +310,12 @@ build_deb() {
   rm -rf "$work"
   mkdir -p "$work/control"
 
-  sed -e "s|@VERSION@|$version|" \
+  # A Debian control file has NO comment syntax — dpkg-deb reads a leading `#`
+  # as a field name and stops with "field name '#' must be followed by colon".
+  # control.in carries comments anyway, because the reasoning behind a
+  # Recommends belongs next to it; they are stripped here, on the way out.
+  sed -e '/^#/d' \
+      -e "s|@VERSION@|$version|" \
       -e "s|@DEB_ARCH@|$deb_arch|" \
       -e "s|@INSTALLED_SIZE@|$installed_size_kb|" \
       -e "s|@DEPENDS@|$depends|" \
