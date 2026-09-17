@@ -784,6 +784,17 @@ export function peggedNativeUsd(symbol: string): number | undefined;
 export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array, a_client_data_json: Uint8Array, a_signature_der: Uint8Array, b_authenticator_data: Uint8Array, b_client_data_json: Uint8Array, b_signature_der: Uint8Array): P256PublicKey | undefined;
 
 /**
+ * **Backing the founding record up to Ethereum — the next step of the walk**
+ * (spec 062). Server-free: every request is an `eth_call` against the
+ * registry contract, on Gnosis (where the record lives) or Ethereum (where
+ * the backup goes). `answers_json` is the transcript (`LookupAnswer[]`, the
+ * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
+ * requests to perform, or the verdict and, when the wallet is not backed up,
+ * the one call that would do it. No passkey is involved at any point.
+ */
+export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string): string;
+
+/**
  * **The registered name behind an address — the next step of the lookup.**
  *
  * The v2 passkey index cannot be asked about an address, so the name is
@@ -977,6 +988,7 @@ export interface InitOutput {
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
+    readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
