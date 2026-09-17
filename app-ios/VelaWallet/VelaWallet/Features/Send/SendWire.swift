@@ -181,7 +181,28 @@ struct SendTreasuryStatusWire: Decodable, Equatable {
     /// Whether this is a network Vela ships, and so one whose relayer the
     /// OPERATOR is expected to keep funded. The core decides; it changes what
     /// the person is asked to do (spec 060).
+    ///
+    /// Absent ⇒ `false`, mirroring the core's `#[serde(default)]`: a status
+    /// written before the field existed, or a hand-built one in a test, reads
+    /// as a custom network — the branch that only ever asks the person to
+    /// fund the relayer, which is the safe assumption when nobody said Vela
+    /// serves it.
     let operatorServed: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case chainId, address, asset, balance, floor, bootstrapNeeded, operatorServed
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chainId = try c.decode(Int.self, forKey: .chainId)
+        address = try c.decode(String.self, forKey: .address)
+        asset = try c.decode(String.self, forKey: .asset)
+        balance = try c.decode(String.self, forKey: .balance)
+        floor = try c.decode(String.self, forKey: .floor)
+        bootstrapNeeded = try c.decode(Bool.self, forKey: .bootstrapNeeded)
+        operatorServed = try c.decodeIfPresent(Bool.self, forKey: .operatorServed) ?? false
+    }
 }
 
 /// One leg of a receipt.
