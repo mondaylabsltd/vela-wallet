@@ -1,5 +1,9 @@
 # 062 — Plan
 
+> **2026-09-17 ruling:** Part B (replace a key) is dropped, Part A (keys screen) deferred.
+> Only **Phase 2 — back up to Ethereum** below is live work; Phases 1 and 3 are kept as
+> the record of what was considered. See spec §0 and §5a.
+
 Order is by risk, not by the order the founder listed them: **A reads, C replays bytes
 nobody can forge, B moves locks.** A ships alone and is useful alone; B needs A's reads;
 C needs only A's row and an Ethereum deployment.

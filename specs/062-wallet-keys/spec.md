@@ -1,6 +1,6 @@
-# 062 — Wallet keys: see them, replace one, back them up
+# 062 — Wallet keys: back the founding record up to Ethereum
 
-**Status**: draft for the founder's rulings (§8). Nothing in §3–§5 is built.
+**Status**: scope RULED 2026-09-17 (see §0). Part C is being built; Part B is dropped; Part A is deferred.
 **Origin**: founder, 2026-09-17, on the back of issue 191 (where the wallet learned to
 read a Safe's founding key from the chain).
 **Shells**: web, Android, iOS, desktop — every rule in `vela-core`, written once.
@@ -9,6 +9,26 @@ read a Safe's founding key from the chain).
 > 以及最新版本（不同网络可能不一样，需要到 safe account 实时查询出 signer 以及公钥）……
 > 支持对某个网络的 signer 进行更换，操作交互要简单友好，小白就能上手……
 > 支持把某个钱包的创建版本的 p256 数据迁移到以太坊主网。」
+
+## 0. The founder's ruling (2026-09-17, after reading the first draft)
+
+> 「要不还是不提供换，更换 signer 确实很复杂而且有风险，提供用户把计算一致性的地址的
+> 公钥 p256 index 存储到以太坊主网就好了。」
+
+- **Part B — replace a key: DROPPED.** Not deferred: dropped. The draft below is kept as the
+  record of WHY — three traps (signing reads the founding set, a replaced-in key cannot log
+  in, the #191 cache rule breaks) and one property no spec can fix (a network never used
+  always deploys with the FOUNDING keys, so a stolen founding key stays dangerous there).
+  `signers.md`'s "plan the key set at creation" stays the product's honest answer.
+- **Part C — back up to Ethereum: THE FEATURE.** §5, narrowed in §5a.
+- **Part A — the keys screen: DEFERRED**, and smaller when it returns. Its "current keys per
+  network" half existed to show the result of a replacement; with no replacement every
+  network equals the founding set by construction. What survives is a read-only list of the
+  founding keys, which is where the backup row will eventually live. Until then the backup
+  row sits in Settings on its own (§5a).
+- Rulings 1, 2, 3 of §8 are moot. Ruling 4 (who deploys the registry to Ethereum) is the one
+  thing Part C waits on. Ruling 5: `B09`'s "one passkey per wallet" is already false and gets
+  corrected with Part C; `signers.md` stays as it is.
 
 ## 1. Why this matters
 
@@ -170,6 +190,45 @@ a one-time CREATE2 deployment (same bytecode, same constructor `(100, 0x5266…e
 salt ⇒ the same address `0x94fD…1EA9`), by anyone, with no owner. It is the operator's to
 do; `p256-index/docs/mainnet-self-backup.md` §3 is the runbook. Part C ships dark until the
 address has code.
+
+### 5a. Part C as ruled — what is built
+
+**Server-free by construction.** Every read is an `eth_call` against the registry contract
+(same address on both chains); the index service is never asked. A backup feature that
+needed our server to work would not be a backup from our server.
+
+The walk (`vela_core::registry_backup`, the transcript pattern of `registry_lookup`):
+
+| # | Chain | Call | Yields |
+|---|---|---|---|
+| 1 | Ethereum | `VERSION()` | no code → **Unavailable** (the row is not drawn) |
+| 2 | Gnosis | `getGroupsOfKey(foundingKey, 0, 8, desc)` | the units this key founded |
+| 3 | Gnosis | `getUnit(id)` for each, newest first | the unit whose metadata names THIS address → its `groupPublicKey`. None → **Not registered** (a v1-era wallet) |
+| 4 | Ethereum | `getUnitByGroupKey(groupPublicKey)` | `exists` → **Backed up ✓** |
+| 5 | Gnosis | `registerPayloadOf(id)` | the bytes to send → **Not backed up** + the one call to make |
+
+The founding key comes from the account record — the wallet knows its own key; nothing is
+read from a Safe. Step 4 asks the contract directly instead of simulating a replay and
+reading the revert (the server design's trick): the same answer, without depending on how an
+RPC reports a custom error.
+
+**The payload is checked before it is offered**, though the Ethereum contract re-verifies
+every signature anyway: it must be a `register(...)` call whose `groupPublicKey` and
+`metadata` are byte-equal to the unit found in step 3. A payload that fails this is
+**Could not check**, never a button.
+
+**Sending it** is one ordinary operation on Ethereum: `to = registry`, `value = 0`,
+`data = payload`, through the existing submit path and the ordinary fee row. Anyone may
+send these bytes — being the sender grants nothing — so the person's own Safe is simply the
+most convenient payer.
+
+**References are not replayed.** The wallet never writes one (that was Part B), so a Vela
+unit has none of its own; what others may have pointed at it is, in the registry's words,
+"a suggestion inbox".
+
+**Restore from Ethereum** (`registry_lookup` and login reading the Ethereum registry when
+the index is unreachable) is the second half of the value and is the next slice after the
+backup itself.
 
 ## 6. Out of scope
 
