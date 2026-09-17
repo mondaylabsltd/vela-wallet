@@ -16,11 +16,12 @@
  *    standing in for the name. The action now sits under that name and says
  *    what it does.
  *
- * Hermetic: every off-origin request is denied; the index answers from here.
+ * Hermetic: every off-origin request is denied; the chain and the index answer
+ * from here, in the three hops `public-key-index.ts` documents.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { en, seedSignedIn, TEST_ACCOUNT_ADDRESS } from './live-helpers';
-import { denyOffOrigin, readKv } from './stub-chain';
+import { denyOffOrigin, readKv, stubJsonRpc } from './stub-chain';
 
 /** The index knows this one by name. */
 const KNOWN = '0x' + 'b0b0'.repeat(10);
@@ -67,17 +68,51 @@ async function seedHistory(page: Page): Promise<void> {
 	);
 }
 
-/** The passkey index, by `walletRef` (the address left-padded to 32 bytes). */
-async function stubIndex(page: Page): Promise<string[]> {
+/** `SafeWebAuthnSharedSigner` and the founding key it holds for KNOWN. */
+const SHARED_SIGNER = '0x94a4f6affbd8975951142c3999aeab7ecee555c2';
+const KEY_X = '19'.repeat(32);
+const KEY_Y = 'fe'.repeat(32);
+const UNIT_ID = 10;
+
+function metadataHex(address: string, names: string[]): string {
+	const json = JSON.stringify({
+		version: 1,
+		address,
+		wallet_version: 'safe-1.4.1',
+		key_names: names
+	});
+	return Buffer.from(json, 'utf8').toString('hex');
+}
+
+/**
+ * The registry, the way the v2 index can actually be asked about an ADDRESS:
+ * the chain says which key founded the Safe, the index says which units that
+ * key founded, and the unit whose metadata carries this address names it.
+ * Registered AFTER the deny net, so these win. Returns what the index was asked.
+ */
+async function stubRegistry(page: Page): Promise<string[]> {
 	const asked: string[] = [];
-	await page.route(/\/api\/query\?walletRef=/, (route) => {
-		const ref = new URL(route.request().url()).searchParams.get('walletRef') ?? '';
-		asked.push(ref);
-		if (ref.endsWith(KNOWN.slice(2)))
-			return route.fulfill({
-				contentType: 'application/json',
-				body: JSON.stringify({ rpId: 'getvela.app', name: REGISTRY_NAME, createdAt: 1 })
-			});
+	await stubJsonRpc(page, /^https?:\/\/(?!localhost|127\.0\.0\.1)/, (method, params) => {
+		if (method !== 'eth_call') return undefined;
+		const call = params[0] as { to?: string; data?: string };
+		const known =
+			call.to?.toLowerCase() === SHARED_SIGNER && call.data?.endsWith(KNOWN.slice(2)) === true;
+		// Everything else — an unconfigured Safe, every name-service registry —
+		// reads as zero: nobody.
+		return known ? '0x' + KEY_X + KEY_Y + '0'.repeat(61) + '100' : '0x' + '0'.repeat(192);
+	});
+	await page.route(/\/api\/query\?/, (route) => {
+		const url = new URL(route.request().url());
+		asked.push(url.search);
+		const json = (body: unknown) =>
+			route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+		if (url.searchParams.get('publicKey') === '04' + KEY_X + KEY_Y)
+			return json({ entry: { entryId: 1 }, groups: { total: 1, unitIds: [UNIT_ID] } });
+		if (url.searchParams.get('unitId') === String(UNIT_ID))
+			return json({ unit: { unitId: UNIT_ID, metadata: metadataHex(KNOWN, [REGISTRY_NAME]) } });
+		// What the v2 index really says to the old by-address question.
+		if (url.searchParams.has('walletRef'))
+			return route.fulfill({ status: 400, contentType: 'application/json', body: '{}' });
 		return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
 	});
 	return asked;
@@ -100,15 +135,17 @@ test.describe('desktop', () => {
 	test('the list calls a history row by its registry name; the address is the last resort', async ({
 		page
 	}) => {
-		const asked = await stubIndex(page);
+		const asked = await stubRegistry(page);
 		await openContacts(page);
 
 		// Nobody opened a detail: the book asked on its own.
 		await expect(page.getByText(REGISTRY_NAME, { exact: true }).first()).toBeVisible();
 		// …and the row nobody knows still introduces itself by its address.
 		await expect(page.getByText(STRANGER_SHORT, { exact: true }).first()).toBeVisible();
-		// Once per address — a second render is not a second ask.
-		expect(asked.filter((ref) => ref.endsWith(KNOWN.slice(2)))).toHaveLength(1);
+		// Once: the book and the activity feed both want this name, and share one
+		// waterfall. And never the question the v2 index cannot answer.
+		expect(asked.filter((query) => query.includes('publicKey='))).toHaveLength(1);
+		expect(asked.some((query) => query.includes('walletRef'))).toBe(false);
 		// Being recognised is not being saved: nothing was written to the book.
 		expect(await readKv(page, 'vela.contacts')).toBeNull();
 	});
@@ -116,7 +153,7 @@ test.describe('desktop', () => {
 	test('a history row is named from under its own name, and the name survives a reload', async ({
 		page
 	}) => {
-		await stubIndex(page);
+		await stubRegistry(page);
 		await openContacts(page);
 		await page.getByText(STRANGER_SHORT, { exact: true }).first().click();
 
@@ -146,7 +183,7 @@ test.describe('desktop', () => {
 	});
 
 	test("the person's own name outranks the registry's", async ({ page }) => {
-		await stubIndex(page);
+		await stubRegistry(page);
 		await openContacts(page);
 		await page.getByText(REGISTRY_NAME, { exact: true }).first().click();
 		// Recognised, but still not the person's word for them — so still offered.
@@ -163,7 +200,7 @@ test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
 	test('the same two rules on the phone layout', async ({ page }) => {
-		await stubIndex(page);
+		await stubRegistry(page);
 		await openContacts(page);
 		await expect(page.getByText(REGISTRY_NAME, { exact: true }).first()).toBeVisible();
 

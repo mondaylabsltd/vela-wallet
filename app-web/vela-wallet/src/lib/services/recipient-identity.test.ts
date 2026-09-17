@@ -21,7 +21,7 @@ vi.mock('$lib/core/client', () => ({
 }));
 const index = { record: null as { name: string } | null, calls: 0 };
 vi.mock('$lib/services/public-key-index', () => ({
-	queryByWalletRef: vi.fn(async () => {
+	queryWalletName: vi.fn(async () => {
 		index.calls += 1;
 		return index.record;
 	})
