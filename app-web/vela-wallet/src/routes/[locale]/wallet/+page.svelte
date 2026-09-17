@@ -1264,6 +1264,16 @@
 			nav.enter('receive');
 			return;
 		}
+		if (handoff.kind === 'ethereum-backup') {
+			// Settings handed the person here because this route hosts the signing
+			// sheet (spec 062). The check runs again — a link is not a verdict — and
+			// the sheet opens only if Ethereum really lacks the record.
+			const account = session.view.accounts[session.view.active_index]?.account;
+			if (account) {
+				void import('$lib/backup/ethereum-backup').then((m) => m.startEthereumBackup(account));
+			}
+			return;
+		}
 		nav.enter('send');
 		void openSend(
 			handoff.kind === 'send' ? { prefilled_recipient: handoff.recipient } : undefined

@@ -9,15 +9,12 @@
  * believed, what a malformed blob means and how long a verdict may be kept are
  * all `vela_core::registry_lookup` — written once for four shells (issue 191).
  *
- * What is left here is what only a shell can do: perform the requests the core
- * hands over (an `eth_call` through the pool, a GET against the configured
- * index, read per call so a settings edit reaches the next lookup) and keep
- * the verdict for as long as the core says it may be kept.
+ * What is left here is what only a shell can do: carry the requests
+ * (`core-walk.ts`, shared with the Ethereum backup) and keep the verdict for as
+ * long as the core says it may be kept.
  */
 import { loadCore, registryNameStep } from '$lib/core/client';
-import { getPasskeyIndexURL } from './endpoints';
-import { fetchWithTimeout, NET_TIMEOUTS } from './net';
-import { poolRpcCall } from './rpc-pool';
+import { runWalk } from './core-walk';
 import { getItem, setItem } from './storage';
 
 export interface IndexedWalletName {
@@ -27,30 +24,15 @@ export interface IndexedWalletName {
 	publicKey: string;
 }
 
-// --- The core's contract (`registry_lookup.rs`), as it crosses the boundary ---
-
-type LookupRequest =
-	| { type: 'eth_call'; id: string; chain_id: number; to: string; data: string }
-	| { type: 'index_get'; id: string; path: string };
-
-interface LookupAnswer {
-	id: string;
-	outcome: 'ok' | 'not_found' | 'failed';
-	body: string | null;
+/** `registry_lookup::LookupStep::Done`. */
+interface LookupDone {
+	type: 'done';
+	found: { name: string; public_key: string } | null;
+	remember: 'forever' | 'briefly' | 'no';
 }
-
-type LookupStep =
-	| { type: 'ask'; requests: LookupRequest[] }
-	| {
-			type: 'done';
-			found: { name: string; public_key: string } | null;
-			remember: 'forever' | 'briefly' | 'no';
-	  };
 
 /** `registry_lookup::MISS_TTL_MS` — a miss is only true for now. */
 const MISS_TTL_MS = 6 * 60 * 60 * 1000;
-/** A lookup is a handful of rounds; this only stops a contract bug from spinning. */
-const MAX_ROUNDS = 16;
 
 // --- Cache: the key and the name for good, a miss briefly -------------------
 
@@ -78,38 +60,6 @@ async function writeCache(address: string, entry: Cached): Promise<void> {
 	}
 }
 
-// --- Transport ---------------------------------------------------------------
-
-const failed = (id: string): LookupAnswer => ({ id, outcome: 'failed', body: null });
-
-async function perform(request: LookupRequest): Promise<LookupAnswer> {
-	const { id } = request;
-	try {
-		if (request.type === 'eth_call') {
-			const response = await poolRpcCall(
-				'eth_call',
-				[{ to: request.to, data: request.data }, 'latest'],
-				request.chain_id
-			);
-			return response.error == null && typeof response.result === 'string'
-				? { id, outcome: 'ok', body: response.result }
-				: failed(id);
-		}
-		const baseUrl = getPasskeyIndexURL().trim().replace(/\/$/, '');
-		const response = await fetchWithTimeout(
-			baseUrl + request.path,
-			{},
-			{ timeoutMs: NET_TIMEOUTS.keyIndexRead }
-		);
-		// "No such key / unit" is an answer; any other non-OK is the index failing.
-		if (response.status === 404) return { id, outcome: 'not_found', body: null };
-		if (!response.ok) return failed(id);
-		return { id, outcome: 'ok', body: await response.text() };
-	} catch {
-		return failed(id);
-	}
-}
-
 /**
  * The name a Vela user registered for the wallet at `address`, or `null`.
  *
@@ -125,21 +75,14 @@ export async function queryWalletName(address: string): Promise<IndexedWalletNam
 
 	try {
 		await loadCore();
-		const answers: LookupAnswer[] = [];
-		for (let round = 0; round < MAX_ROUNDS; round++) {
-			const step = JSON.parse(registryNameStep(key, JSON.stringify(answers))) as LookupStep;
-			if (step.type === 'ask') {
-				answers.push(...(await Promise.all(step.requests.map(perform))));
-				continue;
-			}
-			const hit =
-				step.found === null ? null : { name: step.found.name, publicKey: step.found.public_key };
-			if (hit !== null && step.remember === 'forever') await writeCache(key, { hit });
-			else if (hit === null && step.remember === 'briefly')
-				await writeCache(key, { missAt: Date.now() });
-			return hit;
-		}
-		return null;
+		const done = await runWalk<LookupDone>((answers) => registryNameStep(key, answers));
+		if (done === null) return null;
+		const hit =
+			done.found === null ? null : { name: done.found.name, publicKey: done.found.public_key };
+		if (hit !== null && done.remember === 'forever') await writeCache(key, { hit });
+		else if (hit === null && done.remember === 'briefly')
+			await writeCache(key, { missAt: Date.now() });
+		return hit;
 	} catch {
 		return null;
 	}
