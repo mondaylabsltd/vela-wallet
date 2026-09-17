@@ -96,6 +96,60 @@ enum ChainCatalog {
                   apiNetworkId: "worldchain-mainnet", nativeSymbol: "ETH", isL2: true,
                   rpcURL: "https://worldchain.drpc.org",
                   explorerURL: "https://worldscan.org", gasModel: .native),
+        // Circle's USDC-native L1 (spec 060). `gasModel: .native` on purpose:
+        // Tempo has no native coin and reimburses gas in a TIP-20, Arc pays gas
+        // natively — only the coin's PRICE is special, and the core's $1 peg
+        // handles that. The ERC-20 view of the same balance at 0x3600…0000 is
+        // never a token.
+        ChainMeta(id: "arc", displayName: "Arc", chainId: 5_042,
+                  apiNetworkId: "arc-mainnet", nativeSymbol: "USDC", isL2: false,
+                  rpcURL: "https://rpc.mainnet.arc.io",
+                  explorerURL: "https://explorer.arc.io", gasModel: .native),
+        // The eleven admitted together (spec 061), in the core's order.
+        ChainMeta(id: "xlayer", displayName: "X Layer", chainId: 196,
+                  apiNetworkId: "xlayer-mainnet", nativeSymbol: "OKB", isL2: true,
+                  rpcURL: "https://rpc.xlayer.tech",
+                  explorerURL: "https://www.oklink.com/xlayer", gasModel: .native),
+        ChainMeta(id: "stable", displayName: "Stable", chainId: 988,
+                  apiNetworkId: "stable-mainnet", nativeSymbol: "USDT0", isL2: false,
+                  rpcURL: "https://rpc.stable.xyz",
+                  explorerURL: "https://stablescan.xyz", gasModel: .native),
+        ChainMeta(id: "soneium", displayName: "Soneium", chainId: 1868,
+                  apiNetworkId: "soneium-mainnet", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://rpc.soneium.org",
+                  explorerURL: "https://soneium.blockscout.com", gasModel: .native),
+        ChainMeta(id: "megaeth", displayName: "MegaETH", chainId: 4326,
+                  apiNetworkId: "megaeth-mainnet", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://megaeth.drpc.org",
+                  explorerURL: "https://megaeth.blockscout.com", gasModel: .native),
+        ChainMeta(id: "robinhood", displayName: "Robinhood Chain", chainId: 4663,
+                  apiNetworkId: "robinhood-mainnet", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://rpc.mainnet.chain.robinhood.com",
+                  explorerURL: "https://robinhoodchain.blockscout.com", gasModel: .native),
+        ChainMeta(id: "mantle", displayName: "Mantle", chainId: 5000,
+                  apiNetworkId: "mantle-mainnet", nativeSymbol: "MNT", isL2: true,
+                  rpcURL: "https://rpc.mantle.xyz",
+                  explorerURL: "https://mantlescan.xyz", gasModel: .native),
+        ChainMeta(id: "kaia", displayName: "Kaia", chainId: 8217,
+                  apiNetworkId: "kaia-mainnet", nativeSymbol: "KAIA", isL2: false,
+                  rpcURL: "https://public-en.node.kaia.io",
+                  explorerURL: "https://kaiascope.com", gasModel: .native),
+        ChainMeta(id: "celo", displayName: "Celo", chainId: 42_220,
+                  apiNetworkId: "celo-mainnet", nativeSymbol: "CELO", isL2: true,
+                  rpcURL: "https://forno.celo.org",
+                  explorerURL: "https://celoscan.io", gasModel: .native),
+        ChainMeta(id: "ink", displayName: "Ink", chainId: 57_073,
+                  apiNetworkId: "ink-mainnet", nativeSymbol: "ETH", isL2: true,
+                  rpcURL: "https://rpc-gel.inkonchain.com",
+                  explorerURL: "https://explorer.inkonchain.com", gasModel: .native),
+        ChainMeta(id: "plume", displayName: "Plume", chainId: 98_866,
+                  apiNetworkId: "plume-mainnet", nativeSymbol: "PLUME", isL2: true,
+                  rpcURL: "https://rpc.plume.org",
+                  explorerURL: "https://explorer.plume.org", gasModel: .native),
+        ChainMeta(id: "xrplevm", displayName: "XRPL EVM", chainId: 1_440_000,
+                  apiNetworkId: "xrpl-evm-mainnet", nativeSymbol: "XRP", isL2: false,
+                  rpcURL: "https://rpc.xrplevm.org",
+                  explorerURL: "https://explorer.xrplevm.org", gasModel: .native),
     ]
 
     static func meta(_ chainId: Int) -> ChainMeta? {
@@ -136,7 +190,7 @@ enum RpcProvider: String, CaseIterable {
 
     /// `chainId` → the provider's own name for that chain. A chain missing from
     /// a provider's map means no URL is built for it there — Ankr genuinely
-    /// does not serve Unichain, World Chain, Monad or Tempo, and inventing a
+    /// does not serve Unichain, World Chain, Monad, Tempo or Arc, and inventing a
     /// slug would produce an endpoint that 404s on every call.
     private static let slugs: [RpcProvider: [Int: String]] = [
         .alchemy: [
@@ -144,12 +198,18 @@ enum RpcProvider: String, CaseIterable {
             137: "polygon-mainnet", 42_161: "arb-mainnet", 10: "opt-mainnet",
             8_453: "base-mainnet", 43_114: "avax-mainnet", 100: "gnosis-mainnet",
             130: "unichain-mainnet", 4_217: "tempo-mainnet", 143: "monad-mainnet",
-            480: "worldchain-mainnet",
+            480: "worldchain-mainnet", 5_042: "arc-mainnet", 988: "stable-mainnet",
+            1_868: "soneium-mainnet", 4_326: "megaeth-mainnet", 4_663: "robinhood-mainnet",
+            5_000: "mantle-mainnet", 8_217: "kaia-mainnet", 42_220: "celo-mainnet",
+            57_073: "ink-mainnet", 98_866: "plume-mainnet",
         ],
         .drpc: [
             1: "ethereum", 56: "bsc", 137: "polygon", 42_161: "arbitrum",
             10: "optimism", 8_453: "base", 43_114: "avalanche", 100: "gnosis",
             130: "unichain", 4_217: "tempo", 143: "monad", 480: "worldchain",
+            5_042: "arc", 196: "xlayer", 988: "stable", 1_868: "soneium", 4_326: "megaeth",
+            4_663: "robinhood", 5_000: "mantle", 8_217: "kaia", 42_220: "celo", 57_073: "ink",
+            98_866: "plume",
         ],
         .ankr: [
             1: "eth", 56: "bsc", 137: "polygon", 42_161: "arbitrum",

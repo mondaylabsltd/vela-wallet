@@ -669,8 +669,15 @@ enum SendLive {
                 ? "pathUSD"
                 : (ChainCatalog.meta(status.chainId)?.nativeSymbol ?? "")
             let short = shortfall(floor: status.floor, balance: status.balance)
+            // Two situations, one symptom: on a network Vela ships the
+            // operator owns that relayer and telling them is the fix; on one
+            // the person added, there may be nobody else who can hold gas
+            // there at all (spec 060).
+            let lead = status.operatorServed
+                ? loc.t("componentsUi.treasuryBootstrap.operatorLead")
+                : loc.t("componentsUi.treasuryBootstrap.customLead")
             return loc.t("componentsUi.treasuryBootstrap.title") + " · "
-                + loc.t("componentsUi.treasuryBootstrap.lead") + " "
+                + lead + " "
                 + loc.t("componentsUi.treasuryBootstrap.amountHint", vars: [
                     "amount": fromBase(short, decimals: decimals), "symbol": symbol,
                 ])

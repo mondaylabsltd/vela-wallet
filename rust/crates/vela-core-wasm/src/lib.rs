@@ -693,6 +693,31 @@ pub fn best_native_dex_price(groups: NativeQuoteGroups) -> Option<f64> {
     vela_core::app::balance_dashboard::best_native_dex_price(&groups)
 }
 
+/// The lowest gas price a chain accepts, as a decimal string (money crosses
+/// this boundary as decimal strings, never as JS numbers).
+///
+/// `"0"` on every chain but Arc, which discards an underpriced transaction
+/// SILENTLY — no error, no trace, a payment that simply never happens. The web
+/// shell keeps a TypeScript twin of the gas-price derivation
+/// (`safe-transaction.ts`), and it reads the floor from here rather than
+/// carrying its own copy of the number.
+#[wasm_bindgen(js_name = minGasPriceWei)]
+pub fn min_gas_price_wei(chain_id: u32) -> String {
+    vela_core::app::fee_policy::min_gas_price_wei(chain_id).to_string()
+}
+
+/// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
+/// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
+/// the Chainlink/DEX ladder unchanged.
+///
+/// This exists so the rule is written once. It used to be a `symbol == "USD"`
+/// literal in each of the four shells, which is four chances to disagree about
+/// what a coin is worth.
+#[wasm_bindgen(js_name = peggedNativeUsd)]
+pub fn pegged_native_usd(symbol: &str) -> Option<f64> {
+    vela_core::app::balance_dashboard::pegged_native_usd(symbol)
+}
+
 /// The source ladder and its sanity band — `choose_native_price`.
 #[wasm_bindgen(js_name = chooseNativePrice)]
 pub fn choose_native_price(

@@ -1226,6 +1226,9 @@ mod treasury_tests {
                     balance: "0".to_owned(),
                     floor: "20000000000000000".to_owned(),
                     bootstrap_needed: true,
+                    // Gnosis ships with Vela, so its relayer is the operator's
+                    // to refill — the core says so when it publishes the sheet.
+                    operator_served: true,
                 }),
                 ..host.view()
             };
@@ -2492,7 +2495,10 @@ mod tests {
             insufficient: false,
             selected: true,
         }];
-        assert_eq!(fee_line(Some(&quote), None, &fee, "en"), "0.000091 BNB · ≈$0.05");
+        assert_eq!(
+            fee_line(Some(&quote), None, &fee, "en"),
+            "0.000091 BNB · ≈$0.05"
+        );
 
         // Under half a cent the coin amount is the honest primary: "$0.00"
         // beside a real fee reads as free.

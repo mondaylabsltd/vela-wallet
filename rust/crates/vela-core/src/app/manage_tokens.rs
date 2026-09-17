@@ -284,9 +284,36 @@ pub struct Model {
     /// (`AddTokenPanel.tsx:180-182`). The shell shows the copy; cleared by
     /// the next input or probe.
     not_found: bool,
+    /// The address is a chain's native coin behind an ERC-20 interface
+    /// (`native_alias_token`) — a refusal with a reason, not a miss.
+    native_alias: bool,
     /// A save failed — the `showAlert(errorSaveToken)` branch. Same contract.
     save_error: bool,
     attempt: u64,
+}
+
+/// The ERC-20 interface onto a chain's NATIVE balance, where the chain has one.
+///
+/// Arc's native coin IS USDC: 18 decimals natively, with a 6-decimal ERC-20
+/// view of the SAME balance at `0x3600…0000` (spec 060). Adding that address as
+/// a token would list one balance twice and double the person's total — money
+/// that does not exist, on a screen they are meant to trust.
+///
+/// Per-chain data, not a global address ban: the same address on another chain
+/// is an ordinary unknown contract and is treated as one.
+pub fn native_alias_token(chain_id: u32) -> Option<&'static str> {
+    match chain_id {
+        5_042 | 5_042_002 => Some("0x3600000000000000000000000000000000000000"),
+        // Stable: native USDT0 (18 dp) and this 6-dp ERC-20 are one balance —
+        // verified address by address, `native ÷ 10¹² == erc20` (spec 061).
+        988 => Some("0x779Ded0c9e1022225f8E0630b35a9b54bE713736"),
+        _ => None,
+    }
+}
+
+/// Whether this address is the chain's native coin wearing an ERC-20 interface.
+fn is_native_alias(chain_id: u32, address: &str) -> bool {
+    native_alias_token(chain_id).is_some_and(|alias| alias.eq_ignore_ascii_case(address.trim()))
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +348,10 @@ pub struct MtokView {
     /// The manage/delete list below the form.
     pub custom_tokens: Vec<MtokCustomToken>,
     pub not_found: bool,
+    /// The searched address is this network's native coin wearing an ERC-20
+    /// interface. It holds the same balance the wallet already shows, so it is
+    /// refused with that reason rather than reported as "not found".
+    pub native_alias: bool,
     pub save_error: bool,
 }
 
@@ -355,6 +386,7 @@ impl App for ManageTokens {
                 // retire any probe still in flight for the old address.
                 clear_probe(model);
                 model.not_found = false;
+                model.native_alias = false;
                 model.save_error = false;
                 render()
             }
@@ -366,6 +398,7 @@ impl App for ManageTokens {
                 }
                 clear_probe(model);
                 model.not_found = false;
+                model.native_alias = false;
                 model.save_error = false;
                 model.networks.clear();
                 for network in networks {
@@ -485,6 +518,7 @@ impl App for ManageTokens {
             saving: matches!(model.save_phase, SavePhase::Writing { .. }),
             custom_tokens: model.custom_tokens.clone(),
             not_found: model.not_found,
+            native_alias: model.native_alias,
             save_error: model.save_error,
         }
     }
@@ -514,11 +548,23 @@ fn accept(model: &mut Model, result: MtokShellResult) -> Command<MtokEffect, Eve
             if !model.pending_probes.remove(&chain_id) {
                 return Command::done();
             }
-            // Admission (invariant ②): a missing name or symbol is a miss no
-            // matter what the shell sent — the one gate for `!name || !symbol`.
-            model
-                .detection
-                .insert(chain_id, meta.filter(admissible_erc20_meta));
+            // The native coin is not a token. On a chain whose native balance
+            // also answers an ERC-20 interface (Arc), that contract resolves
+            // perfectly well — name, symbol, decimals — and listing it would
+            // show one balance as two rows and double the total. Refused before
+            // admission, and said out loud (`native_alias`) rather than
+            // reported as "not found", which would be a different and untrue
+            // reason.
+            if is_native_alias(chain_id, &address) {
+                model.native_alias = true;
+                model.detection.insert(chain_id, None);
+            } else {
+                // Admission (invariant ②): a missing name or symbol is a miss no
+                // matter what the shell sent — the one gate for `!name || !symbol`.
+                model
+                    .detection
+                    .insert(chain_id, meta.filter(admissible_erc20_meta));
+            }
             if model.pending_probes.is_empty() {
                 model.detect_in_flight = false;
                 if model.detection.values().all(Option::is_none) {

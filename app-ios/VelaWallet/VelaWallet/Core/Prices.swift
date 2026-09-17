@@ -129,11 +129,14 @@ final class Prices {
     /// `chainlink_eth` rung.
     nonisolated static func mainnetPrice(symbol: String, in prices: [String: Double]) -> Double? {
         let upper = symbol.uppercased()
-        // A chain whose gas coin IS a USD stablecoin (Tempo's `USD`) is pegged
-        // by definition. It never reaches a balance, because Tempo has no
-        // native coin to hold — the peg is here so the ladder answers the same
-        // question web answers.
-        if upper == "USD" { return 1 }
+        // A chain whose gas coin IS a USD stablecoin (Tempo's `USD`, Arc's
+        // `USDC`) is pegged by definition: there is no feed to read because the
+        // coin is the dollar. The table is the CORE's — it used to be a literal
+        // here and in the three other shells, which is four chances to disagree
+        // about what a coin is worth (spec 060). It is also what earns such a
+        // chain the ordinary $0.01 fee floor, which is "$0.01 worth of the
+        // native coin" and needs a price to exist.
+        if let pegged = peggedNativeUsd(symbol: upper) { return pegged }
         if let direct = prices[upper] { return direct }
         guard let alias = symbolAliases[upper] else { return nil }
         return prices[alias]

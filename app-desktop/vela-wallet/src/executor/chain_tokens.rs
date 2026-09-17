@@ -90,6 +90,9 @@ fn builtin_dex(chain_id: u32) -> Option<DexInfo> {
         43114 => uniswap_v3("0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F"),
         // SushiSwap V3 — the best available V3 quoter on Gnosis.
         100 => uniswap_v3("0xb1E835Dc2785b52265711e17fCCb0fd018226a6e"),
+        // Not listed, deliberately: Tempo (4217) and Arc (5042) have no DEX to
+        // quote against. Arc does not need one — its native coin is USDC and
+        // the core's peg prices it (spec 060).
         _ => return None,
     })
 }
@@ -343,6 +346,11 @@ mod tests {
             }
         }
         assert_eq!(builtin_dex(4217), None, "Tempo has no DEX to quote");
+        assert_eq!(
+            builtin_dex(5042),
+            None,
+            "Arc has no DEX; its coin is pegged"
+        );
     }
 
     /// The live index, for one chain.

@@ -515,7 +515,9 @@
   "errorChainNotFound": "Zincir bilgisi bulunamadı",
   "errorNotCompatible": "Vela Wallet ile uyumlu değil",
   "invalidAddress": "Geçersiz sözleşme adresi",
-  "notCompatible": "Uyumlu değil"
+  "notCompatible": "Uyumlu değil",
+  "nativeAliasTitle": "Zaten Var",
+  "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor."
  },
  "tokenDetail": {
   "send": "Gönder",
@@ -1456,7 +1458,11 @@
    "copied": "Kopyalandı",
    "closeBtn": "Kapat",
    "suggested": "Önerilen ekleme",
-   "retryBtn": "Fonladım · Tekrar dene"
+   "retryBtn": "Fonladım · Tekrar dene",
+   "operatorLead": "Bu ağın relayer'ını Vela operatörü çalıştırıyor ve gazı bitti. Onlara haber vermek en hızlı çözüm — düzelince herkes için düzelir.",
+   "reportBtn": "Bunu bildir",
+   "selfFundToggle": "Bekleyemiyor musun? Kendin başlat",
+   "customLead": "Bu ağı sen ekledin; yerel ya da kurum içi bir zincirde Vela operatörünün gaz tutma imkânı olmayabilir. Relayer'ı başlatmak sana kalmış."
   },
   "mainNav": {
    "wallet": "Cüzdan",

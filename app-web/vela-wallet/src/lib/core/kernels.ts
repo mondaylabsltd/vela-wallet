@@ -607,3 +607,32 @@ export function attestSafeMessageHash(
 ): Uint8Array {
 	return translated(() => wasm.attestSafeMessageHash(originalHash, BigInt(chainId), safeAddress));
 }
+
+// ---------------------------------------------------------------------------
+// Chain gas floor (spec 060)
+// ---------------------------------------------------------------------------
+
+/**
+ * The lowest gas price a chain will ACCEPT, in wei.
+ *
+ * `0n` on every chain but Arc, which discards an operation priced under its
+ * 20 gwei minimum base fee SILENTLY — no error, no trace, a payment that looks
+ * submitted and never happens. The number lives in the core
+ * (`fee_policy::min_gas_price_wei`); this is the money path's door to it, not a
+ * second copy.
+ */
+export function minGasPriceWei(chainId: number): bigint {
+	return BigInt(wasm.minGasPriceWei(chainId));
+}
+
+/**
+ * The USD price of a native gas coin that IS a dollar stablecoin — Tempo's
+ * `USD`, Arc's `USDC`. `null` means "not pegged": the caller falls through to
+ * the Chainlink/DEX ladder unchanged.
+ *
+ * One table, in the core, because this rule used to be a `symbol === 'USD'`
+ * literal in each of the four shells (spec 060).
+ */
+export function peggedNativeUsd(symbol: string): number | null {
+	return wasm.peggedNativeUsd(symbol) ?? null;
+}

@@ -338,7 +338,11 @@
       "copied": "Copié",
       "closeBtn": "Fermer",
       "suggested": "Rechargement suggéré",
-      "retryBtn": "J'ai approvisionné · Réessayer"
+      "retryBtn": "J'ai approvisionné · Réessayer",
+      "operatorLead": "L'opérateur de Vela fait tourner le relayeur de ce réseau, et il n'a plus de gas. Le prévenir est le plus rapide — et une fois réglé, c'est réglé pour tout le monde.",
+      "reportBtn": "Signaler",
+      "selfFundToggle": "Pas le temps d'attendre ? Démarrez-le vous-même",
+      "customLead": "Vous avez ajouté ce réseau : sur une chaîne locale ou interne, l'opérateur de Vela n'a peut-être aucun moyen d'y détenir du gas. Démarrer son relayeur vous revient."
     },
     "mainNav": {
       "wallet": "Portefeuille",

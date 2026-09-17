@@ -1178,6 +1178,25 @@ export function liveBalanceDetail(
  * carries base units as decimal strings; a value that already has a point is
  * taken as human decimal (the older `TreasuryStatus` shape).
  */
+/**
+ * The smallest top-up worth asking a person for, in whole native coin.
+ *
+ * The relay's own float floor is two orders of magnitude lower, and asking for
+ * exactly the shortfall to it — 0.0001 — buys a relayer that drops back under
+ * the floor after roughly one operation, so the same sheet reappears. A round
+ * 0.01 is a contribution that actually starts the thing (spec 060).
+ */
+const MIN_TOP_UP_SUGGESTION = '0.01';
+
+/** The larger of the real shortfall and {@link MIN_TOP_UP_SUGGESTION}. */
+function topUpSuggestion(floor: string, balance: string, decimals: number): string {
+	const shortfall = shortfallText(floor, balance, decimals);
+	const asNumber = Number(shortfall);
+	return Number.isFinite(asNumber) && asNumber > Number(MIN_TOP_UP_SUGGESTION)
+		? shortfall
+		: MIN_TOP_UP_SUGGESTION;
+}
+
 function shortfallText(floor: string, balance: string, decimals: number): string {
 	if (floor.includes('.') || balance.includes('.')) {
 		const diff = Number(floor) - Number(balance);
@@ -1205,13 +1224,23 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 	const pathUsd = status.asset === 'path_usd';
 	const decimals = pathUsd ? TEMPO_FEE_TOKEN_DECIMALS : 18;
 	const symbol = pathUsd ? 'pathUSD' : (chainInfo(status.chain_id)?.nativeSymbol ?? '');
+	// WHO can fix this is the core's verdict (`operator_served`), not a guess
+	// from the chain id here. On a network Vela ships the operator owns that
+	// relayer; on one the person added — a devnet, an internal chain — there
+	// may be nobody else who could hold gas on it (spec 060).
+	// Whether to offer it is the decision; WHERE it goes is the component's, as
+	// it already is for the feedback link (`FeedbackBody.svelte`).
+	const report = status.operator_served
+		? { label: m.relayer.reportBtn, selfFundLabel: m.relayer.selfFundToggle }
+		: undefined;
 	return {
 		title: m.relayer.title,
-		lead: m.relayer.lead,
+		report,
+		lead: status.operator_served ? m.relayer.operatorLead : m.relayer.customLead,
 		mark: rescueMark(status.chain_id),
 		name: chainName(status.chain_id),
 		amountHint: fill(m.relayer.amountHint, {
-			amount: shortfallText(status.floor, status.balance, decimals),
+			amount: topUpSuggestion(status.floor, status.balance, decimals),
 			symbol
 		}),
 		qrCaption: m.relayer.addressLabel,

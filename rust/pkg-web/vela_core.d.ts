@@ -706,6 +706,18 @@ export function keccak256(data: Uint8Array): Uint8Array;
 
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
+/**
+ * The lowest gas price a chain accepts, as a decimal string (money crosses
+ * this boundary as decimal strings, never as JS numbers).
+ *
+ * `"0"` on every chain but Arc, which discards an underpriced transaction
+ * SILENTLY — no error, no trace, a payment that simply never happens. The web
+ * shell keeps a TypeScript twin of the gas-price derivation
+ * (`safe-transaction.ts`), and it reads the floor from here rather than
+ * carrying its own copy of the number.
+ */
+export function minGasPriceWei(chain_id: number): string;
+
 export function parsePublicKey(hex: string): P256PublicKey;
 
 /**
@@ -752,6 +764,17 @@ export function passkeyProviderIconDataUri(aaguid: string, dark: boolean): strin
  * The provider's brand name, or an empty string when the catalog has no entry.
  */
 export function passkeyProviderName(aaguid: string): string;
+
+/**
+ * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
+ * `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
+ * the Chainlink/DEX ladder unchanged.
+ *
+ * This exists so the rule is written once. It used to be a `symbol == "USD"`
+ * literal in each of the four shells, which is four chances to disagree about
+ * what a coin is worth.
+ */
+export function peggedNativeUsd(symbol: string): number | undefined;
 
 /**
  * Returns `null` when the two assertions do not pin down exactly one key
@@ -921,6 +944,7 @@ export interface InitOutput {
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly minGasPriceWei: (a: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -935,6 +959,7 @@ export interface InitOutput {
     readonly paymentrequestcore_new: () => number;
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly paymentrequestcore_view: (a: number) => [number, number, number, number];
+    readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

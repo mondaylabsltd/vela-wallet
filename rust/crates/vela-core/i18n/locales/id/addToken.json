@@ -39,6 +39,8 @@
     "errorChainNotFound": "Info chain tidak ditemukan",
     "errorNotCompatible": "Tidak kompatibel dengan Vela Wallet",
     "invalidAddress": "Alamat kontrak tidak valid",
-    "notCompatible": "Tidak kompatibel"
+    "notCompatible": "Tidak kompatibel",
+    "nativeAliasTitle": "Sudah Ditampilkan",
+    "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda."
   }
 }

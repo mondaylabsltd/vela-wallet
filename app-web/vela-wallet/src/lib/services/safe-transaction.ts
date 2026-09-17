@@ -33,6 +33,7 @@ import {
 	fromHex,
 	functionSelector,
 	keccak256,
+	minGasPriceWei,
 	parsePublicKey,
 	stripHexPrefix,
 	toHex
@@ -2493,6 +2494,7 @@ export interface ChainGasPrice {
  * failed/absent read. Pure + tested.
  */
 export function deriveChainGasPrice(signals: {
+	chainId: number;
 	ethGasPrice: bigint;
 	baseFee: bigint;
 	priorityFee: bigint;
@@ -2506,9 +2508,16 @@ export function deriveChainGasPrice(signals: {
 				? ethGasPrice - baseFee
 				: 0n;
 	const withTip = baseFee + priorityFee;
-	const gasPrice = ethGasPrice > withTip ? ethGasPrice : withTip;
+	const derived = ethGasPrice > withTip ? ethGasPrice : withTip;
+	// The chain's own floor is the last word. Arc discards an operation priced
+	// under its 20 gwei minimum SILENTLY — no error, no trace, a payment that
+	// looks submitted and never happens (spec 060). The floor only ever raises
+	// a price and is `0` on every other chain, so nothing else moves. The
+	// number is the core's, not a second copy of it.
+	const floor = minGasPriceWei(signals.chainId);
+	const gasPrice = derived > floor ? derived : floor;
 	const tipMeasured = signals.tipMeasured ?? signals.priorityFee > 0n;
-	return { gasPrice, baseFee, priorityFee, tipMeasured };
+	return { gasPrice, baseFee: baseFee > floor ? baseFee : floor, priorityFee, tipMeasured };
 }
 
 const _gasPriceCache = new Map<number, ChainGasPrice & { at: number }>();
@@ -2552,7 +2561,13 @@ async function getGasPrices(chainId: number): Promise<ChainGasPrice> {
 		// A present result (even "0x0" on L2s) is a real measurement; null = failed/skipped.
 		const tipMeasured = wantTip && tipRes?.result != null;
 		const tip = tipRes?.result ? parseHexUInt64(tipRes.result as string) : 0n;
-		const derived = deriveChainGasPrice({ ethGasPrice, baseFee, priorityFee: tip, tipMeasured });
+		const derived = deriveChainGasPrice({
+			chainId,
+			ethGasPrice,
+			baseFee,
+			priorityFee: tip,
+			tipMeasured
+		});
 		if (derived.gasPrice > 0n) {
 			console.log(
 				`[UserOp] Gas: ethGasPrice=${ethGasPrice} baseFee=${baseFee} tip=${derived.priorityFee} measured=${derived.tipMeasured} using=${derived.gasPrice}`
@@ -2564,9 +2579,14 @@ async function getGasPrices(chainId: number): Promise<ChainGasPrice> {
 		// Use defaults
 	}
 
+	// 5 gwei doubled by the bundler margin is 10 gwei — under Arc's floor, so
+	// the fallback is floored too: a chain that cannot be read is still a chain
+	// whose rules apply.
+	const fallbackFloor = minGasPriceWei(chainId);
+	const fallbackBase = 5_000_000_000n > fallbackFloor ? 5_000_000_000n : fallbackFloor;
 	const fallback: ChainGasPrice = {
-		gasPrice: 5_000_000_000n,
-		baseFee: 5_000_000_000n,
+		gasPrice: fallbackBase,
+		baseFee: fallbackBase,
 		priorityFee: 0n,
 		tipMeasured: false
 	}; // 5 gwei

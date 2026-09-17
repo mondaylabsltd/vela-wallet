@@ -338,7 +338,11 @@
       "copied": "Copiato",
       "closeBtn": "Chiudi",
       "suggested": "Ricarica consigliata",
-      "retryBtn": "Ho ricaricato · Riprova"
+      "retryBtn": "Ho ricaricato · Riprova",
+      "operatorLead": "Il relayer di questa rete è gestito dall'operatore Vela ed è rimasto senza gas. Segnalarlo è la via più rapida, e una volta risolto vale per tutti.",
+      "reportBtn": "Segnala",
+      "selfFundToggle": "Non puoi aspettare? Avvialo tu",
+      "customLead": "Questa rete l'hai aggiunta tu: su una catena locale o interna l'operatore Vela potrebbe non avere modo di tenerci gas. Avviare il relayer sta a te."
     },
     "mainNav": {
       "wallet": "Portafoglio",

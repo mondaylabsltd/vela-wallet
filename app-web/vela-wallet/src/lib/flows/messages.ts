@@ -105,6 +105,8 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.invalidAddress',
 	'addToken.notFoundTitle',
 	'addToken.notFoundMessage',
+	'addToken.nativeAliasTitle',
+	'addToken.nativeAliasMessage',
 	'addToken.netSearchLabel',
 	'addToken.netSearchPlaceholder',
 	'addToken.netPickerEmpty',

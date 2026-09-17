@@ -475,7 +475,7 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 			{
 				id: 'chain-data',
 				label: m.endpoints.chainDataLabel,
-				value: 'https://ethereum-data.awesometools.dev',
+				value: 'https://ethereum-data.getvela.app',
 				hint: m.endpoints.chainDataHint,
 				badge: latencyPill(62)
 			},
@@ -489,7 +489,7 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 			{
 				id: 'relay',
 				label: m.endpoints.bundlerLabel,
-				value: 'https://vela-relay.getvela.app',
+				value: 'https://vela-relay-cf.getvela.app',
 				hint: m.endpoints.bundlerHint,
 				badge: latencyPill(104)
 			},
@@ -848,15 +848,21 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 function relayer(m: SettingsMessages): RelayerModel {
 	return {
 		title: m.relayer.title,
-		lead: m.relayer.lead,
+		lead: m.relayer.operatorLead,
 		mark: MARKS.gnosis,
 		name: 'Gnosis',
-		amountHint: fill(m.relayer.amountHint, { amount: '0.02', symbol: 'xDAI' }),
+		amountHint: fill(m.relayer.amountHint, { amount: '0.01', symbol: 'xDAI' }),
 		qrCaption: m.relayer.addressLabel,
 		addressDisplay: '0x7Bd0...4E9c',
 		copyLabel: m.relayer.copyBtn,
 		callout: { tone: 'warning', text: m.relayer.disclaimer },
-		primary: m.relayer.retryBtn
+		primary: m.relayer.retryBtn,
+		// Gnosis is a network Vela ships, so the gallery shows the case that
+		// leads with telling the operator (spec 060).
+		report: {
+			label: m.relayer.reportBtn,
+			selfFundLabel: m.relayer.selfFundToggle
+		}
 	};
 }
 

@@ -19,16 +19,16 @@ use support::DomainDriver;
 use vela_core::app::fee_policy::{
     atto_to_token_units, calc_max_fee_per_gas, calculate_in_band_fee_amount,
     derive_chain_gas_price, encode_erc20_transfer, from_base_units, is_tempo_chain,
-    max_native_sendable, raw_bundler_gas_cost, reserve_fee_token, reserve_native_gas,
-    same_asset_fee_limit, tempo_call_gas_limit, tempo_expected_gas, tempo_fee_token_units,
-    tempo_minimum_fee_token_units, tempo_quote_is_stale, tempo_reimbursement,
-    tempo_settlement_split, tempo_split_safety_gas, tier_multiplier, to_base_units,
-    usd_price_scaled, AssetPricing, Event, FeeAsset, FeeAssetKind, FeeAssetQuote, FeeAssetView,
-    FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome, FeeOperation as Op,
-    FeePolicy, FeeShellResult as Res, FeeTier, GasSignals, MultiTokenSpec, TEMPO_BASE_FEE_ATTO,
-    TEMPO_CALL_GAS_PER_SUBCALL, TEMPO_COST_BUFFER_GAS, TEMPO_DEFAULT_FEE_TOKEN,
-    TEMPO_DEPLOYED_GAS_EST, TEMPO_DEPLOY_GAS_EST, TEMPO_PER_SUBCALL_GAS_EST,
-    TEMPO_SPLIT_SAFETY_BPS, TEMPO_SPLIT_SAFETY_GAS,
+    max_native_sendable, min_gas_price_wei, raw_bundler_gas_cost, reserve_fee_token,
+    reserve_native_gas, same_asset_fee_limit, tempo_call_gas_limit, tempo_expected_gas,
+    tempo_fee_token_units, tempo_minimum_fee_token_units, tempo_quote_is_stale,
+    tempo_reimbursement, tempo_settlement_split, tempo_split_safety_gas, tier_multiplier,
+    to_base_units, usd_price_scaled, AssetPricing, Event, FeeAsset, FeeAssetKind, FeeAssetQuote,
+    FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
+    FeeOperation as Op, FeePolicy, FeeShellResult as Res, FeeTier, GasSignals, MultiTokenSpec,
+    TEMPO_BASE_FEE_ATTO, TEMPO_CALL_GAS_PER_SUBCALL, TEMPO_COST_BUFFER_GAS,
+    TEMPO_DEFAULT_FEE_TOKEN, TEMPO_DEPLOYED_GAS_EST, TEMPO_DEPLOY_GAS_EST,
+    TEMPO_PER_SUBCALL_GAS_EST, TEMPO_SPLIT_SAFETY_BPS, TEMPO_SPLIT_SAFETY_GAS,
 };
 
 type Sut = DomainDriver<FeePolicy>;
@@ -235,6 +235,7 @@ fn tier_multiplier_table_is_verbatim() {
 fn derive_chain_gas_price_includes_priority_tip() {
     // Gnosis: baseFee + tip dominates a tiny eth_gasPrice.
     let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: 100,
         eth_gas_price: 21,
         base_fee: 17,
         priority_fee: 1_202,
@@ -247,6 +248,7 @@ fn derive_chain_gas_price_includes_priority_tip() {
 
     // eth_gasPrice stays a floor on min-gas-price chains (Polygon/BSC).
     let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: 137,
         eth_gas_price: 30_000_000_000,
         base_fee: 1_000_000_000,
         priority_fee: 500_000_000,
@@ -256,6 +258,7 @@ fn derive_chain_gas_price_includes_priority_tip() {
 
     // Missing tip (0) is recovered from eth_gasPrice — never below legacy.
     let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: 1,
         eth_gas_price: 30,
         base_fee: 10,
         priority_fee: 0,
@@ -267,12 +270,73 @@ fn derive_chain_gas_price_includes_priority_tip() {
 
     // L2 with zero tip (Arbitrum/OP): no over-pricing.
     let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: 42_161,
         eth_gas_price: 100_000_000,
         base_fee: 100_000_000,
         priority_fee: 0,
         tip_measured: None,
     });
     assert_eq!(derived.gas_price, 100_000_000);
+}
+
+/// Arc's 20 gwei floor (spec 060). Arc DISCARDS an underpriced transaction
+/// without an error, so a price under the floor is a payment that silently
+/// never happens — the floor is not an optimisation, it is the difference
+/// between a loud failure and a lost send.
+#[test]
+fn arc_gas_price_never_falls_below_the_chain_floor() {
+    const ARC: u32 = 5_042;
+    const FLOOR: u128 = 20_000_000_000;
+
+    // A read that comes back far under the floor is still floored.
+    let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: ARC,
+        eth_gas_price: 1_000_000_000,
+        base_fee: 1_000_000_000,
+        priority_fee: 0,
+        tip_measured: None,
+    });
+    assert_eq!(derived.gas_price, FLOOR);
+    assert_eq!(derived.base_fee, FLOOR);
+
+    // A genuine read ABOVE the floor is untouched — the floor only raises.
+    let derived = derive_chain_gas_price(&GasSignals {
+        chain_id: ARC,
+        eth_gas_price: 25_000_000_000,
+        base_fee: 20_000_000_000,
+        priority_fee: 1_000_000_000,
+        tip_measured: Some(true),
+    });
+    assert_eq!(derived.gas_price, 25_000_000_000);
+
+    // Arc testnet carries the same floor.
+    assert_eq!(min_gas_price_wei(5_042_002), FLOOR);
+}
+
+/// The regression that matters more than the feature: every chain that had no
+/// floor before must price bit-identically after. A floor that leaked into
+/// another chain would silently change what people pay.
+#[test]
+fn no_other_chain_gained_a_gas_floor() {
+    for chain_id in [
+        1u32, 10, 56, 100, 130, 137, 143, 480, 4_217, 8_453, 42_161, 43_114, 196, 988, 1_868,
+        4_326, 4_663, 5_000, 8_217, 42_220, 57_073, 98_866, 1_440_000,
+    ] {
+        assert_eq!(
+            min_gas_price_wei(chain_id),
+            0,
+            "chain {chain_id} must have no gas-price floor"
+        );
+        let derived = derive_chain_gas_price(&GasSignals {
+            chain_id,
+            eth_gas_price: 1_000,
+            base_fee: 400,
+            priority_fee: 100,
+            tip_measured: Some(true),
+        });
+        assert_eq!(derived.gas_price, 1_000, "chain {chain_id} gas price moved");
+        assert_eq!(derived.base_fee, 400, "chain {chain_id} base fee moved");
+    }
 }
 
 /// `usdPriceScaled` (`safe-transaction.ts:353-363`): 8-dp fixed point, strict

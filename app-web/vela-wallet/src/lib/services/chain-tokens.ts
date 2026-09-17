@@ -3,7 +3,7 @@
  * Chain token discovery from ethereum-data API.
  *
  * Fetches stablecoins, wrapped native token, and DEX info per chain.
- * Data source: https://ethereum-data.awesometools.dev/chains/eip155-{chainId}.json
+ * Data source: https://ethereum-data.getvela.app/chains/eip155-{chainId}.json
  */
 
 import { getEthereumDataURL } from './endpoints';

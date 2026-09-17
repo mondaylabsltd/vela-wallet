@@ -47,6 +47,7 @@ import init, {
 	identiconSvgCircular,
 	keccak256,
 	LoginCore,
+	minGasPriceWei,
 	ManageTokensCore,
 	NetworkAdminCore,
 	passkeyDirectoryEntry,
@@ -54,6 +55,7 @@ import init, {
 	passkeyFallbackIconDataUri,
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
+	peggedNativeUsd,
 	ReceiveWatchCore,
 	RpcPoolCore,
 	SendCore,
@@ -97,6 +99,10 @@ export {
 // construction.
 export { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex };
 export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
+// Native-coin money rules the shells used to each keep a copy of (spec 060):
+// the $1 peg for a coin that IS a dollar, and the chain gas floor below which
+// Arc discards a transaction without saying so.
+export { minGasPriceWei, peggedNativeUsd };
 export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };

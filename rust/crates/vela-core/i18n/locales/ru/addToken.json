@@ -39,6 +39,8 @@
     "errorChainNotFound": "Информация о сети не найдена",
     "errorNotCompatible": "Несовместимо с Vela Wallet",
     "invalidAddress": "Неверный адрес контракта",
-    "notCompatible": "Несовместимо"
+    "notCompatible": "Несовместимо",
+    "nativeAliasTitle": "Уже есть",
+    "nativeAliasMessage": "Это нативная монета сети. Её баланс уже показан в ваших активах."
   }
 }

@@ -275,8 +275,21 @@ for (let i = 1; i < PATHS.length; i++) {
 //   row that WON'T be sent; these rows will be, exactly as asked for, so the
 //   words beside them have to name which earlier recipient they repeat instead
 //   of claiming a refusal that never happens. No new branch.
-if (PATHS.length !== 1634) fail(`expected 1634 paths (1549 leaf + 85 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1549) fail(`expected 1549 leaf paths, got ${leafSet.size}`);
+// + 2 more (spec 060, Arc): `addToken.nativeAliasTitle` / `…Message`. Arc's
+//   native coin also answers an ERC-20 interface, so pasting that contract into
+//   "add a token" finds a real, well-formed token — and adding it would show one
+//   balance as two rows and double the person's total. "Not Found" would be the
+//   wrong words for a refusal with a reason, so the refusal says what it is.
+//   No new branch — it hangs off the existing `addToken`.
+// + 4 more (spec 060, found in a real browser): the out-of-gas relayer sheet
+//   now says WHO can fix it. On a network Vela ships, the operator runs that
+//   relayer and the useful act is telling them (`operatorLead`, `reportBtn`),
+//   with self-funding kept behind `selfFundToggle` so nobody is nudged into
+//   paying for something that is not theirs to pay for. On a network the
+//   person added — a local devnet, an internal chain — the operator may have
+//   no way to hold gas there at all, and `customLead` says so.
+if (PATHS.length !== 1640) fail(`expected 1640 paths (1555 leaf + 85 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1555) fail(`expected 1555 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 85) fail(`expected 85 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

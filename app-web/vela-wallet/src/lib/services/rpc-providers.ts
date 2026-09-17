@@ -87,7 +87,17 @@ const PROVIDER_CHAIN_SLUGS: Record<ProviderId, Record<number, string>> = {
 		130: 'unichain-mainnet',
 		4217: 'tempo-mainnet',
 		143: 'monad-mainnet',
-		480: 'worldchain-mainnet'
+		480: 'worldchain-mainnet',
+		5042: 'arc-mainnet',
+		988: 'stable-mainnet',
+		1868: 'soneium-mainnet',
+		4326: 'megaeth-mainnet',
+		4663: 'robinhood-mainnet',
+		5000: 'mantle-mainnet',
+		8217: 'kaia-mainnet',
+		42220: 'celo-mainnet',
+		57073: 'ink-mainnet',
+		98866: 'plume-mainnet'
 	},
 	// https://lb.drpc.org/ogrpc?network={slug}&dkey={key} — serves all 12 Vela chains.
 	drpc: {
@@ -102,7 +112,18 @@ const PROVIDER_CHAIN_SLUGS: Record<ProviderId, Record<number, string>> = {
 		130: 'unichain',
 		4217: 'tempo',
 		143: 'monad',
-		480: 'worldchain'
+		480: 'worldchain',
+		5042: 'arc',
+		196: 'xlayer',
+		988: 'stable',
+		1868: 'soneium',
+		4326: 'megaeth',
+		4663: 'robinhood',
+		5000: 'mantle',
+		8217: 'kaia',
+		42220: 'celo',
+		57073: 'ink',
+		98866: 'plume'
 	},
 	// https://rpc.ankr.com/{slug}/{key} — Ankr does NOT serve Unichain, World Chain,
 	// Monad (mainnet) or Tempo (verified via its public endpoints), so they're omitted.

@@ -338,7 +338,11 @@
       "copied": "Disalin",
       "closeBtn": "Tutup",
       "suggested": "Saran top-up",
-      "retryBtn": "Sudah saya isi · Coba lagi"
+      "retryBtn": "Sudah saya isi · Coba lagi",
+      "operatorLead": "Relayer jaringan ini dijalankan operator Vela, dan gasnya habis. Memberi tahu mereka adalah cara tercepat — dan perbaikannya berlaku untuk semua orang.",
+      "reportBtn": "Laporkan ini",
+      "selfFundToggle": "Tidak bisa menunggu? Mulai sendiri",
+      "customLead": "Jaringan ini Anda tambahkan sendiri, jadi operator Vela mungkin tidak punya cara menyimpan gas di sana — rantai lokal atau internal bukan urusan orang lain. Memulai relayer-nya terserah Anda."
     },
     "mainNav": {
       "wallet": "Dompet",

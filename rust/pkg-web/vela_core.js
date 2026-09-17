@@ -3274,6 +3274,31 @@ export function matchSelector(sig, calldata) {
 }
 
 /**
+ * The lowest gas price a chain accepts, as a decimal string (money crosses
+ * this boundary as decimal strings, never as JS numbers).
+ *
+ * `"0"` on every chain but Arc, which discards an underpriced transaction
+ * SILENTLY — no error, no trace, a payment that simply never happens. The web
+ * shell keeps a TypeScript twin of the gas-price derivation
+ * (`safe-transaction.ts`), and it reads the floor from here rather than
+ * carrying its own copy of the number.
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function minGasPriceWei(chain_id) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.minGasPriceWei(chain_id);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * @param {string} hex
  * @returns {P256PublicKey}
  */
@@ -3415,6 +3440,24 @@ export function passkeyProviderName(aaguid) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
+ * `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
+ * the Chainlink/DEX ladder unchanged.
+ *
+ * This exists so the rule is written once. It used to be a `symbol == "USD"`
+ * literal in each of the four shells, which is four chances to disagree about
+ * what a coin is worth.
+ * @param {string} symbol
+ * @returns {number | undefined}
+ */
+export function peggedNativeUsd(symbol) {
+    const ptr0 = passStringToWasm0(symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.peggedNativeUsd(ptr0, len0);
+    return ret[0] === 0 ? undefined : ret[1];
 }
 
 /**

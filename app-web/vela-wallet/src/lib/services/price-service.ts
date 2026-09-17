@@ -112,8 +112,12 @@ export function resolveChainlinkPrice(
 	prices: Record<string, number>
 ): number | null {
 	const upper = nativeSym.toUpperCase();
-	// Stablecoin-denominated native gas (e.g. Tempo's "USD") is pegged to $1.
-	if (upper === 'USD') return 1;
+	// Feeds only. A native gas coin that IS a dollar stablecoin (Tempo's "USD",
+	// Arc's "USDC") has no feed to read because the coin is the dollar; that peg
+	// is the CORE's table and is applied by the caller, through the
+	// `native-price` seam, BEFORE this function is consulted (spec 060). It used
+	// to be a `=== 'USD'` literal right here and in three other shells — four
+	// chances to disagree about what a coin is worth.
 	return prices[upper] ?? prices[SYMBOL_ALIAS[upper] ?? ''] ?? null;
 }
 

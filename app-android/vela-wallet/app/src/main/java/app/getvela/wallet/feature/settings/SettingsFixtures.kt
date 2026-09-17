@@ -451,7 +451,7 @@ object SettingsFixtures {
             UrlFieldModel(
                 "chain-data",
                 s.t(I18nKeys.SettingsUi.ENDPOINT_CHAIN_DATA),
-                "https://ethereum-data.awesometools.dev",
+                "https://ethereum-data.getvela.app",
                 hint = s.t(I18nKeys.SettingsUi.ENDPOINT_CHAIN_DATA_HINT),
                 badge = latency(62),
             ),
@@ -465,7 +465,7 @@ object SettingsFixtures {
             UrlFieldModel(
                 "relay",
                 s.t(I18nKeys.SettingsUi.ENDPOINT_RELAY),
-                "https://vela-relay.getvela.app",
+                "https://vela-relay-cf.getvela.app",
                 hint = s.t(I18nKeys.SettingsUi.ENDPOINT_RELAY_HINT),
                 badge = latency(104),
             ),

@@ -15,17 +15,19 @@ import {
 	refreshCustomNetworks
 } from './networks';
 
-const CELO = {
-	id: 'custom-42220',
-	displayName: 'Celo',
-	chainId: 42220,
+// Linea: a real chain that is NOT built in, which is what makes it a custom one.
+// (This fixture was Celo until Celo became built in, spec 061.)
+const LINEA = {
+	id: 'custom-59144',
+	displayName: 'Linea',
+	chainId: 59144,
 	iconLabel: 'CEL',
 	iconColor: '#fff',
 	iconBg: '#35d07f',
 	isL2: false,
-	rpcURL: 'https://forno.celo.org',
-	explorerURL: 'https://celoscan.io',
-	nativeSymbol: 'CELO'
+	rpcURL: 'https://rpc.linea.build',
+	explorerURL: 'https://lineascan.build',
+	nativeSymbol: 'ETH'
 };
 
 describe('the custom-network snapshot', () => {
@@ -34,18 +36,18 @@ describe('the custom-network snapshot', () => {
 	});
 
 	it('reads what the person added, once per document, before the first fetch', async () => {
-		await setItem('vela.customNetworks', JSON.stringify([CELO]));
+		await setItem('vela.customNetworks', JSON.stringify([LINEA]));
 		const first = ensureCustomNetworks();
 		expect(ensureCustomNetworks()).toBe(first);
 		await first;
-		expect(getCustomChainIdsSync()).toContain(42220);
-		expect(getAllNetworksSync().some((n) => n.chainId === 42220)).toBe(true);
+		expect(getCustomChainIdsSync()).toContain(59144);
+		expect(getAllNetworksSync().some((n) => n.chainId === 59144)).toBe(true);
 	});
 
 	it('a later write still refreshes', async () => {
 		await ensureCustomNetworks();
 		await setItem('vela.customNetworks', JSON.stringify([]));
 		await refreshCustomNetworks();
-		expect(getCustomChainIdsSync()).not.toContain(42220);
+		expect(getCustomChainIdsSync()).not.toContain(59144);
 	});
 });

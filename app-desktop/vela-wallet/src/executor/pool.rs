@@ -793,7 +793,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(url, RpcSource::User, &mut bundler);
     }
     add(
-        format!("https://vela-relay.getvela.app/{chain_id}"),
+        format!("{}/{chain_id}", crate::executor::relay::BUILTIN_BASE),
         RpcSource::Default,
         &mut bundler,
     );

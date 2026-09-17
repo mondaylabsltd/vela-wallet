@@ -151,12 +151,12 @@ pub const SEARCH_DEBOUNCE_MS: u32 = 300;
 /// Vela's per-chain ERC-4337 bundler base for BUILT-IN networks
 /// (network.ts:33). Custom networks use the *configurable* service endpoint
 /// instead (`getBundlerServiceURL()`).
-pub const BUNDLER_BASE: &str = "https://vela-relay.getvela.app";
+pub const BUNDLER_BASE: &str = "https://vela-relay-cf.getvela.app";
 
 // `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324).
-pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.awesometools.dev";
+pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
 pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
-pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay.getvela.app";
+pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
 pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
 
 /// `SERVICE_IDENTITY` (SettingsScreen.tsx:340-344) — the `/api/health`
@@ -208,7 +208,7 @@ pub struct NetBuiltinChain {
     pub typical_inclusion_s: u16,
 }
 
-pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
+pub const BUILTIN_CHAINS: [NetBuiltinChain; 24] = [
     NetBuiltinChain {
         id: "ethereum",
         display_name: "Ethereum",
@@ -317,10 +317,147 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         explorer_url: "https://worldscan.org",
         typical_inclusion_s: 4,
     },
+    // Circle's USDC-native L1 (spec 060). The native coin IS USDC — 18 decimals
+    // on-chain, with a 6-decimal ERC-20 view of the SAME balance at
+    // 0x3600…0000 that must never be listed as a token. ~0.48 s blocks with
+    // deterministic finality, so 2 s covers the relay's inclusion depth.
+    NetBuiltinChain {
+        id: "arc",
+        display_name: "Arc",
+        chain_id: 5042,
+        native_symbol: "USDC",
+        rpc_url: "https://rpc.mainnet.arc.io",
+        explorer_url: "https://explorer.arc.io",
+        typical_inclusion_s: 2,
+    }, // The eleven admitted together (spec 061): every one probed live for all
+    // eleven required contracts and the RIP-7212 precompile before it was listed.
+    // Polygon CDK zk-rollup; OKB is the gas coin.
+    NetBuiltinChain {
+        id: "xlayer",
+        display_name: "X Layer",
+        chain_id: 196,
+        native_symbol: "OKB",
+        rpc_url: "https://rpc.xlayer.tech",
+        explorer_url: "https://www.oklink.com/xlayer",
+        typical_inclusion_s: 3,
+    },
+    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
+    NetBuiltinChain {
+        id: "stable",
+        display_name: "Stable",
+        chain_id: 988,
+        native_symbol: "USDT0",
+        rpc_url: "https://rpc.stable.xyz",
+        explorer_url: "https://stablescan.xyz",
+        typical_inclusion_s: 2,
+    },
+    // OP-stack L2 (Sony).
+    NetBuiltinChain {
+        id: "soneium",
+        display_name: "Soneium",
+        chain_id: 1868,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.soneium.org",
+        explorer_url: "https://soneium.blockscout.com",
+        typical_inclusion_s: 6,
+    },
+    // Real-time L2; ~1 s blocks at the RPC boundary.
+    NetBuiltinChain {
+        id: "megaeth",
+        display_name: "MegaETH",
+        chain_id: 4326,
+        native_symbol: "ETH",
+        rpc_url: "https://megaeth.drpc.org",
+        explorer_url: "https://megaeth.blockscout.com",
+        typical_inclusion_s: 3,
+    },
+    // Arbitrum Orbit L2; ~0.1 s blocks.
+    NetBuiltinChain {
+        id: "robinhood",
+        display_name: "Robinhood Chain",
+        chain_id: 4663,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
+        explorer_url: "https://robinhoodchain.blockscout.com",
+        typical_inclusion_s: 2,
+    },
+    // OP-derived L2 with its own token-ratio gas metering; MNT is the gas coin.
+    NetBuiltinChain {
+        id: "mantle",
+        display_name: "Mantle",
+        chain_id: 5000,
+        native_symbol: "MNT",
+        rpc_url: "https://rpc.mantle.xyz",
+        explorer_url: "https://mantlescan.xyz",
+        typical_inclusion_s: 6,
+    },
+    // Kaia (ex-Klaytn) L1, 1 s blocks.
+    NetBuiltinChain {
+        id: "kaia",
+        display_name: "Kaia",
+        chain_id: 8217,
+        native_symbol: "KAIA",
+        rpc_url: "https://public-en.node.kaia.io",
+        explorer_url: "https://kaiascope.com",
+        typical_inclusion_s: 3,
+    },
+    // OP-stack L2 since 2025; CELO is the gas coin.
+    NetBuiltinChain {
+        id: "celo",
+        display_name: "Celo",
+        chain_id: 42220,
+        native_symbol: "CELO",
+        rpc_url: "https://forno.celo.org",
+        explorer_url: "https://celoscan.io",
+        typical_inclusion_s: 3,
+    },
+    // OP-stack L2 (Kraken).
+    NetBuiltinChain {
+        id: "ink",
+        display_name: "Ink",
+        chain_id: 57073,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc-gel.inkonchain.com",
+        explorer_url: "https://explorer.inkonchain.com",
+        typical_inclusion_s: 3,
+    },
+    // Arbitrum Orbit L2; PLUME is the gas coin.
+    NetBuiltinChain {
+        id: "plume",
+        display_name: "Plume",
+        chain_id: 98866,
+        native_symbol: "PLUME",
+        rpc_url: "https://rpc.plume.org",
+        explorer_url: "https://explorer.plume.org",
+        typical_inclusion_s: 2,
+    },
+    // Cosmos-EVM sidechain, ~6 s blocks; XRP is the gas coin. No provider serves it.
+    NetBuiltinChain {
+        id: "xrplevm",
+        display_name: "XRPL EVM",
+        chain_id: 1440000,
+        native_symbol: "XRP",
+        rpc_url: "https://rpc.xrplevm.org",
+        explorer_url: "https://explorer.xrplevm.org",
+        typical_inclusion_s: 18,
+    },
 ];
 
 fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
+}
+
+/// Whether this is a network Vela ships, as opposed to one a person added.
+///
+/// The distinction decides WHO can fix an out-of-gas relayer. On a network we
+/// ship, the operator runs that relayer and can refill it — the useful thing a
+/// person can do is tell them. On a network someone added — a local devnet, a
+/// company's internal chain, anything the operator cannot reach — there may be
+/// no way for the operator to hold gas there at all, and funding it is the
+/// person's own call. Offering the wrong one of those two is either a shrug or
+/// a request for money that should never have been asked for.
+pub fn is_builtin_chain(chain_id: u32) -> bool {
+    builtin(chain_id).is_some()
 }
 
 /// `PROVIDER_ORDER` (rpc-providers.ts:37).
@@ -348,6 +485,16 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             4217 => Some("tempo-mainnet"),
             143 => Some("monad-mainnet"),
             480 => Some("worldchain-mainnet"),
+            5042 => Some("arc-mainnet"),
+            988 => Some("stable-mainnet"),
+            1868 => Some("soneium-mainnet"),
+            4326 => Some("megaeth-mainnet"),
+            4663 => Some("robinhood-mainnet"),
+            5000 => Some("mantle-mainnet"),
+            8217 => Some("kaia-mainnet"),
+            42220 => Some("celo-mainnet"),
+            57073 => Some("ink-mainnet"),
+            98866 => Some("plume-mainnet"),
             _ => None,
         },
         NetProviderId::Drpc => match chain_id {
@@ -363,9 +510,21 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
             4217 => Some("tempo"),
             143 => Some("monad"),
             480 => Some("worldchain"),
+            5042 => Some("arc"),
+            196 => Some("xlayer"),
+            988 => Some("stable"),
+            1868 => Some("soneium"),
+            4326 => Some("megaeth"),
+            4663 => Some("robinhood"),
+            5000 => Some("mantle"),
+            8217 => Some("kaia"),
+            42220 => Some("celo"),
+            57073 => Some("ink"),
+            98866 => Some("plume"),
             _ => None,
         },
-        // Ankr serves neither Unichain, World Chain, Monad nor Tempo.
+        // Ankr serves none of the chains added since Gnosis; a slug is listed only
+        // once its endpoint has been seen to answer (spec 060 R5), so none are.
         NetProviderId::Ankr => match chain_id {
             1 => Some("eth"),
             56 => Some("bsc"),

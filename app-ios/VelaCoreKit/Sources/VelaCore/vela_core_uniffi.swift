@@ -9504,6 +9504,23 @@ public func passkeyProviderPng(aaguid: String, dark: Bool, sizePx: UInt32)throws
 })
 }
 /**
+ * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
+ * `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
+ * the Chainlink/DEX ladder unchanged.
+ *
+ * This exists so the rule is written once. It used to be a `symbol == "USD"`
+ * literal in each of the four shells, which is four chances to disagree about
+ * what a coin is worth.
+ */
+public func peggedNativeUsd(symbol: String) -> Double?  {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_pegged_native_usd(
+        FfiConverterString.lower(symbol),uniffiCallStatus
+    )
+})
+}
+/**
  * A displayed quote is usable when it is positive and names a real address.
  */
 public func quotedFeeUsable(amount: String, recipient: String) -> Bool  {
@@ -10195,6 +10212,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_provider_png() != 59824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_pegged_native_usd() != 48722) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_quoted_fee_usable() != 26912) {

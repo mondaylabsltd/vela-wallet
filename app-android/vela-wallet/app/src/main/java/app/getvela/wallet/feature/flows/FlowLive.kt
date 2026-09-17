@@ -277,6 +277,13 @@ object FlowLive {
                 detail = "${first.symbol} · ${strings.t(I18nKeys.Flows.ADD_LABEL_DECIMALS)} ${first.decimals} · ${first.network_name}",
                 chip = if (first.added) StatusChipModel(strings.t(I18nKeys.Flows.ADD_TOKEN_ADDED), StatusTone.Success) else null,
             )
+            // Before `not_found`: the probe FINDS this contract — it is a real,
+            // well-formed ERC-20 view of the network's own coin — so "not found"
+            // would be the wrong words for a refusal that has a reason.
+            view.native_alias -> AddTokenResult.NotFound(
+                "${strings.t(I18nKeys.Flows.ADD_NATIVE_ALIAS_TITLE)} — " +
+                    strings.t(I18nKeys.Flows.ADD_NATIVE_ALIAS_MESSAGE),
+            )
             view.not_found -> AddTokenResult.NotFound(
                 "${strings.t(I18nKeys.Flows.ADD_NOT_FOUND_TITLE)} — ${strings.t(I18nKeys.Flows.ADD_NOT_FOUND_MESSAGE)}",
             )

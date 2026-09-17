@@ -49,5 +49,9 @@ struct MtokViewWire: Decodable, Equatable {
     let customTokens: [MtokCustomTokenWire]
     /// Every chain answered and none of them knew this contract.
     let notFound: Bool
+    /// The searched address is a network's native coin wearing an ERC-20
+    /// interface (Arc's `0x3600…0000`). Refused with a reason rather than
+    /// reported as "not found" — the balance is already on screen (spec 060).
+    let nativeAlias: Bool
     let saveError: Bool
 }

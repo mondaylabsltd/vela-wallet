@@ -178,6 +178,10 @@ struct SendTreasuryStatusWire: Decodable, Equatable {
     let balance: String
     let floor: String
     let bootstrapNeeded: Bool
+    /// Whether this is a network Vela ships, and so one whose relayer the
+    /// OPERATOR is expected to keep funded. The core decides; it changes what
+    /// the person is asked to do (spec 060).
+    let operatorServed: Bool
 }
 
 /// One leg of a receipt.

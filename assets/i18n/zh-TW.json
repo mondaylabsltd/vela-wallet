@@ -515,7 +515,9 @@
   "errorChainNotFound": "找不到鏈資訊",
   "errorNotCompatible": "與 Vela Wallet 不相容",
   "invalidAddress": "無效的合約位址",
-  "notCompatible": "不相容"
+  "notCompatible": "不相容",
+  "nativeAliasTitle": "已在你的資產中",
+  "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。"
  },
  "tokenDetail": {
   "send": "發送",
@@ -1456,7 +1458,11 @@
    "copied": "已複製",
    "closeBtn": "關閉",
    "suggested": "建議注資金額",
-   "retryBtn": "已完成注資 · 重試"
+   "retryBtn": "已完成注資 · 重試",
+   "operatorLead": "這個網路的中繼由 Vela 營運方維護，現在它沒有 gas 了。告訴他們是最快的辦法——修好之後對所有人都有效。",
+   "reportBtn": "回報這個問題",
+   "selfFundToggle": "等不及？自己啟動它",
+   "customLead": "這是你自己新增的網路，Vela 營運方可能根本無法在上面持有 gas——本地或內部的鏈不該由別人來儲值。啟動它的中繼要由你自己來。"
   },
   "mainNav": {
    "wallet": "錢包",

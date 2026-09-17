@@ -4,4 +4,14 @@ import type { SendTreasuryAsset } from "./SendTreasuryAsset";
 /**
  * `TreasuryStatus` (`bundler-service.ts`), amounts as decimal strings.
  */
-export type SendTreasuryStatus = { chain_id: number, address: string, asset: SendTreasuryAsset, balance: string, floor: string, bootstrap_needed: boolean, };
+export type SendTreasuryStatus = { chain_id: number, address: string, asset: SendTreasuryAsset, balance: string, floor: string, bootstrap_needed: boolean, 
+/**
+ * Whether this is a network Vela ships, and therefore one whose relayer
+ * the OPERATOR is expected to keep funded
+ * ([`network_admin::is_builtin_chain`]). The shell does not send this —
+ * the core fills it when it publishes the sheet — because it decides
+ * which of two different things the person is asked to do: tell the
+ * operator, or fund it themselves. On a network someone added, the
+ * operator may have no way to hold gas there at all.
+ */
+operator_served: boolean, };

@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.wallet.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
 import org.json.JSONObject
+import uniffi.vela_core_uniffi.peggedNativeUsd
 
 /**
  * The last rung of the price ladder: Chainlink's feeds on Ethereum mainnet.
@@ -78,13 +79,17 @@ class ChainlinkPrices(private val pool: RpcPool) {
         /**
          * A native symbol's mainnet price, or `null`.
          *
-         * A chain whose gas coin IS a stablecoin (Tempo's `USD`) is pegged at a
-         * dollar — the same peg the stablecoin rows use, and the reason that
-         * chain is never asked for a balance in the first place.
+         * A chain whose gas coin IS a dollar stablecoin (Tempo's `USD`, Arc's
+         * `USDC`) is pegged: there is no feed to read because the coin is the
+         * dollar. The table is the CORE's — it used to be a literal here and in
+         * the three other shells, which is four chances to disagree about what a
+         * coin is worth (spec 060). It is also what earns such a chain the
+         * ordinary $0.01 fee floor, which is "$0.01 worth of the native coin"
+         * and needs a price to exist.
          */
         fun resolve(nativeSymbol: String, prices: Map<String, Double>): Double? {
             val upper = nativeSymbol.uppercase()
-            if (upper == "USD") return 1.0
+            peggedNativeUsd(upper)?.let { return it }
             return prices[upper] ?: ALIASES[upper]?.let { prices[it] }
         }
     }

@@ -644,7 +644,15 @@ object SendLive {
             val symbol = if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else nativeSymbol(status.chain_id, ctx)
             val short = (status.floor.toBigDecimalOrNull() ?: BigDecimal.ZERO) - (status.balance.toBigDecimalOrNull() ?: BigDecimal.ZERO)
             val hint = s.t(I18nKeys.Flows.TREASURY_AMOUNT_HINT, mapOf("amount" to fromBase(short.max(BigDecimal.ZERO).toPlainString(), decimals), "symbol" to symbol))
-            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · ${s.t(I18nKeys.Flows.TREASURY_LEAD)} $hint"
+            // Two situations, one symptom: on a network Vela ships the operator owns that
+            // relayer and telling them is the fix; on one the person added, there may be
+            // nobody else who can hold gas there at all (spec 060).
+            val lead = if (status.operator_served) {
+                s.t(I18nKeys.Flows.TREASURY_OPERATOR_LEAD)
+            } else {
+                s.t(I18nKeys.Flows.TREASURY_CUSTOM_LEAD)
+            }
+            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · $lead $hint"
         }
         return when (view.tx_error) {
             SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
@@ -794,5 +802,11 @@ object SendLive {
     private val NATIVE_BY_NAME = mapOf(
         "Ethereum" to "ETH", "Arbitrum" to "ETH", "Optimism" to "ETH", "Base" to "ETH", "Unichain" to "ETH",
         "BNB Chain" to "BNB", "Polygon" to "POL", "Gnosis" to "xDAI", "Avalanche" to "AVAX",
+        // Arc's gas coin IS USDC; defaulting it to ETH would name the wrong
+        // asset on the send sheet (spec 060).
+        "Arc" to "USDC",
+        "X Layer" to "OKB", "Stable" to "USDT0", "Soneium" to "ETH", "MegaETH" to "ETH",
+        "Robinhood Chain" to "ETH", "Mantle" to "MNT", "Kaia" to "KAIA", "Celo" to "CELO",
+        "Ink" to "ETH", "Plume" to "PLUME", "XRPL EVM" to "XRP",
     )
 }

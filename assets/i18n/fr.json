@@ -518,7 +518,9 @@
   "errorChainNotFound": "Informations de chaîne introuvables",
   "errorNotCompatible": "Incompatible avec Vela Wallet",
   "invalidAddress": "Adresse de contrat invalide",
-  "notCompatible": "Incompatible"
+  "notCompatible": "Incompatible",
+  "nativeAliasTitle": "Déjà là",
+  "nativeAliasMessage": "C'est la pièce native du réseau. Son solde figure déjà dans vos actifs."
  },
  "tokenDetail": {
   "send": "Envoyer",
@@ -1459,7 +1461,11 @@
    "copied": "Copié",
    "closeBtn": "Fermer",
    "suggested": "Rechargement suggéré",
-   "retryBtn": "J'ai approvisionné · Réessayer"
+   "retryBtn": "J'ai approvisionné · Réessayer",
+   "operatorLead": "L'opérateur de Vela fait tourner le relayeur de ce réseau, et il n'a plus de gas. Le prévenir est le plus rapide — et une fois réglé, c'est réglé pour tout le monde.",
+   "reportBtn": "Signaler",
+   "selfFundToggle": "Pas le temps d'attendre ? Démarrez-le vous-même",
+   "customLead": "Vous avez ajouté ce réseau : sur une chaîne locale ou interne, l'opérateur de Vela n'a peut-être aucun moyen d'y détenir du gas. Démarrer son relayeur vous revient."
   },
   "mainNav": {
    "wallet": "Portefeuille",

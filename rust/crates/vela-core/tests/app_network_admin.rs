@@ -19,13 +19,13 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::network_admin::{
-    build_provider_rpc_url, clean_endpoint_value, explorer_base_url, is_code_deployed,
-    is_localhost_http, p256_call_indicates_support, provider_chain_ids, rank_search, Event,
-    NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody, NetNetworkConfig,
-    NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId, NetProviderKeys,
-    NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
-    NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUNDLER_BASE,
-    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    build_provider_rpc_url, clean_endpoint_value, explorer_base_url, is_builtin_chain,
+    is_code_deployed, is_localhost_http, p256_call_indicates_support, provider_chain_ids,
+    rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
+    NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
+    NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
+    NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
+    BUNDLER_BASE, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
     DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE, REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 
@@ -199,8 +199,8 @@ fn started_loads_the_store_and_lists_builtins_plus_customs() {
     let sut = started_with(vec![custom_network(999)], vec![]);
     let view = sut.view();
     assert!(view.loaded);
-    assert_eq!(view.networks.len(), 13, "12 builtins + 1 custom");
-    let custom = &view.networks[12];
+    assert_eq!(view.networks.len(), 25, "24 builtins + 1 custom");
+    let custom = &view.networks[24];
     assert!(custom.is_custom);
     assert_eq!(custom.chain_id, 999);
     assert!(!view.networks[0].is_custom);
@@ -579,7 +579,7 @@ fn a_chain_missing_any_required_contract_never_saves() {
             now_iso: NOW_ISO.to_owned()
         })
         .is_empty());
-    assert_eq!(sut.view().networks.len(), 12);
+    assert_eq!(sut.view().networks.len(), 24);
 }
 
 #[test]
@@ -669,8 +669,8 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
     let view = sut.view();
     assert_eq!(view.last_added_chain_id, Some(NEW_CHAIN));
     assert_eq!(view.wizard.phase, NetWizardPhase::Idle, "reset + close");
-    assert_eq!(view.networks.len(), 13);
-    assert!(view.networks[12].is_custom);
+    assert_eq!(view.networks.len(), 25);
+    assert!(view.networks[24].is_custom);
 }
 
 /// The wizard's bundler/logo URLs follow the CONFIGURED service endpoints
@@ -819,7 +819,7 @@ fn the_scan_path_keeps_rpc_failure_apart_from_not_compatible() {
             chain_id: NEW_CHAIN
         })
     );
-    assert_eq!(sut.view().networks.len(), 12, "nothing saved");
+    assert_eq!(sut.view().networks.len(), 24, "nothing saved");
 }
 
 // ===========================================================================
@@ -1176,7 +1176,7 @@ fn deleting_a_custom_network_drops_it_and_flushes_every_pool() {
             Op::InvalidatePools { chain_id: None },
         ]
     );
-    assert_eq!(sut.view().networks.len(), 12);
+    assert_eq!(sut.view().networks.len(), 24);
 }
 
 // ===========================================================================
@@ -1555,7 +1555,11 @@ fn opening_the_provider_modal_auto_tests_configured_providers() {
         })
         .collect();
     assert_eq!(ops, expected, "one unified probe per supported chain");
-    assert_eq!(ops.len(), 12, "X Layer's dead slug never surfaces");
+    assert_eq!(
+        ops.len(),
+        23,
+        "one probe per Alchemy-served built-in; XRPL EVM has no slug"
+    );
 }
 
 /// Invariant ⑦ core: ok requires reported == target — a probe answering the
@@ -1761,10 +1765,123 @@ fn provider_urls_follow_the_slug_maps() {
     assert_eq!(build_provider_rpc_url(NetProviderId::Ankr, 4217, "k"), None);
     assert_eq!(build_provider_rpc_url(NetProviderId::Alchemy, 1, ""), None);
     // Canonical order, filtered per provider.
-    assert_eq!(provider_chain_ids(NetProviderId::Alchemy).len(), 12);
-    assert_eq!(provider_chain_ids(NetProviderId::Drpc).len(), 12);
+    assert_eq!(provider_chain_ids(NetProviderId::Alchemy).len(), 23);
+    assert_eq!(provider_chain_ids(NetProviderId::Drpc).len(), 23);
     assert_eq!(
         provider_chain_ids(NetProviderId::Ankr),
         vec![1, 56, 137, 42161, 10, 8453, 43114, 100]
+    );
+}
+
+/// Arc (spec 060) — the thirteenth built-in network. Every field here is load
+/// bearing: the native symbol drives the $1 peg (and therefore the $0.01 fee
+/// floor), and the RPC and explorer are what a person actually reaches.
+#[test]
+fn arc_is_a_builtin_network_with_the_fields_the_rest_of_the_wallet_reads() {
+    assert_eq!(BUILTIN_CHAINS.len(), 24);
+    let arc = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.chain_id == 5_042)
+        .expect("Arc must be built in");
+    assert_eq!(arc.id, "arc");
+    assert_eq!(arc.display_name, "Arc");
+    // NOT "USD": Arc's gas coin is USDC and every surface names it that.
+    assert_eq!(arc.native_symbol, "USDC");
+    assert_eq!(arc.rpc_url, "https://rpc.mainnet.arc.io");
+    assert_eq!(arc.explorer_url, "https://explorer.arc.io");
+    // ~0.48 s blocks with deterministic finality.
+    assert_eq!(arc.typical_inclusion_s, 2);
+}
+
+/// Arc testnet is reachable through the add-a-network flow, deliberately NOT
+/// as a built-in (spec 060 scope decision).
+#[test]
+fn arc_testnet_is_not_a_builtin_network() {
+    assert!(BUILTIN_CHAINS.iter().all(|c| c.chain_id != 5_042_002));
+}
+
+/// Provider slugs were verified against the live providers, not guessed: a
+/// wrong slug enters the RPC pool at the highest tier and poisons every read.
+#[test]
+fn arc_provider_slugs_match_the_providers_that_actually_serve_it() {
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Alchemy, 5_042, "key"),
+        Some("https://arc-mainnet.g.alchemy.com/v2/key".to_owned())
+    );
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Drpc, 5_042, "key"),
+        Some("https://lb.drpc.org/ogrpc?network=arc&dkey=key".to_owned())
+    );
+    // Ankr does not serve Arc, so it must not be offered for it.
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Ankr, 5_042, "key"),
+        None
+    );
+}
+
+/// The services moved to `getvela.app` (spec 060). These constants are what a
+/// clean install reaches on first run.
+#[test]
+fn builtin_service_endpoints_point_at_the_cloudflare_deployments() {
+    assert_eq!(
+        DEFAULT_ETHEREUM_DATA_URL,
+        "https://ethereum-data.getvela.app"
+    );
+    assert_eq!(BUNDLER_BASE, "https://vela-relay-cf.getvela.app");
+    assert_eq!(
+        DEFAULT_BUNDLER_SERVICE_URL,
+        "https://vela-relay-cf.getvela.app"
+    );
+}
+
+/// Who can fix an out-of-gas relayer (spec 060). On a network Vela ships the
+/// operator owns it; on one a person added — a devnet, an internal chain —
+/// there may be nobody else who could hold gas on it at all, and the sheet must
+/// not ask them to report it to someone who cannot help.
+#[test]
+fn a_builtin_network_is_one_whose_relayer_the_operator_owns() {
+    for chain_id in [
+        1, 10, 56, 100, 130, 137, 143, 480, 4_217, 5_042, 8_453, 42_161, 43_114, 196, 988, 1_868,
+        4_326, 4_663, 5_000, 8_217, 42_220, 57_073, 98_866, 1_440_000,
+    ] {
+        assert!(
+            is_builtin_chain(chain_id),
+            "chain {chain_id} ships with Vela"
+        );
+    }
+    // Arc TESTNET is added by hand, like any local or internal chain.
+    assert!(!is_builtin_chain(5_042_002));
+    assert!(
+        !is_builtin_chain(31_337),
+        "a local devnet is nobody else's to fund"
+    );
+    assert!(!is_builtin_chain(1_337));
+}
+
+/// The eleven admitted with spec 061. Each field is what a person reaches or
+/// what a money rule reads; XRPL EVM is the one no provider serves.
+#[test]
+fn the_eleven_are_built_in_with_verified_provider_slugs() {
+    let by_id = |id: u32| {
+        BUILTIN_CHAINS
+            .iter()
+            .find(|c| c.chain_id == id)
+            .expect("built in")
+    };
+    assert_eq!(by_id(988).native_symbol, "USDT0");
+    assert_eq!(by_id(196).native_symbol, "OKB");
+    assert_eq!(by_id(1_440_000).native_symbol, "XRP");
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Alchemy, 196, "k"),
+        Some("https://xlayer-mainnet.g.alchemy.com/v2/k".to_owned()),
+        "X Layer's slug was dead data until the chain was built in"
+    );
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Alchemy, 1_440_000, "k"),
+        None
+    );
+    assert_eq!(
+        build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"),
+        None
     );
 }
