@@ -14,6 +14,13 @@
 # NOTE: `ubuntu-24.04-arm` is free for public repositories; on a private
 # repository it needs a paid plan. If the arm64 jobs sit queued forever, that is
 # why.
+#
+# A consequence of those containers worth knowing before adding a crate: they
+# are MINIMAL, while the runner's own Ubuntu image is not. `btleplug`'s BlueZ
+# backend pulls `libdbus-sys`, which needs dbus's headers — present on the
+# runner (so ci.yml's `desktop` job stays green) and absent here, which is why
+# the dev package is named explicitly in both lists below. A system dependency
+# that the runner happens to carry is one this workflow has to ask for.
 name: Desktop Linux packages
 
 on:
@@ -96,6 +103,7 @@ jobs:
             wayland-devel libxkbcommon-x11-devel libxcb-devel \
             fontconfig-devel freetype-devel alsa-lib-devel \
             openssl-devel libzstd-devel \
+            dbus-devel \
             rpm-build desktop-file-utils appstream
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -136,6 +144,7 @@ jobs:
             git ca-certificates curl file \
             libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \
+            libdbus-1-dev \
             desktop-file-utils appstream
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
