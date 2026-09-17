@@ -13,7 +13,7 @@
 //      `collectRpcUrls`/`collectBundlerUrls` stay there).
 //
 //  So the core owns *which endpoint to try and when to ban it*, and this owns
-//  *what endpoints exist at all*. The twelve chains here are the same twelve
+//  *what endpoints exist at all*. The chains here are the same ones
 //  `network_admin::BUILTIN_CHAINS` knows, and `ChainCatalogTests` pins that
 //  they do not drift — because a chain the settings screen lists and the pool
 //  cannot route for is a network that reads as present and returns nothing.

@@ -27,8 +27,12 @@ struct RpcEndpointsTests {
 
     /// Every chain the settings screen lists must be routable, or a person can
     /// add a network that reads as present and returns nothing.
-    @Test func theCatalogCoversTheCoresTwelveBuiltins() {
-        let coreBuiltins = [1, 56, 137, 42_161, 10, 8_453, 43_114, 100, 130, 4_217, 143, 480]
+    @Test func theCatalogCoversTheCoresBuiltins() {
+        let coreBuiltins = [
+            1, 56, 137, 42_161, 10, 8_453, 43_114, 100, 130, 4_217, 143, 480,
+            5_042, 196, 988, 1_868, 4_326, 4_663, 5_000, 8_217, 42_220, 57_073,
+            98_866, 1_440_000,
+        ]
         #expect(ChainCatalog.chains.count == coreBuiltins.count)
         for chainId in coreBuiltins {
             #expect(ChainCatalog.meta(chainId) != nil, "chain \(chainId) is not routable")
