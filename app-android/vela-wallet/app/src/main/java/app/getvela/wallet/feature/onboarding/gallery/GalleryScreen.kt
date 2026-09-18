@@ -197,6 +197,7 @@ fun GalleryScreen(initialDarkTheme: Boolean) {
                             address = view.address.orEmpty(),
                             walletName = view.keys.firstOrNull()?.name ?: view.name,
                             keys = view.keys,
+                            entering = view.busy,
                             onEnter = { selectedCode = null },
                         )
                     }
