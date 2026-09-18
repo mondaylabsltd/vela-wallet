@@ -64,13 +64,13 @@ pub const TARGET_CHAINS: [u32; 2] = [TARGET_CHAIN, 8453];
 const MAX_UNITS: u64 = 8;
 
 const SIG_VERSION: &str = "VERSION()";
-const SIG_GROUPS_OF_KEY: &str = "getGroupsOfKey(bytes,uint256,uint256,bool)";
-const SIG_GET_UNIT: &str = "getUnit(uint256)";
+pub(crate) const SIG_GROUPS_OF_KEY: &str = "getGroupsOfKey(bytes,uint256,uint256,bool)";
+pub(crate) const SIG_GET_UNIT: &str = "getUnit(uint256)";
 const SIG_UNIT_BY_GROUP_KEY: &str = "getUnitByGroupKey(bytes)";
 const SIG_REGISTER_PAYLOAD: &str = "registerPayloadOf(uint256)";
 
 /// `Unit { rpId, metadata, groupPublicKey, contentHash, memberCount, createdAt }`.
-const UNIT_TUPLE: &str = "(string,bytes,bytes,bytes32,uint32,uint256)";
+pub(crate) const UNIT_TUPLE: &str = "(string,bytes,bytes,bytes32,uint32,uint256)";
 
 const PROOF: &str = "(bytes,string,uint256,uint256,uint256,uint256)";
 
@@ -136,7 +136,7 @@ fn done(state: BackupState) -> BackupStep {
 // Encoding the five questions
 // ---------------------------------------------------------------------------
 
-fn call_data(signature: &str, args: &[DynSolValue]) -> Option<String> {
+pub(crate) fn call_data(signature: &str, args: &[DynSolValue]) -> Option<String> {
     let mut data = primitives::function_selector(signature).ok()?;
     data.extend(DynSolValue::Tuple(args.to_vec()).abi_encode_params());
     Some(primitives::to_hex(&data, true))
@@ -159,14 +159,14 @@ fn ask(id: &str, chain_id: u32, signature: &str, args: &[DynSolValue]) -> Option
 
 /// The returned bytes of an answered call. `None` = nobody answered (or not
 /// hex) — which is never a verdict.
-fn returned(answer: &LookupAnswer) -> Option<Vec<u8>> {
+pub(crate) fn returned(answer: &LookupAnswer) -> Option<Vec<u8>> {
     if answer.outcome != LookupOutcome::Ok {
         return None;
     }
     primitives::from_hex(answer.body.as_deref()?).ok()
 }
 
-fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
+pub(crate) fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
     match DynSolType::parse(types)
         .ok()?
         .abi_decode_params(data)
@@ -177,12 +177,12 @@ fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
     }
 }
 
-struct Unit {
-    metadata: Vec<u8>,
-    group_public_key: Vec<u8>,
+pub(crate) struct Unit {
+    pub(crate) metadata: Vec<u8>,
+    pub(crate) group_public_key: Vec<u8>,
 }
 
-fn unit_from(value: &DynSolValue) -> Option<Unit> {
+pub(crate) fn unit_from(value: &DynSolValue) -> Option<Unit> {
     let fields = value.as_tuple()?;
     Some(Unit {
         metadata: fields.get(1)?.as_bytes()?.to_vec(),
@@ -251,7 +251,7 @@ pub fn describe_register_call(data: &[u8]) -> Option<RegisterCall> {
     })
 }
 
-fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
+pub(crate) fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
     let bytes = primitives::from_hex(public_key_hex).ok()?;
     match bytes.len() {
         65 if bytes[0] == 0x04 => Some(bytes),
