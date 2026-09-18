@@ -113,6 +113,28 @@ npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fai
 
 `i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four.
 
+## Where to get it
+
+| | Packages | Stores | Build it yourself |
+| --- | --- | --- | --- |
+| **Web** | nothing to install — [wallet.getvela.app](https://wallet.getvela.app/) | — | [Build for Web](#build-for-web-cloudflare-workers) |
+| **Desktop** — macOS, Windows, Linux | [GitHub Releases](https://github.com/mondaylabsltd/vela-wallet/releases), free; every package attached there is meant to install as downloaded | when they accept us — a store listing is paid, and buys one-click install and updates, never access | [app-desktop/vela-wallet](app-desktop/vela-wallet/README.md) |
+| **Browser extension** | [GitHub Releases](https://github.com/mondaylabsltd/vela-wallet/releases), free, loaded by hand | Chrome Web Store, when listed | [extension/](app-web/vela-wallet/extension/README.md) |
+| **iOS, Android** | none — the phone apps are **not** published on GitHub | the App Store and Google Play (paid) | yes; read the note below first |
+
+The rule behind the table ([spec 063](specs/063-release-channels/spec.md)): nothing is attached to a release unless a person with no developer tools can install it and reach a wallet. A macOS `.dmg` is attached only when that build was signed with our Developer ID and notarized by Apple; the Windows installer is not code-signed, so SmartScreen asks once (**More info → Run anyway**).
+
+### A phone app you built yourself
+
+It is the same wallet, with one door closed. "This device" — the phone's own passkey, through Credential Manager on Android or the system passkey sheet on iOS — only works in a build signed with *our* key: the operating system checks the app's signing identity against `getvela.app` before it lets the app use a `getvela.app` passkey, and your signature is not ours.
+
+The two other ways in do not ask the operating system, and work in any build:
+
+- **Scan with another phone.** The wallet shows a QR code; a phone that already holds your passkey scans it and approves. The whole exchange (hybrid / caBLE) runs in `vela-core`.
+- **A security key.** USB on Android; on iOS a key that speaks FIDO over its smart-card interface (YubiKey firmware 5.8 or later). The CTAP conversation is `vela-core`'s too.
+
+These are the same escape hatches the store apps fall back on if `getvela.app` is ever unreachable — which is what makes "you can always build it yourself" a true sentence rather than a polite one.
+
 ## Platform Support
 
 Capabilities differ per shell and are documented where they were built: each shell's README, and the spec that wired the capability (for example passkey methods per platform in [specs/019](specs/019-onboarding-live-wiring/spec.md)). The shells share the core's rules; what differs is the platform API each one drives.
