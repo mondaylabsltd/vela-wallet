@@ -54,6 +54,10 @@ pub struct RegistryError {
     /// `network`, and every route out of this machine refused (spec 038): the
     /// sentence is "check your network", not "the service is down".
     pub local: bool,
+    /// The server answered, and with a 5xx: it is there and failing. Together
+    /// with `network` this is "the index is gone" (spec 062); a 4xx is the
+    /// index saying no, and is never second-guessed.
+    failing: bool,
 }
 
 impl RegistryError {
@@ -62,6 +66,7 @@ impl RegistryError {
             message: message.into(),
             network: true,
             local,
+            failing: false,
         }
     }
 
@@ -70,7 +75,20 @@ impl RegistryError {
             message: message.into(),
             network: false,
             local: false,
+            failing: false,
         }
+    }
+
+    fn failing(message: impl Into<String>) -> Self {
+        Self {
+            failing: true,
+            ..Self::answered(message)
+        }
+    }
+
+    /// Unreachable, or failing: not an answer.
+    fn index_is_gone(&self) -> bool {
+        self.network || self.failing
     }
 }
 
@@ -122,6 +140,9 @@ use super::{pool, storage};
 /// arrived; `local` says whether it never even left the machine.
 fn classify(label: &str, failure: Transport) -> RegistryError {
     match failure.error {
+        ureq::Error::StatusCode(status) if status >= 500 => {
+            RegistryError::failing(format!("{label} failed: {status}"))
+        }
         ureq::Error::StatusCode(status) => {
             RegistryError::answered(format!("{label} failed: {status}"))
         }
@@ -224,11 +245,27 @@ pub struct KeyStatus {
 }
 
 pub fn query_by_public_key(public_key_hex: &str) -> Result<KeyStatus> {
-    let profile: KeyProfile = get_json(
+    let profile: KeyProfile = match get_json(
         &format!("/api/query?publicKey={}", urlencode(public_key_hex)),
         "Query",
         READ_TIMEOUT,
-    )?;
+    ) {
+        Ok(profile) => {
+            set_unit_source(None);
+            profile
+        }
+        Err(gone) if gone.index_is_gone() => {
+            // Nobody answered on-chain either: the original failure is the
+            // honest one to report.
+            let Some((chain_id, profile)) = chain_key_profile(&pool_eth_call, public_key_hex)
+            else {
+                return Err(gone);
+            };
+            set_unit_source(Some(chain_id));
+            profile
+        }
+        Err(refused) => return Err(refused),
+    };
     let raw = profile
         .groups
         .map(|groups| groups.unit_ids)
@@ -478,15 +515,134 @@ pub struct UnitDetail {
     pub members: Vec<RegistryUnitMember>,
 }
 
+// ---------------------------------------------------------------------------
+// The contract itself — what sign-in falls back to (spec 062)
+// ---------------------------------------------------------------------------
+//
+// The index service is a cache of the registry contract. When it is GONE —
+// never when it answers; a refusal is an answer — the same two read questions
+// are put to the contract: on Gnosis, where the record lives, then on Ethereum,
+// where a person may have backed it up precisely for this.
+// `vela_core::registry_chain` plans the calls and answers in the index's own
+// JSON shapes, so every guard in this file runs unchanged on either source.
+
+use vela_core::registry_chain;
+
+/// Which chain listed the last key's units; `None` = the index did.
+///
+/// Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so a
+/// key's units are asked of whoever listed them. The index mirrors Gnosis, so
+/// an index listing may be continued on Gnosis; a chain listing is continued on
+/// that chain and nowhere else.
+fn unit_source_cell() -> &'static Mutex<Option<u32>> {
+    static CELL: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+    CELL.get_or_init(|| Mutex::new(None))
+}
+
+fn unit_source() -> Option<u32> {
+    *unit_source_cell()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn set_unit_source(source: Option<u32>) {
+    *unit_source_cell()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = source;
+}
+
+/// One `eth_call` through the pool: the raw `result` hex, or `None` when that
+/// chain did not answer.
+fn pool_eth_call(chain_id: u32, to: &str, data: &str) -> Option<String> {
+    let params = serde_json::json!([{ "to": to, "data": data }, "latest"]);
+    pool::call(chain_id, "eth_call", params)
+        .ok()?
+        .get("result")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+type EthCall<'a> = &'a dyn Fn(u32, &str, &str) -> Option<String>;
+
+/// Both calls of a plan on one chain; `None` unless BOTH were answered.
+fn read_pair(
+    read: EthCall,
+    chain_id: u32,
+    calls: &[registry_chain::ChainCall],
+) -> Option<(String, String)> {
+    let [first, second] = calls else { return None };
+    Some((
+        read(chain_id, &first.to, &first.data)?,
+        read(chain_id, &second.to, &second.data)?,
+    ))
+}
+
+/// The `?publicKey=` body and the chain that gave it.
+fn chain_key_profile(read: EthCall, public_key_hex: &str) -> Option<(u32, KeyProfile)> {
+    let calls = registry_chain::key_status_calls(public_key_hex)?;
+    for chain_id in registry_chain::READ_CHAINS {
+        let Some((entry, groups)) = read_pair(read, chain_id, &calls) else {
+            continue;
+        };
+        let Some(profile) = registry_chain::key_status_json(&entry, &groups)
+            .and_then(|body| serde_json::from_str::<KeyProfile>(&body).ok())
+        else {
+            continue;
+        };
+        // A chain that knows the key founded nothing is only believed when it
+        // is the record's home: Ethereum holds what somebody backed up.
+        let founded = profile
+            .groups
+            .as_ref()
+            .map_or(0, |groups| groups.unit_ids.len());
+        if chain_id != registry_chain::READ_CHAINS[0] && founded == 0 {
+            continue;
+        }
+        return Some((chain_id, profile));
+    }
+    None
+}
+
+/// The `?unitId=` body from ONE chain.
+fn chain_unit(read: EthCall, chain_id: u32, unit_id: u32) -> Option<UnitResponse> {
+    let calls = registry_chain::unit_calls(u64::from(unit_id))?;
+    let (unit, members) = read_pair(read, chain_id, &calls)?;
+    serde_json::from_str(&registry_chain::unit_json(
+        u64::from(unit_id),
+        &unit,
+        &members,
+    )?)
+    .ok()
+}
+
 /// One group: the frozen metadata blob and ALL its founding members in
 /// ascending order, which IS the canonical founding order the Safe address
 /// derivation pins.
 pub fn query_unit(unit_id: u32) -> Result<UnitDetail> {
-    let detail: UnitResponse = get_json(
-        &format!("/api/query?unitId={unit_id}&pageSize={MAX_UNIT_MEMBERS}&order=asc"),
-        "Query",
-        READ_TIMEOUT,
-    )?;
+    let detail: UnitResponse = if let Some(source) = unit_source() {
+        chain_unit(&pool_eth_call, source, unit_id).ok_or_else(|| {
+            RegistryError::network(
+                format!("Query failed: chain {source} did not answer for unit {unit_id}"),
+                false,
+            )
+        })?
+    } else {
+        match get_json(
+            &format!("/api/query?unitId={unit_id}&pageSize={MAX_UNIT_MEMBERS}&order=asc"),
+            "Query",
+            READ_TIMEOUT,
+        ) {
+            Ok(detail) => detail,
+            // The index listed this unit and then went away. Its ids are Gnosis's.
+            Err(gone) if gone.index_is_gone() => {
+                match chain_unit(&pool_eth_call, registry_chain::READ_CHAINS[0], unit_id) {
+                    Some(detail) => detail,
+                    None => return Err(gone),
+                }
+            }
+            Err(refused) => return Err(refused),
+        }
+    };
     let members = detail.members.unwrap_or(UnitMembers {
         total: 0,
         items: Vec::new(),
@@ -979,6 +1135,108 @@ mod tests {
     /// A credential id is hex today, but the query string is built from it —
     /// so anything that could change WHICH record is being asked for is
     /// escaped rather than assumed absent.
+    /// Web's recording of the contract on Gnosis and Ethereum: keyed by chain,
+    /// then by calldata. The REAL core reads REAL bytes here.
+    fn recorded() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../../app-web/vela-wallet/src/lib/onboarding/core/__fixtures__/registry-chain.json"
+        ))
+        .unwrap()
+    }
+
+    fn recorded_chains<'a>(
+        down: &'static [u32],
+        asked: &'a std::cell::RefCell<Vec<u32>>,
+    ) -> impl Fn(u32, &str, &str) -> Option<String> + 'a {
+        let fixture = recorded();
+        move |chain_id, _to, data| {
+            asked.borrow_mut().push(chain_id);
+            if down.contains(&chain_id) {
+                return None;
+            }
+            fixture["answers"][chain_id.to_string()][data]
+                .as_str()
+                .map(str::to_owned)
+        }
+    }
+
+    #[test]
+    fn the_contract_on_gnosis_answers_for_an_absent_index() {
+        let key = recorded()["publicKey"].as_str().unwrap().to_owned();
+        let asked = std::cell::RefCell::new(Vec::new());
+        let read = recorded_chains(&[], &asked);
+
+        let (chain_id, profile) = chain_key_profile(&read, &key).unwrap();
+        assert_eq!(chain_id, 100);
+        assert!(profile.entry.is_some_and(|entry| !entry.is_null()));
+        assert_eq!(profile.groups.unwrap().unit_ids, vec![12, 10, 8]);
+
+        let unit = chain_unit(&read, 100, 10).unwrap();
+        let members = unit.members.unwrap();
+        assert_eq!((members.total, members.items.len()), (3, 3));
+        assert_eq!(members.items[0].public_key, key);
+        assert!(members.items.iter().all(|m| !m.credential_id.is_empty()));
+        // Ethereum is not asked while Gnosis answers.
+        assert!(asked.borrow().iter().all(|chain| *chain == 100));
+    }
+
+    #[test]
+    fn ethereums_backup_answers_under_its_own_unit_ids() {
+        let key = recorded()["publicKey"].as_str().unwrap().to_owned();
+        let asked = std::cell::RefCell::new(Vec::new());
+        let read = recorded_chains(&[100], &asked);
+
+        let (chain_id, profile) = chain_key_profile(&read, &key).unwrap();
+        assert_eq!(chain_id, 1);
+        assert_eq!(profile.groups.unwrap().unit_ids, vec![0]);
+
+        let unit = chain_unit(&read, 1, 0).unwrap();
+        assert_eq!(unit.members.unwrap().items[0].public_key, key);
+    }
+
+    #[test]
+    fn silence_everywhere_is_nothing_and_a_bad_key_plans_nothing() {
+        let key = recorded()["publicKey"].as_str().unwrap().to_owned();
+        let asked = std::cell::RefCell::new(Vec::new());
+        assert!(chain_key_profile(&recorded_chains(&[100, 1], &asked), &key).is_none());
+
+        asked.borrow_mut().clear();
+        assert!(chain_key_profile(&recorded_chains(&[], &asked), "not a key").is_none());
+        assert!(asked.borrow().is_empty());
+    }
+
+    /// The whole sign-in read path with the index pointed at a closed port:
+    /// the key and its founding set come from the contract on Gnosis.
+    #[test]
+    #[ignore = "reads Gnosis; moves the process-wide registry endpoint"]
+    fn a_dead_index_still_signs_the_golden_wallet_in() {
+        let key = recorded()["publicKey"].as_str().unwrap().to_owned();
+        let before = registry_url();
+        set_registry_url("http://127.0.0.1:9");
+        let status = query_by_public_key(&key);
+        let unit = status
+            .as_ref()
+            .ok()
+            .and_then(|status| status.unit_ids.first().copied())
+            .map(query_unit);
+        set_registry_url(&before);
+        set_unit_source(None);
+
+        let status = status.unwrap();
+        assert!(status.registered);
+        assert!(status.unit_ids.contains(&10), "{:?}", status.unit_ids);
+        let unit = unit.unwrap().unwrap();
+        assert!(unit.members.iter().any(|m| m.public_key_hex == key));
+    }
+
+    #[test]
+    fn only_an_absent_index_is_replaced() {
+        assert!(RegistryError::network("Query failed: timeout", false).index_is_gone());
+        assert!(RegistryError::failing("Query failed: 503").index_is_gone());
+        // A refusal is an answer.
+        assert!(!RegistryError::answered("Query failed: 404").index_is_gone());
+    }
+
     #[test]
     fn query_values_are_escaped() {
         assert_eq!(urlencode("abc123"), "abc123");
