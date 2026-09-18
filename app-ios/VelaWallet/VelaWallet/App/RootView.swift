@@ -210,9 +210,7 @@ struct RootView: View {
         let store = AccountStore()
         self.accounts = store
         let session = SessionController(store: store)
-        let onboarding = OnboardingModel(session: session, store: store)
         _session = State(initialValue: session)
-        _onboarding = State(initialValue: onboarding)
         let shelf = VelaStore()
         self.shelf = shelf
         // Before the session machine boots: it reads `vela.accounts` on its
@@ -223,6 +221,21 @@ struct RootView: View {
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
         _pool = State(initialValue: pool)
+        // With the contract behind the index: a service that cannot be reached
+        // must not be what stands between a person and their wallet (spec 062).
+        let onboarding = OnboardingModel(
+            session: session, store: store,
+            registry: RegistryClient(chain: RegistryChainReader(ethCall: { [pool] chainId, to, data in
+                let outcome = await pool.call(
+                    chainId: chainId, method: "eth_call",
+                    params: [["to": to, "data": data], "latest"]
+                )
+                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+                else { return nil }
+                return hex
+            }))
+        )
+        _onboarding = State(initialValue: onboarding)
         // ONE name resolver for the whole app: the address book and the
         // activity feed ask the same question about the same addresses, and two
         // resolvers would mean two caches and two names for one person.
