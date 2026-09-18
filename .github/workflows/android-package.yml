@@ -1,14 +1,21 @@
 # Release build of the Android shell (app-android/vela-wallet): an UNSIGNED
-# release APK and AAB, attached to a GitHub release on an `android-v*` tag.
+# release APK and AAB, kept as a workflow artifact on an `android-v*` tag.
 #
-# Same shape as the desktop release triad and web-extension-package.yml: a tag
-# cuts a release, a manual run only builds, a pull request that touches the
-# shell's packaging runs the cheap metadata check.
+# NOT attached to a GitHub Release, by ruling (spec 063 §0): the phone apps ship
+# through the stores, which are paid, and a free installable package next to a
+# paid listing is the project undercutting its own price by accident. It was
+# also never installable — an unsigned APK is refused by the package installer
+# ("package info is null"), which is how this was found.
+#
+# What the tag still buys, and why the workflow stays:
+#   * the file the founder signs and uploads to Play — the artifact below; and
+#   * the check that the RELEASE configuration still compiles. Nothing else
+#     builds `assembleRelease`/`bundleRelease` with the three-ABI core, and a
+#     packaging path nobody walks is where 0.9.0 found three defects at once.
 #
 # Unsigned on purpose (founder, 2026-09-11: 不用考虑签名). The upload keystore
 # is the founder's to hold; signing the AAB is a local step
-# (`jarsigner` / Play App Signing — see docs/project-takeover/05). The zip
-# attached here is what gets signed.
+# (`jarsigner` / Play App Signing — see docs/project-takeover/05).
 #
 # Unlike the `android` job in ci.yml this job does NOT pass
 # -PvelaSkipRustBuild: a release package needs libvela_core_uniffi.so for all
@@ -17,7 +24,8 @@
 name: Android package
 
 on:
-  # Cutting an Android release: `git tag android-v1.0 && git push --tags`.
+  # Cutting an Android build: `git tag android-v1.0 && git push origin android-v1.0`
+  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
   # The tag's version must equal `versionName` in app/build.gradle.kts.
   push:
     tags: ['android-v*']
@@ -99,39 +107,15 @@ jobs:
           cp app/build/outputs/apk/release/app-release-unsigned.apk "out/vela-wallet-android-${version}-unsigned.apk"
           cp app/build/outputs/bundle/release/app-release.aab "out/vela-wallet-android-${version}-unsigned.aab"
           ls -l out
+      - name: Checksums travel with the packages
+        working-directory: app-android/vela-wallet/out
+        run: |
+          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-android"
+          mv "$RUNNER_TEMP/SHA256SUMS-android" SHA256SUMS-android
+          cat SHA256SUMS-android
+      # The artifact IS the deliverable: download it from the run, sign, submit.
       - uses: actions/upload-artifact@v4
         with:
           name: android
           path: app-android/vela-wallet/out/*
           if-no-files-found: error
-
-  release:
-    name: Attach the packages to the release
-    if: startsWith(github.ref, 'refs/tags/android-v')
-    needs: [metadata, package]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the packages
-        working-directory: artifacts
-        run: |
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-android"
-          mv "$RUNNER_TEMP/SHA256SUMS-android" SHA256SUMS-android
-          cat SHA256SUMS-android
-      - name: Upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet Android $GITHUB_REF_NAME (unsigned)" \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber

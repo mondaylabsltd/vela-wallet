@@ -1,24 +1,31 @@
 # Release build of the iOS shell (app-ios/VelaWallet): an UNSIGNED device
-# archive, packaged as an .ipa-shaped zip, attached to a GitHub release on an
+# archive, packaged as an .ipa-shaped zip, kept as a workflow artifact on an
 # `ios-v*` tag.
 #
-# Same shape as the desktop release triad and web-extension-package.yml: a tag
-# cuts a release, a manual run only builds, a pull request that touches the
-# packaging runs the cheap metadata check.
+# NOT attached to a GitHub Release, by ruling (spec 063 §0): the phone apps ship
+# through the stores. An unsigned .ipa on a download page is a file nobody can
+# install — iOS has no way to put it on a device — so publishing it only ever
+# produced a broken download.
+#
+# What the tag still buys, and why the workflow stays:
+#   * the .xcarchive the founder opens in Xcode's organizer to sign and submit
+#     — the artifact below; and
+#   * the check that the ARCHIVE path still compiles. It builds
+#     `-O -whole-module-optimization` under the newest Xcode, which ci.yml's
+#     debug test build does not, and it is the path 0.9.0 found broken.
 #
 # Unsigned on purpose (founder, 2026-09-11: 不用考虑签名). The archive is built
-# with code signing disabled, so it installs on nothing as-is; signing it with
-# the team's certificate and profile (Xcode "Distribute" on the .xcarchive, or
-# `codesign` + a re-zip) is a local step — see docs/project-takeover/05. The
-# .xcarchive itself is attached too, because that is what Xcode's organizer
-# wants for a signed export.
+# with code signing disabled; signing it with the team's certificate and
+# profile (Xcode "Distribute" on the .xcarchive, or `codesign` + a re-zip) is a
+# local step — see docs/project-takeover/05.
 #
 # macos-15 minutes bill at ten times Linux, so the xcframework is cached on the
 # core's own sources exactly as the `ios` job in ci.yml does.
 name: iOS package
 
 on:
-  # Cutting an iOS release: `git tag ios-v1.0 && git push --tags`.
+  # Cutting an iOS build: `git tag ios-v1.0 && git push origin ios-v1.0`
+  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
   # The tag's version must equal MARKETING_VERSION in the Xcode project.
   push:
     tags: ['ios-v*']
@@ -127,39 +134,15 @@ jobs:
           (cd "$RUNNER_TEMP" && zip -qry "$OLDPWD/out/vela-wallet-ios-${version}-unsigned.ipa" Payload)
           (cd "$RUNNER_TEMP" && zip -qry "$OLDPWD/out/vela-wallet-ios-${version}.xcarchive.zip" VelaWallet.xcarchive)
           ls -l out
+      - name: Checksums travel with the packages
+        working-directory: app-ios/VelaWallet/out
+        run: |
+          shasum -a 256 ./* > "$RUNNER_TEMP/SHA256SUMS-ios"
+          mv "$RUNNER_TEMP/SHA256SUMS-ios" SHA256SUMS-ios
+          cat SHA256SUMS-ios
+      # The artifact IS the deliverable: download it from the run, sign, submit.
       - uses: actions/upload-artifact@v4
         with:
           name: ios
           path: app-ios/VelaWallet/out/*
           if-no-files-found: error
-
-  release:
-    name: Attach the packages to the release
-    if: startsWith(github.ref, 'refs/tags/ios-v')
-    needs: [metadata, package]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the packages
-        working-directory: artifacts
-        run: |
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-ios"
-          mv "$RUNNER_TEMP/SHA256SUMS-ios" SHA256SUMS-ios
-          cat SHA256SUMS-ios
-      - name: Upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet iOS $GITHUB_REF_NAME (unsigned)" \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber
