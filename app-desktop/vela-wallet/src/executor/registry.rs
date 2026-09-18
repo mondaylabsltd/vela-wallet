@@ -402,6 +402,35 @@ pub fn wallet_name_by_address(address: &str) -> Option<String> {
     None
 }
 
+/// Where a wallet's founding record stands on Ethereum (spec 062 §5a), and —
+/// when it is not there — the one call that would put it there.
+///
+/// The walk is `vela_core::registry_backup`: five `eth_call`s against the
+/// registry contract, on Gnosis and on the target. The index service is never
+/// asked, no passkey is involved, and nothing is cached: "not backed up" next
+/// to a fee must never be stale. This is only the transport, shared with
+/// [`wallet_name_by_address`].
+pub fn ethereum_backup_check(
+    address: &str,
+    founding_public_key_hex: &str,
+    target_chain: u32,
+) -> (
+    vela_core::registry_backup::BackupState,
+    Option<vela_core::registry_backup::BackupCall>,
+) {
+    use vela_core::registry_backup::{self as backup, BackupState, BackupStep};
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..MAX_LOOKUP_ROUNDS {
+        match backup::step_to(address, founding_public_key_hex, target_chain, &answers) {
+            BackupStep::Ask { requests } => {
+                answers.extend(requests.iter().map(perform));
+            }
+            BackupStep::Done { state, call, .. } => return (state, call),
+        }
+    }
+    (BackupState::CouldNotCheck, None)
+}
+
 /// A worker that panicked answered nothing.
 fn perform_failed(request: &LookupRequest) -> LookupAnswer {
     let (LookupRequest::EthCall { id, .. } | LookupRequest::IndexGet { id, .. }) = request;
@@ -955,6 +984,30 @@ mod tests {
         assert_eq!(urlencode("abc123"), "abc123");
         assert_eq!(urlencode("a&b=c"), "a%26b%3Dc");
         assert_eq!(urlencode("a b"), "a%20b");
+    }
+
+    /// The golden multi-key Safe was backed up from the web wallet on
+    /// 2026-09-18 (Ethereum tx 0x86795d08…dc5c, Base tx 0x69c54f91…fc73d), so
+    /// both registries hold its group; a key that founded nothing is simply
+    /// not registered.
+    #[test]
+    #[ignore = "reads Gnosis, Ethereum and Base"]
+    fn the_golden_safe_reads_backed_up_on_ethereum_and_base() {
+        use vela_core::registry_backup::BackupState;
+        storage::tests::with_temp_state("registry-backup-check", || {
+            let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+            let key = "04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b";
+            for chain in [1, 8453] {
+                let (state, call) = ethereum_backup_check(safe, key, chain);
+                assert_eq!(state, BackupState::BackedUp, "chain {chain}");
+                assert!(call.is_none());
+            }
+            let stranger = format!("04{}{}", "11".repeat(32), "22".repeat(32));
+            assert_eq!(
+                ethereum_backup_check(safe, &stranger, 1).0,
+                BackupState::NotRegistered
+            );
+        });
     }
 
     /// The walk the v2 index forces: chain → founding key → units → the unit

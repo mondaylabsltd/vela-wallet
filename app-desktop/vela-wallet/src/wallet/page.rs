@@ -457,6 +457,15 @@ pub struct WalletPage {
     /// which is what the gallery and an unsigned-in window get.
     #[cfg(not(target_os = "linux"))]
     signing_host: Option<gpui::Entity<crate::wallet::signing_host::SigningHost>>,
+    /// Where the active wallet's founding record stands on Ethereum (spec 062):
+    /// the address it was asked about, and the answer once there is one
+    /// (`None` = still asking). Asked of the chain, never of our server, each
+    /// time the Account page meets a different account.
+    backup_for: Option<String>,
+    backup_check: Option<(
+        vela_core::registry_backup::BackupState,
+        Option<vela_core::registry_backup::BackupCall>,
+    )>,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -852,6 +861,8 @@ impl WalletPage {
             send_host: None,
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
+            backup_for: None,
+            backup_check: None,
             menu_origin: None,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
@@ -5474,6 +5485,7 @@ impl WalletPage {
         let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
         self.sync_switcher(session, cx);
+        self.ensure_backup_check(cx);
         let s = &self.settings;
         // The COUNT is real; the total beside it is not stated at all, because
         // the switcher's cached per-account totals are a `balance_dashboard`
@@ -5816,6 +5828,154 @@ impl WalletPage {
             ))
     }
 
+    /// Ask the chain where the active wallet's founding record stands, once
+    /// per account this page meets (spec 062). Blocking reads, so off the
+    /// frame; a stale answer for a previous account is dropped.
+    fn ensure_backup_check(&mut self, cx: &mut Context<Self>) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        if self.backup_for.as_deref() == Some(account.address.as_str()) {
+            return;
+        }
+        self.backup_for = Some(account.address.clone());
+        self.backup_check = None;
+        let address = account.address.clone();
+        let key = account.keys.first().map_or_else(
+            || account.public_key_hex.clone(),
+            |key| key.public_key_hex.clone(),
+        );
+        cx.spawn(async move |page, cx| {
+            let asked = address.clone();
+            let answer = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::executor::registry::ethereum_backup_check(
+                        &address,
+                        &key,
+                        vela_core::registry_backup::TARGET_CHAIN,
+                    )
+                })
+                .await;
+            page.update(cx, |page, cx| {
+                if page.backup_for.as_deref() == Some(asked.as_str()) {
+                    page.backup_check = Some(answer);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The Ethereum backup row (spec 062): one line, three states, a button
+    /// only while there is something to do. Nothing at all when the registry is
+    /// not on Ethereum or the wallet has no record there to copy.
+    fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        use vela_core::registry_backup::BackupState;
+        let s = &self.settings;
+        let (subtitle, colour, call) = match &self.backup_check {
+            None => (s.backup_checking.clone(), theme.fg_subtle, None),
+            Some((BackupState::BackedUp, _)) => (s.backup_backed_up.clone(), theme.success, None),
+            Some((BackupState::NotBackedUp, call)) => (
+                s.backup_not_backed_up.clone(),
+                theme.fg_subtle,
+                call.clone(),
+            ),
+            Some((BackupState::CouldNotCheck, _)) => {
+                (s.backup_could_not_check.clone(), theme.fg_subtle, None)
+            }
+            Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
+        };
+        let title = s.backup_title.clone();
+        let actionable = call.is_some();
+        let mut row = div()
+            .id("settings-ethereum-backup")
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::Upload,
+                false,
+                theme.fg_base,
+                18.,
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(colour)
+                            .child(subtitle),
+                    ),
+            );
+        if actionable {
+            row = row
+                .cursor_pointer()
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    if let Some(call) = call.clone() {
+                        page.open_backup_signing(call, cx);
+                    }
+                }));
+        }
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
+                .child(row),
+        )
+    }
+
+    /// The backup is one transaction the wallet asks ITSELF to sign: the same
+    /// signing column a dApp request opens, so the estimate, the fee, the
+    /// funding guidance, the passkey and the receipt are the existing ones.
+    #[cfg(not(target_os = "linux"))]
+    fn open_backup_signing(
+        &mut self,
+        call: vela_core::registry_backup::BackupCall,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        let params = serde_json::json!([{
+            "from": account.address,
+            "to": call.to,
+            "value": "0x0",
+            "data": call.data,
+        }]);
+        let request = crate::wallet::signing_host::IncomingRequest {
+            id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: params.to_string(),
+            origin: "https://getvela.app".to_owned(),
+            transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
+            chain_id: call.chain_id,
+        };
+        // After it closes, ask again: the row should say what is true now.
+        self.backup_for = None;
+        self.open_signing_request(&account, request, cx);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn open_backup_signing(
+        &mut self,
+        _call: vela_core::registry_backup::BackupCall,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
     /// Sign out and erase, shared by the live and mock account panels.
     #[allow(clippy::too_many_arguments, reason = "one footer, two call sites")]
     fn settings_account_footer(
@@ -5828,9 +5988,11 @@ impl WalletPage {
         erase_confirm: gpui::SharedString,
         cx: &mut Context<Self>,
     ) -> Div {
+        let backup = self.backup_row(theme, cx);
         div()
             .flex()
             .flex_col()
+            .children(backup)
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
                 div()
@@ -8258,7 +8420,19 @@ impl WalletPage {
             transport_id: "browser".to_owned(),
             chain_id: self.browser_chain,
         };
+        self.open_signing_request(&account, request, cx);
+    }
+
+    /// The four signing machines for one request — a page's, or the wallet's own.
+    #[cfg(not(target_os = "linux"))]
+    fn open_signing_request(
+        &mut self,
+        account: &vela_core::app::Account,
+        request: crate::wallet::signing_host::IncomingRequest,
+        cx: &mut Context<Self>,
+    ) {
         let window_handle = self.window_handle;
+        let account = account.clone();
         let host = cx.new(|cx| {
             crate::wallet::signing_host::SigningHost::open(&account, request, window_handle, cx)
         });

@@ -47,6 +47,10 @@ use crate::executor::passkey::WindowHandle;
 use crate::executor::sign_request::{self as sign_executor, SignAnswer, SignContext};
 use crate::resident::{Answer, Machine, Sink};
 
+/// The transport id of a request the WALLET made of itself. Its answer has no
+/// page to go to; the column closing is the whole acknowledgement.
+pub const WALLET_TRANSPORT: &str = "wallet";
+
 /// One dApp request, as the shell received it.
 pub struct IncomingRequest {
     pub id: String,
@@ -485,15 +489,19 @@ impl SigningHost {
     /// The one screen-owned operation: answering the site.
     fn answer_transport(&mut self, id: u64, operation: &SignOperation, cx: &mut Context<Self>) {
         if let SignOperation::SendResponse {
+            transport_id,
             id: request_id,
             payload,
-            ..
         } = operation
         {
+            // The wallet's own requests (the Ethereum backup, spec 062) ride
+            // their own transport: there is no page to tell.
             #[cfg(not(target_os = "linux"))]
-            crate::webview::respond(request_id, payload);
+            if transport_id != WALLET_TRANSPORT {
+                crate::webview::respond(request_id, payload);
+            }
             #[cfg(target_os = "linux")]
-            let _ = (request_id, payload);
+            let _ = (transport_id, request_id, payload);
         }
         // Answered either way: the core sequences record-then-respond off this
         // acknowledgement, and withholding it would strand the request.
