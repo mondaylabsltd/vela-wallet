@@ -47,7 +47,7 @@ const APP_DIR = 'app';
 /** The page-side scripts, bundled from their module sources (below). */
 const ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js'];
 /** What must NOT be copied verbatim: build inputs and the bundler's own sources. */
-const SKIP_COPY = new Set(['dist', 'build.mjs', 'README.md', 'lib', ...ENTRIES]);
+const SKIP_COPY = new Set(['dist', 'build.mjs', 'README.md', 'release-notes.md', 'lib', ...ENTRIES]);
 
 /** Route trees the extension has no entry point for. */
 const PRUNE = ['gallery', 'gallery.html'];

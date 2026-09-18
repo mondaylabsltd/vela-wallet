@@ -113,6 +113,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only for the install notes. They open the release so that the person who
+      # lands on this page is told how to install what is on it (spec 063
+      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app-web/vela-wallet/extension/release-notes.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -130,6 +137,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Vela Wallet Chrome extension $GITHUB_REF_NAME" \
+            --notes-file app-web/vela-wallet/extension/release-notes.md \
             --generate-notes \
             --verify-tag \
             artifacts/* \
