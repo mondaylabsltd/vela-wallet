@@ -79,10 +79,12 @@ pub struct CeremonyChannel {
     /// The caBLE QR payload the person scans with their phone, while a hybrid
     /// ceremony waits for the scan. `None` when no QR is up.
     qr: Mutex<Option<String>>,
-    /// The person dismissed the QR (or the flow left). The hybrid scan polls
-    /// this; a fresh QR going up clears it, so one dismissal cancels one
-    /// ceremony and not the next.
-    qr_cancelled: std::sync::atomic::AtomicBool,
+    /// The person dismissed whatever the ceremony was waiting behind — the QR,
+    /// or a "touch your key" prompt — or the flow left. Every open-ended wait
+    /// that knows how to stop polls this (the hybrid scan, the USB exchange
+    /// loop). Cleared whenever a ceremony is built, so one dismissal cancels
+    /// one ceremony and not the next.
+    dismissed: std::sync::atomic::AtomicBool,
     pin: Mutex<PinState>,
     pick: Mutex<PickState>,
     /// ONE CONDVAR PER MUTEX, and that is not a style choice.
@@ -111,6 +113,9 @@ impl CeremonyChannel {
         let touch_channel = Arc::clone(self);
         let qr_channel = Arc::clone(self);
         let cancel_channel = Arc::clone(self);
+        // A new ceremony starts undismissed, whatever happened to the last one.
+        self.dismissed
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         let pin_channel = Arc::clone(self);
         let pick_channel = Arc::clone(self);
         Ceremony {
@@ -122,7 +127,7 @@ impl CeremonyChannel {
             qr: Arc::new(move |payload| {
                 if payload.is_some() {
                     qr_channel
-                        .qr_cancelled
+                        .dismissed
                         .store(false, std::sync::atomic::Ordering::SeqCst);
                 }
                 if let Ok(mut slot) = qr_channel.qr.lock() {
@@ -131,7 +136,7 @@ impl CeremonyChannel {
             }),
             cancelled: Arc::new(move || {
                 cancel_channel
-                    .qr_cancelled
+                    .dismissed
                     .load(std::sync::atomic::Ordering::SeqCst)
             }),
             pin: Arc::new(move |request| pin_channel.request_pin(request)),
@@ -156,9 +161,20 @@ impl CeremonyChannel {
     /// Bluetooth scan running behind a screen that says nothing is happening,
     /// and the next attempt would start a second one beside it.
     pub fn cancel_qr(&self) {
-        self.qr_cancelled
+        self.dismissed
             .store(true, std::sync::atomic::Ordering::SeqCst);
         if let Ok(mut slot) = self.qr.lock() {
+            *slot = None;
+        }
+    }
+
+    /// The person dismissed the "touch your key" prompt: take it down NOW and
+    /// tell the exchange behind it to stop — which sends the key `CANCEL`, so
+    /// it stops blinking too. Only offered for prompts marked `cancellable`.
+    pub fn cancel_touch(&self) {
+        self.dismissed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut slot) = self.touch.lock() {
             *slot = None;
         }
     }
@@ -280,7 +296,7 @@ impl CeremonyChannel {
         }
         // A scan still waiting for a phone must not outlive the flow by up to
         // ninety seconds.
-        self.qr_cancelled
+        self.dismissed
             .store(true, std::sync::atomic::Ordering::SeqCst);
         self.pin_answered.notify_all();
         self.pick_answered.notify_all();
@@ -325,6 +341,33 @@ mod tests {
             (ceremony.cancelled)(),
             "a flow that leaves stops the scan too"
         );
+    }
+
+    /// The "touch your key" prompt, dismissed: the card comes down and the
+    /// exchange is told — and the NEXT ceremony starts clean. A USB ceremony
+    /// shows no QR, so building the ceremony is the only place that reset can
+    /// live; without it one dismissal would cancel every USB attempt after it.
+    #[test]
+    fn dismissing_the_touch_prompt_cancels_this_ceremony_and_not_the_next() {
+        let channel = CeremonyChannel::new();
+        let first = channel.ceremony(0);
+        (first.touch)(Some(TouchRequest {
+            kind: crate::ctap::usb::TouchKind::Presence,
+            product: "YubiKey".to_owned(),
+            remote: false,
+            cancellable: true,
+        }));
+        assert!(channel.touch_waiting().is_some());
+
+        channel.cancel_touch();
+        assert!(
+            channel.touch_waiting().is_none(),
+            "the card comes down at once"
+        );
+        assert!((first.cancelled)(), "and the exchange behind it is told");
+
+        let second = channel.ceremony(0);
+        assert!(!(second.cancelled)(), "a new ceremony starts undismissed");
     }
     use std::sync::atomic::{AtomicUsize, Ordering};
 

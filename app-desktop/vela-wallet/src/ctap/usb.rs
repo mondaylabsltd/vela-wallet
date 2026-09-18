@@ -118,7 +118,21 @@ pub struct TouchRequest {
     /// security key on the desk — the prompt says "follow the steps on your
     /// device" instead of "touch your security key".
     pub remote: bool,
+    /// Can the wait behind this prompt actually be stopped? True only for a
+    /// key on USB HID, whose exchange loop polls for a dismissal and sends the
+    /// device `CANCEL`. The prompt shows a Cancel button exactly when this is
+    /// true: a button that takes the card down while the ceremony carries on
+    /// behind it would be a lie with a label on it.
+    pub cancellable: bool,
 }
+
+/// "Has the person dismissed the prompt?" — polled by every open-ended wait
+/// that knows how to stop (the USB exchange loop here, the hybrid scan).
+pub type CancelProbe = Arc<dyn Fn() -> bool + Send + Sync>;
+
+/// After `CANCEL` is sent, how long the device gets to say so itself
+/// (`CTAP2_ERR_KEEPALIVE_CANCEL`) before the loop stops waiting for it.
+const CANCEL_GRACE: Duration = Duration::from_secs(2);
 
 /// Told when the authenticator starts waiting for a person, and when it stops.
 ///
@@ -290,6 +304,8 @@ fn enumerate_here() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
 /// One open conversation with one authenticator.
 pub struct SecurityKey {
     device: HidDevice,
+    /// Asked once per read slice while an exchange waits on a person.
+    cancelled: Option<CancelProbe>,
     channel: u32,
     /// What the device says about itself. Read once, at open: the PIN protocol
     /// and the `rk` capability both come from here, and asking twice would let
@@ -324,6 +340,7 @@ impl SecurityKey {
     pub fn open_touched(
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         // One `HidApi` for the whole process: hidapi refuses a second live
         // instance, so the devices are opened HERE and the handles move into
@@ -331,12 +348,12 @@ impl SecurityKey {
         let mut opened = enumerate()?;
         if opened.len() == 1 {
             let (product, path, device) = opened.remove(0);
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             key.channel = key.init(nonce())?;
             return Ok(key);
         }
 
-        Self::race(opened, nonce, touch)
+        Self::race(opened, nonce, touch, cancelled)
     }
 
     /// Open the key that already holds a particular credential.
@@ -357,13 +374,14 @@ impl SecurityKey {
         probe_hash: &[u8],
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         let opened = enumerate()?;
 
         let mut holders = Vec::new();
         let mut rest = Vec::new();
         for (product, path, device) in opened {
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             match key.init(nonce()) {
                 Ok(channel) => key.channel = channel,
                 Err(_) => continue,
@@ -424,9 +442,15 @@ impl SecurityKey {
         }
     }
 
-    fn new(product: String, path: String, device: HidDevice) -> Self {
+    fn new(
+        product: String,
+        path: String,
+        device: HidDevice,
+        cancelled: Option<CancelProbe>,
+    ) -> Self {
         Self {
             device,
+            cancelled,
             channel: BROADCAST_CHANNEL,
             product,
             path,
@@ -443,6 +467,7 @@ impl SecurityKey {
         opened: Vec<(String, String, HidDevice)>,
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         // Announced before the threads start: several keys are about to blink,
         // and the person needs to know that touching ONE of them is the point.
@@ -451,12 +476,13 @@ impl SecurityKey {
                 kind: TouchKind::Select,
                 product: String::new(),
                 remote: false,
+                cancellable: true,
             }));
         }
 
         let mut keys = Vec::with_capacity(opened.len());
         for (product, path, device) in opened {
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             // A key that will not even initialise is not in the race.
             if let Ok(channel) = key.init(nonce()) {
                 key.channel = channel;
@@ -473,6 +499,7 @@ impl SecurityKey {
                 kind: TouchKind::Select,
                 product: String::new(),
                 remote: false,
+                cancellable: true,
             }));
         }
         Self::finish_race(keys, touch)
@@ -594,10 +621,30 @@ impl SecurityKey {
         let mut reassembler = Reassembler::new();
         let mut announced_touch = false;
         let mut report = [0u8; HID_REPORT_SIZE];
+        // `READ_SLICE` was chosen "short enough that a cancelled ceremony stops
+        // promptly" — and then nothing ever cancelled one. The prompt sat over
+        // the window for the device's whole user-presence budget with nothing
+        // to press (founder, 2026-09-19).
+        let probe = self.cancelled.clone();
+        let mut cancel_sent: Option<Instant> = None;
 
         let outcome = loop {
             if Instant::now() >= deadline {
                 break Err(UsbError::TimedOut);
+            }
+            match cancel_sent {
+                // Dismissed: tell the KEY, so it stops blinking, and keep
+                // reading — a CTAP2 device answers `CANCEL` itself, with
+                // KEEPALIVE_CANCEL, which the core already reads as "cancelled".
+                None if probe.as_ref().is_some_and(|dismissed| dismissed()) => {
+                    self.cancel();
+                    cancel_sent = Some(Instant::now());
+                }
+                // A device too old to answer is not waited on forever.
+                Some(sent) if sent.elapsed() >= CANCEL_GRACE => {
+                    break Err(UsbError::Ctap(Status::Cancelled));
+                }
+                _ => {}
             }
             let read = self
                 .device
@@ -626,6 +673,7 @@ impl SecurityKey {
                                 kind,
                                 product: self.product.clone(),
                                 remote: false,
+                                cancellable: self.cancelled.is_some(),
                             }));
                         }
                     }
@@ -704,7 +752,7 @@ mod hardware_tests {
     #[test]
     #[ignore]
     fn a_plugged_in_key_answers_get_info() {
-        let mut key = match SecurityKey::open_touched(&|| [0x11; 8], None) {
+        let mut key = match SecurityKey::open_touched(&|| [0x11; 8], None, None) {
             Ok(key) => key,
             Err(UsbError::NoKeyPresent) => {
                 panic!("no FIDO2 key is plugged in — this test needs one")

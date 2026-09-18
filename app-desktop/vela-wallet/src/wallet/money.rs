@@ -786,6 +786,12 @@ impl SendHost {
         cx.notify();
     }
 
+    /// The person dismissed the "touch your key" prompt: stop the exchange.
+    pub fn cancel_touch(&mut self, cx: &mut Context<Self>) {
+        self.channel.cancel_touch();
+        cx.notify();
+    }
+
     /// The person dismissed the hybrid QR: stop the scan behind it.
     pub fn cancel_qr(&mut self, cx: &mut Context<Self>) {
         self.channel.cancel_qr();

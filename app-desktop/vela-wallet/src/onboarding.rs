@@ -727,9 +727,16 @@ impl OnboardingPage {
     /// The cards themselves live in [`crate::hardware`] and know nothing about
     /// this screen — which is what lets the gallery render the real ones rather
     /// than a copy that can drift from them.
-    fn touch_prompt(&self, theme: &Theme) -> Option<Stateful<Div>> {
+    fn touch_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let waiting = self.channel.touch_waiting()?;
-        Some(scrim(theme, "touch-scrim").child(hardware::touch_card(theme, &self.loc, &waiting)))
+        let on_cancel = cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.channel.cancel_touch();
+            cx.notify();
+        });
+        Some(
+            scrim(theme, "touch-scrim")
+                .child(hardware::touch_card(theme, &self.loc, &waiting, on_cancel)),
+        )
     }
 
     /// The caBLE QR, while a hybrid ceremony waits for the phone to scan it. It
@@ -1210,7 +1217,7 @@ impl Render for OnboardingPage {
         if let Some(qr) = self.qr_prompt(&theme, cx) {
             root = root.child(qr);
         }
-        if let Some(prompt) = self.touch_prompt(&theme) {
+        if let Some(prompt) = self.touch_prompt(&theme, cx) {
             root = root.child(prompt);
         }
         if let Some(picker) = self.wallet_picker(&theme, cx) {
@@ -1240,6 +1247,16 @@ impl Render for OnboardingPage {
                 // covers a window.
                 if ks.key == "escape" && this.channel.qr_showing().is_some() {
                     this.channel.cancel_qr();
+                    cx.notify();
+                    return;
+                }
+                if ks.key == "escape"
+                    && this
+                        .channel
+                        .touch_waiting()
+                        .is_some_and(|waiting| waiting.cancellable)
+                {
+                    this.channel.cancel_touch();
                     cx.notify();
                     return;
                 }

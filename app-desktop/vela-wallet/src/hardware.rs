@@ -73,7 +73,12 @@ fn body(theme: &Theme, text: SharedString) -> Div {
 /// **No buttons.** There is nothing to press here — the answer is on the desk,
 /// and a Cancel would only be a second way to do what walking away already does
 /// (the exchange times out and reports it).
-pub fn touch_card(theme: &Theme, loc: &Loc, waiting: &TouchRequest) -> Div {
+pub fn touch_card(
+    theme: &Theme,
+    loc: &Loc,
+    waiting: &TouchRequest,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+) -> Div {
     // A phone reached over caBLE is not a security key on the desk — it runs the
     // approval behind its own fingerprint/passkey UI, so the prompt tells the
     // person to look at the phone, not to "touch" anything here. The two
@@ -98,7 +103,7 @@ pub fn touch_card(theme: &Theme, loc: &Loc, waiting: &TouchRequest) -> Div {
         )
     };
 
-    card(theme)
+    let prompt = card(theme)
         .items_center()
         // A filled disc where the outcome badge would be: the same place, the
         // same weight, and the only thing on the card that draws the eye.
@@ -119,7 +124,23 @@ pub fn touch_card(theme: &Theme, loc: &Loc, waiting: &TouchRequest) -> Div {
                 ),
         )
         .child(title(theme, title_text))
-        .child(body(theme, body_text))
+        .child(body(theme, body_text));
+    // The way out — drawn ONLY where it is one. This card covers the window
+    // for as long as a key waits for a finger, and it had nothing on it to
+    // press (founder, 2026-09-19: the third dialog of its kind). A prompt
+    // whose wait cannot be stopped yet gets no button rather than a button
+    // that hides the card and leaves the ceremony running behind it.
+    if waiting.cancellable {
+        prompt.child(vela_button(
+            "touch-cancel",
+            ButtonVariant::Secondary,
+            loc.t("common.cancel"),
+            theme,
+            on_cancel,
+        ))
+    } else {
+        prompt
+    }
 }
 
 /// The three ways to sign in — this device, a phone by scan, a security key —

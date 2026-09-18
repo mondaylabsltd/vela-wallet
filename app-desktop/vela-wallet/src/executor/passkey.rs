@@ -228,8 +228,7 @@ pub type CredentialPicker = Arc<dyn Fn(Vec<CredentialChoice>) -> Option<usize> +
 /// once the tunnel is up or the attempt ends.
 pub type QrNotifier = Arc<dyn Fn(Option<String>) + Send + Sync>;
 
-/// "Has the person dismissed the QR?" — asked by the hybrid scan while it waits.
-pub type CancelProbe = Arc<dyn Fn() -> bool + Send + Sync>;
+pub use crate::ctap::usb::CancelProbe;
 
 /// Everything a ceremony needs from the screen that started it.
 #[derive(Clone)]
@@ -768,6 +767,9 @@ fn desk_touch_announcer(ceremony: &Ceremony) -> TouchAnnouncer {
             kind,
             product: product.to_owned(),
             remote: false,
+            // The CCID keepalive poll lives in the core and has no dismissal
+            // to watch; no button until it does.
+            cancellable: false,
         }));
     })
 }
@@ -879,6 +881,8 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
             // Over caBLE the "authenticator" is the person's phone; the prompt
             // must say so, not "touch your security key".
             remote: true,
+            // The phone is mid-ceremony over the tunnel; nothing here polls.
+            cancellable: false,
         }));
     });
 
@@ -1022,7 +1026,11 @@ fn nonces() -> impl Fn() -> [u8; 8] {
 // Unreachable on Windows, where `webauthn.dll` runs the USB ceremony instead.
 #[cfg_attr(windows, allow(dead_code))]
 fn open(ceremony: &Ceremony) -> Result<SecurityKey, UsbError> {
-    SecurityKey::open_touched(&nonces(), Some(&ceremony.touch))
+    SecurityKey::open_touched(
+        &nonces(),
+        Some(&ceremony.touch),
+        Some(Arc::clone(&ceremony.cancelled)),
+    )
 }
 
 /// The key that already holds this credential.
@@ -1047,6 +1055,7 @@ fn open_for(credential_id: &str, ceremony: &Ceremony) -> Result<SecurityKey, Usb
         &random(32),
         &nonces(),
         Some(&ceremony.touch),
+        Some(Arc::clone(&ceremony.cancelled)),
     )
 }
 
@@ -1183,6 +1192,8 @@ mod tests {
             kind: TouchKind::Presence,
             product: "phone".to_owned(),
             remote: true,
+            // The phone is mid-ceremony over the tunnel; nothing here polls.
+            cancellable: false,
         }));
 
         let failure = match assert_over(&mut HungUp, &ceremony, &[0x11; 32], None) {
