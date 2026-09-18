@@ -24,8 +24,14 @@
 # identity. Every other run uses the empty `build-check` environment, so a
 # `workflow_dispatch` from a fix branch (how 0.9.0's packaging fixes were
 # proven before merging) keeps working and simply finds no secrets.
-# specs/063-release-channels/quickstart.md lists the secrets and how to make
-# each one.
+#
+# TODAY THAT ENVIRONMENT IS DELIBERATELY EMPTY. The founder's ruling (spec 063
+# §3a): the signature is made on the founder's Mac and the .dmg files are
+# attached by hand — scripts/release-macos-local.sh <tag> --upload — so that
+# nothing able to sign as us is stored on GitHub. This workflow is therefore
+# the BUILD CHECK for macOS and publishes nothing; the signing path below is
+# kept, tested as far as it can be without credentials, and unconfigured.
+# specs/063-release-channels/quickstart.md §C says how to turn it on.
 name: Desktop macOS packages
 
 on:

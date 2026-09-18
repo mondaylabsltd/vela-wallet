@@ -74,6 +74,7 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
   - Windows:能装能跑。不买代码签名证书(裁定),SmartScreen 会拦一次,release 说明里写了「更多信息 → 仍要运行」。
   - 扩展:zip 解压后「加载已解压的扩展程序」,release 说明里写了步骤。
   - macOS:**Developer ID 签名 + hardened runtime + 内嵌 Developer ID provisioning profile + 公证 + staple**,缺一不可。缺任何一样,Gatekeeper 都会把浏览器下载的 .dmg 报成「已损坏」;缺 profile 则没有平台 passkey。
+- **mac 包在创始人的 Mac 上签名、手动上传**(裁定,spec 063 §3a):签名私钥不上 GitHub。tag 推上去、CI 建好 release 之后:`git checkout <tag> && cd app-desktop/vela-wallet && ./scripts/release-macos-local.sh <tag> --upload`。脚本只认 tag 对应的源码,自己找 Developer ID profile、按 profile 选证书(钥匙串里有同名证书,按 SHA-1 不按名字)、编译前先验公证凭据,已有 mac 包时拒绝覆盖。一次性准备见 [quickstart](../../specs/063-release-channels/quickstart.md) §A。
 - **这条规则是机制,不是习惯。** macOS workflow 只有在该次运行真的完成签名+公证时才挂 .dmg;凭据缺失时照常构建、校验三种架构,但什么都不挂,并在 job summary 里写明缺什么。凭据放在 GitHub Environment `release` 里(仅 `desktop-v*` tag 可用),清单与生成方法见 [quickstart](../../specs/063-release-channels/quickstart.md)。
 
 ### 发版步骤

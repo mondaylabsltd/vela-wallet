@@ -325,6 +325,13 @@ VELA_NOTARY_PROFILE=vela-notary \
 ./scripts/build-macos-app.sh --arch universal --notarize
 ```
 
+For a release, do not assemble that by hand: `./scripts/release-macos-local.sh
+desktop-v<version> [--upload]` builds all three images from the tag, finds the
+profile, picks the certificate the profile names, proves the notary credentials
+before compiling, and attaches the result to the release CI created. Signing is
+local by ruling — nothing that can sign as us is stored on GitHub
+([quickstart](../../specs/063-release-channels/quickstart.md)).
+
 Use the identity's SHA-1 (`security find-identity -v -p codesigning`), not its
 name: a keychain that holds a renewed certificate beside the old one makes the
 name ambiguous and `codesign` refuses to guess. `VELA_NOTARY_PROFILE` is a

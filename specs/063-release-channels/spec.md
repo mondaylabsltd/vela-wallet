@@ -1,7 +1,8 @@
 # 063 — Release channels: what each shell ships where, and nothing unusable on GitHub Releases
 
-**Status**: channel policy RULED 2026-09-18 (§0). Parts that need nothing from the founder are
-built (see `tasks.md`, `results.md`); macOS publishing waits on three credentials (§6).
+**Status**: channel policy RULED 2026-09-18 (§0); built and merged (#243); the existing
+releases cleaned up the same day. macOS publishing is **local by ruling** (§3a) and waits on
+three things only the account holder can make (§6).
 **Origin**: founder, 2026-09-18, after the first week of tagged releases (0.9.0 → 0.9.2).
 Three of the six things those tags published could not be installed by the person who
 downloaded them.
@@ -110,6 +111,21 @@ environment `build-check` serves every non-tag run, so a `workflow_dispatch` fro
 branch (how 0.9.0's fixes were verified before merging) keeps working and simply has no
 secrets to find.
 
+## 3a. Where the signature is made — the founder's ruling
+
+> 「quickstart.md §4 操作中的操作我感觉好危险呀，能不能直接本地打包好我上传到 github release 去？」
+
+Yes — and for a wallet it is the better answer, not a concession. The signing key never
+leaves the founder's Mac and GitHub holds nothing that can sign as us; the price is one
+command per release. `scripts/release-macos-local.sh <tag> [--upload]` is that command: it
+refuses to build from anything but the tag, finds the Developer ID profile, picks the
+certificate *the profile names* (by SHA-1 — the keychain has same-named ones), proves the
+notary credentials before compiling, and will not overwrite published packages unless told.
+
+The gate in CI is unchanged and now permanent rather than provisional: the macOS workflow
+has no credentials, so it builds, verifies and attaches nothing. CI signing stays available
+(`quickstart.md` §C) and unconfigured.
+
 ## 4. A self-built phone app: what works and what does not
 
 Verified in the code, because the first version of this analysis claimed a self-built app
@@ -174,8 +190,8 @@ distance between "the dmg is built" and "the dmg is published".
 | N1 | A **Developer ID provisioning profile** for `app.getvela.VelaWallet` with Associated Domains (developer.apple.com → Profiles → + → *Developer ID* → App ID `app.getvela.VelaWallet`) | Issued by the portal to the account holder. This Mac has the *development* profile for that App ID (expires 2027-07-28) and a Developer ID profile for a different app — not this one |
 | N2 | The **Developer ID Application certificate as a `.p12`** | The private key is in the login keychain. Note the keychain holds **two** identities both named `Developer ID Application: Qin Xie (F9W689P9NE)` — signing by name is ambiguous on this Mac; export the one that is not expired/revoked |
 | N3 | **Notary credentials**: an App Store Connect API key (`.p8` + key id + issuer id), or an Apple ID with an app-specific password | Account-level secrets |
-| N4 | The `release` environment's secrets (`quickstart.md` has the exact commands) | The values are N1–N3 |
-| N5 | **Store facts for the download page.** `play.google.com/store/apps/details?id=app.getvela.wallet` answers **404 in seven regions** and the App Store lookup for `app.getvela.VelaWallet` returns nothing (both checked 2026-09-18). If the Play listing is in a testing track or in review, the page must keep saying "coming soon"; if it is live under another id, the link needs that id | Only the consoles know |
-| N6 | **Is the Apple account an organization?** The certificates are issued to a person's name, which is how an *individual* enrollment looks. App Store Review Guideline 3.1.5(i) allows wallet apps only from developers enrolled as an organization. If the enrollment is individual, this blocks the iOS and Mac App Store listings regardless of anything technical — and "iOS: stores only" (§0) then has no store | Only the account holder can see or change the enrollment |
+| ~~N4~~ | **NOT NEEDED** — signing is local by ruling (§3a); no secret goes to GitHub | — |
+| ~~N5~~ | **ANSWERED 2026-09-18: not on Play yet** (「还没有呀」) — the page's "coming soon" is right as it stands. *Original:* **Store facts for the download page.** `play.google.com/store/apps/details?id=app.getvela.wallet` answers **404 in seven regions** and the App Store lookup for `app.getvela.VelaWallet` returns nothing (both checked 2026-09-18). If the Play listing is in a testing track or in review, the page must keep saying "coming soon"; if it is live under another id, the link needs that id | Only the consoles know |
+| ~~N6~~ | **RESOLVED 2026-09-18: it is an organization** — the provisioning profile's `TeamName` is `MONDAY LABS LTD` (the certificates predate the upgrade and still carry a person's name; `quickstart.md` A1 replaces them). The first analysis read the certificate and not the profile. *Original:* **Is the Apple account an organization?** The certificates are issued to a person's name, which is how an *individual* enrollment looks. App Store Review Guideline 3.1.5(i) allows wallet apps only from developers enrolled as an organization. If the enrollment is individual, this blocks the iOS and Mac App Store listings regardless of anything technical — and "iOS: stores only" (§0) then has no store | Only the account holder can see or change the enrollment |
 | N7 | **`assetlinks.json` fingerprint `A3:8E:36:FE:…`** — compare with Play Console → App integrity → App signing key certificate. If it matches, it is Google's key and must stay; the debug keystore (`24:EA:D0:…`, password `android`, a file on a laptop) and the retired EAS key (`BE:1E:CA:…`) should leave production | Play Console |
-| N8 | A go-ahead for FR-009's deletions, and ten minutes with the first signed dmg: open it from a browser download, create a wallet with "This device", open the scanner | Destructive, and a camera |
+| N8 | ~~A go-ahead for FR-009's deletions~~ (given and done 2026-09-18), and ten minutes with the first signed dmg: open it from a browser download, create a wallet with "This device", open the scanner | Destructive, and a camera |
