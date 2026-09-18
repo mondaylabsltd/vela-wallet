@@ -127,7 +127,9 @@ notarize_file() {
   status="$(/usr/bin/plutil -extract status raw -o - - <<<"$out" 2>/dev/null || true)"
   if [[ "$status" != "Accepted" ]]; then
     echo "$out" >&2
-    [[ -n "$id" ]] && xcrun notarytool log "$id" "${notary_auth[@]}" >&2 || true
+    if [[ -n "$id" ]]; then
+      xcrun notarytool log "$id" "${notary_auth[@]}" >&2 || true
+    fi
     die "Apple did not accept ${file##*/} (status: ${status:-unknown})"
   fi
   echo "  accepted ($id)"
