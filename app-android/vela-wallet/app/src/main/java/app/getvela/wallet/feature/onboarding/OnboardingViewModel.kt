@@ -18,6 +18,7 @@ import app.getvela.wallet.feature.onboarding.core.LoginView
 import app.getvela.wallet.feature.onboarding.core.OnboardingExecutor
 import app.getvela.wallet.feature.onboarding.core.PasskeyExecutor
 import app.getvela.wallet.feature.onboarding.core.PromptKind
+import app.getvela.wallet.feature.onboarding.core.RegistryChainReader
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.onboarding.core.UsbSecurityKeyCeremony
@@ -53,7 +54,9 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     /** The relying party and every ceremony. Rebuilt per attached Activity. */
     private var passkey: PasskeyExecutor? = null
-    private val registry = RegistryClient()
+    // With the contract behind it: an index that cannot be reached must not be
+    // what stands between a person and their wallet (spec 062).
+    private val registry = RegistryClient(chain = RegistryChainReader(container::rawEthCall))
 
     private var createDriver: CoreDriver? = null
     private var loginDriver: CoreDriver? = null

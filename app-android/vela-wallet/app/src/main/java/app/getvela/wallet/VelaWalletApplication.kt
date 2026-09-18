@@ -151,11 +151,7 @@ class AppContainer(private val app: Application) {
             store = VelaStore(app),
             // The RAW result, bare `0x` included: a chain without the signer
             // contract is an answer ("not here"), not a silence.
-            ethCall = { chainId, to, data ->
-                (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
-                    ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
-                    ?.takeIf { it.startsWith("0x") }
-            },
+            ethCall = ::rawEthCall,
             indexGet = { path ->
                 val got = client.rawGet(path)
                 when {
@@ -398,16 +394,22 @@ class AppContainer(private val app: Application) {
         )
     }
 
+    /**
+     * One `eth_call` through the pool: the RAW result, bare `0x` included — a
+     * chain without the contract is an answer ("not here"), not a silence — or
+     * `null` when nobody answered. The registry walks all tell the two apart.
+     */
+    suspend fun rawEthCall(chainId: Int, to: String, data: String): String? =
+        (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
+            ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
+            ?.takeIf { it.startsWith("0x") }
+
     /** Where the active wallet's founding record stands on Ethereum (spec 062). */
     val registryBackup: RegistryBackup by lazy {
         RegistryBackup(
             // The RAW result, bare `0x` included: a chain without the registry is
             // an answer ("not here"), not a silence.
-            ethCall = { chainId, to, data ->
-                (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
-                    ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
-                    ?.takeIf { it.startsWith("0x") }
-            },
+            ethCall = ::rawEthCall,
             step = { address, key, answers, target -> uniffi.vela_core_uniffi.registryBackupStep(address, key, answers, target) },
         )
     }
