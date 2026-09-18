@@ -1311,6 +1311,7 @@
    "techIdentityToken": "Token",
    "techIdentityRecipient": "Penerima",
    "copyValue": "Salin",
+   "signWith": "Tanda tangani dengan",
    "viewOnExplorer": "Lihat di explorer",
    "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
   },
@@ -1567,17 +1568,23 @@
    "invalid": "Tidak valid"
   },
   "backup": {
-   "title": "Cadangkan kunci ke Ethereum",
+   "title": "Cadangkan kunci publik ke Ethereum",
    "backedUp": "Sudah dicadangkan di Ethereum",
    "notBackedUp": "Belum dicadangkan",
-   "couldNotCheck": "Tidak dapat memeriksa"
+   "couldNotCheck": "Tidak dapat memeriksa",
+   "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda."
   },
   "keys": {
    "title": "Kunci",
    "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
    "keyN": "Kunci {{n}}",
-   "notSynced": "Tidak disinkronkan",
-   "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini."
+   "notSynced": "Terikat perangkat",
+   "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",
+   "publicKey": "Kunci publik",
+   "credential": "Kredensial",
+   "transport": "Transport",
+   "attestation": "Atestasi",
+   "userVerified": "Pengguna terverifikasi"
   }
  },
  "contacts": {

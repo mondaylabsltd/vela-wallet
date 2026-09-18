@@ -542,7 +542,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			backedUp: k('settingsModals.backup.backedUp'),
 			notBackedUp: k('settingsModals.backup.notBackedUp'),
 			couldNotCheck: k('settingsModals.backup.couldNotCheck'),
-			checking: k('componentsUi.funding.checking')
+			checking: k('componentsUi.funding.checking'),
+			explain: k('settingsModals.backup.explain')
 		},
 		keys: {
 			title: k('settingsModals.keys.title'),
@@ -553,7 +554,14 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fromDevice: k('settingsModals.keys.fromDevice'),
 			providerPlatform: k('onboarding.create.providerPlatform'),
 			providerGeneric: k('onboarding.create.providerGeneric'),
-			providerSecurityKey: k('onboarding.create.providerSecurityKey')
+			providerSecurityKey: k('onboarding.create.providerSecurityKey'),
+			publicKey: k('settingsModals.keys.publicKey'),
+			credential: k('settingsModals.keys.credential'),
+			transport: k('settingsModals.keys.transport'),
+			attestation: k('settingsModals.keys.attestation'),
+			userVerified: k('settingsModals.keys.userVerified'),
+			copy: k('componentsUi.signing.copyValue'),
+			copied: k('receive.copied')
 		},
 		relayer: {
 			title: k('componentsUi.treasuryBootstrap.title'),
@@ -832,6 +840,12 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		signWithLabel: k('componentsUi.signing.signWith'),
+		signWithAuto: k('common.automatic'),
+		// Titles only: the create flow's descriptions say "create it on…".
+		signWithPlatform: k('onboarding.create.methodPlatformTitle'),
+		signWithHybrid: k('onboarding.create.methodHybridTitle'),
+		signWithSecurityKey: k('onboarding.create.methodSecurityKeyTitle'),
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

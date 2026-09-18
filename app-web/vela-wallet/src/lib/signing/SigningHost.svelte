@@ -28,6 +28,7 @@
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { FeeCall } from '$lib/core/generated/FeeCall';
+	import { setSignMethod, type SignMethod } from '$lib/onboarding/core/passkey';
 
 	interface Props {
 		messages: SigningMessages;
@@ -116,9 +117,39 @@
 		});
 	});
 
+	// WHERE the signing passkey is — this request's, and only this request's. The
+	// passkey module reads it at the ceremony; it goes back to `auto` the moment
+	// the sheet is gone, so a choice made for one request never signs another.
+	let signMethod = $state<SignMethod>('auto');
+	let signWithOpen = $state(false);
+	$effect(() => {
+		setSignMethod(signMethod);
+	});
+	$effect(() => {
+		if (signView.request && signView.surface !== 'hidden') return;
+		signMethod = 'auto';
+		signWithOpen = false;
+	});
+	function onSignWith(id: string | null): void {
+		if (id === null) {
+			signWithOpen = !signWithOpen;
+			return;
+		}
+		if (id === 'auto' || id === 'platform' || id === 'hybrid' || id === 'security_key') {
+			signMethod = id;
+		}
+		signWithOpen = false;
+	}
+
 	const model = $derived.by(() => {
 		if (!identity) return null;
-		return buildSigningModel({
+		const titles: Record<SignMethod, string> = {
+			auto: messages.signWithAuto,
+			platform: messages.signWithPlatform,
+			hybrid: messages.signWithHybrid,
+			security_key: messages.signWithSecurityKey
+		};
+		const built = buildSigningModel({
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
@@ -128,6 +159,20 @@
 			identity,
 			identicon: avatarSvgForClient
 		});
+		if (!built) return built;
+		return {
+			...built,
+			signWith: {
+				label: messages.signWithLabel,
+				value: titles[signMethod],
+				open: signWithOpen,
+				options: (Object.keys(titles) as SignMethod[]).map((id) => ({
+					id,
+					title: titles[id],
+					selected: id === signMethod
+				}))
+			}
+		};
 	});
 
 	/**
@@ -179,5 +224,6 @@
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => (fee.view?.failed ? fee.requote() : onfee())}
+		onsignwith={onSignWith}
 	/>
 {/if}

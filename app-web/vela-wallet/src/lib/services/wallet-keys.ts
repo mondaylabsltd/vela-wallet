@@ -21,6 +21,12 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced'> {
 	/** `null` when only the device answered: nobody can vouch for a badge. */
 	synced: boolean | null;
 	public_key_hex: string;
+	/** base64url, as authenticators and the registry explorer print it; empty from the device. */
+	credential_id: string;
+	/** The registry's 20-byte attestation summary, `0x`-hex; empty from the device. */
+	attestation_hex: string;
+	/** The authenticator verified the person at registration; `null` = nobody can vouch. */
+	user_verified: boolean | null;
 }
 
 export interface WalletKeys {

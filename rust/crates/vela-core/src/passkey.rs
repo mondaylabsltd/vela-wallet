@@ -338,6 +338,16 @@ pub fn attestation_signals(attestation_hex: &str) -> (String, bool) {
     (aaguid, backed_up)
 }
 
+/// Did the authenticator verify the person (UV, bit 2 of the flags byte) when
+/// this credential was registered? `None` for an attestation this build cannot
+/// read — unlike "synced", nothing gates on this, so it does not fail open: a
+/// badge nobody can vouch for is not drawn.
+#[must_use]
+pub fn attestation_user_verified(attestation_hex: &str) -> Option<bool> {
+    let bytes = crate::primitives::from_hex(attestation_hex).ok()?;
+    (bytes.len() == 20).then(|| bytes[17] & 0x04 != 0)
+}
+
 /// The provider's brand name, or `None` when the catalog does not know it.
 #[must_use]
 pub fn provider_name(aaguid: &str) -> Option<&'static str> {

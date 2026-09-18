@@ -650,6 +650,9 @@ export interface WalletKeysModel {
 	rows: WalletKeyRowModel[];
 	/** The founding record's standing on Ethereum; absent = nothing to draw. */
 	backup?: EthereumBackupRowModel;
+	/** Under the backup: PUBLIC keys only, private keys never leave the device. */
+	backupExplain: string;
+	copy: { action: string; done: string };
 }
 
 export interface WalletKeyRowModel {
@@ -657,9 +660,15 @@ export interface WalletKeyRowModel {
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
 	holderFallback: string;
-	badge?: { text: string; tone: 'synced' | 'local' };
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
+	/** "User-verified", "Synced" / "Device-bound" — drawn as pills, the explorer's way. */
+	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
+	/**
+	 * What the row opens onto: the registry explorer's facts, each copyable.
+	 * Empty when only the device answered — then there is nothing to open.
+	 */
+	details: { label: string; value: string; mono: boolean; copy: boolean }[];
 	/** The row in the create flow's shape — what `PasskeyProviderMark` draws from. */
 	key: import('$lib/onboarding/generated/CreateKeyRow').CreateKeyRow;
 }

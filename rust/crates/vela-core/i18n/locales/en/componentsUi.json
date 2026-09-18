@@ -220,6 +220,7 @@
       "techIdentityToken": "Token",
       "techIdentityRecipient": "Recipient",
       "copyValue": "Copy",
+      "signWith": "Sign with",
       "viewOnExplorer": "View on explorer",
       "sendingToTokenContract": "Sent to the token’s own contract"
     },

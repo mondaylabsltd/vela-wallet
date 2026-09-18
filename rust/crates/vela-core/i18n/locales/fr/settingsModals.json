@@ -85,17 +85,23 @@
       "invalid": "Invalide"
     },
     "backup": {
-      "title": "Sauvegarder les clés sur Ethereum",
+      "title": "Sauvegarder les clés publiques sur Ethereum",
       "backedUp": "Sauvegardées sur Ethereum",
       "notBackedUp": "Pas encore sauvegardées",
-      "couldNotCheck": "Vérification impossible"
+      "couldNotCheck": "Vérification impossible",
+      "explain": "Seules les clés publiques sont publiées, afin de pouvoir retrouver et reconstruire ce portefeuille depuis Ethereum. Les clés privées ne quittent jamais vos appareils."
     },
     "keys": {
       "title": "Clés",
       "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
       "keyN": "Clé {{n}}",
-      "notSynced": "Non synchronisée",
-      "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient."
+      "notSynced": "Liée à l'appareil",
+      "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient.",
+      "publicKey": "Clé publique",
+      "credential": "Identifiant",
+      "transport": "Transport",
+      "attestation": "Attestation",
+      "userVerified": "Utilisateur vérifié"
     }
   }
 }

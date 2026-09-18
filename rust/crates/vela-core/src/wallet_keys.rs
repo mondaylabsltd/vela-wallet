@@ -83,6 +83,15 @@ pub struct WalletKeyRow {
     pub method: String,
     /// Uncompressed `04‖x‖y`, lowercase bare hex.
     pub public_key_hex: String,
+    /// The WebAuthn credential id, base64url as authenticators and the registry
+    /// explorer print it. Empty when only the device answered.
+    pub credential_id: String,
+    /// The registry's 20-byte attestation summary, `0x`-hex. Empty when only
+    /// the device answered.
+    pub attestation_hex: String,
+    /// The authenticator verified the person at registration (UV). `None` when
+    /// nobody can vouch for it.
+    pub user_verified: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +141,9 @@ fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
             provider_name: String::new(),
             method: method_of("", &key.transports).to_owned(),
             public_key_hex: normal_key(&key.public_key_hex).unwrap_or_default(),
+            credential_id: String::new(),
+            attestation_hex: String::new(),
+            user_verified: None,
         })
         .collect()
 }
@@ -172,16 +184,24 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
         let public_key_hex = normal_key(item["publicKey"].as_str()?)?;
         let attachment = item["authenticatorAttachment"].as_str().unwrap_or_default();
         let transports = item["transports"].as_str().unwrap_or_default();
-        let (aaguid, synced) =
-            passkey::attestation_signals(item["attestation"].as_str().unwrap_or_default());
+        let attestation = item["attestation"].as_str().unwrap_or_default();
+        let (aaguid, synced) = passkey::attestation_signals(attestation);
+        let credential_id = item["credentialId"]
+            .as_str()
+            .and_then(|hex| primitives::from_hex(hex).ok())
+            .map(|bytes| primitives::to_base64url(&bytes))
+            .unwrap_or_default();
         let remembered = device
             .iter()
             .find(|key| normal_key(&key.public_key_hex).as_deref() == Some(&public_key_hex));
-        let name = names
-            .get(index)
+        // The person's OWN label first (founder, 2026-09-17: a name somebody
+        // chose outranks every name somebody else recorded). The registry's
+        // metadata is what the key was called on the day it was registered —
+        // often a default — and only speaks when the device has nothing.
+        let name = remembered
+            .map(|key| key.name.clone())
             .filter(|name| !name.is_empty())
-            .cloned()
-            .or_else(|| remembered.map(|key| key.name.clone()))
+            .or_else(|| names.get(index).filter(|name| !name.is_empty()).cloned())
             .unwrap_or_default();
         rows.push(WalletKeyRow {
             name,
@@ -195,6 +215,13 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
             aaguid,
             method: method_of(attachment, transports).to_owned(),
             public_key_hex,
+            credential_id,
+            attestation_hex: if attestation.is_empty() {
+                String::new()
+            } else {
+                format!("0x{}", attestation.trim_start_matches("0x"))
+            },
+            user_verified: passkey::attestation_user_verified(attestation),
         });
     }
     Some(rows)
@@ -405,8 +432,14 @@ mod tests {
         assert_eq!(keys[0].public_key_hex, device()[0].public_key_hex);
         assert!(keys.iter().all(|key| key.confirmed && key.synced.is_some()));
         assert!(keys.iter().all(|key| key.public_key_hex.len() == 130));
-        // Every row is called something: the registry's metadata carries the names.
+        // The person's own label outranks the registry's; where the device has
+        // none, the registry's metadata speaks.
+        assert_eq!(keys[0].name, "Parallel Multi");
         assert!(keys.iter().all(|key| !key.name.is_empty()), "{keys:?}");
+        // The explorer's facts, for the details a row opens onto.
+        assert!(keys.iter().all(|key| !key.credential_id.is_empty()));
+        assert!(keys.iter().all(|key| key.attestation_hex.len() == 42));
+        assert!(keys.iter().all(|key| key.user_verified.is_some()));
         assert!(asked.iter().all(|chain| *chain == 100));
     }
 

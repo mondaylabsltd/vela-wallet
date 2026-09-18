@@ -271,6 +271,8 @@ export interface SettingsMessages {
 		notBackedUp: string;
 		couldNotCheck: string;
 		checking: string;
+		/** What is being published, and what is not: PUBLIC keys only. */
+		explain: string;
 	};
 	/** The keys that control this wallet (spec 062). */
 	keys: {
@@ -285,6 +287,14 @@ export interface SettingsMessages {
 		providerPlatform: string;
 		providerGeneric: string;
 		providerSecurityKey: string;
+		/** The labels of what a key row opens onto — the registry explorer's facts. */
+		publicKey: string;
+		credential: string;
+		transport: string;
+		attestation: string;
+		userVerified: string;
+		copy: string;
+		copied: string;
 	};
 	relayer: {
 		title: string;
@@ -399,6 +409,14 @@ export const SETTINGS_KEYS = [
 	'settingsModals.keys.keyN',
 	'settingsModals.keys.notSynced',
 	'settingsModals.keys.fromDevice',
+	'settingsModals.keys.publicKey',
+	'settingsModals.keys.credential',
+	'settingsModals.keys.transport',
+	'settingsModals.keys.attestation',
+	'settingsModals.keys.userVerified',
+	'settingsModals.backup.explain',
+	'componentsUi.signing.copyValue',
+	'receive.copied',
 	'onboarding.create.keySyncedBadge',
 	'onboarding.create.providerPlatform',
 	'onboarding.create.providerGeneric',

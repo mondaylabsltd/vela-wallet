@@ -2,6 +2,7 @@
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import SignerRow from './SignerRow.svelte';
+	import SignWithRow from './SignWithRow.svelte';
 	import SlideToConfirm from './SlideToConfirm.svelte';
 	import TechDetails from './TechDetails.svelte';
 	import type { SigningModel } from '../model';
@@ -18,9 +19,11 @@
 		onchip?: (id: string) => void;
 		oncustom?: (text: string) => void;
 		onfee?: () => void;
+		/** `null` toggles the list; an id picks a method and closes it. */
+		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onconfirm, onchip, oncustom, onfee }: Props = $props();
+	let { model, onconfirm, onchip, oncustom, onfee, onsignwith }: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
 	let techOverride = $state<boolean | undefined>();
@@ -40,6 +43,9 @@
 		identiconSvg={model.signer.identiconSvg}
 		address={model.signer.address}
 	/>
+	{#if model.signWith}
+		<SignWithRow signWith={model.signWith} onselect={onsignwith} />
+	{/if}
 	<SlideToConfirm
 		hint={model.confirm.hint}
 		action={model.confirm.action}

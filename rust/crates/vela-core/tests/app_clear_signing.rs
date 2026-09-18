@@ -2085,7 +2085,7 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     let view = sut.view();
     assert!(view.resolved);
     let result = view.result.expect("a first-party result");
-    assert_eq!(result.intent, "Back up wallet keys");
+    assert_eq!(result.intent, "Back up public keys");
     assert_eq!(
         result.contract_name.as_deref(),
         Some("Vela passkey registry")
@@ -2102,9 +2102,9 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
     assert_eq!(
         rows,
         vec![
-            ("Wallet", "Interleave"),
+            ("Registered as", "Interleave"),
             ("Address", "0x88cCA0…266894"),
-            ("Keys", "3"),
+            ("Public keys", "3"),
         ]
     );
     assert_eq!(

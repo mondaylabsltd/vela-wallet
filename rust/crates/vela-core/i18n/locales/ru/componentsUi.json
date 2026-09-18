@@ -191,6 +191,7 @@
       "techIdentityToken": "Токен",
       "techIdentityRecipient": "Получатель",
       "copyValue": "Копировать",
+      "signWith": "Подписать через",
       "viewOnExplorer": "Открыть в обозревателе",
       "sendingToTokenContract": "Отправляется на собственный контракт токена"
     },

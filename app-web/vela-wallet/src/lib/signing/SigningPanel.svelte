@@ -16,14 +16,15 @@
 		onconfirm?: () => void;
 		onchip?: (id: string) => void;
 		onfee?: () => void;
+		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onconfirm, onchip, onfee }: Props = $props();
+	let { model, onconfirm, onchip, onfee, onsignwith }: Props = $props();
 </script>
 
 <div class="panel">
 	<SigningHeader dapp={model.dapp} network={model.network} />
-	<SigningBody {model} {onconfirm} {onchip} {onfee} />
+	<SigningBody {model} {onconfirm} {onchip} {onfee} {onsignwith} />
 </div>
 
 <style>

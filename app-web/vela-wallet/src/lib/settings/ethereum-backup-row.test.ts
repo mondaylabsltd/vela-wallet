@@ -19,13 +19,16 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	provider_name: '',
 	method: 'platform',
 	public_key_hex: '04' + 'ab'.repeat(64),
+	credential_id: '',
+	attestation_hex: '',
+	user_verified: null,
 	...over
 });
 
 describe('ethereumBackupRow', () => {
 	it('says where the record stands, and is a button only when it is not backed up', () => {
 		expect(ethereumBackupRow('not_backed_up', m)).toEqual({
-			title: 'Back up keys to Ethereum',
+			title: 'Back up public keys to Ethereum',
 			subtitle: 'Not backed up yet',
 			tone: 'caution',
 			actionable: true
@@ -61,7 +64,14 @@ describe('walletKeysModel', () => {
 		source: 'registry',
 		chainId: 100,
 		keys: [
-			key({ name: 'Interleave', provider_name: 'Apple Passwords' }),
+			key({
+				name: 'Interleave',
+				provider_name: 'Apple Passwords',
+				aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+				credential_id: 'aa_bgDzJkhFmY',
+				attestation_hex: '0x01fbfc3007154e4ecc8c0b6e020557d7bd5d0000',
+				user_verified: true
+			}),
 			key({ synced: false, method: 'security_key', transports: 'usb,nfc' }),
 			key({ method: 'hybrid' })
 		]
@@ -79,11 +89,21 @@ describe('walletKeysModel', () => {
 			'Passkey'
 		]);
 		expect(model.rows[0].fingerprint).toBe('abab…abab');
-		expect(model.rows.map((row) => row.badge)).toEqual([
-			{ text: 'Synced', tone: 'synced' },
-			{ text: 'Not synced', tone: 'local' },
-			{ text: 'Synced', tone: 'synced' }
+		expect(model.rows.map((row) => row.pills.map((pill) => pill.text))).toEqual([
+			['User-verified', 'Synced'],
+			['Device-bound'],
+			['Synced']
 		]);
+		// What a row opens onto: the explorer's facts, the two a person pastes elsewhere copyable.
+		expect(model.rows[0].details.map((d) => [d.label, d.copy])).toEqual([
+			['Public key', true],
+			['Credential', true],
+			['AAGUID', false],
+			['Transport', false],
+			['Attestation', false]
+		]);
+		expect(model.rows[0].details[0].value).toBe('0x04' + 'ab'.repeat(64));
+		expect(model.backupExplain).toContain('Private keys never leave');
 	});
 
 	it('still asking: a title and no guessed count', () => {
@@ -99,7 +119,9 @@ describe('walletKeysModel', () => {
 			m
 		);
 		expect(model.note).toBe(m.keys.fromDevice);
-		expect(model.rows[0].badge).toBeUndefined();
+		expect(model.rows[0].pills).toEqual([]);
+		// Nothing to open when only the device answered.
+		expect(model.rows[0].details.map((d) => d.label)).toEqual(['Public key', 'Transport']);
 		// A registry that answered with nothing was not unreachable: no such note.
 		const unregistered = walletKeysModel(
 			{ source: 'not_registered', chainId: null, keys: [key({ synced: null })] },

@@ -2518,11 +2518,16 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
         };
     let address = call.wallet_address.to_lowercase();
     Some(ClearSignResult {
-        intent: "Back up wallet keys".to_owned(),
+        // PUBLIC keys: "back up wallet keys" read as handing over the keys
+        // themselves (founder, 2026-09-19).
+        intent: "Back up public keys".to_owned(),
         contract_name: Some("Vela passkey registry".to_owned()),
         owner: Some("Vela".to_owned()),
         fields: vec![
-            field("Wallet", call.wallet_name, "raw", None),
+            // The name IN THE RECORD being copied — what the wallet was called on
+            // the day it was registered, not what its owner calls it now (that is
+            // the sheet's own signing-account row).
+            field("Registered as", call.wallet_name, "raw", None),
             field(
                 "Address",
                 format!(
@@ -2533,7 +2538,7 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
                 "addressName",
                 Some(address),
             ),
-            field("Keys", call.key_count.to_string(), "raw", None),
+            field("Public keys", call.key_count.to_string(), "raw", None),
         ],
         risk: ClearRisk::Safe,
         contract_address: Some(to.to_lowercase()),

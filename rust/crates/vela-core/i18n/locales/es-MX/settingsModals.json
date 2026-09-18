@@ -85,17 +85,23 @@
       "invalid": "Inválido"
     },
     "backup": {
-      "title": "Respaldar llaves en Ethereum",
+      "title": "Respaldar las llaves públicas en Ethereum",
       "backedUp": "Respaldadas en Ethereum",
       "notBackedUp": "Aún sin respaldo",
-      "couldNotCheck": "No se pudo comprobar"
+      "couldNotCheck": "No se pudo comprobar",
+      "explain": "Solo se publican las llaves públicas, para poder encontrar y reconstruir esta billetera desde Ethereum. Las llaves privadas nunca salen de tus dispositivos."
     },
     "keys": {
       "title": "Llaves",
       "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
       "keyN": "Llave {{n}}",
-      "notSynced": "Sin sincronizar",
-      "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo."
+      "notSynced": "Ligada al dispositivo",
+      "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",
+      "publicKey": "Llave pública",
+      "credential": "Credencial",
+      "transport": "Transporte",
+      "attestation": "Atestación",
+      "userVerified": "Usuario verificado"
     }
   }
 }

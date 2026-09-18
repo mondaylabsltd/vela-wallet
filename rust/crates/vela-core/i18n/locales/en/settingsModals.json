@@ -85,17 +85,23 @@
       "invalid": "Invalid"
     },
     "backup": {
-      "title": "Back up keys to Ethereum",
+      "title": "Back up public keys to Ethereum",
       "backedUp": "Backed up on Ethereum",
       "notBackedUp": "Not backed up yet",
-      "couldNotCheck": "Could not check"
+      "couldNotCheck": "Could not check",
+      "explain": "Only public keys are published, so this wallet can be found and rebuilt from Ethereum. Private keys never leave your devices."
     },
     "keys": {
       "title": "Keys",
       "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
       "keyN": "Key {{n}}",
-      "notSynced": "Not synced",
-      "fromDevice": "Couldn't reach the registry. Showing what this device remembers."
+      "notSynced": "Device-bound",
+      "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
+      "publicKey": "Public key",
+      "credential": "Credential",
+      "transport": "Transport",
+      "attestation": "Attestation",
+      "userVerified": "User-verified"
     }
   }
 }

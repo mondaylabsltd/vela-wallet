@@ -227,7 +227,7 @@ describe('a decoded request', () => {
 					...DECODED,
 					result: {
 						...DECODED.result!,
-						intent: 'Back up wallet keys',
+						intent: 'Back up public keys',
 						contract_name: 'Vela passkey registry',
 						owner: 'Vela',
 						verified: true,
@@ -259,7 +259,7 @@ describe('a decoded request', () => {
 			})
 		)!;
 		expect(backup.blocks.filter((b) => b.kind === 'warning')).toEqual([]);
-		expect(backup.blocks[0]).toMatchObject({ kind: 'intent', text: 'Back up wallet keys' });
+		expect(backup.blocks[0]).toMatchObject({ kind: 'intent', text: 'Back up public keys' });
 		const rows = backup.blocks.find((b) => b.kind === 'rows');
 		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
 			['Wallet', 'Interleave'],

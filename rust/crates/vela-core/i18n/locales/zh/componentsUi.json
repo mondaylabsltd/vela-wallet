@@ -191,6 +191,7 @@
       "techIdentityToken": "代币",
       "techIdentityRecipient": "接收方",
       "copyValue": "复制",
+      "signWith": "签名方式",
       "viewOnExplorer": "在区块浏览器中查看",
       "sendingToTokenContract": "发送到代币自身合约"
     },

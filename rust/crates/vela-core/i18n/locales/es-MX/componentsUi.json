@@ -191,6 +191,7 @@
       "techIdentityToken": "Token",
       "techIdentityRecipient": "Destinatario",
       "copyValue": "Copiar",
+      "signWith": "Firmar con",
       "viewOnExplorer": "Ver en el explorador",
       "sendingToTokenContract": "Enviado al contrato del propio token"
     },

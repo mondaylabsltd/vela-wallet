@@ -1311,6 +1311,7 @@
    "techIdentityToken": "Token",
    "techIdentityRecipient": "Empfänger",
    "copyValue": "Kopieren",
+   "signWith": "Signieren mit",
    "viewOnExplorer": "Im Explorer ansehen",
    "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet"
   },
@@ -1567,17 +1568,23 @@
    "invalid": "Ungültig"
   },
   "backup": {
-   "title": "Schlüssel auf Ethereum sichern",
+   "title": "Öffentliche Schlüssel auf Ethereum sichern",
    "backedUp": "Auf Ethereum gesichert",
    "notBackedUp": "Noch nicht gesichert",
-   "couldNotCheck": "Prüfung nicht möglich"
+   "couldNotCheck": "Prüfung nicht möglich",
+   "explain": "Veröffentlicht werden nur die öffentlichen Schlüssel, damit dieses Wallet über Ethereum gefunden und wiederhergestellt werden kann. Private Schlüssel verlassen Ihre Geräte nie."
   },
   "keys": {
    "title": "Schlüssel",
    "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
    "keyN": "Schlüssel {{n}}",
-   "notSynced": "Nicht synchronisiert",
-   "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat."
+   "notSynced": "Gerätegebunden",
+   "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat.",
+   "publicKey": "Öffentlicher Schlüssel",
+   "credential": "Anmeldedaten",
+   "transport": "Transport",
+   "attestation": "Attestierung",
+   "userVerified": "Nutzer verifiziert"
   }
  },
  "contacts": {

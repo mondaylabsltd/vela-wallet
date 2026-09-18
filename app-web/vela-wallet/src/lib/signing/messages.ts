@@ -147,6 +147,12 @@ export interface SigningMessages {
 	techIdentityToken: string;
 	techIdentityRecipient: string;
 	copyValue: string;
+	/** The "Sign with" row: the create flow's own words for where a passkey is. */
+	signWithLabel: string;
+	signWithAuto: string;
+	signWithPlatform: string;
+	signWithHybrid: string;
+	signWithSecurityKey: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;

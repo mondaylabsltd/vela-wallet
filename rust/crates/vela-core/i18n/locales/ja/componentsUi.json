@@ -191,6 +191,7 @@
       "techIdentityToken": "トークン",
       "techIdentityRecipient": "受取人",
       "copyValue": "コピー",
+      "signWith": "署名方法",
       "viewOnExplorer": "エクスプローラーで表示",
       "sendingToTokenContract": "トークン自身のコントラクトへの送金"
     },

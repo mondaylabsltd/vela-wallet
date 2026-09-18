@@ -85,17 +85,23 @@
       "invalid": "Non valido"
     },
     "backup": {
-      "title": "Salva le chiavi su Ethereum",
+      "title": "Esegui il backup delle chiavi pubbliche su Ethereum",
       "backedUp": "Salvate su Ethereum",
       "notBackedUp": "Non ancora salvate",
-      "couldNotCheck": "Impossibile verificare"
+      "couldNotCheck": "Impossibile verificare",
+      "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi."
     },
     "keys": {
       "title": "Chiavi",
       "subtitle": "Una qualsiasi di queste passkey può firmare per questo wallet, su tutte le reti.",
       "keyN": "Chiave {{n}}",
-      "notSynced": "Non sincronizzata",
-      "fromDevice": "Registro non raggiungibile. Viene mostrato ciò che ricorda questo dispositivo."
+      "notSynced": "Legata al dispositivo",
+      "fromDevice": "Registro non raggiungibile. Viene mostrato ciò che ricorda questo dispositivo.",
+      "publicKey": "Chiave pubblica",
+      "credential": "Credenziale",
+      "transport": "Trasporto",
+      "attestation": "Attestazione",
+      "userVerified": "Utente verificato"
     }
   }
 }

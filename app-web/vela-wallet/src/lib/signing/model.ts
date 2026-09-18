@@ -207,6 +207,17 @@ export interface SigningModel {
 		address?: string;
 	};
 	/**
+	 * "Sign with · Automatic ›" — WHERE the passkey that signs this is (founder,
+	 * 2026-09-19). Live only; absent in the gallery. `open` draws the choices in
+	 * place of the row, the way the fee selector does.
+	 */
+	signWith?: {
+		label: string;
+		value: string;
+		open: boolean;
+		options: { id: string; title: string; selected: boolean }[];
+	};
+	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:
 	 * closing the sheet is the rejection (product contract, SPEC 签名).
 	 */

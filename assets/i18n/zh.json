@@ -1321,6 +1321,7 @@
    "techIdentityToken": "代币",
    "techIdentityRecipient": "接收方",
    "copyValue": "复制",
+   "signWith": "签名方式",
    "viewOnExplorer": "在区块浏览器中查看",
    "sendingToTokenContract": "发送到代币自身合约"
   },
@@ -1577,17 +1578,23 @@
    "invalid": "无效"
   },
   "backup": {
-   "title": "把钥匙备份到以太坊",
+   "title": "把公钥备份到以太坊",
    "backedUp": "已备份到以太坊",
    "notBackedUp": "尚未备份",
-   "couldNotCheck": "无法检查"
+   "couldNotCheck": "无法检查",
+   "explain": "只发布公钥，用于从以太坊找回并重建这个钱包。私钥始终留在你的设备里。"
   },
   "keys": {
    "title": "钥匙",
    "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
    "keyN": "钥匙 {{n}}",
-   "notSynced": "未同步",
-   "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。"
+   "notSynced": "仅限本设备",
+   "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
+   "publicKey": "公钥",
+   "credential": "凭证",
+   "transport": "传输方式",
+   "attestation": "认证声明",
+   "userVerified": "已验证用户"
   }
  },
  "contacts": {
