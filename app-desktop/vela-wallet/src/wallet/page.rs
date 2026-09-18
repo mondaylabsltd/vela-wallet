@@ -3622,7 +3622,13 @@ impl WalletPage {
             return Some(scrim("send-pick-scrim").child(card).into_any_element());
         }
         if let Some(payload) = qr {
-            let card = hardware::qr_card(theme, &self.loc, &payload);
+            let on_cancel = {
+                let host = host.clone();
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.cancel_qr(cx));
+                }
+            };
+            let card = hardware::qr_card(theme, &self.loc, &payload, on_cancel);
             return Some(scrim("send-qr-scrim").child(card).into_any_element());
         }
         if let Some(waiting) = touch {

@@ -735,9 +735,16 @@ impl OnboardingPage {
     /// The caBLE QR, while a hybrid ceremony waits for the phone to scan it. It
     /// clears itself the moment the tunnel is up (the ceremony sets it to
     /// `None`), before the on-phone touch prompt takes its place.
-    fn qr_prompt(&self, theme: &Theme) -> Option<Stateful<Div>> {
+    fn qr_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let payload = self.channel.qr_showing()?;
-        Some(scrim(theme, "qr-scrim").child(hardware::qr_card(theme, &self.loc, &payload)))
+        let on_cancel = cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.channel.cancel_qr();
+            cx.notify();
+        });
+        Some(
+            scrim(theme, "qr-scrim")
+                .child(hardware::qr_card(theme, &self.loc, &payload, on_cancel)),
+        )
     }
 
     /// The sign-in method picker — the same three methods creating a wallet
@@ -1200,7 +1207,7 @@ impl Render for OnboardingPage {
         if let Some(picker) = self.signin_method_prompt(&theme, cx) {
             root = root.child(picker);
         }
-        if let Some(qr) = self.qr_prompt(&theme) {
+        if let Some(qr) = self.qr_prompt(&theme, cx) {
             root = root.child(qr);
         }
         if let Some(prompt) = self.touch_prompt(&theme) {
@@ -1228,6 +1235,13 @@ impl Render for OnboardingPage {
                     && ks.modifiers.platform;
                 if ks.key == "f11" || macos_chord {
                     window.toggle_fullscreen();
+                }
+                // Escape dismisses the QR, as it dismisses everything else that
+                // covers a window.
+                if ks.key == "escape" && this.channel.qr_showing().is_some() {
+                    this.channel.cancel_qr();
+                    cx.notify();
+                    return;
                 }
                 // The intro pages by keyboard too (spec 038 SC-416).
                 if this.intro.is_some() {

@@ -55,6 +55,9 @@ pub enum HybridError {
     Tunnel(String),
     /// The Noise handshake over the tunnel failed.
     Handshake(String),
+    /// The person dismissed the QR. Not a failure: the same answer as closing
+    /// the system's passkey sheet, and reported upward as that.
+    Cancelled,
 }
 
 impl std::fmt::Display for HybridError {
@@ -65,6 +68,7 @@ impl std::fmt::Display for HybridError {
             Self::BadAdvert => write!(f, "the phone's advertisement was malformed"),
             Self::Tunnel(detail) => write!(f, "the relay tunnel would not open: {detail}"),
             Self::Handshake(detail) => write!(f, "the encrypted channel failed: {detail}"),
+            Self::Cancelled => write!(f, "the QR was dismissed"),
         }
     }
 }
@@ -268,10 +272,11 @@ pub fn establish_hybrid(
     product: String,
     ephemeral_seed: &[u8],
     on_touch: Option<TouchAnnouncer>,
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<Box<dyn Cable>, HybridError> {
     // 1. Find the authenticator by its BLE proximity advert.
     log("scanning for the phone's Bluetooth advert…");
-    let hit = scan_for_advert(session.eid_key())?;
+    let hit = scan_for_advert(session.eid_key(), cancelled)?;
     log("advert found; decrypted");
 
     // 2. The advert chooses the channel: a PSM means the CTAP 2.3 local BLE
@@ -628,7 +633,14 @@ struct AdvertHit {
     address: Option<([u8; 6], bool)>,
 }
 
-fn scan_for_advert(eid_key: Vec<u8>) -> Result<AdvertHit, HybridError> {
+/// How often the scan asks whether the person has dismissed the QR. Short
+/// enough that "Cancel" feels immediate, long enough to cost nothing.
+const CANCEL_POLL: Duration = Duration::from_millis(120);
+
+fn scan_for_advert(
+    eid_key: Vec<u8>,
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
+) -> Result<AdvertHit, HybridError> {
     // BOTH drivers, and the I/O one is not optional. On Linux `btleplug` reaches
     // `bluetoothd` over D-Bus, and `dbus-tokio` registers that socket with the
     // runtime's I/O driver: without `enable_io` its connection task panics with
@@ -647,9 +659,22 @@ fn scan_for_advert(eid_key: Vec<u8>) -> Result<AdvertHit, HybridError> {
         .map_err(|error| HybridError::Bluetooth(error.to_string()))?;
 
     runtime.block_on(async move {
-        match tokio::time::timeout(SCAN_TIMEOUT, scan_loop(&eid_key)).await {
-            Ok(result) => result,
-            Err(_elapsed) => Err(HybridError::NoAdvert),
+        // The scan is the ONLY open-ended wait in a hybrid ceremony — ninety
+        // seconds for a phone that may never come — and for as long as it had no
+        // way out, neither did the person: the QR sat over the whole window
+        // with nothing to press, and changing one's mind meant quitting the app
+        // (founder, 2026-09-19). So it races a cancellation the screen can set.
+        let dismissed = async {
+            while !cancelled() {
+                tokio::time::sleep(CANCEL_POLL).await;
+            }
+        };
+        tokio::select! {
+            scanned = tokio::time::timeout(SCAN_TIMEOUT, scan_loop(&eid_key)) => match scanned {
+                Ok(result) => result,
+                Err(_elapsed) => Err(HybridError::NoAdvert),
+            },
+            () = dismissed => Err(HybridError::Cancelled),
         }
     })
 }

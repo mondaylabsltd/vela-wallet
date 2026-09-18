@@ -79,6 +79,10 @@ pub struct CeremonyChannel {
     /// The caBLE QR payload the person scans with their phone, while a hybrid
     /// ceremony waits for the scan. `None` when no QR is up.
     qr: Mutex<Option<String>>,
+    /// The person dismissed the QR (or the flow left). The hybrid scan polls
+    /// this; a fresh QR going up clears it, so one dismissal cancels one
+    /// ceremony and not the next.
+    qr_cancelled: std::sync::atomic::AtomicBool,
     pin: Mutex<PinState>,
     pick: Mutex<PickState>,
     /// ONE CONDVAR PER MUTEX, and that is not a style choice.
@@ -106,6 +110,7 @@ impl CeremonyChannel {
     pub fn ceremony(self: &Arc<Self>, window: WindowHandle) -> Ceremony {
         let touch_channel = Arc::clone(self);
         let qr_channel = Arc::clone(self);
+        let cancel_channel = Arc::clone(self);
         let pin_channel = Arc::clone(self);
         let pick_channel = Arc::clone(self);
         Ceremony {
@@ -115,9 +120,19 @@ impl CeremonyChannel {
                 }
             }),
             qr: Arc::new(move |payload| {
+                if payload.is_some() {
+                    qr_channel
+                        .qr_cancelled
+                        .store(false, std::sync::atomic::Ordering::SeqCst);
+                }
                 if let Ok(mut slot) = qr_channel.qr.lock() {
                     *slot = payload;
                 }
+            }),
+            cancelled: Arc::new(move || {
+                cancel_channel
+                    .qr_cancelled
+                    .load(std::sync::atomic::Ordering::SeqCst)
             }),
             pin: Arc::new(move |request| pin_channel.request_pin(request)),
             pick: Arc::new(move |choices| pick_channel.request_choice(choices)),
@@ -133,6 +148,19 @@ impl CeremonyChannel {
     /// The caBLE QR to show right now, if a hybrid ceremony is waiting for a scan.
     pub fn qr_showing(&self) -> Option<String> {
         self.qr.lock().ok()?.clone()
+    }
+
+    /// The person dismissed the QR: take it down NOW and tell the scan to stop.
+    ///
+    /// Both halves matter. Hiding the card alone would leave a ninety-second
+    /// Bluetooth scan running behind a screen that says nothing is happening,
+    /// and the next attempt would start a second one beside it.
+    pub fn cancel_qr(&self) {
+        self.qr_cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Ok(mut slot) = self.qr.lock() {
+            *slot = None;
+        }
     }
 
     /// Called on the ceremony thread. Blocks until the screen answers.
@@ -250,6 +278,10 @@ impl CeremonyChannel {
         if let Ok(mut slot) = self.qr.lock() {
             *slot = None;
         }
+        // A scan still waiting for a phone must not outlive the flow by up to
+        // ninety seconds.
+        self.qr_cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         self.pin_answered.notify_all();
         self.pick_answered.notify_all();
     }
@@ -258,6 +290,42 @@ impl CeremonyChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Dismissing the QR is two things at once, and a screen that did only one
+    /// of them is the bug: the card comes down AND the scan is told to stop.
+    /// One dismissal cancels one ceremony — the next QR starts clean — and a
+    /// flow that leaves stops a scan still waiting for a phone.
+    #[test]
+    fn dismissing_the_qr_hides_it_and_stops_the_scan_once() {
+        let channel = CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+
+        (ceremony.qr)(Some("FIDO:/1".to_owned()));
+        assert_eq!(channel.qr_showing().as_deref(), Some("FIDO:/1"));
+        assert!(
+            !(ceremony.cancelled)(),
+            "a QR just shown is not a dismissed one"
+        );
+
+        channel.cancel_qr();
+        assert_eq!(channel.qr_showing(), None, "the card comes down at once");
+        assert!((ceremony.cancelled)(), "and the scan behind it is told");
+
+        // The next attempt: the dismissal belonged to the last one.
+        (ceremony.qr)(Some("FIDO:/2".to_owned()));
+        assert!(!(ceremony.cancelled)());
+
+        // The ceremony taking its own QR down is not a dismissal.
+        (ceremony.qr)(None);
+        assert!(!(ceremony.cancelled)());
+
+        (ceremony.qr)(Some("FIDO:/3".to_owned()));
+        channel.close();
+        assert!(
+            (ceremony.cancelled)(),
+            "a flow that leaves stops the scan too"
+        );
+    }
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn request(device: &str, retry: bool) -> PinRequest {

@@ -171,6 +171,9 @@ fn hybrid_failure(error: HybridError) -> PasskeyFailure {
         HybridError::Bluetooth(_) => {
             PasskeyFailure::classified(FailureKind::NotSupported, error.to_string())
         }
+        // Dismissing the QR is dismissing the ceremony — what closing the
+        // system's passkey sheet already is on every other path.
+        HybridError::Cancelled => PasskeyFailure::cancelled(),
         other => PasskeyFailure::other(other.to_string()),
     }
 }
@@ -225,6 +228,9 @@ pub type CredentialPicker = Arc<dyn Fn(Vec<CredentialChoice>) -> Option<usize> +
 /// once the tunnel is up or the attempt ends.
 pub type QrNotifier = Arc<dyn Fn(Option<String>) + Send + Sync>;
 
+/// "Has the person dismissed the QR?" — asked by the hybrid scan while it waits.
+pub type CancelProbe = Arc<dyn Fn() -> bool + Send + Sync>;
+
 /// Everything a ceremony needs from the screen that started it.
 #[derive(Clone)]
 pub struct Ceremony {
@@ -235,6 +241,9 @@ pub struct Ceremony {
     pub pick: CredentialPicker,
     /// Shows the caBLE QR while a hybrid ceremony waits for the phone.
     pub qr: QrNotifier,
+    /// Has the person dismissed that QR? Polled by the scan, which is the one
+    /// open-ended wait a hybrid ceremony has.
+    pub cancelled: CancelProbe,
     /// The app window the Windows dialog parents itself to.
     ///
     /// Read on exactly one platform, because it is the only one where the
@@ -878,10 +887,17 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
         HYBRID_PRODUCT.to_owned(),
         &ephemeral_seed,
         Some(on_touch),
+        &*ceremony.cancelled,
     );
     // The QR has done its job the moment the tunnel is up (or failed); take it
     // down either way rather than leaving it on screen behind the next step.
     (ceremony.qr)(None);
+    // Dismissed in the few seconds between "advert found" and "tunnel up",
+    // where nothing polls: honour it here rather than carry on into a touch
+    // prompt for a ceremony the person has already walked away from.
+    if (ceremony.cancelled)() {
+        return Err(PasskeyFailure::cancelled());
+    }
     result.map_err(hybrid_failure)
 }
 
@@ -1159,6 +1175,7 @@ mod tests {
             pin: Arc::new(|_| None),
             pick: Arc::new(|_| None),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             window: 0,
         };
         // The card is up — the phone had announced a touch.
@@ -1355,6 +1372,7 @@ mod hardware_tests {
                 }
             }),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             pin: Arc::new(|request| {
                 let pin = std::env::var("VELA_TEST_PIN").ok();
                 eprintln!(
@@ -1454,6 +1472,7 @@ mod hardware_tests {
                 }
             }),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             pin: Arc::new(|_| std::env::var("VELA_TEST_PIN").ok()),
             pick: Arc::new(|_| Some(0)),
             window: 0,
