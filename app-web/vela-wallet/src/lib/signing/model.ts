@@ -192,8 +192,25 @@ export type FeeModel =
 
 export interface SigningModel {
 	id: SigningStateId;
-	dapp: { name: string; host: string; letter: string; tint: string };
-	network: { name: string; dot: string };
+	dapp: {
+		name: string;
+		/** The observed origin's host. EMPTY for the wallet's own request: there is no site. */
+		host: string;
+		letter: string;
+		tint: string;
+		/**
+		 * The wallet asking ITSELF (the key backup): drawn with the wallet's own
+		 * mark. A third-party site never gets a fetched icon — see `LetterAvatar`.
+		 */
+		own?: boolean;
+	};
+	network: {
+		name: string;
+		/** The drawn fallback beneath the logo — a real colour, never a keyword. */
+		dot: string;
+		/** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
+		logoUrl?: string;
+	};
 	blocks: Block[];
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */

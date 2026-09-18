@@ -25,6 +25,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
+import { chainLogoURL } from '$lib/services/tokens-model';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -66,6 +67,13 @@ function toneOf(risk: 'safe' | 'normal' | 'caution' | 'danger'): Tone {
 			return 'neutral';
 	}
 }
+
+/**
+ * The tint of a mark nobody has a brand colour for. It used to be the string
+ * `'neutral'`, which is not a colour: the letter disc and the network dot both
+ * drew as nothing at all.
+ */
+const NEUTRAL_TINT = 'var(--color-fg-muted)';
 
 function letterOf(name: string): string {
 	return (name.trim()[0] ?? '?').toUpperCase();
@@ -336,6 +344,7 @@ export function buildSigningModel(inputs: SigningLiveInputs): SigningModel | nul
 	const request = sign.request;
 	const dapp = request.dapp;
 	const name = dapp?.name ?? new URL(request.origin).host;
+	const own = typeof window !== 'undefined' && request.origin === window.location.origin;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
 	// still be waiting for a cap; the fee may still be in flight.
@@ -344,8 +353,17 @@ export function buildSigningModel(inputs: SigningLiveInputs): SigningModel | nul
 
 	return {
 		id: 'cs1',
-		dapp: { name, host: new URL(request.origin).host, letter: letterOf(name), tint: 'neutral' },
-		network: { name: chainName(request.chain_id), dot: 'neutral' },
+		// The wallet's own request (the key backup) is not a site: it wears the
+		// wallet's mark and name, and no host — `localhost:5173` under "Vela" read
+		// as a stranger borrowing the brand (founder, 2026-09-19).
+		dapp: own
+			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
+			: { name, host: new URL(request.origin).host, letter: letterOf(name), tint: NEUTRAL_TINT },
+		network: {
+			name: chainName(request.chain_id),
+			dot: NEUTRAL_TINT,
+			logoUrl: chainLogoURL(request.chain_id)
+		},
 		blocks: blocksFor(inputs),
 		tech: techModel(inputs),
 		techOpen: false,
