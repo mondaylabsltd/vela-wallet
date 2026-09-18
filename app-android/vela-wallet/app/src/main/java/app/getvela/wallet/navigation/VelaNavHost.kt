@@ -298,6 +298,39 @@ fun VelaNavHost(
         }
     }
 
+    /**
+     * The onboarding hand-off, which the route guard above CANNOT see.
+     *
+     * `allowed_route` is a DERIVED value — `Wallet` the moment any account is
+     * held — so it is `Wallet` before and after a person with a wallet builds a
+     * second one. The guard is keyed on that value, and a key that does not
+     * change does not re-run the effect: the 进入钱包 button completed the
+     * hand-off (`complete_onboarding` answers in a millisecond) and nothing
+     * navigated. Worse, the create view reports `Completing` as `Created`, so
+     * the Done screen could not show that anything had happened either — the
+     * person taps a live button that does nothing, concludes the wallet failed,
+     * and builds another one (device-found 2026-09-18: eleven taps, then a
+     * third wallet).
+     *
+     * `finished` is the EVENT the value cannot carry: set once when the
+     * onboarding core hands over, consumed here. `OnboardingViewModel` has
+     * always written it and always exposed `consumeFinished()` — its own
+     * comment says "the host navigates and clears it" — and no host ever did.
+     */
+    LaunchedEffect(onboarding.finished, startDestination) {
+        if (onboarding.finished && startDestination !in DEVELOPER_ROUTES) {
+            // Only where the core agrees there is somewhere to go. A hand-off
+            // whose session has not settled on `Wallet` is the route guard's
+            // business, not this one's.
+            if (session.allowedRoute == SessionRoute.Wallet) {
+                section = VelaTab.Wallet
+                onboarding.disposeCreate()
+                navController.navigateSingleTop(VelaDestinations.WALLET)
+            }
+            onboarding.consumeFinished()
+        }
+    }
+
     Box {
     // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
     // address opens it (see IdenticonImage.tappable), so twelve screens do not

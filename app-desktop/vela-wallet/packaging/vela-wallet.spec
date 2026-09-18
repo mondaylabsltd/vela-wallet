@@ -87,6 +87,10 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Thu Sep 17 2026 Monday Labs <hello@getvela.app> - 0.9.2-1
+- Pre-release: the total settles as it loads, contacts keep their names, and the
+  founding record can be backed up to Ethereum.
+
 * Thu Sep 17 2026 Monday Labs <hello@getvela.app> - 0.9.1-1
 - Pre-release: the first cut whose Linux packages and iOS archive build from a tag.
 

@@ -230,6 +230,10 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 
 			case 'notify_confirmed': {
 				const hash = normalize(operation.user_op_hash);
+				// The balances moved: the hero refetches (issue 188). First, and
+				// unconditionally — the auto-add below may take a store read, and
+				// the figure is the part the person is waiting on.
+				ports.confirmed(operation.chain_id);
 				const logs = logsByHash.get(hash);
 				logsByHash.delete(hash);
 				if (logs && logs.length > 0) {

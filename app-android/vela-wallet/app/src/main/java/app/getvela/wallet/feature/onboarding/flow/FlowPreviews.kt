@@ -206,6 +206,7 @@ private fun DonePreview(darkTheme: Boolean) {
             address = v.address.orEmpty(),
             walletName = v.keys.first().name,
             keys = v.keys,
+            entering = v.busy,
             onEnter = {},
         )
     }

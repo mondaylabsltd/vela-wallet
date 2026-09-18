@@ -25,7 +25,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 1
-        versionName = "0.9.1"
+        versionName = "0.9.2"
 
         // Spec 047: the About page and the bug report name the build. A provider,
         // not a process at configuration time — the configuration cache refuses that.
