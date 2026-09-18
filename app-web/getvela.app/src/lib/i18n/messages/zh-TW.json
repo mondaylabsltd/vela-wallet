@@ -388,6 +388,7 @@
 		"availableNow": "現已可用",
 		"comingSoon": "即將上架",
 		"githubCta": "從 GitHub Releases 下載",
+		"sourceCta": "從原始碼自行建置",
 		"platforms": {
 			"web": {
 				"title": "網頁版",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "應用程式商店裡的下載是付費的，這是一支獨立小團隊公開開發 Vela 的經費來源。所有程式碼都開源，所以你也可以自己建置——同一個應用程式，不收一分錢。",
-		"storeNote": "目前還沒有上架任何應用程式商店。在那之前，每一個建置版本都在 GitHub 上。"
+		"storeNote": "目前還沒有上架任何應用程式商店。在那之前，桌面版和瀏覽器擴充功能都在 GitHub 上，下載即可安裝。手機版不在那裡：它們來自應用程式商店，或者來自原始碼。"
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

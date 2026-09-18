@@ -388,6 +388,7 @@
 		"availableNow": "Disponible",
 		"comingSoon": "Bientôt",
 		"githubCta": "Télécharger depuis GitHub Releases",
+		"sourceCta": "Compiler depuis les sources",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "Les téléchargements en boutique sont payants, et c'est ainsi qu'une petite équipe indépendante finance la construction de Vela au grand jour. Tout est open source : vous pouvez aussi le compiler vous-même — même application, sans frais.",
-		"storeNote": "Pas encore en boutique. En attendant, chaque build est sur GitHub."
+		"storeNote": "Pas encore en boutique. En attendant, les applications de bureau et l’extension sont sur GitHub, prêtes à installer. Les applications mobiles n’y sont pas : elles viennent des boutiques, ou des sources."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

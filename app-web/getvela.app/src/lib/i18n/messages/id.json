@@ -388,6 +388,7 @@
 		"availableNow": "Tersedia sekarang",
 		"comingSoon": "Segera hadir",
 		"githubCta": "Unduh dari GitHub Releases",
+		"sourceCta": "Bangun dari kode sumber",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "Unduhan dari toko berbayar, dan begitulah tim kecil independen membiayai pembangunan Vela secara terbuka. Semuanya open source, jadi Anda selalu bisa membangunnya sendiri — aplikasi yang sama, tanpa biaya.",
-		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, setiap build ada di GitHub."
+		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, aplikasi desktop dan ekstensi ada di GitHub, siap dipasang. Aplikasi ponsel tidak: aplikasi itu berasal dari toko, atau dari kode sumber."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

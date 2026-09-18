@@ -388,6 +388,7 @@
 		"availableNow": "而家用得",
 		"comingSoon": "即將推出",
 		"githubCta": "喺 GitHub Releases 下載",
+		"sourceCta": "用原始碼自己 build",
 		"platforms": {
 			"web": {
 				"title": "網頁",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "喺商店下載係要畀錢嘅，而呢個就係一隊獨立細團隊公開開發 Vela 嘅經費來源。所有嘢都開源，所以你永遠可以自己 build——同一個應用，唔使畀錢。",
-		"storeNote": "仲未上商店。喺嗰日之前，每一個 build 都喺 GitHub 上面。"
+		"storeNote": "仲未上商店。喺嗰日之前，桌面版同瀏覽器擴充功能都喺 GitHub 上面，下載就裝得。手機版唔喺嗰度：佢哋嚟自應用商店，或者嚟自原始碼。"
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }
