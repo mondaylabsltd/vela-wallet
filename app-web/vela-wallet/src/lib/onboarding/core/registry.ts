@@ -11,6 +11,14 @@
  * "the service said no" from "the service was not there".
  */
 
+import {
+	loadCore,
+	registryChainKeyPlan,
+	registryChainKeyStatus,
+	registryChainUnit,
+	registryChainUnitPlan
+} from '$lib/core/client';
+import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
 
@@ -197,15 +205,149 @@ type UnitResponse = {
 	members?: { total: number; items: UnitMember[] };
 };
 
+// ---------------------------------------------------------------------------
+// Signing in when the index is gone (spec 062)
+// ---------------------------------------------------------------------------
+//
+// The index service is a cache of the registry contract. When it cannot be
+// REACHED — never when it answers, a refusal is an answer — the same two read
+// questions are put to the contract itself: on Gnosis, where the record lives,
+// then on Ethereum, where a person may have backed it up precisely for this.
+// `vela_core::registry_chain` answers in the index's own JSON shapes, so every
+// guard below runs unchanged on either source.
+//
+// Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so a
+// key's units are asked of whoever listed them. The index mirrors Gnosis, so
+// an index listing may be continued on Gnosis; a chain listing is continued on
+// that chain and nowhere else.
+
+/** Which chain listed the last key's units; `null` = the index did. */
+let unitSource: number | null = null;
+
+const GNOSIS = 100;
+
+/** The index could not be reached, or is failing: not an answer. */
+function indexIsGone(error: unknown): boolean {
+	if (!(error instanceof RegistryError)) return false;
+	if (error.network) return true;
+	return / failed: 5\d\d$/.test(error.message);
+}
+
+type ChainPlan = { chains: number[]; calls: { to: string; data: string }[] };
+
+/** Both calls of a plan on one chain, through its public RPCs in order. `null`
+ *  = that chain did not answer (every endpoint failed, or an RPC error). */
+async function readChain(chainId: number, plan: ChainPlan): Promise<string[] | null> {
+	for (const url of PUBLIC_RPCS[chainId] ?? []) {
+		try {
+			const results = await Promise.all(
+				plan.calls.map(async (call) => {
+					const controller = new AbortController();
+					const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+					try {
+						const response = await fetch(url, {
+							method: 'POST',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({
+								jsonrpc: '2.0',
+								id: 1,
+								method: 'eth_call',
+								params: [call, 'latest']
+							}),
+							signal: controller.signal
+						});
+						const body = (await response.json()) as { result?: unknown };
+						return typeof body.result === 'string' ? body.result : null;
+					} finally {
+						clearTimeout(timer);
+					}
+				})
+			);
+			if (results.every((r): r is string => r !== null)) return results;
+		} catch {
+			/* next endpoint */
+		}
+	}
+	return null;
+}
+
+async function readKeyProfile(publicKey: string): Promise<KeyProfile> {
+	try {
+		const profile = await request<KeyProfile>(
+			`/api/query?publicKey=${encodeURIComponent(publicKey)}`,
+			{},
+			READ_TIMEOUT_MS,
+			'Query'
+		);
+		unitSource = null;
+		return profile;
+	} catch (error) {
+		if (!indexIsGone(error)) throw error;
+		await loadCore();
+		const planJson = registryChainKeyPlan(publicKey);
+		if (planJson === undefined) throw error;
+		const plan = JSON.parse(planJson) as ChainPlan;
+		for (const chainId of plan.chains) {
+			const results = await readChain(chainId, plan);
+			const body = results && registryChainKeyStatus(results[0], results[1]);
+			if (body) {
+				const profile = JSON.parse(body) as KeyProfile;
+				// A chain that knows the key founded nothing is only believed when
+				// it is the record's home: Ethereum holds what somebody backed up.
+				if (chainId !== GNOSIS && (profile.groups?.unitIds ?? []).length === 0) continue;
+				unitSource = chainId;
+				return profile;
+			}
+		}
+		// Nobody answered: the original failure is the honest one to report.
+		throw error;
+	}
+}
+
+async function readUnitFromChain(chainId: number, unitId: number): Promise<UnitResponse | null> {
+	await loadCore();
+	const planJson = registryChainUnitPlan(unitId);
+	if (planJson === undefined) return null;
+	const plan = JSON.parse(planJson) as ChainPlan;
+	const results = await readChain(chainId, plan);
+	const body = results && registryChainUnit(unitId, results[0], results[1]);
+	return body ? (JSON.parse(body) as UnitResponse) : null;
+}
+
+async function readUnit(unitId: number): Promise<UnitResponse> {
+	if (unitSource !== null) {
+		const detail = await readUnitFromChain(unitSource, unitId);
+		if (detail !== null) return detail;
+		throw new RegistryError(
+			`Query failed: chain ${unitSource} did not answer for unit ${unitId}`,
+			true
+		);
+	}
+	try {
+		return await request<UnitResponse>(
+			`/api/query?unitId=${encodeURIComponent(unitId)}&pageSize=${MAX_UNIT_MEMBERS}&order=asc`,
+			{},
+			READ_TIMEOUT_MS,
+			'Query'
+		);
+	} catch (error) {
+		if (!indexIsGone(error)) throw error;
+		// The index listed this unit and then went away. Its ids are Gnosis's.
+		const detail = await readUnitFromChain(GNOSIS, unitId);
+		if (detail !== null) return detail;
+		throw error;
+	}
+}
+
+/** Test seam: forget which source listed the last key's units. */
+export function _resetUnitSource(): void {
+	unitSource = null;
+}
+
 /** `/api/query?publicKey=` — is this key registered, and which groups does it
  *  found? */
 export async function queryByPublicKey(publicKey: string): Promise<KeyStatus> {
-	const profile = await request<KeyProfile>(
-		`/api/query?publicKey=${encodeURIComponent(publicKey)}`,
-		{},
-		READ_TIMEOUT_MS,
-		'Query'
-	);
+	const profile = await readKeyProfile(publicKey);
 	const unitIds = profile.groups?.unitIds ?? [];
 	// The core speaks u32 unit ids because the wire is JSON. An id past 2^32
 	// would truncate into a DIFFERENT group, so this fails the query instead of
@@ -229,12 +371,7 @@ export async function queryByPublicKey(publicKey: string): Promise<KeyStatus> {
  * founding set — a different, wrong, fundable address.
  */
 export async function queryUnit(unitId: number): Promise<UnitDetail> {
-	const detail = await request<UnitResponse>(
-		`/api/query?unitId=${encodeURIComponent(unitId)}&pageSize=${MAX_UNIT_MEMBERS}&order=asc`,
-		{},
-		READ_TIMEOUT_MS,
-		'Query'
-	);
+	const detail = await readUnit(unitId);
 	const total = detail.members?.total ?? 0;
 	const items = detail.members?.items ?? [];
 	if (total > MAX_UNIT_MEMBERS) {

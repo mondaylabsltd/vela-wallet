@@ -3528,6 +3528,85 @@ export function registryBackupStep(address, founding_public_key_hex, answers_jso
 }
 
 /**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ * @param {string} public_key_hex
+ * @returns {string | undefined}
+ */
+export function registryChainKeyPlan(public_key_hex) {
+    const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainKeyPlan(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {string} has_entry_hex
+ * @param {string} groups_hex
+ * @returns {string | undefined}
+ */
+export function registryChainKeyStatus(has_entry_hex, groups_hex) {
+    const ptr0 = passStringToWasm0(has_entry_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(groups_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainKeyStatus(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {number} unit_id
+ * @param {string} unit_hex
+ * @param {string} members_hex
+ * @returns {string | undefined}
+ */
+export function registryChainUnit(unit_id, unit_hex, members_hex) {
+    const ptr0 = passStringToWasm0(unit_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(members_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainUnit(unit_id, ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {number} unit_id
+ * @returns {string | undefined}
+ */
+export function registryChainUnitPlan(unit_id) {
+    const ret = wasm.registryChainUnitPlan(unit_id);
+    let v1;
+    if (ret[0] !== 0) {
+        v1 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v1;
+}
+
+/**
  * **The registered name behind an address — the next step of the lookup.**
  *
  * The v2 passkey index cannot be asked about an address, so the name is

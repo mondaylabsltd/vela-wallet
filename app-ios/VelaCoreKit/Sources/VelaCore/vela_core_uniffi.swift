@@ -9602,6 +9602,59 @@ public func registryBuildMemberProof(authenticatorDataHex: String, clientDataJso
 })
 }
 /**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ */
+public func registryChainKeyPlan(publicKeyHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_key_plan(
+        FfiConverterString.lower(publicKeyHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainKeyStatus(hasEntryHex: String, groupsHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_key_status(
+        FfiConverterString.lower(hasEntryHex),
+        FfiConverterString.lower(groupsHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainUnit(unitId: UInt32, unitHex: String, membersHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_unit(
+        FfiConverterUInt32.lower(unitId),
+        FfiConverterString.lower(unitHex),
+        FfiConverterString.lower(membersHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainUnitPlan(unitId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_unit_plan(
+        FfiConverterUInt32.lower(unitId),uniffiCallStatus
+    )
+})
+}
+/**
  * The uncompressed public key (`04‖x‖y` hex) of the one-time group key a
  * 32-byte `seed_hex` derives. Needed before the group's challenge can be
  * requested, because the contract binds the challenge to this key.
@@ -10303,6 +10356,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_build_member_proof() != 44131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_key_plan() != 57974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_key_status() != 55529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_unit() != 39814) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_unit_plan() != 56149) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_group_public_key_from_seed() != 7492) {

@@ -797,6 +797,32 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array,
 export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string, target_chain?: number | null): string;
 
 /**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ */
+export function registryChainKeyPlan(public_key_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainKeyStatus(has_entry_hex: string, groups_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainUnit(unit_id: number, unit_hex: string, members_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainUnitPlan(unit_id: number): string | undefined;
+
+/**
  * **The registered name behind an address — the next step of the lookup.**
  *
  * The v2 passkey index cannot be asked about an address, so the name is
@@ -991,6 +1017,10 @@ export interface InitOutput {
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
     readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly registryChainKeyPlan: (a: number, b: number) => [number, number];
+    readonly registryChainKeyStatus: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryChainUnit: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly registryChainUnitPlan: (a: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;

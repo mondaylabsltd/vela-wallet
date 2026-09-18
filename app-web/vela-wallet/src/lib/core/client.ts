@@ -58,6 +58,10 @@ import init, {
 	peggedNativeUsd,
 	ReceiveWatchCore,
 	registryBackupStep,
+	registryChainKeyPlan,
+	registryChainKeyStatus,
+	registryChainUnit,
+	registryChainUnitPlan,
 	registryNameStep,
 	RpcPoolCore,
 	SendCore,
@@ -109,6 +113,7 @@ export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep };
+export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a

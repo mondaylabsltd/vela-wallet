@@ -487,6 +487,36 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// **Signing in when the index is gone** (spec 062): the registry contract's
+/// side of the index's two read questions, answered in the index's own JSON
+/// shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+/// try (in order) and the two `eth_call`s to make on one of them; the matching
+/// function turns the two raw results into the body, or nothing when that
+/// chain did not really answer (the shell then tries the next). Unit ids are
+/// per deployment: ask about a key's units on the chain that listed them.
+#[uniffi::export]
+pub fn registry_chain_key_plan(public_key_hex: String) -> Option<String> {
+    vela_core::registry_chain::key_status_plan_json(&public_key_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_key_status(has_entry_hex: String, groups_hex: String) -> Option<String> {
+    vela_core::registry_chain::key_status_json(&has_entry_hex, &groups_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_unit_plan(unit_id: u32) -> Option<String> {
+    vela_core::registry_chain::unit_plan_json(u64::from(unit_id))
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_unit(unit_id: u32, unit_hex: String, members_hex: String) -> Option<String> {
+    vela_core::registry_chain::unit_json(u64::from(unit_id), &unit_hex, &members_hex)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
