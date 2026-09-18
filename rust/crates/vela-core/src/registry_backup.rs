@@ -214,6 +214,43 @@ fn payload_is_this_unit(payload: &[u8], unit: &Unit) -> bool {
         && inputs.get(2).and_then(DynSolValue::as_bytes) == Some(unit.group_public_key.as_slice())
 }
 
+/// What a `register(...)` call says about the wallet it registers — for the
+/// signing sheet, which draws the backup as what it is rather than as a
+/// stranger's 4 KB contract call (spec 062 §5a).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegisterCall {
+    /// The wallet the record is FOR, EIP-55 as the metadata carries it.
+    pub wallet_address: String,
+    /// `key_names[0]` — the wallet's name as its owner registered it.
+    pub wallet_name: String,
+    /// The founding keys the record carries.
+    pub key_count: usize,
+}
+
+/// Read a `register(...)` calldata. `None` unless it is exactly that call with
+/// metadata this build can decode — then the sheet falls back to the ordinary
+/// ladder, never to a guess.
+#[must_use]
+pub fn describe_register_call(data: &[u8]) -> Option<RegisterCall> {
+    let register = Function::parse(&register_signature()).ok()?;
+    if data.len() < 4 || data[..4] != register.selector()[..] {
+        return None;
+    }
+    let inputs = register.abi_decode_input(&data[4..]).ok()?;
+    let metadata = inputs.get(1)?.as_bytes()?;
+    let members = inputs.get(4)?.as_array()?;
+    let metadata = RegistryMetadata::decode_hex(&primitives::to_hex(metadata, false)).ok()?;
+    let wallet_name = metadata.key_names.first()?.trim().to_owned();
+    if wallet_name.is_empty() || members.is_empty() {
+        return None;
+    }
+    Some(RegisterCall {
+        wallet_address: metadata.address,
+        wallet_name,
+        key_count: members.len(),
+    })
+}
+
 fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
     let bytes = primitives::from_hex(public_key_hex).ok()?;
     match bytes.len() {
@@ -727,6 +764,23 @@ mod tests {
         }
         let json = step_json(SAFE, &key, Some(8453), "[]");
         assert!(json.contains(r#""chain_id":8453"#), "{json}");
+    }
+
+    #[test]
+    fn a_register_call_describes_the_wallet_it_registers() {
+        assert_eq!(
+            describe_register_call(&register_payload(SAFE, 2)),
+            Some(RegisterCall {
+                wallet_address: SAFE.to_owned(),
+                wallet_name: "Interleave".to_owned(),
+                key_count: 1,
+            })
+        );
+        assert_eq!(describe_register_call(&[0xde, 0xad, 0xbe, 0xef]), None);
+        assert_eq!(
+            describe_register_call(&register_payload(SAFE, 2)[..100]),
+            None
+        );
     }
 
     #[test]

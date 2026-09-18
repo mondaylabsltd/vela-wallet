@@ -233,7 +233,10 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
 		}
 		if (result.best_effort) {
-			blocks.push({ kind: 'warning', tone: 'caution', text: m.summaryBestEffort });
+			// `summaryBestEffort` carries a `{{fn}}` slot the core hands nothing
+			// for, and it was drawn unfilled ("Calling {{fn}} — …"). The other
+			// three shells say the placeholder-free sentence; so does this one.
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
 		}
 
 		const rest = result.fields.filter((f) => f.role === 'generic' && f !== send && f !== receive);

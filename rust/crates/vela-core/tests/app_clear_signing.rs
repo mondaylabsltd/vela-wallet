@@ -2053,3 +2053,141 @@ fn a_spender_equal_to_the_contract_is_not_a_burn() {
     );
     assert!(!result.to_own_token);
 }
+
+// ---------------------------------------------------------------------------
+// The registry backup (spec 062) — the wallet's one first-party contract call
+// ---------------------------------------------------------------------------
+
+/// The verbatim `register(...)` calldata Gnosis holds for the golden multi-key
+/// Safe (unit 10), captured 2026-09-17 — the bytes the backup replays.
+fn registry_backup_calldata() -> String {
+    format!(
+        "0x{}",
+        include_str!("fixtures/registry-register-unit10.hex").trim()
+    )
+}
+
+#[test]
+fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        // EIP-55, as the wallet's own request carries it.
+        to: Some("0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9".to_owned()),
+        data: Some(registry_backup_calldata()),
+        value: Some("0x0".to_owned()),
+        chain_id: 1,
+        locale: ClearLocale::default(),
+    });
+    assert!(
+        ops.is_empty(),
+        "no clock, no descriptor, no signature database"
+    );
+    let view = sut.view();
+    assert!(view.resolved);
+    let result = view.result.expect("a first-party result");
+    assert_eq!(result.intent, "Back up wallet keys");
+    assert_eq!(
+        result.contract_name.as_deref(),
+        Some("Vela passkey registry")
+    );
+    assert_eq!(result.owner.as_deref(), Some("Vela"));
+    assert!(result.verified, "our contract, the record's own bytes");
+    assert!(!result.best_effort && !result.partial);
+    assert_eq!(result.risk, ClearRisk::Safe);
+    let rows: Vec<(&str, &str)> = result
+        .fields
+        .iter()
+        .map(|f| (f.label.as_str(), f.value.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("Wallet", "Interleave"),
+            ("Address", "0x88cCA0…266894"),
+            ("Keys", "3"),
+        ]
+    );
+    assert_eq!(
+        result.fields[1].address.as_deref(),
+        Some("0x88cca0eedbf2c4426110bbfc998f048689266894")
+    );
+}
+
+#[test]
+fn another_call_into_the_registry_takes_the_ordinary_ladder() {
+    let mut sut = Sut::new();
+    // `refer(...)`-shaped garbage: same contract, not a register call.
+    let ops = resolve_tx(
+        &mut sut,
+        "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9",
+        "0xdeadbeef00000000000000000000000000000000000000000000000000000000",
+        "0x0",
+    );
+    assert!(!ops.is_empty(), "the ladder asks for a descriptor");
+    assert!(!sut.view().resolved);
+}
+
+#[test]
+fn a_struct_in_a_best_effort_decode_is_summarised_not_object_object() {
+    // The generic renderer's contract, pinned at the boundary: a tuple is
+    // "{n}" and a tuple array "[{n}, {n}]" — never "[object Object]".
+    let selector = compute_selector("f((uint256,uint256),(uint256,uint256)[])").unwrap_or_default();
+    let head = format!(
+        "{}{}{}",
+        pad_u128(1),
+        pad_u128(2),
+        pad("0x60") // offset of the array
+    );
+    let array = format!(
+        "{}{}{}{}{}",
+        pad_u128(2),
+        pad_u128(3),
+        pad_u128(4),
+        pad_u128(5),
+        pad_u128(6)
+    );
+    let data = format!("{selector}{head}{array}");
+    let mut sut = Sut::new();
+    let _ = resolve_tx(&mut sut, UNKNOWN_TOKEN, &data, "0x0");
+    // Walk the ladder with empty answers until the selector database is asked.
+    loop {
+        let outstanding = sut.outstanding();
+        let Some(op) = outstanding.first().cloned() else {
+            break;
+        };
+        match op {
+            Op::HttpGet { path } => sut.resolve(Res::DescriptorFetched { path, json: None }),
+            Op::SelectorDbLookup { .. } => {
+                sut.resolve(Res::SelectorCandidates {
+                    sigs: vec!["f((uint256,uint256),(uint256,uint256)[])".to_owned()],
+                });
+                break;
+            }
+            Op::RpcEthCall {
+                chain_id,
+                to,
+                probe,
+                ..
+            } => sut.resolve(Res::RpcAnswer {
+                probe,
+                chain_id,
+                to,
+                result: None,
+                rpc_error: false,
+            }),
+            Op::Now => sut.resolve(Res::Clock { now_ms: NOW }),
+            Op::Timer { .. } => {
+                sut.drop_matching(|o| matches!(o, Op::Timer { .. }));
+                Vec::new()
+            }
+        };
+    }
+    let result = sut.view().result.expect("a best-effort result");
+    let values: Vec<&str> = result.fields.iter().map(|f| f.value.as_str()).collect();
+    assert!(
+        !values.iter().any(|v| v.contains("[object Object]")),
+        "{values:?}"
+    );
+    let labels: Vec<&str> = result.fields.iter().map(|f| f.label.as_str()).collect();
+    assert_eq!(labels, vec!["Record", "Records"]);
+}

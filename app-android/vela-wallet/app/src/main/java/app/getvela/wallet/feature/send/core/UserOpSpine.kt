@@ -6,6 +6,9 @@ import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import uniffi.vela_core_uniffi.RelayRejection
 import uniffi.vela_core_uniffi.UserOpCall
+import uniffi.vela_core_uniffi.UserOpDraft
+import uniffi.vela_core_uniffi.userOpCallsToMeasure
+import uniffi.vela_core_uniffi.userOpRaiseCallGas
 import uniffi.vela_core_uniffi.UserOpFeeMode
 import uniffi.vela_core_uniffi.WebAuthnAssertion
 import uniffi.vela_core_uniffi.eip1271Signature
@@ -43,6 +46,16 @@ class UserOpSpine(
     private val relay: RelayClient,
     private val accounts: SendExecutor.AccountPort,
     private val signer: () -> UserOpSigner,
+    /**
+     * `eth_estimateGas({from, to, value, data})` on one chain — the gas hex, or
+     * `null` when nobody answered. The inner calls' own measurement (spec 062):
+     * the relay estimates `callGasLimit` against the SENDER, and an undeployed
+     * Safe has no code there, so its figure is 21k plus calldata whatever the
+     * call does. Measured from the Safe's address instead, a codeless account
+     * estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
+     */
+    private val measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
+        { _, _, _, _, _ -> null },
 ) {
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String)
@@ -57,6 +70,33 @@ class UserOpSpine(
     class Refused(val failure: Failure) : Exception()
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
+
+    /**
+     * Every real contract call measured from the Safe's own address; the draft's
+     * `callGasLimit` raised to the core's floor when that is higher. A call nobody
+     * could measure leaves the relay's figure — and its existing guard — alone.
+     */
+    private suspend fun raisedToMeasuredFloor(
+        draft: UserOpDraft,
+        chainId: Int,
+        account: String,
+        calls: List<UserOpCall>,
+    ): UserOpDraft {
+        val toMeasure = userOpCallsToMeasure(calls)
+        if (toMeasure.isEmpty()) return draft
+        val measured = ArrayList<String>(toMeasure.size)
+        for (index in toMeasure) {
+            val call = calls[index.toInt()]
+            val valueHex = if (call.value.startsWith("0x")) call.value else "0x" + java.math.BigInteger(call.value.ifBlank { "0" }).toString(16)
+            val hex = measureCall(chainId, account, call.to, valueHex, call.data) ?: return draft
+            measured += java.math.BigInteger(hex.removePrefix("0x"), 16).toString()
+        }
+        val raised = userOpRaiseCallGas(draft, measured, calls.size.toUInt())
+        if (raised.callGasLimit != draft.callGasLimit) {
+            VelaLog.event("userop.submit", "callGasLimit raised to the inner calls' own estimate", "relay" to draft.callGasLimit, "inner" to raised.callGasLimit)
+        }
+        return raised
+    }
 
     /**
      * A page's message (spec 044): the Safe message hash under the Safe's
@@ -147,13 +187,16 @@ class UserOpSpine(
         }.getOrElse { other(it.message ?: "The operation could not be assembled.") }
         val hasContractCall = userOpHasContractCall(calls)
         when (val estimate = relay.estimateUserOpGas(chainId, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
-            is RelayClient.EstimateAnswer.Estimated -> draft = userOpApplyEstimate(
-                draft,
-                estimate.verificationGasLimit,
-                estimate.callGasLimit,
-                estimate.preVerificationGas,
-                floors,
-            )
+            is RelayClient.EstimateAnswer.Estimated -> {
+                draft = userOpApplyEstimate(
+                    draft,
+                    estimate.verificationGasLimit,
+                    estimate.callGasLimit,
+                    estimate.preVerificationGas,
+                    floors,
+                )
+                draft = raisedToMeasuredFloor(draft, chainId, account, calls)
+            }
             is RelayClient.EstimateAnswer.Refused, RelayClient.EstimateAnswer.Unreachable -> {
                 VelaLog.event("userop.submit", "estimate failed, defaults", "contract" to hasContractCall)
                 if (hasContractCall) {

@@ -1289,6 +1289,46 @@ pub fn user_op_has_contract_call(calls: Vec<UserOpCall>) -> Result<bool, CoreErr
     )?))
 }
 
+/// The calls a shell must measure on their own (`eth_estimateGas` from the
+/// Safe's address) before submitting: every one that is more than a plain
+/// transfer, by index into `calls`. Empty = nothing to measure.
+#[uniffi::export]
+pub fn user_op_calls_to_measure(calls: Vec<UserOpCall>) -> Result<Vec<u32>, CoreError> {
+    Ok(inner_calls(&calls)?
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| !vela_core::user_op::is_plain_transfer_call(&call.data))
+        .map(|(index, _)| index as u32)
+        .collect())
+}
+
+/// The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
+/// `measured` are the shell's `eth_estimateGas` figures for the calls
+/// `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
+/// inner call. The draft's `call_gas_limit` is raised to the result when it is
+/// higher — an undeployed Safe's first contract call must not go out with the
+/// bundler's trivial "no code here" estimate. `None` = nothing to raise.
+#[uniffi::export]
+pub fn user_op_raise_call_gas(
+    draft: UserOpDraft,
+    measured: Vec<String>,
+    call_count: u32,
+) -> Result<UserOpDraft, CoreError> {
+    let measured: Vec<u128> = measured
+        .iter()
+        .map(|gas| u128_of(gas, "measured gas"))
+        .collect::<Result<_, _>>()?;
+    let Some(floor) = vela_core::user_op::inner_calls_gas_floor(&measured, call_count as usize)
+    else {
+        return Ok(draft);
+    };
+    let mut op = op_of(&draft)?;
+    if floor > op.call_gas_limit {
+        op.call_gas_limit = floor;
+    }
+    Ok(draft_of(&op))
+}
+
 /// A displayed quote is usable when it is positive and names a real address.
 #[uniffi::export]
 pub fn quoted_fee_usable(amount: String, recipient: String) -> bool {

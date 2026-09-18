@@ -1226,6 +1226,21 @@ fn start_tx(
     }
 
     let to = to.map(|t| t.to_lowercase());
+
+    // The wallet's own backup of its founding record (spec 062): a 4 KB
+    // `register(...)` into the passkey registry, which the ordinary ladder can
+    // only present as a stranger's call it read from a signature database. It
+    // is the one first-party contract call the wallet makes; it is drawn as
+    // what it is, with nothing to fetch.
+    if let Some(result) = to
+        .as_deref()
+        .and_then(|to| build_registry_backup_result(to, &data))
+    {
+        model.result = Some(result);
+        model.resolved = true;
+        return render();
+    }
+
     model.run = Some(Run {
         req: Req::Tx {
             to,
@@ -2421,6 +2436,8 @@ fn pretty_type(ty: &str) -> String {
     match ty {
         "bool" => "Flag".to_owned(),
         "string" => "Text".to_owned(),
+        "tuple" => "Record".to_owned(),
+        "tuple[]" => "Records".to_owned(),
         t if t.starts_with("bytes") => "Data".to_owned(),
         t => t.to_owned(),
     }
@@ -2452,6 +2469,10 @@ fn format_generic_value(v: &Ctx, ty: &str, locale: &ClearLocale) -> String {
         }
         Ctx::Bool(b) => if *b { "true" } else { "false" }.to_owned(),
         Ctx::Num(d) => group_digits(d, locale),
+        // A struct in a best-effort decode: say how much is in it rather than
+        // JS's `[object Object]` (issue found on the registry backup, spec 062).
+        // Its members are under "Technical details"; the row is a summary.
+        Ctx::Map(fields) => format!("{{{}}}", fields.len()),
         other => {
             let s = js_string(other);
             if is_hex_address_shape(&s) {
@@ -2461,6 +2482,67 @@ fn format_generic_value(v: &Ctx, ty: &str, locale: &ClearLocale) -> String {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// The registry backup (spec 062 §5a) — the wallet's one first-party call
+// ---------------------------------------------------------------------------
+
+/// `Some` only for a `register(...)` into the passkey registry that this build
+/// can read; anything else takes the ordinary ladder.
+///
+/// Verified: the contract is ours and the bytes are the Gnosis record's own
+/// (the target registry re-verifies every signature in them), so no warning
+/// is owed. The rows say whose record it is and how many keys it carries; the
+/// network is in the sheet's header. Labels are descriptor vocabulary, like
+/// every built-in descriptor's.
+fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult> {
+    if !to.eq_ignore_ascii_case(crate::registry_backup::REGISTRY) {
+        return None;
+    }
+    let bytes = primitives::from_hex(data).ok()?;
+    let call = crate::registry_backup::describe_register_call(&bytes)?;
+    let field =
+        |label: &str, value: String, format: &str, address: Option<String>| ClearSignField {
+            label: label.to_owned(),
+            value,
+            format: format.to_owned(),
+            token_address: None,
+            warning: false,
+            unverified: false,
+            role: ClearFieldRole::Generic,
+            detail: false,
+            expired: false,
+            address,
+            usd_value: None,
+        };
+    let address = call.wallet_address.to_lowercase();
+    Some(ClearSignResult {
+        intent: "Back up wallet keys".to_owned(),
+        contract_name: Some("Vela passkey registry".to_owned()),
+        owner: Some("Vela".to_owned()),
+        fields: vec![
+            field("Wallet", call.wallet_name, "raw", None),
+            field(
+                "Address",
+                format!(
+                    "{}…{}",
+                    take_chars(&call.wallet_address, 0, 8),
+                    last_chars(&call.wallet_address, 6)
+                ),
+                "addressName",
+                Some(address),
+            ),
+            field("Keys", call.key_count.to_string(), "raw", None),
+        ],
+        risk: ClearRisk::Safe,
+        contract_address: Some(to.to_lowercase()),
+        verified: true,
+        sign_type: ClearSignType::Transaction,
+        partial: false,
+        best_effort: false,
+        to_own_token: false,
+    })
 }
 
 // ---------------------------------------------------------------------------

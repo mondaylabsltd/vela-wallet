@@ -233,7 +233,15 @@ struct RootView: View {
         let spine = UserOpSpine(
             relay: relay,
             accounts: port,
-            signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) }
+            signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) },
+            measureCall: { chainId, from, to, valueHex, data in
+                let outcome = await pool.call(
+                    chainId: chainId, method: "eth_estimateGas",
+                    params: [["from": from, "to": to, "value": valueHex, "data": data]]
+                )
+                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x") else { return nil }
+                return hex
+            }
         )
         self.userOpSpine = spine
         let feeStore = FeeStore(relay: relay, accounts: port)

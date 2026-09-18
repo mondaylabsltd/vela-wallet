@@ -9716,6 +9716,19 @@ public func userOpApplyEstimate(draft: UserOpDraft, verificationGasLimit: String
 })
 }
 /**
+ * The calls a shell must measure on their own (`eth_estimateGas` from the
+ * Safe's address) before submitting: every one that is more than a plain
+ * transfer, by index into `calls`. Empty = nothing to measure.
+ */
+public func userOpCallsToMeasure(calls: [UserOpCall])throws  -> [UInt32]  {
+    return try  FfiConverterSequenceUInt32.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_calls_to_measure(
+        FfiConverterSequenceTypeUserOpCall.lower(calls),uniffiCallStatus
+    )
+})
+}
+/**
  * A draft operation: the batch (calls + the fee leg `fee` names) as MultiSend
  * calldata, the floors as limits, the estimation dummy as signature, and —
  * for an undeployed account — the initCode for its founding keys.
@@ -9758,6 +9771,24 @@ public func userOpHasContractCall(calls: [UserOpCall])throws  -> Bool  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_user_op_has_contract_call(
         FfiConverterSequenceTypeUserOpCall.lower(calls),uniffiCallStatus
+    )
+})
+}
+/**
+ * The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
+ * `measured` are the shell's `eth_estimateGas` figures for the calls
+ * `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
+ * inner call. The draft's `call_gas_limit` is raised to the result when it is
+ * higher — an undeployed Safe's first contract call must not go out with the
+ * bundler's trivial "no code here" estimate. `None` = nothing to raise.
+ */
+public func userOpRaiseCallGas(draft: UserOpDraft, measured: [String], callCount: UInt32)throws  -> UserOpDraft  {
+    return try  FfiConverterTypeUserOpDraft_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_raise_call_gas(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterSequenceString.lower(measured),
+        FfiConverterUInt32.lower(callCount),uniffiCallStatus
     )
 })
 }
@@ -10304,6 +10335,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_apply_estimate() != 50114) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_calls_to_measure() != 59686) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_draft() != 31118) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10311,6 +10345,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_has_contract_call() != 47699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_raise_call_gas() != 29305) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_relay_json() != 41999) {

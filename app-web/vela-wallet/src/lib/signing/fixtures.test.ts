@@ -44,9 +44,10 @@ describe('signing messages', () => {
 });
 
 describe('the catalogue (data-model.md §3)', () => {
-	it('is all 33 scenarios, each with its own id', () => {
-		expect(ALL_STATES).toHaveLength(33);
-		expect(new Set(ALL_STATES).size).toBe(33);
+	it('is all 35 scenarios, each with its own id', () => {
+		// 33 in data-model.md §3, plus cs34/cs35 (032 phase 39, the cap field).
+		expect(ALL_STATES).toHaveLength(35);
+		expect(new Set(ALL_STATES).size).toBe(35);
 	});
 
 	it.each(ALL_STATES)('%s builds, says something, and fills every template', (state) => {

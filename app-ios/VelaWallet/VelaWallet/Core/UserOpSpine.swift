@@ -72,11 +72,49 @@ final class UserOpSpine {
     private let relay: RelayClient
     private let accounts: AccountPort
     private let signer: () -> UserOpSigner
+    /// `eth_estimateGas({from, to, value, data})` on one chain — the gas hex, or
+    /// `nil` when nobody answered. The inner calls' own measurement (spec 062):
+    /// the relay estimates `callGasLimit` against the SENDER, and an undeployed
+    /// Safe has no code there, so its figure is 21k plus calldata whatever the
+    /// call does. Measured from the Safe's address instead, a codeless account
+    /// estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
+    private let measureCall: (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
 
-    init(relay: RelayClient, accounts: AccountPort, signer: @escaping () -> UserOpSigner) {
+    init(
+        relay: RelayClient,
+        accounts: AccountPort,
+        signer: @escaping () -> UserOpSigner,
+        measureCall: @escaping (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
+    ) {
         self.relay = relay
         self.accounts = accounts
         self.signer = signer
+        self.measureCall = measureCall
+    }
+
+    /// Every real contract call measured from the Safe's own address; the draft's
+    /// `callGasLimit` raised to the core's floor when that is higher. A call nobody
+    /// could measure leaves the relay's figure — and its existing guard — alone.
+    private func raisedToMeasuredFloor(
+        _ draft: UserOpDraft, chainId: Int, account: String, calls: [UserOpCall]
+    ) async -> UserOpDraft {
+        guard let toMeasure = try? userOpCallsToMeasure(calls: calls), !toMeasure.isEmpty else { return draft }
+        var measured: [String] = []
+        for index in toMeasure {
+            let call = calls[Int(index)]
+            let valueHex = call.value.hasPrefix("0x") ? call.value : "0x" + (Self.decimalToHex(call.value) ?? "0")
+            guard let hex = await measureCall(chainId, account, call.to, valueHex, call.data),
+                  let gas = UInt64(hex.dropFirst(hex.hasPrefix("0x") ? 2 : 0), radix: 16)
+            else { return draft }
+            measured.append(String(gas))
+        }
+        return (try? userOpRaiseCallGas(draft: draft, measured: measured, callCount: UInt32(calls.count))) ?? draft
+    }
+
+    /// A decimal wei string as bare hex. Values here are small enough for
+    /// `UInt64`… except when they are not — then the measurement is skipped.
+    private static func decimalToHex(_ decimal: String) -> String? {
+        decimal.isEmpty ? "0" : UInt64(decimal).map { String($0, radix: 16) }
     }
 
     private func other(_ message: String) -> Refused { Refused(failure: .other(message)) }
@@ -214,7 +252,7 @@ final class UserOpSpine {
                 preVerificationGas: preVerification,
                 floors: floors
             ) {
-                draft = applied
+                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
             }
         case .refused, .unreachable:
             // A plain transfer can ride the floors. A batch carrying a real

@@ -213,6 +213,58 @@ describe('a decoded request', () => {
 		const warnings = flagged.blocks.filter((b) => b.kind === 'warning');
 		expect(warnings).toHaveLength(3);
 		expect(warnings[0]).toMatchObject({ tone: 'danger' });
+		// …and says them in words, not in template slots: "Calling {{fn}} —"
+		// shipped once (spec 062 found it on the registry backup).
+		for (const warning of warnings) {
+			expect(JSON.stringify(warning)).not.toContain('{{');
+		}
+	});
+
+	it("the wallet's own registry backup is drawn verified, with rows and no warning", () => {
+		const backup = buildSigningModel(
+			inputs({
+				clear: {
+					...DECODED,
+					result: {
+						...DECODED.result!,
+						intent: 'Back up wallet keys',
+						contract_name: 'Vela passkey registry',
+						owner: 'Vela',
+						verified: true,
+						best_effort: false,
+						partial: false,
+						risk: 'safe',
+						fields: [
+							{
+								...DECODED.result!.fields[0],
+								label: 'Wallet',
+								value: 'Interleave',
+								role: 'generic',
+								format: 'raw',
+								address: null,
+								token_address: null
+							},
+							{
+								...DECODED.result!.fields[0],
+								label: 'Keys',
+								value: '3',
+								role: 'generic',
+								format: 'raw',
+								address: null,
+								token_address: null
+							}
+						]
+					}
+				}
+			})
+		)!;
+		expect(backup.blocks.filter((b) => b.kind === 'warning')).toEqual([]);
+		expect(backup.blocks[0]).toMatchObject({ kind: 'intent', text: 'Back up wallet keys' });
+		const rows = backup.blocks.find((b) => b.kind === 'rows');
+		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
+			['Wallet', 'Interleave'],
+			['Keys', '3']
+		]);
 	});
 });
 
