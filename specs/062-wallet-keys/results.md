@@ -1,8 +1,9 @@
 # 062 — Results
 
-What was ruled (spec §0): no key replacement, no keys screen. The feature is **back the
-founding record up to Ethereum, and be able to sign in from it.** Both halves are built on
-all four shells.
+What was ruled (spec §0): no key replacement. The feature is **back the founding record up
+to Ethereum, be able to sign in from it, and see which keys those are.** All three are built
+on all four shells. (I first read the ruling as also deferring the keys *view*; it did not —
+see the second pass below.)
 
 ## What exists
 
@@ -100,4 +101,5 @@ failures `main` has (explore fixtures, `FLOW_KEYS`, token px audit).
 
 ## Deferred, with the founder's ruling
 
-Keys screen (Part A) and key replacement (Part B): spec §0.
+Key replacement (Part B), and the per-network *live* signer half of Part A that only existed
+to show replacements: spec §0. The founding-set view is built (second pass).
