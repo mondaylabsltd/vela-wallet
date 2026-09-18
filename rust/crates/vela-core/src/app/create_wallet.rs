@@ -664,28 +664,7 @@ fn key_name_changed(model: &mut Model, index: usize, name: String) -> Command<Ef
 /// fail open there rather than dead-end an honest provider (same benefit of
 /// the doubt `credProps.rk === undefined` gets in the passkey module).
 fn attestation_signals(attestation_hex: &str) -> (String, bool) {
-    let Ok(bytes) = crate::primitives::from_hex(attestation_hex) else {
-        return (String::new(), true);
-    };
-    if bytes.len() != 20 {
-        return (String::new(), true);
-    }
-    let aaguid_bytes = &bytes[1..17];
-    let aaguid = if aaguid_bytes.iter().all(|b| *b == 0) {
-        String::new()
-    } else {
-        let hex = crate::primitives::to_hex(aaguid_bytes, false);
-        format!(
-            "{}-{}-{}-{}-{}",
-            &hex[0..8],
-            &hex[8..12],
-            &hex[12..16],
-            &hex[16..20],
-            &hex[20..32]
-        )
-    };
-    let backed_up = bytes[17] & 0x10 != 0;
-    (aaguid, backed_up)
+    crate::passkey::attestation_signals(attestation_hex)
 }
 
 impl Draft {

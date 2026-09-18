@@ -89,6 +89,13 @@
       "backedUp": "已备份到以太坊",
       "notBackedUp": "尚未备份",
       "couldNotCheck": "无法检查"
+    },
+    "keys": {
+      "title": "钥匙",
+      "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
+      "keyN": "钥匙 {{n}}",
+      "notSynced": "未同步",
+      "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。"
     }
   }
 }

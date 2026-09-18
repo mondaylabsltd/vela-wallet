@@ -132,6 +132,10 @@ export interface SigningMessages {
 	balancesBlindSimulated: string;
 	balancesBestEffort: string;
 	feeLabel: string;
+	/** The fee row while the quote is in flight. */
+	feeEstimating: string;
+	/** The fee row after the quote failed; tapping it asks again. */
+	feeRetry: string;
 	feeTokenTitle: string;
 	feeEstimated: string;
 	feeBalance: string;

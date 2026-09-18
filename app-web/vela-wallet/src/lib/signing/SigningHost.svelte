@@ -27,6 +27,7 @@
 	import { IDLE_FEE_VIEW, type FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
+	import type { FeeCall } from '$lib/core/generated/FeeCall';
 
 	interface Props {
 		messages: SigningMessages;
@@ -62,6 +63,57 @@
 		} else {
 			signingSheet.dismiss();
 		}
+	});
+
+	/**
+	 * The REAL calls of a transaction request, as the fee machine prices them.
+	 * `null` for anything that is not an on-chain operation (a message has no
+	 * fee) or whose params this cannot read — then no fee is drawn, and the
+	 * slide does not wait for one.
+	 */
+	function callsOf(kind: string, paramsJson: string): FeeCall[] | null {
+		try {
+			const first = (JSON.parse(paramsJson) as unknown[])[0] as
+				{ to?: string; value?: string; data?: string; calls?: unknown[] } | undefined;
+			const raw = kind === 'batch' ? (first?.calls ?? []) : kind === 'transaction' ? [first] : [];
+			const calls = (raw as { to?: string; value?: string; data?: string }[]).map((call) => ({
+				to: call?.to ?? '',
+				value: BigInt(call?.value ?? '0x0').toString(),
+				data: call?.data ?? '0x'
+			}));
+			return calls.length > 0 && calls.every((call) => call.to !== '') ? calls : null;
+		} catch {
+			return null;
+		}
+	}
+
+	// A transaction is shown WITH what it costs (the founder's standing rule:
+	// signing mirrors Send). Until this, no surface asked for the quote when a
+	// request arrived, so the web sheet drew no fee for anything — and the
+	// backup to Ethereum, which costs real dollars, said nothing about it.
+	let quotedFor = '';
+	$effect(() => {
+		const request = signView.request;
+		if (!request || signView.surface === 'hidden' || !identity) {
+			quotedFor = '';
+			return;
+		}
+		if (quotedFor === request.id) return;
+		const calls = callsOf(request.kind, request.params_json);
+		if (calls === null) return;
+		quotedFor = request.id;
+		const account = view.accounts.find(
+			(row) => row.account.address.toLowerCase() === identity.address.toLowerCase()
+		)?.account;
+		void fee.requestQuote({
+			chainId: request.chain_id,
+			account: identity.address,
+			calls,
+			feeToken: null,
+			publicKeyHex: account
+				? (account.keys[0]?.public_key_hex ?? account.public_key_hex)
+				: undefined
+		});
 	});
 
 	const model = $derived.by(() => {
@@ -126,6 +178,6 @@
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
 		oncustom={guardCustom}
-		{onfee}
+		onfee={() => (fee.view?.failed ? fee.requote() : onfee())}
 	/>
 {/if}

@@ -487,6 +487,14 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// Which passkeys control the wallet at `address` — the Settings keys view
+/// (spec 062). See `vela_core::wallet_keys`.
+#[uniffi::export]
+#[must_use]
+pub fn wallet_keys_step(address: String, device_keys_json: String, answers_json: String) -> String {
+    vela_core::wallet_keys::step_json(&address, &device_keys_json, &answers_json)
+}
+
 /// **Signing in when the index is gone** (spec 062): the registry contract's
 /// side of the index's two read questions, answered in the index's own JSON
 /// shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to

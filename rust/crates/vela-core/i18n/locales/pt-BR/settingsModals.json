@@ -89,6 +89,13 @@
       "backedUp": "Backup feito na Ethereum",
       "notBackedUp": "Ainda sem backup",
       "couldNotCheck": "Não foi possível verificar"
+    },
+    "keys": {
+      "title": "Chaves",
+      "subtitle": "Qualquer uma destas chaves de acesso pode assinar por esta carteira, em todas as redes.",
+      "keyN": "Chave {{n}}",
+      "notSynced": "Não sincronizada",
+      "fromDevice": "Não foi possível consultar o registro. Mostrando o que este dispositivo lembra."
     }
   }
 }

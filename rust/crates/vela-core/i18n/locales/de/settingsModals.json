@@ -89,6 +89,13 @@
       "backedUp": "Auf Ethereum gesichert",
       "notBackedUp": "Noch nicht gesichert",
       "couldNotCheck": "Prüfung nicht möglich"
+    },
+    "keys": {
+      "title": "Schlüssel",
+      "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
+      "keyN": "Schlüssel {{n}}",
+      "notSynced": "Nicht synchronisiert",
+      "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat."
     }
   }
 }

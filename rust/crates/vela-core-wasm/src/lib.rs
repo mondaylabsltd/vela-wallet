@@ -583,6 +583,16 @@ pub fn registry_chain_unit(unit_id: u32, unit_hex: &str, members_hex: &str) -> O
     vela_core::registry_chain::unit_json(u64::from(unit_id), unit_hex, members_hex)
 }
 
+/// Which passkeys control the wallet at `address` — the Settings keys view
+/// (spec 062). `device_keys_json` is the account record's `keys` array (or a
+/// one-element array built from the legacy scalars); the answer is `ask` with
+/// `eth_call`s to perform, or `done` with the rows and where they came from.
+#[wasm_bindgen(js_name = walletKeysStep)]
+#[must_use]
+pub fn wallet_keys_step(address: &str, device_keys_json: &str, answers_json: &str) -> String {
+    vela_core::wallet_keys::step_json(address, device_keys_json, answers_json)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where

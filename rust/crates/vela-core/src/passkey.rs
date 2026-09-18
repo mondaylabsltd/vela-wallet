@@ -303,6 +303,41 @@ pub fn provider(aaguid: &str) -> Option<PasskeyProvider> {
     })
 }
 
+/// What the registry's 20-byte attestation blob says about a credential
+/// (`version ‖ AAGUID(16) ‖ authenticatorData flags ‖ reserved(2)`): the AAGUID
+/// as a canonical uuid (empty when absent or all-zero), and whether the
+/// credential is backed up (BS, bit 4) — a "synced passkey".
+///
+/// An EMPTY or malformed attestation reads as synced: some authenticators
+/// legitimately omit attested-credential data, and everything that gates on
+/// this must fail open rather than dead-end an honest provider. Shared by the
+/// create flow's key list and the settings keys view (spec 062).
+#[must_use]
+pub fn attestation_signals(attestation_hex: &str) -> (String, bool) {
+    let Ok(bytes) = crate::primitives::from_hex(attestation_hex) else {
+        return (String::new(), true);
+    };
+    if bytes.len() != 20 {
+        return (String::new(), true);
+    }
+    let aaguid_bytes = &bytes[1..17];
+    let aaguid = if aaguid_bytes.iter().all(|b| *b == 0) {
+        String::new()
+    } else {
+        let hex = crate::primitives::to_hex(aaguid_bytes, false);
+        format!(
+            "{}-{}-{}-{}-{}",
+            &hex[0..8],
+            &hex[8..12],
+            &hex[12..16],
+            &hex[16..20],
+            &hex[20..32]
+        )
+    };
+    let backed_up = bytes[17] & 0x10 != 0;
+    (aaguid, backed_up)
+}
+
 /// The provider's brand name, or `None` when the catalog does not know it.
 #[must_use]
 pub fn provider_name(aaguid: &str) -> Option<&'static str> {

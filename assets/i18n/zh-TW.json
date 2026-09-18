@@ -1571,6 +1571,13 @@
    "backedUp": "已備份到以太坊",
    "notBackedUp": "尚未備份",
    "couldNotCheck": "無法檢查"
+  },
+  "keys": {
+   "title": "金鑰",
+   "subtitle": "其中任何一把通行密鑰都能為這個錢包簽署，所有網路通用。",
+   "keyN": "金鑰 {{n}}",
+   "notSynced": "未同步",
+   "fromDevice": "暫時連不上註冊表，僅顯示本機記得的內容。"
   }
  },
  "contacts": {

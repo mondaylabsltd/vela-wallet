@@ -281,7 +281,15 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	if (kind === 'personal_sign' || kind === 'typed_data') {
 		return { kind: 'offchain', note: m.okNoNetworkFee };
 	}
-	if (!fee.fee) return { kind: 'hidden' };
+	if (!fee.fee) {
+		// Asked and not answered yet, or asked and refused: say so in the fee's
+		// own row. A sheet that drew nothing here let a person slide on a
+		// mainnet transaction without ever being told what it costs — and the
+		// slide stays shut in both states, as it does on the phones.
+		if (fee.busy) return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating };
+		if (fee.failed) return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry };
+		return { kind: 'hidden' };
+	}
 	// The send screens' own line, through the send screens' own formatter: the
 	// coin that is ACTUALLY paying, trimmed, and what it costs (issue 201).
 	// This sheet used to print the estimate's NATIVE figure beside the CHAIN's

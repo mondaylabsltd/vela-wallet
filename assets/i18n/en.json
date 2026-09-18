@@ -1581,6 +1581,13 @@
    "backedUp": "Backed up on Ethereum",
    "notBackedUp": "Not backed up yet",
    "couldNotCheck": "Could not check"
+  },
+  "keys": {
+   "title": "Keys",
+   "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
+   "keyN": "Key {{n}}",
+   "notSynced": "Not synced",
+   "fromDevice": "Couldn't reach the registry. Showing what this device remembers."
   }
  },
  "contacts": {

@@ -69,7 +69,8 @@ import init, {
 	SignRequestCore,
 	toHex,
 	TokenTrustCore,
-	TxTrackerCore
+	TxTrackerCore,
+	walletKeysStep
 } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 
@@ -112,7 +113,7 @@ export { minGasPriceWei, peggedNativeUsd };
 export { identiconNormalizeSeed, identiconSvgCircular };
 export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
-export { registryBackupStep, registryNameStep };
+export { registryBackupStep, registryNameStep, walletKeysStep };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 
 /**

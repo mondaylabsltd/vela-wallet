@@ -1571,6 +1571,13 @@
    "backedUp": "Sudah dicadangkan di Ethereum",
    "notBackedUp": "Belum dicadangkan",
    "couldNotCheck": "Tidak dapat memeriksa"
+  },
+  "keys": {
+   "title": "Kunci",
+   "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
+   "keyN": "Kunci {{n}}",
+   "notSynced": "Tidak disinkronkan",
+   "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini."
   }
  },
  "contacts": {

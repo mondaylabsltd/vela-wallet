@@ -544,6 +544,17 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			couldNotCheck: k('settingsModals.backup.couldNotCheck'),
 			checking: k('componentsUi.funding.checking')
 		},
+		keys: {
+			title: k('settingsModals.keys.title'),
+			subtitle: k('settingsModals.keys.subtitle'),
+			keyN: k('settingsModals.keys.keyN'),
+			synced: k('onboarding.create.keySyncedBadge'),
+			notSynced: k('settingsModals.keys.notSynced'),
+			fromDevice: k('settingsModals.keys.fromDevice'),
+			providerPlatform: k('onboarding.create.providerPlatform'),
+			providerGeneric: k('onboarding.create.providerGeneric'),
+			providerSecurityKey: k('onboarding.create.providerSecurityKey')
+		},
 		relayer: {
 			title: k('componentsUi.treasuryBootstrap.title'),
 			lead: k('componentsUi.treasuryBootstrap.lead'),
@@ -808,6 +819,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		balancesBlindSimulated: k('componentsUi.signing.blindButSimulated'),
 		balancesBestEffort: k('componentsUi.signing.bestEffortSimulated'),
 		feeLabel: k('componentsUi.gas.networkFee'),
+		feeEstimating: k('componentsUi.gas.estimating'),
+		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeEstimated: k('componentsUi.signing.feeEstimated'),
 		feeBalance: k('componentsUi.gas.rowBalance'),

@@ -850,6 +850,14 @@ export function toQuantity(value: string): string;
  */
 export function validateClientData(kind: string, client_data_json: Uint8Array, authenticator_data: Uint8Array): void;
 
+/**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). `device_keys_json` is the account record's `keys` array (or a
+ * one-element array built from the legacy scalars); the answer is `ask` with
+ * `eth_call`s to perform, or `done` with the rows and where they came from.
+ */
+export function walletKeysStep(address: string, device_keys_json: string, answers_json: string): string;
+
 export function webauthnSigningHash(authenticator_data: Uint8Array, client_data_json: Uint8Array): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -1052,6 +1060,7 @@ export interface InitOutput {
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

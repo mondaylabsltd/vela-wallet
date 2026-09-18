@@ -272,6 +272,20 @@ export interface SettingsMessages {
 		couldNotCheck: string;
 		checking: string;
 	};
+	/** The keys that control this wallet (spec 062). */
+	keys: {
+		title: string;
+		subtitle: string;
+		/** `Key {{n}}` — a key nobody named. */
+		keyN: string;
+		synced: string;
+		notSynced: string;
+		/** The registry did not answer; the rows are the device's memory. */
+		fromDevice: string;
+		providerPlatform: string;
+		providerGeneric: string;
+		providerSecurityKey: string;
+	};
 	relayer: {
 		title: string;
 		lead: string;
@@ -380,6 +394,15 @@ export const SETTINGS_KEYS = [
 	'settingsModals.backup.notBackedUp',
 	'settingsModals.backup.couldNotCheck',
 	'componentsUi.funding.checking',
+	'settingsModals.keys.title',
+	'settingsModals.keys.subtitle',
+	'settingsModals.keys.keyN',
+	'settingsModals.keys.notSynced',
+	'settingsModals.keys.fromDevice',
+	'onboarding.create.keySyncedBadge',
+	'onboarding.create.providerPlatform',
+	'onboarding.create.providerGeneric',
+	'onboarding.create.providerSecurityKey',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
 	'settingsModals.network.fieldRpcUrl',

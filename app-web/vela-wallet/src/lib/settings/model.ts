@@ -549,6 +549,8 @@ export interface SettingsHomeModel {
 	tab: 'wallet' | 'contacts' | 'explore' | 'settings';
 	tabs: { wallet: string; contacts: string; explore: string; settings: string };
 	account: AccountRowModel;
+	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+	keys?: WalletKeysModel;
 	sections: SettingsSectionModel[];
 	appearance: { theme: SegmentedModel; avatar: SegmentedModel; textScale: TextScaleModel };
 	signOut: { label: string };
@@ -631,6 +633,37 @@ export interface EthereumBackupRowModel {
 	actionable: boolean;
 }
 
+/**
+ * The keys that control this wallet (spec 062) — drawn above the backup, because
+ * a person offered "back up your keys" is owed the sight of them first.
+ *
+ * `rows` is empty while the first answer is in flight; `note` is set when the
+ * registry did not answer and the rows are only what this device remembers.
+ */
+export interface WalletKeysModel {
+	title: string;
+	subtitle: string;
+	/** "3" — how many keys, beside the title. Empty while loading. */
+	count: string;
+	loading: boolean;
+	note?: string;
+	rows: WalletKeyRowModel[];
+	/** The founding record's standing on Ethereum; absent = nothing to draw. */
+	backup?: EthereumBackupRowModel;
+}
+
+export interface WalletKeyRowModel {
+	/** The owner's label, or "Key n" when nobody recorded one. */
+	name: string;
+	/** Who holds it when the core's catalog knows; else the method's generic line. */
+	holderFallback: string;
+	badge?: { text: string; tone: 'synced' | 'local' };
+	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
+	fingerprint: string;
+	/** The row in the create flow's shape — what `PasskeyProviderMark` draws from. */
+	key: import('$lib/onboarding/generated/CreateKeyRow').CreateKeyRow;
+}
+
 export interface SettingsDesktopModel {
 	state: DesktopSettingsStateId;
 	title: string;
@@ -648,8 +681,8 @@ export interface SettingsDesktopModel {
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };
-		/** Live only (spec 062): the founding record's standing on Ethereum. Absent = nothing to draw. */
-		backup?: EthereumBackupRowModel;
+		/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+		keys?: WalletKeysModel;
 	};
 	appearance: {
 		title: string;

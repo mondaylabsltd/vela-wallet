@@ -214,6 +214,14 @@
 	let sendView = $state<SendView | null>(null);
 	let sendSession: SendSession | null = null;
 	const feeQuote = new FeeQuote();
+	/**
+	 * The signing sheet's OWN fee session. It used to be handed Send's, which was
+	 * harmless only while nothing priced a signing request; now the host asks for
+	 * the request's real quote, and doing that on Send's session would replace the
+	 * operation a half-filled send form is showing a fee for.
+	 */
+	const signingFee = new FeeQuote();
+	onMount(() => () => signingFee.dispose());
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */
 	let feeSheetOpen = $state(false);
 	/**
@@ -1274,16 +1282,6 @@
 			nav.enter('receive');
 			return;
 		}
-		if (handoff.kind === 'ethereum-backup') {
-			// Settings handed the person here because this route hosts the signing
-			// sheet (spec 062). The check runs again — a link is not a verdict — and
-			// the sheet opens only if Ethereum really lacks the record.
-			const account = session.view.accounts[session.view.active_index]?.account;
-			if (account) {
-				void import('$lib/backup/ethereum-backup').then((m) => m.startEthereumBackup(account));
-			}
-			return;
-		}
 		nav.enter('send');
 		void openSend(
 			handoff.kind === 'send' ? { prefilled_recipient: handoff.recipient } : undefined
@@ -1516,7 +1514,7 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<SigningHost messages={data.signingMessages} fee={feeQuote} />
+<SigningHost messages={data.signingMessages} fee={signingFee} />
 
 <!--
   What fills the scanner's frame. One definition for both layouts — only one of

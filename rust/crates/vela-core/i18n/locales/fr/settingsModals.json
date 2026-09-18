@@ -89,6 +89,13 @@
       "backedUp": "Sauvegardées sur Ethereum",
       "notBackedUp": "Pas encore sauvegardées",
       "couldNotCheck": "Vérification impossible"
+    },
+    "keys": {
+      "title": "Clés",
+      "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
+      "keyN": "Clé {{n}}",
+      "notSynced": "Non synchronisée",
+      "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient."
     }
   }
 }

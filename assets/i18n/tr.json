@@ -1571,6 +1571,13 @@
    "backedUp": "Ethereum'a yedeklendi",
    "notBackedUp": "Henüz yedeklenmedi",
    "couldNotCheck": "Kontrol edilemedi"
+  },
+  "keys": {
+   "title": "Anahtarlar",
+   "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
+   "keyN": "Anahtar {{n}}",
+   "notSynced": "Eşitlenmedi",
+   "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor."
   }
  },
  "contacts": {

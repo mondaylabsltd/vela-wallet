@@ -14,10 +14,7 @@
 export type FlowHandoff =
 	| { kind: 'send'; recipient: string }
 	| { kind: 'receive' }
-	| { kind: 'group-send'; groupId: string }
-	/** Settings → back the founding record up to Ethereum (spec 062). The signing
-	 *  sheet's host lives on the wallet route, so that is where it starts. */
-	| { kind: 'ethereum-backup' };
+	| { kind: 'group-send'; groupId: string };
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
@@ -29,7 +26,6 @@ export function readFlowHandoff(search: string): FlowHandoff | null {
 	const group = params.get('group');
 	if (group !== null && group !== '') return { kind: 'group-send', groupId: group };
 	if (params.get('flow') === 'receive') return { kind: 'receive' };
-	if (params.get('flow') === 'ethereum-backup') return { kind: 'ethereum-backup' };
 	return null;
 }
 
@@ -49,9 +45,6 @@ export function flowHandoffQuery(handoff: FlowHandoff): `?${string}` {
 			break;
 		case 'receive':
 			params.set('flow', 'receive');
-			break;
-		case 'ethereum-backup':
-			params.set('flow', 'ethereum-backup');
 			break;
 	}
 	return `?${params.toString()}`;

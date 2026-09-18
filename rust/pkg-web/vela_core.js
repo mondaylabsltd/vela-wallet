@@ -3756,6 +3756,35 @@ export function validateClientData(kind, client_data_json, authenticator_data) {
 }
 
 /**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). `device_keys_json` is the account record's `keys` array (or a
+ * one-element array built from the legacy scalars); the answer is `ask` with
+ * `eth_call`s to perform, or `done` with the rows and where they came from.
+ * @param {string} address
+ * @param {string} device_keys_json
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function walletKeysStep(address, device_keys_json, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(device_keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.walletKeysStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} authenticator_data
  * @param {Uint8Array} client_data_json
  * @returns {Uint8Array}

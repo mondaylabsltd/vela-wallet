@@ -61,7 +61,7 @@ pub const TARGET_CHAIN: u32 = 1;
 pub const TARGET_CHAINS: [u32; 2] = [TARGET_CHAIN, 8453];
 
 /// A key founds few wallets; the newest are the ones worth a call.
-const MAX_UNITS: u64 = 8;
+pub(crate) const MAX_UNITS: u64 = 8;
 
 const SIG_VERSION: &str = "VERSION()";
 pub(crate) const SIG_GROUPS_OF_KEY: &str = "getGroupsOfKey(bytes,uint256,uint256,bool)";
@@ -192,7 +192,7 @@ pub(crate) fn unit_from(value: &DynSolValue) -> Option<Unit> {
 
 /// Is this unit's metadata about `address_lower`? A blob that does not decode
 /// is about nobody.
-fn names(unit: &Unit, address_lower: &str) -> bool {
+pub(crate) fn names(unit: &Unit, address_lower: &str) -> bool {
     RegistryMetadata::decode_hex(&primitives::to_hex(&unit.metadata, false))
         .is_ok_and(|metadata| metadata.address.to_lowercase() == address_lower)
 }
@@ -261,7 +261,7 @@ pub(crate) fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
     }
 }
 
-fn is_address(address: &str) -> bool {
+pub(crate) fn is_address(address: &str) -> bool {
     address
         .strip_prefix("0x")
         .is_some_and(|hex| hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
