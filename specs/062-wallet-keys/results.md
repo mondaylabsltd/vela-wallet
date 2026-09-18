@@ -19,6 +19,33 @@ The registry is deployed at `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` on Gnos
 and Base (operator, 2026-09-18). `TARGET_CHAINS = [1, 8453]`; the Settings row offers
 Ethereum only.
 
+## Second pass, 2026-09-18 — after the founder rejected the first UI
+
+The first version passed every test and was not fit to look at. Three faults, all fixed:
+
+| Fault | Cause | Now |
+|---|---|---|
+| On a desktop-width page the signing sheet was a full-width bottom drawer with the sidebar and asset list showing through | `position: absolute`, no z-index, laid out against whichever page mounted the host | Fixed + layered; a centred card past the desktop breakpoint (no bottom sheets on desktop). True of **every** dApp request on web, not only this one |
+| Tapping the backup jumped to the wallet home | The sheet's host was only mounted on `/wallet`, and I routed around that | Settings hosts the sheet; the `?flow=ethereum-backup` hand-off is deleted |
+| "Back up your keys" without showing the keys | I had deferred the keys view together with key *replacement*; only replacement was ruled out | **Keys block** on all four shells: name, vault (its own mark), fingerprint, synced — read from the registry contract by the new core walk `wallet_keys`; the backup is the block's last row |
+
+Found on the way: the web signing sheet never showed a **fee** for anything (no surface asked
+for the quote when a request arrived). The host now prices the request's real calls, on its
+own fee session, and keeps the slide shut until the quote is in — as the phones do.
+
+Found only by looking at the running desktop app: a wallet the registry has no record of was
+told *"Couldn't reach the registry"*. `wallet_keys` now answers `not_registered` separately
+from `device` (nobody answered).
+
+Looked at, not inferred: web at 1600px dark and 390px light against the live registry;
+desktop dark/en and light/zh on a throwaway `VELA_STATE_DIR`; Android on the Galaxy S22 with
+a real account (*jdjd · Samsung Pass · 90ea…7985 · Synced*); iOS by rendering the real SwiftUI
+block to PNG (Apple Passwords, security key and 1Password marks drawn). iOS is still **not
+seen in a running app with a real account**.
+
+Suites after the second pass: core green · desktop 400 · Android 541 · iOS 601 · web 1048 + the
+3 failures `main` has. Corpus 1651 paths through all seven gates.
+
 ## How each claim was checked
 
 **Real money, web.** The golden multi-key Safe `0x88cC…6894` backed itself up from the
