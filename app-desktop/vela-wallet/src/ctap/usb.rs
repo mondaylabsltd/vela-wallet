@@ -144,6 +144,123 @@ const KEEPALIVE_UP_NEEDED: u8 = 0x02;
 /// A key that fails to open while ANOTHER opens fine is simply skipped: the
 /// working one is the answer, and one device's trouble is not the ceremony's.
 fn enumerate() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
+    hid_thread::run(enumerate_here)
+        .unwrap_or_else(|| Err(UsbError::Hid("the HID thread could not answer".to_owned())))
+}
+
+/// Is the HID subsystem reachable at all? The support gate's question, asked
+/// on the same thread as everything else that touches hidapi — see
+/// [`hid_thread`] for why it must not be asked anywhere else.
+pub fn hid_reachable() -> bool {
+    hid_thread::run(|| HidApi::new().is_ok()).unwrap_or(false)
+}
+
+/// The one thread hidapi is ever initialised or enumerated on.
+///
+/// hidapi's macOS backend keeps ONE process-global `IOHIDManager` and
+/// schedules it on the run loop of **whichever thread initialised it**
+/// (`mac/hid.c`: `IOHIDManagerScheduleWithRunLoop(hid_mgr,
+/// CFRunLoopGetCurrent(), …)`), and hidapi-rs never tears it down. When that
+/// thread ends, the manager is left holding a dead run loop; the next
+/// enumeration that has a device IOKit has not scheduled yet — a key plugged in
+/// after launch, or pulled and pushed back — hands it to `CFRunLoopAddSource`
+/// and the process dies in `__CFCheckCFInfoPACSignature` (SIGTRAP).
+///
+/// This was met three times. The support probe crashed on gpui's libdispatch
+/// workers and was moved to a one-shot thread; the L2CAP port corrupted a
+/// worker's run loop and got a private thread. The one-shot probe thread was
+/// the trap's third form: it initialised the manager and then ENDED, so every
+/// later enumeration ran against a run loop that no longer existed — "creating
+/// a wallet with a USB key works, signing in crashes" (founder, 2026-09-19, in
+/// the first notarized build). Fixing call sites one at a time is what let it
+/// come back, so there is now exactly one place hidapi may be entered from, and
+/// its thread lives as long as the process.
+///
+/// Only initialisation and enumeration need this. An opened [`HidDevice`] is
+/// `Send` and gets its own read thread and run loop from hidapi, so the
+/// handles this returns are used from the ceremony's threads as before.
+mod hid_thread {
+    use std::sync::{OnceLock, mpsc};
+
+    type Job = Box<dyn FnOnce() + Send>;
+
+    static JOBS: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
+
+    /// Run `work` on the HID thread and wait for its answer. `None` only if
+    /// the work panicked (the thread survives it) or the thread could not be
+    /// started at all.
+    pub fn run<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let jobs = JOBS.get_or_init(|| {
+            let (jobs, inbox) = mpsc::channel::<Job>();
+            // If the spawn fails the receiver is dropped with it, every send
+            // below errors, and callers get `None` — reported, not fatal.
+            let _ = std::thread::Builder::new()
+                .name("vela-hid".to_owned())
+                .spawn(move || {
+                    for job in inbox {
+                        job();
+                    }
+                });
+            jobs
+        });
+        let (answer, reply) = mpsc::channel();
+        jobs.send(Box::new(move || {
+            // A panic in one enumeration must not end the thread: the thread
+            // ending IS the bug this module exists to prevent.
+            if let Some(value) = crate::panic_report::guarded(work) {
+                let _ = answer.send(value);
+            }
+        }))
+        .ok()?;
+        reply.recv().ok()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::run;
+
+        /// The property the fix rests on, stated directly: whoever asks, from
+        /// whatever thread — including threads that have since ended — the
+        /// work runs on the SAME thread, and that thread is still there.
+        #[test]
+        fn every_caller_lands_on_the_one_thread_that_never_ends() {
+            let here = || {
+                (
+                    std::thread::current().id(),
+                    std::thread::current().name().map(str::to_owned),
+                )
+            };
+            let first = run(here).expect("the HID thread answers");
+            assert_eq!(first.1.as_deref(), Some("vela-hid"));
+            assert_ne!(
+                first.0,
+                std::thread::current().id(),
+                "not the caller's thread"
+            );
+            for _ in 0..4 {
+                let from_a_thread_that_ends = std::thread::spawn(move || run(here))
+                    .join()
+                    .expect("join")
+                    .expect("the HID thread answers");
+                assert_eq!(from_a_thread_that_ends, first);
+            }
+        }
+
+        /// A panicking job is reported as `None` and the thread outlives it.
+        #[test]
+        fn a_panic_does_not_end_the_thread() {
+            assert_eq!(
+                run(|| -> u8 { panic!("a key was yanked mid-enumeration") }),
+                None
+            );
+            assert_eq!(run(|| 7u8), Some(7));
+        }
+    }
+}
+
+/// [`enumerate`], on whatever thread it is called from — which must be the HID
+/// thread and nothing else.
+fn enumerate_here() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
     let api = HidApi::new().map_err(|error| UsbError::Hid(error.to_string()))?;
     let mut opened = Vec::new();
     let mut refused: Option<(String, String)> = None;

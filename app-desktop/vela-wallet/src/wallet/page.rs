@@ -9276,7 +9276,10 @@ impl WalletPage {
         // cannot be forgotten — a preview mints one per frame, so leaking them
         // would be ~30 textures a second.
         let preview = self.scan_preview.slot.clone();
-        let card = panels::scan_modal(&model, theme, &mut self.icons, tools, preview);
+        let close: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.close_scanner(cx);
+        }));
+        let card = panels::scan_modal(&model, theme, &mut self.icons, tools, Some(close), preview);
         Some(
             div()
                 .id("scan-scrim")
@@ -9286,11 +9289,7 @@ impl WalletPage {
                 .items_center()
                 .justify_center()
                 .bg(theme.backdrop)
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.flows.clear();
-                    this.panel = PanelId::None;
-                    cx.notify();
-                }))
+                .on_click(cx.listener(|this, _, _, cx| this.close_scanner(cx)))
                 .child(
                     // The card is not the scrim. Without this, a click on
                     // anything IN the modal — its tools included — bubbled to
@@ -9306,6 +9305,22 @@ impl WalletPage {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// Close the scanner — and ONLY the scanner.
+    ///
+    /// The X, Escape and a click on the dimmed window all land here. The
+    /// scanner is an overlay this page put up, so closing it takes itself off
+    /// the stack and nothing else: opened from a send form, the form is still
+    /// there underneath. (The scrim used to `flows.clear()`, which threw the
+    /// form away with it and left its `send_host` behind.) The camera stops on
+    /// the next frame, when `scan_overlay` sees DS1 is no longer on top.
+    fn close_scanner(&mut self, cx: &mut Context<Self>) {
+        self.flows.retain(|panel| *panel != FlowPanel::Ds1);
+        if self.flows.is_empty() {
+            self.panel = PanelId::None;
+        }
+        cx.notify();
     }
 
     /// Keep the viewfinder fed while the scanner is open.
@@ -10417,6 +10432,10 @@ impl Render for WalletPage {
                 if ks.key == "escape" && this.settings_dialog.is_some() {
                     this.close_settings_dialog(cx);
                     cx.notify();
+                    return;
+                }
+                if ks.key == "escape" && this.flows.last() == Some(&FlowPanel::Ds1) {
+                    this.close_scanner(cx);
                     return;
                 }
                 if ks.key == "escape" {

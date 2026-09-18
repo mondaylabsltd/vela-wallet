@@ -502,29 +502,19 @@ pub fn supported() -> bool {
     }
     #[cfg(not(windows))]
     {
-        // The probe runs on a DEDICATED thread, and the answer is cached for
-        // the life of the process. Both halves are load-bearing on macOS:
-        // `HidApi::new` has IOHIDManager schedule sources on the CURRENT
-        // thread's run loop, and this function is called from gpui's
-        // libdispatch worker threads — whose CFRunLoop can be a recycled
-        // thread's stale object, which `CFRunLoopAddSource` answers with a PAC
-        // trap (a SIGTRAP crash seen live, repeatedly, from exactly this
-        // call). A fresh `std::thread` owns a fresh run loop; the cache keeps
-        // the probe from ever running twice ("is the HID subsystem reachable"
-        // does not change mid-session — a key being plugged in later is the
-        // ceremony's business, not this gate's).
+        // Asked on THE HID thread (`ctap::usb::hid_thread`), and cached for the
+        // life of the process. The thread is the load-bearing half on macOS:
+        // `HidApi::new` schedules a process-global IOHIDManager on the CURRENT
+        // thread's run loop. Called from gpui's libdispatch workers it trapped
+        // in `CFRunLoopAddSource`; moved to a one-shot `std::thread` it stopped
+        // trapping HERE and started trapping later — that thread initialised
+        // the manager and then ended, leaving every later enumeration a dead
+        // run loop (the USB sign-in crash of 2026-09-19). One immortal thread
+        // for every hidapi entry is the fix for both. The cache stays because
+        // "is the HID subsystem reachable" does not change mid-session — a key
+        // plugged in later is the ceremony's business, not this gate's.
         static REACHABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *REACHABLE.get_or_init(|| {
-            std::thread::Builder::new()
-                .name("vela-hid-probe".to_owned())
-                .spawn(|| hidapi::HidApi::new().is_ok())
-                .and_then(|probe| {
-                    probe
-                        .join()
-                        .map_err(|_| std::io::Error::other("the HID probe panicked"))
-                })
-                .unwrap_or(false)
-        })
+        *REACHABLE.get_or_init(crate::ctap::usb::hid_reachable)
     }
 }
 
