@@ -466,6 +466,12 @@ pub struct WalletPage {
         vela_core::registry_backup::BackupState,
         Option<vela_core::registry_backup::BackupCall>,
     )>,
+    /// Which passkeys control that same wallet (spec 062), read from the
+    /// registry contract; `None` = still asking.
+    keys_check: Option<(
+        vela_core::wallet_keys::KeysSource,
+        Vec<vela_core::wallet_keys::WalletKeyRow>,
+    )>,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -863,6 +869,7 @@ impl WalletPage {
             signing_host: None,
             backup_for: None,
             backup_check: None,
+            keys_check: None,
             menu_origin: None,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
@@ -5840,6 +5847,43 @@ impl WalletPage {
         }
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
+        self.keys_check = None;
+        // The record's key list in founding order; a legacy record is one key.
+        let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
+            vec![vela_core::wallet_keys::DeviceKey {
+                public_key_hex: account.public_key_hex.clone(),
+                name: account.name.clone(),
+                transports: String::new(),
+            }]
+        } else {
+            account
+                .keys
+                .iter()
+                .map(|key| vela_core::wallet_keys::DeviceKey {
+                    public_key_hex: key.public_key_hex.clone(),
+                    name: key.name.clone(),
+                    transports: key.transports.clone(),
+                })
+                .collect()
+        };
+        let keys_address = account.address.clone();
+        cx.spawn(async move |page, cx| {
+            let asked = keys_address.clone();
+            let answer = cx
+                .background_executor()
+                .spawn(
+                    async move { crate::executor::registry::wallet_keys(&keys_address, &device) },
+                )
+                .await;
+            page.update(cx, |page, cx| {
+                if page.backup_for.as_deref() == Some(asked.as_str()) {
+                    page.keys_check = Some(answer);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
         let address = account.address.clone();
         let key = account.keys.first().map_or_else(
             || account.public_key_hex.clone(),
@@ -5893,14 +5937,23 @@ impl WalletPage {
             .id("settings-ethereum-backup")
             .flex()
             .items_center()
-            .gap(px(8.))
-            .child(icon_img(
-                &mut self.icons,
-                Icon::Upload,
-                false,
-                theme.fg_base,
-                18.,
-            ))
+            // The key rows' own mark column, so the block reads as one list.
+            .gap(px(12.))
+            .child(
+                div()
+                    .size(px(theme::KEY_ROW_MARK))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Upload,
+                        false,
+                        theme.fg_subtle,
+                        18.,
+                    )),
+            )
             .child(
                 div()
                     .flex()
@@ -5928,13 +5981,204 @@ impl WalletPage {
                     }
                 }));
         }
-        Some(
+        Some(div().child(row.py(px(14.))))
+    }
+
+    /// The keys that control this wallet, with their Ethereum backup beneath
+    /// them (spec 062) — one block. A person offered "back up your keys" is
+    /// owed the sight of them first: what each is called, who is holding it,
+    /// whether it is synced. De-containered and hairline-divided like the rest
+    /// of the page; only the backup is a button.
+    fn keys_block(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        use vela_core::wallet_keys::KeysSource;
+        let s = &self.settings;
+        let title = s.keys_title.clone();
+        let subtitle = s.keys_subtitle.clone();
+        let from_device = s.keys_from_device.clone();
+        let synced = s.keys_synced.clone();
+        let not_synced = s.keys_not_synced.clone();
+        let key_n = s.keys_key_n.clone();
+        let lines = (
+            s.keys_provider_platform.clone(),
+            s.keys_provider_generic.clone(),
+            s.keys_provider_security_key.clone(),
+        );
+        let check = self.keys_check.clone();
+
+        let mut header = div().flex().items_baseline().gap(px(8.)).child(
             div()
-                .flex()
-                .flex_col()
-                .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
-                .child(row),
-        )
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(title),
+        );
+        if let Some((_, keys)) = &check {
+            header = header.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(keys.len().to_string()),
+            );
+        }
+        let mut block = div()
+            .flex()
+            .flex_col()
+            .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
+            .child(header)
+            .child(
+                div()
+                    .pt(px(4.))
+                    .pb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(subtitle),
+            );
+
+        match check {
+            // The shape of one row, so the block does not jump when the answer lands.
+            None => {
+                block = block.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(14.))
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .child(
+                            div()
+                                .size(px(theme::KEY_ROW_MARK))
+                                .rounded_full()
+                                .bg(theme.divider),
+                        )
+                        .child(
+                            div()
+                                .w(px(160.))
+                                .h(px(10.))
+                                .rounded_full()
+                                .bg(theme.divider),
+                        ),
+                );
+            }
+            Some((source, keys)) => {
+                for (index, key) in keys.iter().enumerate() {
+                    let name = if key.name.is_empty() {
+                        key_n.replace("{{n}}", &(index + 1).to_string())
+                    } else {
+                        key.name.clone()
+                    };
+                    let holder = if key.provider_name.is_empty() {
+                        match key.method.as_str() {
+                            "security_key" => lines.2.clone(),
+                            "hybrid" => lines.1.clone(),
+                            _ => lines.0.clone(),
+                        }
+                    } else {
+                        gpui::SharedString::from(key.provider_name.clone())
+                    };
+                    let body = key.public_key_hex.trim_start_matches("04");
+                    let fingerprint = (body.len() >= 8)
+                        .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
+
+                    let mut row = div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(14.))
+                        .border_b_1()
+                        .border_color(theme.divider);
+                    if let Some(mark) = super::components::passkey_mark(
+                        &mut self.identicons,
+                        &key.aaguid,
+                        theme.is_dark(),
+                        theme::KEY_ROW_MARK,
+                    ) {
+                        row = row.child(mark);
+                    } else if let Some(mark) = super::components::passkey_fallback_mark(
+                        &mut self.identicons,
+                        &key.authenticator_attachment,
+                        &key.transports,
+                        key.method == "security_key",
+                        theme,
+                        theme::KEY_ROW_MARK,
+                    ) {
+                        row = row.child(mark);
+                    } else {
+                        row = row.child(
+                            div()
+                                .size(px(theme::KEY_ROW_MARK))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::Lock,
+                                    false,
+                                    theme.fg_subtle,
+                                    18.,
+                                )),
+                        );
+                    }
+                    let mut meta = div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(holder);
+                    if let Some(fingerprint) = fingerprint {
+                        meta = meta
+                            .child("·")
+                            .child(div().font_family(theme::font_mono()).child(fingerprint));
+                    }
+                    row = row.child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(theme.fg_base)
+                                    .child(name),
+                            )
+                            .child(meta),
+                    );
+                    // A badge nobody can vouch for is not drawn.
+                    if let Some(is_synced) = key.synced {
+                        row = row.child(
+                            div()
+                                .flex_none()
+                                .text_size(theme::text_row_sub())
+                                .text_color(if is_synced {
+                                    theme.success
+                                } else {
+                                    theme.fg_subtle
+                                })
+                                .child(if is_synced {
+                                    synced.clone()
+                                } else {
+                                    not_synced.clone()
+                                }),
+                        );
+                    }
+                    block = block.child(row);
+                }
+                if source == KeysSource::Device {
+                    block = block.child(
+                        div()
+                            .py(px(8.))
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_subtle)
+                            .child(from_device),
+                    );
+                }
+            }
+        }
+        block.children(self.backup_row(theme, cx))
     }
 
     /// The backup is one transaction the wallet asks ITSELF to sign: the same
@@ -5988,11 +6232,11 @@ impl WalletPage {
         erase_confirm: gpui::SharedString,
         cx: &mut Context<Self>,
     ) -> Div {
-        let backup = self.backup_row(theme, cx);
+        let keys = self.keys_block(theme, cx);
         div()
             .flex()
             .flex_col()
-            .children(backup)
+            .child(keys)
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
                 div()

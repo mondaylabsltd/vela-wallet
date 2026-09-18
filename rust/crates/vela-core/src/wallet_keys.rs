@@ -55,6 +55,10 @@ pub enum KeysSource {
     Registry,
     /// No chain answered. Names and transports only, from the account record.
     Device,
+    /// A chain DID answer, and holds no record naming this address — a v1-era
+    /// wallet, or one created before its registration landed. The same rows as
+    /// [`Self::Device`], but nothing was unreachable and no shell may say so.
+    NotRegistered,
 }
 
 /// One row of the keys view. The first eight fields are `CreateKeyRow`'s, in
@@ -133,8 +137,12 @@ fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
 }
 
 fn from_device(device: &[DeviceKey]) -> KeysStep {
+    device_done(KeysSource::Device, device)
+}
+
+fn device_done(source: KeysSource, device: &[DeviceKey]) -> KeysStep {
     KeysStep::Done {
-        source: KeysSource::Device,
+        source,
         chain_id: None,
         keys: device_rows(device),
     }
@@ -209,6 +217,10 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
     }
     let address = address.to_lowercase();
     let answer = |id: &str| answers.iter().find(|a| a.id == id);
+
+    // Did any registry give a complete answer that simply has no unit for this
+    // address? That is "not registered", which is not "unreachable".
+    let mut answered_without_it = false;
 
     'chains: for chain_id in READ_CHAINS {
         // 1. The units this key founded, newest first.
@@ -292,10 +304,15 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
                 _ => continue 'chains,
             }
         }
-        // This chain answered and holds no unit for the address: on Gnosis that
-        // is a v1-era wallet; either way the next chain is still worth asking.
+        // This chain answered every question and holds no unit for the address:
+        // on Gnosis that is a v1-era wallet. The next chain is still worth asking.
+        answered_without_it = true;
     }
-    from_device(device)
+    if answered_without_it {
+        device_done(KeysSource::NotRegistered, device)
+    } else {
+        from_device(device)
+    }
 }
 
 /// The JSON door the bindings use. `device_keys_json` is the account record's
@@ -424,6 +441,45 @@ mod tests {
         assert_eq!(keys[0].name, "Parallel Multi");
         assert_eq!(keys[0].synced, None);
         assert_eq!(keys[0].provider_name, "");
+    }
+
+    #[test]
+    fn a_registry_that_answers_with_nothing_is_not_an_unreachable_one() {
+        // The same key, asked about an address none of its units names.
+        let fixture = recorded();
+        let other = "0xD40086000000000000000000000000000000130b";
+        let mut answers = Vec::new();
+        let done = loop {
+            match step(other, &device(), &answers) {
+                KeysStep::Ask { requests } => {
+                    for request in requests {
+                        let LookupRequest::EthCall {
+                            id, chain_id, data, ..
+                        } = request
+                        else {
+                            unreachable!()
+                        };
+                        let body = fixture["answers"][chain_id.to_string()][&data].as_str();
+                        answers.push(LookupAnswer {
+                            id,
+                            outcome: if body.is_some() {
+                                LookupOutcome::Ok
+                            } else {
+                                LookupOutcome::Failed
+                            },
+                            body: body.map(str::to_owned),
+                        });
+                    }
+                }
+                done => break done,
+            }
+        };
+        let KeysStep::Done { source, keys, .. } = done else {
+            unreachable!()
+        };
+        assert_eq!(source, KeysSource::NotRegistered);
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].synced, None);
     }
 
     #[test]

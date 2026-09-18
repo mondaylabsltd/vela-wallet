@@ -24,15 +24,19 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced'> {
 }
 
 export interface WalletKeys {
-	source: 'registry' | 'device';
-	/** The chain whose registry answered; `null` for `device`. */
+	/**
+	 * `device` = no chain answered. `not_registered` = one did, and holds no
+	 * record for this address: the same rows, but nothing was unreachable.
+	 */
+	source: 'registry' | 'device' | 'not_registered';
+	/** The chain whose registry answered; `null` otherwise. */
 	chainId: number | null;
 	keys: WalletKeyRow[];
 }
 
 interface KeysDone {
 	type: 'done';
-	source: 'registry' | 'device';
+	source: 'registry' | 'device' | 'not_registered';
 	chain_id: number | null;
 	keys: WalletKeyRow[];
 }

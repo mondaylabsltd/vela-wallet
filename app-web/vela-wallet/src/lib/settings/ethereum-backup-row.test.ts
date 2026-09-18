@@ -100,6 +100,13 @@ describe('walletKeysModel', () => {
 		);
 		expect(model.note).toBe(m.keys.fromDevice);
 		expect(model.rows[0].badge).toBeUndefined();
+		// A registry that answered with nothing was not unreachable: no such note.
+		const unregistered = walletKeysModel(
+			{ source: 'not_registered', chainId: null, keys: [key({ synced: null })] },
+			'unavailable',
+			m
+		);
+		expect(unregistered.note).toBeUndefined();
 	});
 
 	it("carries the backup as the block's last row — a button only when there is something to do", () => {

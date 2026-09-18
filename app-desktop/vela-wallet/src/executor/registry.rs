@@ -468,6 +468,36 @@ pub fn ethereum_backup_check(
     (BackupState::CouldNotCheck, None)
 }
 
+/// Which passkeys control `address` (spec 062) — the settings keys block.
+///
+/// The rules are `vela_core::wallet_keys`: the founding set read from the
+/// registry CONTRACT (Gnosis, then the Ethereum backup), each key named and
+/// its vault identified, falling back to the device's own record — without
+/// sync badges nobody can vouch for — when no chain answers. This is only the
+/// transport. Not cached: it is asked when one page opens.
+pub fn wallet_keys(
+    address: &str,
+    device: &[vela_core::wallet_keys::DeviceKey],
+) -> (
+    vela_core::wallet_keys::KeysSource,
+    Vec<vela_core::wallet_keys::WalletKeyRow>,
+) {
+    use vela_core::wallet_keys::{self as keys, KeysSource, KeysStep};
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..MAX_LOOKUP_ROUNDS {
+        match keys::step(address, device, &answers) {
+            KeysStep::Ask { requests } => answers.extend(requests.iter().map(perform)),
+            KeysStep::Done { source, keys, .. } => return (source, keys),
+        }
+    }
+    // The walk never settled: what the device alone says, asked with no address
+    // so that it cannot ask anybody.
+    match keys::step("", device, &[]) {
+        KeysStep::Done { keys, .. } => (KeysSource::Device, keys),
+        KeysStep::Ask { .. } => (KeysSource::Device, Vec::new()),
+    }
+}
+
 /// A worker that panicked answered nothing.
 fn perform_failed(request: &LookupRequest) -> LookupAnswer {
     let (LookupRequest::EthCall { id, .. } | LookupRequest::IndexGet { id, .. }) = request;
@@ -1207,6 +1237,21 @@ mod tests {
 
     /// The whole sign-in read path with the index pointed at a closed port:
     /// the key and its founding set come from the contract on Gnosis.
+    /// The golden multi-key Safe's founding set, read from the contract.
+    #[test]
+    #[ignore = "reads Gnosis"]
+    fn the_golden_safe_shows_its_three_keys() {
+        let device = [vela_core::wallet_keys::DeviceKey {
+            public_key_hex: recorded()["publicKey"].as_str().unwrap().to_owned(),
+            name: "Parallel Multi".to_owned(),
+            transports: String::new(),
+        }];
+        let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device);
+        assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[0].public_key_hex, device[0].public_key_hex);
+    }
+
     #[test]
     #[ignore = "reads Gnosis; moves the process-wide registry endpoint"]
     fn a_dead_index_still_signs_the_golden_wallet_in() {
