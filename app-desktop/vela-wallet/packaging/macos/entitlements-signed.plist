@@ -28,5 +28,15 @@
         -->
         <string>webcredentials:getvela.app</string>
     </array>
+    <!--
+      The hardened runtime (codesign's `runtime` option, which notarization requires)
+      denies capture to a process without this, whatever TCC says. The ad-hoc
+      branch never turns the hardened runtime on, so only a team-signed bundle
+      can lose the scanner's camera this way — which is the one people get
+      (spec 063 §3). Bluetooth, USB HID and PC/SC need no counterpart: their
+      entitlements belong to the App Sandbox, which this bundle does not use.
+    -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
 </dict>
 </plist>

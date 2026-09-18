@@ -9,6 +9,23 @@
 #   ./scripts/build-macos-app.sh --skip-build      # reuse target/<triple>/release
 #   ./scripts/build-macos-app.sh --zip             # also produce a .zip
 #   ./scripts/build-macos-app.sh --no-dmg          # bundle only, for iteration
+#   ./scripts/build-macos-app.sh --distribution    # sign as for the public, no Apple round trip
+#   ./scripts/build-macos-app.sh --notarize        # the package a person can actually open
+#
+# The only .dmg that may be PUBLISHED is a --notarize one (spec 063 §3): signed
+# with a Developer ID, hardened runtime, the Developer ID provisioning profile
+# embedded, notarized and stapled. Anything less is refused by Gatekeeper as
+# "damaged" once it has been downloaded through a browser. It needs:
+#
+#   VELA_SIGN_IDENTITY       "Developer ID Application: …" — or its SHA-1, which
+#                            is the only unambiguous form on a Mac whose
+#                            keychain holds two certificates of the same name
+#   VELA_PROVISION_PROFILE   the Developer ID profile for app.getvela.VelaWallet
+#                            with Associated Domains (without it: no passkeys,
+#                            and newer macOS kills the bundle at launch)
+#   VELA_NOTARY_PROFILE      a `notarytool store-credentials` profile name
+#     [VELA_NOTARY_KEYCHAIN] …and the keychain it lives in, when not the login one
+#   — or VELA_NOTARY_KEY (.p8 path) + VELA_NOTARY_KEY_ID + VELA_NOTARY_ISSUER
 #
 # Outputs land in dist/macos/: the bundle at <arch>/Vela Wallet.app and the
 # installer at VelaWallet-<version>-macos-<arch>.dmg, with a SHA-256 checksum
@@ -43,6 +60,8 @@ arch="$(uname -m)"   # arm64 on Apple silicon, x86_64 on Intel
 skip_build=0
 make_zip=0
 make_dmg=1
+distribution=0   # sign the way a published package must be signed
+notarize=0       # …and have Apple agree
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --arch)       [[ $# -ge 2 ]] || die "--arch needs a value: arm64, x86_64 or universal"
@@ -51,6 +70,8 @@ while [[ $# -gt 0 ]]; do
     --skip-build) skip_build=1; shift ;;
     --zip)        make_zip=1; shift ;;
     --no-dmg)     make_dmg=0; shift ;;
+    --distribution) distribution=1; shift ;;
+    --notarize)   distribution=1; notarize=1; shift ;;
     -h|--help)    sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//; $d'; exit 0 ;;
     *)            die "unknown option: $1" ;;
   esac
@@ -62,6 +83,55 @@ done
        turning it into an .icns needs Apple's iconutil."
 
 command -v iconutil >/dev/null 2>&1 || die "iconutil not found; install the Xcode command-line tools"
+
+# Distribution preflight — BEFORE the build, so a missing credential costs
+# seconds rather than the half hour the compile takes.
+notary_auth=()
+if (( distribution )); then
+  [[ -n "${VELA_SIGN_IDENTITY:-}" ]] || die "--distribution/--notarize need VELA_SIGN_IDENTITY (a Developer ID Application identity)"
+  # A warning in the local branch below; an ERROR here. A team signature that
+  # claims associated-domains without a profile granting it is a bundle newer
+  # macOS kills at launch — and one without the claim has no platform passkeys.
+  # Neither is something to hand to the public.
+  [[ -n "${VELA_PROVISION_PROFILE:-}" ]] || die "--distribution/--notarize need VELA_PROVISION_PROFILE
+       (the Developer ID provisioning profile for app.getvela.VelaWallet, with
+       Associated Domains — developer.apple.com > Profiles > Developer ID)"
+  [[ -f "$VELA_PROVISION_PROFILE" ]] || die "no such provisioning profile: $VELA_PROVISION_PROFILE"
+  (( make_dmg )) || die "--distribution/--notarize produce the .dmg; drop --no-dmg"
+fi
+if (( notarize )); then
+  xcrun --find notarytool >/dev/null 2>&1 || die "notarytool not found; it ships with Xcode 13 and later"
+  if [[ -n "${VELA_NOTARY_PROFILE:-}" ]]; then
+    notary_auth=(--keychain-profile "$VELA_NOTARY_PROFILE")
+    [[ -n "${VELA_NOTARY_KEYCHAIN:-}" ]] && notary_auth+=(--keychain "$VELA_NOTARY_KEYCHAIN")
+  elif [[ -n "${VELA_NOTARY_KEY:-}" ]]; then
+    [[ -f "$VELA_NOTARY_KEY" ]] || die "no such App Store Connect key: $VELA_NOTARY_KEY"
+    [[ -n "${VELA_NOTARY_KEY_ID:-}" && -n "${VELA_NOTARY_ISSUER:-}" ]] ||
+      die "VELA_NOTARY_KEY needs VELA_NOTARY_KEY_ID and VELA_NOTARY_ISSUER beside it"
+    notary_auth=(--key "$VELA_NOTARY_KEY" --key-id "$VELA_NOTARY_KEY_ID" --issuer "$VELA_NOTARY_ISSUER")
+  else
+    die "--notarize needs notary credentials: VELA_NOTARY_PROFILE, or
+       VELA_NOTARY_KEY + VELA_NOTARY_KEY_ID + VELA_NOTARY_ISSUER"
+  fi
+fi
+
+# Submit one file to Apple's notary service and wait for the verdict. On
+# anything but "Accepted" the notary's own log is printed — it names the exact
+# binary and the exact reason, which the one-word status never does.
+notarize_file() {
+  local file="$1" out id status
+  note "notarizing ${file##*/} (Apple usually answers in a few minutes)"
+  out="$(xcrun notarytool submit "$file" "${notary_auth[@]}" --wait --output-format json)" ||
+    die "notarytool submit failed for ${file##*/}: $out"
+  id="$(/usr/bin/plutil -extract id raw -o - - <<<"$out" 2>/dev/null || true)"
+  status="$(/usr/bin/plutil -extract status raw -o - - <<<"$out" 2>/dev/null || true)"
+  if [[ "$status" != "Accepted" ]]; then
+    echo "$out" >&2
+    [[ -n "$id" ]] && xcrun notarytool log "$id" "${notary_auth[@]}" >&2 || true
+    die "Apple did not accept ${file##*/} (status: ${status:-unknown})"
+  fi
+  echo "  accepted ($id)"
+}
 
 # --arch to Rust target triple(s). "universal" builds both and merges with lipo.
 triples=()
@@ -162,7 +232,10 @@ if command -v codesign >/dev/null 2>&1; then
     # deep-signing re-signs nested code with the app's entitlements, which is
     # never what a restricted entitlement should spread onto.
     note "code signature: $VELA_SIGN_IDENTITY (+ associated-domains entitlement)"
-    codesign --force --timestamp=none --options runtime \
+    # The notary refuses a signature without a SECURE timestamp; a local
+    # development signature does not need one and should not need the network.
+    if (( distribution )); then timestamp=(--timestamp); else timestamp=(--timestamp=none); fi
+    codesign --force "${timestamp[@]}" --options runtime \
       --entitlements "$packaging/macos/entitlements-signed.plist" \
       --sign "$VELA_SIGN_IDENTITY" "$app"
   else
@@ -173,6 +246,19 @@ if command -v codesign >/dev/null 2>&1; then
   # abort, and an unverifiable bundle must never reach the .dmg.
   codesign --verify --strict "$app" || die "the signature does not verify"
   echo "  signature verifies"
+fi
+
+# The APP is notarized and stapled before it goes into the image, not only the
+# image after: a ticket stapled to the image stays on the image, and the thing
+# a person launches is the copy they dragged out of it. Without its own ticket
+# that copy needs Apple to be reachable at first launch.
+if (( notarize )); then
+  app_zip="$(mktemp -d "${TMPDIR:-/tmp}/vela-notary.XXXXXX")/$app_name.zip"
+  ditto -c -k --keepParent "$app" "$app_zip"
+  notarize_file "$app_zip"
+  rm -rf "$(dirname "$app_zip")"
+  xcrun stapler staple "$app" >/dev/null || die "could not staple the ticket to the bundle"
+  echo "  ticket stapled to the bundle"
 fi
 
 checksums=()
@@ -209,6 +295,23 @@ if (( make_dmg )); then
   trap - EXIT
   hdiutil verify -quiet "$dmg" || die "the image fails hdiutil verify: $dmg"
   echo "  image verifies"
+  if (( distribution )); then
+    codesign --force --timestamp --sign "$VELA_SIGN_IDENTITY" "$dmg" ||
+      die "could not sign the image"
+    echo "  image signed"
+  fi
+  if (( notarize )); then
+    notarize_file "$dmg"
+    xcrun stapler staple "$dmg" >/dev/null || die "could not staple the ticket to the image"
+    echo "  ticket stapled to the image"
+    # The question that matters, asked the way Gatekeeper asks it of a download.
+    spctl --assess --type open --context context:primary-signature -v "$dmg" ||
+      die "Gatekeeper would still refuse this image"
+    spctl --assess --type execute -v "$app" ||
+      die "Gatekeeper would still refuse the application"
+  fi
+  # AFTER stapling: the ticket changes the file, and a checksum of the
+  # unstapled image matches nothing a person can download.
   checksums+=("$dmg")
 fi
 
@@ -230,6 +333,13 @@ if (( ${#checksums[@]} )); then
   ( cd "$dist_dir" && shasum -a 256 "${checksums[@]/#"$dist_dir"\//}" )
 fi
 echo
-echo "NOTE: this bundle is ad-hoc signed, not notarized. Gatekeeper will warn on"
-echo "first launch until it is signed with a Developer ID certificate and"
-echo "notarized - the same open decision as the Windows code-signing certificate."
+if (( notarize )); then
+  echo "Signed, notarized and stapled: this is a package a person can open."
+elif (( distribution )); then
+  echo "NOTE: signed for distribution but NOT notarized (a rehearsal). Gatekeeper"
+  echo "refuses it once downloaded; publish only what --notarize produced."
+else
+  echo "NOTE: not signed for distribution and not notarized. Gatekeeper reports a"
+  echo "downloaded copy as damaged - fine on the Mac that built it, never"
+  echo "something to publish (spec 063). See --notarize."
+fi
