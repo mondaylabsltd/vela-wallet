@@ -75,6 +75,22 @@ function toneOf(risk: 'safe' | 'normal' | 'caution' | 'danger'): Tone {
  */
 const NEUTRAL_TINT = 'var(--color-fg-muted)';
 
+/**
+ * Where a site's icon conventionally lives, best first. Only for an `https:`
+ * origin: the request is made by the person's own browser, with no referrer
+ * (`RemoteLogo`), to a site they are already on — and never over plain http,
+ * where anybody on the path could answer with somebody else's brand.
+ */
+export function siteIconUrls(origin: string): string[] {
+	try {
+		const url = new URL(origin);
+		if (url.protocol !== 'https:') return [];
+		return [`${url.origin}/apple-touch-icon.png`, `${url.origin}/favicon.ico`];
+	} catch {
+		return [];
+	}
+}
+
 function letterOf(name: string): string {
 	return (name.trim()[0] ?? '?').toUpperCase();
 }
@@ -358,7 +374,13 @@ export function buildSigningModel(inputs: SigningLiveInputs): SigningModel | nul
 		// as a stranger borrowing the brand (founder, 2026-09-19).
 		dapp: own
 			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
-			: { name, host: new URL(request.origin).host, letter: letterOf(name), tint: NEUTRAL_TINT },
+			: {
+					name,
+					host: new URL(request.origin).host,
+					letter: letterOf(name),
+					tint: NEUTRAL_TINT,
+					iconUrls: siteIconUrls(request.origin)
+				},
 		network: {
 			name: chainName(request.chain_id),
 			dot: NEUTRAL_TINT,

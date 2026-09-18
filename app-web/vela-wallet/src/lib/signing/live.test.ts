@@ -429,3 +429,19 @@ describe('the deeper rungs of the ladder', () => {
 		expect(model.blocks[0].kind).toBe('sentence');
 	});
 });
+
+describe('siteIconUrls', () => {
+	it('names where an https site keeps its icon, best first', async () => {
+		const { siteIconUrls } = await import('./live');
+		expect(siteIconUrls('https://app.uniswap.org')).toEqual([
+			'https://app.uniswap.org/apple-touch-icon.png',
+			'https://app.uniswap.org/favicon.ico'
+		]);
+	});
+
+	it('asks nothing of plain http, or of something that is not an origin', async () => {
+		const { siteIconUrls } = await import('./live');
+		expect(siteIconUrls('http://app.uniswap.org')).toEqual([]);
+		expect(siteIconUrls('not an origin')).toEqual([]);
+	});
+});

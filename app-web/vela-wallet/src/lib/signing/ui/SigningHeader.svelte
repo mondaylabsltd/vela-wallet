@@ -17,7 +17,12 @@
 		<!-- The wallet asking itself: its own mark, never a letter on a disc. -->
 		<span class="own" style:width="36px" style:height="36px"><BrandMark size={22} /></span>
 	{:else}
-		<LetterAvatar letter={dapp.letter} tint={dapp.tint} size={36} />
+		<!-- The site's own icon over its initial: the letter shows until the icon
+		     lands, and stays when the site has none. -->
+		<span class="site">
+			<LetterAvatar letter={dapp.letter} tint={dapp.tint} size={36} />
+			<RemoteLogo urls={dapp.iconUrls} />
+		</span>
 	{/if}
 	<span class="who">
 		<span class="name">{dapp.name}</span>
@@ -85,6 +90,12 @@
 		/* The letter avatar's own box (36), set inline as that component does. */
 		border-radius: var(--radius-full);
 		background: var(--color-bg-sunken);
+	}
+
+	.site {
+		position: relative;
+		display: grid;
+		flex: none;
 	}
 
 	.chain {

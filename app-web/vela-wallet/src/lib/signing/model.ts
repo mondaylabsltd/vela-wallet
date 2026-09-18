@@ -198,11 +198,14 @@ export interface SigningModel {
 		host: string;
 		letter: string;
 		tint: string;
-		/**
-		 * The wallet asking ITSELF (the key backup): drawn with the wallet's own
-		 * mark. A third-party site never gets a fetched icon — see `LetterAvatar`.
-		 */
+		/** The wallet asking ITSELF (the key backup): drawn with the wallet's own mark. */
 		own?: boolean;
+		/**
+		 * The site's own icon, tried in order over the letter (founder ruling
+		 * 2026-09-19, superseding spec 022's "never fetch"): the letter is what
+		 * shows until one lands and what stays when none exists.
+		 */
+		iconUrls?: string[];
 	};
 	network: {
 		name: string;
