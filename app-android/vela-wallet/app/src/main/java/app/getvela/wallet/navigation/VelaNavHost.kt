@@ -2,6 +2,7 @@ package app.getvela.wallet.navigation
 
 import app.getvela.wallet.core.diagnostics.CrashSheet
 import app.getvela.wallet.feature.settings.SettingsPage
+import app.getvela.wallet.feature.settings.core.RegistryBackup
 import app.getvela.wallet.feature.settings.core.NetOverrideField
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.contacts.core.ContactFileFormat
@@ -1467,6 +1468,15 @@ fun VelaNavHost(
                 LaunchedEffect(Unit) {
                     treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
                 }
+                // The Ethereum backup row (spec 062): asked of the chain, never of our
+                // server, each time this screen meets an account. `null` = still asking.
+                var backupCheck by remember(session.address) { mutableStateOf<RegistryBackup.Check?>(null) }
+                LaunchedEffect(session.address) {
+                    val address = session.address
+                    if (address.isBlank()) return@LaunchedEffect
+                    val key = application.container.foundingKeyOf(address) ?: return@LaunchedEffect
+                    backupCheck = application.container.registryBackup.check(address, key)
+                }
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
@@ -1478,6 +1488,7 @@ fun VelaNavHost(
                         theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
                     )
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
+                    m = SettingsLive.withEthereumBackup(m, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(
                         m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
@@ -1570,6 +1581,14 @@ fun VelaNavHost(
                         // would look for it.
                         onSignOut = { application.container.session.signOut() },
                         onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
+                        // Only while there is something to do. The signing sheet is hosted on
+                        // the wallet route, so the person goes there and the request follows.
+                        onEthereumBackup = {
+                            backupCheck?.call?.let { call ->
+                                selectFromPushed(VelaTab.Wallet)
+                                application.container.openEthereumBackup(call)
+                            }
+                        },
                         onSheetSelect = { sheet, id ->
                             val prefsStore = application.container.preferences
                             when (sheet) {

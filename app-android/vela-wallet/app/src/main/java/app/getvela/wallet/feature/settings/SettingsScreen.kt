@@ -93,6 +93,8 @@ data class SettingsActions(
     val onSelectTab: (VelaTab) -> Unit = {},
     val onSignOut: () -> Unit = {},
     val onOpenContacts: () -> Unit = {},
+    /** The Ethereum backup row (spec 062); the caller decides whether there is anything to do. */
+    val onEthereumBackup: () -> Unit = {},
     /**
      * A row picked in one of the select sheets — currency today, the language
      * and format sheets when their machines arrive.
@@ -182,6 +184,7 @@ fun SettingsRoute(
         onRow = { id ->
             when (id) {
                 "contacts" -> actions.onOpenContacts()
+                SettingsLive.ETHEREUM_BACKUP_ROW -> actions.onEthereumBackup()
                 "networks" -> page = SettingsPage.Networks
                 "rpc-providers" -> page = SettingsPage.RpcProviders
                 "add-network" -> page = SettingsPage.AddNetwork

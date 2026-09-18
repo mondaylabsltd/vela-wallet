@@ -35,6 +35,7 @@ import app.getvela.wallet.feature.signing.core.SignAccountRef
 import app.getvela.wallet.feature.send.core.StoreAccountPort
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.settings.core.NetEndpointField
+import app.getvela.wallet.feature.settings.core.RegistryBackup
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -364,18 +365,73 @@ class AppContainer(private val app: Application) {
 
     private val signingScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
-    private fun openSigning(browser: BrowserController, request: BrowserController.SignRequest) {
+    private fun openSigning(browser: BrowserController, request: BrowserController.SignRequest) = openSigningRequest(
+        request = IncomingRequest(id = request.id, method = request.method, paramsJson = request.paramsJson, origin = request.origin, transportId = request.transportId, chainId = request.chainId),
+        answer = { transportId, id, json -> browser.answerFromSigning(transportId, id, json) },
+        rememberUserOp = { browser.rememberUserOp(it) },
+    )
+
+    /**
+     * The Ethereum backup (spec 062): ONE transaction the wallet asks ITSELF to
+     * sign, through the same controller a page's request opens — so the estimate
+     * of the real operation, the fee, the funding guidance, the passkey and the
+     * receipt are the existing ones. Its answer has no page to go to; the sheet
+     * closing is the whole acknowledgement. Anyone may submit these bytes — the
+     * registry re-verifies every signature in them — so the person's Safe is
+     * simply the most convenient payer.
+     */
+    fun openEthereumBackup(call: RegistryBackup.Call) {
+        val address = session.view.value.address
+        if (address.isBlank()) return
+        val params = org.json.JSONArray().put(JSONObject().put("from", address).put("to", call.to).put("value", "0x0").put("data", call.data))
+        openSigningRequest(
+            request = IncomingRequest(
+                id = "vela-ethereum-backup-${System.currentTimeMillis()}",
+                method = "eth_sendTransaction",
+                paramsJson = params.toString(),
+                origin = "https://getvela.app",
+                transportId = WALLET_TRANSPORT,
+                chainId = call.chainId,
+            ),
+            answer = { _, _, _ -> },
+            rememberUserOp = {},
+        )
+    }
+
+    /** Where the active wallet's founding record stands on Ethereum (spec 062). */
+    val registryBackup: RegistryBackup by lazy {
+        RegistryBackup(
+            // The RAW result, bare `0x` included: a chain without the registry is
+            // an answer ("not here"), not a silence.
+            ethCall = { chainId, to, data ->
+                (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
+                    ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
+                    ?.takeIf { it.startsWith("0x") }
+            },
+            step = { address, key, answers, target -> uniffi.vela_core_uniffi.registryBackupStep(address, key, answers, target) },
+        )
+    }
+
+    /** The active account's FIRST founding key — the one the registry files its groups under. */
+    suspend fun foundingKeyOf(address: String): String? =
+        StoreAccountPort(AccountStore(app)).keysOf(address).firstOrNull()?.publicKeyHex
+
+    private fun openSigningRequest(
+        request: IncomingRequest,
+        answer: (transportId: String, id: String, json: JSONObject) -> Unit,
+        rememberUserOp: (String) -> Unit,
+    ) {
         signingScope.launch {
             val address = session.view.value.address
             val accountPort = StoreAccountPort(AccountStore(app))
             val credential = accountPort.keysOf(address).firstOrNull()?.credentialId
             if (address.isBlank() || credential == null) {
-                browser.answerFromSigning(request.transportId, request.id, BrowserExecutor.errorJson(request.id, 4100, "No wallet account available"))
+                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, 4100, "No wallet account available"))
                 return@launch
             }
             // One request at a time: a second while the sheet is up is the core's ConsentBusy on the permissions side; here it is refused plainly.
             signing.value?.let { open ->
-                browser.answerFromSigning(request.transportId, request.id, BrowserExecutor.errorJson(request.id, -32002, "Another request is open"))
+                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, -32002, "Another request is open"))
                 return@launch
             }
             lateinit var controller: SigningController
@@ -387,12 +443,19 @@ class AppContainer(private val app: Application) {
                 signer = { ParallelSpaceHook.signer() ?: passkeySigner ?: error("no signer bound") },
                 knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
                 wallet = SignAccountRef(address = address, credential_id = credential),
+                // The inner calls' own gas floor (spec 062): without it an undeployed
+                // Safe's first contract call goes out with the relay's "no code here" figure.
+                measureCall = { chainId, from, to, valueHex, data ->
+                    (pool.call(chainId, "eth_estimateGas", listOf(JSONObject().put("from", from).put("to", to).put("value", valueHex).put("data", data))) as? RpcResult.Body)
+                        ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
+                },
                 ports = object : SigningController.Ports {
                     override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
-                        browser.answerFromSigning(transportId, id, json)
+                        answer(transportId, id, json)
+                        // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }
-                    override fun opSubmitted(id: String, userOpHash: String) = browser.rememberUserOp(userOpHash)
+                    override fun opSubmitted(id: String, userOpHash: String) = rememberUserOp(userOpHash)
                     override fun signingStarted() = Unit
                     override fun recordsPersisted() = wallet.feedReconciled()
                     override fun recordPersisted(recordId: String) = Unit
@@ -417,7 +480,7 @@ class AppContainer(private val app: Application) {
                 },
             )
             signing.value = controller
-            controller.open(IncomingRequest(id = request.id, method = request.method, paramsJson = request.paramsJson, origin = request.origin, transportId = request.transportId, chainId = request.chainId))
+            controller.open(request)
             controller.closed.collect { closed -> if (closed) { if (signing.value === controller) signing.value = null; throw kotlinx.coroutines.CancellationException("answered") } }
         }
     }
@@ -554,3 +617,6 @@ class VelaWalletApplication : Application() {
 
 /** `network_admin::DEFAULT_BUNDLER_SERVICE_URL` — the relay every client ships with. */
 private const val DEFAULT_BUNDLER_SERVICE_URL = "https://vela-relay-cf.getvela.app"
+
+/** The transport id of a request the WALLET made of itself: its answer has no page to go to. */
+private const val WALLET_TRANSPORT = "wallet"

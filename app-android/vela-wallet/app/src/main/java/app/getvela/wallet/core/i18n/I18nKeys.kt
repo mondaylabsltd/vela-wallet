@@ -740,6 +740,13 @@ object I18nKeys {
         const val NETWORK_ONLINE = "settings.networks.online"
         const val NETWORK_SLOW = "settings.networks.slow"
         const val NETWORK_OFFLINE = "settingsModals.health.offline"
+
+        /** The Ethereum backup row (spec 062). */
+        const val BACKUP_TITLE = "settingsModals.backup.title"
+        const val BACKUP_BACKED_UP = "settingsModals.backup.backedUp"
+        const val BACKUP_NOT_BACKED_UP = "settingsModals.backup.notBackedUp"
+        const val BACKUP_COULD_NOT_CHECK = "settingsModals.backup.couldNotCheck"
+        const val BACKUP_CHECKING = "componentsUi.funding.checking"
         const val CHAIN_ID = "settingsModals.network.chainId"
         const val FIELD_RPC_URL = "settingsModals.network.fieldRpcUrl"
         const val FIELD_EXPLORER = "settingsModals.network.fieldExplorer"

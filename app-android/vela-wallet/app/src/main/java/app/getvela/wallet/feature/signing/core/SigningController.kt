@@ -65,6 +65,9 @@ class SigningController(
     /** The signing wallet: address and the pinned credential. */
     private val wallet: SignAccountRef,
     private val ports: Ports,
+    /** `eth_estimateGas` for one inner call, from the Safe's address (`UserOpSpine.measureCall`). */
+    measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
+        { _, _, _, _, _ -> null },
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
@@ -105,7 +108,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer),
+        spine = UserOpSpine(relay, accounts, signer, measureCall),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {

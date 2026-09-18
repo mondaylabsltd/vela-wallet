@@ -535,4 +535,37 @@ object SettingsLive {
             },
         ),
     )
+
+    /**
+     * The Ethereum backup row (spec 062): one line, three states, tappable only
+     * while there is something to do. `null` = still asking. Nothing at all when
+     * the registry is not on Ethereum or the wallet has no record there to copy.
+     * It opens the home, above the appearance block — a wallet's safety before
+     * its looks.
+     */
+    fun withEthereumBackup(
+        model: SettingsScreenModel,
+        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        strings: VelaStrings,
+    ): SettingsScreenModel {
+        val k = I18nKeys.SettingsUi
+        val (subtitle, actionable) = when (state) {
+            null -> strings.t(k.BACKUP_CHECKING) to false
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.BackedUp -> strings.t(k.BACKUP_BACKED_UP) to false
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to true
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to false
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return model
+        }
+        val row = SettingsRowModel(
+            id = ETHEREUM_BACKUP_ROW,
+            title = strings.t(k.BACKUP_TITLE),
+            icon = SettingsIcon.Upload,
+            subtitle = subtitle,
+            trailing = if (actionable) RowTrailing.Chevron else RowTrailing.None,
+        )
+        return model.copy(sections = listOf(SettingsSectionModel(rows = listOf(row))) + model.sections)
+    }
+
+    const val ETHEREUM_BACKUP_ROW = "ethereum-backup"
 }

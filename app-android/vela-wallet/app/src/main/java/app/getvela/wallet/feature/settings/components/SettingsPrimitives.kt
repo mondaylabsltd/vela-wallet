@@ -95,6 +95,7 @@ fun settingsIcon(icon: SettingsIcon): ImageVector = when (icon) {
     SettingsIcon.Sun -> VelaIcons.Sun
     SettingsIcon.Moon -> VelaIcons.Moon
     SettingsIcon.Monitor -> VelaIcons.Monitor
+    SettingsIcon.Upload -> VelaIcons.Upload
 }
 
 /**

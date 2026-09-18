@@ -63,7 +63,7 @@ data class CalloutModel(val tone: CalloutTone, val text: String)
 /** Which glyph a settings row draws (models stay UI-type free). */
 enum class SettingsIcon {
     Contacts, Feedback, Globe, Coins, Hash, Calendar, Clock,
-    Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor,
+    Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload,
 }
 
 /** Row emphasis. `Danger` is the red 退出登录 / 清理数据 family. */
