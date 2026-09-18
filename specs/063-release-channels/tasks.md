@@ -21,9 +21,10 @@
 - [X] T017 Environments by expression: `release` on `desktop-v*` tags, `build-check` elsewhere
 - [X] T018 Validate the profile checks against the real profiles on the founder's Mac
 - [X] T019 The negative path in CI: dispatch on the branch → builds, verifies, "NOT published" summary, `release` skipped
-- [ ] T020 **N1–N4** credentials and the `release` environment (`quickstart.md` §1–5)
+- [X] T019a `scripts/release-macos-local.sh`: sign on the founder's Mac, upload by hand (ruling, spec §3a); its four refusals exercised in a throwaway clone
+- [ ] T020 **N1–N3** a company-named Developer ID certificate, the Developer ID profile, notary credentials in the login keychain (`quickstart.md` §A)
 - [ ] T021 **N8** the first notarized dmg, downloaded through a browser: opens; "This device" makes a wallet; the scanner opens the camera
-- [ ] T022 The first `desktop-v*` tag after T020 attaches three dmgs
+- [ ] T022 The next `desktop-v*` release gets three dmgs from `release-macos-local.sh --upload` (0.9.2's tag predates the fixes and cannot)
 
 ## Phase 3 — what is published says how to install it (FR-005)
 
@@ -37,7 +38,7 @@
 - [X] T040 Per-card `onGithub`; the phone card's second route is the source, never Releases
 - [X] T041 `en.ts`: `sourceCta`, `storeNote`
 - [X] T042 Fifteen locales translated, then stamped; `i18n:status` clean; 479 unit tests; `svelte-check`; prettier
-- [ ] T043 **N5** when a store listing is live: its link, the chip's wording, and the phone blurb ("in real-device testing") — all three change together
+- [ ] T043 (N5 answered: nothing is live yet) when a store listing is live: its link, the chip's wording, and the phone blurb ("in real-device testing") — all three change together
 - [ ] T044 zh is the one *reviewed* locale: the two zh strings changed here want the founder's eye
 
 ## Phase 5 — the record (FR-007, FR-008)
@@ -48,11 +49,11 @@
 
 ## Phase 6 — the existing releases (FR-009) — destructive, waits on the founder
 
-- [ ] T060 **N8** delete releases and tags `android-v0.9.1`, `android-v0.9.2`, `ios-v0.9.1`, `ios-v0.9.2`
-- [ ] T061 **N8** from `desktop-v0.9.1` and `desktop-v0.9.2` delete the three ad-hoc `.dmg` files and `SHA256SUMS-macos` each (eight assets); the Windows and Linux packages stay
-- [ ] T062 Edit the two desktop releases' notes to the new install text, so the pages that remain say what is on them
+- [X] T060 (2026-09-18, founder: 「删」) deleted releases and tags `android-v0.9.1`, `android-v0.9.2`, `ios-v0.9.1`, `ios-v0.9.2`
+- [X] T061 from `desktop-v0.9.1` and `desktop-v0.9.2` delete the three ad-hoc `.dmg` files and `SHA256SUMS-macos` each (eight assets); the Windows and Linux packages stay
+- [X] T062 Install notes prepended to the four releases that remain (both desktop, both extension), generated changelogs kept beneath
 
 ## Not this spec — decisions the founder owns
 
-- [ ] **N6** Is the Apple enrollment an organization? (Guideline 3.1.5(i); decides whether iOS has a store at all)
+- [X] **N6** The Apple enrollment IS an organization (`TeamName` = MONDAY LABS LTD in the profile)
 - [ ] **N7** `assetlinks.json`: is `A3:8E:36:FE:…` Google's Play signing key? Then remove the debug and EAS fingerprints from production

@@ -28,10 +28,22 @@ What was verified, how, and — as plainly — what was not. 2026-09-18.
 | **`--notes-file` + `--generate-notes` in a real release** | only a tag creates a release. `gh`'s help documents the prepend behaviour (research R8) | the next `desktop-v*` / `extension-v*` tag |
 | **Translations by a native reader** | fourteen locales are `drafted` by policy; zh is `reviewed` and two of its strings changed | founder for zh (T044) |
 
+## The cleanup (FR-009) — done 2026-09-18 on the founder's 「删」
+
+- Deleted, with their tags: `android-v0.9.1`, `android-v0.9.2`, `ios-v0.9.1`, `ios-v0.9.2`.
+- Deleted from `desktop-v0.9.1` and `desktop-v0.9.2`: the three ad-hoc `.dmg` files and `SHA256SUMS-macos` each — eight assets. Each release keeps its ten Windows and Linux files.
+- Install notes prepended to the four remaining releases; the generated changelogs kept beneath.
+
+Nothing on the Releases page is now a package its downloader cannot install.
+
+## The local release path (spec §3a)
+
+`release-macos-local.sh` was run in a throwaway clone with the tag moved to the branch head: no tag → asks which; wrong HEAD → names the `git checkout`; no Developer ID profile → the portal steps; a development profile passed explicitly → refused as one. **Not run**: the path past those checks — it needs the profile and the notary credentials (`quickstart.md` §A).
+
 ## Findings beyond the brief
 
 1. **The packaged macOS app would have been killed on "Scan".** No `NSCameraUsageDescription`; unseen because the scanner had only run under `cargo run`, where the terminal is the responsible process. The third time this month a path that only a published package walks hid a defect — the ledger's 门外路径.
 2. **The public stores do not show the apps.** Play 404 ×7 regions, App Store lookup empty (research R7). The page keeps "coming soon" until the founder says otherwise (N5).
-3. **The Apple certificates are issued to a person.** If the enrollment is individual, Guideline 3.1.5(i) keeps wallet apps off the App Store and the Mac App Store regardless of anything technical (N6).
+3. ~~The Apple certificates are issued to a person~~ — **resolved the same day**: the enrollment is an organization (the profile's `TeamName` is `MONDAY LABS LTD`); the certificates merely predate the upgrade. The error was mine: I read the certificate's name and not the profile's team, and raised a launch-blocking alarm on it. What remains is cosmetic and worth fixing — a new Developer ID certificate so signed apps carry the company's name (`quickstart.md` A1).
 4. **Production `assetlinks.json` trusts a debug keystore** whose password is `android` and which lives on a laptop (N7). Any holder of that file can build an app that `getvela.app` vouches for.
 5. **Two same-named Developer ID certificates** in the founder's keychain make signing *by name* fail as ambiguous on that Mac; everything here uses the SHA-1.
