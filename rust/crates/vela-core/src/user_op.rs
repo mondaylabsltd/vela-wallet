@@ -558,6 +558,37 @@ pub fn pad_gas_estimate(
     }
 }
 
+/// A floor for `call_gas_limit` measured from the inner calls THEMSELVES.
+///
+/// The bundler estimates `callGasLimit` as `eth_estimateGas({to: sender,
+/// data: callData, from: EntryPoint})`. For a Safe that is NOT deployed yet
+/// the sender has no code, so that call "succeeds" trivially and the estimate
+/// is 21k plus calldata — about 118k for a 4.3M-gas contract call. Padded
+/// 1.5× twice it became 265,786; the bundler accepted the operation and never
+/// bundled it (its execution would run out of gas), and the wallet reported a
+/// two-minute timeout. First met deploying the multi-key golden Safe on Base
+/// to back up its registry record (spec 062, 2026-09-18); it waits for ANY
+/// fresh chain whose first operation is a real contract call.
+///
+/// The shell measures each real contract call on its own, from the Safe's
+/// address, with `eth_estimateGas` — a codeless account estimates like any
+/// other — and hands the figures here. `measured` holds one entry per
+/// contract call (plain transfers are not measured; the defaults cover them);
+/// `call_count` is every inner call, transfers included. Each measurement is
+/// padded 25% for itself and 60k for the `executeUserOp` → (MultiSend →) CALL
+/// frames around it, plus 50k per call. `None` = nothing to raise.
+///
+/// Parity: the web's `innerCallsGasFloor` is this arithmetic; 4,308,125 →
+/// 5,495,156 is the live figure both must produce.
+#[must_use]
+pub fn inner_calls_gas_floor(measured: &[u128], call_count: usize) -> Option<u128> {
+    if measured.is_empty() {
+        return None;
+    }
+    let calls: u128 = measured.iter().map(|gas| gas * 125 / 100 + 60_000).sum();
+    Some(calls + 50_000 * call_count as u128)
+}
+
 // ---------------------------------------------------------------------------
 // Wire (`safe-transaction.ts:2942-2988`)
 // ---------------------------------------------------------------------------
@@ -665,6 +696,18 @@ pub fn parse_hex_quantity(value: Option<&str>) -> Result<u128, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_inner_calls_floor_is_the_live_figure_and_nothing_for_transfers() {
+        // The Base run of 2026-09-18: the bundler said 265,786, the registry
+        // call measured 4,308,125 from the Safe's address.
+        assert_eq!(inner_calls_gas_floor(&[4_308_125], 1), Some(5_495_156));
+        assert_eq!(inner_calls_gas_floor(&[], 3), None);
+        assert_eq!(
+            inner_calls_gas_floor(&[100_000, 200_000], 3),
+            Some(125_000 + 60_000 + 250_000 + 60_000 + 150_000)
+        );
+    }
     use crate::eip712::hash_typed_data;
     use alloy_dyn_abi::DynSolValue;
     use alloy_primitives::U256;

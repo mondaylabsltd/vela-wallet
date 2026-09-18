@@ -37,12 +37,13 @@ use vela_core::user_op::{
     VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature, build_in_band_fee_leg,
     build_init_code_for_keys, build_multi_send_execute_call_data, build_user_op_signature,
     calculate_safe_op_hash, encode_erc20_transfer, extract_client_data_fields,
-    is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash, signer_address_for,
+    inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash,
+    signer_address_for,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
 use crate::executor::passkey::PasskeyFailure;
-use crate::executor::{chain, relay};
+use crate::executor::{chain, pool, relay};
 
 /// `TEMPO_VERIFICATION_GAS_UNDEPLOYED` (`tempo.ts:89`) — the one Tempo
 /// constant `fee_policy` does not carry, because only the submit path
@@ -444,6 +445,7 @@ fn submit_in_band(
             op.verification_gas_limit = padded.verification_gas_limit;
             op.call_gas_limit = padded.call_gas_limit;
             op.pre_verification_gas = padded.pre_verification_gas;
+            raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
         Err(message) => {
             eprintln!("[vela-wallet] in-band: estimation failed, using defaults: {message}");
@@ -541,6 +543,7 @@ fn submit_tempo(
             op.verification_gas_limit = padded.verification_gas_limit;
             op.call_gas_limit = padded.call_gas_limit;
             op.pre_verification_gas = padded.pre_verification_gas;
+            raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
         Err(message) => {
             eprintln!("[vela-wallet] tempo: estimation failed, using defaults: {message}");
@@ -666,6 +669,54 @@ fn envelope(assertion: &Assertion, keys: &[WalletKey]) -> Result<Vec<u8>, Submit
 /// The keys' public points, for the estimate's initCode.
 pub fn key_hexes(keys: &[WalletKey]) -> Vec<String> {
     keys.iter().map(|key| key.public_key_hex.clone()).collect()
+}
+
+/// The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
+/// every real contract call measured from the Safe's address — a codeless
+/// account estimates like any other — so an UNDEPLOYED Safe's first contract
+/// call is not sent with the bundler's trivial "no code here" figure. Nothing
+/// measurable (transfers only, or a chain that did not answer) keeps the
+/// padded estimate and its existing guard.
+fn raise_to_measured_floor(
+    op: &mut UserOperation,
+    chain_id: u32,
+    safe: &str,
+    inner: &[MultiSendCall],
+    has_contract_call: bool,
+) {
+    if !has_contract_call {
+        return;
+    }
+    let mut measured = Vec::new();
+    for call in inner
+        .iter()
+        .filter(|call| !is_plain_transfer_call(&call.data))
+    {
+        let params = serde_json::json!([{
+            "from": safe,
+            "to": call.to,
+            "value": call.value_hex,
+            "data": format!("0x{}", vela_core::primitives::to_hex(&call.data, false)),
+        }]);
+        let Some(gas) = pool::call(chain_id, "eth_estimateGas", params)
+            .ok()
+            .and_then(|answer| answer.get("result")?.as_str().map(str::to_owned))
+            .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
+        else {
+            return;
+        };
+        measured.push(gas);
+    }
+    match inner_calls_gas_floor(&measured, inner.len()) {
+        Some(floor) if floor > op.call_gas_limit => {
+            eprintln!(
+                "[vela-wallet] callGasLimit raised to the inner calls' own estimate bundler={} inner={floor}",
+                op.call_gas_limit
+            );
+            op.call_gas_limit = floor;
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
