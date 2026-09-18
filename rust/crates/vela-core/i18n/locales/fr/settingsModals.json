@@ -83,6 +83,12 @@
       "offline": "Hors ligne",
       "httpsRequired": "HTTPS requis",
       "invalid": "Invalide"
+    },
+    "backup": {
+      "title": "Sauvegarder les clés sur Ethereum",
+      "backedUp": "Sauvegardées sur Ethereum",
+      "notBackedUp": "Pas encore sauvegardées",
+      "couldNotCheck": "Vérification impossible"
     }
   }
 }

@@ -60,6 +60,8 @@
 		onaccountsignin?: () => void;
 		/** The account page is showing: the balance core refreshes its rows while it is. */
 		onaccountsopen?: (open: boolean) => void;
+		/** The Ethereum backup row (spec 062): hand the person to the wallet route, which hosts the sheet. */
+		onethereumbackup?: () => void;
 		/** A storage row's action, by its own id (the phone's `onstorageclear`). */
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
@@ -78,6 +80,7 @@
 		onaccountcreate,
 		onaccountsignin,
 		onaccountsopen,
+		onethereumbackup,
 		onstorageclear,
 		onclearcaches
 	}: Props = $props();
@@ -177,6 +180,30 @@
 					oncreate={onaccountcreate}
 					onsignin={onaccountsignin}
 				/>
+
+				{#if model.account.backup !== undefined}
+					{@const backup = model.account.backup}
+					<!-- The founding record's standing on Ethereum (spec 062). A button
+					     only while there is something to do; the wallet route hosts the
+					     signing sheet and checks again before opening it. -->
+					<hr />
+					<button
+						type="button"
+						class="backup"
+						data-tone={backup.tone}
+						disabled={!backup.actionable}
+						onclick={() => onethereumbackup?.()}
+					>
+						<Icon icon={UTILITY_ICONS.upload} size="md" />
+						<span class="backup-text">
+							<span class="backup-title">{backup.title}</span>
+							<span class="backup-subtitle">{backup.subtitle}</span>
+						</span>
+						{#if backup.actionable}
+							<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+						{/if}
+					</button>
+				{/if}
 
 				<hr />
 
@@ -436,6 +463,45 @@
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		margin-block: var(--space-4xl);
+	}
+
+	.backup {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		width: 100%;
+		padding: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		color: var(--color-fg-base);
+		text-align: start;
+		cursor: pointer;
+	}
+
+	.backup:disabled {
+		cursor: default;
+	}
+
+	.backup-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		flex: 1;
+		min-width: 0;
+	}
+
+	.backup-title {
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+	}
+
+	.backup-subtitle {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.backup[data-tone='positive'] .backup-subtitle {
+		color: var(--color-success-base);
 	}
 
 	.sign-out {

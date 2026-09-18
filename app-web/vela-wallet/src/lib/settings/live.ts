@@ -68,6 +68,8 @@ import type {
 	UrlFieldModel,
 	AccountsSheetModel
 } from './model';
+import type { EthereumBackupState } from '$lib/services/registry-backup';
+import type { EthereumBackupRowModel } from './model';
 
 // ---------------------------------------------------------------------------
 // Badges — the probe/health vocabularies, worded once.
@@ -1250,5 +1252,73 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 		copyLabel: m.relayer.copyBtn,
 		callout: { tone: 'warning', text: m.relayer.disclaimer },
 		primary: m.relayer.retryBtn
+	};
+}
+
+// ---------------------------------------------------------------------------
+// The Ethereum backup row (spec 062 §5a)
+// ---------------------------------------------------------------------------
+
+/** The row for a state, or `undefined` when there is nothing to draw:
+ *  no registry on Ethereum (the feature is dark) or no record to back up. */
+export function ethereumBackupRow(
+	state: EthereumBackupState | 'checking',
+	m: SettingsMessages
+): EthereumBackupRowModel | undefined {
+	switch (state) {
+		case 'checking':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.checking,
+				tone: 'neutral',
+				actionable: false
+			};
+		case 'backed_up':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.backedUp,
+				tone: 'positive',
+				actionable: false
+			};
+		case 'not_backed_up':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.notBackedUp,
+				tone: 'caution',
+				actionable: true
+			};
+		case 'could_not_check':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.couldNotCheck,
+				tone: 'neutral',
+				actionable: false
+			};
+		case 'unavailable':
+		case 'not_registered':
+			return undefined;
+	}
+}
+
+/** The phone: the row joins the first group, after the address book. */
+export function withLiveEthereumBackup<M extends { sections: SettingsHomeModel['sections'] }>(
+	model: M,
+	state: EthereumBackupState | 'checking',
+	m: SettingsMessages
+): M {
+	const row = ethereumBackupRow(state, m);
+	if (row === undefined) return model;
+	const settingsRow = {
+		id: 'ethereum-backup',
+		icon: 'upload' as const,
+		title: row.title,
+		subtitle: row.subtitle,
+		trailing: row.actionable ? ('chevron' as const) : ('none' as const)
+	};
+	return {
+		...model,
+		sections: model.sections.map((section, index) =>
+			index === 0 ? { ...section, rows: [...section.rows, settingsRow] } : section
+		)
 	};
 }

@@ -288,9 +288,9 @@ for (let i = 1; i < PATHS.length; i++) {
 //   paying for something that is not theirs to pay for. On a network the
 //   person added — a local devnet, an internal chain — the operator may have
 //   no way to hold gas there at all, and `customLead` says so.
-if (PATHS.length !== 1640) fail(`expected 1640 paths (1555 leaf + 85 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1555) fail(`expected 1555 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 85) fail(`expected 85 branch paths, got ${branchSet.size}`);
+if (PATHS.length !== 1645) fail(`expected 1645 paths (1559 leaf + 86 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1559) fail(`expected 1559 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 86) fail(`expected 86 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

@@ -83,6 +83,12 @@
       "offline": "Offline",
       "httpsRequired": "HTTPS diperlukan",
       "invalid": "Tidak valid"
+    },
+    "backup": {
+      "title": "Cadangkan kunci ke Ethereum",
+      "backedUp": "Sudah dicadangkan di Ethereum",
+      "notBackedUp": "Belum dicadangkan",
+      "couldNotCheck": "Tidak dapat memeriksa"
     }
   }
 }

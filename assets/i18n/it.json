@@ -1568,6 +1568,12 @@
    "offline": "Offline",
    "httpsRequired": "HTTPS richiesto",
    "invalid": "Non valido"
+  },
+  "backup": {
+   "title": "Salva le chiavi su Ethereum",
+   "backedUp": "Salvate su Ethereum",
+   "notBackedUp": "Non ancora salvate",
+   "couldNotCheck": "Impossibile verificare"
   }
  },
  "contacts": {

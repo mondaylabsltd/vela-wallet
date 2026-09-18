@@ -264,6 +264,14 @@ export interface SettingsMessages {
 		updatedLabel: string;
 		retry: string;
 	};
+	/** The Ethereum backup row (spec 062): the founding record's standing there. */
+	backup: {
+		title: string;
+		backedUp: string;
+		notBackedUp: string;
+		couldNotCheck: string;
+		checking: string;
+	};
 	relayer: {
 		title: string;
 		lead: string;
@@ -367,6 +375,11 @@ export const SETTINGS_KEYS = [
 	'settings.networks.online',
 	'settings.networks.slow',
 	'settingsModals.health.offline',
+	'settingsModals.backup.title',
+	'settingsModals.backup.backedUp',
+	'settingsModals.backup.notBackedUp',
+	'settingsModals.backup.couldNotCheck',
+	'componentsUi.funding.checking',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
 	'settingsModals.network.fieldRpcUrl',

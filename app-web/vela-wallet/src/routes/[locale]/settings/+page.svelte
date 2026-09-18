@@ -38,6 +38,9 @@
 	import { desktopWithIdentity, homeWithIdentity } from '$lib/settings/identity';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
+	import { foundingKeyOf } from '$lib/backup/ethereum-backup';
+	import { flowHandoffQuery } from '$lib/flows/contact-handoff';
+	import { checkEthereumBackup, type EthereumBackupState } from '$lib/services/registry-backup';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import {
@@ -61,7 +64,9 @@
 	} from '$lib/services/device-storage';
 	import {
 		themeFromSegment,
+		ethereumBackupRow,
 		withEraseFailure,
+		withLiveEthereumBackup,
 		withLivePreferences,
 		withLivePreferencesDesktop
 	} from '$lib/settings/live';
@@ -165,6 +170,34 @@
 
 	/** Set when an erase ran and something survived. Said, never swallowed. */
 	let eraseFailed = $state(false);
+
+	// --- The Ethereum backup row (spec 062) ---------------------------------
+	//
+	// Where the active wallet's founding record stands on Ethereum, asked of the
+	// chain (never of our server) each time this page meets an account. The row
+	// is a button only while there is something to do, and tapping it hands the
+	// person to the wallet route — which hosts the signing sheet and checks
+	// again before it opens one: a link is not a verdict.
+	let backupState = $state<EthereumBackupState | 'checking'>('checking');
+	$effect(() => {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		if (!account) return;
+		backupState = 'checking';
+		let cancelled = false;
+		void checkEthereumBackup(account.address, foundingKeyOf(account)).then((check) => {
+			if (!cancelled) backupState = check.state;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+	function startEthereumBackup(): void {
+		void goto(
+			resolve(`/[locale]/wallet${flowHandoffQuery({ kind: 'ethereum-backup' })}`, {
+				locale: data.locale
+			})
+		);
+	}
 
 	/**
 	 * The language row's own text: the endonym, plus "· system" when the person
@@ -338,6 +371,7 @@
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
+		model = withLiveEthereumBackup(model, backupState, m);
 		// The phone's first block (founder, 2026-09-05): 通讯录 is a tab on the
 		// bar under this very screen, and 反馈 is not wanted here — so the block
 		// they made up goes with them. The desktop nav keeps its own list.
@@ -364,6 +398,7 @@
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
 		model = withLiveConnections(model, grants, m);
 		model = withLiveCurrencyDesktop(model, currency.view, currencyCatalog);
+		model = { ...model, account: { ...model.account, backup: ethereumBackupRow(backupState, m) } };
 		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
 	});
 
@@ -503,6 +538,7 @@
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
+				onethereumbackup={startEthereumBackup}
 			/>
 		</div>
 	{:else}
@@ -521,6 +557,7 @@
 				onaccountsignin={() => void goto(welcome)}
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
+				onethereumbackup={startEthereumBackup}
 			/>
 		</main>
 	{/if}

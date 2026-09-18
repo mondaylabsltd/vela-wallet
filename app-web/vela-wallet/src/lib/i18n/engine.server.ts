@@ -537,6 +537,13 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			updatedLabel: k('home.balanceDetailUpdatedLabel'),
 			retry: k('home.balanceDetailRetry')
 		},
+		backup: {
+			title: k('settingsModals.backup.title'),
+			backedUp: k('settingsModals.backup.backedUp'),
+			notBackedUp: k('settingsModals.backup.notBackedUp'),
+			couldNotCheck: k('settingsModals.backup.couldNotCheck'),
+			checking: k('componentsUi.funding.checking')
+		},
 		relayer: {
 			title: k('componentsUi.treasuryBootstrap.title'),
 			lead: k('componentsUi.treasuryBootstrap.lead'),

@@ -619,6 +619,18 @@ export interface DropdownModel {
 	rows: SelectRowModel[];
 }
 
+/**
+ * The Ethereum backup row (spec 062). One line, three states; the row is a
+ * button only while there is something to do — a link is not a verdict, so
+ * the wallet route checks again before it opens the sheet.
+ */
+export interface EthereumBackupRowModel {
+	title: string;
+	subtitle: string;
+	tone: 'neutral' | 'positive' | 'caution';
+	actionable: boolean;
+}
+
 export interface SettingsDesktopModel {
 	state: DesktopSettingsStateId;
 	title: string;
@@ -636,6 +648,8 @@ export interface SettingsDesktopModel {
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };
+		/** Live only (spec 062): the founding record's standing on Ethereum. Absent = nothing to draw. */
+		backup?: EthereumBackupRowModel;
 	};
 	appearance: {
 		title: string;

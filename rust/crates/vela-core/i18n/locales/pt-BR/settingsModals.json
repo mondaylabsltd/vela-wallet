@@ -83,6 +83,12 @@
       "offline": "Offline",
       "httpsRequired": "HTTPS obrigatório",
       "invalid": "Inválido"
+    },
+    "backup": {
+      "title": "Fazer backup das chaves na Ethereum",
+      "backedUp": "Backup feito na Ethereum",
+      "notBackedUp": "Ainda sem backup",
+      "couldNotCheck": "Não foi possível verificar"
     }
   }
 }

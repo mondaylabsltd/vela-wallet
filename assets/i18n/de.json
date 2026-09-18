@@ -1565,6 +1565,12 @@
    "offline": "Offline",
    "httpsRequired": "HTTPS erforderlich",
    "invalid": "Ungültig"
+  },
+  "backup": {
+   "title": "Schlüssel auf Ethereum sichern",
+   "backedUp": "Auf Ethereum gesichert",
+   "notBackedUp": "Noch nicht gesichert",
+   "couldNotCheck": "Prüfung nicht möglich"
   }
  },
  "contacts": {

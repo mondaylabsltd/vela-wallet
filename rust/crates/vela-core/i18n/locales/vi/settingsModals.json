@@ -83,6 +83,12 @@
       "offline": "Ngoại tuyến",
       "httpsRequired": "Cần HTTPS",
       "invalid": "Không hợp lệ"
+    },
+    "backup": {
+      "title": "Sao lưu khóa lên Ethereum",
+      "backedUp": "Đã sao lưu lên Ethereum",
+      "notBackedUp": "Chưa sao lưu",
+      "couldNotCheck": "Không kiểm tra được"
     }
   }
 }

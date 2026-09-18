@@ -1565,6 +1565,12 @@
    "offline": "Çevrimdışı",
    "httpsRequired": "HTTPS gerekli",
    "invalid": "Geçersiz"
+  },
+  "backup": {
+   "title": "Anahtarları Ethereum'a yedekle",
+   "backedUp": "Ethereum'a yedeklendi",
+   "notBackedUp": "Henüz yedeklenmedi",
+   "couldNotCheck": "Kontrol edilemedi"
   }
  },
  "contacts": {

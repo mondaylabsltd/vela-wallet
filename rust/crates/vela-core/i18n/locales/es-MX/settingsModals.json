@@ -83,6 +83,12 @@
       "offline": "Sin conexión",
       "httpsRequired": "Se requiere HTTPS",
       "invalid": "Inválido"
+    },
+    "backup": {
+      "title": "Respaldar llaves en Ethereum",
+      "backedUp": "Respaldadas en Ethereum",
+      "notBackedUp": "Aún sin respaldo",
+      "couldNotCheck": "No se pudo comprobar"
     }
   }
 }

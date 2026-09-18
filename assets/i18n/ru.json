@@ -1571,6 +1571,12 @@
    "offline": "Не в сети",
    "httpsRequired": "Требуется HTTPS",
    "invalid": "Недействительно"
+  },
+  "backup": {
+   "title": "Сохранить ключи в Ethereum",
+   "backedUp": "Сохранено в Ethereum",
+   "notBackedUp": "Ещё не сохранено",
+   "couldNotCheck": "Не удалось проверить"
   }
  },
  "contacts": {

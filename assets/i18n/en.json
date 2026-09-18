@@ -1575,6 +1575,12 @@
    "offline": "Offline",
    "httpsRequired": "HTTPS required",
    "invalid": "Invalid"
+  },
+  "backup": {
+   "title": "Back up keys to Ethereum",
+   "backedUp": "Backed up on Ethereum",
+   "notBackedUp": "Not backed up yet",
+   "couldNotCheck": "Could not check"
   }
  },
  "contacts": {

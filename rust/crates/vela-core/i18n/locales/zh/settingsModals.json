@@ -83,6 +83,12 @@
       "offline": "离线",
       "httpsRequired": "需要 HTTPS",
       "invalid": "无效"
+    },
+    "backup": {
+      "title": "把钥匙备份到以太坊",
+      "backedUp": "已备份到以太坊",
+      "notBackedUp": "尚未备份",
+      "couldNotCheck": "无法检查"
     }
   }
 }

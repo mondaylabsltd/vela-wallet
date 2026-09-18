@@ -1565,6 +1565,12 @@
    "offline": "오프라인",
    "httpsRequired": "HTTPS 필요",
    "invalid": "유효하지 않음"
+  },
+  "backup": {
+   "title": "키를 이더리움에 백업",
+   "backedUp": "이더리움에 백업됨",
+   "notBackedUp": "아직 백업되지 않음",
+   "couldNotCheck": "확인할 수 없음"
   }
  },
  "contacts": {

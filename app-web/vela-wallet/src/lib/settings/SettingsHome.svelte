@@ -59,6 +59,8 @@
 		onsignout?: () => void;
 		/** 通讯录 row — the contacts screens are their own route. */
 		onopencontacts?: () => void;
+		/** The Ethereum backup row (spec 062): hand the person to the wallet route, which hosts the sheet. */
+		onethereumbackup?: () => void;
 		/** The network surfaces' live wiring (spec 024). Absent = gallery. */
 		onnetevent?: OnNetEvent;
 		/** The person chose a display currency in the sheet (spec 024 phase 5). */
@@ -93,6 +95,7 @@
 		onselecttab,
 		onsignout,
 		onopencontacts,
+		onethereumbackup,
 		onnetevent,
 		oncurrencyselect,
 		onstorageclear,
@@ -141,6 +144,10 @@
 	function selectRow(id: string) {
 		if (id === 'contacts') {
 			onopencontacts?.();
+			return;
+		}
+		if (id === 'ethereum-backup') {
+			onethereumbackup?.();
 			return;
 		}
 		const next = PAGE_OF[id];

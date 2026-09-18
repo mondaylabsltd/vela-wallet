@@ -83,6 +83,12 @@
       "offline": "オフライン",
       "httpsRequired": "HTTPS が必要です",
       "invalid": "無効"
+    },
+    "backup": {
+      "title": "鍵を Ethereum にバックアップ",
+      "backedUp": "Ethereum にバックアップ済み",
+      "notBackedUp": "まだバックアップされていません",
+      "couldNotCheck": "確認できませんでした"
     }
   }
 }
