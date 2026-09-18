@@ -556,14 +556,22 @@ pub fn passkey_provider_icon_data_uri(aaguid: &str, dark: bool) -> Option<String
 /// same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
 /// requests to perform, or the verdict and, when the wallet is not backed up,
 /// the one call that would do it. No passkey is involved at any point.
+/// `target_chain` is Ethereum when absent; Base (8453) is the operator's
+/// rehearsal deployment; anything else is refused.
 #[wasm_bindgen(js_name = registryBackupStep)]
 #[must_use]
 pub fn registry_backup_step(
     address: &str,
     founding_public_key_hex: &str,
     answers_json: &str,
+    target_chain: Option<u32>,
 ) -> String {
-    vela_core::registry_backup::step_json(address, founding_public_key_hex, answers_json)
+    vela_core::registry_backup::step_json(
+        address,
+        founding_public_key_hex,
+        target_chain,
+        answers_json,
+    )
 }
 
 /// **The registered name behind an address — the next step of the lookup.**

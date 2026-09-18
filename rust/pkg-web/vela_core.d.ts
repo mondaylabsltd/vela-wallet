@@ -791,8 +791,10 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array,
  * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
  * requests to perform, or the verdict and, when the wallet is not backed up,
  * the one call that would do it. No passkey is involved at any point.
+ * `target_chain` is Ethereum when absent; Base (8453) is the operator's
+ * rehearsal deployment; anything else is refused.
  */
-export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string): string;
+export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string, target_chain?: number | null): string;
 
 /**
  * **The registered name behind an address — the next step of the lookup.**
@@ -988,7 +990,7 @@ export interface InitOutput {
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
-    readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;

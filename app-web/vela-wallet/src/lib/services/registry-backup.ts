@@ -57,16 +57,18 @@ const COULD_NOT: EthereumBackupCheck = { state: 'could_not_check', call: null, u
  * Where this wallet's founding record stands on Ethereum.
  *
  * `foundingPublicKeyHex` is the account's FIRST founding key (`keys[0]`, or the
- * legacy single `public_key_hex`). Never throws.
+ * legacy single `public_key_hex`). `targetChainId` is Ethereum unless a
+ * rehearsal names Base; the core refuses any other chain. Never throws.
  */
 export async function checkEthereumBackup(
 	address: string,
-	foundingPublicKeyHex: string
+	foundingPublicKeyHex: string,
+	options: { targetChainId?: number } = {}
 ): Promise<EthereumBackupCheck> {
 	try {
 		await loadCore();
 		const done = await runWalk<BackupDone>((answers) =>
-			registryBackupStep(address, foundingPublicKeyHex, answers)
+			registryBackupStep(address, foundingPublicKeyHex, answers, options.targetChainId)
 		);
 		if (done === null) return COULD_NOT;
 		return { state: done.state, call: done.call, unitId: done.unit_id };

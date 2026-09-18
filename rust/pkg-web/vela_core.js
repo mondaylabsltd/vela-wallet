@@ -3500,12 +3500,15 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
  * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
  * requests to perform, or the verdict and, when the wallet is not backed up,
  * the one call that would do it. No passkey is involved at any point.
+ * `target_chain` is Ethereum when absent; Base (8453) is the operator's
+ * rehearsal deployment; anything else is refused.
  * @param {string} address
  * @param {string} founding_public_key_hex
  * @param {string} answers_json
+ * @param {number | null} [target_chain]
  * @returns {string}
  */
-export function registryBackupStep(address, founding_public_key_hex, answers_json) {
+export function registryBackupStep(address, founding_public_key_hex, answers_json, target_chain) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -3515,7 +3518,7 @@ export function registryBackupStep(address, founding_public_key_hex, answers_jso
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.registryBackupStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        const ret = wasm.registryBackupStep(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(target_chain) ? Number.MAX_SAFE_INTEGER : (target_chain) >>> 0);
         deferred4_0 = ret[0];
         deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

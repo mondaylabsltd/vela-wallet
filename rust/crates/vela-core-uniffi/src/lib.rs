@@ -499,8 +499,14 @@ pub fn registry_backup_step(
     address: String,
     founding_public_key_hex: String,
     answers_json: String,
+    target_chain: Option<u32>,
 ) -> String {
-    vela_core::registry_backup::step_json(&address, &founding_public_key_hex, &answers_json)
+    vela_core::registry_backup::step_json(
+        &address,
+        &founding_public_key_hex,
+        target_chain,
+        &answers_json,
+    )
 }
 
 /// **The registered name behind an address — the next step of the lookup.**

@@ -85,9 +85,10 @@ function requestSignature(address: string, call: EthereumBackupCall): Promise<Ba
  * A host for the sheet (`<SigningHost>`) must be mounted — the wallet route is.
  */
 export async function startEthereumBackup(
-	account: Pick<Account, 'address' | 'public_key_hex' | 'keys'>
+	account: Pick<Account, 'address' | 'public_key_hex' | 'keys'>,
+	options: { targetChainId?: number } = {}
 ): Promise<EthereumBackupOutcome> {
-	const check = await checkEthereumBackup(account.address, foundingKeyOf(account));
+	const check = await checkEthereumBackup(account.address, foundingKeyOf(account), options);
 	if (check.state !== 'not_backed_up' || check.call === null) {
 		return { kind: 'nothing_to_do', check };
 	}
