@@ -65,6 +65,9 @@ struct SettingsScreen: View {
     /// The switcher was opened. The balance machine reads every account's
     /// cached total so the sheet shows numbers the instant it appears.
     var onOpenAccounts: (() -> Void)?
+    /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
+    /// whether there is anything to send.
+    var onEthereumBackup: (() -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -97,7 +100,8 @@ struct SettingsScreen: View {
         onAccountCreate: (() -> Void)? = nil,
         onAccountSignIn: (() -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
-        onOpenAccounts: (() -> Void)? = nil
+        onOpenAccounts: (() -> Void)? = nil,
+        onEthereumBackup: (() -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -115,6 +119,7 @@ struct SettingsScreen: View {
         self.onAccountSignIn = onAccountSignIn
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
+        self.onEthereumBackup = onEthereumBackup
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -388,6 +393,7 @@ struct SettingsScreen: View {
         case "date-format": overlay = .dateFormat
         case "time-format": overlay = .timeFormat
         case "feedback": overlay = .feedback
+        case SettingsLive.ethereumBackupRow: onEthereumBackup?()
         default: break
         }
     }

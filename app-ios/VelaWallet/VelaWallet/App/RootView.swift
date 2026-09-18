@@ -122,6 +122,10 @@ struct RootView: View {
     /// and dropped when the page has its answer — four machines that must not
     /// outlive the question they were asked.
     @State private var signing: SigningController?
+    /// Whether this wallet's founding keys are on Ethereum too (spec 062),
+    /// and for WHICH wallet that was asked — an answer about the previous
+    /// account must not be drawn under the next one's name.
+    @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -1117,12 +1121,56 @@ struct RootView: View {
     /// the permissions machine's `consent_busy` rule, applied to signing. Two
     /// sheets over one page is a person answering the wrong question.
     private func openSigning(_ request: BrowserController.SignRequest) {
-        guard signing == nil else {
-            browser.answerFromSigning(
-                transportId: request.transportId,
+        openSigningRequest(
+            SigningController.Incoming(
                 id: request.id,
-                json: BrowserExecutor.errorJson(
-                    id: request.id, code: -32002, message: "Another request is open"
+                method: request.method,
+                paramsJson: request.paramsJson,
+                origin: request.origin,
+                transportId: request.transportId,
+                chainId: request.chainId
+            ),
+            respond: { [browser] transportId, id, json in
+                browser.answerFromSigning(transportId: transportId, id: id, json: json)
+            }
+        )
+    }
+
+    /// The transport of a request the WALLET made of itself. Nothing is
+    /// listening on it: an answer addressed here must never reach a page.
+    private static let walletTransport = "wallet"
+
+    /// The wallet's own request to copy its founding keys to Ethereum (spec
+    /// 062), through the same sheet a page's request gets — the person reads
+    /// what it is, sees the fee, and slides. There is no page to answer, so the
+    /// answer goes nowhere; the settings row re-reads the chain when it closes.
+    private func openEthereumBackup(_ call: RegistryBackup.Call) {
+        let tx: [String: Any] = [
+            "from": session.view.address, "to": call.to, "value": "0x0", "data": call.data,
+        ]
+        guard let params = try? JSONSerialization.data(withJSONObject: [tx]) else { return }
+        openSigningRequest(
+            SigningController.Incoming(
+                id: "backup-\(UUID().uuidString)",
+                method: "eth_sendTransaction",
+                paramsJson: String(decoding: params, as: UTF8.self),
+                origin: "https://getvela.app",
+                transportId: Self.walletTransport,
+                chainId: call.chainId
+            ),
+            respond: { _, _, _ in }
+        )
+    }
+
+    private func openSigningRequest(
+        _ incoming: SigningController.Incoming,
+        respond: @escaping (String, String, [String: Any]) -> Void
+    ) {
+        guard signing == nil else {
+            respond(
+                incoming.transportId, incoming.id,
+                BrowserExecutor.errorJson(
+                    id: incoming.id, code: -32002, message: "Another request is open"
                 )
             )
             return
@@ -1141,9 +1189,7 @@ struct RootView: View {
             store: shelf,
             pool: pool,
             ports: SigningController.Ports(
-                respond: { [browser] transportId, id, json in
-                    browser.answerFromSigning(transportId: transportId, id: id, json: json)
-                },
+                respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
                     notifier.askOnceIfNeeded()
                     tracker.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
@@ -1171,14 +1217,7 @@ struct RootView: View {
             )
         )
         signing = controller
-        controller.open(SigningController.Incoming(
-            id: request.id,
-            method: request.method,
-            paramsJson: request.paramsJson,
-            origin: request.origin,
-            transportId: request.transportId,
-            chainId: request.chainId
-        ))
+        controller.open(incoming)
     }
 
     // MARK: - Split (spec 054)
@@ -2399,8 +2438,44 @@ struct RootView: View {
                 onOpenEndpoints: { settings.openEndpoints() },
                 onOpenProviders: { settings.openProviders() }
             ),
-            onOpenAccounts: { openAccountSwitcher() }
+            onOpenAccounts: { openAccountSwitcher() },
+            // Only "not backed up" carries a call; every other state's row is
+            // not a button, and a tap on it sends nothing.
+            onEthereumBackup: {
+                guard let asked = backupCheck,
+                      asked.address.caseInsensitiveCompare(session.view.address) == .orderedSame,
+                      let call = asked.check.call
+                else { return }
+                openEthereumBackup(call)
+            }
         )
+        // The wallet's own request, over the page that raised it. Settings
+        // keeps its pickers on a sheet of its own INSIDE the screen; the row
+        // that opens this one opens no picker, so the two never stand at once.
+        .sheet(isPresented: Binding(
+            get: { signing != nil },
+            set: { open in if !open { signing?.swipeDismissed() } }
+        )) {
+            if let signing {
+                SigningSheet(
+                    model: signingModel(for: signing),
+                    onConfirm: { signing.approve() },
+                    onAllowanceChip: { chip in signing.guardPreset(chip) },
+                    onAllowanceAmount: { text in signing.guardCustomAmount(text) }
+                )
+                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.large])
+                    .presentationCornerRadius(Tokens.Radius.r20)
+                    .themed(scheme)
+            }
+        }
+        .onChange(of: signing?.closed) { _, closed in
+            guard closed == true else { return }
+            signing = nil
+            // Landed, rejected or dismissed — the chain is what knows.
+            Task { await checkEthereumBackup() }
+        }
+        .task(id: session.view.address) { await checkEthereumBackup() }
         .task {
             settings.open()
             // Both pages ask the core to read what is stored when they open.
@@ -2439,6 +2514,11 @@ struct RootView: View {
             on: model,
             loc: loc
         )
+        // Asked of the chain for THIS wallet, or still being asked (spec 062).
+        let backedUp = backupCheck.flatMap {
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check.state : nil
+        }
+        model = SettingsLive.withEthereumBackup(backedUp, on: model, loc: loc)
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
@@ -2456,6 +2536,34 @@ struct RootView: View {
             on: model, loc: loc
         )
         return model
+    }
+
+    /// Reads, from the chains themselves, whether this wallet's founding keys
+    /// are registered on Ethereum as they are on Gnosis (spec 062).
+    ///
+    /// A wallet with no stored founding key — the dev seed — has nothing to
+    /// look up, and the row is not drawn for it.
+    private func checkEthereumBackup() async {
+        let address = session.view.address
+        guard !address.isEmpty else { return }
+        let key = await RegistryBackup.foundingKeyHex(of: address, in: sendAccountPort)
+        guard !key.isEmpty else {
+            backupCheck = (address, RegistryBackup.Check(state: .unavailable, call: nil))
+            return
+        }
+        let backup = RegistryBackup(ethCall: { [pool] chainId, to, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_call",
+                params: [["to": to, "data": data], "latest"]
+            )
+            // The RAW result, a bare `0x` included: a chain without the
+            // registry is an answer ("not here"), not a silence.
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+            else { return nil }
+            return hex
+        })
+        let check = await backup.check(address: address, foundingKeyHex: key)
+        backupCheck = (address, check)
     }
 
     /// 全部清除 — the caches this app can rebuild, and nothing it cannot.

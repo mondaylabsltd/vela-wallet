@@ -291,6 +291,12 @@ enum I18nKeys {
         static let networkSaveHint = "settings.networks.saveHint"
         static let networkOnline = "settings.networks.online"
         static let networkSlow = "settings.networks.slow"
+            // Ethereum backup of the founding keys (spec 062).
+        static let backupTitle = "settingsModals.backup.title"
+        static let backupBackedUp = "settingsModals.backup.backedUp"
+        static let backupNotBackedUp = "settingsModals.backup.notBackedUp"
+        static let backupCouldNotCheck = "settingsModals.backup.couldNotCheck"
+        static let backupChecking = "componentsUi.funding.checking"
         static let networkOffline = "settingsModals.health.offline"
         static let chainId = "settingsModals.network.chainId"
         static let fieldRpcUrl = "settingsModals.network.fieldRpcUrl"

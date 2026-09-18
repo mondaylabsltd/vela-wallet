@@ -209,6 +209,41 @@ enum SettingsLive {
         return copy
     }
 
+    /// The row id the screen routes to the host (spec 062).
+    static let ethereumBackupRow = "ethereum-backup"
+
+    /// "Back up keys to Ethereum" — one row of its own, under the account.
+    ///
+    /// `state == nil` is "still asking". Where there is no registry on
+    /// Ethereum, or the wallet was never registered at home, there is nothing
+    /// to offer and the model comes back untouched. The row is a button only
+    /// while there is something to do: a chevron on "backed up" would promise
+    /// a page that does not exist.
+    static func withEthereumBackup(
+        _ state: RegistryBackup.State?,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let subtitle: String
+        switch state {
+        case .unavailable, .notRegistered: return model
+        case nil: subtitle = loc.t(k.backupChecking)
+        case .backedUp: subtitle = loc.t(k.backupBackedUp)
+        case .notBackedUp: subtitle = loc.t(k.backupNotBackedUp)
+        case .couldNotCheck: subtitle = loc.t(k.backupCouldNotCheck)
+        }
+        var next = model
+        next.sections.insert(SettingsSectionModel(rows: [SettingsRowModel(
+            id: ethereumBackupRow,
+            title: loc.t(k.backupTitle),
+            icon: .upload,
+            subtitle: subtitle,
+            trailing: state == .notBackedUp ? .chevron : RowTrailing.none
+        )]), at: 0)
+        return next
+    }
+
     /// The account switcher, live — the SESSION's accounts and the balance
     /// core's cached totals, not the fixture three.
     ///
