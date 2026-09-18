@@ -126,6 +126,8 @@ struct RootView: View {
     /// and for WHICH wallet that was asked — an answer about the previous
     /// account must not be drawn under the next one's name.
     @State private var backupCheck: (address: String, check: RegistryBackup.Check)?
+    /// Which passkeys control that wallet, and for which wallet it was asked.
+    @State private var walletKeys: (address: String, result: WalletKeys.Result)?
     /// What the person is typing. Held locally and echoed to the core, which
     /// owns the value: a field bound straight to a machine loses characters on
     /// the round trip (Android found it on the device).
@@ -2489,6 +2491,7 @@ struct RootView: View {
             Task { await checkEthereumBackup() }
         }
         .task(id: session.view.address) { await checkEthereumBackup() }
+        .task(id: session.view.address) { await readWalletKeys() }
         .task {
             settings.open()
             // Both pages ask the core to read what is stored when they open.
@@ -2531,7 +2534,10 @@ struct RootView: View {
         let backedUp = backupCheck.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.check.state : nil
         }
-        model = SettingsLive.withEthereumBackup(backedUp, on: model, loc: loc)
+        let keys = walletKeys.flatMap {
+            $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
+        }
+        model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
@@ -2549,6 +2555,26 @@ struct RootView: View {
             on: model, loc: loc
         )
         return model
+    }
+
+    /// Which passkeys control the active wallet (spec 062), from the registry
+    /// contract — or, when no chain answers, from this device's own record.
+    private func readWalletKeys() async {
+        let address = session.view.address
+        guard !address.isEmpty else { return }
+        let device = await WalletKeys.deviceKeys(
+            of: address, walletName: session.view.activeName, in: sendAccountPort
+        )
+        let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_call",
+                params: [["to": to, "data": data], "latest"]
+            )
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+            else { return nil }
+            return hex
+        })
+        walletKeys = (address, await reader.read(address: address, device: device))
     }
 
     /// Reads, from the chains themselves, whether this wallet's founding keys

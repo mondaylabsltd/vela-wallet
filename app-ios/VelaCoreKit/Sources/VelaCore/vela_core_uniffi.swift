@@ -9909,6 +9909,20 @@ public func validateClientData(kind: ClientDataKind, clientDataJson: Data, authe
     )
 }
 }
+/**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). See `vela_core::wallet_keys`.
+ */
+public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_wallet_keys_step(
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(deviceKeysJson),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
 public func webauthnSigningHash(authenticatorData: Data, clientDataJson: Data) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
         uniffiCallStatus in
@@ -10428,6 +10442,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 48208) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_webauthn_signing_hash() != 22291) {

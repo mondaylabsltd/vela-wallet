@@ -74,16 +74,16 @@ struct RegistryBackupTests {
         #expect(bare.state == .couldNotCheck)
     }
 
-    @Test func theRowIsAButtonOnlyWhileThereIsSomethingToDo() {
-        let loc = Loc(overrideTag: "en", preferredLanguages: [])
-        let model = SettingsFixtures.build(.st1, loc: loc)
-        func row(_ state: RegistryBackup.State?) -> SettingsRowModel? {
-            SettingsLive.withEthereumBackup(state, on: model, loc: loc).sections.first?.rows.first
-        }
+    private var loc: Loc { Loc(overrideTag: "en", preferredLanguages: []) }
+    private var base: SettingsScreenModel { SettingsFixtures.build(.st1, loc: loc) }
 
+    @Test func theBackupRowIsAButtonOnlyWhileThereIsSomethingToDo() {
+        func row(_ state: RegistryBackup.State?) -> SettingsRowModel? {
+            SettingsLive.ethereumBackupRow(state, loc: loc)
+        }
         // Dark where there is nothing to offer.
-        #expect(SettingsLive.withEthereumBackup(.unavailable, on: model, loc: loc).sections.count == model.sections.count)
-        #expect(SettingsLive.withEthereumBackup(.notRegistered, on: model, loc: loc).sections.count == model.sections.count)
+        #expect(row(.unavailable) == nil)
+        #expect(row(.notRegistered) == nil)
 
         #expect(row(nil)?.id == SettingsLive.ethereumBackupRow)
         #expect(row(nil)?.title == "Back up keys to Ethereum")
@@ -91,10 +91,92 @@ struct RegistryBackupTests {
         #expect(row(.backedUp)?.subtitle == "Backed up on Ethereum")
         #expect(row(.notBackedUp)?.subtitle == "Not backed up yet")
         #expect(row(.couldNotCheck)?.subtitle == "Could not check")
-
         #expect(row(.notBackedUp)?.trailing == .chevron)
         for quiet in [nil, RegistryBackup.State.backedUp, .couldNotCheck] {
             #expect(row(quiet)?.trailing == RowTrailing.none)
+        }
+    }
+
+    private func key(
+        _ name: String = "", provider: String = "", method: KeyMethod = .platform, synced: Bool? = true
+    ) -> WalletKeys.Row {
+        WalletKeys.Row(
+            key: CreateKeyRow(
+                name: name, authenticatorAttachment: "platform", transports: "internal", confirmed: true,
+                synced: synced ?? true, aaguid: "", providerName: provider, method: method
+            ),
+            synced: synced,
+            publicKeyHex: "04" + String(repeating: "ab", count: 64)
+        )
+    }
+
+    @Test func theKeysBlockNamesEveryKeyAndBadgesOnlyWhatItCanVouchFor() {
+        let registry = WalletKeys.Result(source: .registry, rows: [
+            key("Interleave", provider: "Apple Passwords"),
+            key(method: .securityKey, synced: false),
+            key(method: .hybrid),
+        ])
+        let live = SettingsLive.withWalletKeys(registry, backup: .notBackedUp, on: base, loc: loc)
+        let block = live.keys
+        #expect(block?.title == "Keys")
+        #expect(block?.count == "3")
+        #expect(block?.rows.map(\.name) == ["Interleave", "Key 2", "Key 3"])
+        #expect(block?.rows.map(\.holder) == ["Apple Passwords", "Security key", "Passkey"])
+        #expect(block?.rows.map(\.badge) == ["Synced", "Not synced", "Synced"])
+        #expect(block?.rows.first?.fingerprint == "abab…abab")
+        #expect(block?.note == nil)
+        #expect(block?.backup?.trailing == .chevron)
+        // The block is its own thing, not a row smuggled into a section.
+        #expect(live.sections.count == base.sections.count)
+    }
+
+    @Test func stillAskingRegistrySilentAndRegistryEmptyAreThreeDifferentThings() {
+        let asking = SettingsLive.withWalletKeys(nil, backup: nil, on: base, loc: loc).keys
+        #expect(asking?.loading == true)
+        #expect(asking?.count == "")
+        #expect(asking?.rows.isEmpty == true)
+
+        let silent = SettingsLive.withWalletKeys(
+            WalletKeys.Result(source: .device, rows: [key("Mine", synced: nil)]),
+            backup: .couldNotCheck, on: base, loc: loc
+        ).keys
+        #expect(silent?.note == "Couldn't reach the registry. Showing what this device remembers.")
+        #expect(silent?.rows.first?.badge == nil)
+
+        // A registry that answered with nothing was not unreachable.
+        let empty = SettingsLive.withWalletKeys(
+            WalletKeys.Result(source: .notRegistered, rows: [key("Mine", synced: nil)]),
+            backup: .notRegistered, on: base, loc: loc
+        ).keys
+        #expect(empty?.note == nil)
+        #expect(empty?.backup == nil)
+    }
+
+    @Test func theKeysTransportCarriesRequestsAndTellsTheThreeSourcesApart() async {
+        let ask = #"{"type":"ask","requests":[{"type":"eth_call","id":"groups@100","chain_id":100,"to":"0xreg","data":"0xd"}]}"#
+        func done(_ source: String) -> String {
+            #"{"type":"done","source":"\#(source)","chain_id":null,"keys":[{"name":"A","method":"security_key","synced":null,"public_key_hex":"04ab","provider_name":"","aaguid":"","transports":"usb","authenticator_attachment":""}]}"#
+        }
+        let table: [(String, WalletKeys.Source)] = [
+            ("registry", .registry), ("device", .device), ("not_registered", .notRegistered),
+        ]
+        for (wire, source) in table {
+            let script = Script([ask, done(wire)])
+            let reader = WalletKeys(
+                ethCall: { _, _, _ in nil },
+                step: { _, _, answers in
+                    let parsed = (try? JSONSerialization.jsonObject(with: Data(answers.utf8))) as? [[String: Any]]
+                    script.transcripts.append(parsed ?? [])
+                    return script.rounds.removeFirst()
+                }
+            )
+            let result = await reader.read(
+                address: "0xsafe", device: [WalletKeys.DeviceKey(publicKeyHex: "04ab", name: "A", transports: "")]
+            )
+            #expect(result.source == source)
+            #expect(result.rows.first?.key.method == .securityKey)
+            #expect(result.rows.first?.synced == nil)
+            #expect(script.transcripts.last?.first?["outcome"] as? String == "failed")
         }
     }
 }

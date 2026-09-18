@@ -290,6 +290,11 @@ struct SettingsScreen: View {
             overlay = .accounts
         }
 
+        // Under the account it belongs to (spec 062): which keys, then their backup.
+        if let keys = model.keys {
+            WalletKeysBlock(model: keys, onTap: select)
+        }
+
         ForEach(model.sections) { section in
             if let label = section.label {
                 SettingsSectionLabel(
