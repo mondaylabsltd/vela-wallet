@@ -29,6 +29,7 @@
 	const alternates = $derived(translatedLocales('getStarted'));
 
 	const RELEASES = 'https://github.com/mondaylabsltd/vela-wallet/releases';
+	const BUILD_FROM_SOURCE = 'https://github.com/mondaylabsltd/vela-wallet#where-to-get-it';
 	const WEB_WALLET = 'https://wallet.getvela.app/';
 </script>
 
@@ -77,7 +78,13 @@
 			</div>
 		</li>
 
-		{#each [m.getStarted.platforms.desktop, m.getStarted.platforms.mobile, m.getStarted.platforms.extension] as platform, i (platform.title)}
+		<!-- Which platforms have packages on GitHub is a ruling, not a layout
+		     choice (spec 063 §0): desktop and the extension do, and everything
+		     attached there installs as downloaded. The phone apps do NOT — they
+		     ship through the stores, which are paid — so that card must never
+		     point at Releases: for a week it did, and what people found there
+		     was an APK the installer refused. Its second route is the source. -->
+		{#each [{ platform: m.getStarted.platforms.desktop, onGithub: true }, { platform: m.getStarted.platforms.mobile, onGithub: false }, { platform: m.getStarted.platforms.extension, onGithub: true }] as { platform, onGithub }, i (platform.title)}
 			<li class="platform">
 				<div class="meta">
 					<div class="line">
@@ -96,13 +103,13 @@
 					</span>
 					<a
 						class="github"
-						href={RELEASES}
+						href={onGithub ? RELEASES : BUILD_FROM_SOURCE}
 						target="_blank"
 						rel="noopener"
 						data-rybbit-event="cta_click"
-						data-rybbit-prop-location="get-started-github-{i}"
+						data-rybbit-prop-location="get-started-{onGithub ? 'github' : 'source'}-{i}"
 					>
-						{m.getStarted.githubCta}
+						{onGithub ? m.getStarted.githubCta : m.getStarted.sourceCta}
 						<svg
 							width="13"
 							height="13"

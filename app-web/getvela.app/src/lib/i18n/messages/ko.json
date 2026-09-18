@@ -388,6 +388,7 @@
 		"availableNow": "지금 사용 가능",
 		"comingSoon": "출시 예정",
 		"githubCta": "GitHub Releases에서 내려받기",
+		"sourceCta": "소스에서 직접 빌드하기",
 		"platforms": {
 			"web": {
 				"title": "웹",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "스토어에서의 내려받기는 유료이며, 그것이 작은 독립 팀이 Vela를 공개적으로 만들어 가는 재원입니다. 전부 오픈소스이니 직접 빌드해도 됩니다 — 같은 앱이고, 비용은 없습니다.",
-		"storeNote": "아직 어느 스토어에도 없습니다. 그때까지 모든 빌드는 GitHub에 있습니다."
+		"storeNote": "아직 어느 스토어에도 없습니다. 그때까지 데스크톱 앱과 브라우저 확장 프로그램은 바로 설치할 수 있는 형태로 GitHub에 있습니다. 휴대폰 앱은 그곳에 없습니다. 스토어에서 받거나 소스에서 빌드해야 합니다."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

@@ -388,6 +388,7 @@
 		"availableNow": "Disponible ya",
 		"comingSoon": "Muy pronto",
 		"githubCta": "Descargar desde GitHub Releases",
+		"sourceCta": "Compilar desde el código fuente",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "Las descargas en las tiendas son de pago, y así es como un equipo pequeño e independiente financia construir Vela a la vista de todos. Todo es de código abierto, así que siempre puedes compilarlo tú mismo — la misma app, sin costo.",
-		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, cada build está en GitHub."
+		"storeNote": "Todavía no está en ninguna tienda. Hasta entonces, las apps de escritorio y la extensión están en GitHub, listas para instalar. Las apps para teléfono no: vienen de las tiendas, o del código fuente."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }
