@@ -20,7 +20,7 @@
 - [X] T016 The gate: `release` job runs only when `publishable == 'true'`; otherwise a job summary and a tag-time warning
 - [X] T017 Environments by expression: `release` on `desktop-v*` tags, `build-check` elsewhere
 - [X] T018 Validate the profile checks against the real profiles on the founder's Mac
-- [~] T019 The negative path in CI: dispatch on the branch → builds, verifies, "NOT published" summary, `release` skipped
+- [X] T019 The negative path in CI: dispatch on the branch → builds, verifies, "NOT published" summary, `release` skipped
 - [ ] T020 **N1–N4** credentials and the `release` environment (`quickstart.md` §1–5)
 - [ ] T021 **N8** the first notarized dmg, downloaded through a browser: opens; "This device" makes a wallet; the scanner opens the camera
 - [ ] T022 The first `desktop-v*` tag after T020 attaches three dmgs
