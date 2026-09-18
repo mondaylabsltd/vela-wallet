@@ -537,17 +537,60 @@ object SettingsLive {
     )
 
     /**
-     * The Ethereum backup row (spec 062): one line, three states, tappable only
-     * while there is something to do. `null` = still asking. Nothing at all when
-     * the registry is not on Ethereum or the wallet has no record there to copy.
-     * It opens the home, above the appearance block — a wallet's safety before
-     * its looks.
+     * The keys that control this wallet, with their Ethereum backup beneath
+     * them (spec 062) — ONE block, under the account it belongs to. A person
+     * offered "back up your keys" is owed the sight of them first.
+     *
+     * `keys == null` is "still asking": a title and no guessed count. A registry
+     * that did not answer leaves the device's own memory on screen, labelled,
+     * without sync badges; one that answered with nothing is NOT called
+     * unreachable. The backup row is a button only while there is something to
+     * do, and absent where there is no registry on Ethereum or no registration.
      */
-    fun withEthereumBackup(
+    fun withWalletKeys(
         model: SettingsScreenModel,
-        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        keys: app.getvela.wallet.feature.settings.core.WalletKeys.Result?,
+        backup: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
         strings: VelaStrings,
     ): SettingsScreenModel {
+        val k = I18nKeys.SettingsUi
+        val rows = keys?.rows.orEmpty().mapIndexed { index, row ->
+            val body = row.publicKeyHex.removePrefix("0x").let { if (it.length == 130 && it.startsWith("04")) it.drop(2) else it }
+            WalletKeyRowModel(
+                name = row.key.name.ifEmpty { strings.t(k.KEYS_KEY_N).replace("{{n}}", (index + 1).toString()) },
+                holder = row.key.providerName.ifEmpty {
+                    strings.t(
+                        when (row.key.method) {
+                            app.getvela.wallet.feature.onboarding.core.KeyMethod.SecurityKey -> k.KEYS_PROVIDER_SECURITY_KEY
+                            app.getvela.wallet.feature.onboarding.core.KeyMethod.Hybrid -> k.KEYS_PROVIDER_GENERIC
+                            app.getvela.wallet.feature.onboarding.core.KeyMethod.Platform -> k.KEYS_PROVIDER_PLATFORM
+                        },
+                    )
+                },
+                fingerprint = if (body.length >= 8) "${body.take(4)}…${body.takeLast(4)}".lowercase() else "",
+                badge = row.synced?.let { strings.t(if (it) k.KEYS_SYNCED else k.KEYS_NOT_SYNCED) },
+                badgeSynced = row.synced == true,
+                key = row.key,
+            )
+        }
+        return model.copy(
+            keys = WalletKeysModel(
+                title = strings.t(k.KEYS_TITLE),
+                subtitle = strings.t(k.KEYS_SUBTITLE),
+                count = if (keys == null) "" else rows.size.toString(),
+                loading = keys == null,
+                note = if (keys?.source == app.getvela.wallet.feature.settings.core.WalletKeys.Source.Device) strings.t(k.KEYS_FROM_DEVICE) else null,
+                rows = rows,
+                backup = ethereumBackupRow(backup, strings),
+            ),
+        )
+    }
+
+    /** The backup as a row: one line, three states, a chevron only when there is something to do. */
+    fun ethereumBackupRow(
+        state: app.getvela.wallet.feature.settings.core.RegistryBackup.State?,
+        strings: VelaStrings,
+    ): SettingsRowModel? {
         val k = I18nKeys.SettingsUi
         val (subtitle, actionable) = when (state) {
             null -> strings.t(k.BACKUP_CHECKING) to false
@@ -555,16 +598,15 @@ object SettingsLive {
             app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotBackedUp -> strings.t(k.BACKUP_NOT_BACKED_UP) to true
             app.getvela.wallet.feature.settings.core.RegistryBackup.State.CouldNotCheck -> strings.t(k.BACKUP_COULD_NOT_CHECK) to false
             app.getvela.wallet.feature.settings.core.RegistryBackup.State.Unavailable,
-            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return model
+            app.getvela.wallet.feature.settings.core.RegistryBackup.State.NotRegistered -> return null
         }
-        val row = SettingsRowModel(
+        return SettingsRowModel(
             id = ETHEREUM_BACKUP_ROW,
             title = strings.t(k.BACKUP_TITLE),
             icon = SettingsIcon.Upload,
             subtitle = subtitle,
             trailing = if (actionable) RowTrailing.Chevron else RowTrailing.None,
         )
-        return model.copy(sections = listOf(SettingsSectionModel(rows = listOf(row))) + model.sections)
     }
 
     const val ETHEREUM_BACKUP_ROW = "ethereum-backup"

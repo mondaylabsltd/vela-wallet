@@ -1510,6 +1510,14 @@ fun VelaNavHost(
                     val key = application.container.foundingKeyOf(address) ?: return@LaunchedEffect
                     backupCheck = application.container.registryBackup.check(address, key)
                 }
+                // Which passkeys control this wallet — the block the backup sits under.
+                var walletKeys by remember(session.address) { mutableStateOf<app.getvela.wallet.feature.settings.core.WalletKeys.Result?>(null) }
+                LaunchedEffect(session.address) {
+                    val address = session.address
+                    if (address.isBlank()) return@LaunchedEffect
+                    val device = application.container.deviceKeysOf(address, session.activeName)
+                    walletKeys = application.container.walletKeys.read(address, device)
+                }
                 val liveModel = run {
                     var m = SettingsLive.withWizard(
                         SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
@@ -1521,7 +1529,7 @@ fun VelaNavHost(
                         theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
                     )
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
-                    m = SettingsLive.withEthereumBackup(m, backupCheck?.state, strings)
+                    m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(
                         m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,

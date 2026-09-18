@@ -414,6 +414,35 @@ data class IndexDownModel(
 
 /** Everything one settings state needs. */
 @Immutable
+/**
+ * The keys that control this wallet (spec 062) — drawn under the account and
+ * above everything else, with the Ethereum backup as the block's last row.
+ * [rows] is empty while the first answer is in flight; [note] is set only when
+ * the registry did not answer and the rows are what this device remembers.
+ */
+data class WalletKeysModel(
+    val title: String,
+    val subtitle: String,
+    /** "3"; empty while loading — never a guessed count. */
+    val count: String,
+    val loading: Boolean,
+    val note: String?,
+    val rows: List<WalletKeyRowModel>,
+    val backup: SettingsRowModel?,
+)
+
+data class WalletKeyRowModel(
+    val name: String,
+    /** The vault's name when the catalog knows it; else the method's generic line. */
+    val holder: String,
+    /** `197d…647b` — what tells two unnamed keys apart. */
+    val fingerprint: String,
+    /** `null` = nobody can vouch for one. */
+    val badge: String?,
+    val badgeSynced: Boolean,
+    val key: app.getvela.wallet.feature.onboarding.core.CreateKeyRow,
+)
+
 data class SettingsScreenModel(
     val state: SettingsScreenState,
     val title: String,
@@ -423,6 +452,8 @@ data class SettingsScreenModel(
     val selectedTab: String,
     val tabs: TabsModel,
     val account: AccountRowModel,
+    /** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+    val keys: WalletKeysModel? = null,
     val sections: List<SettingsSectionModel>,
     val theme: SegmentedModel,
     val avatar: SegmentedModel,

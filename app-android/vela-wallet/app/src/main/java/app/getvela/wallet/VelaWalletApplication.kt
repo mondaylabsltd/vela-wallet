@@ -36,6 +36,7 @@ import app.getvela.wallet.feature.send.core.StoreAccountPort
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.RegistryBackup
+import app.getvela.wallet.feature.settings.core.WalletKeys
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -413,6 +414,21 @@ class AppContainer(private val app: Application) {
             step = { address, key, answers, target -> uniffi.vela_core_uniffi.registryBackupStep(address, key, answers, target) },
         )
     }
+
+    /** Which passkeys control a wallet (spec 062): the registry contract's answer, or the device's. */
+    val walletKeys: WalletKeys by lazy {
+        WalletKeys(ethCall = ::rawEthCall)
+    }
+
+    /**
+     * The account record's keys in founding order, as the keys walk wants them.
+     * The record keeps no per-key label, so only key 0 — whose name IS the
+     * wallet's — arrives named; the registry's metadata names the rest.
+     */
+    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> =
+        StoreAccountPort(AccountStore(app)).keysOf(address).mapIndexed { index, key ->
+            WalletKeys.DeviceKey(key.publicKeyHex, if (index == 0) walletName else "", "")
+        }
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =

@@ -54,6 +54,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.identicon.IdenticonImage
 import app.getvela.wallet.feature.settings.components.SettingsDivider
+import app.getvela.wallet.feature.settings.components.VelaWalletKeysBlock
 import app.getvela.wallet.feature.settings.components.SettingsSectionLabel
 import app.getvela.wallet.feature.settings.components.VelaAccountRow
 import app.getvela.wallet.feature.settings.components.VelaCallout
@@ -491,6 +492,9 @@ private fun SettingsHomeBody(
 ) {
     val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
+
+    // Under the account it belongs to (spec 062): which keys, then their backup.
+    model.keys?.let { VelaWalletKeysBlock(it, onRow) }
 
     model.sections.forEach { section ->
         if (section.label != null) {
