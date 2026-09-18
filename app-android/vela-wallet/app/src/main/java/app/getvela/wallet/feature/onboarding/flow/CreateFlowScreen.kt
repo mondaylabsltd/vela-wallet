@@ -127,6 +127,10 @@ fun CreateFlowScreen(
                 address = view!!.address.orEmpty(),
                 walletName = view.keys.firstOrNull()?.name ?: view.name,
                 keys = view.keys,
+                // `Created` + busy IS `Completing`: the core collapses the two
+                // stages into one view stage, and this is the seam that tells
+                // them apart.
+                entering = view.busy,
                 onEnter = model::enterWallet,
             )
         }

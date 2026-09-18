@@ -70,6 +70,17 @@ fun ColumnScope.DoneScreen(
     address: String,
     walletName: String,
     keys: List<CreateKeyRow>,
+    /**
+     * The hand-off is in flight.
+     *
+     * `Completing` reaches the view as `Created` (the core collapses the pair),
+     * so this flag is the ONLY thing that distinguishes "waiting for you" from
+     * "already going". Without it the button stays live and unchanged through a
+     * transition it has already started, which reads as a dead button and gets
+     * tapped again — and every tap after the first is a silent no-op, because
+     * the core's guard only answers in `Created`.
+     */
+    entering: Boolean,
     onEnter: () -> Unit,
 ) {
     val strings = LocalVelaStrings.current
@@ -218,6 +229,8 @@ fun ColumnScope.DoneScreen(
         text = strings.t(I18nKeys.Create.ENTER_WALLET_BTN),
         onClick = onEnter,
         modifier = Modifier.fillMaxWidth(),
+        enabled = !entering,
+        loading = entering,
     )
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
 }
