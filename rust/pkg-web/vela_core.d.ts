@@ -834,6 +834,20 @@ export function registryChainUnitPlan(unit_id: number): string | undefined;
  */
 export function registryNameStep(address: string, answers_json: string): string;
 
+/**
+ * Sign-in's first question — which groups does this key belong to? — through
+ * the three layers: the index, then the registry contract on Gnosis, then on
+ * Ethereum. See `vela_core::registry_resolve`.
+ */
+export function registryResolveKeyStep(public_key_hex: string, answers_json: string): string;
+
+/**
+ * Sign-in's second question — who are this group's members? — with an index
+ * answer PROVED against the chain (`contentHash`), not merely believed.
+ * `source` is the token the key step returned.
+ */
+export function registryResolveUnitStep(unit_id: number, source: string, answers_json: string): string;
+
 export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
@@ -1030,6 +1044,8 @@ export interface InitOutput {
     readonly registryChainUnit: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly registryChainUnitPlan: (a: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

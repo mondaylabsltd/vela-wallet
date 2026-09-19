@@ -11,13 +11,7 @@
  * "the service said no" from "the service was not there".
  */
 
-import {
-	loadCore,
-	registryChainKeyPlan,
-	registryChainKeyStatus,
-	registryChainUnit,
-	registryChainUnitPlan
-} from '$lib/core/client';
+import { loadCore, registryResolveKeyStep, registryResolveUnitStep } from '$lib/core/client';
 import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
@@ -206,142 +200,151 @@ type UnitResponse = {
 };
 
 // ---------------------------------------------------------------------------
-// Signing in when the index is gone (spec 062)
+// The three layers — transport for `vela_core::registry_resolve` (064)
 // ---------------------------------------------------------------------------
 //
-// The index service is a cache of the registry contract. When it cannot be
-// REACHED — never when it answers, a refusal is an answer — the same two read
-// questions are put to the contract itself: on Gnosis, where the record lives,
-// then on Ethereum, where a person may have backed it up precisely for this.
-// `vela_core::registry_chain` answers in the index's own JSON shapes, so every
-// guard below runs unchanged on either source.
+// The index for speed, the chain for truth, Ethereum for survival. WHICH is
+// asked, in what order, and whether an index answer is believed — it is not:
+// its `contentHash` is recomputed and compared with the chain's — are the
+// core's, written once for four shells. This file performs the requests.
+// Until 064 it carried its own copy of the ladder, which believed any index
+// that answered.
 //
 // Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so a
-// key's units are asked of whoever listed them. The index mirrors Gnosis, so
-// an index listing may be continued on Gnosis; a chain listing is continued on
-// that chain and nowhere else.
+// key's units are asked of whoever listed them: `unitSource` is the opaque
+// token the core hands back with a listing.
 
-/** Which chain listed the last key's units; `null` = the index did. */
-let unitSource: number | null = null;
+/** Who listed the last key's units — the core's token, handed back verbatim. */
+let unitSource = 'index';
 
-const GNOSIS = 100;
+type ResolveRequest =
+	| { type: 'eth_call'; id: string; chain_id: number; to: string; data: string }
+	| { type: 'index_get'; id: string; path: string };
+type ResolveAnswer = { id: string; outcome: 'ok' | 'not_found' | 'failed'; body: string | null };
+type ResolveStep =
+	| { type: 'ask'; requests: ResolveRequest[] }
+	| {
+			type: 'done';
+			body: string | null;
+			source: string;
+			verified_by: 'gnosis' | 'ethereum' | 'none';
+			index_discarded: boolean;
+	  };
 
-/** The index could not be reached, or is failing: not an answer. */
-function indexIsGone(error: unknown): boolean {
-	if (!(error instanceof RegistryError)) return false;
-	if (error.network) return true;
-	return / failed: 5\d\d$/.test(error.message);
-}
+/** How many rounds a walk may take; it only stops a contract bug from spinning. */
+const MAX_RESOLVE_ROUNDS = 16;
 
-type ChainPlan = { chains: number[]; calls: { to: string; data: string }[] };
-
-/** Both calls of a plan on one chain, through its public RPCs in order. `null`
- *  = that chain did not answer (every endpoint failed, or an RPC error). */
-async function readChain(chainId: number, plan: ChainPlan): Promise<string[] | null> {
+/** One `eth_call` on one chain, through its public RPCs in order. `null` = the
+ *  chain did not answer (every endpoint failed, or an RPC error). A bare `0x`
+ *  IS an answer ("no such contract here") and is passed on as one. */
+async function ethCall(chainId: number, to: string, data: string): Promise<string | null> {
 	for (const url of PUBLIC_RPCS[chainId] ?? []) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
 		try {
-			const results = await Promise.all(
-				plan.calls.map(async (call) => {
-					const controller = new AbortController();
-					const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
-					try {
-						const response = await fetch(url, {
-							method: 'POST',
-							headers: { 'content-type': 'application/json' },
-							body: JSON.stringify({
-								jsonrpc: '2.0',
-								id: 1,
-								method: 'eth_call',
-								params: [call, 'latest']
-							}),
-							signal: controller.signal
-						});
-						const body = (await response.json()) as { result?: unknown };
-						return typeof body.result === 'string' ? body.result : null;
-					} finally {
-						clearTimeout(timer);
-					}
-				})
-			);
-			if (results.every((r): r is string => r !== null)) return results;
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: 1,
+					method: 'eth_call',
+					params: [{ to, data }, 'latest']
+				}),
+				signal: controller.signal
+			});
+			const body = (await response.json()) as { result?: unknown };
+			if (typeof body.result === 'string') return body.result;
 		} catch {
 			/* next endpoint */
+		} finally {
+			clearTimeout(timer);
 		}
 	}
 	return null;
 }
 
-async function readKeyProfile(publicKey: string): Promise<KeyProfile> {
-	try {
-		const profile = await request<KeyProfile>(
-			`/api/query?publicKey=${encodeURIComponent(publicKey)}`,
-			{},
-			READ_TIMEOUT_MS,
-			'Query'
-		);
-		unitSource = null;
-		return profile;
-	} catch (error) {
-		if (!indexIsGone(error)) throw error;
-		await loadCore();
-		const planJson = registryChainKeyPlan(publicKey);
-		if (planJson === undefined) throw error;
-		const plan = JSON.parse(planJson) as ChainPlan;
-		for (const chainId of plan.chains) {
-			const results = await readChain(chainId, plan);
-			const body = results && registryChainKeyStatus(results[0], results[1]);
-			if (body) {
-				const profile = JSON.parse(body) as KeyProfile;
-				// A chain that knows the key founded nothing is only believed when
-				// it is the record's home: Ethereum holds what somebody backed up.
-				if (chainId !== GNOSIS && (profile.groups?.unitIds ?? []).length === 0) continue;
-				unitSource = chainId;
-				return profile;
-			}
-		}
-		// Nobody answered: the original failure is the honest one to report.
-		throw error;
-	}
-}
-
-async function readUnitFromChain(chainId: number, unitId: number): Promise<UnitResponse | null> {
+/**
+ * Drive one resolver walk to its end.
+ *
+ * When NOBODY answers, the error reported is the INDEX's own — reachable or
+ * not — because that is the distinction the core's notices are written for;
+ * the chains being silent too adds nothing a person can act on.
+ */
+async function resolve<T>(
+	label: string,
+	step: (answersJson: string) => string,
+	/** Only a LISTING names who its unit ids belong to. A unit's own source may
+	 *  be a chain the index's ids mean nothing on. */
+	listing: boolean
+): Promise<T> {
 	await loadCore();
-	const planJson = registryChainUnitPlan(unitId);
-	if (planJson === undefined) return null;
-	const plan = JSON.parse(planJson) as ChainPlan;
-	const results = await readChain(chainId, plan);
-	const body = results && registryChainUnit(unitId, results[0], results[1]);
-	return body ? (JSON.parse(body) as UnitResponse) : null;
+	const answers: ResolveAnswer[] = [];
+	let indexFailure: RegistryError | null = null;
+
+	const perform = async (request: ResolveRequest): Promise<ResolveAnswer> => {
+		const failed: ResolveAnswer = { id: request.id, outcome: 'failed', body: null };
+		if (request.type === 'eth_call') {
+			const result = await ethCall(request.chain_id, request.to, request.data);
+			return result === null ? failed : { id: request.id, outcome: 'ok', body: result };
+		}
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+		try {
+			const response = await fetch(`${baseUrl}${request.path}`, { signal: controller.signal });
+			if (!response.ok) {
+				// The server answered — a refusal. Remembered, and the chain is asked.
+				indexFailure = new RegistryError(`${label} failed: ${response.status}`, false);
+				return response.status === 404 ? { ...failed, outcome: 'not_found' } : failed;
+			}
+			return { id: request.id, outcome: 'ok', body: await response.text() };
+		} catch (error) {
+			indexFailure = new RegistryError(`${label} failed: ${describe(error)}`, true);
+			return failed;
+		} finally {
+			clearTimeout(timer);
+		}
+	};
+
+	for (let round = 0; round < MAX_RESOLVE_ROUNDS; round++) {
+		const next = JSON.parse(step(JSON.stringify(answers))) as ResolveStep;
+		if (next.type === 'ask') {
+			answers.push(...(await Promise.all(next.requests.map(perform))));
+			continue;
+		}
+		if (next.body === null) break;
+		if (next.index_discarded) {
+			// Our own index described a founding set the chain does not hold. The
+			// chain's is what is used; this line is for whoever runs the index.
+			console.warn(`[registry] the index's answer did not match the chain — discarded`);
+		}
+		if (listing) unitSource = next.source;
+		return JSON.parse(next.body) as T;
+	}
+	throw indexFailure ?? new RegistryError(`${label} failed: nobody answered`, true);
 }
 
-async function readUnit(unitId: number): Promise<UnitResponse> {
-	if (unitSource !== null) {
-		const detail = await readUnitFromChain(unitSource, unitId);
-		if (detail !== null) return detail;
-		throw new RegistryError(
-			`Query failed: chain ${unitSource} did not answer for unit ${unitId}`,
-			true
-		);
-	}
-	try {
-		return await request<UnitResponse>(
-			`/api/query?unitId=${encodeURIComponent(unitId)}&pageSize=${MAX_UNIT_MEMBERS}&order=asc`,
-			{},
-			READ_TIMEOUT_MS,
-			'Query'
-		);
-	} catch (error) {
-		if (!indexIsGone(error)) throw error;
-		// The index listed this unit and then went away. Its ids are Gnosis's.
-		const detail = await readUnitFromChain(GNOSIS, unitId);
-		if (detail !== null) return detail;
-		throw error;
-	}
+function readKeyProfile(publicKey: string): Promise<KeyProfile> {
+	return resolve<KeyProfile>(
+		'Query',
+		(answers) => registryResolveKeyStep(publicKey, answers),
+		true
+	);
+}
+
+function readUnit(unitId: number): Promise<UnitResponse> {
+	// The token is read NOW: the listing that set it is the one these ids belong to.
+	const source = unitSource;
+	return resolve<UnitResponse>(
+		'Query',
+		(answers) => registryResolveUnitStep(unitId, source, answers),
+		false
+	);
 }
 
 /** Test seam: forget which source listed the last key's units. */
 export function _resetUnitSource(): void {
-	unitSource = null;
+	unitSource = 'index';
 }
 
 /** `/api/query?publicKey=` — is this key registered, and which groups does it

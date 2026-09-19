@@ -63,6 +63,8 @@ import init, {
 	registryChainUnit,
 	registryChainUnitPlan,
 	registryNameStep,
+	registryResolveKeyStep,
+	registryResolveUnitStep,
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
@@ -115,6 +117,7 @@ export { passkeyFallbackIconDataUri, passkeyProviderIconDataUri };
 export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
+export { registryResolveKeyStep, registryResolveUnitStep };
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a
