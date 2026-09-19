@@ -63,7 +63,7 @@ jobs:
           # final 1.0" is said with the pre-release flag below, where nothing
           # has to parse it.
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::'$branch' does not name a version. Release branches are release/vX.Y.Z — digits only."
+            echo "::error::'$branch' does not name a version. Release branches are release/vYY.M.R (e.g. release/v26.9.0) — digits only."
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -102,6 +102,13 @@ jobs:
           existing=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
           if [ -z "$existing" ]; then
             echo "$TAG does not exist yet — this run creates it at ${GITHUB_SHA:0:7}."
+            # A NEW version must be the calendar's (spec 066): YY.M.REVISION, this
+            # month, the next revision. Only here — re-running a release that
+            # already has its tag must not start failing when the month turns.
+            # The rule proves itself first: a gate nobody tested is a rumour.
+            scripts/check-release-version.test.sh >/dev/null ||
+              { echo "::error::scripts/check-release-version.sh fails its own tests; refusing to trust it."; exit 1; }
+            scripts/check-release-version.sh "${TAG#v}"
           elif [ "$existing" = "$GITHUB_SHA" ]; then
             echo "$TAG already points at this commit — re-running the same release (packages are re-attached)."
           else
