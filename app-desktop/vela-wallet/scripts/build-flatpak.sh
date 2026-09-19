@@ -79,7 +79,14 @@ flatpak install --user --arch "$arch" --noninteractive flathub \
 mkdir -p "$dist_dir"
 build_dir="$dist_dir/build-$arch"
 repo_dir="$dist_dir/repo"
-bundle="$dist_dir/$appid-$arch.flatpak"
+# The version is in the file's name, like every other package on a release.
+# It was not, through 0.9.3 (`app.getvela.VelaWallet-x86_64.flatpak`, the usual
+# Flatpak spelling): two versions downloaded side by side were one name, and
+# nobody could tell which was which.
+version="$(sed -n '/^\[package\]/,/^\[/ s/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$project_root/Cargo.toml" | head -1)"
+[[ -n "$version" ]] || die "could not read the version from Cargo.toml"
+bundle="$dist_dir/$appid-$version-$arch.flatpak"
 
 # ------------------------------------------------------- which tree to build --
 

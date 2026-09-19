@@ -193,8 +193,9 @@ function fileHeaders(file: ReleaseFile, sha256: string, length: number): Headers
 		'Content-Disposition': `attachment; filename="${file.name}"`,
 		'Accept-Ranges': 'bytes',
 		ETag: `"${sha256}"`,
-		// `/download/<platform>` is the same URL for every version, and the
-		// Flatpak's file NAME is too — so the URL is never cached; the object is.
+		// `/download/<platform>` is the same URL for every version (and through
+		// 0.9.3 so was the Flatpak's file name) — so the URL is never cached; the
+		// object is.
 		'Cache-Control': 'no-cache'
 	});
 }
