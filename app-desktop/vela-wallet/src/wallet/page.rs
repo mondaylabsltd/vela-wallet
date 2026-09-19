@@ -472,6 +472,10 @@ pub struct WalletPage {
         vela_core::wallet_keys::KeysSource,
         Vec<vela_core::wallet_keys::WalletKeyRow>,
     )>,
+    /// Which key rows are open, by founding position; and the `row:label` of
+    /// the value just copied, for the button's "Copied".
+    keys_open: std::collections::HashSet<usize>,
+    keys_copied: Option<String>,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -870,6 +874,17 @@ impl WalletPage {
             backup_for: None,
             backup_check: None,
             keys_check: None,
+            // `VELA_KEYS_OPEN=1` (debug builds): the first key row starts open, so
+            // the details card can be looked at without a click — the same env-pin
+            // family as `VELA_PAGE` / `VELA_THEME`.
+            keys_open: if cfg!(debug_assertions)
+                && std::env::var("VELA_KEYS_OPEN").as_deref() == Ok("1")
+            {
+                std::collections::HashSet::from([0])
+            } else {
+                std::collections::HashSet::new()
+            },
+            keys_copied: None,
             menu_origin: None,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
@@ -5848,6 +5863,7 @@ impl WalletPage {
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
         self.keys_check = None;
+        self.keys_copied = None;
         // The record's key list in founding order; a legacy record is one key.
         let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
             vec![vela_core::wallet_keys::DeviceKey {
@@ -6003,6 +6019,16 @@ impl WalletPage {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
+        let user_verified = s.keys_user_verified.clone();
+        let labels = (
+            s.keys_public_key.clone(),
+            s.keys_credential.clone(),
+            s.keys_transport.clone(),
+            s.keys_attestation.clone(),
+        );
+        let copy_label = s.keys_copy.clone();
+        let copied_label = s.keys_copied.clone();
+        let explain = s.backup_explain.clone();
         let check = self.keys_check.clone();
 
         let mut header = div().flex().items_baseline().gap(px(8.)).child(
@@ -6080,13 +6106,7 @@ impl WalletPage {
                     let fingerprint = (body.len() >= 8)
                         .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
 
-                    let mut row = div()
-                        .flex()
-                        .items_center()
-                        .gap(px(12.))
-                        .py(px(14.))
-                        .border_b_1()
-                        .border_color(theme.divider);
+                    let mut row = div().flex().items_center().gap(px(12.)).py(px(14.));
                     if let Some(mark) = super::components::passkey_mark(
                         &mut self.identicons,
                         &key.aaguid,
@@ -6147,25 +6167,168 @@ impl WalletPage {
                             )
                             .child(meta),
                     );
-                    // A badge nobody can vouch for is not drawn.
+                    // The registry explorer's pills; one nobody can vouch for is not drawn.
+                    let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
+                    if key.user_verified == Some(true) {
+                        pills.push((user_verified.clone(), theme.info_base));
+                    }
                     if let Some(is_synced) = key.synced {
+                        pills.push(if is_synced {
+                            (synced.clone(), theme.success)
+                        } else {
+                            (not_synced.clone(), theme.fg_subtle)
+                        });
+                    }
+                    for (text, colour) in pills {
                         row = row.child(
                             div()
                                 .flex_none()
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .border_1()
+                                .border_color(colour)
                                 .text_size(theme::text_row_sub())
-                                .text_color(if is_synced {
-                                    theme.success
-                                } else {
-                                    theme.fg_subtle
-                                })
-                                .child(if is_synced {
-                                    synced.clone()
-                                } else {
-                                    not_synced.clone()
-                                }),
+                                .text_color(colour)
+                                .child(text),
                         );
                     }
-                    block = block.child(row);
+
+                    // What the row opens onto: the explorer's facts, the two a
+                    // person pastes elsewhere copyable. Nothing to open when only
+                    // the device answered.
+                    let transport = [
+                        key.authenticator_attachment.as_str(),
+                        key.transports.as_str(),
+                    ]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                    let details: Vec<(gpui::SharedString, String, bool, bool)> = [
+                        (
+                            labels.0.clone(),
+                            if key.public_key_hex.is_empty() {
+                                String::new()
+                            } else {
+                                format!("0x{}", key.public_key_hex)
+                            },
+                            true,
+                            true,
+                        ),
+                        (labels.1.clone(), key.credential_id.clone(), true, true),
+                        (
+                            gpui::SharedString::from("AAGUID"),
+                            key.aaguid.clone(),
+                            true,
+                            false,
+                        ),
+                        (labels.2.clone(), transport, false, false),
+                        (labels.3.clone(), key.attestation_hex.clone(), true, false),
+                    ]
+                    .into_iter()
+                    .filter(|(_, value, _, _)| !value.is_empty())
+                    .collect();
+                    let expandable = !key.credential_id.is_empty();
+                    let is_open = self.keys_open.contains(&index);
+                    let mut stateful = row.id(("settings-key-row", index));
+                    if expandable {
+                        stateful = stateful
+                            .child(icon_img(
+                                &mut self.icons,
+                                if is_open {
+                                    Icon::ChevronUp
+                                } else {
+                                    Icon::ChevronDown
+                                },
+                                false,
+                                theme.fg_subtle,
+                                14.,
+                            ))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                if !page.keys_open.remove(&index) {
+                                    page.keys_open.insert(index);
+                                }
+                                cx.notify();
+                            }));
+                    }
+                    let mut entry = div()
+                        .flex()
+                        .flex_col()
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .child(stateful);
+                    if expandable && is_open {
+                        let mut card = div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(12.))
+                            .p(px(16.))
+                            .mb(px(12.))
+                            .rounded(px(12.))
+                            .border_1()
+                            .border_color(theme.divider)
+                            .bg(theme.bg_sunken);
+                        for (slot, (label, value, mono, copyable)) in
+                            details.into_iter().enumerate()
+                        {
+                            let mut shown = div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_base)
+                                .child(gpui::SharedString::from(value.clone()));
+                            if mono {
+                                shown = shown.font_family(theme::font_mono());
+                            }
+                            let mut line = div()
+                                .flex()
+                                .items_start()
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .w(px(110.))
+                                        .flex_none()
+                                        .text_size(theme::text_row_sub())
+                                        .text_color(theme.fg_subtle)
+                                        .child(label),
+                                )
+                                .child(shown);
+                            if copyable {
+                                let copy_id = format!("{index}:{slot}");
+                                let done = self.keys_copied.as_deref() == Some(copy_id.as_str());
+                                line = line.child(
+                                    div()
+                                        .id(("settings-key-copy", index * 8 + slot))
+                                        .flex_none()
+                                        .px(px(8.))
+                                        .py(px(2.))
+                                        .rounded(px(6.))
+                                        .border_1()
+                                        .border_color(theme.divider)
+                                        .text_size(theme::text_row_sub())
+                                        .text_color(theme.fg_subtle)
+                                        .cursor_pointer()
+                                        .child(if done {
+                                            copied_label.clone()
+                                        } else {
+                                            copy_label.clone()
+                                        })
+                                        .on_click(cx.listener(move |page, _, _, cx| {
+                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                                value.clone(),
+                                            ));
+                                            page.keys_copied = Some(copy_id.clone());
+                                            cx.notify();
+                                        })),
+                                );
+                            }
+                            card = card.child(line);
+                        }
+                        entry = entry.child(card);
+                    }
+                    block = block.child(entry);
                 }
                 if source == KeysSource::Device {
                     block = block.child(
@@ -6178,7 +6341,18 @@ impl WalletPage {
                 }
             }
         }
-        block.children(self.backup_row(theme, cx))
+        match self.backup_row(theme, cx) {
+            // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+            Some(backup) => block.child(backup).child(
+                div()
+                    .pl(px(theme::KEY_ROW_MARK + 12.))
+                    .pb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(explain),
+            ),
+            None => block,
+        }
     }
 
     /// The backup is one transaction the wallet asks ITSELF to sign: the same
