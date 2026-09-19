@@ -46,6 +46,10 @@ class RpcPool(
     transport: RpcTransport = OkHttpTransport(),
 ) {
 
+    private companion object {
+        const val SLOW_CALL_MS = 5_000L
+    }
+
     /** One in-flight routed call: what to send, what came back, who is waiting. */
     private class Waiting(val payload: RpcPayload) {
         val bodies = ConcurrentHashMap<String, JSONObject>()
@@ -114,6 +118,7 @@ class RpcPool(
         val callId = "c${nextId.incrementAndGet()}"
         val waiting = Waiting(RpcPayload(method, params))
         calls[callId] = waiting
+        val asked = System.currentTimeMillis()
         try {
             host.dispatch(
                 RpcEvent.CallRequested(
@@ -137,6 +142,12 @@ class RpcPool(
                 is RpcCallVerdict.BestRpcUrl -> RpcResult.Failed(rateLimited = false)
             }
         } finally {
+            // A call that took far longer than any one post is a call that
+            // WAITED — for routing, for its turn — and `rpc.post` cannot show it.
+            val took = System.currentTimeMillis() - asked
+            if (took >= SLOW_CALL_MS) {
+                VelaLog.event("rpc.call", "slow", "chain" to chainId, "method" to method, "ms" to took, "inFlight" to calls.size)
+            }
             // Whatever happened, stop holding the body. A late `json_rpc_post`
             // for this id now finds no payload and reports the endpoint as
             // unreachable, which is what tells the core to stop routing for a

@@ -183,6 +183,7 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.alertIncompatibleBodyCreate',
 	'onboarding.login.alertSignInFailedTitle',
 	'onboarding.login.alertSignInFailedBody',
+	'onboarding.login.alertSelectorUnresponsive',
 	'onboarding.login.recoverOfferTitle',
 	'onboarding.login.recoverOfferBody',
 	'onboarding.login.recoverConfirm',

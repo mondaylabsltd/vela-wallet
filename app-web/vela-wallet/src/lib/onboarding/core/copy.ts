@@ -12,6 +12,7 @@
  */
 
 import type { KeyMethod } from '../generated/KeyMethod';
+import { SELECTOR_UNRESPONSIVE } from './passkey';
 import type { PromptKind } from '../generated/PromptKind';
 import type { StatusKey } from '../generated/StatusKey';
 import type { SubmitLabel } from '../generated/SubmitLabel';
@@ -199,7 +200,12 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 		case 'sign_in_failed':
 			return {
 				title: t('onboarding.login.alertSignInFailedTitle'),
-				message: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+				// The one failure whose words are the shell's, not the platform's:
+				// the system's passkey sheet never appeared (see `passkey.ts`).
+				message:
+					kind.detail === SELECTOR_UNRESPONSIVE
+						? t('onboarding.login.alertSelectorUnresponsive')
+						: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

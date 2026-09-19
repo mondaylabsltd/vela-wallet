@@ -239,6 +239,7 @@
 			"alertNotFoundTitle": "Account Not Found",
 			"alertNotFoundBody": "No wallet was found for this identity.\n\nPossible reasons:\n• You haven't created a wallet yet\n• Your identity hasn't synced to this device (check iCloud / Google settings)\n• The public key server is unreachable\n\nTry creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.",
 			"alertSignInFailedTitle": "Sign In Failed",
+			"alertSelectorUnresponsive": "The system passkey picker is not responding. This can happen when too many passkeys are saved for this wallet on this device. Try again, or sign in with another device or a security key.",
 			"alertSignInFailedBody": "{{message}}\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.",
 			"alertIncompatibleBodyCreate": "Your device's identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.",
 			"recoverOfferTitle": "Recover Your Wallet",

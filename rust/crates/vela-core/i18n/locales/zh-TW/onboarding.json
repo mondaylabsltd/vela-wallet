@@ -239,6 +239,7 @@
 			"alertNotFoundTitle": "找不到帳戶",
 			"alertNotFoundBody": "找不到此身分對應的錢包。\n\n可能的原因：\n• 您尚未建立錢包\n• 您的身分尚未同步到此裝置（請檢查 iCloud／Google 設定）\n• 公鑰伺服器無法連線\n\n請嘗試建立新錢包，或確認您的身分提供者（Face ID／指紋）已在各裝置間同步。",
 			"alertSignInFailedTitle": "登入失敗",
+			"alertSelectorUnresponsive": "系統通行密鑰選擇器沒有回應。當此裝置上為本錢包儲存了過多通行密鑰時，可能發生這種情況。請重試，或改用其他裝置或安全金鑰登入。",
 			"alertSignInFailedBody": "{{message}}\n\n請確認您的裝置已設定 Face ID、Touch ID 或指紋後再試一次。",
 			"alertIncompatibleBodyCreate": "您裝置的身分提供者與此錢包不相容。請至系統設定切換為 Google 密碼管理工具後再試一次。",
 			"recoverOfferTitle": "找回錢包",

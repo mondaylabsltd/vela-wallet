@@ -239,6 +239,7 @@
 			"alertNotFoundTitle": "Compte introuvable",
 			"alertNotFoundBody": "Aucun portefeuille n'a été trouvé pour cette identité.\n\nRaisons possibles :\n• Vous n'avez pas encore créé de portefeuille\n• Votre identité n'a pas été synchronisée sur cet appareil (vérifiez les réglages iCloud / Google)\n• Le serveur de clés publiques est injoignable\n\nEssayez de créer un nouveau portefeuille, ou assurez-vous que votre fournisseur d'identité (Face ID / empreinte digitale) est synchronisé entre vos appareils.",
 			"alertSignInFailedTitle": "Échec de la connexion",
+			"alertSelectorUnresponsive": "Le sélecteur de passkeys du système ne répond pas. Cela peut arriver lorsque trop de passkeys sont enregistrées pour ce portefeuille sur cet appareil. Réessayez, ou connectez-vous avec un autre appareil ou une clé de sécurité.",
 			"alertSignInFailedBody": "{{message}}\n\nAssurez-vous que votre appareil dispose de Face ID, Touch ID ou d'une empreinte digitale configurée, puis réessayez.",
 			"alertIncompatibleBodyCreate": "Le fournisseur d'identité de votre appareil n'est pas compatible avec ce portefeuille. Veuillez passer au Gestionnaire de mots de passe Google dans les réglages système, puis réessayez.",
 			"recoverOfferTitle": "Récupérer le portefeuille",

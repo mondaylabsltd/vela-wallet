@@ -247,8 +247,9 @@ fun VelaNavHost(
 
     // Credential Manager raises system UI, which needs an Activity — not the
     // application context the ViewModel was constructed with.
-    LaunchedEffect(context) {
-        onboarding.attach(context)
+    val strings = LocalVelaStrings.current
+    LaunchedEffect(context, strings) {
+        onboarding.attach(context, strings)
         // Spec 043: the send path signs with the same ceremony sign-in uses.
         application.container.passkeySigner = onboarding.signer()
     }
