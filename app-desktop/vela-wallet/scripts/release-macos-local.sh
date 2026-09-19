@@ -141,7 +141,10 @@ rm -rf "$project_root/dist/macos"
 
 cd "$project_root/dist/macos"
 for built in arm64 x86_64 universal; do
-  strings -a "$built/Vela Wallet.app/Contents/MacOS/vela-wallet" | grep -q "${tag_commit:0:7}" ||
+  # Not `strings | grep -q`: grep -q exits at the first match, strings dies of
+  # SIGPIPE, and pipefail turns "found it early" into a failure. 0.9.3's three
+  # good images were refused here for exactly that.
+  grep -aq "${tag_commit:0:7}" "$built/Vela Wallet.app/Contents/MacOS/vela-wallet" ||
     die "the $built binary does not carry commit ${tag_commit:0:7} — About would show something else"
 done
 for dmg in ./*.dmg; do

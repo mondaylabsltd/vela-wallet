@@ -257,7 +257,9 @@ jobs:
             [ "$got" = "$want" ] || { echo "$arch bundle contains [$got]"; exit 1; }
             codesign --verify --strict "dist/macos/$arch/Vela Wallet.app"
             # Spec 064 §3, asserted where it matters: in the package.
-            strings -a "$bin" | grep -q "${GITHUB_SHA:0:7}" || {
+            # Not `strings | grep -q`: under pipefail that fails with 141
+            # (SIGPIPE) precisely when the commit is found early.
+            grep -aq "${GITHUB_SHA:0:7}" "$bin" || {
               echo "::error::the $arch binary does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
           done
       - name: What is about to be published must be what Gatekeeper accepts

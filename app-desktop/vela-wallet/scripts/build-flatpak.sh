@@ -148,6 +148,17 @@ note "flatpak-builder ($arch)"
   --state-dir="$dist_dir/.builder" \
   "$build_dir" "$manifest_to_build"
 
+# Spec 064 §3, asserted in the package: the sandbox has neither CI's
+# environment nor, necessarily, a usable git, so this is the one build where
+# "About shows the commit" has to be looked at rather than assumed.
+if (( ! worktree )); then
+  want="${VELA_GIT_COMMIT:-$(git -C "$repo_root" rev-parse HEAD)}"
+  want="${want:0:7}"
+  grep -aq "$want" "$build_dir/files/bin/vela-wallet" ||
+    die "the Flatpak's binary does not carry commit $want — About would show something else"
+  note "vela-wallet carries $want"
+fi
+
 note "exporting bundle"
 flatpak build-bundle --arch="$arch" "$repo_dir" "$bundle" "$appid"
 
