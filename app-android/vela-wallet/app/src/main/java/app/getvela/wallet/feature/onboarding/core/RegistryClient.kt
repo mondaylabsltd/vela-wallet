@@ -6,6 +6,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -25,19 +28,17 @@ import org.json.JSONObject
  */
 class RegistryClient(
     baseUrl: String = DEFAULT_REGISTRY_URL,
-    /** The contract itself, for the two reads sign-in needs when the index is gone (spec 062). `null` = no fallback. */
-    private val chain: RegistryChainReader? = null,
+    /** The three layers (064). `null` = the index alone, as before there was a contract to ask. */
+    private val resolver: RegistryResolver? = null,
 ) {
 
     /**
-     * Which chain listed the last key's units; `null` = the index did.
+     * Who listed the last key's units — the core's token, handed back verbatim.
      *
      * Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so
-     * a key's units are asked of whoever listed them. The index mirrors Gnosis,
-     * so an index listing may be continued on Gnosis; a chain listing is
-     * continued on that chain and nowhere else.
+     * a key's units are asked of whoever listed them.
      */
-    private var unitSource: Int? = null
+    private var unitSource: String = "index"
 
     var baseUrl: String = normalize(baseUrl)
         set(value) {
@@ -192,15 +193,11 @@ class RegistryClient(
 
     /** `/api/query?publicKey=` — is this key registered, and which groups does it found? */
     suspend fun queryByPublicKey(publicKeyHex: String): KeyStatus {
-        val profile = try {
-            get("/api/query?publicKey=${encode(publicKeyHex)}", READ_TIMEOUT_MS, "Query").also { unitSource = null }
-        } catch (gone: RegistryFailure) {
-            if (!gone.indexIsGone) throw gone
-            // Nobody answered on-chain either: the original failure is the honest one.
-            val (chainId, body) = chain?.keyProfile(publicKeyHex) ?: throw gone
-            VelaLog.event("registry", "Query", "source" to "chain", "chain" to chainId)
-            unitSource = chainId
-            body
+        val path = "/api/query?publicKey=${encode(publicKeyHex)}"
+        val profile = if (resolver == null) {
+            get(path, READ_TIMEOUT_MS, "Query")
+        } else {
+            resolve("Query", listing = true) { answers -> resolver.keyStep(publicKeyHex, answers) }
         }
         val ids = profile.optJSONObject("groups")?.optJSONArray("unitIds")
         val unitIds = buildList {
@@ -222,21 +219,64 @@ class RegistryClient(
     }
 
     private suspend fun readUnit(unitId: Long): JSONObject {
-        unitSource?.let { source ->
-            return chain?.unit(source, unitId)
-                ?: throw RegistryFailure("Query failed: chain $source did not answer for unit $unitId", network = true)
+        if (resolver == null) {
+            return get("/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc", READ_TIMEOUT_MS, "Query")
         }
-        return try {
-            get(
-                "/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc",
-                READ_TIMEOUT_MS,
-                "Query",
-            )
-        } catch (gone: RegistryFailure) {
-            if (!gone.indexIsGone) throw gone
-            // The index listed this unit and then went away. Its ids are Gnosis's.
-            chain?.unit(RegistryChainReader.HOME_CHAIN, unitId) ?: throw gone
+        // The token is read NOW: the listing that set it is the one these ids belong to.
+        val source = unitSource
+        return resolve("Query", listing = false) { answers -> resolver.unitStep(unitId, source, answers) }
+    }
+
+    /**
+     * Drive one resolver walk to its end.
+     *
+     * When NOBODY answers, the failure reported is the INDEX's own — reachable
+     * or not — because that is the distinction the core's notices are written
+     * for; the chains being silent too adds nothing a person can act on.
+     *
+     * Only a LISTING sets [unitSource]: a unit proved on Ethereum must not make
+     * the index's (Gnosis) ids be asked of Ethereum.
+     */
+    private suspend fun resolve(label: String, listing: Boolean, step: (String) -> String): JSONObject {
+        val resolver = resolver ?: error("no resolver")
+        val answers = JSONArray()
+        var indexFailure: RegistryFailure? = null
+        repeat(MAX_RESOLVE_ROUNDS) {
+            val next = JSONObject(step(answers.toString()))
+            if (next.optString("type") == "ask") {
+                val requests = next.optJSONArray("requests") ?: JSONArray()
+                coroutineScope {
+                    (0 until requests.length()).map { i ->
+                        val request = requests.getJSONObject(i)
+                        async {
+                            val id = request.optString("id")
+                            val body: String? = if (request.optString("type") == "eth_call") {
+                                resolver.ethCall(request.optInt("chain_id"), request.optString("to"), request.optString("data"))
+                            } else {
+                                try {
+                                    get(request.optString("path"), READ_TIMEOUT_MS, label).toString()
+                                } catch (failure: RegistryFailure) {
+                                    indexFailure = failure
+                                    null
+                                }
+                            }
+                            JSONObject().put("id", id).put("outcome", if (body != null) "ok" else "failed").put("body", body ?: JSONObject.NULL)
+                        }
+                    }.awaitAll()
+                }.forEach(answers::put)
+                return@repeat
+            }
+            if (next.isNull("body")) throw indexFailure ?: RegistryFailure("$label failed: nobody answered", network = true)
+            if (next.optBoolean("index_discarded")) {
+                // Our own index described a founding set the chain does not hold. The
+                // chain's is what is used; this line is for whoever runs the index.
+                VelaLog.event("registry", label, "index_discarded" to true, "source" to next.optString("source"))
+            }
+            if (listing) unitSource = next.optString("source", "index")
+            VelaLog.event("registry", label, "source" to next.optString("source"), "verified_by" to next.optString("verified_by"))
+            return JSONObject(next.getString("body"))
         }
+        throw indexFailure ?: RegistryFailure("$label failed: nobody answered", network = true)
     }
 
     /**
@@ -425,6 +465,9 @@ class RegistryClient(
         private const val POLL_INTERVAL_MS = 2_000L
         private const val U32_CEILING = 4_294_967_296L
 
+        /** A walk is a handful of rounds; this only stops a contract bug from spinning. */
+        private const val MAX_RESOLVE_ROUNDS = 16
+
         fun normalize(url: String): String =
             url.trim().replace("\r", "").replace("\n", "").trimEnd('/').ifEmpty { DEFAULT_REGISTRY_URL }
     }
@@ -438,11 +481,7 @@ class RegistryClient(
  * which is why this single bit of classification is delegated to it; everything
  * else about an index failure is the core's to interpret.
  */
-class RegistryFailure(message: String, val network: Boolean) : Exception(message) {
-    /** Unreachable, or failing (5xx): not an answer. A 4xx is the index saying no. */
-    val indexIsGone: Boolean
-        get() = network || Regex(" failed: 5\\d\\d$").containsMatchIn(message.orEmpty())
-}
+class RegistryFailure(message: String, val network: Boolean) : Exception(message)
 
 data class GroupChallenge(
     val groupChallenge: String,
