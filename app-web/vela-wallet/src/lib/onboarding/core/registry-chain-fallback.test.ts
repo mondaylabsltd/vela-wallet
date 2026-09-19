@@ -1,8 +1,12 @@
 /**
- * Signing in when the index is gone (spec 062): the two registry reads fall
- * back to the contract — Gnosis, then Ethereum — and the REAL core turns the
- * REAL bytes both chains answered (`__fixtures__/registry-chain.json`) into the
- * index's own shapes, so every guard in `registry.ts` runs unchanged.
+ * The three layers (067): the index for speed, the chain for truth, Ethereum
+ * for survival — through `registry.ts`, with the REAL core and the REAL bytes
+ * both chains answered (`__fixtures__/registry-chain.json`).
+ *
+ * The rules are `vela_core::registry_resolve` and are tested there. What is
+ * pinned HERE is that this shell really hands its reads to that walk: that an
+ * index answer is PROVED rather than believed, that a forged one is thrown
+ * away, and that a listing's unit ids are asked of whoever listed them.
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,18 +17,32 @@ vi.mock('$lib/core/client', async (original) => ({
 	loadCore: async () => {}
 }));
 
+import { registryChainUnit, registryChainUnitPlan } from '$lib/core/client';
 import { _resetUnitSource, queryByPublicKey, queryUnit, RegistryError } from './registry';
 
 const answers = fixture.answers as Record<string, Record<string, string>>;
-/** How the index behaves, and which chains are reachable. */
-let index: 'unreachable' | 'failing' | 'refusing' | { units: number[] };
-let silentChains: number[];
 const chainOf = (url: string) => (url.includes('gnosis') ? 100 : 1);
+
+/** Gnosis unit 10 in the index's shape, built from the CHAIN's own bytes — what an honest index returns. */
+function honestUnit() {
+	const plan = JSON.parse(registryChainUnitPlan(10)!) as { calls: { data: string }[] };
+	const [unit, members] = plan.calls.map((call) => answers['100'][call.data]);
+	return JSON.parse(registryChainUnit(10, unit, members)!) as {
+		unit: Record<string, unknown>;
+		members: { total: number; items: { publicKey: string }[] };
+	};
+}
+
+/** What the index says for `?publicKey=` and `?unitId=`; `null` = unreachable, a number = that status. */
+let indexListing: unknown;
+let indexUnit: unknown;
+let silentChains: number[];
 const asked: string[] = [];
 
 beforeEach(() => {
 	_resetUnitSource();
-	index = 'unreachable';
+	indexListing = null;
+	indexUnit = null;
 	silentChains = [];
 	asked.length = 0;
 	vi.stubGlobal(
@@ -32,10 +50,10 @@ beforeEach(() => {
 		vi.fn(async (url: string, init?: RequestInit) => {
 			if (url.includes('/api/query')) {
 				asked.push('index');
-				if (index === 'unreachable') throw new TypeError('Failed to fetch');
-				if (index === 'failing') return new Response('bad gateway', { status: 502 });
-				if (index === 'refusing') return new Response('{}', { status: 400 });
-				return Response.json({ entry: {}, groups: { total: 1, unitIds: index.units } });
+				const says = url.includes('publicKey=') ? indexListing : indexUnit;
+				if (says === null) throw new TypeError('Failed to fetch');
+				if (typeof says === 'number') return new Response('{}', { status: says });
+				return new Response(JSON.stringify(says), { status: 200 });
 			}
 			const chain = chainOf(url);
 			asked.push(`chain:${chain}`);
@@ -47,8 +65,54 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('the registry reads, with the index gone', () => {
-	it('an unreachable index: the key and its unit are read from the contract on Gnosis', async () => {
+describe('an index that answers is proved, not believed', () => {
+	beforeEach(() => {
+		indexListing = { entry: {}, groups: { total: 1, unitIds: [10] } };
+	});
+
+	it('honest: the index, then ONE eth_call to Gnosis — and its answer is what is used', async () => {
+		indexUnit = honestUnit();
+		await queryByPublicKey(fixture.publicKey);
+		asked.length = 0;
+		const unit = await queryUnit(10);
+		expect(unit.members).toHaveLength(3);
+		expect(asked).toEqual(['index', 'chain:100']);
+	});
+
+	it("FORGED — one member swapped for another: caught, and the chain's founding set is returned", async () => {
+		const forged = honestUnit();
+		forged.members.items[2].publicKey = forged.members.items[1].publicKey;
+		indexUnit = forged;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		await queryByPublicKey(fixture.publicKey);
+		const unit = await queryUnit(10);
+		const honest = honestUnit().members.items.map((m) => m.publicKey);
+		expect(unit.members.map((m) => m.public_key_hex)).toEqual(honest);
+		expect(new Set(honest).size).toBe(3);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('did not match the chain'));
+		warn.mockRestore();
+	});
+
+	it("no chain reachable: the person still signs in on the index's word", async () => {
+		indexUnit = honestUnit();
+		silentChains = [100, 1];
+		await queryByPublicKey(fixture.publicKey);
+		expect((await queryUnit(10)).members).toHaveLength(3);
+	});
+
+	it('Gnosis silent: the Ethereum backup proves the same answer — no id translation', async () => {
+		indexUnit = honestUnit();
+		silentChains = [100];
+		await queryByPublicKey(fixture.publicKey);
+		asked.length = 0;
+		expect((await queryUnit(10)).members).toHaveLength(3);
+		// (Gnosis has more than one public endpoint; each is tried before it counts as silent.)
+		expect([...new Set(asked)]).toEqual(['index', 'chain:100', 'chain:1']);
+	});
+});
+
+describe('an index that does not answer', () => {
+	it('unreachable: the key and its unit are read from the contract on Gnosis', async () => {
 		expect(await queryByPublicKey(fixture.publicKey)).toEqual({
 			registered: true,
 			unitIds: [12, 10, 8]
@@ -56,51 +120,38 @@ describe('the registry reads, with the index gone', () => {
 		const unit = await queryUnit(10);
 		expect(unit.members).toHaveLength(3);
 		expect(unit.members[0].public_key_hex).toBe(fixture.publicKey);
-		expect(unit.members.every((m) => m.credential_id !== '')).toBe(true);
-		// The metadata is the wallet's own: address and key names.
-		expect(Buffer.from(unit.metadataHex, 'hex').toString()).toContain(
-			'0x88cCA0EeDbF2C4426110bbFc998F048689266894'
-		);
-		// Gnosis listed the units, so Gnosis — not the index — is asked about them.
-		expect(asked.filter((a) => a === 'index')).toHaveLength(1);
+		expect(asked).not.toContain('chain:1');
 	});
 
-	it('Gnosis silent too: a backed-up wallet signs in from Ethereum, where it is unit 0', async () => {
+	it('a 5xx, a refusal, and "no such wallet" are all checked with the contract first', async () => {
+		for (const says of [502, 400, { entry: null, groups: { total: 0, unitIds: [] } }]) {
+			_resetUnitSource();
+			indexListing = says;
+			expect((await queryByPublicKey(fixture.publicKey)).unitIds, String(says)).toEqual([
+				12, 10, 8
+			]);
+		}
+	});
+
+	it("Gnosis silent too: Ethereum's backup answers, under ITS unit ids, and only it is asked about them", async () => {
 		silentChains = [100];
-		expect(await queryByPublicKey(fixture.publicKey)).toEqual({ registered: true, unitIds: [0] });
+		expect((await queryByPublicKey(fixture.publicKey)).unitIds).toEqual([0]);
+		asked.length = 0;
 		const unit = await queryUnit(0);
 		expect(unit.members).toHaveLength(3);
-		expect(asked).toContain('chain:1');
-
-		// The same three founding keys, in the same founding order, as Gnosis holds.
-		_resetUnitSource();
-		silentChains = [];
-		await queryByPublicKey(fixture.publicKey);
-		const home = await queryUnit(10);
-		expect(unit.members.map((m) => m.public_key_hex)).toEqual(
-			home.members.map((m) => m.public_key_hex)
-		);
-		expect(unit.metadataHex).toBe(home.metadataHex);
+		expect(unit.members[0].public_key_hex).toBe(fixture.publicKey);
+		expect(new Set(asked)).toEqual(new Set(['chain:1']));
 	});
 
-	it('a 5xx is the index failing; a 4xx is the index ANSWERING — no fallback, no second opinion', async () => {
-		index = 'failing';
-		expect((await queryByPublicKey(fixture.publicKey)).unitIds).toEqual([12, 10, 8]);
-		_resetUnitSource();
-		index = 'refusing';
-		await expect(queryByPublicKey(fixture.publicKey)).rejects.toBeInstanceOf(RegistryError);
-		expect(asked.filter((a) => a.startsWith('chain:'))).toHaveLength(2); // only the 5xx run read chains
-	});
-
-	it("the index listed the unit and then went away: its ids are Gnosis's", async () => {
-		index = { units: [10] };
-		await queryByPublicKey(fixture.publicKey);
-		index = 'unreachable';
-		expect((await queryUnit(10)).members).toHaveLength(3);
-	});
-
-	it('nobody answers: the ORIGINAL failure is what the person is told', async () => {
+	it("nobody at all: the INDEX's own failure is what is reported", async () => {
 		silentChains = [100, 1];
-		await expect(queryByPublicKey(fixture.publicKey)).rejects.toMatchObject({ network: true });
+		const gone = await queryByPublicKey(fixture.publicKey).catch((e: unknown) => e);
+		expect(gone).toBeInstanceOf(RegistryError);
+		expect((gone as RegistryError).network).toBe(true);
+
+		indexListing = 400;
+		const refused = await queryByPublicKey(fixture.publicKey).catch((e: unknown) => e);
+		expect((refused as RegistryError).network).toBe(false);
+		expect((refused as RegistryError).message).toContain('400');
 	});
 });

@@ -9687,6 +9687,33 @@ public func registryNameStep(address: String, answersJson: String) -> String  {
 })
 }
 /**
+ * Sign-in's first question through the three layers — index, Gnosis,
+ * Ethereum. See `vela_core::registry_resolve`.
+ */
+public func registryResolveKeyStep(publicKeyHex: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_resolve_key_step(
+        FfiConverterString.lower(publicKeyHex),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Sign-in's second question, with an index answer PROVED against the chain.
+ * `source` is the token the key step returned.
+ */
+public func registryResolveUnitStep(unitId: UInt32, source: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_resolve_unit_step(
+        FfiConverterUInt32.lower(unitId),
+        FfiConverterString.lower(source),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
  * `parseBundlerError`: the JSON-RPC `error` member as one sentence.
  */
 public func relayErrorMessage(errorJson: String) -> String  {
@@ -10402,6 +10429,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_name_step() != 50136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_key_step() != 38068) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_unit_step() != 23154) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_relay_error_message() != 61806) {

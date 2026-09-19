@@ -3637,6 +3637,57 @@ export function registryNameStep(address, answers_json) {
 }
 
 /**
+ * Sign-in's first question — which groups does this key belong to? — through
+ * the three layers: the index, then the registry contract on Gnosis, then on
+ * Ethereum. See `vela_core::registry_resolve`.
+ * @param {string} public_key_hex
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryResolveKeyStep(public_key_hex, answers_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.registryResolveKeyStep(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Sign-in's second question — who are this group's members? — with an index
+ * answer PROVED against the chain (`contentHash`), not merely believed.
+ * `source` is the token the key step returned.
+ * @param {number} unit_id
+ * @param {string} source
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryResolveUnitStep(unit_id, source, answers_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.registryResolveUnitStep(unit_id, ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @returns {string}
  */
 export function safeProxyRuntimeCode() {

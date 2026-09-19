@@ -583,6 +583,24 @@ pub fn registry_chain_unit(unit_id: u32, unit_hex: &str, members_hex: &str) -> O
     vela_core::registry_chain::unit_json(u64::from(unit_id), unit_hex, members_hex)
 }
 
+/// Sign-in's first question — which groups does this key belong to? — through
+/// the three layers: the index, then the registry contract on Gnosis, then on
+/// Ethereum. See `vela_core::registry_resolve`.
+#[wasm_bindgen(js_name = registryResolveKeyStep)]
+#[must_use]
+pub fn registry_resolve_key_step(public_key_hex: &str, answers_json: &str) -> String {
+    vela_core::registry_resolve::key_step_json(public_key_hex, answers_json)
+}
+
+/// Sign-in's second question — who are this group's members? — with an index
+/// answer PROVED against the chain (`contentHash`), not merely believed.
+/// `source` is the token the key step returned.
+#[wasm_bindgen(js_name = registryResolveUnitStep)]
+#[must_use]
+pub fn registry_resolve_unit_step(unit_id: u32, source: &str, answers_json: &str) -> String {
+    vela_core::registry_resolve::unit_step_json(u64::from(unit_id), source, answers_json)
+}
+
 /// Which passkeys control the wallet at `address` — the Settings keys view
 /// (spec 062). `device_keys_json` is the account record's `keys` array (or a
 /// one-element array built from the legacy scalars); the answer is `ask` with

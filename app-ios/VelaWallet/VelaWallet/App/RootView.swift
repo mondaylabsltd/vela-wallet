@@ -223,11 +223,11 @@ struct RootView: View {
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
         _pool = State(initialValue: pool)
-        // With the contract behind the index: a service that cannot be reached
-        // must not be what stands between a person and their wallet (spec 062).
+        // Through the three layers (067): the index's answers are PROVED against
+        // the registry contract, and the contract answers when the index cannot.
         let onboarding = OnboardingModel(
             session: session, store: store,
-            registry: RegistryClient(chain: RegistryChainReader(ethCall: { [pool] chainId, to, data in
+            registry: RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
                 let outcome = await pool.call(
                     chainId: chainId, method: "eth_call",
                     params: [["to": to, "data": data], "latest"]
