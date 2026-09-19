@@ -1572,7 +1572,10 @@
    "backedUp": "Ethereum'a yedeklendi",
    "notBackedUp": "Henüz yedeklenmedi",
    "couldNotCheck": "Kontrol edilemedi",
-   "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz."
+   "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz.",
+   "intent": "Açık anahtarları yedekle",
+   "registeredAs": "Kayıtlı ad",
+   "publicKeys": "Açık anahtar sayısı"
   },
   "keys": {
    "title": "Anahtarlar",

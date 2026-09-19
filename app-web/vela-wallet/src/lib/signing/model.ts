@@ -175,6 +175,8 @@ export interface FeeTokenOption {
 	balance: string;
 	fee: string;
 	selected: boolean;
+	/** The core's verdict: this coin cannot pay. Drawn, never pickable (issue 211). */
+	insufficient?: boolean;
 }
 
 export type FeeModel =

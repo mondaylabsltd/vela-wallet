@@ -1572,7 +1572,10 @@
    "backedUp": "已備份到以太坊",
    "notBackedUp": "尚未備份",
    "couldNotCheck": "無法檢查",
-   "explain": "只會發布公鑰，用嚟喺以太坊搵返同重建呢個錢包。私鑰永遠留喺你部機度。"
+   "explain": "只會發布公鑰，用嚟喺以太坊搵返同重建呢個錢包。私鑰永遠留喺你部機度。",
+   "intent": "備份公鑰",
+   "registeredAs": "註冊名稱",
+   "publicKeys": "公鑰數量"
   },
   "keys": {
    "title": "鎖匙",

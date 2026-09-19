@@ -122,6 +122,8 @@
 	// the sheet is gone, so a choice made for one request never signs another.
 	let signMethod = $state<SignMethod>('auto');
 	let signWithOpen = $state(false);
+	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
+	let feeOpen = $state(false);
 	$effect(() => {
 		setSignMethod(signMethod);
 	});
@@ -129,6 +131,7 @@
 		if (signView.request && signView.surface !== 'hidden') return;
 		signMethod = 'auto';
 		signWithOpen = false;
+		feeOpen = false;
 	});
 	function onSignWith(id: string | null): void {
 		if (id === null) {
@@ -154,6 +157,7 @@
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
 			fee: fee.view ?? IDLE_FEE_VIEW,
+			feeOpen,
 			currency: currency.view,
 			m: messages,
 			identity,
@@ -223,7 +227,19 @@
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
 		oncustom={guardCustom}
-		onfee={() => (fee.view?.failed ? fee.requote() : onfee())}
+		onfee={() => {
+			// Failed → ask again. More than one coin → open the list, here in the
+			// sheet. Otherwise the host's own surface, if it has one.
+			if (fee.view?.failed) fee.requote();
+			else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
+			else onfee();
+		}}
+		onfeepick={(id) => {
+			// The pick is a quote PARAMETER: the core re-prices the operation in
+			// that coin, and the approve carries `fee_token` from the same view.
+			fee.selectAsset(id === 'native' ? null : id);
+			feeOpen = false;
+		}}
 		onsignwith={onSignWith}
 	/>
 {/if}

@@ -19,10 +19,12 @@
 		onchip?: (id: string) => void;
 		oncustom?: (text: string) => void;
 		onfee?: () => void;
+		onfeepick?: (id: string) => void;
 		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onclose, onconfirm, onchip, oncustom, onfee, onsignwith }: Props = $props();
+	let { model, onclose, onconfirm, onchip, oncustom, onfee, onfeepick, onsignwith }: Props =
+		$props();
 </script>
 
 <svelte:window
@@ -36,7 +38,7 @@
 	<span class="handle" aria-hidden="true"></span>
 	<div class="scroll">
 		<SigningHeader dapp={model.dapp} network={model.network} />
-		<SigningBody {model} {onconfirm} {onchip} {oncustom} {onfee} {onsignwith} />
+		<SigningBody {model} {onconfirm} {onchip} {oncustom} {onfee} {onfeepick} {onsignwith} />
 	</div>
 </div>
 

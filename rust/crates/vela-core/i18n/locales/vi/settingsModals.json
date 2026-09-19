@@ -89,7 +89,10 @@
       "backedUp": "Đã sao lưu lên Ethereum",
       "notBackedUp": "Chưa sao lưu",
       "couldNotCheck": "Không kiểm tra được",
-      "explain": "Chỉ khóa công khai được công bố, để có thể tìm và dựng lại ví này từ Ethereum. Khóa riêng không bao giờ rời khỏi thiết bị của bạn."
+      "explain": "Chỉ khóa công khai được công bố, để có thể tìm và dựng lại ví này từ Ethereum. Khóa riêng không bao giờ rời khỏi thiết bị của bạn.",
+      "intent": "Sao lưu khóa công khai",
+      "registeredAs": "Tên đã đăng ký",
+      "publicKeys": "Số khóa công khai"
     },
     "keys": {
       "title": "Khóa",

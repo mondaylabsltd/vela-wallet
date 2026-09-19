@@ -1575,7 +1575,10 @@
    "backedUp": "Respaldadas en Ethereum",
    "notBackedUp": "Aún sin respaldo",
    "couldNotCheck": "No se pudo comprobar",
-   "explain": "Solo se publican las llaves públicas, para poder encontrar y reconstruir esta billetera desde Ethereum. Las llaves privadas nunca salen de tus dispositivos."
+   "explain": "Solo se publican las llaves públicas, para poder encontrar y reconstruir esta billetera desde Ethereum. Las llaves privadas nunca salen de tus dispositivos.",
+   "intent": "Respaldar llaves públicas",
+   "registeredAs": "Registrada como",
+   "publicKeys": "Llaves públicas"
   },
   "keys": {
    "title": "Llaves",

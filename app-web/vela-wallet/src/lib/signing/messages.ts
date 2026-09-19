@@ -148,6 +148,11 @@ export interface SigningMessages {
 	techIdentityRecipient: string;
 	copyValue: string;
 	/** The "Sign with" row: the create flow's own words for where a passkey is. */
+	/** The wallet's own key backup, in the person's language (the core's built-in result is English). */
+	backupIntent: string;
+	backupRegisteredAs: string;
+	backupAddress: string;
+	backupPublicKeys: string;
 	signWithLabel: string;
 	signWithAuto: string;
 	signWithPlatform: string;

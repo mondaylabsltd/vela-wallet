@@ -89,7 +89,10 @@
       "backedUp": "Sudah dicadangkan di Ethereum",
       "notBackedUp": "Belum dicadangkan",
       "couldNotCheck": "Tidak dapat memeriksa",
-      "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda."
+      "explain": "Hanya kunci publik yang dipublikasikan, agar dompet ini bisa ditemukan dan dibangun ulang dari Ethereum. Kunci privat tidak pernah meninggalkan perangkat Anda.",
+      "intent": "Cadangkan kunci publik",
+      "registeredAs": "Terdaftar sebagai",
+      "publicKeys": "Jumlah kunci publik"
     },
     "keys": {
       "title": "Kunci",

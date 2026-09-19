@@ -26,6 +26,7 @@ import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { chainLogoURL } from '$lib/services/tokens-model';
+import { trimBalance } from '$lib/wallet/live';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -47,6 +48,8 @@ export interface SigningLiveInputs {
 	clear: ClearSigningView;
 	guard: GuardView;
 	fee: FeeView;
+	/** The fee-coin selector is open (live only): the row becomes the list, as on Send. */
+	feeOpen?: boolean;
 	/** The display currency the fee's "≈" half is written in (issue 201). */
 	currency: CurrencyView;
 	m: SigningMessages;
@@ -322,7 +325,30 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// sheet is explicit that these two surfaces must not drift.
 	const parts = feeParts(fee.fee, fee.options);
 	const value = feeLine(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
-	return { kind: 'onchain', label: m.feeLabel, value };
+	// The coins the relay will take the fee in — the SAME rows, amounts and
+	// "cannot pay" verdict the Send screen shows (founder, 2026-09-19: a fee a
+	// person can switch when sending and not when signing is two products).
+	const amount = (raw: string, decimals: number) =>
+		trimBalance((Number(raw) / 10 ** decimals).toString(), 4);
+	const selector =
+		inputs.feeOpen === true && fee.options.length > 1
+			? {
+					title: m.feeTokenTitle,
+					options: fee.options.map((option) => ({
+						id: option.contract ?? 'native',
+						mark: { letter: option.symbol.slice(0, 1).toUpperCase(), tint: NEUTRAL_TINT },
+						name: option.symbol,
+						balance: `${amount(option.balance, option.decimals)} ${option.symbol}`,
+						fee:
+							option.amount === null
+								? '—'
+								: `~${amount(option.amount, option.decimals)} ${option.symbol}`,
+						selected: option.selected,
+						insufficient: option.insufficient
+					}))
+				}
+			: undefined;
+	return { kind: 'onchain', label: m.feeLabel, value, selector };
 }
 
 function techModel(inputs: SigningLiveInputs): TechModel {
@@ -353,14 +379,54 @@ function techModel(inputs: SigningLiveInputs): TechModel {
  * The whole sheet. `null` while the core is showing nothing — the route
  * renders no sheet at all then, rather than an empty one.
  */
-export function buildSigningModel(inputs: SigningLiveInputs): SigningModel | null {
+/** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
+const PASSKEY_REGISTRY = '0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9';
+
+/**
+ * The wallet's own key backup, in the person's language.
+ *
+ * The core's built-in results are English, like the ERC-7730 descriptors they
+ * sit beside — "the words stay in the shell". For a third-party contract that is
+ * the descriptor author's text and stays as written. This one is OURS, raised by
+ * the wallet itself, and a sheet that was Chinese everywhere except its three
+ * most important lines read as half-finished (founder, 2026-09-19). Matched on
+ * the request being first-party AND the verified registry address, never on the
+ * English words.
+ */
+function localizedOwnBackup(clear: ClearSigningView, own: boolean, m: SigningMessages) {
+	const result = clear.result;
+	if (!own || !result?.verified || result.contract_address?.toLowerCase() !== PASSKEY_REGISTRY)
+		return clear;
+	const labels = [m.backupRegisteredAs, m.backupAddress, m.backupPublicKeys];
+	return {
+		...clear,
+		result: {
+			...result,
+			intent: m.backupIntent,
+			fields: result.fields.map((field, index) => ({
+				...field,
+				label: labels[index] ?? field.label
+			}))
+		},
+		confirm:
+			clear.confirm.type === 'confirm_intent'
+				? { ...clear.confirm, intent: m.backupIntent }
+				: clear.confirm
+	};
+}
+
+export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
+	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
+	const ownRequest =
+		typeof window !== 'undefined' && raw.sign.request.origin === window.location.origin;
+	const inputs = { ...raw, clear: localizedOwnBackup(raw.clear, ownRequest, raw.m) };
 	const { sign, clear, guard, fee, m, identity, identicon } = inputs;
 	if (sign.surface === 'hidden' || !sign.request) return null;
 
 	const request = sign.request;
 	const dapp = request.dapp;
 	const name = dapp?.name ?? new URL(request.origin).host;
-	const own = typeof window !== 'undefined' && request.origin === window.location.origin;
+	const own = ownRequest;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
 	// still be waiting for a cap; the fee may still be in flight.

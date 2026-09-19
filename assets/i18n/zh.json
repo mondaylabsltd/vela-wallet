@@ -1582,7 +1582,10 @@
    "backedUp": "已备份到以太坊",
    "notBackedUp": "尚未备份",
    "couldNotCheck": "无法检查",
-   "explain": "只发布公钥，用于从以太坊找回并重建这个钱包。私钥始终留在你的设备里。"
+   "explain": "只发布公钥，用于从以太坊找回并重建这个钱包。私钥始终留在你的设备里。",
+   "intent": "备份公钥",
+   "registeredAs": "注册名称",
+   "publicKeys": "公钥数量"
   },
   "keys": {
    "title": "钥匙",

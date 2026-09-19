@@ -89,7 +89,10 @@
       "backedUp": "Auf Ethereum gesichert",
       "notBackedUp": "Noch nicht gesichert",
       "couldNotCheck": "Prüfung nicht möglich",
-      "explain": "Veröffentlicht werden nur die öffentlichen Schlüssel, damit dieses Wallet über Ethereum gefunden und wiederhergestellt werden kann. Private Schlüssel verlassen Ihre Geräte nie."
+      "explain": "Veröffentlicht werden nur die öffentlichen Schlüssel, damit dieses Wallet über Ethereum gefunden und wiederhergestellt werden kann. Private Schlüssel verlassen Ihre Geräte nie.",
+      "intent": "Öffentliche Schlüssel sichern",
+      "registeredAs": "Registriert als",
+      "publicKeys": "Öffentliche Schlüssel"
     },
     "keys": {
       "title": "Schlüssel",

@@ -89,7 +89,10 @@
       "backedUp": "Backup feito na Ethereum",
       "notBackedUp": "Ainda sem backup",
       "couldNotCheck": "Não foi possível verificar",
-      "explain": "Apenas as chaves públicas são publicadas, para que esta carteira possa ser encontrada e reconstruída a partir da Ethereum. As chaves privadas nunca saem dos seus dispositivos."
+      "explain": "Apenas as chaves públicas são publicadas, para que esta carteira possa ser encontrada e reconstruída a partir da Ethereum. As chaves privadas nunca saem dos seus dispositivos.",
+      "intent": "Backup das chaves públicas",
+      "registeredAs": "Registrada como",
+      "publicKeys": "Chaves públicas"
     },
     "keys": {
       "title": "Chaves",

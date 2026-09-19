@@ -7,11 +7,13 @@
 
 	interface Props {
 		fee: FeeModel;
-		/** Opens the fee-token selector; absent in the gallery. */
+		/** Opens / closes the fee-token selector; absent in the gallery. */
 		ontoggle?: () => void;
+		/** A coin was chosen — its option id. Absent in the gallery, where the list is a picture. */
+		onpick?: (id: string) => void;
 	}
 
-	let { fee, ontoggle }: Props = $props();
+	let { fee, ontoggle, onpick }: Props = $props();
 </script>
 
 {#if fee.kind === 'offchain'}
@@ -19,12 +21,21 @@
 {:else if fee.kind === 'onchain'}
 	{#if fee.selector}
 		<section class="selector">
-			<header>
+			<button type="button" class="head" onclick={ontoggle}>
 				<span>{fee.selector.title}</span>
 				<Icon icon={UTILITY_ICONS['chevron-down']} size="sm" />
-			</header>
+			</button>
 			{#each fee.selector.options as option (option.id)}
-				<div class="option" class:selected={option.selected}>
+				<!-- A coin that cannot pay is DRAWN and not pickable: hiding it would be a
+				     second filter beside the core's own, and a live-looking row that does
+				     nothing is how somebody pays gas in a coin they do not hold (issue 211). -->
+				<button
+					type="button"
+					class="option"
+					class:selected={option.selected}
+					disabled={option.insufficient === true}
+					onclick={() => onpick?.(option.id)}
+				>
 					<LetterAvatar letter={option.mark.letter} tint={option.mark.tint} size={32} />
 					<span class="who">
 						<span class="name">{option.name}</span>
@@ -32,12 +43,11 @@
 					</span>
 					<span class="numbers">
 						<span class="fee">{option.fee}</span>
-						<span class="hint">{option.selected ? '' : ''}</span>
 					</span>
 					{#if option.selected}
 						<span class="check"><Icon icon={UTILITY_ICONS.check} size="base" /></span>
 					{/if}
-				</div>
+				</button>
 			{/each}
 		</section>
 	{:else}
@@ -83,7 +93,12 @@
 		padding: var(--space-lg) var(--space-xl);
 	}
 
-	header {
+	.head {
+		width: 100%;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		cursor: pointer;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -93,11 +108,22 @@
 	}
 
 	.option {
+		width: 100%;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		text-align: start;
+		cursor: pointer;
 		display: flex;
 		align-items: center;
 		gap: var(--space-lg);
 		padding: var(--space-md);
 		border-radius: var(--radius-lg);
+	}
+
+	.option:disabled {
+		opacity: var(--opacity-disabled, 0.4);
+		cursor: default;
 	}
 
 	.option.selected {

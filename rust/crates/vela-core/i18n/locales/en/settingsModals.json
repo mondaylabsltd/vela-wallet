@@ -89,7 +89,10 @@
       "backedUp": "Backed up on Ethereum",
       "notBackedUp": "Not backed up yet",
       "couldNotCheck": "Could not check",
-      "explain": "Only public keys are published, so this wallet can be found and rebuilt from Ethereum. Private keys never leave your devices."
+      "explain": "Only public keys are published, so this wallet can be found and rebuilt from Ethereum. Private keys never leave your devices.",
+      "intent": "Back up public keys",
+      "registeredAs": "Registered as",
+      "publicKeys": "Public keys"
     },
     "keys": {
       "title": "Keys",

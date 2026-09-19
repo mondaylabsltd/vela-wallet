@@ -840,6 +840,10 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		backupIntent: k('settingsModals.backup.intent'),
+		backupRegisteredAs: k('settingsModals.backup.registeredAs'),
+		backupAddress: k('contacts.addressLabel'),
+		backupPublicKeys: k('settingsModals.backup.publicKeys'),
 		signWithLabel: k('componentsUi.signing.signWith'),
 		signWithAuto: k('common.automatic'),
 		// Titles only: the create flow's descriptions say "create it on…".

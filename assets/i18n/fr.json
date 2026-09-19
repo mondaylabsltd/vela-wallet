@@ -1575,7 +1575,10 @@
    "backedUp": "Sauvegardées sur Ethereum",
    "notBackedUp": "Pas encore sauvegardées",
    "couldNotCheck": "Vérification impossible",
-   "explain": "Seules les clés publiques sont publiées, afin de pouvoir retrouver et reconstruire ce portefeuille depuis Ethereum. Les clés privées ne quittent jamais vos appareils."
+   "explain": "Seules les clés publiques sont publiées, afin de pouvoir retrouver et reconstruire ce portefeuille depuis Ethereum. Les clés privées ne quittent jamais vos appareils.",
+   "intent": "Sauvegarder les clés publiques",
+   "registeredAs": "Enregistré sous",
+   "publicKeys": "Clés publiques"
   },
   "keys": {
    "title": "Clés",

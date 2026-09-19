@@ -1575,7 +1575,10 @@
    "backedUp": "Salvate su Ethereum",
    "notBackedUp": "Non ancora salvate",
    "couldNotCheck": "Impossibile verificare",
-   "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi."
+   "explain": "Vengono pubblicate solo le chiavi pubbliche, così questo wallet può essere ritrovato e ricostruito da Ethereum. Le chiavi private non lasciano mai i tuoi dispositivi.",
+   "intent": "Backup delle chiavi pubbliche",
+   "registeredAs": "Registrato come",
+   "publicKeys": "Chiavi pubbliche"
   },
   "keys": {
    "title": "Chiavi",
