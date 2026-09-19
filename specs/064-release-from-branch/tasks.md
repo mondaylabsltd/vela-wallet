@@ -22,6 +22,6 @@
 - [X] T021 Stale `desktop-v*` / `extension-v*` references in workflows and READMEs
 
 ## Waits on the founder
-- [ ] **N2** agree that `main` no longer deploys the web wallet
+- [X] **N2** agreed 2026-09-19: `main` no longer deploys the web wallet
 - [ ] **N1** Cloudflare → `vela-wallet-web` → production branch `released` (after the first release creates it)
 - [ ] **N3** branch protection for `released`

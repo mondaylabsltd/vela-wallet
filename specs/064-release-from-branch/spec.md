@@ -137,7 +137,7 @@ rules (worth having; a repository setting for the founder).
 | # | What | When |
 |---|---|---|
 | N1 | Cloudflare → `vela-wallet-web` → Settings → Build → Branch control → production branch **`released`** | after the first release has created `released`; until then the web wallet keeps deploying from `main`, exactly as today |
-| N2 | Agree that `main` no longer deploys the web wallet (§4) | before N1 |
+| ~~N2~~ | **AGREED 2026-09-19** (「接受」): `main` no longer deploys the web wallet; it ships with a release (§4) | — |
 | N3 | Branch protection for `released` (no direct pushes except the workflow; no force-push) | any time |
 
 ## 7. Acceptance — the first release cut this way
