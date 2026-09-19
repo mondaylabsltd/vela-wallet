@@ -423,6 +423,25 @@ struct WalletKeysModel {
     let note: String?
     let rows: [WalletKeyRowModel]
     let backup: SettingsRowModel?
+    /// Under the backup: PUBLIC keys only; private keys never leave the device.
+    let backupExplain: String
+    let copyLabel: String
+    let copiedLabel: String
+}
+
+enum KeyPillTone { case verified, synced, local }
+
+struct KeyPillModel: Equatable {
+    let text: String
+    let tone: KeyPillTone
+}
+
+struct KeyDetailModel: Equatable, Identifiable {
+    let label: String
+    let value: String
+    let mono: Bool
+    let copy: Bool
+    var id: String { label }
 }
 
 struct WalletKeyRowModel: Identifiable {
@@ -432,9 +451,10 @@ struct WalletKeyRowModel: Identifiable {
     let holder: String
     /// `197d…647b` — what tells two unnamed keys apart.
     let fingerprint: String
-    /// `nil` = nobody can vouch for one.
-    let badge: String?
-    let badgeSynced: Bool
+    /// "User-verified", "Synced" / "Device-bound" — the registry explorer's pills.
+    let pills: [KeyPillModel]
+    /// What the row opens onto: the explorer's facts. Empty = nothing to open.
+    let details: [KeyDetailModel]
     let key: CreateKeyRow
 }
 

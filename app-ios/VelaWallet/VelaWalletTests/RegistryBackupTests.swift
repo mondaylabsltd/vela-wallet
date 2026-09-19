@@ -86,7 +86,7 @@ struct RegistryBackupTests {
         #expect(row(.notRegistered) == nil)
 
         #expect(row(nil)?.id == SettingsLive.ethereumBackupRow)
-        #expect(row(nil)?.title == "Back up keys to Ethereum")
+        #expect(row(nil)?.title == "Back up public keys to Ethereum")
         #expect(row(nil)?.subtitle == "Checking…")
         #expect(row(.backedUp)?.subtitle == "Backed up on Ethereum")
         #expect(row(.notBackedUp)?.subtitle == "Not backed up yet")
@@ -122,7 +122,9 @@ struct RegistryBackupTests {
         #expect(block?.count == "3")
         #expect(block?.rows.map(\.name) == ["Interleave", "Key 2", "Key 3"])
         #expect(block?.rows.map(\.holder) == ["Apple Passwords", "Security key", "Passkey"])
-        #expect(block?.rows.map(\.badge) == ["Synced", "Not synced", "Synced"])
+        #expect(block?.rows.map { $0.pills.map(\.text) } == [["Synced"], ["Device-bound"], ["Synced"]])
+        #expect(block?.rows.first?.details.map(\.label) == ["Public key", "Transport"])
+        #expect(block?.backupExplain.contains("Private keys never leave") == true)
         #expect(block?.rows.first?.fingerprint == "abab…abab")
         #expect(block?.note == nil)
         #expect(block?.backup?.trailing == .chevron)
@@ -141,7 +143,7 @@ struct RegistryBackupTests {
             backup: .couldNotCheck, on: base, loc: loc
         ).keys
         #expect(silent?.note == "Couldn't reach the registry. Showing what this device remembers.")
-        #expect(silent?.rows.first?.badge == nil)
+        #expect(silent?.rows.first?.pills.isEmpty == true)
 
         // A registry that answered with nothing was not unreachable.
         let empty = SettingsLive.withWalletKeys(
@@ -178,5 +180,14 @@ struct RegistryBackupTests {
             #expect(result.rows.first?.synced == nil)
             #expect(script.transcripts.last?.first?["outcome"] as? String == "failed")
         }
+    }
+
+    @Test func aLongHexValueWrapsWithoutGainingCharacters() {
+        // SwiftUI hyphenates a long unbroken "word"; a hyphen inside a public
+        // key is a character that is not in the key.
+        let shown = WalletKeysBlock.breakable("0x0123456789abcdef0123")
+        #expect(!shown.contains("-"))
+        #expect(shown.replacingOccurrences(of: "\u{200B}", with: "") == "0x0123456789abcdef0123")
+        #expect(shown.contains("\u{200B}"))
     }
 }

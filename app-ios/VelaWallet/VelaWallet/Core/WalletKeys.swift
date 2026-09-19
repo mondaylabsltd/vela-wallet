@@ -40,6 +40,12 @@ final class WalletKeys {
         /// `nil` when only the device answered: nobody can vouch for a badge.
         let synced: Bool?
         let publicKeyHex: String
+        /// base64url, as the registry explorer prints it; empty from the device.
+        var credentialId = ""
+        /// The registry's 20-byte attestation summary, `0x`-hex; empty from the device.
+        var attestationHex = ""
+        /// The authenticator verified the person at registration; `nil` = nobody can vouch.
+        var userVerified: Bool?
     }
 
     struct Result: Equatable {
@@ -130,7 +136,10 @@ final class WalletKeys {
                     method: KeyMethod(rawValue: text("method")) ?? .platform
                 ),
                 synced: synced,
-                publicKeyHex: text("public_key_hex")
+                publicKeyHex: text("public_key_hex"),
+                credentialId: text("credential_id"),
+                attestationHex: text("attestation_hex"),
+                userVerified: (key["user_verified"] as? NSNumber)?.boolValue
             )
         }
         return Result(source: source, rows: rows)

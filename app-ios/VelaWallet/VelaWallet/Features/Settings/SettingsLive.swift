@@ -242,8 +242,22 @@ enum SettingsLive {
                     : row.key.name,
                 holder: row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
-                badge: row.synced.map { loc.t($0 ? k.keysSynced : k.keysNotSynced) },
-                badgeSynced: row.synced == true,
+                pills: [
+                    row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
+                    row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
+                ].compactMap { $0 },
+                // The registry explorer's facts, in its order; what is absent is left out.
+                details: [
+                    KeyDetailModel(label: loc.t(k.keysPublicKey), value: row.publicKeyHex.isEmpty ? "" : "0x" + body130(row.publicKeyHex), mono: true, copy: true),
+                    KeyDetailModel(label: loc.t(k.keysCredential), value: row.credentialId, mono: true, copy: true),
+                    KeyDetailModel(label: "AAGUID", value: row.key.aaguid, mono: true, copy: false),
+                    KeyDetailModel(
+                        label: loc.t(k.keysTransport),
+                        value: [row.key.authenticatorAttachment, row.key.transports].filter { !$0.isEmpty }.joined(separator: " · "),
+                        mono: false, copy: false
+                    ),
+                    KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
+                ].filter { !$0.value.isEmpty },
                 key: row.key
             )
         }
@@ -258,9 +272,17 @@ enum SettingsLive {
             loading: keys == nil,
             note: keys?.source == .device ? loc.t(k.keysFromDevice) : nil,
             rows: rows,
-            backup: ethereumBackupRow(backup, loc: loc)
+            backup: ethereumBackupRow(backup, loc: loc),
+            backupExplain: loc.t(k.backupExplain),
+            copyLabel: loc.t(k.keysCopy),
+            copiedLabel: loc.t(k.keysCopied)
         )
         return next
+    }
+
+    /// The key as stored, without a `0x` it may or may not have worn.
+    private static func body130(_ hex: String) -> String {
+        hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
     }
 
     /// The backup as a row: one line, three states, a chevron only when there
