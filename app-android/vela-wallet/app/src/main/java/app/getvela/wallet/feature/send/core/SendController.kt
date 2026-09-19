@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.FeePolicyCore
@@ -272,10 +273,18 @@ class SendController(
         // Settled = not busy, and either a NEW estimate or a failure. The
         // reference check is what keeps a stale estimate from answering a
         // fresh request; every commit decodes a fresh object.
+        //
+        // Woken by `commits`, NOT by `view`: a re-quote at the same price is a
+        // view that `equals` the one before the request, and a StateFlow never
+        // delivers that to a collector that missed the `busy` in between — the
+        // wait then ran out its whole timeout with the answer sitting in the
+        // view (see `CoreHost.commits`).
         val settled = withTimeoutOrNull(QUOTE_TIMEOUT_MS) {
-            feeHost.view.first { view ->
-                !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
-            }
+            feeHost.commits
+                .map { feeHost.view.value }
+                .first { view ->
+                    !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+                }
         } ?: return SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
         val estimate = settled.fee
         return when {
