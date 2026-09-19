@@ -1,5 +1,5 @@
 /**
- * The three layers (064): the index for speed, the chain for truth, Ethereum
+ * The three layers (067): the index for speed, the chain for truth, Ethereum
  * for survival — through `registry.ts`, with the REAL core and the REAL bytes
  * both chains answered (`__fixtures__/registry-chain.json`).
  *

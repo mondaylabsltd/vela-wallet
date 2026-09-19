@@ -223,7 +223,7 @@ struct RootView: View {
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
         _pool = State(initialValue: pool)
-        // Through the three layers (064): the index's answers are PROVED against
+        // Through the three layers (067): the index's answers are PROVED against
         // the registry contract, and the contract answers when the index cannot.
         let onboarding = OnboardingModel(
             session: session, store: store,

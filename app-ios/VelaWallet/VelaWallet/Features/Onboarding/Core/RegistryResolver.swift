@@ -2,7 +2,7 @@
 //  RegistryResolver.swift
 //  VelaWallet
 //
-//  The three layers behind a sign-in read (064): the index, the registry
+//  The three layers behind a sign-in read (067): the index, the registry
 //  contract on Gnosis, and its backup on Ethereum.
 //
 //  Every rule — which layer is asked, when the index's answer is PROVED against

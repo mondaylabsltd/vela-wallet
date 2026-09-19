@@ -119,7 +119,7 @@ this branch.
 
 ---
 
-## §6 — The three layers: index → Gnosis → Ethereum (design, 2026-09-19; NOT yet built)
+## §6 — The three layers: index → Gnosis → Ethereum (design, 2026-09-19; BUILT as spec 067)
 
 Founder's question: a public key → its group/wallet → the wallet address can be resolved
 through the p256-index server, then the Gnosis contract, then the Ethereum contract. Three

@@ -1,5 +1,5 @@
 //! Resolving a passkey's wallets through three layers — the index for speed,
-//! the chain for truth, Ethereum for survival (spec 062 plan §6, built as 064).
+//! the chain for truth, Ethereum for survival (spec 062 plan §6, built as 067).
 //!
 //! Signing in asks two questions: *which groups does this key belong to?* and
 //! *who are this group's members?* — and derives the wallet's address from the
@@ -467,7 +467,7 @@ mod tests {
     use super::*;
 
     /// Web's verbatim recording of the contract on both chains, keyed by chain
-    /// then by calldata — plus, since 064, the two `getUnitByGroupKey` answers.
+    /// then by calldata — plus, since 067, the two `getUnitByGroupKey` answers.
     fn recorded() -> Value {
         serde_json::from_str(include_str!(
             "../../../../app-web/vela-wallet/src/lib/onboarding/core/__fixtures__/registry-chain.json"

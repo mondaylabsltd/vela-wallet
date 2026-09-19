@@ -28,7 +28,7 @@ import org.json.JSONObject
  */
 class RegistryClient(
     baseUrl: String = DEFAULT_REGISTRY_URL,
-    /** The three layers (064). `null` = the index alone, as before there was a contract to ask. */
+    /** The three layers (067). `null` = the index alone, as before there was a contract to ask. */
     private val resolver: RegistryResolver? = null,
 ) {
 

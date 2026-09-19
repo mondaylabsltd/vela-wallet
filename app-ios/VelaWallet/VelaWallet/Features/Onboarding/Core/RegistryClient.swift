@@ -100,7 +100,7 @@ actor RegistryClient {
 
     private var baseURL: String
 
-    /// The three-layer walk behind the two reads sign-in needs (064). `nil` =
+    /// The three-layer walk behind the two reads sign-in needs (067). `nil` =
     /// the index alone, believed as it is.
     private let resolver: RegistryResolver?
 

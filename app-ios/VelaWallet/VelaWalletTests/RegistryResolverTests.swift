@@ -2,7 +2,7 @@
 //  RegistryResolverTests.swift
 //  VelaWalletTests
 //
-//  The three layers (064), through `RegistryClient`, with the REAL core over the
+//  The three layers (067), through `RegistryClient`, with the REAL core over the
 //  REAL bytes both chains answered (the fixture web recorded) and an index that
 //  says whatever the test tells it to.
 //

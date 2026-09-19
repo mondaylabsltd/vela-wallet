@@ -17,7 +17,7 @@ import java.net.InetSocketAddress
 import java.util.Collections
 
 /**
- * The three layers (064), through [RegistryClient], with the REAL core over the
+ * The three layers (067), through [RegistryClient], with the REAL core over the
  * REAL bytes both chains answered (the fixture web recorded) and a real local
  * HTTP index that says whatever the test tells it to.
  *

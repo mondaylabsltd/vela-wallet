@@ -54,7 +54,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
 
     /** The relying party and every ceremony. Rebuilt per attached Activity. */
     private var passkey: PasskeyExecutor? = null
-    // Through the three layers (064): the index's answers are PROVED against the
+    // Through the three layers (067): the index's answers are PROVED against the
     // registry contract, and the contract answers when the index cannot.
     private val registry = RegistryClient(resolver = RegistryResolver(container::rawEthCall))
 

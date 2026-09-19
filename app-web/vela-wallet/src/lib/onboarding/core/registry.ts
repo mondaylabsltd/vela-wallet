@@ -200,14 +200,14 @@ type UnitResponse = {
 };
 
 // ---------------------------------------------------------------------------
-// The three layers — transport for `vela_core::registry_resolve` (064)
+// The three layers — transport for `vela_core::registry_resolve` (067)
 // ---------------------------------------------------------------------------
 //
 // The index for speed, the chain for truth, Ethereum for survival. WHICH is
 // asked, in what order, and whether an index answer is believed — it is not:
 // its `contentHash` is recomputed and compared with the chain's — are the
 // core's, written once for four shells. This file performs the requests.
-// Until 064 it carried its own copy of the ladder, which believed any index
+// Until 067 it carried its own copy of the ladder, which believed any index
 // that answered.
 //
 // Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so a
