@@ -89,7 +89,7 @@ class RegistryBackupTest {
         assertNull(row(RegistryBackup.State.Unavailable))
         assertNull(row(RegistryBackup.State.NotRegistered))
         assertEquals(SettingsLive.ETHEREUM_BACKUP_ROW, row(null)!!.id)
-        assertEquals("Back up keys to Ethereum", row(null)!!.title)
+        assertEquals("Back up public keys to Ethereum", row(null)!!.title)
         assertEquals("Checking…" to RowTrailing.None, row(null)!!.let { it.subtitle to it.trailing })
         assertEquals("Backed up on Ethereum" to RowTrailing.None, row(RegistryBackup.State.BackedUp)!!.let { it.subtitle to it.trailing })
         assertEquals("Not backed up yet" to RowTrailing.Chevron, row(RegistryBackup.State.NotBackedUp)!!.let { it.subtitle to it.trailing })
@@ -112,7 +112,9 @@ class RegistryBackupTest {
         assertEquals("Keys" to "3", block.title to block.count)
         assertEquals(listOf("Interleave", "Key 2", "Key 3"), block.rows.map { it.name })
         assertEquals(listOf("Apple Passwords", "Security key", "Passkey"), block.rows.map { it.holder })
-        assertEquals(listOf("Synced", "Not synced", "Synced"), block.rows.map { it.badge })
+        assertEquals(listOf(listOf("Synced"), listOf("Device-bound"), listOf("Synced")), block.rows.map { row -> row.pills.map { it.text } })
+        assertEquals(listOf("Public key", "Transport"), block.rows.first().details.map { it.label })
+        assertTrue(block.backupExplain.contains("Private keys never leave"))
         assertEquals("abab…abab", block.rows.first().fingerprint)
         assertNull(block.note)
         assertEquals(RowTrailing.Chevron, block.backup!!.trailing)
@@ -127,7 +129,7 @@ class RegistryBackupTest {
 
         val silent = SettingsLive.withWalletKeys(model, WalletKeys.Result(WalletKeys.Source.Device, listOf(key("Mine", synced = null))), RegistryBackup.State.CouldNotCheck, strings).keys!!
         assertEquals("Couldn't reach the registry. Showing what this device remembers.", silent.note)
-        assertNull(silent.rows.first().badge)
+        assertTrue(silent.rows.first().pills.isEmpty())
 
         // A registry that answered with nothing was not unreachable.
         val empty = SettingsLive.withWalletKeys(model, WalletKeys.Result(WalletKeys.Source.NotRegistered, listOf(key("Mine", synced = null))), RegistryBackup.State.NotRegistered, strings).keys!!

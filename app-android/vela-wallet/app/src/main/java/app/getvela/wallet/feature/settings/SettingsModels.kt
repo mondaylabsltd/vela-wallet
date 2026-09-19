@@ -429,7 +429,17 @@ data class WalletKeysModel(
     val note: String?,
     val rows: List<WalletKeyRowModel>,
     val backup: SettingsRowModel?,
+    /** Under the backup: PUBLIC keys only; private keys never leave the device. */
+    val backupExplain: String,
+    val copyLabel: String,
+    val copiedLabel: String,
 )
+
+enum class KeyPillTone { Verified, Synced, Local }
+
+data class KeyPillModel(val text: String, val tone: KeyPillTone)
+
+data class KeyDetailModel(val label: String, val value: String, val mono: Boolean, val copy: Boolean)
 
 data class WalletKeyRowModel(
     val name: String,
@@ -437,9 +447,10 @@ data class WalletKeyRowModel(
     val holder: String,
     /** `197d…647b` — what tells two unnamed keys apart. */
     val fingerprint: String,
-    /** `null` = nobody can vouch for one. */
-    val badge: String?,
-    val badgeSynced: Boolean,
+    /** "User-verified", "Synced" / "Device-bound" — the registry explorer's pills. */
+    val pills: List<KeyPillModel>,
+    /** What the row opens onto: the explorer's facts. Empty = nothing to open. */
+    val details: List<KeyDetailModel>,
     val key: app.getvela.wallet.feature.onboarding.core.CreateKeyRow,
 )
 

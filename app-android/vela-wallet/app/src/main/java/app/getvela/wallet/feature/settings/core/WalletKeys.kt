@@ -44,6 +44,12 @@ class WalletKeys(
         /** `null` when only the device answered: nobody can vouch for a badge. */
         val synced: Boolean?,
         val publicKeyHex: String,
+        /** base64url, as the registry explorer prints it; empty from the device. */
+        val credentialId: String = "",
+        /** The registry's 20-byte attestation summary, `0x`-hex; empty from the device. */
+        val attestationHex: String = "",
+        /** The authenticator verified the person at registration; `null` = nobody can vouch. */
+        val userVerified: Boolean? = null,
     )
 
     data class Result(val source: Source, val rows: List<Row>)
@@ -101,6 +107,9 @@ class WalletKeys(
                 ),
                 synced = synced,
                 publicKeyHex = key.optString("public_key_hex"),
+                credentialId = key.optString("credential_id"),
+                attestationHex = key.optString("attestation_hex"),
+                userVerified = if (key.isNull("user_verified")) null else key.optBoolean("user_verified"),
             )
         }
         return Result(source, rows)
