@@ -58,6 +58,19 @@ describe('matchFiles', () => {
 		expect(matched).toEqual({});
 	});
 
+	it('finds the Flatpak under its versioned name (after 0.9.3) as well as its old one', () => {
+		const matched = matchFiles(
+			files([
+				'app.getvela.VelaWallet-26.9.0-x86_64.flatpak',
+				'app.getvela.VelaWallet-26.9.0-aarch64.flatpak'
+			])
+		);
+		expect(matched['linux-flatpak-x64']!.name).toBe('app.getvela.VelaWallet-26.9.0-x86_64.flatpak');
+		expect(matched['linux-flatpak-arm64']!.name).toBe(
+			'app.getvela.VelaWallet-26.9.0-aarch64.flatpak'
+		);
+	});
+
 	it('follows the next Fedora without being told', () => {
 		const matched = matchFiles(files(['vela-wallet-1.0.0-2.fc45.x86_64.rpm']));
 		expect(matched['linux-rpm-x64']).toBeDefined();

@@ -358,7 +358,7 @@ appear in GNOME Software, KDE Discover and the shell's own search.
 |---|---|---|
 | `vela-wallet-<version>-1.fc<n>.<arch>.rpm` | Fedora, RHEL, openSUSE | `./scripts/build-linux-packages.sh --formats rpm` |
 | `vela-wallet_<version>_<arch>.deb` | Debian, Ubuntu, Mint, Pop!_OS | `./scripts/build-linux-packages.sh --formats deb` |
-| `app.getvela.VelaWallet-<arch>.flatpak` | Every distribution, sandboxed | `./scripts/build-flatpak.sh` |
+| `app.getvela.VelaWallet-<version>-<arch>.flatpak` | Every distribution, sandboxed | `./scripts/build-flatpak.sh` |
 | `vela-wallet-<version>-linux-<arch>.tar.gz` | Manual installs, other distros | `./scripts/build-linux-packages.sh --formats tar` |
 
 ### RPM and DEB

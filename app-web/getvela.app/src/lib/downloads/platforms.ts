@@ -48,8 +48,10 @@ const FILE_SHAPE: Record<PlatformId, RegExp> = {
 	'linux-deb-arm64': /^vela-wallet_[\d.]+_arm64\.deb$/,
 	'linux-rpm-x64': /^vela-wallet-[\d.]+-\d+\.[a-z0-9]+\.x86_64\.rpm$/,
 	'linux-rpm-arm64': /^vela-wallet-[\d.]+-\d+\.[a-z0-9]+\.aarch64\.rpm$/,
-	'linux-flatpak-x64': /^app\.getvela\.VelaWallet-x86_64\.flatpak$/,
-	'linux-flatpak-arm64': /^app\.getvela\.VelaWallet-aarch64\.flatpak$/,
+	// Versioned from the release after 0.9.3; 0.9.3's own are not, and stay
+	// downloadable for as long as it is the latest.
+	'linux-flatpak-x64': /^app\.getvela\.VelaWallet-(?:[\d.]+-)?x86_64\.flatpak$/,
+	'linux-flatpak-arm64': /^app\.getvela\.VelaWallet-(?:[\d.]+-)?aarch64\.flatpak$/,
 	extension: /^vela-wallet-extension-[\d.]+\.zip$/
 };
 

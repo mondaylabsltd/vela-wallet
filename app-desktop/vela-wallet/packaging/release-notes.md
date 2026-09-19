@@ -11,7 +11,7 @@ If no `.dmg` is attached, this version's macOS build has not been published — 
 **Linux** — `x86_64`/`amd64` for most PCs, `aarch64`/`arm64` for ARM.
 - Debian, Ubuntu, Mint, Pop!_OS: `sudo apt install ./vela-wallet_<version>_amd64.deb`
 - Fedora, RHEL, openSUSE: `sudo dnf install ./vela-wallet-<version>-1.fc*.x86_64.rpm`
-- Anything else: `flatpak install --user ./app.getvela.VelaWallet-x86_64.flatpak`
+- Anything else: `flatpak install --user ./app.getvela.VelaWallet-<version>-x86_64.flatpak`
 
 Your wallet is not in the app: it is the passkey you sign in with. Installing, reinstalling or switching platforms never moves or risks funds.
 
