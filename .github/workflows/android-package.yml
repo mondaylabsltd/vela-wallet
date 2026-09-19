@@ -1,5 +1,5 @@
 # Release build of the Android shell (app-android/vela-wallet): an UNSIGNED
-# release APK and AAB, kept as a workflow artifact on an `android-v*` tag.
+# release APK and AAB, kept as a workflow artifact of every release (release.yml calls this).
 #
 # NOT attached to a GitHub Release, by ruling (spec 063 §0): the phone apps ship
 # through the stores, which are paid, and a free installable package next to a
@@ -24,17 +24,24 @@
 name: Android package
 
 on:
-  # Cutting an Android build: `git tag android-v1.0 && git push origin android-v1.0`
-  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
-  # The tag's version must equal `versionName` in app/build.gradle.kts.
-  push:
-    tags: ['android-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
       - 'app-android/vela-wallet/app/build.gradle.kts'
       - 'rust/scripts/build-android.sh'
       - '.github/workflows/android-package.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -53,15 +60,6 @@ jobs:
           done
           grep -qE 'abiFilters \+= listOf\("arm64-v8a", "armeabi-v7a", "x86_64"\)' "$f" \
             || { echo "::error::the packaged ABI list changed — update rust/scripts/build-android.sh and this workflow together"; exit 1; }
-      - name: A release tag must name versionName
-        if: startsWith(github.ref, 'refs/tags/android-v')
-        run: |
-          version=$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' app-android/vela-wallet/app/build.gradle.kts)
-          tag="${GITHUB_REF_NAME#android-v}"
-          if [ "$tag" != "$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME names $tag but build.gradle.kts says versionName $version — bump it and re-tag"
-            exit 1
-          fi
 
   package:
     name: Build the unsigned APK and AAB
@@ -98,6 +96,13 @@ jobs:
       - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleRelease :app:bundleRelease --console=plain
+      # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
+      - name: The app says which commit it is
+        working-directory: app-android/vela-wallet
+        run: |
+          grep -rq "GIT_COMMIT = \"${GITHUB_SHA:0:7}\"" app/build/generated/source/buildConfig/release || {
+            echo "::error::BuildConfig.GIT_COMMIT is not ${GITHUB_SHA:0:7}"
+            grep -rh GIT_COMMIT app/build/generated/source/buildConfig/release || true; exit 1; }
       - name: Collect
         id: collect
         working-directory: app-android/vela-wallet

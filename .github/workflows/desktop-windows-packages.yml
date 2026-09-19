@@ -1,7 +1,7 @@
 # Windows installers for the GPUI desktop app: Setup.exe for x64 and ARM64.
 #
 # This is the third leg of the desktop release triad — desktop-linux-packages
-# and desktop-macos-packages trigger on the same desktop-v* tag, and all three
+# and desktop-macos-packages are called by release.yml for the same commit, and all three
 # attach their artifacts to the same GitHub release, so one tag ships every
 # platform.
 #
@@ -14,9 +14,13 @@
 name: Desktop Windows packages
 
 on:
-  # Cutting a desktop release: `git tag desktop-v0.1.0 && git push --tags`.
-  push:
-    tags: ['desktop-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
   workflow_dispatch:
   # Packaging metadata is cheap to check and easy to break, so it is checked on
   # every PR that touches it. The installer builds are not — Windows runner
@@ -26,6 +30,11 @@ on:
       - 'app-desktop/vela-wallet/installer/**'
       - 'app-desktop/vela-wallet/scripts/build-windows-installer.ps1'
       - '.github/workflows/desktop-windows-packages.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -93,55 +102,22 @@ jobs:
         working-directory: app-desktop/vela-wallet
         shell: pwsh
         run: ./scripts/build-windows-installer.ps1 -Architecture ${{ matrix.arch }}
+      # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
+      - name: The binary says which commit it is
+        working-directory: app-desktop/vela-wallet
+        shell: pwsh
+        run: |
+          $sha = $env:GITHUB_SHA.Substring(0, 7)
+          $exe = Get-ChildItem target -Recurse -Filter vela-wallet.exe |
+            Where-Object { $_.FullName -match '\\release\\vela-wallet\.exe$' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) { Write-Error "no release vela-wallet.exe under target/"; exit 1 }
+          $text = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes($exe.FullName))
+          if (-not $text.Contains($sha)) {
+            Write-Output "::error::$($exe.FullName) does not carry commit $sha — About would show something else"; exit 1 }
+          Write-Output "$($exe.Name) carries $sha"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/windows/*.exe
           if-no-files-found: error
-
-  release:
-    name: Attach packages to the release
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
-    # metadata is a needs-edge, not just a sibling: its .iss define check is
-    # the only guard the build path does not re-enforce before ISCC runs.
-    needs: [metadata, installer]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      # Only for the install notes. They open the release so that the person who
-      # lands on this page is told how to install what is on it (spec 063
-      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app-desktop/vela-wallet/packaging/release-notes.md
-          sparse-checkout-cone-mode: false
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the packages
-        working-directory: artifacts
-        run: |
-          # SHA256SUMS-windows, not SHA256SUMS: the Linux and macOS workflows
-          # upload their own checksum files to the same release, and whichever
-          # job runs last would --clobber the others'.
-          # Via a temp file so the glob cannot pick up the file being written.
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-windows"
-          mv "$RUNNER_TEMP/SHA256SUMS-windows" SHA256SUMS-windows
-          cat SHA256SUMS-windows
-      - name: Upload
-        # The Linux and macOS workflows race this job on the same tag;
-        # whichever runs later falls through to `gh release upload`.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet Desktop $GITHUB_REF_NAME" \
-            --notes-file app-desktop/vela-wallet/packaging/release-notes.md \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber
