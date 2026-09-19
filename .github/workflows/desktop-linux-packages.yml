@@ -139,7 +139,10 @@ jobs:
         # bash, so the .rpm job passed and the .deb job did not).
         run: |
           sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
-          strings -a target/release/vela-wallet | grep -q "$sha" || {
+          # grep on the file, not `strings | grep -q`: -q exits at the first
+          # match, strings dies of SIGPIPE, and under pipefail the pipeline
+          # FAILS because it found the commit early (it did, locally, 0.9.3).
+          grep -aq "$sha" target/release/vela-wallet || {
             echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
           echo "vela-wallet carries $sha"
       - uses: actions/upload-artifact@v4
@@ -190,7 +193,10 @@ jobs:
         # bash, so the .rpm job passed and the .deb job did not).
         run: |
           sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
-          strings -a target/release/vela-wallet | grep -q "$sha" || {
+          # grep on the file, not `strings | grep -q`: -q exits at the first
+          # match, strings dies of SIGPIPE, and under pipefail the pipeline
+          # FAILS because it found the commit early (it did, locally, 0.9.3).
+          grep -aq "$sha" target/release/vela-wallet || {
             echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
           echo "vela-wallet carries $sha"
       - name: The package must satisfy dpkg itself
