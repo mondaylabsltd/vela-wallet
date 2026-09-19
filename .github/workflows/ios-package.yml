@@ -122,7 +122,14 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/VelaWallet.xcarchive" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            VELA_GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
             | tail -20
+          # The build setting has been waiting for a value since spec 058, and this
+          # workflow never passed one — so every archive said "build 1" (spec 064).
+          stamped=$(/usr/libexec/PlistBuddy -c 'Print :VelaGitCommit' \
+            "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app/Info.plist")
+          [ "$stamped" = "$(git rev-parse --short=7 HEAD)" ] || {
+            echo "::error::the archive says commit '$stamped', not $(git rev-parse --short=7 HEAD)"; exit 1; }
           test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
       - name: Package
         working-directory: app-ios/VelaWallet
