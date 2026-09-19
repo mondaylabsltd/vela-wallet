@@ -24,9 +24,18 @@
 name: Desktop Linux packages
 
 on:
-  # Cutting a desktop release: `git tag desktop-v0.1.0 && git push --tags`.
-  push:
-    tags: ['desktop-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
+    inputs:
+      flatpak:
+        description: 'Also build the Flatpak bundles'
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       flatpak:
@@ -41,6 +50,11 @@ on:
       - 'app-desktop/vela-wallet/packaging/**'
       - 'app-desktop/vela-wallet/scripts/**'
       - '.github/workflows/desktop-linux-packages.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -116,6 +130,18 @@ jobs:
       - name: Build the RPM
         working-directory: app-desktop/vela-wallet
         run: ./scripts/build-linux-packages.sh --formats rpm
+      # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
+      - name: The binary says which commit it is
+        working-directory: app-desktop/vela-wallet
+        # POSIX sh, not bash: these steps run INSIDE the container, where the
+        # default shell is the image's `sh` — dash on Debian, which answers
+        # `${GITHUB_SHA:0:7}` with "Bad substitution" (it did; Fedora's sh is
+        # bash, so the .rpm job passed and the .deb job did not).
+        run: |
+          sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
+          strings -a target/release/vela-wallet | grep -q "$sha" || {
+            echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
+          echo "vela-wallet carries $sha"
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.arch }}
@@ -155,6 +181,18 @@ jobs:
       - name: Build the DEB
         working-directory: app-desktop/vela-wallet
         run: ./scripts/build-linux-packages.sh --formats deb
+      # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
+      - name: The binary says which commit it is
+        working-directory: app-desktop/vela-wallet
+        # POSIX sh, not bash: these steps run INSIDE the container, where the
+        # default shell is the image's `sh` — dash on Debian, which answers
+        # `${GITHUB_SHA:0:7}` with "Bad substitution" (it did; Fedora's sh is
+        # bash, so the .rpm job passed and the .deb job did not).
+        run: |
+          sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
+          strings -a target/release/vela-wallet | grep -q "$sha" || {
+            echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
+          echo "vela-wallet carries $sha"
       - name: The package must satisfy dpkg itself
         working-directory: app-desktop/vela-wallet
         run: |
@@ -175,7 +213,7 @@ jobs:
     # tag or with the workflow_dispatch input. The ref check keeps it on for a
     # workflow_dispatch pointed at a release tag: the release job needs the
     # Flatpak bundles, so any path that can publish must also build them.
-    if: github.event_name == 'push' || startsWith(github.ref, 'refs/tags/desktop-v') || inputs.flatpak
+    if: github.event_name == 'push' || inputs.flatpak
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -220,48 +258,3 @@ jobs:
           name: flatpak-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/flatpak/*.flatpak
           if-no-files-found: error
-
-  release:
-    name: Attach packages to the release
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
-    # flatpak is a needs-edge so the bundles cannot nondeterministically miss
-    # the release: without it, release starts once rpm+deb finish and only
-    # picks up whatever Flatpak artifacts happen to exist at that moment.
-    # metadata gates for the same reason as the macOS and Windows workflows —
-    # its five-place app-id assertion is not re-enforced by the build path.
-    needs: [metadata, rpm, deb, flatpak]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      # Only for the install notes. They open the release so that the person who
-      # lands on this page is told how to install what is on it (spec 063
-      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app-desktop/vela-wallet/packaging/release-notes.md
-          sparse-checkout-cone-mode: false
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the packages
-        working-directory: artifacts
-        run: |
-          # Via a temp file so the glob cannot pick up the file being written.
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS"
-          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
-          cat SHA256SUMS
-      - name: Upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet Desktop $GITHUB_REF_NAME" \
-            --notes-file app-desktop/vela-wallet/packaging/release-notes.md \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber
