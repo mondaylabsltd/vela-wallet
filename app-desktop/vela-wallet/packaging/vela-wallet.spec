@@ -87,6 +87,11 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Sat Sep 19 2026 Monday Labs <hello@getvela.app> - 0.9.3-1
+- Pre-release: a wallet's founding record can be backed up to Ethereum; signing in
+  with a USB security key no longer crashes; every waiting dialog can be cancelled;
+  and About shows the real version and commit.
+
 * Thu Sep 17 2026 Monday Labs <hello@getvela.app> - 0.9.2-1
 - Pre-release: the total settles as it loads, contacts keep their names, and the
   founding record can be backed up to Ethereum.
