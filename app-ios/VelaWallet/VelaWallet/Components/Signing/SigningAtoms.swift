@@ -35,24 +35,43 @@ struct SigningHeaderView: View {
 
     let dapp: (name: String, host: String, letter: String, tint: Color)
     let network: (name: String, dot: Color)
+    var own = false
+    var iconUrls: [String] = []
+    var networkLogoUrl: String?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            LetterAvatarView(letter: dapp.letter, tint: dapp.tint,
-                             size: ExploreGeometry.signingAvatar)
+            if own {
+                // The wallet asking itself: its own mark, never a letter on a disc.
+                VelaMark(size: ExploreGeometry.signingAvatar * 0.6)
+                    .frame(width: ExploreGeometry.signingAvatar, height: ExploreGeometry.signingAvatar)
+                    .background(theme.bgSunken, in: Circle())
+            } else {
+                // The site's own icon; its initial until one lands, and when it has none.
+                RemoteLogoView(urls: iconUrls, size: ExploreGeometry.signingAvatar) {
+                    LetterAvatarView(letter: dapp.letter, tint: dapp.tint,
+                                     size: ExploreGeometry.signingAvatar)
+                }
+            }
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(verbatim: dapp.name)
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .lineLimit(1)
-                Text(verbatim: dapp.host)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
+                if !dapp.host.isEmpty {
+                    Text(verbatim: dapp.host)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: Tokens.Space.s8)
             HStack(spacing: Tokens.Space.s8) {
-                Circle().fill(network.dot).frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                // The chain's logo; the drawn dot until it lands, and when there is none.
+                RemoteLogoView(urls: [networkLogoUrl].compactMap { $0 }, size: Tokens.Space.s16) {
+                    Circle().fill(network.dot).frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                        .frame(width: Tokens.Space.s16, height: Tokens.Space.s16)
+                }
                 Text(verbatim: network.name)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
@@ -451,5 +470,68 @@ struct SigningBalances: View {
             RoundedRectangle(cornerRadius: Tokens.Radius.r16)
                 .stroke(theme.borderBase, lineWidth: Tokens.BorderWidth.hairline)
         )
+    }
+}
+
+
+/// "Sign with · Automatic ›" — where the passkey that signs this request is.
+///
+/// Creating a wallet and signing in both let a person say whether their key is
+/// on this phone, on another device, or on a security key. Signing did not: it
+/// took the first key's stored route (founder, 2026-09-19). Per request; the
+/// core decides which key the ceremony is pinned to (`signRoute`). Opens in
+/// place — a sheet over the signing sheet is a modal under a modal.
+struct SignWithRow: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+    let model: SignWithModel
+    /// `nil` toggles the list; an id picks a method and closes it.
+    var onSelect: (String?) -> Void = { _ in }
+
+    var body: some View {
+        VStack(spacing: Tokens.Space.s8) {
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: model.label)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                Spacer(minLength: Tokens.Space.s8)
+                Text(verbatim: model.value)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
+                    .foregroundStyle(theme.fgMuted)
+                    .rotationEffect(.degrees(model.open ? 180 : 0))
+            }
+            // The whole row is the target, not only its glyphs.
+            .contentShape(Rectangle())
+            .onTapGesture { onSelect(nil) }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+
+            if model.open {
+                VStack(spacing: 0) {
+                    ForEach(model.options) { option in
+                        HStack {
+                            Text(verbatim: option.title)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .foregroundStyle(option.selected ? theme.fgBase : theme.fgMuted)
+                            Spacer()
+                            if option.selected {
+                                LucideIcon(.check, size: LucideIconSize.rowGlyph)
+                                    .foregroundStyle(theme.accentBase)
+                            }
+                        }
+                        .padding(.horizontal, Tokens.Space.s16)
+                        .padding(.vertical, Tokens.Space.s12)
+                        .contentShape(Rectangle())
+                        .onTapGesture { onSelect(option.id) }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(option.selected ? [.isButton, .isSelected] : .isButton)
+                    }
+                }
+                .padding(Tokens.Space.s4)
+                .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+            }
+        }
     }
 }

@@ -48,7 +48,8 @@ enum ClearSignType: String, Decodable {
 
 /// One resolved display field.
 struct ClearSignFieldWire: Decodable, Equatable {
-    let label: String
+    /// `var`: the shell relabels the wallet's OWN built-in result (spec 062).
+    var label: String
     let value: String
     let format: String
     /// A normalised, validated token address, for the logo lookup.
@@ -73,10 +74,11 @@ struct ClearSignFieldWire: Decodable, Equatable {
 struct ClearSignResultWire: Decodable, Equatable {
     /// The canonical English key — the shell localises it. Printing this
     /// verbatim is how Android shipped a confirm button reading "确认send".
-    let intent: String
+    /// `var`, with `fields`: see `relabelled`.
+    var intent: String
     let contractName: String?
     let owner: String?
-    let fields: [ClearSignFieldWire]
+    var fields: [ClearSignFieldWire]
     let risk: ClearRisk
     let contractAddress: String?
     let verified: Bool
@@ -216,7 +218,7 @@ enum ClearConfirmWire: Decodable, Equatable {
 struct ClearSigningViewWire: Decodable, Equatable {
     let resolving: Bool
     let resolved: Bool
-    let result: ClearSignResultWire?
+    var result: ClearSignResultWire?
     let message: ClearMessageViewWire?
     let surface: ClearSurface
     let confirm: ClearConfirmWire
@@ -233,4 +235,19 @@ struct ClearSigningViewWire: Decodable, Equatable {
         resolving: false, resolved: false, result: nil, message: nil,
         surface: .none, confirm: .confirm, blindTyped: nil, dangerHaptic: false
     )
+}
+
+
+extension ClearSignResultWire {
+    /// The same result wearing the shell's words: a new intent, and the first
+    /// `labels.count` field labels replaced in order. Values, roles, risk and
+    /// verification are the core's and are not touched.
+    func relabelled(intent: String, labels: [String]) -> ClearSignResultWire {
+        var next = self
+        next.intent = intent
+        for index in next.fields.indices where index < labels.count {
+            next.fields[index].label = labels[index]
+        }
+        return next
+    }
 }

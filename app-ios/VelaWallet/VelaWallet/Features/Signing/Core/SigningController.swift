@@ -79,6 +79,22 @@ final class SigningController {
     /// container may drop this controller.
     private(set) var closed = false
 
+    /// "Sign with": WHERE the passkey that signs this request is. This
+    /// controller lives for one request, so the choice cannot outlive the
+    /// question it was made for. `auto` is the wallet's stored route.
+    private(set) var signMethod = "auto"
+    private(set) var signWithOpen = false
+
+    /// `nil` toggles the list; an id picks a method and closes it.
+    func signWith(_ id: String?) {
+        guard let id else {
+            signWithOpen.toggle()
+            return
+        }
+        if ["auto", "platform", "hybrid", "security_key"].contains(id) { signMethod = id }
+        signWithOpen = false
+    }
+
     private var signCore: CoreStore<SignViewWire>!
     private var clearCore: CoreStore<ClearSigningViewWire>!
     private var guardCore: CoreStore<GuardViewWire>!

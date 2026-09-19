@@ -1073,6 +1073,7 @@ struct RootView: View {
                         // 无限额, and the slide stayed shut.
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+                        onSignWith: { id in signing?.signWith(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         onSelectTab: selectTab
@@ -1231,6 +1232,9 @@ struct RootView: View {
                 }
             )
         )
+        // The spine is shared with Send; it reads THIS request's "Sign with"
+        // choice, and goes back to `auto` the moment the controller is dropped.
+        userOpSpine.signMethod = { [weak controller] in controller?.signMethod ?? "auto" }
         signing = controller
         controller.open(incoming)
     }
@@ -2004,7 +2008,10 @@ struct RootView: View {
     /// expression away from a type-checker timeout — 052 hit it, 054 hit it
     /// again, and this is the third.
     private func signingModel(for live: SigningController) -> SigningModel {
-        let chain = browser.browserChain
+        // The REQUEST's chain. The browser's was right for a page's request and
+        // wrong for the wallet's own: the key backup is on Ethereum whatever
+        // chain the last tab was on.
+        let chain = live.request?.chainId ?? browser.browserChain
         let request = live.request ?? SigningController.Incoming(
             id: "", method: "", paramsJson: "[]", origin: "",
             transportId: "", chainId: chain
@@ -2021,7 +2028,9 @@ struct RootView: View {
             // What the chain said this transaction would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it.
             sim: trust.trust?.sim,
-            simulation: live.simulation
+            simulation: live.simulation,
+            signMethod: live.signMethod,
+            signWithOpen: live.signWithOpen
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2476,7 +2485,8 @@ struct RootView: View {
                     model: signingModel(for: signing),
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
-                    onAllowanceAmount: { text in signing.guardCustomAmount(text) }
+                    onAllowanceAmount: { text in signing.guardCustomAmount(text) },
+                    onSignWith: { id in signing.signWith(id) }
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])

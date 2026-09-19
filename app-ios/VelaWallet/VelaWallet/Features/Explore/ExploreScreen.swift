@@ -30,6 +30,7 @@ struct ExploreScreen: View {
     /// what each means; the sheet only reports the tap.
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
+    var onSignWith: (String?) -> Void = { _ in }
     /// The sheet went away without a tap. The core routes what that means by
     /// phase — a refusal before the commitment, a dismissal after it — so the
     /// shell reports the gesture and decides nothing.
@@ -274,7 +275,8 @@ struct ExploreScreen: View {
                     model: signingLive,
                     onConfirm: onSigningConfirm,
                     onAllowanceChip: onAllowanceChip,
-                    onAllowanceAmount: onAllowanceAmount
+                    onAllowanceAmount: onAllowanceAmount,
+                    onSignWith: onSignWith
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])

@@ -33,6 +33,9 @@ enum SigningLive {
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
+        /// The person's "Sign with" choice for THIS request, and whether its list is open.
+        var signMethod = "auto"
+        var signWithOpen = false
     }
 
     private static func s(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
@@ -45,17 +48,67 @@ enum SigningLive {
                      : loc.t("componentsUi.signingApprove.\(key)", vars: vars)
     }
 
+    /// The transport of a request the WALLET made of itself (`RootView`).
+    static let walletTransport = "wallet"
+    /// `registry_backup::REGISTRY` — the one contract the wallet's own backup calls.
+    private static let passkeyRegistry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+
+    /// Where a site's icon conventionally lives, best first. Https only: never
+    /// over plain http, where anybody on the path could answer with somebody
+    /// else's brand.
+    static func siteIconUrls(origin: String) -> [String] {
+        guard origin.hasPrefix("https://"),
+              let host = URL(string: origin)?.host, !host.isEmpty
+        else { return [] }
+        let port = URL(string: origin)?.port.map { ":\($0)" } ?? ""
+        let base = "https://\(host)\(port)"
+        return ["\(base)/apple-touch-icon.png", "\(base)/favicon.ico"]
+    }
+
+    /// The "Sign with" row: the create flow's own words for where a passkey is.
+    static func signWith(context: Context) -> SignWithModel {
+        let loc = context.loc
+        let titles: [(String, String)] = [
+            ("auto", loc.t("common.automatic")),
+            ("platform", loc.t("onboarding.create.methodPlatformTitle")),
+            ("hybrid", loc.t("onboarding.create.methodHybridTitle")),
+            ("security_key", loc.t("onboarding.create.methodSecurityKeyTitle")),
+        ]
+        return SignWithModel(
+            label: loc.t("componentsUi.signing.signWith"),
+            value: titles.first { $0.0 == context.signMethod }?.1 ?? titles[0].1,
+            open: context.signWithOpen,
+            options: titles.map { .init(id: $0.0, title: $0.1, selected: $0.0 == context.signMethod) }
+        )
+    }
+
+    /// The wallet's own key backup, in the person's language. The core's
+    /// built-in results are English, like the descriptors beside them ("the
+    /// words stay in the shell"); this one is OURS. Matched on the request being
+    /// first-party AND the verified registry address — never on the English words.
+    static func localizedOwnBackup(_ clear: ClearSigningViewWire, own: Bool, loc: Loc) -> ClearSigningViewWire {
+        guard own, let result = clear.result, result.verified,
+              result.contractAddress?.lowercased() == passkeyRegistry
+        else { return clear }
+        let labels = ["settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys"].map { loc.t($0) }
+        var next = clear
+        next.result = result.relabelled(intent: loc.t("settingsModals.backup.intent"), labels: labels)
+        return next
+    }
+
     static func model(
         fallback: SigningModel,
         request: SigningController.Incoming,
         sign: SignViewWire,
-        clear: ClearSigningViewWire,
+        clear rawClear: ClearSigningViewWire,
         guard guardView: GuardViewWire,
         fee: FeeViewWire?,
         context: Context
     ) -> SigningModel {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
+        let own = request.transportId == walletTransport
+        let clear = localizedOwnBackup(rawClear, own: own, loc: loc)
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
@@ -68,13 +121,13 @@ enum SigningLive {
             + balanceBlocks(isTransaction: facts != nil, context: context)
             + guardBlocks(guardView, loc: loc)
 
-        return SigningModel(
+        var model = SigningModel(
             id: fallback.id,
             // The HOST, twice. A name a page supplies is a claim, and a
             // signing sheet that leads with the claim is a sheet somebody can
             // dress up as a bank.
-            dapp: (name: host.isEmpty ? request.origin : host,
-                   host: host.isEmpty ? request.origin : host,
+            dapp: (name: own ? "Vela Wallet" : (host.isEmpty ? request.origin : host),
+                   host: own ? "" : (host.isEmpty ? request.origin : host),
                    letter: ExploreLive.site(host: host, name: host, origin: request.origin).letter,
                    tint: ExploreLive.tint(for: host)),
             network: (name: context.chainName, dot: context.chainDot),
@@ -100,6 +153,13 @@ enum SigningLive {
                       enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear)),
             panelTitle: s(loc, "signatureRequest")
         )
+        // The wallet's own request (the key backup) is not a site: its own mark
+        // and name, and no host — "getvela.app" under a letter read as a stranger.
+        model.dappOwn = own
+        model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
+        model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
+        model.signWith = signWith(context: context)
+        return model
     }
 
     // MARK: - The gate

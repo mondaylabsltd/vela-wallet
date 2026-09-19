@@ -464,9 +464,9 @@ enum SendLive {
         switch estimate.feeAsset {
         case .native:
             let symbol = ChainCatalog.meta(estimate.chainId)?.nativeSymbol ?? ""
-            return "\(fromBase(estimate.totalWei, decimals: 18)) \(symbol)"
+            return "\(feeFromBase(estimate.totalWei, decimals: 18)) \(symbol)"
         case .erc20(_, let decimals, let amount, let symbol):
-            return "\(fromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
+            return "\(feeFromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
         }
     }
 
@@ -994,6 +994,29 @@ enum SendLive {
 
     /// A base-unit decimal string as a human one. `TokenReads` owns the
     /// arithmetic; a `Double` here would round somebody's money.
+    /// A FEE in its coin, to read rather than to audit: six decimals, as the
+    /// web shows it. Full precision — `0.000410400290875302 ETH` — crushed the
+    /// row's label and told nobody anything the first three figures had not
+    /// (founder's device, 2026-09-19). Rounded UP, because a fee that displays
+    /// as less than it costs is the wrong way to be wrong; a fee below the sixth
+    /// decimal keeps two significant figures instead of reading as zero.
+    static func feeFromBase(_ base: String, decimals: Int) -> String {
+        let value = NSDecimalNumber(string: base).multiplying(byPowerOf10: Int16(-decimals))
+        guard value != .notANumber else { return base }
+        if value == .zero { return "0" }
+        var scale: Int16 = 6
+        if value.compare(NSDecimalNumber(string: "0.000001")) == .orderedAscending {
+            // Two significant figures: the exponent of the leading digit, plus one.
+            let exponent = Int16(ceil(-log10(value.doubleValue)))
+            scale = exponent + 1
+        }
+        let rounding = NSDecimalNumberHandler(
+            roundingMode: .up, scale: scale, raiseOnExactness: false,
+            raiseOnOverflow: false, raiseOnUnderflow: false, raiseOnDivideByZero: false
+        )
+        return trim(value.rounding(accordingToBehavior: rounding).stringValue)
+    }
+
     static func fromBase(_ base: String, decimals: Int) -> String {
         TokenReads.scaled(decimal: base, decimals: decimals) ?? base
     }

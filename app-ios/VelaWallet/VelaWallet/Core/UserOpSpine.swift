@@ -37,6 +37,11 @@
 import Foundation
 import VelaCore
 
+extension UserOpSpine.AccountPort {
+    /// Nothing known: the ceremony routes as it always did.
+    func keyRoutesJson(of address: String) async -> String { "[]" }
+}
+
 @MainActor
 final class UserOpSpine {
 
@@ -56,6 +61,9 @@ final class UserOpSpine {
         /// The pinned key's stored transports and method, for the ceremony's
         /// routing.
         func routing(of address: String) async -> (transports: String, method: KeyMethod)
+        /// Every founding key's credential id and stored transports, as JSON for
+        /// the core's `signRoute` — `[{credential_id, transports}]`.
+        func keyRoutesJson(of address: String) async -> String
     }
 
     enum Failure: Equatable {
@@ -331,16 +339,37 @@ final class UserOpSpine {
 
     // MARK: - The one ceremony
 
+    /// The person's "Sign with" choice for the request in hand — `auto` unless a
+    /// signing sheet says otherwise (the spine is shared with Send, which never
+    /// sets it). WHICH key that pins, and how it is reached, is the core's.
+    var signMethod: () -> String = { "auto" }
+
+    /// The credential a ceremony is pinned to, its transports and method: the
+    /// person's choice when they made one, the stored route otherwise.
+    private func route(account: String, first: WalletKeyRecord) async -> (credentialId: String, transports: String, method: KeyMethod) {
+        let chosen = signMethod()
+        if chosen != "auto",
+           let json = signRoute(deviceKeysJson: await accounts.keyRoutesJson(of: account), method: chosen),
+           let picked = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
+           let credential = picked["credential_id"] as? String, !credential.isEmpty,
+           let method = (picked["method"] as? String).flatMap(KeyMethod.init(rawValue:))
+        {
+            return (credential, picked["transports"] as? String ?? "", method)
+        }
+        let stored = await accounts.routing(of: account)
+        return (first.credentialId, stored.transports, stored.method)
+    }
+
     private func assert(
         account: String,
         pinned: WalletKeyRecord,
         challenge: Data
     ) async throws -> Assertion {
-        let routing = await accounts.routing(of: account)
+        let routing = await route(account: account, first: pinned)
         do {
             return try await signer().sign(
                 challenge: challenge,
-                credentialIdHex: pinned.credentialId,
+                credentialIdHex: routing.credentialId,
                 transports: routing.transports,
                 method: routing.method
             )

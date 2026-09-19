@@ -181,4 +181,28 @@ struct SigningModel {
     let confirm: (hint: String, action: String, enabled: Bool)
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
+    /// The wallet asking ITSELF (the key backup): its own mark and name, and
+    /// no host — it is not a site.
+    var dappOwn = false
+    /// The site's own icon, tried in order OVER the letter (founder ruling
+    /// 2026-09-19). Https only.
+    var dappIconUrls: [String] = []
+    /// The chain's logo; the dot shows until it lands, and when there is none.
+    var networkLogoUrl: String?
+    /// "Sign with · Automatic ›" — where the passkey that signs this is. Live only.
+    var signWith: SignWithModel?
+}
+
+/// The per-request choice of WHERE the signing passkey is; opens in place.
+struct SignWithModel: Equatable {
+    struct Option: Equatable, Identifiable {
+        let id: String
+        let title: String
+        let selected: Bool
+    }
+
+    let label: String
+    let value: String
+    let open: Bool
+    let options: [Option]
 }
