@@ -20,11 +20,6 @@ import Foundation
 struct RegistryFailure: Error {
     let message: String
     let network: Bool
-
-    /// Unreachable, or failing (5xx): not an answer. A 4xx is the index saying no.
-    var indexIsGone: Bool {
-        network || message.range(of: #" failed: 5\d\d$"#, options: .regularExpression) != nil
-    }
 }
 
 struct GroupChallenge {
@@ -105,21 +100,23 @@ actor RegistryClient {
 
     private var baseURL: String
 
-    /// The contract itself, for the two reads sign-in needs when the index is
-    /// gone (spec 062). `nil` = no fallback.
-    private let chain: RegistryChainReader?
+    /// The three-layer walk behind the two reads sign-in needs (064). `nil` =
+    /// the index alone, believed as it is.
+    private let resolver: RegistryResolver?
 
-    /// Which chain listed the last key's units; `nil` = the index did.
+    /// Who listed the last key's units — the core's own token (`index`,
+    /// `chain:100`, `chain:1`), handed back to it untouched.
     ///
     /// Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum),
-    /// so a key's units are asked of whoever listed them. The index mirrors
-    /// Gnosis, so an index listing may be continued on Gnosis; a chain listing
-    /// is continued on that chain and nowhere else.
-    private var unitSource: Int?
+    /// so a key's units are asked of whoever listed them.
+    private var unitSource = "index"
 
-    init(baseURL: String = RegistryClient.defaultURL, chain: RegistryChainReader? = nil) {
+    /// A walk is a handful of rounds; this only stops a contract bug from spinning.
+    private static let maxResolveRounds = 16
+
+    init(baseURL: String = RegistryClient.defaultURL, resolver: RegistryResolver? = nil) {
         self.baseURL = Self.normalize(baseURL)
-        self.chain = chain
+        self.resolver = resolver
     }
 
     func setBaseURL(_ url: String) {
@@ -275,19 +272,17 @@ actor RegistryClient {
     /// it found?
     func queryByPublicKey(_ publicKeyHex: String) async throws -> KeyStatus {
         let profile: [String: Any]
-        do {
+        if let resolver {
+            profile = try await resolve(label: "Query", listing: true) { answers in
+                resolver.keyStep(publicKeyHex, answers)
+            }
+        } else {
             profile = try await request(
                 "/api/query?publicKey=\(Self.escape(publicKeyHex))",
                 body: nil,
                 timeout: Self.readTimeout,
                 label: "Query"
             )
-            unitSource = nil
-        } catch let gone as RegistryFailure {
-            // Nobody answered on-chain either: the original failure is the honest one.
-            guard gone.indexIsGone, let found = await chain?.keyProfile(publicKeyHex) else { throw gone }
-            unitSource = found.chainId
-            profile = found.body
         }
         let raw = (profile["groups"] as? [String: Any])?["unitIds"] as? [Any] ?? []
         var unitIds: [UInt32] = []
@@ -308,28 +303,102 @@ actor RegistryClient {
     }
 
     private func readUnit(_ unitId: UInt32) async throws -> [String: Any] {
-        if let source = unitSource {
-            guard let detail = await chain?.unit(chainId: source, unitId: unitId) else {
-                throw RegistryFailure(
-                    message: "Query failed: chain \(source) did not answer for unit \(unitId)", network: true
-                )
-            }
-            return detail
-        }
-        do {
+        guard let resolver else {
             return try await request(
                 "/api/query?unitId=\(unitId)&pageSize=\(Self.maxUnitMembers)&order=asc",
                 body: nil,
                 timeout: Self.readTimeout,
                 label: "Query"
             )
-        } catch let gone as RegistryFailure {
-            // The index listed this unit and then went away. Its ids are Gnosis's.
-            guard gone.indexIsGone,
-                  let detail = await chain?.unit(chainId: RegistryChainReader.homeChain, unitId: unitId)
-            else { throw gone }
-            return detail
         }
+        // The token is read NOW: the listing that set it is the one these ids belong to.
+        let source = unitSource
+        return try await resolve(label: "Query", listing: false) { answers in
+            resolver.unitStep(unitId, source, answers)
+        }
+    }
+
+    /// Drive one resolver walk to its end.
+    ///
+    /// When NOBODY answers, the failure reported is the INDEX's own — reachable
+    /// or not — because that is the distinction the core's notices are written
+    /// for; the chains being silent too adds nothing a person can act on.
+    ///
+    /// Only a LISTING sets `unitSource`: a unit proved on Ethereum must not make
+    /// the index's (Gnosis) ids be asked of Ethereum.
+    private func resolve(
+        label: String,
+        listing: Bool,
+        step: @Sendable (String) -> String
+    ) async throws -> [String: Any] {
+        guard let resolver else { throw RegistryFailure(message: "\(label) failed: no resolver", network: false) }
+        var answers: [[String: Any]] = []
+        var indexFailure: RegistryFailure?
+        for _ in 0..<Self.maxResolveRounds {
+            let answersJson = (try? JSONSerialization.data(withJSONObject: answers))
+                .map { String(decoding: $0, as: UTF8.self) } ?? "[]"
+            guard let next = (try? JSONSerialization.jsonObject(with: Data(step(answersJson).utf8))) as? [String: Any]
+            else { break }
+
+            if next["type"] as? String == "ask" {
+                let requests = next["requests"] as? [[String: Any]] ?? []
+                // One round's reads go out together; the transcript keeps the order asked.
+                let round = await withTaskGroup(of: (Int, String?, RegistryFailure?).self) { group in
+                    for (slot, request) in requests.enumerated() {
+                        let kind = request["type"] as? String ?? ""
+                        let chainId = (request["chain_id"] as? NSNumber)?.intValue ?? 0
+                        let to = request["to"] as? String ?? ""
+                        let data = request["data"] as? String ?? ""
+                        let path = request["path"] as? String ?? ""
+                        group.addTask { [self] in
+                            if kind == "eth_call" {
+                                return (slot, await resolver.ethCall(chainId, to, data), nil)
+                            }
+                            do {
+                                return (slot, try await self.rawBody(path, label: label), nil)
+                            } catch let failure as RegistryFailure {
+                                return (slot, nil, failure)
+                            } catch {
+                                return (slot, nil, RegistryFailure(message: "\(label) failed: \(error)", network: true))
+                            }
+                        }
+                    }
+                    var collected: [(Int, String?, RegistryFailure?)] = []
+                    for await result in group { collected.append(result) }
+                    return collected.sorted { $0.0 < $1.0 }
+                }
+                for (slot, body, failure) in round {
+                    if let failure { indexFailure = failure }
+                    answers.append([
+                        "id": requests[slot]["id"] as? String ?? "",
+                        "outcome": body != nil ? "ok" : "failed",
+                        "body": body ?? NSNull(),
+                    ])
+                }
+                continue
+            }
+
+            guard let body = next["body"] as? String,
+                  let object = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any]
+            else { break }
+            let source = next["source"] as? String ?? "index"
+            if next["index_discarded"] as? Bool == true {
+                // Our own index described a founding set the chain does not hold. The
+                // chain's is what is used; this line is for whoever runs the index.
+                NSLog("registry: the index's answer was discarded for %@", source)
+            }
+            if listing { unitSource = source }
+            return object
+        }
+        throw indexFailure ?? RegistryFailure(message: "\(label) failed: nobody answered", network: true)
+    }
+
+    /// One index GET for the resolver: the body as TEXT (the core hashes and
+    /// parses it itself), under the same failure rules as `request`.
+    private func rawBody(_ path: String, label: String) async throws -> String {
+        let object = try await request(path, body: nil, timeout: Self.readTimeout, label: label)
+        let data = try JSONSerialization.data(withJSONObject: object)
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// `/api/query?unitId=` — the group's frozen metadata and ALL its founding
