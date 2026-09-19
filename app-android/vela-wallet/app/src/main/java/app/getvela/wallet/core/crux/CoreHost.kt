@@ -55,6 +55,23 @@ class CoreHost<V : Any>(
     /** The core's current view. Never a partially-applied one. */
     val view: StateFlow<V> = _view.asStateFlow()
 
+    private val _commits = MutableStateFlow(0L)
+
+    /**
+     * How many views the core has committed — for a caller waiting on something
+     * the core DID rather than on what the view now says.
+     *
+     * [view] cannot be waited on for that. A `StateFlow` drops a value that
+     * `equals` the last one a collector saw, and views are data classes: a
+     * machine that goes `idle(A) → busy → idle(A')` with `A' == A` — a second
+     * fee quote at the same price — looks, to a collector that was not
+     * scheduled during `busy`, like nothing happened at all. It is never woken,
+     * and whatever it was waiting for never arrives (the send flow's quote
+     * wait sat out its whole 30 s this way on a loaded CI runner). A counter
+     * never repeats, so every commit wakes its collectors; read [view] then.
+     */
+    val commits: StateFlow<Long> = _commits.asStateFlow()
+
     private val driver = CoreDriver(
         bridge = bridge,
         scope = scope,
@@ -88,7 +105,10 @@ class CoreHost<V : Any>(
      */
     private fun commit(viewJson: JSONObject) {
         runCatching { Wire.json.decodeFromString(serializer, viewJson.toString()) }
-            .onSuccess { _view.value = it }
+            .onSuccess {
+                _view.value = it
+                _commits.value += 1
+            }
             .onFailure(onFault)
     }
 }

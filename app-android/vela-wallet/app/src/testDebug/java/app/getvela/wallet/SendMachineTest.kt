@@ -56,7 +56,9 @@ class SendMachineTest {
     private val port = FakeRelayPort()
     private val safe = fixtureMultiAddress()
     private val recipient = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
-    private val events = ArrayList<String>()
+    // Appended to from the machines' threads while the test iterates it: a plain
+    // list threw ConcurrentModificationException about once in 150 loaded runs.
+    private val events = java.util.concurrent.CopyOnWriteArrayList<String>()
     private var signs = 0
 
     @After
