@@ -21,8 +21,8 @@ release, which creates the unified `vX.Y.Z` Release this spec reads from.
 3. **Phones stay out of it**: 「android 和 ios 包不用传到 github release」. Their cards keep
    pointing at the stores (spec 063). Uploading signed phone packages means uploading to
    Play / App Store, which is a different tool and not this spec.
-4. **Open — the founder's call**: relaying downloads through the Worker for readers in
-   mainland China (§A5). Costs bandwidth; not decided.
+4. **Downloads are served from R2, not from GitHub** (§A5) — decided 2026-09-19:
+   「要的，放到 r2 下载更快」.
 
 ## 1. Why
 
@@ -65,12 +65,29 @@ any file a release happens not to carry.
 → The Worker reads the Release's asset list (GitHub's API), cached at the edge for a few
 minutes; the page renders from that list, not from a list of what *ought* to exist.
 
-**A5. OPEN — relay for mainland China.** `github.com` release downloads are often slow or
-unreachable there. The Worker could stream the file itself and keep it in R2, so the
-download comes from Cloudflare. It costs storage and egress-free-but-not-request-free
-traffic, and it makes us the distributor of record for the bytes. Default if undecided:
-**not built**; the redirect in A3 is kept shaped so the relay can replace it without the
-page changing.
+**A5. The bytes come from R2** (founder, 2026-09-19: 「要的，放到 r2 下载更快」).
+`github.com` release downloads are often slow or unreachable in mainland China, so the file
+a person receives is served by Cloudflare from an R2 bucket, not redirected to GitHub.
+
+- **GitHub Releases stays the source of truth.** R2 is a mirror of it, never a second place
+  to publish: a file is in R2 because it is on the Release, and only then.
+- **Filled on first request, then kept.** `/download/<platform>` looks in R2 under
+  `vX.Y.Z/<file>`; on a miss the Worker fetches the asset from the Release, streams it to
+  the person *and* into R2, and every later request is R2 alone. No upload step for the
+  founder, and nothing to forget — `release-attach.sh` (Part B) does not have to know R2
+  exists. (A warm-up request per file right after a release is a cheap courtesy to the
+  first reader, not a requirement.)
+- **What is served is what was published.** The mirror is keyed by version and file name,
+  and checked against the Release's own `SHA256SUMS*` before it is kept: a truncated fetch
+  must not become the file everyone downloads from then on. A `--replace` in Part B has to
+  be able to evict the old object.
+- **If R2 or the Worker path fails, fall back to the GitHub redirect** — a slow download
+  beats none.
+- **Costs, said plainly**: R2 has no egress fee; storage is ~150 MB per release (fourteen
+  desktop files + the extension), so years of releases fit in a few GB. Old versions can
+  be pruned by a lifecycle rule; the latest few are what people download.
+- The bucket and its binding live in the site's `wrangler` config; **creating the bucket
+  is the founder's** (or done with their say-so) — it is an account resource.
 
 **A6. Words**: sixteen locales, through spec 059's process (translate, then stamp).
 
@@ -110,6 +127,8 @@ files attached by hand, which is exactly where it is easiest to break.
   platform with no asset answers with the page (and the *coming shortly* state), not a 404.
 - **FR-002** The asset list is read from GitHub, cached briefly, and survives GitHub being
   slow or down by serving the last good list.
+- **FR-002a** The bytes are served from R2 (A5): fill-on-miss from the Release, verified
+  against the Release's checksums before being kept, GitHub redirect as the fallback.
 - **FR-003** The page: detected primary button; "other platforms" per A2; A4's states.
 - **FR-004** Detection is testable without a browser (a pure function of UA / client hints),
   and has a test per row of A2 plus "unknown → show the list, pick nothing".
