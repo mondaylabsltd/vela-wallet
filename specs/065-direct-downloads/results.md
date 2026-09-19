@@ -48,7 +48,7 @@ courtesy; it is not automated here).
 
 ## Not checked
 
-- **Production R2 and the production edge cache** — bucket `vela-wallet-installer` exists and
+- **Production R2 and the production edge cache** — bucket `vela-downloads` exists and
   is bound, but nothing has been served from it until this deploys. Locally it is Miniflare's R2, which enforced `sha256` the way the docs say the real one does.
 - **`waitUntil` after a client disconnect in production**: Workers gives background work a
   limited time once the response ends. If a fill is cut short R2 refuses it (wrong hash) and
