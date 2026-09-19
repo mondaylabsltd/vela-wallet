@@ -387,7 +387,6 @@
 		"recommended": "推荐",
 		"availableNow": "现已可用",
 		"comingSoon": "即将上架",
-		"githubCta": "从 GitHub Releases 下载",
 		"sourceCta": "从源码自行构建",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "应用商店里的下载是付费的，这是一支独立小团队公开开发 Vela 的经费来源。所有代码都开源，所以你也可以自己构建——同一个应用，不收一分钱。",
-		"storeNote": "目前还没有上架任何应用商店。在那之前，桌面版和浏览器扩展都在 GitHub 上，下载即可安装。手机版不在那里：它们来自应用商店，或者来自源码。"
+		"storeNote": "目前还没有上架任何应用商店。在那之前，桌面版和浏览器扩展都可以直接从本页下载，下载即可安装。手机版不行：它们来自应用商店，或者来自源码。",
+		"downloads": {
+			"yourSystem": "你的系统",
+			"versionLine": "版本 {{version}}",
+			"comingShortly": "稍后提供",
+			"unavailable": "这个下载还没有上传——通常在新版本发布后几小时内补上。这里其他的都已经可以下载。",
+			"windowsNote": "Windows 会提示“Windows 已保护你的电脑”：安装程序还没有代码签名。点“更多信息”，再点“仍要运行”。",
+			"verify": "在 GitHub 查看校验和与源码",
+			"installer": "安装程序",
+			"chips": {
+				"appleSilicon": "Apple 芯片",
+				"intel": "Intel 芯片",
+				"universal": "通用"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple 芯片（M1 及之后）",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM（Snapdragon、Surface Pro X）",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — 任意发行版 (Flatpak)",
+				"linux-flatpak-arm64": "Linux — 任意发行版 (Flatpak, ARM)",
+				"extension": "浏览器扩展"
+			},
+			"extension": {
+				"action": "下载扩展",
+				"stepsTitle": "在上架 Chrome 应用商店之前，还需要：",
+				"steps": [
+					"解压到一个你会保留的文件夹——浏览器会从那里运行扩展。",
+					"打开 chrome://extensions，开启“开发者模式”。",
+					"点击“加载已解压的扩展程序”，选择那个文件夹。"
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

@@ -193,7 +193,7 @@ final install and window-behaviour check on a physical ARM64 Windows device or
 an ARM64 CI runner. The x64 package can run under Windows on ARM emulation, but
 it is not a substitute for distributing the native ARM64 package.
 
-On a release tag (`desktop-v*`),
+On a release (a push to `release/vX.Y.Z` — [spec 064](../../specs/064-release-from-branch/spec.md)),
 [the Windows CI workflow](../../.github/workflows/desktop-windows-packages.yml)
 builds both installers on x64 runners — ARM64 cross-compiles through the same
 VsDevCmd path the script uses locally — and attaches them to the same release
@@ -303,7 +303,7 @@ macOS only: `iconutil` turns the committed
 `packaging/icons/macos/AppIcon.iconset` into `AppIcon.icns`, and `codesign`
 applies an ad-hoc signature. The iconset itself is generated on any platform by
 `./scripts/generate-desktop-icons.sh`, so only the final assembly needs a Mac.
-On a release tag (`desktop-v*`),
+On a release (a push to `release/vX.Y.Z` — [spec 064](../../specs/064-release-from-branch/spec.md)),
 [the macOS CI workflow](../../.github/workflows/desktop-macos-packages.yml)
 builds all three images on one arm64 runner — `--arch universal` compiles both
 Rust targets, and the two follow-up invocations repackage with `--skip-build` —
@@ -326,7 +326,7 @@ VELA_NOTARY_PROFILE=vela-notary \
 ```
 
 For a release, do not assemble that by hand: `./scripts/release-macos-local.sh
-desktop-v<version> [--upload]` builds all three images from the tag, finds the
+v<version> [--upload]` builds all three images from the release's tag, finds the
 profile, picks the certificate the profile names, proves the notary credentials
 before compiling, and attaches the result to the release CI created. Signing is
 local by ruling — nothing that can sign as us is stored on GitHub
@@ -358,7 +358,7 @@ appear in GNOME Software, KDE Discover and the shell's own search.
 |---|---|---|
 | `vela-wallet-<version>-1.fc<n>.<arch>.rpm` | Fedora, RHEL, openSUSE | `./scripts/build-linux-packages.sh --formats rpm` |
 | `vela-wallet_<version>_<arch>.deb` | Debian, Ubuntu, Mint, Pop!_OS | `./scripts/build-linux-packages.sh --formats deb` |
-| `app.getvela.VelaWallet-<arch>.flatpak` | Every distribution, sandboxed | `./scripts/build-flatpak.sh` |
+| `app.getvela.VelaWallet-<version>-<arch>.flatpak` | Every distribution, sandboxed | `./scripts/build-flatpak.sh` |
 | `vela-wallet-<version>-linux-<arch>.tar.gz` | Manual installs, other distros | `./scripts/build-linux-packages.sh --formats tar` |
 
 ### RPM and DEB

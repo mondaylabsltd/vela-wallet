@@ -3,10 +3,14 @@
 # on THIS Mac, so the signing key never leaves it (spec 063, the founder's
 # choice: nothing that can sign as us is stored on GitHub).
 #
-#   ./scripts/release-macos-local.sh desktop-v0.9.2            # build + verify, upload nothing
-#   ./scripts/release-macos-local.sh desktop-v0.9.2 --upload   # …then attach to the release
+#   ./scripts/release-macos-local.sh v0.9.3            # build + verify, upload nothing
+#   ./scripts/release-macos-local.sh v0.9.3 --upload   # …then attach to the release
 #
-# CI builds Windows and Linux from the tag and creates the release; its macOS
+# The tag is the one release.yml created at the head of release/v0.9.3 (spec
+# 064): one tag per version, at the commit every other package was built from —
+# so the images made here say the same "0.9.3 (abc1234)" as the rest.
+#
+# CI builds Windows and Linux from that commit and creates the release; its macOS
 # job has no credentials, so it verifies the build and attaches nothing. This
 # script supplies the missing third: the same three .dmg files, from the same
 # tagged source, signed with the Developer ID and notarized by Apple.
@@ -47,11 +51,11 @@ while [[ $# -gt 0 ]]; do
     --profile)        [[ $# -ge 2 ]] || die "--profile needs a path"; profile="$2"; shift 2 ;;
     --notary-profile) [[ $# -ge 2 ]] || die "--notary-profile needs a name"; notary_profile="$2"; shift 2 ;;
     -h|--help)        sed -n '2,/^set -euo/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//; $d'; exit 0 ;;
-    desktop-v*)       tag="$1"; shift ;;
-    *)                die "unknown argument: $1 (expected a desktop-v* tag)" ;;
+    v[0-9]*)          tag="$1"; shift ;;
+    *)                die "unknown argument: $1 (expected the release's tag, e.g. v0.9.3)" ;;
   esac
 done
-[[ -n "$tag" ]] || die "which release? e.g. ./scripts/release-macos-local.sh desktop-v0.9.2"
+[[ -n "$tag" ]] || die "which release? e.g. ./scripts/release-macos-local.sh v0.9.3"
 [[ "$(uname -s)" == "Darwin" ]] || die "this script only runs on macOS"
 
 # ------------------------------------------------------------ the source --
@@ -64,7 +68,7 @@ tag_commit="$(git -C "$repo_root" rev-parse -q --verify "refs/tags/$tag^{commit}
 [[ -z "$(git -C "$repo_root" status --porcelain -- app-desktop rust)" ]] ||
   die "app-desktop/ or rust/ has uncommitted changes; a release is built from the tag, exactly"
 version="$(sed -n '/^\[package\]/,/^\[/ s/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$project_root/Cargo.toml" | head -1)"
-[[ "desktop-v$version" == "$tag" ]] || die "Cargo.toml says $version but the tag is $tag"
+[[ "v$version" == "$tag" ]] || die "Cargo.toml says $version but the tag is $tag"
 
 # ----------------------------------------------------------- the profile --
 profile_is_ours() {  # a Developer ID profile for this app, granting Associated Domains
@@ -118,8 +122,8 @@ note "notary credentials: $notary_profile (Apple accepted them)"
 if (( upload )); then
   command -v gh >/dev/null 2>&1 || die "--upload needs the GitHub CLI (gh)"
   existing="$(gh release view "$tag" --repo "$repo" --json assets -q '.assets[].name' 2>/dev/null)" ||
-    die "there is no release for $tag yet. CI creates it (with the install notes) when the
-       tag is pushed; wait for the Windows or Linux workflow to finish, then run this."
+    die "there is no release for $tag yet. release.yml creates it (tag, notes, Windows and
+       Linux packages) when release/$tag is pushed; wait for that run, then run this."
   if grep -qE '\.dmg$|^SHA256SUMS-macos$' <<<"$existing" && (( ! replace )); then
     die "$tag already has macOS packages. Replacing published files changes their
        checksums under people who downloaded them; pass --replace if you mean it."
@@ -128,12 +132,21 @@ fi
 
 # ------------------------------------------------------------- the build --
 export VELA_SIGN_IDENTITY="$identity" VELA_PROVISION_PROFILE="$profile" VELA_NOTARY_PROFILE="$notary_profile"
+# The commit About shows: the tag's, said out loud rather than left to build.rs to find.
+export VELA_GIT_COMMIT="$tag_commit"
 rm -rf "$project_root/dist/macos"
 "$project_root/scripts/build-macos-app.sh" --arch universal --notarize
 "$project_root/scripts/build-macos-app.sh" --arch arm64 --skip-build --notarize
 "$project_root/scripts/build-macos-app.sh" --arch x86_64 --skip-build --notarize
 
 cd "$project_root/dist/macos"
+for built in arm64 x86_64 universal; do
+  # Not `strings | grep -q`: grep -q exits at the first match, strings dies of
+  # SIGPIPE, and pipefail turns "found it early" into a failure. 0.9.3's three
+  # good images were refused here for exactly that.
+  grep -aq "${tag_commit:0:7}" "$built/Vela Wallet.app/Contents/MacOS/vela-wallet" ||
+    die "the $built binary does not carry commit ${tag_commit:0:7} — About would show something else"
+done
 for dmg in ./*.dmg; do
   xcrun stapler validate "$dmg" >/dev/null || die "no stapled ticket on $dmg"
   spctl --assess --type open --context context:primary-signature "$dmg" || die "Gatekeeper refuses $dmg"
@@ -143,9 +156,12 @@ shasum -a 256 ./*.dmg > SHA256SUMS-macos
 echo; cat SHA256SUMS-macos; echo
 
 if (( upload )); then
-  clobber=(); (( replace )) && clobber=(--clobber)
-  gh release upload "$tag" ./*.dmg SHA256SUMS-macos --repo "$repo" ${clobber[@]+"${clobber[@]}"}
-  note "attached to https://github.com/$repo/releases/tag/$tag"
+  # One uploader, not two (spec 065 FR-007): release-attach.sh re-checks each
+  # image the way it checks any hand-attached file — stapled, accepted by
+  # Gatekeeper, named for this tag, carrying its commit, replacing nothing
+  # unless told to — and keeps SHA256SUMS-macos on the release in step.
+  attach=("$repo_root/scripts/release-attach.sh" "$tag"); (( replace )) && attach+=(--replace)
+  "${attach[@]}" ./*.dmg
   echo "Now the check no script can make: download one .dmg THROUGH A BROWSER (a file"
   echo "that never left this Mac is not quarantined), open it, make a wallet with"
   echo "\"This device\", and open the scanner."

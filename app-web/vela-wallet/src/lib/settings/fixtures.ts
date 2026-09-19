@@ -48,6 +48,7 @@ export {
 	DESKTOP_SETTINGS_STATES as DESKTOP_STATES,
 	MOBILE_SETTINGS_STATES as MOBILE_STATES
 } from './model';
+import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
 
 /** The signed-in account the mocks draw. Shared with the wallet fixtures. */
 export const ACCOUNT_NAME = '大表哥';
@@ -165,8 +166,9 @@ const DATE_SAMPLES = [
 ];
 const TIME_SAMPLES = ['13:45', '13:45', '1:45 PM'];
 
-const APP_VERSION = '1.0.0';
-const APP_COMMIT = '6ab8f';
+// The build's own, not the mock's — see `$lib/build/info` (spec 064).
+const APP_VERSION = BUILD_VERSION;
+const APP_COMMIT = BUILD_COMMIT;
 
 /** `45ms` etc. — the latency pill's own text, tone chosen by the number. */
 function latencyPill(ms: number, prefix?: string) {

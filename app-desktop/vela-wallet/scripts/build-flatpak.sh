@@ -79,7 +79,14 @@ flatpak install --user --arch "$arch" --noninteractive flathub \
 mkdir -p "$dist_dir"
 build_dir="$dist_dir/build-$arch"
 repo_dir="$dist_dir/repo"
-bundle="$dist_dir/$appid-$arch.flatpak"
+# The version is in the file's name, like every other package on a release.
+# It was not, through 0.9.3 (`app.getvela.VelaWallet-x86_64.flatpak`, the usual
+# Flatpak spelling): two versions downloaded side by side were one name, and
+# nobody could tell which was which.
+version="$(sed -n '/^\[package\]/,/^\[/ s/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$project_root/Cargo.toml" | head -1)"
+[[ -n "$version" ]] || die "could not read the version from Cargo.toml"
+bundle="$dist_dir/$appid-$version-$arch.flatpak"
 
 # ------------------------------------------------------- which tree to build --
 
@@ -147,6 +154,17 @@ note "flatpak-builder ($arch)"
   --repo="$repo_dir" \
   --state-dir="$dist_dir/.builder" \
   "$build_dir" "$manifest_to_build"
+
+# Spec 064 §3, asserted in the package: the sandbox has neither CI's
+# environment nor, necessarily, a usable git, so this is the one build where
+# "About shows the commit" has to be looked at rather than assumed.
+if (( ! worktree )); then
+  want="${VELA_GIT_COMMIT:-$(git -C "$repo_root" rev-parse HEAD)}"
+  want="${want:0:7}"
+  grep -aq "$want" "$build_dir/files/bin/vela-wallet" ||
+    die "the Flatpak's binary does not carry commit $want — About would show something else"
+  note "vela-wallet carries $want"
+fi
 
 note "exporting bundle"
 flatpak build-bundle --arch="$arch" "$repo_dir" "$bundle" "$appid"

@@ -19,7 +19,7 @@
 # on its own) and attaches NOTHING, and says so in the job summary.
 #
 # WHERE THE CREDENTIALS LIVE. In the `release` ENVIRONMENT, restricted to
-# `desktop-v*` tags — not in repository secrets. This repository is public: a
+# `release/v*` branches — not in repository secrets. This repository is public: a
 # pull request or a branch workflow must not be able to reach a signing
 # identity. Every other run uses the empty `build-check` environment, so a
 # `workflow_dispatch` from a fix branch (how 0.9.0's packaging fixes were
@@ -35,10 +35,17 @@
 name: Desktop macOS packages
 
 on:
-  # Cutting a desktop release: `git tag desktop-v0.1.0 && git push origin desktop-v0.1.0`
-  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
-  push:
-    tags: ['desktop-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
+    outputs:
+      publishable:
+        description: 'true only when this run signed AND notarized the images (spec 063 §3)'
+        value: ${{ jobs.dmg.outputs.publishable }}
   workflow_dispatch:
   # Packaging metadata is cheap to check and easy to break, so it is checked on
   # every PR that touches it. The package build itself is not - macOS runner
@@ -48,6 +55,11 @@ on:
       - 'app-desktop/vela-wallet/packaging/**'
       - 'app-desktop/vela-wallet/scripts/**'
       - '.github/workflows/desktop-macos-packages.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -89,7 +101,7 @@ jobs:
     runs-on: macos-15
     # Two environments, one expression: only a release tag may ask for the one
     # that holds the signing identity.
-    environment: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'release' || 'build-check' }}
+    environment: ${{ startsWith(github.ref, 'refs/heads/release/v') && 'release' || 'build-check' }}
     outputs:
       publishable: ${{ steps.credentials.outputs.publishable }}
     env:
@@ -135,8 +147,8 @@ jobs:
               echo
               echo "See \`specs/063-release-channels/quickstart.md\`."
             } >> "$GITHUB_STEP_SUMMARY"
-            if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
-              echo "::warning title=macOS not published::No signing credentials in the release environment — this tag ships without a macOS package."
+            if [[ "$GITHUB_REF" == refs/heads/release/v* ]]; then
+              echo "::notice title=macOS is attached by hand::No signing credentials on GitHub, by ruling (spec 063 §3a). After this run: ./scripts/release-macos-local.sh v<version> --upload"
             fi
           fi
       - name: Import the Developer ID identity into a throwaway keychain
@@ -244,6 +256,11 @@ jobs:
             [ "$arch" = universal ] && want="arm64 x86_64" || want="$arch"
             [ "$got" = "$want" ] || { echo "$arch bundle contains [$got]"; exit 1; }
             codesign --verify --strict "dist/macos/$arch/Vela Wallet.app"
+            # Spec 064 §3, asserted where it matters: in the package.
+            # Not `strings | grep -q`: under pipefail that fails with 141
+            # (SIGPIPE) precisely when the commit is found early.
+            grep -aq "${GITHUB_SHA:0:7}" "$bin" || {
+              echo "::error::the $arch binary does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
           done
       - name: What is about to be published must be what Gatekeeper accepts
         if: steps.credentials.outputs.publishable == 'true'
@@ -262,53 +279,3 @@ jobs:
           name: dmg
           path: app-desktop/vela-wallet/dist/macos/*.dmg
           if-no-files-found: error
-
-  release:
-    name: Attach packages to the release
-    # `publishable` is the gate (spec 063 §3): a tag without signing credentials
-    # still builds and verifies, and attaches no macOS package at all.
-    if: startsWith(github.ref, 'refs/tags/desktop-v') && needs.dmg.outputs.publishable == 'true'
-    # metadata is a needs-edge, not just a sibling: its CFBundleIdentifier
-    # check is the only guard the build path does not re-enforce, and a red
-    # check on the tag commit must block the release, not decorate it.
-    needs: [metadata, dmg]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      # Only for the install notes. They open the release so that the person who
-      # lands on this page is told how to install what is on it (spec 063
-      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app-desktop/vela-wallet/packaging/release-notes.md
-          sparse-checkout-cone-mode: false
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the packages
-        working-directory: artifacts
-        run: |
-          # SHA256SUMS-macos, not SHA256SUMS: the Linux workflow uploads a file
-          # by that name to the same release, and whichever job runs second
-          # would --clobber the other's checksums.
-          # Via a temp file so the glob cannot pick up the file being written.
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-macos"
-          mv "$RUNNER_TEMP/SHA256SUMS-macos" SHA256SUMS-macos
-          cat SHA256SUMS-macos
-      - name: Upload
-        # The Linux workflow races this job on the same tag; whichever runs
-        # second falls through to `gh release upload`.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet Desktop $GITHUB_REF_NAME" \
-            --notes-file app-desktop/vela-wallet/packaging/release-notes.md \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber

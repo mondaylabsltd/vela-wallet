@@ -1,0 +1,270 @@
+# THE release. Pushing `release/vX.Y.Z` is the release (spec 064, founder's
+# ruling 2026-09-19): every package is built from the branch's head commit, and
+# the tag and the GitHub Release are created AT that commit.
+#
+#     git switch -c release/v0.9.3 main     # bump the four versions, commit
+#     git push origin release/v0.9.3        # <- this
+#
+# Why not a tag on main afterwards, which is how 0.9.0-0.9.2 were cut: merging
+# the release branch makes a NEW commit, the tag went on that one, and every
+# package carried a commit that does not exist on the release branch. Someone
+# holding the app and reading "About" could not find what they were running.
+#
+# What runs, in order:
+#   gate     seconds, before anything compiles: the branch names a version, all
+#            four shells declare that version, and the version has not already
+#            been released from a DIFFERENT commit
+#   build    every shell, from the same commit, by CALLING the packaging
+#            workflows — they stay the single definition of how a package is made
+#   publish  one tag, one Release: desktop (Windows, Linux; macOS only if this
+#            run signed it — by ruling it does not) and the extension. Phone
+#            packages stay workflow artifacts (spec 063): the stores are their
+#            channel
+#   released fast-forwards the `released` branch to the commit. Cloudflare
+#            deploys the web wallet from that branch, so the web wallet is the
+#            same commit as everything else
+#
+# Then, by hand, on the founder's Mac (spec 063 §3a):
+#     ./scripts/release-macos-local.sh vX.Y.Z --upload
+name: Release
+
+on:
+  push:
+    branches: ['release/v*']
+
+# One release of a version at a time; a second push to the same branch waits
+# for the first, and then meets the gate's "already released" rule.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: May this commit be released as this version?
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the tag check needs the tags
+      - name: The branch names a version
+        id: version
+        run: |
+          branch="${GITHUB_REF#refs/heads/}"
+          version="${branch#release/v}"
+          # Digits only. A suffix like -alpha breaks three packagers at once:
+          # Chrome's manifest takes dot-separated integers, rpm's Version cannot
+          # hold a '-', and CFBundleShortVersionString must be numeric. "Not the
+          # final 1.0" is said with the pre-release flag below, where nothing
+          # has to parse it.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$branch' does not name a version. Release branches are release/vYY.M.R (e.g. release/v26.9.0) — digits only."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version from ${GITHUB_SHA:0:7}"
+      - name: All four shells declare that version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          desktop=$(sed -n '/^\[package\]/,/^\[/ s/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app-desktop/vela-wallet/Cargo.toml | head -1)
+          extension=$(node -p "require('./app-web/vela-wallet/extension/manifest.json').version")
+          android=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' app-android/vela-wallet/app/build.gradle.kts)
+          ios=$(grep -m1 -oE 'MARKETING_VERSION = [^;]+' app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj | sed 's/MARKETING_VERSION = //')
+          ios_all=$(grep -oE 'MARKETING_VERSION = [^;]+' app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj | sort -u | wc -l | tr -d ' ')
+          bad=0
+          say() { printf '  %-42s %s\n' "$1" "$2"; }
+          check() { if [ "$2" = "$VERSION" ]; then say "$1" "$2"; else say "$1" "$2   <-- not $VERSION"; bad=1; fi; }
+          echo "release/v$VERSION wants every shell to say $VERSION:"
+          check "app-desktop/vela-wallet/Cargo.toml"        "$desktop"
+          check "extension/manifest.json (web + extension)"  "$extension"
+          check "app/build.gradle.kts versionName"           "$android"
+          check "project.pbxproj MARKETING_VERSION"          "$ios"
+          if [ "$ios_all" != "1" ]; then
+            echo "::error::project.pbxproj carries $ios_all different MARKETING_VERSION values; every build configuration must agree."; bad=1
+          fi
+          lock=$(awk '/^name = "vela-wallet"$/{getline; print; exit}' app-desktop/vela-wallet/Cargo.lock | sed -E 's/version = "(.*)"/\1/')
+          [ "$lock" = "$VERSION" ] || { echo "::error::Cargo.lock says vela-wallet $lock — the build runs --locked and would refuse. Run 'cargo update -p vela-wallet' (or build once) and commit the lock."; bad=1; }
+          if [ "$bad" = 1 ]; then
+            echo "::error::The release branch says $VERSION and the shells do not all agree. Bump them on this branch, commit, push again."
+            exit 1
+          fi
+      - name: This version has not been released from a different commit
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          existing=$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" || true)
+          if [ -z "$existing" ]; then
+            echo "$TAG does not exist yet — this run creates it at ${GITHUB_SHA:0:7}."
+            # A NEW version must be the calendar's (spec 066): YY.M.REVISION, this
+            # month, the next revision. Only here — re-running a release that
+            # already has its tag must not start failing when the month turns.
+            # The rule proves itself first: a gate nobody tested is a rumour.
+            scripts/check-release-version.test.sh >/dev/null ||
+              { echo "::error::scripts/check-release-version.sh fails its own tests; refusing to trust it."; exit 1; }
+            scripts/check-release-version.sh "${TAG#v}"
+          elif [ "$existing" = "$GITHUB_SHA" ]; then
+            echo "$TAG already points at this commit — re-running the same release (packages are re-attached)."
+          else
+            echo "::error::$TAG was already released from ${existing:0:7}, and this is ${GITHUB_SHA:0:7}. Published packages are not replaced under the people who downloaded them: a fix is a new version. Cut release/v<next> instead."
+            exit 1
+          fi
+
+  linux:
+    needs: gate
+    uses: ./.github/workflows/desktop-linux-packages.yml
+    with:
+      flatpak: true
+  windows:
+    needs: gate
+    uses: ./.github/workflows/desktop-windows-packages.yml
+  macos:
+    needs: gate
+    uses: ./.github/workflows/desktop-macos-packages.yml
+  extension:
+    needs: gate
+    uses: ./.github/workflows/web-extension-package.yml
+  # Built and verified on every release; attached to nothing (spec 063).
+  android:
+    needs: gate
+    uses: ./.github/workflows/android-package.yml
+  ios:
+    needs: gate
+    uses: ./.github/workflows/ios-package.yml
+
+  publish:
+    name: One tag, one Release, at the released commit
+    # EVERY shell must have built, the phones included: a release whose Android
+    # build is broken is not a release, even though no Android file is attached.
+    needs: [gate, linux, windows, macos, extension, android, ios]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.gate.outputs.tag }}
+      VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            app-desktop/vela-wallet/packaging/release-notes.md
+            app-web/vela-wallet/extension/release-notes.md
+          sparse-checkout-cone-mode: false
+      # By NAME, so what is attached is a decision made here and not "whatever
+      # the run happened to upload": the phone artifacts are never downloaded.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'rpm-*'
+          path: packages
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'deb-*'
+          path: packages
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'flatpak-*'
+          path: packages
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'windows-*'
+          path: packages
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: chrome-extension
+          path: packages
+      - name: macOS images — only if this run signed and notarized them
+        if: needs.macos.outputs.publishable == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: dmg
+          path: packages
+      - name: Checksums
+        working-directory: packages
+        run: |
+          ls -l
+          # One file for everything CI attaches. The founder's Mac adds
+          # SHA256SUMS-macos beside it when the images are attached by hand.
+          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+      - name: Notes
+        run: |
+          {
+            echo "Built from \`${GITHUB_SHA:0:7}\` — the head of \`${GITHUB_REF#refs/heads/}\`. Every app's About page says **$VERSION (${GITHUB_SHA:0:7})**."
+            echo
+            cat app-desktop/vela-wallet/packaging/release-notes.md
+            echo
+            echo "## Browser extension"
+            echo
+            sed '1,/^## Installing$/d' app-web/vela-wallet/extension/release-notes.md
+          } > "$RUNNER_TEMP/notes.md"
+      - name: Publish
+        run: |
+          # 0.x is a pre-release by the founder's ruling (2026-09-17): "not the
+          # final 1.0" is said here, where nothing has to parse it.
+          pre=(); [[ "$VERSION" == 0.* ]] && pre=(--prerelease)
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # The gate has already established this is the SAME commit: a re-run.
+            gh release upload "$TAG" packages/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            # --target creates the tag at exactly this commit. No tag is pushed
+            # by hand, so "push release tags one at a time" stops being a rule.
+            gh release create "$TAG" packages/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Vela Wallet $VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md" \
+              --generate-notes \
+              "${pre[@]}"
+          fi
+          echo "### Released $VERSION from ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.macos.outputs.publishable }}" != "true" ]; then
+            {
+              echo
+              echo "**macOS is attached by hand** (nothing that can sign is on GitHub — spec 063 §3a):"
+              echo
+              echo '```'
+              echo "git fetch --tags && git checkout $TAG"
+              echo "cd app-desktop/vela-wallet && ./scripts/release-macos-local.sh $TAG --upload"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  released:
+    name: Point `released` at this commit (the web wallet deploys from it)
+    needs: [publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast-forward only
+        run: |
+          # Cloudflare's production branch for vela-wallet-web is `released`
+          # (spec 064 §4): this push is what deploys the web wallet, from
+          # exactly the commit every other package was built from. Not
+          # `release` — git cannot hold that name beside release/v*.
+          #
+          # No --force, on purpose. `released` only moves forward; a release
+          # cut from a branch that does not contain the previous release is
+          # refused by git, and that refusal is the right answer.
+          if git push origin "$GITHUB_SHA:refs/heads/released"; then
+            echo "released -> ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::'released' could not be fast-forwarded to ${GITHUB_SHA:0:7}: this release branch does not contain the previous release. Merge the previous release branch (or main, if it was merged back) into this one and push again."
+            exit 1
+          fi

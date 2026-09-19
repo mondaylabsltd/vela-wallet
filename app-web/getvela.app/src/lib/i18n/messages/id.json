@@ -387,7 +387,6 @@
 		"recommended": "Disarankan",
 		"availableNow": "Tersedia sekarang",
 		"comingSoon": "Segera hadir",
-		"githubCta": "Unduh dari GitHub Releases",
 		"sourceCta": "Bangun dari kode sumber",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Unduhan dari toko berbayar, dan begitulah tim kecil independen membiayai pembangunan Vela secara terbuka. Semuanya open source, jadi Anda selalu bisa membangunnya sendiri — aplikasi yang sama, tanpa biaya.",
-		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, aplikasi desktop dan ekstensi ada di GitHub, siap dipasang. Aplikasi ponsel tidak: aplikasi itu berasal dari toko, atau dari kode sumber."
+		"storeNote": "Belum ada di toko aplikasi. Sampai saat itu, aplikasi desktop dan ekstensi diunduh dari halaman ini, siap dipasang. Aplikasi ponsel tidak: keduanya berasal dari toko aplikasi, atau dari kode sumber.",
+		"downloads": {
+			"yourSystem": "Sistem Anda",
+			"versionLine": "Versi {{version}}",
+			"comingShortly": "Segera tersedia",
+			"unavailable": "Unduhan itu belum tersedia — biasanya menyusul beberapa jam setelah rilis baru. Semua yang lain di sini sudah siap.",
+			"windowsNote": "Windows akan menampilkan “Windows melindungi PC Anda”: penginstal belum ditandatangani kodenya. Pilih “Info selengkapnya”, lalu “Tetap jalankan”.",
+			"verify": "Checksum dan kode sumber di GitHub",
+			"installer": "Penginstal",
+			"chips": {
+				"appleSilicon": "Apple silicon",
+				"intel": "Chip Intel",
+				"universal": "Universal"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple silicon (M1 dan yang lebih baru)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — distribusi apa pun (Flatpak)",
+				"linux-flatpak-arm64": "Linux — distribusi apa pun (Flatpak, ARM)",
+				"extension": "Ekstensi browser"
+			},
+			"extension": {
+				"action": "Unduh ekstensi",
+				"stepsTitle": "Lalu, selama belum ada di Chrome Web Store:",
+				"steps": [
+					"Ekstrak ke folder yang akan Anda simpan — browser menjalankan ekstensi dari sana.",
+					"Buka chrome://extensions dan aktifkan “Mode developer”.",
+					"Klik “Muat yang belum dikemas” dan pilih folder tersebut."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

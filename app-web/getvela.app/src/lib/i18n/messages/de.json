@@ -387,7 +387,6 @@
 		"recommended": "Empfohlen",
 		"availableNow": "Jetzt verfügbar",
 		"comingSoon": "Demnächst",
-		"githubCta": "Von GitHub Releases laden",
 		"sourceCta": "Aus dem Quellcode bauen",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Downloads aus den Stores sind kostenpflichtig, und sie sind die Art, wie ein kleines unabhängiges Team die offene Entwicklung von Vela finanziert. Alles ist quelloffen, du kannst es also auch selbst bauen — dieselbe App, ohne Kosten.",
-		"storeNote": "Noch in keinem Store. Bis dahin liegen die Desktop-Apps und die Erweiterung auf GitHub, fertig zum Installieren. Die Handy-Apps nicht: Sie kommen aus den Stores oder aus dem Quellcode."
+		"storeNote": "Noch in keinem Store. Bis dahin lassen sich die Desktop-Apps und die Erweiterung direkt von dieser Seite laden, fertig zum Installieren. Die Handy-Apps nicht: Sie kommen aus den Stores oder aus dem Quellcode.",
+		"downloads": {
+			"yourSystem": "Ihr System",
+			"versionLine": "Version {{version}}",
+			"comingShortly": "In Kürze",
+			"unavailable": "Dieser Download ist noch nicht da – er folgt einem neuen Release meist innerhalb weniger Stunden. Alles andere hier ist bereit.",
+			"windowsNote": "Windows meldet „Der Computer wurde durch Windows geschützt“: Das Installationsprogramm ist noch nicht codesigniert. „Weitere Informationen“ wählen, dann „Trotzdem ausführen“.",
+			"verify": "Prüfsummen und Quellcode auf GitHub",
+			"installer": "Installationsprogramm",
+			"chips": {
+				"appleSilicon": "Apple Silicon",
+				"intel": "Intel-Chip",
+				"universal": "Universal"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple Silicon (M1 und neuer)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — jede Distribution (Flatpak)",
+				"linux-flatpak-arm64": "Linux — jede Distribution (Flatpak, ARM)",
+				"extension": "Browser-Erweiterung"
+			},
+			"extension": {
+				"action": "Erweiterung laden",
+				"stepsTitle": "Danach, bis sie im Chrome Web Store ist:",
+				"steps": [
+					"In einen Ordner entpacken, den Sie behalten – der Browser führt die Erweiterung von dort aus.",
+					"chrome://extensions öffnen und den „Entwicklermodus“ einschalten.",
+					"Auf „Entpackte Erweiterung laden“ klicken und diesen Ordner wählen."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }
