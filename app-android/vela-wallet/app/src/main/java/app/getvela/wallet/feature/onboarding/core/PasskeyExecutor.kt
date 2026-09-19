@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.onboarding.core
 
+import android.app.Activity
 import android.content.Context
 import android.os.SystemClock
 import androidx.credentials.CreatePublicKeyCredentialRequest
@@ -24,7 +25,11 @@ import androidx.credentials.exceptions.publickeycredential.CreatePublicKeyCreden
 import androidx.credentials.exceptions.publickeycredential.GetPublicKeyCredentialDomException
 import java.security.SecureRandom
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.fromBase64url
@@ -81,6 +86,12 @@ class PasskeyExecutor(
      * exactly as the desktop shows its QR card.
      */
     private val showQr: (String?) -> Unit = {},
+    /**
+     * What to tell the person when the system's passkey sheet never appears
+     * (see [awaitingSelector]). The shell owns the words; this class has no
+     * catalog, so the sentence is handed in.
+     */
+    private val selectorUnresponsiveMessage: () -> String = { SELECTOR_UNRESPONSIVE_FALLBACK },
     /**
      * The relying party. A passkey is bound to it: change it and every existing
      * wallet becomes unreachable from this app.
@@ -408,7 +419,7 @@ class PasskeyExecutor(
         }
 
         if (credentialIdHex != null && removable(transports) && securityKey != null) {
-            return assertOnSecurityKey(challenge, credentialIdHex)
+            return assertThroughGms(challenge, credentialIdHex, attachment = "cross-platform")
         }
 
         val credentialManager = manager ?: throw PasskeyFailure(
@@ -444,10 +455,23 @@ class PasskeyExecutor(
         )
         val response = if (credentialIdHex == null) {
             try {
-                credentialManager.getCredential(
-                    context = context,
-                    request = GetCredentialRequest(options),
-                )
+                awaitingSelector {
+                    credentialManager.getCredential(
+                        context = context,
+                        request = GetCredentialRequest(options),
+                    )
+                }
+            } catch (dead: SelectorUnresponsive) {
+                // The system's sheet cannot draw, but the passkeys are still
+                // there. GMS can list its own without that sheet, so ask it
+                // directly before telling the person anything went wrong.
+                if (securityKey == null) throw dead
+                VelaLog.event("passkey.assert", "system selector dead → gms fido2")
+                return try {
+                    assertThroughGms(challenge, null, attachment = "platform")
+                } catch (unavailable: PasskeyFailure) {
+                    if (unavailable.kind == FailureKind.NotSupported) throw dead else throw unavailable
+                }
             } catch (error: GetCredentialException) {
                 // The system route does not exist here — no passkey provider at
                 // all on a GMS-free phone ("no provider dependencies found"), or
@@ -512,9 +536,11 @@ class PasskeyExecutor(
      * offer for it — it lists the password managers that do not have it, and
      * whatever the person does there comes back as a cancellation.
      */
-    private suspend fun assertOnSecurityKey(
+    private suspend fun assertThroughGms(
         challenge: ByteArray,
-        credentialIdHex: String,
+        credentialIdHex: String?,
+        /** What this route reaches: a removable key when pinned to one, GMS's own vault otherwise. */
+        attachment: String,
     ): Assertion {
         val ceremony = securityKey ?: throw PasskeyFailure(
             FailureKind.NotSupported,
@@ -522,14 +548,14 @@ class PasskeyExecutor(
         )
         VelaLog.event(
             "passkey.assert",
-            "asking (fido2 security key)",
+            if (credentialIdHex == null) "asking (gms fido2, any credential)" else "asking (fido2 security key)",
             "cred" to VelaLog.shortId(credentialIdHex),
         )
         val credential = try {
             ceremony.assert(
                 rpId = relyingPartyId,
                 challenge = challenge,
-                credentialId = uniffi.vela_core_uniffi.fromHex(credentialIdHex),
+                credentialId = credentialIdHex?.let { uniffi.vela_core_uniffi.fromHex(it) },
             )
         } catch (unavailable: Fido2Unavailable) {
             throw PasskeyFailure(FailureKind.NotSupported, "Plug in a USB security key and try again.")
@@ -550,7 +576,7 @@ class PasskeyExecutor(
             // Absent, not empty: no user handle is a different fact from an
             // empty one, and the core's name resolution branches on it.
             userIdHex = response.userHandle?.takeIf { it.isNotEmpty() }?.let { toHex(it, false) },
-            authenticatorAttachment = "cross-platform",
+            authenticatorAttachment = attachment,
         )
     }
 
@@ -592,13 +618,15 @@ class PasskeyExecutor(
             // somebody holding a key against their phone (2026-08-26).
             val last = removable || attempt == RETRY_BACKOFF_MS.size
             try {
-                return credentialManager.getCredential(
-                    context = context,
-                    request = GetCredentialRequest(
-                        credentialOptions = options,
-                        preferImmediatelyAvailableCredentials = !last,
-                    ),
-                )
+                return awaitingSelector {
+                    credentialManager.getCredential(
+                        context = context,
+                        request = GetCredentialRequest(
+                            credentialOptions = options,
+                            preferImmediatelyAvailableCredentials = !last,
+                        ),
+                    )
+                }
             } catch (error: NoCredentialException) {
                 // A REMOVABLE key is never "immediately available" — it has to
                 // be tapped or plugged — so these misses are expected for one
@@ -628,6 +656,66 @@ class PasskeyExecutor(
                     "domError" to (error as? GetPublicKeyCredentialDomException)?.domError?.type,
                 )
                 throw failure
+            }
+        }
+    }
+
+    /**
+     * Run a Credential Manager get, and notice when its sheet never arrives.
+     *
+     * Credential Manager hands every candidate passkey — icon bitmaps included —
+     * to the system's selector activity in ONE intent. With enough passkeys
+     * saved for this rpId that intent outgrows a binder transaction
+     * (`TransactionTooLargeException: data parcel size 556892 bytes`, system
+     * log, HyperOS 3 / Android 16, 2026-09-19). The selector process starts, is
+     * never handed its arguments, and never draws a window; the framework
+     * reports neither success nor failure, so the request stays pending FOREVER
+     * and the person watches a spinner that cannot end.
+     *
+     * The platform gives no callback for "my own UI failed to start", so the
+     * signal is indirect but exact: a selector that draws TAKES WINDOW FOCUS
+     * from this activity (measured: well under a second), and one that died
+     * leaves it here (`mCurrentFocus` stays on the caller). Holding focus for
+     * [SELECTOR_WATCHDOG_MS] UNBROKEN with a get still pending therefore means
+     * no sheet is up. While a sheet is up the person may take as long as they
+     * like: focus is elsewhere the whole time, and closing the sheet ends the
+     * request, so a pending get never sits behind a focused caller for long.
+     *
+     * Fail-safe by construction: no activity, or no focus to begin with (one of
+     * our own dialogs holds it), and this is a plain call — never a false alarm.
+     */
+    private suspend fun <T> awaitingSelector(request: suspend () -> T): T {
+        val activity = context as? Activity
+        if (activity == null) return request()
+        return coroutineScope {
+            val ceremony = async { request() }
+            var gaveUp = false
+            val watchdog = launch {
+                var held = 0L
+                while (held < SELECTOR_WATCHDOG_MS) {
+                    delay(SELECTOR_POLL_MS)
+                    // Reset, not stand down: a dead selector ALSO takes focus
+                    // away — for the ~5 s the window manager waits on a window
+                    // that never comes — and then hands it back (device-found).
+                    held = if (activity.hasWindowFocus()) held + SELECTOR_POLL_MS else 0L
+                }
+                gaveUp = true
+                // Cancelling reaches the framework through the request's
+                // CancellationSignal, which also retires the dead selector.
+                ceremony.cancel()
+            }
+            try {
+                ceremony.await()
+            } catch (cancelled: CancellationException) {
+                if (!gaveUp) throw cancelled
+                VelaLog.event(
+                    "passkey.assert",
+                    "system selector never appeared",
+                    "waitedMs" to SELECTOR_WATCHDOG_MS,
+                )
+                throw SelectorUnresponsive(selectorUnresponsiveMessage())
+            } finally {
+                watchdog.cancel()
             }
         }
     }
@@ -737,6 +825,18 @@ class PasskeyExecutor(
          * one final attempt that lets the platform speak for itself.
          */
         val RETRY_BACKOFF_MS = longArrayOf(600L, 1_200L, 2_400L)
+
+        /**
+         * How long this activity may keep window focus with a get pending
+         * before the system's sheet is declared dead. A working selector takes
+         * focus in well under a second, slow phones included; providers are
+         * given a few seconds by the framework before the sheet is drawn, and
+         * this sits comfortably past that.
+         */
+        const val SELECTOR_WATCHDOG_MS = 10_000L
+        const val SELECTOR_POLL_MS = 250L
+        const val SELECTOR_UNRESPONSIVE_FALLBACK =
+            "The system passkey picker is not responding."
         const val NUL = '\u0000'
 
         /**
@@ -766,7 +866,14 @@ enum class FailureKind(val wire: String) {
  * narrow: everything unrecognised becomes `other` carrying the platform's own
  * words, which the core forwards verbatim into the bug report.
  */
-class PasskeyFailure(val kind: FailureKind, message: String) : Exception(message)
+open class PasskeyFailure(val kind: FailureKind, message: String) : Exception(message)
+
+/**
+ * The system's passkey sheet never appeared (see `awaitingSelector`). To the
+ * core it is an `other` failure carrying the shell's sentence; to the executor
+ * it is the cue to try a route that needs no system sheet.
+ */
+class SelectorUnresponsive(message: String) : PasskeyFailure(FailureKind.Other, message)
 
 /** A completed registration, in the core's hex vocabulary. */
 data class Registration(

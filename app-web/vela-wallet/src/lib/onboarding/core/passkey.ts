@@ -186,21 +186,77 @@ export async function register(
 	}
 }
 
+/**
+ * The `detail` of a sign-in that failed because the system's passkey sheet
+ * never appeared. A marker, not a sentence: this module has no catalog, so
+ * `promptCopy` swaps it for the localized line.
+ */
+export const SELECTOR_UNRESPONSIVE = 'vela:selector-unresponsive';
+
+/** How long the page may keep focus with a get pending before the sheet is declared dead. */
+const SELECTOR_WATCHDOG_MS = 10_000;
+const SELECTOR_POLL_MS = 250;
+
+/**
+ * Notice when Android's passkey sheet never arrives, and abort instead of
+ * waiting forever.
+ *
+ * Chrome on Android 14+ hands `credentials.get()` to the system's Credential
+ * Manager, which passes every candidate passkey — icon bitmaps included — to
+ * its selector activity in ONE intent. With enough passkeys saved for this
+ * rpId the intent outgrows a binder transaction (`TransactionTooLargeException:
+ * data parcel size 556892 bytes`, HyperOS 3 / Android 16, 2026-09-19): the
+ * selector never draws, nobody is told, and the promise never settles.
+ *
+ * The signal is the same one the Android app uses: a sheet that draws takes
+ * focus from the page, a dead one leaves it here. Focus held UNBROKEN for the
+ * whole window with the request still pending means no sheet is up; while one
+ * is up focus is elsewhere, and the person may take as long as they like.
+ * Android only — a desktop browser's passkey dialog is browser
+ * chrome and need not take focus from the document at all.
+ */
+function watchForDeadSelector(controller: AbortController): () => void {
+	if (typeof navigator === 'undefined' || !/Android/i.test(navigator.userAgent)) return () => {};
+	if (!document.hasFocus()) return () => {};
+	let held = 0;
+	const timer = setInterval(() => {
+		// Reset, not stand down: a dead selector also takes focus away — for the
+		// few seconds the window manager waits on a window that never comes —
+		// and then hands it back (device-found on the Android app).
+		if (!document.hasFocus() || document.visibilityState !== 'visible') {
+			held = 0;
+			return;
+		}
+		held += SELECTOR_POLL_MS;
+		if (held >= SELECTOR_WATCHDOG_MS) {
+			clearInterval(timer);
+			controller.abort(new PasskeyError('other', SELECTOR_UNRESPONSIVE));
+		}
+	}, SELECTOR_POLL_MS);
+	return () => clearInterval(timer);
+}
+
 /** `navigator.credentials.get()` with no credential hint — "who are you?". */
 export async function authenticate(): Promise<Assertion> {
 	assertSupported();
+	const controller = new AbortController();
+	const stopWatching = watchForDeadSelector(controller);
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: crypto.getRandomValues(new Uint8Array(32)),
 				rpId: relyingPartyId(),
 				userVerification: 'required'
-			}
+			},
+			signal: controller.signal
 		})) as PublicKeyCredential | null;
 		if (!credential) throw new PasskeyError('other', 'No credential returned');
 		return parseAssertion(credential);
 	} catch (error) {
+		// An abort rejects with the reason it was given, which is already ours.
 		throw classify(error);
+	} finally {
+		stopWatching();
 	}
 }
 

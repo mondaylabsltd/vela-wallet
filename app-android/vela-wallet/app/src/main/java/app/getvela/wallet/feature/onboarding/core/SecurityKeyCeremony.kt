@@ -111,16 +111,23 @@ class SecurityKeyCeremony(private val activity: ComponentActivity) {
         }
     }
 
-    /** Sign a challenge with one known credential on the key. */
+    /**
+     * Sign a challenge with one known credential — or, with no [credentialId],
+     * ask GMS "who are you?" and let ITS picker list what it holds.
+     *
+     * The unpinned form is the way round a dead system selector (see
+     * `PasskeyExecutor.awaitingSelector`): GMS loads its passkeys inside its
+     * own process, so nothing has to fit through an intent.
+     */
     suspend fun assert(
         rpId: String,
         challenge: ByteArray,
-        credentialId: ByteArray,
+        credentialId: ByteArray?,
     ): PublicKeyCredential {
         val options = PublicKeyCredentialRequestOptions.Builder()
             .setRpId(rpId)
             .setChallenge(challenge)
-            .setAllowList(descriptors(listOf(credentialId)))
+            .apply { if (credentialId != null) setAllowList(descriptors(listOf(credentialId))) }
             .build()
 
         return awaitCeremony {

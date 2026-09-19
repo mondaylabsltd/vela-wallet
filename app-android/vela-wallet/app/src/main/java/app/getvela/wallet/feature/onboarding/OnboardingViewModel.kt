@@ -234,10 +234,17 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * Spec 043: the send path signs with the same ceremony sign-in uses —
      * this executor, attached to the real activity. `null` until attached.
      */
+    private var strings: app.getvela.wallet.core.i18n.VelaStrings? = null
+
     fun signer(): app.getvela.wallet.feature.send.core.UserOpSigner? =
         passkey?.let { app.getvela.wallet.feature.send.core.PasskeyUserOpSigner(it) }
 
-    fun attach(activityContext: android.content.Context) {
+    fun attach(
+        activityContext: android.content.Context,
+        strings: app.getvela.wallet.core.i18n.VelaStrings? = null,
+    ) {
+        // Read at failure time, so a language change needs no new executor.
+        if (strings != null) this.strings = strings
         if (passkey == null) {
             val isRealActivity = activityContext is app.getvela.wallet.MainActivity
             passkey = PasskeyExecutor(
@@ -266,6 +273,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                     null
                 },
                 showQr = { qr -> viewModelScope.launch { cableQr = qr } },
+                selectorUnresponsiveMessage = {
+                    strings?.t(app.getvela.wallet.core.i18n.I18nKeys.Login.ALERT_SELECTOR_UNRESPONSIVE)
+                        ?: "The system passkey picker is not responding."
+                },
             )
         }
     }

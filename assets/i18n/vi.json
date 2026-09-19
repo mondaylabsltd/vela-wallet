@@ -792,6 +792,7 @@
    "alertNotFoundTitle": "Không tìm thấy tài khoản",
    "alertNotFoundBody": "Không tìm thấy ví nào cho danh tính này.\n\nNguyên nhân có thể:\n• Bạn chưa tạo ví\n• Danh tính của bạn chưa đồng bộ đến thiết bị này (kiểm tra cài đặt iCloud / Google)\n• Không kết nối được máy chủ khóa công khai\n\nHãy thử tạo ví mới, hoặc đảm bảo nhà cung cấp danh tính (Face ID / vân tay) đã được đồng bộ giữa các thiết bị.",
    "alertSignInFailedTitle": "Đăng nhập thất bại",
+   "alertSelectorUnresponsive": "Trình chọn passkey của hệ thống không phản hồi. Điều này có thể xảy ra khi có quá nhiều passkey của ví này được lưu trên thiết bị. Hãy thử lại, hoặc đăng nhập bằng thiết bị khác hoặc khóa bảo mật.",
    "alertSignInFailedBody": "{{message}}\n\nHãy đảm bảo thiết bị của bạn đã thiết lập Face ID, Touch ID hoặc vân tay rồi thử lại.",
    "alertIncompatibleBodyCreate": "Nhà cung cấp danh tính trên thiết bị của bạn không tương thích với ví này. Vui lòng chuyển sang Google Password Manager trong cài đặt hệ thống và thử lại.",
    "recoverOfferTitle": "Khôi phục ví",

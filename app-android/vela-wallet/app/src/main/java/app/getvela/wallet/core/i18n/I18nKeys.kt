@@ -196,6 +196,7 @@ object I18nKeys {
         const val ALERT_INCOMPATIBLE_BODY = "onboarding.login.alertIncompatibleBody"
         const val ALERT_INCOMPATIBLE_BODY_CREATE = "onboarding.login.alertIncompatibleBodyCreate"
         const val ALERT_SIGN_IN_FAILED_BODY = "onboarding.login.alertSignInFailedBody"
+        const val ALERT_SELECTOR_UNRESPONSIVE = "onboarding.login.alertSelectorUnresponsive"
         const val SWITCH_DEVICE_BTN = "onboarding.login.switchDeviceBtn"
 
         // The which-wallet picker for the app-owned CTAP path — a key that
