@@ -5860,6 +5860,25 @@ impl WalletPage {
         if self.backup_for.as_deref() == Some(account.address.as_str()) {
             return;
         }
+        // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
+        // once, with its "Sign with" list open, so the column can be LOOKED at —
+        // there is no way to click this app from a shell. A zero-value call to
+        // itself on Gnosis; nothing is signed unless somebody slides.
+        #[cfg(all(debug_assertions, not(target_os = "linux")))]
+        if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
+            self.open_backup_signing(
+                vela_core::registry_backup::BackupCall {
+                    chain_id: 100,
+                    to: account.address.clone(),
+                    value: "0".to_owned(),
+                    data: "0x".to_owned(),
+                },
+                cx,
+            );
+            if let Some(host) = self.signing_host.clone() {
+                host.update(cx, |host, _| host.sign_with(None));
+            }
+        }
         self.backup_for = Some(account.address.clone());
         self.backup_check = None;
         self.keys_check = None;
@@ -5867,6 +5886,7 @@ impl WalletPage {
         // The record's key list in founding order; a legacy record is one key.
         let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
             vec![vela_core::wallet_keys::DeviceKey {
+                credential_id: account.id.clone(),
                 public_key_hex: account.public_key_hex.clone(),
                 name: account.name.clone(),
                 transports: String::new(),
@@ -5876,6 +5896,7 @@ impl WalletPage {
                 .keys
                 .iter()
                 .map(|key| vela_core::wallet_keys::DeviceKey {
+                    credential_id: key.credential_id.clone(),
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
@@ -9454,6 +9475,53 @@ impl WalletPage {
             model.dapp_name = name;
             model.dapp_host = dapp_host;
             model.dapp_letter = letter;
+            // The wallet's own request (the key backup) is not a site: its own
+            // mark and name, and no host. A site gets its own icon over its
+            // initial — https only, never over a channel anybody could answer on.
+            let own = host.transport_id == crate::wallet::signing_host::WALLET_TRANSPORT;
+            model.dapp_own = own;
+            if own {
+                model.dapp_name = gpui::SharedString::from("Vela Wallet");
+                model.dapp_host = gpui::SharedString::default();
+                // Matched on the VERIFIED registry address, never on "it is ours"
+                // alone and never on the English words: the first look at this
+                // column headed a plain self-transfer "备份公钥".
+                let is_backup = host.clear_view.result.as_ref().is_some_and(|result| {
+                    result.verified
+                        && result.contract_address.as_deref().is_some_and(|address| {
+                            address.eq_ignore_ascii_case(vela_core::registry_backup::REGISTRY)
+                        })
+                });
+                // …and its built-in lines, in the person's language. The core's
+                // are English, like the descriptors beside them; this one is
+                // OURS. First-party + the intent block it opens with.
+                if is_backup
+                    && let Some(signing_fixtures::Block::Intent { text, .. }) =
+                        model.blocks.first_mut()
+                {
+                    *text = self.signing.backup_intent.clone();
+                }
+                let mut relabelled = 0;
+                for block in model.blocks.iter_mut().filter(|_| is_backup) {
+                    if let signing_fixtures::Block::Rows(rows) = block {
+                        for row in rows.iter_mut() {
+                            if let Some(label) = self.signing.backup_labels.get(relabelled) {
+                                row.0 = label.clone();
+                                relabelled += 1;
+                            }
+                        }
+                    }
+                }
+            } else if let Some(base) = host.origin.strip_prefix("https://") {
+                let base = base.split('/').next().unwrap_or_default();
+                if !base.is_empty() {
+                    model.dapp_icon_urls = vec![
+                        gpui::SharedString::from(format!("https://{base}/apple-touch-icon.png")),
+                        gpui::SharedString::from(format!("https://{base}/favicon.ico")),
+                    ];
+                }
+            }
+            model.network_logo = crate::marks::chain_logo_url(host.chain_id);
             // …and on which chain, from the request too. The fixture's badge
             // said Ethereum over a Gnosis fee.
             model.network_name =
@@ -9638,6 +9706,7 @@ impl WalletPage {
                 model.signer_name.clone(),
                 &model.signer_seed,
             ))
+            .children(self.sign_with_row(theme, cx))
             .child(signing_components::slide_to_confirm(
                 theme,
                 &mut self.icons,
@@ -9646,6 +9715,120 @@ impl WalletPage {
                 confirm_action,
             ));
         column
+    }
+
+    /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
+    /// is (founder, 2026-09-19: creating and signing in let a person choose;
+    /// signing took the first key's stored route). Per request — the host lives
+    /// for one. Which key the choice pins is the core's (`sign_route`). Opens in
+    /// place: a dialog over the signing column is a modal under a modal.
+    #[cfg(not(target_os = "linux"))]
+    fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let (method, open) = {
+            let host = self.signing_host.as_ref()?.read(cx);
+            (host.sign_method.clone(), host.sign_with_open)
+        };
+        let options = self.signing.sign_with_options.clone();
+        let value = options
+            .iter()
+            .find(|(id, _)| *id == method)
+            .map_or_else(|| options[0].1.clone(), |(_, title)| title.clone());
+        fn pick(
+            id: Option<&'static str>,
+            cx: &mut Context<WalletPage>,
+        ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
+            cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
+                if let Some(host) = page.signing_host.clone() {
+                    host.update(cx, |host, cx| {
+                        host.sign_with(id);
+                        cx.notify();
+                    });
+                }
+                cx.notify();
+            })
+        }
+        let mut block = div().flex().flex_col().gap(px(8.)).child(
+            div()
+                .id("signing-sign-with")
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .cursor_pointer()
+                .on_click(pick(None, cx))
+                .child(
+                    div()
+                        .flex_1()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(self.signing.sign_with.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(value),
+                )
+                .child(icon_img(
+                    &mut self.icons,
+                    if open {
+                        Icon::ChevronUp
+                    } else {
+                        Icon::ChevronDown
+                    },
+                    false,
+                    theme.fg_muted,
+                    14.,
+                )),
+        );
+        if open {
+            let mut list = div()
+                .flex()
+                .flex_col()
+                .p(px(4.))
+                .rounded(px(12.))
+                .bg(theme.bg_sunken);
+            for (index, (id, title)) in options.into_iter().enumerate() {
+                let selected = id == method;
+                let mut option = div()
+                    .id(("signing-sign-with-option", index))
+                    .flex()
+                    .items_center()
+                    .px(px(16.))
+                    .py(px(10.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_raised))
+                    .on_click(pick(Some(id), cx))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(theme::text_row_sub())
+                            .text_color(if selected {
+                                theme.fg_base
+                            } else {
+                                theme.fg_muted
+                            })
+                            .child(title),
+                    );
+                if selected {
+                    option = option.child(icon_img(
+                        &mut self.icons,
+                        Icon::Check,
+                        false,
+                        theme.accent,
+                        14.,
+                    ));
+                }
+                list = list.child(option);
+            }
+            block = block.child(list);
+        }
+        Some(block)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sign_with_row(&mut self, _theme: &Theme, _cx: &mut Context<Self>) -> Option<Div> {
+        None
     }
 
     fn wallet_columns(

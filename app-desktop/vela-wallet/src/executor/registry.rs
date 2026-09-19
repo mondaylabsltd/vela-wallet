@@ -1242,6 +1242,7 @@ mod tests {
     #[ignore = "reads Gnosis"]
     fn the_golden_safe_shows_its_three_keys() {
         let device = [vela_core::wallet_keys::DeviceKey {
+            credential_id: String::new(),
             public_key_hex: recorded()["publicKey"].as_str().unwrap().to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: String::new(),

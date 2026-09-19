@@ -150,6 +150,12 @@ pub struct SigningModel {
     pub dapp_tint: Hsla,
     pub network_name: SharedString,
     pub network_dot: Hsla,
+    /// The wallet asking ITSELF (the key backup): its own mark and name, no host.
+    pub dapp_own: bool,
+    /// The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19).
+    pub dapp_icon_urls: Vec<SharedString>,
+    /// The chain's logo; the dot shows until it lands, and when there is none.
+    pub network_logo: Option<SharedString>,
     pub blocks: Vec<Block>,
     pub fee: FeeModel,
     pub signer_label: SharedString,
@@ -260,6 +266,9 @@ fn base(
         dapp_tint: dapp.tint,
         network_name: "Ethereum".into(),
         network_dot: chain_ethereum(),
+        dapp_own: false,
+        dapp_icon_urls: Vec::new(),
+        network_logo: None,
         blocks,
         fee: FeeModel::OnChain {
             label: s.fee_label.clone(),

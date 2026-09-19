@@ -35,6 +35,12 @@ pub struct SigningStrings {
     pub panel_title: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
+    /// "Sign with" and its four choices — the create flow's own words.
+    pub sign_with: SharedString,
+    pub sign_with_options: [(&'static str, SharedString); 4],
+    /// The wallet's own key backup, in the person's language.
+    pub backup_intent: SharedString,
+    pub backup_labels: [SharedString; 3],
     pub slide_to_confirm: SharedString,
     pub confirm_send: SharedString,
     pub confirm_swap: SharedString,
@@ -205,6 +211,22 @@ impl SigningStrings {
             panel_title: s("signatureRequest"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
+            sign_with: s("signWith"),
+            sign_with_options: [
+                ("auto", loc.t("common.automatic")),
+                ("platform", loc.t("onboarding.create.methodPlatformTitle")),
+                ("hybrid", loc.t("onboarding.create.methodHybridTitle")),
+                (
+                    "security_key",
+                    loc.t("onboarding.create.methodSecurityKeyTitle"),
+                ),
+            ],
+            backup_intent: loc.t("settingsModals.backup.intent"),
+            backup_labels: [
+                loc.t("settingsModals.backup.registeredAs"),
+                loc.t("contacts.addressLabel"),
+                loc.t("settingsModals.backup.publicKeys"),
+            ],
             slide_to_confirm: s("slideToConfirm"),
             confirm_send: s("confirmSend"),
             confirm_swap: s("confirmSwap"),

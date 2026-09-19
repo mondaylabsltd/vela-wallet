@@ -64,6 +64,12 @@ pub struct IncomingRequest {
 }
 
 pub struct SigningHost {
+    /// The transport the request arrived on — [`WALLET_TRANSPORT`] is the
+    /// wallet asking itself, which is not a site and is not headed like one.
+    pub transport_id: String,
+    /// "Sign with": this request's choice, and whether its list is open.
+    pub sign_method: String,
+    pub sign_with_open: bool,
     sign: CoreHost<SignRequest>,
     pub view: SignView,
     clear: CoreHost<ClearSigning>,
@@ -112,6 +118,19 @@ pub struct SigningHost {
 }
 
 impl SigningHost {
+    /// `None` toggles the list; an id picks a method and closes it.
+    pub fn sign_with(&mut self, id: Option<&str>) {
+        let Some(id) = id else {
+            self.sign_with_open = !self.sign_with_open;
+            return;
+        };
+        if matches!(id, "auto" | "platform" | "hybrid" | "security_key") {
+            self.ctx.choose_method(id);
+            id.clone_into(&mut self.sign_method);
+        }
+        self.sign_with_open = false;
+    }
+
     pub fn open(
         account: &Account,
         request: IncomingRequest,
@@ -131,6 +150,9 @@ impl SigningHost {
         let mut host = Self {
             sim: Vec::new(),
             sim_unavailable: false,
+            transport_id: request.transport_id.clone(),
+            sign_method: "auto".to_owned(),
+            sign_with_open: false,
             origin: request.origin.clone(),
             chain_id: request.chain_id,
             facts: facts_of(&request),
