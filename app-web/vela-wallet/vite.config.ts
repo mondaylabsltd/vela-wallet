@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
@@ -53,7 +55,43 @@ const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/la
  */
 const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
 
+/**
+ * The version and commit every page of this build reports (spec 064 §3).
+ *
+ * VERSION is `extension/manifest.json`'s — the one declared version this app
+ * has, and the one the release gate checks against the release branch's name.
+ * (`package.json` says 0.0.1 and always has; nothing reads it.)
+ *
+ * COMMIT, first that answers: `VELA_GIT_COMMIT` (CI sets it from the commit it
+ * checked out), `WORKERS_CI_COMMIT_SHA` (Cloudflare's build, which deploys the
+ * web wallet from the `released` branch), `git rev-parse` (a developer's
+ * machine), and otherwise the word `unknown` — never a constant that looks
+ * like a commit.
+ */
+function buildIdentity(): { version: string; commit: string } {
+	const manifest = JSON.parse(
+		readFileSync(fileURLToPath(new URL('./extension/manifest.json', import.meta.url)), 'utf8')
+	) as { version: string };
+	const fromEnv = process.env.VELA_GIT_COMMIT || process.env.WORKERS_CI_COMMIT_SHA;
+	let commit = fromEnv?.trim();
+	if (!commit) {
+		try {
+			commit = execFileSync('git', ['rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] })
+				.toString()
+				.trim();
+		} catch {
+			commit = '';
+		}
+	}
+	return { version: manifest.version, commit: commit ? commit.slice(0, 7) : 'unknown' };
+}
+const BUILD = buildIdentity();
+
 export default defineConfig({
+	define: {
+		__VELA_VERSION__: JSON.stringify(BUILD.version),
+		__VELA_COMMIT__: JSON.stringify(BUILD.commit)
+	},
 	resolve: {
 		alias: { $animations: LAUNCH_ANIMATIONS }
 	},

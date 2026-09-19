@@ -249,7 +249,7 @@ jobs:
       # `[target.'cfg(target_os = "macos")'.dependencies]` under a comment
       # claiming it was unconditional, so the entire Windows path went unlinked
       # while this job stayed green. Only a real Windows build finds that class
-      # of bug, and desktop-windows-packages runs on `desktop-v*` tags, not PRs.
+      # of bug, and desktop-windows-packages runs on a release (release.yml) or by dispatch, not on PRs.
       - name: Windows passkey path (type-check only)
         run: ../app-desktop/vela-wallet/scripts/check-windows.sh
       - name: Install wasm-pack

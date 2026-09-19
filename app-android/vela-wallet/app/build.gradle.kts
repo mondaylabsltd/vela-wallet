@@ -29,10 +29,21 @@ android {
 
         // Spec 047: the About page and the bug report name the build. A provider,
         // not a process at configuration time — the configuration cache refuses that.
-        val gitCommit = providers.exec {
-            commandLine("git", "rev-parse", "--short", "HEAD")
-            isIgnoreExitValue = true
-        }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }.getOrElse("unknown")
+        // Spec 064 §3, the same order every shell follows: `VELA_GIT_COMMIT` when the
+        // build sets it (CI does, from the commit it checked out — a container often
+        // cannot ask git itself), else git, else the word `unknown`. Seven characters,
+        // like every other shell, so one commit reads the same on all of them.
+        val gitCommit = providers.environmentVariable("VELA_GIT_COMMIT")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .orElse(
+                providers.exec {
+                    commandLine("git", "rev-parse", "HEAD")
+                    isIgnoreExitValue = true
+                }.standardOutput.asText.map { it.trim() },
+            )
+            .map { if (it.length >= 7) it.take(7) else "unknown" }
+            .getOrElse("unknown")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

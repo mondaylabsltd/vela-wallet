@@ -486,20 +486,37 @@ pub const APP_COMMIT: &str = "6ab8f";
 ///
 /// `live` reads `CARGO_PKG_VERSION`, because the panel said **v1.0.0 (6ab8f)**
 /// while the crate was 0.1.1 — and a bug report that quotes a version names one
-/// that does not exist. The COMMIT stays the mock's for now: there is no
-/// build-time git hash in this crate, and a made-up one is the half of that
-/// line that was already wrong.
+/// that does not exist. The COMMIT is the build's too (spec 064): `build.rs`
+/// stamps `VELA_GIT_COMMIT`, and until it did, every build ever shipped quoted
+/// the mock's `6ab8f` — the half of that line that was still wrong.
 pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
-    let version = if live {
-        env!("CARGO_PKG_VERSION")
+    let (version, commit) = if live {
+        (env!("CARGO_PKG_VERSION"), env!("VELA_GIT_COMMIT"))
     } else {
-        APP_VERSION
+        (APP_VERSION, APP_COMMIT)
     };
     SharedString::from(fill(
         &fill(&s.about_version, "version", version),
         "commit",
-        APP_COMMIT,
+        commit,
     ))
+}
+
+#[cfg(test)]
+mod about_tests {
+    use super::*;
+
+    /// Spec 064 FR-C1: a live build names itself, never the mock.
+    #[test]
+    fn a_live_build_shows_its_own_version_and_commit() {
+        let stamped = env!("VELA_GIT_COMMIT");
+        assert_ne!(stamped, APP_COMMIT, "the build stamped the mock's commit");
+        assert!(
+            stamped == "unknown"
+                || (stamped.len() == 7 && stamped.chars().all(|c| c.is_ascii_hexdigit())),
+            "not a short commit: {stamped:?}"
+        );
+    }
 }
 
 /// Label / value / mono, in DST8's order.
