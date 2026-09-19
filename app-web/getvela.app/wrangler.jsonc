@@ -7,14 +7,10 @@
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
-	}
-	// The download mirror (spec 065, A5). COMMENTED OUT ON PURPOSE: a binding to a
-	// bucket that does not exist fails `wrangler deploy`, and this site deploys on
-	// every merge to main. Order matters:
-	//   1. bunx wrangler r2 bucket create vela-downloads     (an account resource)
-	//   2. uncomment the block below (and the comma above it), merge
-	// Until then `/download/<platform>` redirects to GitHub — the same fallback it
-	// uses whenever the mirror cannot serve, so nothing is broken in between.
-	//
-	// ,"r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "vela-downloads" }]
+	},
+	// The download mirror (spec 065, A5): `/download/<platform>` serves from this
+	// bucket, filling it from the GitHub Release on first request. The founder
+	// created it on 2026-09-19 (APAC). A binding to a bucket that does not exist
+	// fails `wrangler deploy` — so the bucket comes first, always.
+	"r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "vela-wallet-installer" }]
 }
