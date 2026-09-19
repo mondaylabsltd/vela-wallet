@@ -8,6 +8,8 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -90,6 +92,9 @@ class RpcPoolExecutor(
                         is RpcTransportOutcome.Response -> if (o.error == null) "ok" else "rpc error ${o.error.code}"
                         else -> o::class.simpleName
                     },
+                    // How long the WIRE took. Without it a slow call cannot be
+                    // told from one that waited its turn somewhere else.
+                    "ms" to (now() - started).toLong(),
                 )
                 RpcShellResult.PostOutcome(
                     call_id = operation.call_id,
@@ -288,7 +293,7 @@ class OkHttpTransport : RpcTransport {
             .newCall(request)
 
         try {
-            call.execute().use { response ->
+            call.await().use { response ->
                 NetHealth.reached()
                 if (!response.isSuccessful) {
                     return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
@@ -315,6 +320,33 @@ class OkHttpTransport : RpcTransport {
             RpcPostResult(RpcTransportOutcome.Network)
         }
     }
+
+    /**
+     * The call, SUSPENDED rather than blocked on.
+     *
+     * `execute()` inside `withContext(Dispatchers.IO)` looks confined and is
+     * not: the pool's scope IS `Dispatchers.IO`, and `withContext` to the
+     * dispatcher a coroutine is already on does not dispatch — it runs in
+     * place. The driver starts every effect UNDISPATCHED on its one consumer,
+     * so the blocking call ran ON the consumer, and the whole pool sent one
+     * request at a time: ~95 calls queued behind a home-screen scan at half a
+     * second each, and a sign-in's registry proof waited 30 s for its turn
+     * (device-found 2026-09-19, `rpc.call slow … inFlight=96`). `enqueue`
+     * suspends for real, so the consumer moves on and requests overlap.
+     */
+    private suspend fun okhttp3.Call.await(): okhttp3.Response =
+        suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { cancel() }
+            enqueue(object : okhttp3.Callback {
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    continuation.resume(response) { _, _, _ -> response.close() }
+                }
+
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    continuation.resumeWithException(e)
+                }
+            })
+        }
 
     private companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
