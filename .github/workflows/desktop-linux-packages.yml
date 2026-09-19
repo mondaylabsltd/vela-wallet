@@ -133,9 +133,15 @@ jobs:
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The binary says which commit it is
         working-directory: app-desktop/vela-wallet
+        # POSIX sh, not bash: these steps run INSIDE the container, where the
+        # default shell is the image's `sh` — dash on Debian, which answers
+        # `${GITHUB_SHA:0:7}` with "Bad substitution" (it did; Fedora's sh is
+        # bash, so the .rpm job passed and the .deb job did not).
         run: |
-          strings -a target/release/vela-wallet | grep -q "${GITHUB_SHA:0:7}" || {
-            echo "::error::the binary does not carry commit ${GITHUB_SHA:0:7} — About would show something else"; exit 1; }
+          sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
+          strings -a target/release/vela-wallet | grep -q "$sha" || {
+            echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
+          echo "vela-wallet carries $sha"
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.arch }}
@@ -178,9 +184,15 @@ jobs:
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The binary says which commit it is
         working-directory: app-desktop/vela-wallet
+        # POSIX sh, not bash: these steps run INSIDE the container, where the
+        # default shell is the image's `sh` — dash on Debian, which answers
+        # `${GITHUB_SHA:0:7}` with "Bad substitution" (it did; Fedora's sh is
+        # bash, so the .rpm job passed and the .deb job did not).
         run: |
-          strings -a target/release/vela-wallet | grep -q "${GITHUB_SHA:0:7}" || {
-            echo "::error::the binary does not carry commit ${GITHUB_SHA:0:7} — About would show something else"; exit 1; }
+          sha=$(printf '%s' "$GITHUB_SHA" | cut -c1-7)
+          strings -a target/release/vela-wallet | grep -q "$sha" || {
+            echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
+          echo "vela-wallet carries $sha"
       - name: The package must satisfy dpkg itself
         working-directory: app-desktop/vela-wallet
         run: |
