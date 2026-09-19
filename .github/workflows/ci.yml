@@ -48,6 +48,12 @@ jobs:
           cache-dependency-path: scripts/package-lock.json
       # The tooling package (i18next, identicons-esm, @noble/*) — scripts/,
       # not the root.
+      # The release gate's version rule (spec 066) — here so that it is exercised
+      # on every PR, on the same OS the gate runs on: the script asks `date` what
+      # month it is, and GNU date and BSD date do not share a syntax. release.yml
+      # only ever runs on a release branch, which is too late to learn that.
+      - name: The release version rule passes its own tests
+        run: scripts/check-release-version.test.sh
       - run: npm ci --prefix scripts
       # Half of this gate retired with the TypeScript oracle it compared against.
       #

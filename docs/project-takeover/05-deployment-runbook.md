@@ -77,13 +77,26 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 - **mac 包在创始人的 Mac 上签名、手动上传**(裁定,spec 063 §3a):签名私钥不上 GitHub。`release.yml` 建好 release 之后:`git fetch --tags && git checkout vX.Y.Z && cd app-desktop/vela-wallet && ./scripts/release-macos-local.sh vX.Y.Z --upload`。脚本只认 tag 对应的源码,自己找 Developer ID profile、按 profile 选证书(钥匙串里有同名证书,按 SHA-1 不按名字)、编译前先验公证凭据,已有 mac 包时拒绝覆盖。一次性准备见 [quickstart](../../specs/063-release-channels/quickstart.md) §A。
 - **这条规则是机制,不是习惯。** macOS workflow 只有在该次运行真的完成签名+公证时才挂 .dmg;凭据缺失时照常构建、校验三种架构,但什么都不挂,并在 job summary 里写明缺什么。凭据放在 GitHub Environment `release` 里(若启用,仅 `release/v*` 分支可用;按裁定目前留空——mac 包在本机签),清单与生成方法见 [quickstart](../../specs/063-release-channels/quickstart.md)。
 
+### 版本号 — 日历版本 `YY.M.REVISION`(spec 066,2026-09-19 起)
+
+三个数字是**年 · 月 · 当月第几次修订**,不是 major/minor/patch:`26.9.0` = 2026 年 9 月第一个版本,`26.9.1` 第二个,`26.10.0` = 10 月第一个。
+
+- **月份是「发版那一刻」的月份**,不是被修的那条代码线的月份:10 月里给 26.9.2 出的修复就是 `26.10.0`。没有维护分支。
+- **不补零**:`26.09.0` 会被 cargo 直接拒绝(`invalid leading zero`)、被 Chrome manifest 禁止,而 rpm/dpkg 会把它当成和 `26.9.0` 相等——一个版本两种写法。门禁直接拒绝,不做规范化。
+- 修订号从 `.0` 起、逐个加一,不能跳、不能回头。
+- 这些都由 `scripts/check-release-version.sh` 在门禁里执行(「现在」按全球任一时区算,所以 10 月 1 日早上在国内发 `26.10.0` 不会因为 UTC 还在 9 月 30 日被拒);规则的每一句在 `scripts/check-release-version.test.sh` 里都有用例,门禁先跑测试再信脚本。
+- **两个容易漏的后果**:① 上了商店之后这是单行道——版本只能增大,`26.x` 之后回不到 `1.0.0`;② `release.yml` 里「`0.*` 自动标 pre-release」从此不再命中,`26.9.0` 会作为正式版(GitHub 的 Latest)发布。
+- 只有**各端 App** 用日历版本;`vela-core` 等 Rust crate 是有 API 契约的库,继续用 SemVer。
+
+下文的 `vX.Y.Z` 都读作 `vYY.M.R`。
+
 ### 发版步骤 — 推 `release/vX.Y.Z` 就是发版
 
 创始人 2026-09-19 的裁定([spec 064](../../specs/064-release-from-branch/spec.md)):不再在 main 上打 tag。
 
 ```bash
-git switch -c release/v0.9.3 main     # 在这个分支上改四处版本号,提交
-git push origin release/v0.9.3        # ← 这一步就是发版
+git switch -c release/v26.9.0 main    # 在这个分支上改四处版本号,提交
+git push origin release/v26.9.0       # ← 这一步就是发版
 ```
 
 `.github/workflows/release.yml` 依次做四件事:

@@ -66,7 +66,7 @@ One implementation reaches four surfaces: UniFFI generates the Swift and Kotlin 
 | --- | --- | --- | --- |
 | iOS | [app-ios/VelaWallet](app-ios/VelaWallet) | SwiftUI + VelaCoreKit (SPM package wrapping the xcframework) | `./rust/scripts/build-ios-xcframework.sh`, then open `VelaWallet.xcodeproj`, ⌘R |
 | Android | [app-android/vela-wallet](app-android/vela-wallet) | Kotlin + Jetpack Compose + the UniFFI Kotlin bindings | generate the bindings (see [.github/workflows/ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
-| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers; also builds the Chrome extension (`pnpm build:extension`; a release zip is cut by `git tag extension-v<version>` → [web-extension-package.yml](.github/workflows/web-extension-package.yml)) | `pnpm install && pnpm dev` |
+| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers; also builds the Chrome extension (`pnpm build:extension`; the release zip is cut with every release, by pushing `release/v<version>` → [release.yml](.github/workflows/release.yml)) | `pnpm install && pnpm dev` |
 | Desktop | [app-desktop/vela-wallet](app-desktop/vela-wallet/README.md) | Rust + [gpui](https://github.com/zed-industries/zed) | `cargo run` |
 
 ### One source of truth for everything shared

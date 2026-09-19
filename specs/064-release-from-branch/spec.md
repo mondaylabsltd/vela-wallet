@@ -51,7 +51,8 @@ git push origin release/v0.9.3         # ← this is the release
 `release.yml` runs on `push` to `release/v*`, in this order:
 
 1. **Gate** (seconds, before anything is compiled):
-   - the branch name is `release/vX.Y.Z`, digits only (spec 063's runbook says why a suffix
+   - the branch name is `release/vX.Y.Z`, digits only — and since spec 066 the version is
+     the calendar's: `YY.M.REVISION`, this month, the next revision (spec 063's runbook says why a suffix
      breaks three packagers);
    - **all four declared versions equal X.Y.Z** — `Cargo.toml`, `extension/manifest.json`,
      `build.gradle.kts` `versionName`, `MARKETING_VERSION` — one check, where there used to be
