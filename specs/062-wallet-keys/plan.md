@@ -116,3 +116,72 @@ lock" — separate conversations.
 Each phase is its own PR. **None of it belongs in PR #232** (which fixes #191 and should
 merge on its own); this spec rides there only because the founder asked for the plan on
 this branch.
+
+---
+
+## §6 — The three layers: index → Gnosis → Ethereum (design, 2026-09-19; NOT yet built)
+
+Founder's question: a public key → its group/wallet → the wallet address can be resolved
+through the p256-index server, then the Gnosis contract, then the Ethereum contract. Three
+protections. How should they be wired so that it is best practice and not three copies?
+
+### What exists today
+
+| Question | Where the ladder lives | Rungs | Trigger to go down |
+|---|---|---|---|
+| Sign-in: key → units → members → address | **each shell** (`registry.ts`, `RegistryClient.kt/.swift` + `RegistryChainReader`, `registry.rs`) — four copies | index → Gnosis → Ethereum | index **unreachable or 5xx** only |
+| Name by address (`registry_lookup`) | core | index → Gnosis → Ethereum | silence |
+| Keys view (`wallet_keys`) | core | Gnosis → Ethereum (never the index) | silence |
+| Backup check (`registry_backup`) | core | Gnosis + Ethereum (never the index) | — |
+
+Two weaknesses:
+
+1. **The layers are fallbacks on silence, not checks.** An index that ANSWERS is believed.
+   Sign-in derives the address from the member list the index returns, and nothing compares
+   that list with the chain. A compromised or buggy index could hand back a member set that
+   is not the registered one — the wallet would derive, show and *receive funds at* an
+   address its owner does not solely control. The passkey assertion does not save us: the
+   person's key really is in the forged set.
+2. **The sign-in ladder is written four times**, and unit ids differ per deployment (Gnosis
+   unit 10 = Ethereum unit 0), which every copy has to remember.
+
+### What the contract gives us (read in `WebAuthnP256PublicKeyRegistry.sol`)
+
+- A group's stable identity is its **group public key** (equivalently its `contentHash`),
+  *never* the sequential `unitId` — the contract says so itself.
+- `contentHashFor(rpId, metadata, groupPublicKey, members)` is **pure and offline-computable**:
+  `keccak(abi.encode(rpId, metadata, groupPublicKey, [keccak(abi.encode(pk, attestation))…]))`.
+- `getUnitByGroupKey(groupPublicKey)` exists on every deployment and returns the `Unit`,
+  whose fields include that `contentHash`.
+
+### The design: the index for speed, the chain for truth, Ethereum for survival
+
+One transcript-driven walk in the core, `registry_resolve`, replacing the four shell ladders:
+
+1. **Ask the index** (fast, one round trip, carries everything).
+2. **Recompute `contentHash` locally** from what the index returned, and **confirm it with ONE
+   `eth_call`**: `getUnitByGroupKey(groupPublicKey)` on Gnosis. Equal ⇒ the index told the
+   truth, cryptographically — it cannot forge a member set that hashes to the on-chain value.
+   Different ⇒ the index is discarded and the chain is read in full.
+   Because the question is keyed by **group public key**, the same call verifies against
+   Ethereum when Gnosis is silent. No unit-id translation anywhere.
+3. **Index silent** ⇒ read Gnosis in full (today's `registry_chain`). **Gnosis silent** ⇒
+   Ethereum, which holds what the person backed up.
+4. **Verdict travels with the answer**: `verified_by: gnosis | ethereum | none`. `none` (index
+   answered, no chain reachable) still signs the person in — refusing would make the wallet
+   depend on RPC health — but the shell may say so, and must never treat it as verified.
+
+Properties: one implementation; shells only carry `index_get` / `eth_call` (no new Crux
+operations); the common path costs one extra `eth_call`, made in parallel with the rest of
+sign-in; a lying index is detected rather than believed; and the three layers stop being
+"try the next one" and become "fast answer, independent proof, last resort".
+
+`wallet_keys` and `registry_lookup` become callers of the same resolver rather than ladders of
+their own.
+
+### Why this is its own change
+
+It rewrites the sign-in read path on four shells. It needs: the `contentHash` vector test
+against the real contract bytes already recorded (`registry-chain.json`), a forged-index test
+(a member swapped → refused), and a device sign-in per shell. It does not belong in the PR
+that adds the backup.
