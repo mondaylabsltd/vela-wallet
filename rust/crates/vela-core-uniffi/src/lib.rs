@@ -487,6 +487,22 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// Sign-in's first question through the three layers — index, Gnosis,
+/// Ethereum. See `vela_core::registry_resolve`.
+#[uniffi::export]
+#[must_use]
+pub fn registry_resolve_key_step(public_key_hex: String, answers_json: String) -> String {
+    vela_core::registry_resolve::key_step_json(&public_key_hex, &answers_json)
+}
+
+/// Sign-in's second question, with an index answer PROVED against the chain.
+/// `source` is the token the key step returned.
+#[uniffi::export]
+#[must_use]
+pub fn registry_resolve_unit_step(unit_id: u32, source: String, answers_json: String) -> String {
+    vela_core::registry_resolve::unit_step_json(u64::from(unit_id), &source, &answers_json)
+}
+
 /// "Sign with": which credential a ceremony is pinned to and how it is reached,
 /// for the method the person chose — `None` for `auto`. See
 /// `vela_core::wallet_keys::sign_route`.

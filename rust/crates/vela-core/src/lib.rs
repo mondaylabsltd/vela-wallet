@@ -49,6 +49,7 @@ pub mod registry_chain;
 pub mod registry_lookup;
 pub mod registry_metadata;
 pub mod registry_proof;
+pub mod registry_resolve;
 pub mod safe;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
