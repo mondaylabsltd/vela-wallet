@@ -2547,7 +2547,13 @@ struct RootView: View {
         let keys = walletKeys.flatMap {
             $0.address.caseInsensitiveCompare(session.view.address) == .orderedSame ? $0.result : nil
         }
-        model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
+        // No wallet, no block. With no address nothing is ever asked, so "still
+        // asking" would never end: on a signed-out iPhone the block sat on its
+        // loading skeleton and the backup on 正在检查… for good (device-found
+        // 2026-09-19).
+        if !session.view.address.isEmpty {
+            model = SettingsLive.withWalletKeys(keys, backup: backedUp, on: model, loc: loc)
+        }
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
