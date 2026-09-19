@@ -387,7 +387,6 @@
 		"recommended": "추천",
 		"availableNow": "지금 사용 가능",
 		"comingSoon": "출시 예정",
-		"githubCta": "GitHub Releases에서 내려받기",
 		"sourceCta": "소스에서 직접 빌드하기",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "스토어에서의 내려받기는 유료이며, 그것이 작은 독립 팀이 Vela를 공개적으로 만들어 가는 재원입니다. 전부 오픈소스이니 직접 빌드해도 됩니다 — 같은 앱이고, 비용은 없습니다.",
-		"storeNote": "아직 어느 스토어에도 없습니다. 그때까지 데스크톱 앱과 브라우저 확장 프로그램은 바로 설치할 수 있는 형태로 GitHub에 있습니다. 휴대폰 앱은 그곳에 없습니다. 스토어에서 받거나 소스에서 빌드해야 합니다."
+		"storeNote": "아직 어느 스토어에도 올라가 있지 않습니다. 그때까지 데스크톱 앱과 브라우저 확장 프로그램은 이 페이지에서 바로, 설치할 수 있는 상태로 내려받을 수 있습니다. 휴대폰 앱은 그렇지 않습니다. 스토어에서 받거나 소스에서 직접 빌드하세요.",
+		"downloads": {
+			"yourSystem": "사용 중인 시스템",
+			"versionLine": "버전 {{version}}",
+			"comingShortly": "곧 제공",
+			"unavailable": "이 다운로드는 아직 올라오지 않았습니다. 보통 새 릴리스 후 몇 시간 안에 추가됩니다. 여기 있는 나머지는 모두 준비되어 있습니다.",
+			"windowsNote": "Windows가 \"Windows의 PC 보호\"라고 알립니다. 설치 프로그램에 아직 코드 서명이 없기 때문입니다. \"추가 정보\"를 누른 다음 \"실행\"을 누르세요.",
+			"verify": "체크섬과 소스는 GitHub에서",
+			"installer": "설치 프로그램",
+			"chips": {
+				"appleSilicon": "Apple 실리콘",
+				"intel": "Intel 칩",
+				"universal": "유니버설"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple 실리콘(M1 이후)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM(Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — 모든 배포판 (Flatpak)",
+				"linux-flatpak-arm64": "Linux — 모든 배포판 (Flatpak, ARM)",
+				"extension": "브라우저 확장 프로그램"
+			},
+			"extension": {
+				"action": "확장 프로그램 내려받기",
+				"stepsTitle": "Chrome 웹 스토어에 올라가기 전까지는 이어서:",
+				"steps": [
+					"계속 보관할 폴더에 압축을 풉니다 — 브라우저가 그 폴더에서 확장 프로그램을 실행합니다.",
+					"chrome://extensions 를 열고 \"개발자 모드\"를 켭니다.",
+					"\"압축해제된 확장 프로그램을 로드합니다\"를 누르고 그 폴더를 선택합니다."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

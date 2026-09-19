@@ -387,7 +387,6 @@
 		"recommended": "Recomendado",
 		"availableNow": "Disponível agora",
 		"comingSoon": "Em breve",
-		"githubCta": "Baixar do GitHub Releases",
 		"sourceCta": "Compilar a partir do código-fonte",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Downloads nas lojas são pagos, e é assim que um time pequeno e independente financia construir a Vela às claras. Tudo é de código aberto, então você sempre pode compilar por conta própria — o mesmo app, sem custo.",
-		"storeNote": "Ainda não está nas lojas. Até lá, os apps de desktop e a extensão estão no GitHub, prontos para instalar. Os apps de celular não: eles vêm das lojas, ou do código-fonte."
+		"storeNote": "Ainda não está nas lojas. Até lá, os apps de desktop e a extensão são baixados desta página, prontos para instalar. Os apps de celular não: eles vêm das lojas, ou do código-fonte.",
+		"downloads": {
+			"yourSystem": "Seu sistema",
+			"versionLine": "Versão {{version}}",
+			"comingShortly": "Em breve",
+			"unavailable": "Esse download ainda não está no ar — ele costuma chegar poucas horas depois de uma nova versão. Todo o resto aqui já está pronto.",
+			"windowsNote": "O Windows vai dizer “O Windows protegeu o computador”: o instalador ainda não tem assinatura de código. Escolha “Mais informações” e depois “Executar assim mesmo”.",
+			"verify": "Checksums e código-fonte no GitHub",
+			"installer": "Instalador",
+			"chips": {
+				"appleSilicon": "Apple silicon",
+				"intel": "Chip Intel",
+				"universal": "Universal"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple silicon (M1 e posteriores)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — qualquer distribuição (Flatpak)",
+				"linux-flatpak-arm64": "Linux — qualquer distribuição (Flatpak, ARM)",
+				"extension": "Extensão de navegador"
+			},
+			"extension": {
+				"action": "Baixar a extensão",
+				"stepsTitle": "Depois, enquanto ela não está na Chrome Web Store:",
+				"steps": [
+					"Descompacte em uma pasta que você vai manter — o navegador executa a extensão a partir dela.",
+					"Abra chrome://extensions e ative o “Modo do desenvolvedor”.",
+					"Clique em “Carregar sem compactação” e escolha essa pasta."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

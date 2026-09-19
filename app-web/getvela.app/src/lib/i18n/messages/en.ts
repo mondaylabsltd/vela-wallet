@@ -606,7 +606,6 @@ export const en = {
 		recommended: 'Recommended',
 		availableNow: 'Available now',
 		comingSoon: 'Coming soon',
-		githubCta: 'Download from GitHub Releases',
 		/**
 		 * The phone card's second route (spec 063). Phones have no packages on
 		 * GitHub — the stores are the channel, and they are paid — so the honest
@@ -651,7 +650,60 @@ export const en = {
 		fundingNote:
 			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. Everything is open source, so you can always build it yourself instead — same app, no charge.',
 		storeNote:
-			'Not on the stores yet. Until then, the desktop apps and the extension are on GitHub, ready to install. The phone apps are not: they come from the stores, or from the source.'
+			'Not on the stores yet. Until then, the desktop apps and the extension download from this page, ready to install. The phone apps do not: they come from the stores, or from the source.',
+		/**
+		 * Direct downloads (spec 065). The page used to send people to a GitHub
+		 * page listing fourteen files and ask them to know which was theirs.
+		 *
+		 * The platform labels are written for someone who does not know the word
+		 * "aarch64" — the parenthesis names the thing they DO know (the chip's
+		 * brand, the distribution). Product and distribution names stay as they
+		 * are in every language.
+		 */
+		downloads: {
+			/** On the column that matches the visitor's system. A guess, so it only highlights — every other column stays as reachable. */
+			yourSystem: 'Your system',
+			versionLine: 'Version {{version}}',
+			comingShortly: 'Coming shortly',
+			unavailable:
+				'That download is not up yet — it usually follows a new release within a few hours. Everything else here is ready.',
+			windowsNote:
+				'Windows will say it "protected your PC": the installer is not code-signed yet. Choose "More info", then "Run anyway".',
+			verify: 'Checksums and source on GitHub',
+			/** The row label beside the Windows architecture chips. */
+			installer: 'Installer',
+			/** The three Mac chips. "x64" and "Arm64" are not here: they are the same in every language. */
+			chips: {
+				appleSilicon: 'Apple silicon',
+				intel: 'Intel chip',
+				universal: 'Universal'
+			},
+			/** The full name of each download — what a screen reader hears for a chip that shows only "Arm64". */
+			labels: {
+				'macos-arm64': 'macOS — Apple silicon (M1 and later)',
+				'macos-x64': 'macOS — Intel',
+				'macos-universal': 'macOS',
+				'windows-x64': 'Windows',
+				'windows-arm64': 'Windows — ARM (Snapdragon, Surface Pro X)',
+				'linux-deb-x64': 'Linux — Ubuntu, Debian, Mint (.deb)',
+				'linux-deb-arm64': 'Linux — Ubuntu, Debian, Mint (.deb, ARM)',
+				'linux-rpm-x64': 'Linux — Fedora, openSUSE (.rpm)',
+				'linux-rpm-arm64': 'Linux — Fedora, openSUSE (.rpm, ARM)',
+				'linux-flatpak-x64': 'Linux — any distribution (Flatpak)',
+				'linux-flatpak-arm64': 'Linux — any distribution (Flatpak, ARM)',
+				extension: 'Browser extension'
+			},
+			extension: {
+				action: 'Download the extension',
+				/** A zip a person does not know how to load is not a download (A2). */
+				stepsTitle: 'Then, until it is on the Chrome Web Store:',
+				steps: [
+					'Unzip it into a folder you will keep — the browser runs the extension from there.',
+					'Open chrome://extensions and turn on "Developer mode".',
+					'Click "Load unpacked" and choose that folder.'
+				]
+			}
+		}
 	},
 	/**
 	 * Chain setup — the page an operator uses to find out whether Vela can run

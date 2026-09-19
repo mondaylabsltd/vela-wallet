@@ -387,7 +387,6 @@
 		"recommended": "Recommandé",
 		"availableNow": "Disponible",
 		"comingSoon": "Bientôt",
-		"githubCta": "Télécharger depuis GitHub Releases",
 		"sourceCta": "Compiler depuis les sources",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Les téléchargements en boutique sont payants, et c'est ainsi qu'une petite équipe indépendante finance la construction de Vela au grand jour. Tout est open source : vous pouvez aussi le compiler vous-même — même application, sans frais.",
-		"storeNote": "Pas encore en boutique. En attendant, les applications de bureau et l’extension sont sur GitHub, prêtes à installer. Les applications mobiles n’y sont pas : elles viennent des boutiques, ou des sources."
+		"storeNote": "Pas encore sur les stores. D'ici là, les applications de bureau et l'extension se téléchargent depuis cette page, prêtes à installer. Pas les applications mobiles : elles viennent des stores, ou du code source.",
+		"downloads": {
+			"yourSystem": "Votre système",
+			"versionLine": "Version {{version}}",
+			"comingShortly": "Bientôt",
+			"unavailable": "Ce téléchargement n'est pas encore en ligne — il suit généralement une nouvelle version de quelques heures. Tout le reste ici est prêt.",
+			"windowsNote": "Windows affichera « Windows a protégé votre ordinateur » : l'installateur n'est pas encore signé. Choisissez « Informations complémentaires », puis « Exécuter quand même ».",
+			"verify": "Sommes de contrôle et code source sur GitHub",
+			"installer": "Installateur",
+			"chips": {
+				"appleSilicon": "Puce Apple",
+				"intel": "Puce Intel",
+				"universal": "Universel"
+			},
+			"labels": {
+				"macos-arm64": "macOS — puce Apple (M1 et ultérieures)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — toute distribution (Flatpak)",
+				"linux-flatpak-arm64": "Linux — toute distribution (Flatpak, ARM)",
+				"extension": "Extension de navigateur"
+			},
+			"extension": {
+				"action": "Télécharger l'extension",
+				"stepsTitle": "Ensuite, tant qu'elle n'est pas sur le Chrome Web Store :",
+				"steps": [
+					"Décompressez-la dans un dossier que vous garderez — le navigateur exécute l'extension depuis ce dossier.",
+					"Ouvrez chrome://extensions et activez le « Mode développeur ».",
+					"Cliquez sur « Charger l'extension non empaquetée » et choisissez ce dossier."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

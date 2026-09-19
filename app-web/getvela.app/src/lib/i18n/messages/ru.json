@@ -387,7 +387,6 @@
 		"recommended": "Рекомендуем",
 		"availableNow": "Доступно сейчас",
 		"comingSoon": "Скоро",
-		"githubCta": "Скачать с GitHub Releases",
 		"sourceCta": "Собрать из исходного кода",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Загрузки в магазинах платные, и именно так небольшая независимая команда финансирует открытую разработку Vela. Всё с открытым кодом, так что вы всегда можете собрать сами — то же приложение, без оплаты.",
-		"storeNote": "Пока ни в одном магазине. До тех пор приложения для компьютера и расширение лежат на GitHub — готовые к установке. Приложений для телефона там нет: они приходят из магазинов или из исходного кода."
+		"storeNote": "В магазинах приложений пока нет. До тех пор настольные приложения и расширение скачиваются прямо с этой страницы, готовые к установке. Мобильные приложения — нет: их можно получить в магазинах или собрать из исходного кода.",
+		"downloads": {
+			"yourSystem": "Ваша система",
+			"versionLine": "Версия {{version}}",
+			"comingShortly": "Скоро",
+			"unavailable": "Этот файл ещё не выложен — обычно он появляется через несколько часов после нового релиза. Всё остальное здесь уже доступно.",
+			"windowsNote": "Windows сообщит: «Система Windows защитила ваш компьютер» — у установщика пока нет цифровой подписи. Нажмите «Подробнее», затем «Выполнить в любом случае».",
+			"verify": "Контрольные суммы и исходный код на GitHub",
+			"installer": "Установщик",
+			"chips": {
+				"appleSilicon": "Apple silicon",
+				"intel": "Процессор Intel",
+				"universal": "Универсальный"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple silicon (M1 и новее)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — любой дистрибутив (Flatpak)",
+				"linux-flatpak-arm64": "Linux — любой дистрибутив (Flatpak, ARM)",
+				"extension": "Расширение для браузера"
+			},
+			"extension": {
+				"action": "Скачать расширение",
+				"stepsTitle": "Затем, пока его нет в Chrome Web Store:",
+				"steps": [
+					"Распакуйте в папку, которую не будете удалять: браузер запускает расширение оттуда.",
+					"Откройте chrome://extensions и включите «Режим разработчика».",
+					"Нажмите «Загрузить распакованное расширение» и выберите эту папку."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

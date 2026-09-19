@@ -387,7 +387,6 @@
 		"recommended": "おすすめ",
 		"availableNow": "今すぐ使えます",
 		"comingSoon": "近日公開",
-		"githubCta": "GitHub Releases からダウンロード",
 		"sourceCta": "ソースからビルドする",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "ストアでのダウンロードは有料で、それが小さな独立チームが Vela を公開の場で作り続けるための資金になります。すべてオープンソースなので、自分でビルドしても構いません — 同じアプリで、料金はかかりません。",
-		"storeNote": "まだどのストアにも並んでいません。それまでは、デスクトップ版とブラウザ拡張機能を、そのままインストールできる形で GitHub に置いています。スマートフォン版は置いていません。ストアから入手するか、ソースからビルドしてください。"
+		"storeNote": "まだどのストアにも並んでいません。それまでは、デスクトップ版とブラウザ拡張機能を、そのままインストールできる形でこのページからダウンロードできます。スマートフォン版はできません。ストアから入手するか、ソースからビルドしてください。",
+		"downloads": {
+			"yourSystem": "お使いのシステム",
+			"versionLine": "バージョン {{version}}",
+			"comingShortly": "まもなく公開",
+			"unavailable": "このダウンロードはまだ用意できていません。通常、新しいリリースから数時間以内に追加されます。ここにあるほかのものはすべてダウンロードできます。",
+			"windowsNote": "Windows が「Windows によって PC が保護されました」と表示します。インストーラーにまだコード署名がないためです。「詳細情報」を選び、「実行」を押してください。",
+			"verify": "チェックサムとソースは GitHub に",
+			"installer": "インストーラー",
+			"chips": {
+				"appleSilicon": "Apple シリコン",
+				"intel": "Intel チップ",
+				"universal": "ユニバーサル"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple シリコン（M1 以降）",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM（Snapdragon、Surface Pro X）",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — すべてのディストリビューション (Flatpak)",
+				"linux-flatpak-arm64": "Linux — すべてのディストリビューション (Flatpak, ARM)",
+				"extension": "ブラウザ拡張機能"
+			},
+			"extension": {
+				"action": "拡張機能をダウンロード",
+				"stepsTitle": "Chrome ウェブストアに並ぶまでは、続けて：",
+				"steps": [
+					"残しておくフォルダーに展開します——ブラウザはそこから拡張機能を実行します。",
+					"chrome://extensions を開き、「デベロッパー モード」をオンにします。",
+					"「パッケージ化されていない拡張機能を読み込む」を押し、そのフォルダーを選びます。"
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

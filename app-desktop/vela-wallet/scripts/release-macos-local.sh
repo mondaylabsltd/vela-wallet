@@ -156,9 +156,12 @@ shasum -a 256 ./*.dmg > SHA256SUMS-macos
 echo; cat SHA256SUMS-macos; echo
 
 if (( upload )); then
-  clobber=(); (( replace )) && clobber=(--clobber)
-  gh release upload "$tag" ./*.dmg SHA256SUMS-macos --repo "$repo" ${clobber[@]+"${clobber[@]}"}
-  note "attached to https://github.com/$repo/releases/tag/$tag"
+  # One uploader, not two (spec 065 FR-007): release-attach.sh re-checks each
+  # image the way it checks any hand-attached file — stapled, accepted by
+  # Gatekeeper, named for this tag, carrying its commit, replacing nothing
+  # unless told to — and keeps SHA256SUMS-macos on the release in step.
+  attach=("$repo_root/scripts/release-attach.sh" "$tag"); (( replace )) && attach+=(--replace)
+  "${attach[@]}" ./*.dmg
   echo "Now the check no script can make: download one .dmg THROUGH A BROWSER (a file"
   echo "that never left this Mac is not quarantined), open it, make a wallet with"
   echo "\"This device\", and open the scanner."
