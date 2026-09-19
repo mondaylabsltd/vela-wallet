@@ -102,8 +102,16 @@ impl Status {
     pub fn from_byte(byte: u8) -> Self {
         match byte {
             0x00 => Self::Success,
-            0x19 | 0x27 | 0x2f => Self::Cancelled,
-            0x21 => Self::CredentialExcluded,
+            // Checked against libfido2's `fido/err.h`, not recalled: until
+            // 2026-09-19 this table had 0x19 as Cancelled and 0x21 as
+            // CredentialExcluded, and no entry for 0x2d at all — and the test
+            // beside it asserted the same numbers from the same memory. So a
+            // key already in the founding set read as "you cancelled", and a
+            // ceremony the person really did cancel (the client sends CTAPHID
+            // CANCEL, the key answers 0x2d) read as a failed sign-in.
+            0x19 => Self::CredentialExcluded, // CTAP2_ERR_CREDENTIAL_EXCLUDED
+            0x27 | 0x2d | 0x2f => Self::Cancelled, // OPERATION_DENIED, KEEPALIVE_CANCEL, USER_ACTION_TIMEOUT
+            // 0x21 is CTAP2_ERR_PROCESSING — nobody's decision; it keeps its number.
             0x28 => Self::KeyStoreFull,
             0x2b => Self::PinNotSet,
             0x2e => Self::NoCredentials,

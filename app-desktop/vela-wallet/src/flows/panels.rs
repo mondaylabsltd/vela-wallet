@@ -1960,6 +1960,7 @@ pub fn scan_modal(
     theme: &Theme,
     icons: &mut IconCache,
     mut tool_actions: Vec<Option<Click>>,
+    close: Option<Click>,
     preview: Option<std::sync::Arc<gpui::RenderImage>>,
 ) -> Div {
     let mut tools = div().flex().gap(px(8.));
@@ -1992,7 +1993,25 @@ pub fn scan_modal(
                         .text_color(theme.fg_base)
                         .child(model.title.clone()),
                 )
-                .child(icon_img(icons, Icon::X, false, theme.fg_muted, 18.)),
+                // A BUTTON, not a drawing of one. For as long as the scanner had
+                // a camera this was an 18px picture of an X with nothing behind
+                // it, inside a card that swallows every press — so the only way
+                // out was a click on the dimmed window around it, which nobody
+                // finds: the founder had to quit the app to change method
+                // (2026-09-19). 32px of target, because 18 is an icon's size
+                // and not a finger's or a trackpad's.
+                .child(clickable(
+                    "scan-close",
+                    close,
+                    div()
+                        .size(px(32.))
+                        .rounded_full()
+                        .bg(theme.bg_sunken)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(icon_img(icons, Icon::X, false, theme.fg_muted, 18.)),
+                )),
         )
         .child(
             // The viewfinder is landscape, not square — roughly what a webcam

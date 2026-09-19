@@ -272,10 +272,20 @@ fn a_response_splits_into_a_status_and_a_body() {
 #[test]
 fn status_codes_map_to_the_decisions_they_drive() {
     assert_eq!(Status::from_byte(0x00), Status::Success);
-    assert_eq!(Status::from_byte(0x19), Status::Cancelled);
+    // The numbers below are libfido2's `src/fido/err.h` (the CTAP reference
+    // client), read on 2026-09-19 — NOT this crate's own table read back to
+    // itself, which is what this test used to be and why it passed for months
+    // with 0x19 and 0x21 swapped around and 0x2d missing:
+    //   FIDO_ERR_CREDENTIAL_EXCLUDED 0x19   FIDO_ERR_PROCESSING        0x21
+    //   FIDO_ERR_OPERATION_DENIED    0x27   FIDO_ERR_KEEPALIVE_CANCEL  0x2d
+    //   FIDO_ERR_NO_CREDENTIALS      0x2e   FIDO_ERR_USER_ACTION_TIMEOUT 0x2f
+    assert_eq!(Status::from_byte(0x19), Status::CredentialExcluded);
     assert_eq!(Status::from_byte(0x27), Status::Cancelled);
+    // What a key answers to CTAPHID CANCEL — the person pressed Cancel here.
+    assert_eq!(Status::from_byte(0x2d), Status::Cancelled);
     assert_eq!(Status::from_byte(0x2f), Status::Cancelled);
-    assert_eq!(Status::from_byte(0x21), Status::CredentialExcluded);
+    // PROCESSING is nobody's decision: it keeps its number.
+    assert_eq!(Status::from_byte(0x21), Status::Other(0x21));
     assert_eq!(Status::from_byte(0x2e), Status::NoCredentials);
     assert_eq!(Status::from_byte(0x7f), Status::Other(0x7f));
     assert!(Status::Success.is_success());

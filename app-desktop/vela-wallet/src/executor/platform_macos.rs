@@ -35,7 +35,7 @@ use std::time::Duration;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
-use objc2_app_kit::NSApplication;
+use objc2_app_kit::{NSApplication, NSWindow};
 use objc2_authentication_services::{
     ASAuthorization,
     ASAuthorizationController,
@@ -277,7 +277,16 @@ extern "C" fn perform_on_main(context: *mut c_void) {
         }
     };
 
-    let delegate = Delegate::new(mtm, job.tx.clone());
+    // Before anything is presented: no window, no sheet — said as a failure the
+    // onboarding screen can show, where it used to be a panic inside Apple's
+    // callback.
+    let Some(anchor) = presentation_window(mtm) else {
+        let _ = job.tx.send(Err(PasskeyFailure::other(
+            "Vela has no window to show the passkey sheet on — bring it to the front and try again",
+        )));
+        return;
+    };
+    let delegate = Delegate::new(mtm, job.tx.clone(), anchor);
     let requests = NSArray::from_slice(&[&*request]);
     let controller: Retained<ASAuthorizationController> = unsafe {
         msg_send_id![
@@ -345,6 +354,10 @@ fn reclaim(delegate: *const c_void) {
 /// What the delegate needs: where to send the outcome.
 struct Ivars {
     tx: Sender<Result<Outcome, PasskeyFailure>>,
+    /// The window the sheet hangs from — resolved BEFORE the request starts
+    /// (see [`presentation_window`]), so the system's callback has nothing to
+    /// look up and nothing to fail at.
+    anchor: Retained<NSWindow>,
 }
 
 declare_class!(
@@ -411,22 +424,39 @@ declare_class!(
     unsafe impl ASAuthorizationControllerPresentationContextProviding for Delegate {
         #[method_id(presentationAnchorForAuthorizationController:)]
         fn anchor(&self, _controller: &ASAuthorizationController) -> Retained<ASPresentationAnchor> {
-            let mtm = MainThreadMarker::from(self);
-            let app = NSApplication::sharedApplication(mtm);
-            // The app has exactly one window; key beats main only when they
-            // differ (a sheet already up), and either anchors correctly. The
-            // crate aliases `ASPresentationAnchor` to NSObject (it does not
+            // Nothing is looked up here and nothing can fail here, on purpose:
+            // this is called BY AuthenticationServices, and a Rust panic that
+            // reaches an Objective-C frame is not an error, it is `abort()`.
+            // The crate aliases `ASPresentationAnchor` to NSObject (it does not
             // link AppKit itself), so the NSWindow is upcast for the return.
-            let window = unsafe { app.keyWindow().or_else(|| app.mainWindow()) }
-                .expect("the app has a window while onboarding is on screen");
-            unsafe { Retained::cast(window) }
+            unsafe { Retained::cast(self.ivars().anchor.clone()) }
         }
     }
 );
 
+/// The window a passkey sheet can hang from, or `None`.
+///
+/// Key beats main only when they differ (a sheet already up); either anchors
+/// correctly. BOTH are `nil` whenever the app is not the active one — the
+/// person clicked another window while a sign-in was starting, or the app was
+/// launched behind something — which the old `expect("the app has a window")`
+/// turned into a dead process (crash report 2026-09-19 07:15:40, main thread:
+/// `Delegate::anchor` → `expect_failed` → `abort`, called from
+/// `-[ASAuthorizationController _performAuthorizationRequests:…]`). The app's
+/// own window is still there in that case, so it is the third thing asked.
+fn presentation_window(mtm: MainThreadMarker) -> Option<Retained<NSWindow>> {
+    let app = NSApplication::sharedApplication(mtm);
+    unsafe { app.keyWindow().or_else(|| app.mainWindow()) }
+        .or_else(|| app.windows().first().map(|w| w.retain()))
+}
+
 impl Delegate {
-    fn new(mtm: MainThreadMarker, tx: Sender<Result<Outcome, PasskeyFailure>>) -> Retained<Self> {
-        let this = mtm.alloc().set_ivars(Ivars { tx });
+    fn new(
+        mtm: MainThreadMarker,
+        tx: Sender<Result<Outcome, PasskeyFailure>>,
+        anchor: Retained<NSWindow>,
+    ) -> Retained<Self> {
+        let this = mtm.alloc().set_ivars(Ivars { tx, anchor });
         unsafe { msg_send_id![super(this), init] }
     }
 }
