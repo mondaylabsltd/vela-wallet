@@ -387,7 +387,6 @@
 		"recommended": "Khuyên dùng",
 		"availableNow": "Dùng được ngay",
 		"comingSoon": "Sắp có",
-		"githubCta": "Tải từ GitHub Releases",
 		"sourceCta": "Tự build từ mã nguồn",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Tải từ cửa hàng là có trả tiền, và đó là cách một nhóm nhỏ độc lập có kinh phí để làm Vela một cách công khai. Mọi thứ đều mã nguồn mở, nên bạn luôn có thể tự build lấy — cùng một ứng dụng, không mất phí.",
-		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, ứng dụng máy tính và tiện ích mở rộng nằm trên GitHub, tải về là cài được. Ứng dụng điện thoại thì không: chúng đến từ cửa hàng, hoặc từ mã nguồn."
+		"storeNote": "Chưa có trên các cửa hàng ứng dụng. Cho đến lúc đó, ứng dụng máy tính và tiện ích mở rộng được tải về ngay từ trang này, sẵn sàng để cài đặt. Ứng dụng điện thoại thì không: chúng đến từ các cửa hàng, hoặc từ mã nguồn.",
+		"downloads": {
+			"yourSystem": "Hệ thống của bạn",
+			"versionLine": "Phiên bản {{version}}",
+			"comingShortly": "Sắp có",
+			"unavailable": "Bản tải về này chưa được đưa lên — thường sẽ có trong vòng vài giờ sau một bản phát hành mới. Mọi thứ khác ở đây đều đã sẵn sàng.",
+			"windowsNote": "Windows sẽ báo “Windows đã bảo vệ PC của bạn”: trình cài đặt chưa được ký mã. Chọn “Thông tin thêm”, rồi “Vẫn chạy”.",
+			"verify": "Mã kiểm tra và mã nguồn trên GitHub",
+			"installer": "Trình cài đặt",
+			"chips": {
+				"appleSilicon": "Apple silicon",
+				"intel": "Chip Intel",
+				"universal": "Universal"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple silicon (M1 trở về sau)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — mọi bản phân phối (Flatpak)",
+				"linux-flatpak-arm64": "Linux — mọi bản phân phối (Flatpak, ARM)",
+				"extension": "Tiện ích mở rộng trình duyệt"
+			},
+			"extension": {
+				"action": "Tải tiện ích mở rộng",
+				"stepsTitle": "Sau đó, cho đến khi có trên Chrome Web Store:",
+				"steps": [
+					"Giải nén vào một thư mục bạn sẽ giữ lại — trình duyệt chạy tiện ích từ thư mục đó.",
+					"Mở chrome://extensions và bật “Chế độ dành cho nhà phát triển”.",
+					"Nhấp “Tải tiện ích đã giải nén” và chọn thư mục đó."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

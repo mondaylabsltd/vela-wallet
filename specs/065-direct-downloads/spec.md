@@ -1,7 +1,8 @@
 # 065 — Direct downloads: the site hands a person the right file, and one command attaches a signed package
 
-**Status**: design AGREED 2026-09-19 (§0); **not started** — queued behind spec 064's first
-release, which creates the unified `vX.Y.Z` Release this spec reads from.
+**Status**: BUILT 2026-09-19, against v0.9.3 (the first spec-064 release) — see
+[results.md](results.md). The R2 bucket (`vela-downloads`, APAC) was created by the founder the same day and is
+bound as `DOWNLOADS`.
 **Origin**: founder, 2026-09-19.
 **Shells**: the download page on getvela.app (a Cloudflare Worker), and one script.
 

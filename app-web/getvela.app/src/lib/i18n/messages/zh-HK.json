@@ -387,7 +387,6 @@
 		"recommended": "推薦",
 		"availableNow": "而家用得",
 		"comingSoon": "即將推出",
-		"githubCta": "喺 GitHub Releases 下載",
 		"sourceCta": "用原始碼自己 build",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "喺商店下載係要畀錢嘅，而呢個就係一隊獨立細團隊公開開發 Vela 嘅經費來源。所有嘢都開源，所以你永遠可以自己 build——同一個應用，唔使畀錢。",
-		"storeNote": "仲未上商店。喺嗰日之前，桌面版同瀏覽器擴充功能都喺 GitHub 上面，下載就裝得。手機版唔喺嗰度：佢哋嚟自應用商店，或者嚟自原始碼。"
+		"storeNote": "暫時未上架任何應用程式商店。喺嗰之前，桌面版同瀏覽器擴充功能都可以喺呢版直接下載，下載完就裝得。手機版唔得：要喺應用程式商店攞，或者由原始碼自己砌。",
+		"downloads": {
+			"yourSystem": "你嘅系統",
+			"versionLine": "版本 {{version}}",
+			"comingShortly": "稍後提供",
+			"unavailable": "呢個下載仲未上載——通常新版本發布後幾個鐘內就會補上。呢度其他嘅全部都可以下載。",
+			"windowsNote": "Windows 會彈出「Windows 已保護您的電腦」：安裝程式仲未有程式碼簽章。撳「其他資訊」，再撳「仍要執行」。",
+			"verify": "喺 GitHub 睇檢查碼同原始碼",
+			"installer": "安裝程式",
+			"chips": {
+				"appleSilicon": "Apple 晶片",
+				"intel": "Intel 晶片",
+				"universal": "通用"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple 晶片（M1 或之後）",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM（Snapdragon、Surface Pro X）",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — 任何發行版 (Flatpak)",
+				"linux-flatpak-arm64": "Linux — 任何發行版 (Flatpak, ARM)",
+				"extension": "瀏覽器擴充功能"
+			},
+			"extension": {
+				"action": "下載擴充功能",
+				"stepsTitle": "喺上架 Chrome 線上應用程式商店之前，仲要：",
+				"steps": [
+					"解壓縮去一個你會留低嘅資料夾——瀏覽器會喺嗰度執行擴充功能。",
+					"開 chrome://extensions，開啟「開發人員模式」。",
+					"撳「載入未封裝項目」，揀嗰個資料夾。"
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

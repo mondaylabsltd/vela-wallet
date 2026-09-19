@@ -387,7 +387,6 @@
 		"recommended": "Önerilen",
 		"availableNow": "Şimdi kullanılabilir",
 		"comingSoon": "Yakında",
-		"githubCta": "GitHub Releases'ten indirin",
 		"sourceCta": "Kaynak koddan derleyin",
 		"platforms": {
 			"web": {
@@ -415,12 +414,49 @@
 			}
 		},
 		"fundingNote": "Mağaza indirmeleri ücretlidir ve küçük, bağımsız bir ekip Vela'yı açıkta geliştirmeyi böyle finanse eder. Her şey açık kaynak olduğu için dilerseniz kendiniz de derleyebilirsiniz — aynı uygulama, ücretsiz.",
-		"storeNote": "Henüz mağazalarda değil. O zamana kadar masaüstü uygulamaları ve uzantı GitHub'da, kuruluma hazır. Telefon uygulamaları orada değil: mağazalardan ya da kaynak koddan gelir."
+		"storeNote": "Henüz mağazalarda değil. O zamana kadar masaüstü uygulamaları ve uzantı bu sayfadan, kuruluma hazır olarak indirilir. Telefon uygulamaları indirilmez: onlar mağazalardan ya da kaynak koddan gelir.",
+		"downloads": {
+			"yourSystem": "Sisteminiz",
+			"versionLine": "Sürüm {{version}}",
+			"comingShortly": "Çok yakında",
+			"unavailable": "Bu indirme henüz yüklenmedi; genellikle yeni bir sürümden birkaç saat sonra gelir. Buradaki diğer her şey hazır.",
+			"windowsNote": "Windows “Windows kişisel bilgisayarınızı korudu” diyecek: yükleyici henüz kod imzalı değil. “Ek bilgi”yi, ardından “Yine de çalıştır”ı seçin.",
+			"verify": "Sağlama toplamları ve kaynak kod GitHub'da",
+			"installer": "Yükleyici",
+			"chips": {
+				"appleSilicon": "Apple silicon",
+				"intel": "Intel çip",
+				"universal": "Evrensel"
+			},
+			"labels": {
+				"macos-arm64": "macOS — Apple silicon (M1 ve sonrası)",
+				"macos-x64": "macOS — Intel",
+				"macos-universal": "macOS",
+				"windows-x64": "Windows",
+				"windows-arm64": "Windows — ARM (Snapdragon, Surface Pro X)",
+				"linux-deb-x64": "Linux — Ubuntu, Debian, Mint (.deb)",
+				"linux-deb-arm64": "Linux — Ubuntu, Debian, Mint (.deb, ARM)",
+				"linux-rpm-x64": "Linux — Fedora, openSUSE (.rpm)",
+				"linux-rpm-arm64": "Linux — Fedora, openSUSE (.rpm, ARM)",
+				"linux-flatpak-x64": "Linux — her dağıtım (Flatpak)",
+				"linux-flatpak-arm64": "Linux — her dağıtım (Flatpak, ARM)",
+				"extension": "Tarayıcı uzantısı"
+			},
+			"extension": {
+				"action": "Uzantıyı indir",
+				"stepsTitle": "Ardından, Chrome Web Mağazası'na gelene kadar:",
+				"steps": [
+					"Saklayacağınız bir klasöre çıkarın; tarayıcı uzantıyı oradan çalıştırır.",
+					"chrome://extensions adresini açın ve “Geliştirici modu”nu etkinleştirin.",
+					"“Paketlenmemiş öğe yükle”ye tıklayın ve o klasörü seçin."
+				]
+			}
+		}
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "9dbba9a517c8"
+		"getStarted": "7096649e0f32"
 	}
 }

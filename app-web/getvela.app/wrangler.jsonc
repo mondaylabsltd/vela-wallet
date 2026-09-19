@@ -7,5 +7,10 @@
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
-	}
+	},
+	// The download mirror (spec 065, A5): `/download/<platform>` serves from this
+	// bucket, filling it from the GitHub Release on first request. The founder
+	// created it on 2026-09-19 (APAC). A binding to a bucket that does not exist
+	// fails `wrangler deploy` — so the bucket comes first, always.
+	"r2_buckets": [{ "binding": "DOWNLOADS", "bucket_name": "vela-downloads" }]
 }
