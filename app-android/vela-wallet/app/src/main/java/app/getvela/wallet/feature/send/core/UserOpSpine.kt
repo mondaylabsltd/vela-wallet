@@ -3,8 +3,11 @@ package app.getvela.wallet.feature.send.core
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.FailureKind
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
+import org.json.JSONObject
 import uniffi.vela_core_uniffi.RelayRejection
+import uniffi.vela_core_uniffi.WalletKeyRecord
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.UserOpDraft
 import uniffi.vela_core_uniffi.userOpCallsToMeasure
@@ -56,7 +59,29 @@ class UserOpSpine(
      */
     private val measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
         { _, _, _, _, _ -> null },
+    /**
+     * The person's "Sign with" choice for the request in hand — `auto` unless a
+     * signing sheet says otherwise. WHICH key that pins, and how it is reached,
+     * is the core's (`signRoute`); `auto` is the stored route, untouched.
+     */
+    private val signMethod: () -> String = { "auto" },
+    private val route: (keysJson: String, method: String) -> String? = { keys, method -> uniffi.vela_core_uniffi.signRoute(keys, method) },
 ) {
+    /** The credential a ceremony is pinned to, its transports and method. */
+    private suspend fun routeFor(account: String, first: WalletKeyRecord): Triple<String, String, KeyMethod> {
+        val chosen = signMethod()
+        if (chosen != "auto") {
+            runCatching { route(accounts.keyRoutesJson(account), chosen)?.let(::JSONObject) }.getOrNull()?.let { picked ->
+                val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") }
+                if (method != null && picked.optString("credential_id").isNotEmpty()) {
+                    return Triple(picked.optString("credential_id"), picked.optString("transports"), method)
+                }
+            }
+        }
+        val (transports, method) = accounts.routingOf(account)
+        return Triple(first.credentialId, transports, method)
+    }
+
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String)
 
@@ -111,9 +136,9 @@ class UserOpSpine(
         val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
             .getOrElse { other(it.message ?: "The message could not be hashed") }
         signingStarted()
-        val (transports, method) = accounts.routingOf(account)
+        val (credentialId, transports, method) = routeFor(account, pinned)
         val assertion: Assertion = try {
-            signer().sign(challenge, pinned.credentialId, transports, method)
+            signer().sign(challenge, credentialId, transports, method)
         } catch (failure: PasskeyFailure) {
             if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
             other(failure.message ?: "the passkey ceremony failed")
@@ -207,9 +232,9 @@ class UserOpSpine(
         draft = userOpWithCalls(draft, calls, settled)
         val challenge = userOpSafeOpHash(draft, chainId.toUInt())
         signingStarted()
-        val (transports, method) = accounts.routingOf(account)
+        val (credentialId, transports, method) = routeFor(account, pinned)
         val assertion: Assertion = try {
-            signer().sign(challenge, pinned.credentialId, transports, method)
+            signer().sign(challenge, credentialId, transports, method)
         } catch (failure: PasskeyFailure) {
             if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
             other(failure.message ?: "the passkey ceremony failed")

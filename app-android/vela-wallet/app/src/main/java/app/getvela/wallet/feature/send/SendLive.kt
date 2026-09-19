@@ -503,7 +503,7 @@ object SendLive {
      */
     internal fun feeParts(estimate: FeeEstimateView, nativeSymbol: String): FeeParts = when (val asset = estimate.fee_asset) {
         is FeeAssetView.Native -> FeeParts(
-            coin = "${fromBase(estimate.total_wei, 18)} $nativeSymbol",
+            coin = "${feeFromBase(estimate.total_wei, 18)} $nativeSymbol",
             mark = WalletLive.mark(estimate.chain_id, nativeSymbol, null),
             units = estimate.total_wei.toBigDecimalOrNull()?.movePointLeft(18)?.toDouble(),
             contract = null,
@@ -511,7 +511,7 @@ object SendLive {
         is FeeAssetView.Erc20 -> {
             val symbol = asset.symbol ?: "TOKEN"
             FeeParts(
-                coin = "${fromBase(asset.amount, asset.decimals)} $symbol",
+                coin = "${feeFromBase(asset.amount, asset.decimals)} $symbol",
                 mark = WalletLive.mark(estimate.chain_id, symbol, asset.token),
                 units = asset.amount.toBigDecimalOrNull()?.movePointLeft(asset.decimals)?.toDouble(),
                 contract = asset.token,
@@ -770,6 +770,26 @@ object SendLive {
         val value = units.toBigDecimalOrNull() ?: return units
         // Display only (every caller draws it): the decimal mark is the preset's (spec 049).
         return Formats.current.plain(value.movePointLeft(decimals).stripTrailingZeros().toPlainString())
+    }
+
+    /**
+     * A FEE in its coin, to read rather than to audit: six decimals, as the web
+     * shows it. It used to be printed at full precision —
+     * `~0,000410400290875302 ETH` — which crushed the row's label and told
+     * nobody anything the first three figures had not (founder's device,
+     * 2026-09-19). Rounded UP, because a fee that displays as less than it costs
+     * is the wrong way to be wrong; a fee below the sixth decimal keeps two
+     * significant figures instead of reading as zero.
+     */
+    fun feeFromBase(units: String, decimals: Int): String {
+        val value = units.toBigDecimalOrNull()?.movePointLeft(decimals) ?: return units
+        if (value.signum() == 0) return Formats.current.plain("0")
+        val shown = if (value < java.math.BigDecimal("0.000001")) {
+            value.round(java.math.MathContext(2, RoundingMode.UP))
+        } else {
+            value.setScale(6, RoundingMode.UP)
+        }
+        return Formats.current.plain(shown.stripTrailingZeros().toPlainString())
     }
 
     private fun trim(human: String): String {

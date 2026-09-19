@@ -39,6 +39,9 @@ use crate::{passkey, primitives};
 /// the retired client wrote camelCase at the same web origin.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct DeviceKey {
+    /// Only [`sign_route`] reads it; the keys view matches by public key.
+    #[serde(default, alias = "credentialId")]
+    pub credential_id: String,
     #[serde(default, alias = "publicKeyHex")]
     pub public_key_hex: String,
     #[serde(default)]
@@ -342,6 +345,62 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
     }
 }
 
+// ---------------------------------------------------------------------------
+// "Sign with" — which key a ceremony is pinned to, and how it is reached
+// ---------------------------------------------------------------------------
+
+/// Where one signing ceremony goes: the credential it is pinned to, the
+/// transports the request carries, and the method the shell routes by.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignRoute {
+    pub credential_id: String,
+    pub transports: String,
+    /// `platform` | `hybrid` | `security_key`.
+    pub method: String,
+}
+
+/// The person chose HOW to sign this one request (founder, 2026-09-19: creating
+/// and signing in let a person say where their passkey is; signing silently
+/// took the first key's stored route). `None` for `auto` — and for anything
+/// this build does not know — which means "do what you always did".
+///
+/// A native ceremony is PINNED to one credential, so the choice also picks the
+/// key: the first founding key whose own stored transports describe that
+/// method. A wallet whose first key is an Apple passkey and whose third is a
+/// YubiKey, asked for "security key", must pin the YubiKey — pinning the first
+/// would ask a security key for a credential it does not hold. When no key
+/// says it is of that kind (a synced passkey approved from a phone is
+/// registered as `internal`), the first key is pinned and the method's own
+/// transports make it reachable.
+#[must_use]
+pub fn sign_route(device: &[DeviceKey], method: &str) -> Option<SignRoute> {
+    let transports = match method {
+        "platform" => "internal",
+        "hybrid" => "hybrid,internal",
+        "security_key" => "usb,nfc,ble",
+        _ => return None,
+    };
+    let usable = |key: &&DeviceKey| !key.credential_id.is_empty();
+    let pinned = device
+        .iter()
+        .filter(usable)
+        .find(|key| method_of("", &key.transports) == method)
+        .or_else(|| device.iter().find(usable))?;
+    Some(SignRoute {
+        credential_id: pinned.credential_id.clone(),
+        transports: transports.to_owned(),
+        method: method.to_owned(),
+    })
+}
+
+/// The JSON door: `null` for `auto`, an unknown method, or a wallet with no
+/// usable credential.
+#[must_use]
+pub fn sign_route_json(device_keys_json: &str, method: &str) -> Option<String> {
+    let device: Vec<DeviceKey> = serde_json::from_str(device_keys_json).ok()?;
+    serde_json::to_string(&sign_route(&device, method)?).ok()
+}
+
 /// The JSON door the bindings use. `device_keys_json` is the account record's
 /// `keys` array (or a one-element array built from the legacy scalars);
 /// anything unreadable is an empty list, and the answer is then an empty view.
@@ -371,6 +430,7 @@ mod tests {
 
     fn device() -> Vec<DeviceKey> {
         vec![DeviceKey {
+            credential_id: "golden-key-0".to_owned(),
             public_key_hex: recorded()["publicKey"]
                 .as_str()
                 .unwrap_or_default()
@@ -532,6 +592,53 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn held(credential_id: &str, transports: &str) -> DeviceKey {
+        DeviceKey {
+            credential_id: credential_id.to_owned(),
+            transports: transports.to_owned(),
+            ..DeviceKey::default()
+        }
+    }
+
+    #[test]
+    fn sign_with_pins_the_key_of_the_chosen_kind() {
+        let keys = [
+            held("apple", "hybrid,internal"),
+            held("chrome", "internal"),
+            held("yubikey", "nfc,usb"),
+        ];
+        // The YubiKey, not the first key: a security key cannot answer for a
+        // credential it does not hold.
+        let route = sign_route(&keys, "security_key").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.credential_id.as_str(), route.transports.as_str()),
+            ("yubikey", "usb,nfc,ble")
+        );
+        let route = sign_route(&keys, "platform").unwrap_or_else(|| unreachable!());
+        assert_eq!(route.credential_id, "apple");
+        // Nobody registered as hybrid-only: the first key, made reachable over a QR code.
+        let route = sign_route(&keys, "hybrid").unwrap_or_else(|| unreachable!());
+        assert_eq!(
+            (route.credential_id.as_str(), route.transports.as_str()),
+            ("apple", "hybrid,internal")
+        );
+    }
+
+    #[test]
+    fn auto_and_the_unknown_change_nothing() {
+        let keys = [held("apple", "internal")];
+        assert_eq!(sign_route(&keys, "auto"), None);
+        assert_eq!(sign_route(&keys, "telepathy"), None);
+        // No credential to pin: nothing to route.
+        assert_eq!(sign_route(&[held("", "internal")], "platform"), None);
+        assert_eq!(sign_route_json("not json", "platform"), None);
+        assert!(sign_route_json(
+            r#"[{"credentialId":"aa","transports":"usb"}]"#,
+            "security_key"
+        )
+        .is_some_and(|json| json.contains(r#""credential_id":"aa""#)));
     }
 
     #[test]

@@ -505,6 +505,17 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         return transports to method
     }
 
+    override suspend fun keyRoutesJson(address: String): String {
+        val record = record { it.optString("address").equals(address, ignoreCase = true) } ?: return "[]"
+        val keys = record.optJSONArray("keys") ?: return "[]"
+        val out = org.json.JSONArray()
+        for (index in 0 until keys.length()) {
+            val key = keys.optJSONObject(index) ?: continue
+            out.put(org.json.JSONObject().put("credential_id", key.optString("credential_id")).put("transports", key.optString("transports")))
+        }
+        return out.toString()
+    }
+
     /**
      * `load_account_credential { account_id }`: the id the send was opened
      * with. The screens open it with the ADDRESS (the one fact every view

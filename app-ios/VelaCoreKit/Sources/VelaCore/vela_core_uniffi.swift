@@ -9727,6 +9727,20 @@ public func sha256(data: Data) -> Data  {
     )
 })
 }
+/**
+ * "Sign with": which credential a ceremony is pinned to and how it is reached,
+ * for the method the person chose — `None` for `auto`. See
+ * `vela_core::wallet_keys::sign_route`.
+ */
+public func signRoute(deviceKeysJson: String, method: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_route(
+        FfiConverterString.lower(deviceKeysJson),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
 public func toBase64url(data: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -10400,6 +10414,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 22739) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_base64url() != 33334) {

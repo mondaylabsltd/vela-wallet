@@ -487,6 +487,15 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// "Sign with": which credential a ceremony is pinned to and how it is reached,
+/// for the method the person chose — `None` for `auto`. See
+/// `vela_core::wallet_keys::sign_route`.
+#[uniffi::export]
+#[must_use]
+pub fn sign_route(device_keys_json: String, method: String) -> Option<String> {
+    vela_core::wallet_keys::sign_route_json(&device_keys_json, &method)
+}
+
 /// Which passkeys control the wallet at `address` — the Settings keys view
 /// (spec 062). See `vela_core::wallet_keys`.
 #[uniffi::export]

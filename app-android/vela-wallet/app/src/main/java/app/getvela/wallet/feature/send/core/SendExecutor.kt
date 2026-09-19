@@ -77,6 +77,13 @@ class SendExecutor(
         suspend fun routingOf(address: String): Pair<String, KeyMethod>
 
         suspend fun publicKeyOf(accountId: String): String?
+
+        /**
+         * Every founding key's credential id and stored transports, as JSON for
+         * the core's `sign_route` — `[{credential_id, transports}]`. The default
+         * is "nothing known", which routes as it always did.
+         */
+        suspend fun keyRoutesJson(address: String): String = "[]"
     }
 
     /** The live fee session, as `estimate_fee` needs it (research D7). */

@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.rotate
+import app.getvela.wallet.feature.signing.SignWithModel
+import app.getvela.wallet.core.designsystem.components.VelaLogo
+import app.getvela.wallet.core.marks.RemoteLogo
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,6 +77,9 @@ fun SigningHeader(
     networkName: String,
     networkDot: Color,
     modifier: Modifier = Modifier,
+    own: Boolean = false,
+    iconUrls: List<String> = emptyList(),
+    networkLogoUrl: String? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -80,7 +87,18 @@ fun SigningHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        LetterAvatar(letter, tint, size = ExploreMetrics.signingAvatar)
+        if (own) {
+            // The wallet asking itself: its own mark, never a letter on a disc.
+            Box(
+                Modifier.size(ExploreMetrics.signingAvatar).background(colors.bgSunken, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { VelaLogo(darkTheme = VelaTheme.isDark, modifier = Modifier.size(ExploreMetrics.signingAvatar * 0.6f)) }
+        } else {
+            // The site's own icon; its initial until one lands, and when it has none.
+            RemoteLogo(urls = iconUrls, size = ExploreMetrics.signingAvatar) {
+                LetterAvatar(letter, tint, size = ExploreMetrics.signingAvatar)
+            }
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             Text(
                 text = name,
@@ -91,13 +109,15 @@ fun SigningHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = host,
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-            )
+            if (host.isNotEmpty()) {
+                Text(
+                    text = host,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                )
+            }
         }
         Row(
             modifier = Modifier
@@ -107,11 +127,12 @@ fun SigningHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            Box(
-                Modifier
-                    .size(VelaSpacing.md)
-                    .background(networkDot, CircleShape),
-            )
+            // The chain's logo; the drawn dot until it lands, and when there is none.
+            RemoteLogo(urls = listOfNotNull(networkLogoUrl), size = VelaSpacing.xl) {
+                Box(Modifier.size(VelaSpacing.xl), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(VelaSpacing.md).background(networkDot, CircleShape))
+                }
+            }
             Text(
                 text = networkName,
                 color = colors.fgBase,
@@ -811,6 +832,66 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
             )
+        }
+    }
+}
+
+
+/**
+ * "Sign with · Automatic ›" — where the passkey that signs this request is.
+ *
+ * Creating a wallet and signing in both let a person say whether their key is
+ * on this phone, on another device, or on a security key. Signing did not: it
+ * took the first key's stored route (founder, 2026-09-19). Per request; the
+ * core decides which key the ceremony is pinned to (`sign_route`). Opens in
+ * place — a sheet over the signing sheet is a modal under a modal.
+ */
+@Composable
+fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { onSelect(null) },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        ) {
+            Text(model.label, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, modifier = Modifier.weight(1f))
+            Text(model.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+            Icon(
+                imageVector = VelaIcons.ChevronDown,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier.size(VelaIconSize.sm).rotate(if (model.open) 180f else 0f),
+            )
+        }
+        if (model.open) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+                    .padding(VelaSpacing.sm),
+            ) {
+                model.options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(option.id) }
+                            .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            option.title,
+                            color = if (option.selected) colors.fgBase else colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (option.selected) {
+                            Icon(VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+                        }
+                    }
+                }
+            }
         }
     }
 }

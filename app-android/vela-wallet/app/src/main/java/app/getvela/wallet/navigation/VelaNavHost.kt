@@ -596,6 +596,8 @@ fun VelaNavHost(
                     val signFee by controller.fee.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
+                    val signMethod by controller.signMethod.collectAsStateWithLifecycle()
+                    val signWithOpen by controller.signWithOpen.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -606,6 +608,9 @@ fun VelaNavHost(
                         walletAddress = session.address,
                         money = WalletLive.Money.of(currency),
                         origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
+                        chainId = signChain,
+                        signMethod = signMethod,
+                        signWithOpen = signWithOpen,
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -624,6 +629,7 @@ fun VelaNavHost(
                                     }
                                 },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
+                                onSignWith = { controller.signWith(it) },
                             )
                         }
                     }
