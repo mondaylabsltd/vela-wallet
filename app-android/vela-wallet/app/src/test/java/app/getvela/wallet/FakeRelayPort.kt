@@ -15,7 +15,8 @@ import org.json.JSONObject
 class FakeRelayPort : RelayPort {
     val rpc = HashMap<String, ArrayDeque<RpcResult>>()
     val rest = HashMap<String, RestAnswer>()
-    val calls = ArrayList<String>()
+    /** Written by the machines' threads, counted by the test's: never a plain list. */
+    val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
     var base: String? = "https://relay.test"
 
     /** A default per method, served when the queue for it is empty. */
