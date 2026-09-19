@@ -607,6 +607,12 @@ export const en = {
 		availableNow: 'Available now',
 		comingSoon: 'Coming soon',
 		githubCta: 'Download from GitHub Releases',
+		/**
+		 * The phone card's second route (spec 063). Phones have no packages on
+		 * GitHub — the stores are the channel, and they are paid — so the honest
+		 * alternative to "buy it" is the one `fundingNote` already promises.
+		 */
+		sourceCta: 'Build it from source',
 		platforms: {
 			web: {
 				title: 'Web',
@@ -644,7 +650,8 @@ export const en = {
 		 */
 		fundingNote:
 			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. Everything is open source, so you can always build it yourself instead — same app, no charge.',
-		storeNote: 'Not on the stores yet. Until then, every build is on GitHub.'
+		storeNote:
+			'Not on the stores yet. Until then, the desktop apps and the extension are on GitHub, ready to install. The phone apps are not: they come from the stores, or from the source.'
 	},
 	/**
 	 * Chain setup — the page an operator uses to find out whether Vela can run

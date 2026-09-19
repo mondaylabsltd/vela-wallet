@@ -30,5 +30,13 @@
          MUST be exercised from the bundled .app. -->
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Vela scans for your phone's Bluetooth signal to sign in with a passkey on it.</string>
+    <!-- The scanner's live half (spec 036 phase 2). Asking for the camera
+         WITHOUT this string is not a denied permission: macOS terminates the
+         process. It went unseen because the scanner had only ever been run
+         from `cargo run`, where the TERMINAL is the process TCC holds
+         responsible and the terminal has a usage string of its own — the
+         bundled .app is the first place this key is consulted (spec 063 §3). -->
+    <key>NSCameraUsageDescription</key>
+    <string>Vela uses the camera to scan a QR code — an address, a payment request, or a sign-in code.</string>
 </dict>
 </plist>

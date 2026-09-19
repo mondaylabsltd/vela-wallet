@@ -264,6 +264,7 @@ fn entries() -> Vec<Entry> {
             kind: TouchKind::Presence,
             product: "YubiKey 5C NFC".to_owned(),
             remote: false,
+            cancellable: false,
         }),
     );
     hardware(
@@ -272,6 +273,7 @@ fn entries() -> Vec<Entry> {
             kind: TouchKind::Fingerprint,
             product: "YubiKey Bio".to_owned(),
             remote: false,
+            cancellable: false,
         }),
     );
     hardware(
@@ -280,6 +282,7 @@ fn entries() -> Vec<Entry> {
             kind: TouchKind::Select,
             product: String::new(),
             remote: false,
+            cancellable: false,
         }),
     );
     hardware(
@@ -634,7 +637,9 @@ impl GalleryView {
             }
             // The cable's three dialogs, rendered bare: the gallery IS the
             // backdrop, and each card's own scrim would cover the sidebar.
-            Fixture::Touch(request) => crate::hardware::touch_card(theme, &self.loc, request),
+            Fixture::Touch(request) => {
+                crate::hardware::touch_card(theme, &self.loc, request, |_, _, _| {})
+            }
             Fixture::Pin(request) => crate::hardware::pin_card(
                 theme,
                 &self.loc,

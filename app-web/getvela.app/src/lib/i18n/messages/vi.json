@@ -388,6 +388,7 @@
 		"availableNow": "Dùng được ngay",
 		"comingSoon": "Sắp có",
 		"githubCta": "Tải từ GitHub Releases",
+		"sourceCta": "Tự build từ mã nguồn",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "Tải từ cửa hàng là có trả tiền, và đó là cách một nhóm nhỏ độc lập có kinh phí để làm Vela một cách công khai. Mọi thứ đều mã nguồn mở, nên bạn luôn có thể tự build lấy — cùng một ứng dụng, không mất phí.",
-		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, mọi bản build đều nằm trên GitHub."
+		"storeNote": "Chưa lên cửa hàng. Từ giờ đến lúc đó, ứng dụng máy tính và tiện ích mở rộng nằm trên GitHub, tải về là cài được. Ứng dụng điện thoại thì không: chúng đến từ cửa hàng, hoặc từ mã nguồn."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

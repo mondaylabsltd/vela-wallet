@@ -118,7 +118,21 @@ pub struct TouchRequest {
     /// security key on the desk — the prompt says "follow the steps on your
     /// device" instead of "touch your security key".
     pub remote: bool,
+    /// Can the wait behind this prompt actually be stopped? True only for a
+    /// key on USB HID, whose exchange loop polls for a dismissal and sends the
+    /// device `CANCEL`. The prompt shows a Cancel button exactly when this is
+    /// true: a button that takes the card down while the ceremony carries on
+    /// behind it would be a lie with a label on it.
+    pub cancellable: bool,
 }
+
+/// "Has the person dismissed the prompt?" — polled by every open-ended wait
+/// that knows how to stop (the USB exchange loop here, the hybrid scan).
+pub type CancelProbe = Arc<dyn Fn() -> bool + Send + Sync>;
+
+/// After `CANCEL` is sent, how long the device gets to say so itself
+/// (`CTAP2_ERR_KEEPALIVE_CANCEL`) before the loop stops waiting for it.
+const CANCEL_GRACE: Duration = Duration::from_secs(2);
 
 /// Told when the authenticator starts waiting for a person, and when it stops.
 ///
@@ -144,6 +158,123 @@ const KEEPALIVE_UP_NEEDED: u8 = 0x02;
 /// A key that fails to open while ANOTHER opens fine is simply skipped: the
 /// working one is the answer, and one device's trouble is not the ceremony's.
 fn enumerate() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
+    hid_thread::run(enumerate_here)
+        .unwrap_or_else(|| Err(UsbError::Hid("the HID thread could not answer".to_owned())))
+}
+
+/// Is the HID subsystem reachable at all? The support gate's question, asked
+/// on the same thread as everything else that touches hidapi — see
+/// [`hid_thread`] for why it must not be asked anywhere else.
+pub fn hid_reachable() -> bool {
+    hid_thread::run(|| HidApi::new().is_ok()).unwrap_or(false)
+}
+
+/// The one thread hidapi is ever initialised or enumerated on.
+///
+/// hidapi's macOS backend keeps ONE process-global `IOHIDManager` and
+/// schedules it on the run loop of **whichever thread initialised it**
+/// (`mac/hid.c`: `IOHIDManagerScheduleWithRunLoop(hid_mgr,
+/// CFRunLoopGetCurrent(), …)`), and hidapi-rs never tears it down. When that
+/// thread ends, the manager is left holding a dead run loop; the next
+/// enumeration that has a device IOKit has not scheduled yet — a key plugged in
+/// after launch, or pulled and pushed back — hands it to `CFRunLoopAddSource`
+/// and the process dies in `__CFCheckCFInfoPACSignature` (SIGTRAP).
+///
+/// This was met three times. The support probe crashed on gpui's libdispatch
+/// workers and was moved to a one-shot thread; the L2CAP port corrupted a
+/// worker's run loop and got a private thread. The one-shot probe thread was
+/// the trap's third form: it initialised the manager and then ENDED, so every
+/// later enumeration ran against a run loop that no longer existed — "creating
+/// a wallet with a USB key works, signing in crashes" (founder, 2026-09-19, in
+/// the first notarized build). Fixing call sites one at a time is what let it
+/// come back, so there is now exactly one place hidapi may be entered from, and
+/// its thread lives as long as the process.
+///
+/// Only initialisation and enumeration need this. An opened [`HidDevice`] is
+/// `Send` and gets its own read thread and run loop from hidapi, so the
+/// handles this returns are used from the ceremony's threads as before.
+mod hid_thread {
+    use std::sync::{OnceLock, mpsc};
+
+    type Job = Box<dyn FnOnce() + Send>;
+
+    static JOBS: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
+
+    /// Run `work` on the HID thread and wait for its answer. `None` only if
+    /// the work panicked (the thread survives it) or the thread could not be
+    /// started at all.
+    pub fn run<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let jobs = JOBS.get_or_init(|| {
+            let (jobs, inbox) = mpsc::channel::<Job>();
+            // If the spawn fails the receiver is dropped with it, every send
+            // below errors, and callers get `None` — reported, not fatal.
+            let _ = std::thread::Builder::new()
+                .name("vela-hid".to_owned())
+                .spawn(move || {
+                    for job in inbox {
+                        job();
+                    }
+                });
+            jobs
+        });
+        let (answer, reply) = mpsc::channel();
+        jobs.send(Box::new(move || {
+            // A panic in one enumeration must not end the thread: the thread
+            // ending IS the bug this module exists to prevent.
+            if let Some(value) = crate::panic_report::guarded(work) {
+                let _ = answer.send(value);
+            }
+        }))
+        .ok()?;
+        reply.recv().ok()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::run;
+
+        /// The property the fix rests on, stated directly: whoever asks, from
+        /// whatever thread — including threads that have since ended — the
+        /// work runs on the SAME thread, and that thread is still there.
+        #[test]
+        fn every_caller_lands_on_the_one_thread_that_never_ends() {
+            let here = || {
+                (
+                    std::thread::current().id(),
+                    std::thread::current().name().map(str::to_owned),
+                )
+            };
+            let first = run(here).expect("the HID thread answers");
+            assert_eq!(first.1.as_deref(), Some("vela-hid"));
+            assert_ne!(
+                first.0,
+                std::thread::current().id(),
+                "not the caller's thread"
+            );
+            for _ in 0..4 {
+                let from_a_thread_that_ends = std::thread::spawn(move || run(here))
+                    .join()
+                    .expect("join")
+                    .expect("the HID thread answers");
+                assert_eq!(from_a_thread_that_ends, first);
+            }
+        }
+
+        /// A panicking job is reported as `None` and the thread outlives it.
+        #[test]
+        fn a_panic_does_not_end_the_thread() {
+            assert_eq!(
+                run(|| -> u8 { panic!("a key was yanked mid-enumeration") }),
+                None
+            );
+            assert_eq!(run(|| 7u8), Some(7));
+        }
+    }
+}
+
+/// [`enumerate`], on whatever thread it is called from — which must be the HID
+/// thread and nothing else.
+fn enumerate_here() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
     let api = HidApi::new().map_err(|error| UsbError::Hid(error.to_string()))?;
     let mut opened = Vec::new();
     let mut refused: Option<(String, String)> = None;
@@ -173,6 +304,8 @@ fn enumerate() -> Result<Vec<(String, String, HidDevice)>, UsbError> {
 /// One open conversation with one authenticator.
 pub struct SecurityKey {
     device: HidDevice,
+    /// Asked once per read slice while an exchange waits on a person.
+    cancelled: Option<CancelProbe>,
     channel: u32,
     /// What the device says about itself. Read once, at open: the PIN protocol
     /// and the `rk` capability both come from here, and asking twice would let
@@ -207,6 +340,7 @@ impl SecurityKey {
     pub fn open_touched(
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         // One `HidApi` for the whole process: hidapi refuses a second live
         // instance, so the devices are opened HERE and the handles move into
@@ -214,12 +348,12 @@ impl SecurityKey {
         let mut opened = enumerate()?;
         if opened.len() == 1 {
             let (product, path, device) = opened.remove(0);
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             key.channel = key.init(nonce())?;
             return Ok(key);
         }
 
-        Self::race(opened, nonce, touch)
+        Self::race(opened, nonce, touch, cancelled)
     }
 
     /// Open the key that already holds a particular credential.
@@ -240,13 +374,14 @@ impl SecurityKey {
         probe_hash: &[u8],
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         let opened = enumerate()?;
 
         let mut holders = Vec::new();
         let mut rest = Vec::new();
         for (product, path, device) in opened {
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             match key.init(nonce()) {
                 Ok(channel) => key.channel = channel,
                 Err(_) => continue,
@@ -307,9 +442,15 @@ impl SecurityKey {
         }
     }
 
-    fn new(product: String, path: String, device: HidDevice) -> Self {
+    fn new(
+        product: String,
+        path: String,
+        device: HidDevice,
+        cancelled: Option<CancelProbe>,
+    ) -> Self {
         Self {
             device,
+            cancelled,
             channel: BROADCAST_CHANNEL,
             product,
             path,
@@ -326,6 +467,7 @@ impl SecurityKey {
         opened: Vec<(String, String, HidDevice)>,
         nonce: &dyn Fn() -> [u8; 8],
         touch: Option<&TouchNotifier>,
+        cancelled: Option<CancelProbe>,
     ) -> Result<Self, UsbError> {
         // Announced before the threads start: several keys are about to blink,
         // and the person needs to know that touching ONE of them is the point.
@@ -334,12 +476,13 @@ impl SecurityKey {
                 kind: TouchKind::Select,
                 product: String::new(),
                 remote: false,
+                cancellable: true,
             }));
         }
 
         let mut keys = Vec::with_capacity(opened.len());
         for (product, path, device) in opened {
-            let mut key = Self::new(product, path, device);
+            let mut key = Self::new(product, path, device, cancelled.clone());
             // A key that will not even initialise is not in the race.
             if let Ok(channel) = key.init(nonce()) {
                 key.channel = channel;
@@ -356,6 +499,7 @@ impl SecurityKey {
                 kind: TouchKind::Select,
                 product: String::new(),
                 remote: false,
+                cancellable: true,
             }));
         }
         Self::finish_race(keys, touch)
@@ -477,10 +621,30 @@ impl SecurityKey {
         let mut reassembler = Reassembler::new();
         let mut announced_touch = false;
         let mut report = [0u8; HID_REPORT_SIZE];
+        // `READ_SLICE` was chosen "short enough that a cancelled ceremony stops
+        // promptly" — and then nothing ever cancelled one. The prompt sat over
+        // the window for the device's whole user-presence budget with nothing
+        // to press (founder, 2026-09-19).
+        let probe = self.cancelled.clone();
+        let mut cancel_sent: Option<Instant> = None;
 
         let outcome = loop {
             if Instant::now() >= deadline {
                 break Err(UsbError::TimedOut);
+            }
+            match cancel_sent {
+                // Dismissed: tell the KEY, so it stops blinking, and keep
+                // reading — a CTAP2 device answers `CANCEL` itself, with
+                // KEEPALIVE_CANCEL, which the core already reads as "cancelled".
+                None if probe.as_ref().is_some_and(|dismissed| dismissed()) => {
+                    self.cancel();
+                    cancel_sent = Some(Instant::now());
+                }
+                // A device too old to answer is not waited on forever.
+                Some(sent) if sent.elapsed() >= CANCEL_GRACE => {
+                    break Err(UsbError::Ctap(Status::Cancelled));
+                }
+                _ => {}
             }
             let read = self
                 .device
@@ -509,6 +673,7 @@ impl SecurityKey {
                                 kind,
                                 product: self.product.clone(),
                                 remote: false,
+                                cancellable: self.cancelled.is_some(),
                             }));
                         }
                     }
@@ -587,7 +752,7 @@ mod hardware_tests {
     #[test]
     #[ignore]
     fn a_plugged_in_key_answers_get_info() {
-        let mut key = match SecurityKey::open_touched(&|| [0x11; 8], None) {
+        let mut key = match SecurityKey::open_touched(&|| [0x11; 8], None, None) {
             Ok(key) => key,
             Err(UsbError::NoKeyPresent) => {
                 panic!("no FIDO2 key is plugged in — this test needs one")

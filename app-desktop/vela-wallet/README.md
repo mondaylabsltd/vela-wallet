@@ -307,14 +307,44 @@ On a release tag (`desktop-v*`),
 [the macOS CI workflow](../../.github/workflows/desktop-macos-packages.yml)
 builds all three images on one arm64 runner — `--arch universal` compiles both
 Rust targets, and the two follow-up invocations repackage with `--skip-build` —
-and attaches them to the same release the Linux packages land on.
+and attaches them to the same release the Linux packages land on — **but only
+when that run signed and notarized them** ([spec 063](../../specs/063-release-channels/spec.md)).
 
-The bundle is **ad-hoc signed, not notarized**. That is deliberately not
-nothing: Apple silicon refuses to run a completely unsigned bundle, so ad-hoc
-signing is the difference between "Gatekeeper warns on first launch" and "will
-not launch at all". Signing with a Developer ID certificate and notarizing
-remains open, alongside the Windows code-signing certificate and package
-signing — see [Before the first public release](#before-the-first-public-release).
+Three levels of signature, and only the last may be published:
+
+| Mode | What it is | Good for |
+| --- | --- | --- |
+| *(default)* | ad-hoc. Apple silicon refuses a completely unsigned bundle, so this is the difference between "runs" and "will not launch at all" | the Mac that built it. **Never a download**: once a browser has quarantined it, Gatekeeper reports it as *damaged* — which is what 0.9.0–0.9.2 shipped |
+| `--distribution` | Developer ID, hardened runtime, secure timestamp, profile embedded, image signed — everything except Apple's agreement | rehearsing the signing path without a notary round trip. `spctl` says *Unnotarized Developer ID*, which is the right answer |
+| `--notarize` | the above, then the app and the image are each notarized and stapled, and `spctl` is asked the question Gatekeeper asks | **publishing** |
+
+```bash
+VELA_SIGN_IDENTITY="<SHA-1 of the Developer ID Application identity>" \
+VELA_PROVISION_PROFILE=path/to/VelaWallet-DeveloperID.provisionprofile \
+VELA_NOTARY_PROFILE=vela-notary \
+./scripts/build-macos-app.sh --arch universal --notarize
+```
+
+For a release, do not assemble that by hand: `./scripts/release-macos-local.sh
+desktop-v<version> [--upload]` builds all three images from the tag, finds the
+profile, picks the certificate the profile names, proves the notary credentials
+before compiling, and attaches the result to the release CI created. Signing is
+local by ruling — nothing that can sign as us is stored on GitHub
+([quickstart](../../specs/063-release-channels/quickstart.md)).
+
+Use the identity's SHA-1 (`security find-identity -v -p codesigning`), not its
+name: a keychain that holds a renewed certificate beside the old one makes the
+name ambiguous and `codesign` refuses to guess. `VELA_NOTARY_PROFILE` is a
+profile made once with `xcrun notarytool store-credentials`.
+
+The provisioning profile is not optional under a team signature.
+`associated-domains` is a restricted entitlement: it is honoured only with a
+**Developer ID** profile for `app.getvela.VelaWallet` that grants Associated
+Domains, and without it there are no platform passkeys — and newer macOS kills
+the bundle at launch. `--distribution` and `--notarize` refuse to run without
+one. The Windows installer stays unsigned by ruling (SmartScreen asks once; the
+release notes say how to answer); `.rpm`/`.deb` signing is still open — see
+[Before the first public release](#before-the-first-public-release).
 
 ---
 

@@ -388,6 +388,7 @@
 		"availableNow": "Şimdi kullanılabilir",
 		"comingSoon": "Yakında",
 		"githubCta": "GitHub Releases'ten indirin",
+		"sourceCta": "Kaynak koddan derleyin",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "Mağaza indirmeleri ücretlidir ve küçük, bağımsız bir ekip Vela'yı açıkta geliştirmeyi böyle finanse eder. Her şey açık kaynak olduğu için dilerseniz kendiniz de derleyebilirsiniz — aynı uygulama, ücretsiz.",
-		"storeNote": "Henüz mağazalarda değil. O zamana kadar her derleme GitHub'da."
+		"storeNote": "Henüz mağazalarda değil. O zamana kadar masaüstü uygulamaları ve uzantı GitHub'da, kuruluma hazır. Telefon uygulamaları orada değil: mağazalardan ya da kaynak koddan gelir."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

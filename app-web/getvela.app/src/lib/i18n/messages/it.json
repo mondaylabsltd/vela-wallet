@@ -388,6 +388,7 @@
 		"availableNow": "Disponibile ora",
 		"comingSoon": "In arrivo",
 		"githubCta": "Scarica da GitHub Releases",
+		"sourceCta": "Compila dal codice sorgente",
 		"platforms": {
 			"web": {
 				"title": "Web",
@@ -414,12 +415,12 @@
 			}
 		},
 		"fundingNote": "I download negli store sono a pagamento, ed è così che un piccolo team indipendente finanzia il costruire Vela allo scoperto. È tutto open source, quindi puoi sempre compilartelo da solo — stessa app, nessun costo.",
-		"storeNote": "Non è ancora negli store. Fino ad allora, ogni build è su GitHub."
+		"storeNote": "Non è ancora negli store. Fino ad allora, le app desktop e l’estensione sono su GitHub, pronte da installare. Le app per telefono no: arrivano dagli store, o dal codice sorgente."
 	},
 	"_fingerprints": {
 		"home": "978189838858",
 		"about": "669db59e91a0",
 		"roadmap": "1f9b064b5fbb",
-		"getStarted": "dbbb0da3f5cc"
+		"getStarted": "9dbba9a517c8"
 	}
 }

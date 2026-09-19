@@ -8,10 +8,35 @@
 # security-framework) need a second machine. `--arch universal` compiles both
 # Rust targets, so the two follow-up invocations only repackage with
 # --skip-build.
+#
+# WHAT MAY BE PUBLISHED (spec 063 §3). A .dmg is attached to the release only
+# when THIS RUN signed it with the Developer ID, embedded the Developer ID
+# provisioning profile, notarized it and stapled the ticket. An ad-hoc .dmg
+# downloaded through a browser is reported by Gatekeeper as "damaged", and one
+# opened by force has no platform passkeys — 0.9.0 to 0.9.2 published exactly
+# that. So the gate is structural: without the credentials this workflow still
+# builds and verifies all three architectures (the build check is worth having
+# on its own) and attaches NOTHING, and says so in the job summary.
+#
+# WHERE THE CREDENTIALS LIVE. In the `release` ENVIRONMENT, restricted to
+# `desktop-v*` tags — not in repository secrets. This repository is public: a
+# pull request or a branch workflow must not be able to reach a signing
+# identity. Every other run uses the empty `build-check` environment, so a
+# `workflow_dispatch` from a fix branch (how 0.9.0's packaging fixes were
+# proven before merging) keeps working and simply finds no secrets.
+#
+# TODAY THAT ENVIRONMENT IS DELIBERATELY EMPTY. The founder's ruling (spec 063
+# §3a): the signature is made on the founder's Mac and the .dmg files are
+# attached by hand — scripts/release-macos-local.sh <tag> --upload — so that
+# nothing able to sign as us is stored on GitHub. This workflow is therefore
+# the BUILD CHECK for macOS and publishes nothing; the signing path below is
+# kept, tested as far as it can be without credentials, and unconfigured.
+# specs/063-release-channels/quickstart.md §C says how to turn it on.
 name: Desktop macOS packages
 
 on:
-  # Cutting a desktop release: `git tag desktop-v0.1.0 && git push --tags`.
+  # Cutting a desktop release: `git tag desktop-v0.1.0 && git push origin desktop-v0.1.0`
+  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
   push:
     tags: ['desktop-v*']
   workflow_dispatch:
@@ -62,8 +87,134 @@ jobs:
     name: DMG (arm64 + x86_64 + universal)
     if: github.event_name != 'pull_request'
     runs-on: macos-15
+    # Two environments, one expression: only a release tag may ask for the one
+    # that holds the signing identity.
+    environment: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'release' || 'build-check' }}
+    outputs:
+      publishable: ${{ steps.credentials.outputs.publishable }}
+    env:
+      VELA_TEAM_ID: F9W689P9NE
     steps:
       - uses: actions/checkout@v4
+      # Decided FIRST and in one place, so "is this run allowed to publish" has
+      # one answer that the build step, the verify step and the release job all
+      # read — never three slightly different guesses.
+      - name: Are the signing credentials here?
+        id: credentials
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.MACOS_PROVISION_PROFILE_BASE64 }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$CERT" ]          || missing+=("MACOS_CERTIFICATE_P12_BASE64")
+          [ -n "$CERT_PASSWORD" ] || missing+=("MACOS_CERTIFICATE_PASSWORD")
+          [ -n "$PROFILE" ]       || missing+=("MACOS_PROVISION_PROFILE_BASE64")
+          if [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER" ]; then :
+          elif [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_PASSWORD" ]; then :
+          else missing+=("notary credentials (MACOS_NOTARY_KEY_P8_BASE64 + _KEY_ID + _ISSUER_ID, or MACOS_NOTARY_APPLE_ID + MACOS_NOTARY_PASSWORD)")
+          fi
+          if [ ${#missing[@]} -eq 0 ]; then
+            echo "publishable=true" >> "$GITHUB_OUTPUT"
+            echo "Signing credentials present: this run signs, notarizes and may publish."
+          else
+            echo "publishable=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### macOS: built and verified, NOT published"
+              echo
+              echo "This run has no complete set of signing credentials, so the .dmg files are"
+              echo "ad-hoc signed. Gatekeeper reports such a download as damaged, so none is"
+              echo "attached to a release (spec 063 §3). Missing:"
+              echo
+              for m in "${missing[@]}"; do echo "- \`$m\`"; done
+              echo
+              echo "See \`specs/063-release-channels/quickstart.md\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then
+              echo "::warning title=macOS not published::No signing credentials in the release environment — this tag ships without a macOS package."
+            fi
+          fi
+      - name: Import the Developer ID identity into a throwaway keychain
+        if: steps.credentials.outputs.publishable == 'true'
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.MACOS_PROVISION_PROFILE_BASE64 }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY_P8_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/vela-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+
+          printf '%s' "$CERT" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Without this codesign stops to ask a person for the keychain password.
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" >/dev/null
+          # shellcheck disable=SC2046  # the existing list is meant to split
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+          # By SHA-1, never by name: a name is ambiguous the moment a keychain
+          # holds a renewed certificate beside the old one.
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application/ {print $2; exit}')"
+          [ -n "$identity" ] || {
+            echo "::error::The .p12 holds no 'Developer ID Application' identity. An 'Apple Development' or 'Apple Distribution' certificate cannot sign a package for download — export the Developer ID one."
+            security find-identity -v -p codesigning "$keychain" || true
+            exit 1
+          }
+
+          # The profile is checked HERE, in words, because every way it can be
+          # wrong otherwise surfaces as a bundle that is killed at launch on the
+          # user's Mac — after it was signed, notarized and published.
+          profile="$RUNNER_TEMP/VelaWallet.provisionprofile"
+          printf '%s' "$PROFILE" | base64 --decode > "$profile"
+          security cms -D -i "$profile" > "$RUNNER_TEMP/profile.plist"
+          appid="$(plutil -extract 'Entitlements.com\.apple\.application-identifier' raw "$RUNNER_TEMP/profile.plist" || true)"
+          [ "$appid" = "$VELA_TEAM_ID.app.getvela.VelaWallet" ] || {
+            echo "::error::The provisioning profile is for '$appid', not '$VELA_TEAM_ID.app.getvela.VelaWallet'."; exit 1; }
+          [ "$(plutil -extract ProvisionsAllDevices raw "$RUNNER_TEMP/profile.plist" 2>/dev/null || echo false)" = "true" ] || {
+            echo "::error::That is a development profile (it lists devices). Distribution needs a DEVELOPER ID profile: developer.apple.com > Profiles > + > Developer ID."; exit 1; }
+          plutil -extract 'Entitlements.com\.apple\.developer\.associated-domains' raw "$RUNNER_TEMP/profile.plist" >/dev/null 2>&1 || {
+            echo "::error::The profile does not grant Associated Domains. Enable the capability on the App ID, then regenerate the profile."; exit 1; }
+          granted=0; i=0
+          while der="$(plutil -extract "DeveloperCertificates.$i" raw "$RUNNER_TEMP/profile.plist" 2>/dev/null)"; do
+            sha="$(printf '%s' "$der" | base64 --decode | openssl sha1 | awk '{print toupper($NF)}')"
+            [ "$sha" = "$identity" ] && granted=1
+            i=$((i + 1))
+          done
+          [ "$granted" = 1 ] || {
+            echo "::error::The profile was not issued for the certificate in the .p12 (a renewed certificate needs a regenerated profile)."; exit 1; }
+
+          # store-credentials talks to Apple, so wrong notary credentials fail
+          # here in seconds rather than after the half-hour build.
+          if [ -n "$NOTARY_KEY" ]; then
+            printf '%s' "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+            xcrun notarytool store-credentials vela-notary --keychain "$keychain" \
+              --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER"
+            rm -f "$RUNNER_TEMP/notary.p8"
+          else
+            xcrun notarytool store-credentials vela-notary --keychain "$keychain" \
+              --apple-id "$NOTARY_APPLE_ID" --team-id "$VELA_TEAM_ID" --password "$NOTARY_PASSWORD"
+          fi
+
+          {
+            echo "VELA_SIGN_IDENTITY=$identity"
+            echo "VELA_PROVISION_PROFILE=$profile"
+            echo "VELA_NOTARY_PROFILE=vela-notary"
+            echo "VELA_NOTARY_KEYCHAIN=$keychain"
+          } >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -75,10 +226,14 @@ jobs:
           cache-all-crates: true
       - name: Build both architectures once, package all three
         working-directory: app-desktop/vela-wallet
+        env:
+          PUBLISHABLE: ${{ steps.credentials.outputs.publishable }}
         run: |
-          ./scripts/build-macos-app.sh --arch universal
-          ./scripts/build-macos-app.sh --arch arm64 --skip-build
-          ./scripts/build-macos-app.sh --arch x86_64 --skip-build
+          mode=()
+          [ "$PUBLISHABLE" = "true" ] && mode=(--notarize)
+          ./scripts/build-macos-app.sh --arch universal "${mode[@]}"
+          ./scripts/build-macos-app.sh --arch arm64 --skip-build "${mode[@]}"
+          ./scripts/build-macos-app.sh --arch x86_64 --skip-build "${mode[@]}"
       - name: Every package must contain exactly the slices its name claims
         working-directory: app-desktop/vela-wallet
         run: |
@@ -90,6 +245,18 @@ jobs:
             [ "$got" = "$want" ] || { echo "$arch bundle contains [$got]"; exit 1; }
             codesign --verify --strict "dist/macos/$arch/Vela Wallet.app"
           done
+      - name: What is about to be published must be what Gatekeeper accepts
+        if: steps.credentials.outputs.publishable == 'true'
+        working-directory: app-desktop/vela-wallet
+        run: |
+          set -e
+          for dmg in dist/macos/*.dmg; do
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature -v "$dmg"
+          done
+      - name: Delete the throwaway keychain
+        if: always() && steps.credentials.outputs.publishable == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/vela-signing.keychain-db" || true
       - uses: actions/upload-artifact@v4
         with:
           name: dmg
@@ -98,7 +265,9 @@ jobs:
 
   release:
     name: Attach packages to the release
-    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    # `publishable` is the gate (spec 063 §3): a tag without signing credentials
+    # still builds and verifies, and attaches no macOS package at all.
+    if: startsWith(github.ref, 'refs/tags/desktop-v') && needs.dmg.outputs.publishable == 'true'
     # metadata is a needs-edge, not just a sibling: its CFBundleIdentifier
     # check is the only guard the build path does not re-enforce, and a red
     # check on the tag commit must block the release, not decorate it.
@@ -107,6 +276,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only for the install notes. They open the release so that the person who
+      # lands on this page is told how to install what is on it (spec 063
+      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app-desktop/vela-wallet/packaging/release-notes.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -130,6 +306,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Vela Wallet Desktop $GITHUB_REF_NAME" \
+            --notes-file app-desktop/vela-wallet/packaging/release-notes.md \
             --generate-notes \
             --verify-tag \
             artifacts/* \

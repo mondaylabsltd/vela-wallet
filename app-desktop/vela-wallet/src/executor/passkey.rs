@@ -171,6 +171,9 @@ fn hybrid_failure(error: HybridError) -> PasskeyFailure {
         HybridError::Bluetooth(_) => {
             PasskeyFailure::classified(FailureKind::NotSupported, error.to_string())
         }
+        // Dismissing the QR is dismissing the ceremony — what closing the
+        // system's passkey sheet already is on every other path.
+        HybridError::Cancelled => PasskeyFailure::cancelled(),
         other => PasskeyFailure::other(other.to_string()),
     }
 }
@@ -225,6 +228,8 @@ pub type CredentialPicker = Arc<dyn Fn(Vec<CredentialChoice>) -> Option<usize> +
 /// once the tunnel is up or the attempt ends.
 pub type QrNotifier = Arc<dyn Fn(Option<String>) + Send + Sync>;
 
+pub use crate::ctap::usb::CancelProbe;
+
 /// Everything a ceremony needs from the screen that started it.
 #[derive(Clone)]
 pub struct Ceremony {
@@ -235,6 +240,9 @@ pub struct Ceremony {
     pub pick: CredentialPicker,
     /// Shows the caBLE QR while a hybrid ceremony waits for the phone.
     pub qr: QrNotifier,
+    /// Has the person dismissed that QR? Polled by the scan, which is the one
+    /// open-ended wait a hybrid ceremony has.
+    pub cancelled: CancelProbe,
     /// The app window the Windows dialog parents itself to.
     ///
     /// Read on exactly one platform, because it is the only one where the
@@ -502,29 +510,19 @@ pub fn supported() -> bool {
     }
     #[cfg(not(windows))]
     {
-        // The probe runs on a DEDICATED thread, and the answer is cached for
-        // the life of the process. Both halves are load-bearing on macOS:
-        // `HidApi::new` has IOHIDManager schedule sources on the CURRENT
-        // thread's run loop, and this function is called from gpui's
-        // libdispatch worker threads — whose CFRunLoop can be a recycled
-        // thread's stale object, which `CFRunLoopAddSource` answers with a PAC
-        // trap (a SIGTRAP crash seen live, repeatedly, from exactly this
-        // call). A fresh `std::thread` owns a fresh run loop; the cache keeps
-        // the probe from ever running twice ("is the HID subsystem reachable"
-        // does not change mid-session — a key being plugged in later is the
-        // ceremony's business, not this gate's).
+        // Asked on THE HID thread (`ctap::usb::hid_thread`), and cached for the
+        // life of the process. The thread is the load-bearing half on macOS:
+        // `HidApi::new` schedules a process-global IOHIDManager on the CURRENT
+        // thread's run loop. Called from gpui's libdispatch workers it trapped
+        // in `CFRunLoopAddSource`; moved to a one-shot `std::thread` it stopped
+        // trapping HERE and started trapping later — that thread initialised
+        // the manager and then ended, leaving every later enumeration a dead
+        // run loop (the USB sign-in crash of 2026-09-19). One immortal thread
+        // for every hidapi entry is the fix for both. The cache stays because
+        // "is the HID subsystem reachable" does not change mid-session — a key
+        // plugged in later is the ceremony's business, not this gate's.
         static REACHABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *REACHABLE.get_or_init(|| {
-            std::thread::Builder::new()
-                .name("vela-hid-probe".to_owned())
-                .spawn(|| hidapi::HidApi::new().is_ok())
-                .and_then(|probe| {
-                    probe
-                        .join()
-                        .map_err(|_| std::io::Error::other("the HID probe panicked"))
-                })
-                .unwrap_or(false)
-        })
+        *REACHABLE.get_or_init(crate::ctap::usb::hid_reachable)
     }
 }
 
@@ -769,6 +767,9 @@ fn desk_touch_announcer(ceremony: &Ceremony) -> TouchAnnouncer {
             kind,
             product: product.to_owned(),
             remote: false,
+            // The CCID keepalive poll lives in the core and has no dismissal
+            // to watch; no button until it does.
+            cancellable: false,
         }));
     })
 }
@@ -880,6 +881,8 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
             // Over caBLE the "authenticator" is the person's phone; the prompt
             // must say so, not "touch your security key".
             remote: true,
+            // The phone is mid-ceremony over the tunnel; nothing here polls.
+            cancellable: false,
         }));
     });
 
@@ -888,10 +891,17 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
         HYBRID_PRODUCT.to_owned(),
         &ephemeral_seed,
         Some(on_touch),
+        &*ceremony.cancelled,
     );
     // The QR has done its job the moment the tunnel is up (or failed); take it
     // down either way rather than leaving it on screen behind the next step.
     (ceremony.qr)(None);
+    // Dismissed in the few seconds between "advert found" and "tunnel up",
+    // where nothing polls: honour it here rather than carry on into a touch
+    // prompt for a ceremony the person has already walked away from.
+    if (ceremony.cancelled)() {
+        return Err(PasskeyFailure::cancelled());
+    }
     result.map_err(hybrid_failure)
 }
 
@@ -1016,7 +1026,11 @@ fn nonces() -> impl Fn() -> [u8; 8] {
 // Unreachable on Windows, where `webauthn.dll` runs the USB ceremony instead.
 #[cfg_attr(windows, allow(dead_code))]
 fn open(ceremony: &Ceremony) -> Result<SecurityKey, UsbError> {
-    SecurityKey::open_touched(&nonces(), Some(&ceremony.touch))
+    SecurityKey::open_touched(
+        &nonces(),
+        Some(&ceremony.touch),
+        Some(Arc::clone(&ceremony.cancelled)),
+    )
 }
 
 /// The key that already holds this credential.
@@ -1041,6 +1055,7 @@ fn open_for(credential_id: &str, ceremony: &Ceremony) -> Result<SecurityKey, Usb
         &random(32),
         &nonces(),
         Some(&ceremony.touch),
+        Some(Arc::clone(&ceremony.cancelled)),
     )
 }
 
@@ -1169,6 +1184,7 @@ mod tests {
             pin: Arc::new(|_| None),
             pick: Arc::new(|_| None),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             window: 0,
         };
         // The card is up — the phone had announced a touch.
@@ -1176,6 +1192,8 @@ mod tests {
             kind: TouchKind::Presence,
             product: "phone".to_owned(),
             remote: true,
+            // The phone is mid-ceremony over the tunnel; nothing here polls.
+            cancellable: false,
         }));
 
         let failure = match assert_over(&mut HungUp, &ceremony, &[0x11; 32], None) {
@@ -1365,6 +1383,7 @@ mod hardware_tests {
                 }
             }),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             pin: Arc::new(|request| {
                 let pin = std::env::var("VELA_TEST_PIN").ok();
                 eprintln!(
@@ -1464,6 +1483,7 @@ mod hardware_tests {
                 }
             }),
             qr: Arc::new(|_| {}),
+            cancelled: Arc::new(|| false),
             pin: Arc::new(|_| std::env::var("VELA_TEST_PIN").ok()),
             pick: Arc::new(|_| Some(0)),
             window: 0,
