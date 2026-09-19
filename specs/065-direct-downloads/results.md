@@ -48,8 +48,11 @@ courtesy; it is not automated here).
 
 ## Not checked
 
-- **Production R2 and the production edge cache** — bucket `vela-downloads` exists and
-  is bound, but nothing has been served from it until this deploys. Locally it is Miniflare's R2, which enforced `sha256` the way the docs say the real one does.
+- ~~Production R2~~ — **checked 2026-09-19, after deploy**: all twelve `/download/<platform>`
+  requested twice on getvela.app; every second response's SHA-256 equals the Release's
+  `SHA256SUMS*` (12/12); three objects read straight out of bucket `vela-downloads` with
+  `wrangler r2 object get` hash the same. First requests took 3–5 s for 11–31 MB, so every
+  fill completed while the client was still connected.
 - **`waitUntil` after a client disconnect in production**: Workers gives background work a
   limited time once the response ends. If a fill is cut short R2 refuses it (wrong hash) and
   the next request fills again — safe, but not observed in production.
