@@ -19,9 +19,12 @@
 		onchip?: (id: string) => void;
 		oncustom?: (text: string) => void;
 		onfee?: () => void;
+		onfeepick?: (id: string) => void;
+		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onclose, onconfirm, onchip, oncustom, onfee }: Props = $props();
+	let { model, onclose, onconfirm, onchip, oncustom, onfee, onfeepick, onsignwith }: Props =
+		$props();
 </script>
 
 <svelte:window
@@ -35,19 +38,28 @@
 	<span class="handle" aria-hidden="true"></span>
 	<div class="scroll">
 		<SigningHeader dapp={model.dapp} network={model.network} />
-		<SigningBody {model} {onconfirm} {onchip} {oncustom} {onfee} />
+		<SigningBody {model} {onconfirm} {onchip} {oncustom} {onfee} {onfeepick} {onsignwith} />
 	</div>
 </div>
 
 <style>
+	/*
+		FIXED and above the page, not absolute within it: the host is mounted at
+		the end of whichever route a request reaches, and an absolute sheet there
+		is laid out against the PAGE — it spanned a desktop window edge to edge
+		and let the sidebar's marks and the asset list show through it
+		(founder-found 2026-09-18).
+	*/
 	.scrim {
-		position: absolute;
+		position: fixed;
 		inset: 0;
+		z-index: 20;
 		background: var(--color-fixed-backdrop);
 	}
 
 	.sheet {
-		position: absolute;
+		position: fixed;
+		z-index: 21;
 		inset-inline: 0;
 		bottom: 0;
 		display: flex;
@@ -57,6 +69,31 @@
 		border-start-start-radius: var(--radius-2xl);
 		border-start-end-radius: var(--radius-2xl);
 		animation: rise var(--motion-sheet-in) ease-out;
+	}
+
+	/*
+		Past the desktop breakpoint a bottom sheet is the wrong object (founder
+		ruling 2026-09-05: no bottom sheets on desktop). The same atoms become a
+		centred card, the width every other prompt card uses, with nothing to
+		drag.
+	*/
+	@media (min-width: 1280px) {
+		.sheet {
+			inset: 0;
+			margin: auto;
+			width: calc(100% - 2 * var(--space-3xl));
+			max-width: var(--layout-promptCard);
+			height: fit-content;
+			max-height: calc(100% - 2 * var(--space-3xl));
+			padding-top: var(--space-2xl);
+			border: var(--border-hairline) solid var(--color-border-base);
+			border-radius: var(--radius-xl);
+			box-shadow: var(--shadow-lg);
+		}
+
+		.handle {
+			display: none;
+		}
 	}
 
 	@keyframes rise {

@@ -175,6 +175,18 @@ sealed interface FeeModel {
     data object Hidden : FeeModel
 }
 
+/** The per-request choice of WHERE the signing passkey is; opens in place, like the fee. */
+@Immutable
+data class SignWithModel(
+    val label: String,
+    val value: String,
+    val open: Boolean,
+    val options: List<SignWithOption>,
+)
+
+@Immutable
+data class SignWithOption(val id: String, val title: String, val selected: Boolean)
+
 @Immutable
 data class SigningScreenModel(
     val state: SigningScreenState,
@@ -184,6 +196,17 @@ data class SigningScreenModel(
     val dappTint: Color,
     val networkName: String,
     val networkDot: Color,
+    /**
+     * The wallet asking ITSELF (the key backup): its own mark and name, and no
+     * host — it is not a site.
+     */
+    val dappOwn: Boolean = false,
+    /** The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19). Https only. */
+    val dappIconUrls: List<String> = emptyList(),
+    /** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
+    val networkLogoUrl: String? = null,
+    /** "Sign with · Automatic ›" — where the passkey that signs this is. Live only. */
+    val signWith: SignWithModel? = null,
     val blocks: List<SigningBlock>,
     val tech: TechModel,
     /** cs29 ships the disclosure open — the whole point of that mock. */

@@ -20,6 +20,11 @@ import Foundation
 struct RegistryFailure: Error {
     let message: String
     let network: Bool
+
+    /// Unreachable, or failing (5xx): not an answer. A 4xx is the index saying no.
+    var indexIsGone: Bool {
+        network || message.range(of: #" failed: 5\d\d$"#, options: .regularExpression) != nil
+    }
 }
 
 struct GroupChallenge {
@@ -100,8 +105,21 @@ actor RegistryClient {
 
     private var baseURL: String
 
-    init(baseURL: String = RegistryClient.defaultURL) {
+    /// The contract itself, for the two reads sign-in needs when the index is
+    /// gone (spec 062). `nil` = no fallback.
+    private let chain: RegistryChainReader?
+
+    /// Which chain listed the last key's units; `nil` = the index did.
+    ///
+    /// Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum),
+    /// so a key's units are asked of whoever listed them. The index mirrors
+    /// Gnosis, so an index listing may be continued on Gnosis; a chain listing
+    /// is continued on that chain and nowhere else.
+    private var unitSource: Int?
+
+    init(baseURL: String = RegistryClient.defaultURL, chain: RegistryChainReader? = nil) {
         self.baseURL = Self.normalize(baseURL)
+        self.chain = chain
     }
 
     func setBaseURL(_ url: String) {
@@ -256,12 +274,21 @@ actor RegistryClient {
     /// `/api/query?publicKey=` — is this key registered, and which groups does
     /// it found?
     func queryByPublicKey(_ publicKeyHex: String) async throws -> KeyStatus {
-        let profile = try await request(
-            "/api/query?publicKey=\(Self.escape(publicKeyHex))",
-            body: nil,
-            timeout: Self.readTimeout,
-            label: "Query"
-        )
+        let profile: [String: Any]
+        do {
+            profile = try await request(
+                "/api/query?publicKey=\(Self.escape(publicKeyHex))",
+                body: nil,
+                timeout: Self.readTimeout,
+                label: "Query"
+            )
+            unitSource = nil
+        } catch let gone as RegistryFailure {
+            // Nobody answered on-chain either: the original failure is the honest one.
+            guard gone.indexIsGone, let found = await chain?.keyProfile(publicKeyHex) else { throw gone }
+            unitSource = found.chainId
+            profile = found.body
+        }
         let raw = (profile["groups"] as? [String: Any])?["unitIds"] as? [Any] ?? []
         var unitIds: [UInt32] = []
         for value in raw {
@@ -280,6 +307,31 @@ actor RegistryClient {
         return KeyStatus(registered: registered, unitIds: unitIds)
     }
 
+    private func readUnit(_ unitId: UInt32) async throws -> [String: Any] {
+        if let source = unitSource {
+            guard let detail = await chain?.unit(chainId: source, unitId: unitId) else {
+                throw RegistryFailure(
+                    message: "Query failed: chain \(source) did not answer for unit \(unitId)", network: true
+                )
+            }
+            return detail
+        }
+        do {
+            return try await request(
+                "/api/query?unitId=\(unitId)&pageSize=\(Self.maxUnitMembers)&order=asc",
+                body: nil,
+                timeout: Self.readTimeout,
+                label: "Query"
+            )
+        } catch let gone as RegistryFailure {
+            // The index listed this unit and then went away. Its ids are Gnosis's.
+            guard gone.indexIsGone,
+                  let detail = await chain?.unit(chainId: RegistryChainReader.homeChain, unitId: unitId)
+            else { throw gone }
+            return detail
+        }
+    }
+
     /// `/api/query?unitId=` — the group's frozen metadata and ALL its founding
     /// members in ascending order, which IS the canonical founding order the
     /// Safe address derivation pins.
@@ -288,12 +340,7 @@ actor RegistryClient {
     /// cap is not ours, and a partial page would rebuild the address from a
     /// SUBSET of the founding set — a different, wrong, fundable address.
     func queryUnit(_ unitId: UInt32) async throws -> UnitDetail {
-        let detail = try await request(
-            "/api/query?unitId=\(unitId)&pageSize=\(Self.maxUnitMembers)&order=asc",
-            body: nil,
-            timeout: Self.readTimeout,
-            label: "Query"
-        )
+        let detail = try await readUnit(unitId)
         let membersBox = detail["members"] as? [String: Any]
         let total = (membersBox?["total"] as? NSNumber)?.intValue ?? 0
         let items = membersBox?["items"] as? [[String: Any]] ?? []

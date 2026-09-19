@@ -209,6 +209,104 @@ enum SettingsLive {
         return copy
     }
 
+    /// The row id the screen routes to the host (spec 062).
+    static let ethereumBackupRow = "ethereum-backup"
+
+    /// The keys that control this wallet, with their Ethereum backup beneath
+    /// them (spec 062) — ONE block, under the account it belongs to. A person
+    /// offered "back up your keys" is owed the sight of them first.
+    ///
+    /// `keys == nil` is "still asking": a title and no guessed count. A registry
+    /// that did not answer leaves the device's own memory on screen, labelled,
+    /// without sync badges; one that answered with nothing is NOT called
+    /// unreachable.
+    static func withWalletKeys(
+        _ keys: WalletKeys.Result?,
+        backup: RegistryBackup.State?,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let rows = (keys?.rows ?? []).enumerated().map { index, row -> WalletKeyRowModel in
+            var body = row.publicKeyHex.hasPrefix("0x") ? String(row.publicKeyHex.dropFirst(2)) : row.publicKeyHex
+            if body.count == 130, body.hasPrefix("04") { body = String(body.dropFirst(2)) }
+            let line = switch row.key.method {
+            case .securityKey: k.keysProviderSecurityKey
+            case .hybrid: k.keysProviderGeneric
+            case .platform: k.keysProviderPlatform
+            }
+            return WalletKeyRowModel(
+                id: index,
+                name: row.key.name.isEmpty
+                    ? loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
+                    : row.key.name,
+                holder: row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName,
+                fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
+                pills: [
+                    row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
+                    row.synced.map { KeyPillModel(text: loc.t($0 ? k.keysSynced : k.keysNotSynced), tone: $0 ? .synced : .local) },
+                ].compactMap { $0 },
+                // The registry explorer's facts, in its order; what is absent is left out.
+                details: [
+                    KeyDetailModel(label: loc.t(k.keysPublicKey), value: row.publicKeyHex.isEmpty ? "" : "0x" + body130(row.publicKeyHex), mono: true, copy: true),
+                    KeyDetailModel(label: loc.t(k.keysCredential), value: row.credentialId, mono: true, copy: true),
+                    KeyDetailModel(label: "AAGUID", value: row.key.aaguid, mono: true, copy: false),
+                    KeyDetailModel(
+                        label: loc.t(k.keysTransport),
+                        value: [row.key.authenticatorAttachment, row.key.transports].filter { !$0.isEmpty }.joined(separator: " · "),
+                        mono: false, copy: false
+                    ),
+                    KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
+                ].filter { !$0.value.isEmpty },
+                key: row.key
+            )
+        }
+        // A record with no key at all (the DEBUG read-only seed) has nothing to
+        // list and nothing to back up: no block, rather than "Keys 0".
+        if keys != nil, rows.isEmpty { return model }
+        var next = model
+        next.keys = WalletKeysModel(
+            title: loc.t(k.keysTitle),
+            subtitle: loc.t(k.keysSubtitle),
+            count: keys == nil ? "" : String(rows.count),
+            loading: keys == nil,
+            note: keys?.source == .device ? loc.t(k.keysFromDevice) : nil,
+            rows: rows,
+            backup: ethereumBackupRow(backup, loc: loc),
+            backupExplain: loc.t(k.backupExplain),
+            copyLabel: loc.t(k.keysCopy),
+            copiedLabel: loc.t(k.keysCopied)
+        )
+        return next
+    }
+
+    /// The key as stored, without a `0x` it may or may not have worn.
+    private static func body130(_ hex: String) -> String {
+        hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
+    }
+
+    /// The backup as a row: one line, three states, a chevron only when there
+    /// is something to do; `nil` where there is no registry on Ethereum or the
+    /// wallet was never registered at home.
+    static func ethereumBackupRow(_ state: RegistryBackup.State?, loc: Loc) -> SettingsRowModel? {
+        let k = I18nKeys.SettingsUi.self
+        let subtitle: String
+        switch state {
+        case .unavailable, .notRegistered: return nil
+        case nil: subtitle = loc.t(k.backupChecking)
+        case .backedUp: subtitle = loc.t(k.backupBackedUp)
+        case .notBackedUp: subtitle = loc.t(k.backupNotBackedUp)
+        case .couldNotCheck: subtitle = loc.t(k.backupCouldNotCheck)
+        }
+        return SettingsRowModel(
+            id: ethereumBackupRow,
+            title: loc.t(k.backupTitle),
+            icon: .upload,
+            subtitle: subtitle,
+            trailing: state == .notBackedUp ? .chevron : RowTrailing.none
+        )
+    }
+
     /// The account switcher, live — the SESSION's accounts and the balance
     /// core's cached totals, not the fixture three.
     ///

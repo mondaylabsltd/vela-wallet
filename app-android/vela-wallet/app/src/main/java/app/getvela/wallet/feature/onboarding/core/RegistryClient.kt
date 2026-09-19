@@ -23,7 +23,21 @@ import org.json.JSONObject
  * whole surface, and adding an HTTP dependency to carry them would be more
  * machinery than the thing it carries.
  */
-class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
+class RegistryClient(
+    baseUrl: String = DEFAULT_REGISTRY_URL,
+    /** The contract itself, for the two reads sign-in needs when the index is gone (spec 062). `null` = no fallback. */
+    private val chain: RegistryChainReader? = null,
+) {
+
+    /**
+     * Which chain listed the last key's units; `null` = the index did.
+     *
+     * Unit ids are per DEPLOYMENT (unit 10 on Gnosis is unit 0 on Ethereum), so
+     * a key's units are asked of whoever listed them. The index mirrors Gnosis,
+     * so an index listing may be continued on Gnosis; a chain listing is
+     * continued on that chain and nowhere else.
+     */
+    private var unitSource: Int? = null
 
     var baseUrl: String = normalize(baseUrl)
         set(value) {
@@ -178,7 +192,16 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
 
     /** `/api/query?publicKey=` — is this key registered, and which groups does it found? */
     suspend fun queryByPublicKey(publicKeyHex: String): KeyStatus {
-        val profile = get("/api/query?publicKey=${encode(publicKeyHex)}", READ_TIMEOUT_MS, "Query")
+        val profile = try {
+            get("/api/query?publicKey=${encode(publicKeyHex)}", READ_TIMEOUT_MS, "Query").also { unitSource = null }
+        } catch (gone: RegistryFailure) {
+            if (!gone.indexIsGone) throw gone
+            // Nobody answered on-chain either: the original failure is the honest one.
+            val (chainId, body) = chain?.keyProfile(publicKeyHex) ?: throw gone
+            VelaLog.event("registry", "Query", "source" to "chain", "chain" to chainId)
+            unitSource = chainId
+            body
+        }
         val ids = profile.optJSONObject("groups")?.optJSONArray("unitIds")
         val unitIds = buildList {
             for (i in 0 until (ids?.length() ?: 0)) {
@@ -198,6 +221,24 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
         return KeyStatus(registered = !profile.isNull("entry"), unitIds = unitIds)
     }
 
+    private suspend fun readUnit(unitId: Long): JSONObject {
+        unitSource?.let { source ->
+            return chain?.unit(source, unitId)
+                ?: throw RegistryFailure("Query failed: chain $source did not answer for unit $unitId", network = true)
+        }
+        return try {
+            get(
+                "/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc",
+                READ_TIMEOUT_MS,
+                "Query",
+            )
+        } catch (gone: RegistryFailure) {
+            if (!gone.indexIsGone) throw gone
+            // The index listed this unit and then went away. Its ids are Gnosis's.
+            chain?.unit(RegistryChainReader.HOME_CHAIN, unitId) ?: throw gone
+        }
+    }
+
     /**
      * `/api/query?unitId=` — the group's frozen metadata and ALL its founding
      * members in ascending order, which IS the canonical founding order the Safe
@@ -208,11 +249,7 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
      * the founding set — a different, wrong, fundable address.
      */
     suspend fun queryUnit(unitId: Long): UnitDetail {
-        val detail = get(
-            "/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc",
-            READ_TIMEOUT_MS,
-            "Query",
-        )
+        val detail = readUnit(unitId)
         val members = detail.optJSONObject("members")
         val total = members?.optInt("total") ?: 0
         val items = members?.optJSONArray("items").objects()
@@ -401,7 +438,11 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
  * which is why this single bit of classification is delegated to it; everything
  * else about an index failure is the core's to interpret.
  */
-class RegistryFailure(message: String, val network: Boolean) : Exception(message)
+class RegistryFailure(message: String, val network: Boolean) : Exception(message) {
+    /** Unreachable, or failing (5xx): not an answer. A 4xx is the index saying no. */
+    val indexIsGone: Boolean
+        get() = network || Regex(" failed: 5\\d\\d$").containsMatchIn(message.orEmpty())
+}
 
 data class GroupChallenge(
     val groupChallenge: String,

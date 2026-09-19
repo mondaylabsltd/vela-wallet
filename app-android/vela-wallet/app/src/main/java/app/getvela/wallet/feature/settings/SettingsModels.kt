@@ -63,7 +63,7 @@ data class CalloutModel(val tone: CalloutTone, val text: String)
 /** Which glyph a settings row draws (models stay UI-type free). */
 enum class SettingsIcon {
     Contacts, Feedback, Globe, Coins, Hash, Calendar, Clock,
-    Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor,
+    Network, Server, Plus, Zap, HardDrive, Info, Sun, Moon, Monitor, Upload,
 }
 
 /** Row emphasis. `Danger` is the red 退出登录 / 清理数据 family. */
@@ -414,6 +414,46 @@ data class IndexDownModel(
 
 /** Everything one settings state needs. */
 @Immutable
+/**
+ * The keys that control this wallet (spec 062) — drawn under the account and
+ * above everything else, with the Ethereum backup as the block's last row.
+ * [rows] is empty while the first answer is in flight; [note] is set only when
+ * the registry did not answer and the rows are what this device remembers.
+ */
+data class WalletKeysModel(
+    val title: String,
+    val subtitle: String,
+    /** "3"; empty while loading — never a guessed count. */
+    val count: String,
+    val loading: Boolean,
+    val note: String?,
+    val rows: List<WalletKeyRowModel>,
+    val backup: SettingsRowModel?,
+    /** Under the backup: PUBLIC keys only; private keys never leave the device. */
+    val backupExplain: String,
+    val copyLabel: String,
+    val copiedLabel: String,
+)
+
+enum class KeyPillTone { Verified, Synced, Local }
+
+data class KeyPillModel(val text: String, val tone: KeyPillTone)
+
+data class KeyDetailModel(val label: String, val value: String, val mono: Boolean, val copy: Boolean)
+
+data class WalletKeyRowModel(
+    val name: String,
+    /** The vault's name when the catalog knows it; else the method's generic line. */
+    val holder: String,
+    /** `197d…647b` — what tells two unnamed keys apart. */
+    val fingerprint: String,
+    /** "User-verified", "Synced" / "Device-bound" — the registry explorer's pills. */
+    val pills: List<KeyPillModel>,
+    /** What the row opens onto: the explorer's facts. Empty = nothing to open. */
+    val details: List<KeyDetailModel>,
+    val key: app.getvela.wallet.feature.onboarding.core.CreateKeyRow,
+)
+
 data class SettingsScreenModel(
     val state: SettingsScreenState,
     val title: String,
@@ -423,6 +463,8 @@ data class SettingsScreenModel(
     val selectedTab: String,
     val tabs: TabsModel,
     val account: AccountRowModel,
+    /** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+    val keys: WalletKeysModel? = null,
     val sections: List<SettingsSectionModel>,
     val theme: SegmentedModel,
     val avatar: SegmentedModel,

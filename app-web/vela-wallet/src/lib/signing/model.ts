@@ -175,6 +175,8 @@ export interface FeeTokenOption {
 	balance: string;
 	fee: string;
 	selected: boolean;
+	/** The core's verdict: this coin cannot pay. Drawn, never pickable (issue 211). */
+	insufficient?: boolean;
 }
 
 export type FeeModel =
@@ -192,8 +194,28 @@ export type FeeModel =
 
 export interface SigningModel {
 	id: SigningStateId;
-	dapp: { name: string; host: string; letter: string; tint: string };
-	network: { name: string; dot: string };
+	dapp: {
+		name: string;
+		/** The observed origin's host. EMPTY for the wallet's own request: there is no site. */
+		host: string;
+		letter: string;
+		tint: string;
+		/** The wallet asking ITSELF (the key backup): drawn with the wallet's own mark. */
+		own?: boolean;
+		/**
+		 * The site's own icon, tried in order over the letter (founder ruling
+		 * 2026-09-19, superseding spec 022's "never fetch"): the letter is what
+		 * shows until one lands and what stays when none exists.
+		 */
+		iconUrls?: string[];
+	};
+	network: {
+		name: string;
+		/** The drawn fallback beneath the logo — a real colour, never a keyword. */
+		dot: string;
+		/** The chain's logo from the chain-data endpoint; the dot shows until it lands. */
+		logoUrl?: string;
+	};
 	blocks: Block[];
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
@@ -205,6 +227,17 @@ export interface SigningModel {
 		identiconSvg: string;
 		/** The signing account's address — the identicon viewer's seed. Live only. */
 		address?: string;
+	};
+	/**
+	 * "Sign with · Automatic ›" — WHERE the passkey that signs this is (founder,
+	 * 2026-09-19). Live only; absent in the gallery. `open` draws the choices in
+	 * place of the row, the way the fee selector does.
+	 */
+	signWith?: {
+		label: string;
+		value: string;
+		open: boolean;
+		options: { id: string; title: string; selected: boolean }[];
 	};
 	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:

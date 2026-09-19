@@ -191,6 +191,7 @@
       "techIdentityToken": "Token",
       "techIdentityRecipient": "Người nhận",
       "copyValue": "Sao chép",
+      "signWith": "Ký bằng",
       "viewOnExplorer": "Xem trên explorer",
       "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
     },

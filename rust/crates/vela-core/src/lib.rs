@@ -45,6 +45,7 @@ pub mod passkey;
 mod passkey_catalog;
 pub mod primitives;
 pub mod registry_backup;
+pub mod registry_chain;
 pub mod registry_lookup;
 pub mod registry_metadata;
 pub mod registry_proof;
@@ -56,6 +57,7 @@ pub mod types;
 /// 032; on the web (spec 028 Phase 8) it is the second implementation the
 /// shell's TypeScript assembly is checked against before a passkey signs.
 pub mod user_op;
+pub mod wallet_keys;
 pub mod webauthn;
 
 pub use abi::AbiValue;

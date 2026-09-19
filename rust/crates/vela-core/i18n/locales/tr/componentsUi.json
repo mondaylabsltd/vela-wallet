@@ -191,6 +191,7 @@
       "techIdentityToken": "Token",
       "techIdentityRecipient": "Alıcı",
       "copyValue": "Kopyala",
+      "signWith": "Şununla imzala",
       "viewOnExplorer": "Gezginde görüntüle",
       "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor"
     },

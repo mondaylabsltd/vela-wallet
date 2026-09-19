@@ -38,6 +38,12 @@
 	import { desktopWithIdentity, homeWithIdentity } from '$lib/settings/identity';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
+	import { foundingKeyOf, startEthereumBackup } from '$lib/backup/ethereum-backup';
+	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
+	import SigningHost from '$lib/signing/SigningHost.svelte';
+	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+	import { checkEthereumBackup, type EthereumBackupState } from '$lib/services/registry-backup';
+	import { readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import {
@@ -62,6 +68,7 @@
 	import {
 		themeFromSegment,
 		withEraseFailure,
+		walletKeysModel,
 		withLivePreferences,
 		withLivePreferencesDesktop
 	} from '$lib/settings/live';
@@ -165,6 +172,72 @@
 
 	/** Set when an erase ran and something survived. Said, never swallowed. */
 	let eraseFailed = $state(false);
+
+	// --- The Ethereum backup row (spec 062) ---------------------------------
+	//
+	// Where the active wallet's founding record stands on Ethereum, asked of the
+	// chain (never of our server) each time this page meets an account — and
+	// again whenever a backup request settles, because the chain is what knows
+	// whether it landed.
+	let backupState = $state<EthereumBackupState | 'checking'>('checking');
+	let backupAsked = $state(0);
+	$effect(() => {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		void backupAsked;
+		if (!account) return;
+		backupState = 'checking';
+		let cancelled = false;
+		void checkEthereumBackup(account.address, foundingKeyOf(account)).then((check) => {
+			if (!cancelled) backupState = check.state;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	// Which passkeys control the active wallet — read from the registry contract
+	// each time this page meets an account; `null` while the first answer is in
+	// flight. The device's own record is the floor it falls back to.
+	let walletKeys = $state<WalletKeys | null>(null);
+	$effect(() => {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		if (!account) return;
+		walletKeys = null;
+		let cancelled = false;
+		void readWalletKeys(account).then((keys) => {
+			if (!cancelled) walletKeys = keys;
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	/**
+	 * The backup is signed on THIS page (founder, 2026-09-18: tapping the row
+	 * used to land a person on the wallet home with a sheet over it). The
+	 * signing machine is app-resident; this route mounts a host for its sheet
+	 * and an idle fee session, exactly as the extension's request window does.
+	 */
+	const feeQuote = new FeeQuote();
+	onMount(() => () => feeQuote.dispose());
+	let backupOpening = false;
+	function startBackup(): void {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		if (!account || backupOpening) return;
+		backupOpening = true;
+		void (async () => {
+			try {
+				await signRequest.boot();
+				signRequest.syncNetworks();
+				signRequest.syncAccounts();
+				const outcome = await startEthereumBackup(account);
+				if (outcome.kind === 'requested') await outcome.settled;
+			} finally {
+				backupOpening = false;
+				backupAsked += 1;
+			}
+		})();
+	}
 
 	/**
 	 * The language row's own text: the endonym, plus "· system" when the person
@@ -338,6 +411,7 @@
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
+		model = { ...model, keys: walletKeysModel(walletKeys, backupState, m) };
 		// The phone's first block (founder, 2026-09-05): 通讯录 is a tab on the
 		// bar under this very screen, and 反馈 is not wanted here — so the block
 		// they made up goes with them. The desktop nav keeps its own list.
@@ -364,6 +438,10 @@
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
 		model = withLiveConnections(model, grants, m);
 		model = withLiveCurrencyDesktop(model, currency.view, currencyCatalog);
+		model = {
+			...model,
+			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
+		};
 		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
 	});
 
@@ -503,6 +581,7 @@
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
+				onethereumbackup={startBackup}
 			/>
 		</div>
 	{:else}
@@ -521,6 +600,7 @@
 				onaccountsignin={() => void goto(welcome)}
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
+				onethereumbackup={startBackup}
 			/>
 		</main>
 	{/if}
@@ -536,6 +616,12 @@
      rendering it only on the wallet route left the confirm button doing
      nothing at all (issue 214). -->
 <SignOutHost copy={data.signOut} />
+
+<!--
+	The wallet's own request to copy its keys to Ethereum is answered HERE
+	(spec 062). Same host, same four machines, same sheet as a page's request.
+-->
+<SigningHost messages={data.signingMessages} fee={feeQuote} />
 
 <style>
 	/* The phone screens are `height: 100%` of whatever holds them, and the

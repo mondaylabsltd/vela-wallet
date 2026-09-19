@@ -77,6 +77,13 @@ class SendExecutor(
         suspend fun routingOf(address: String): Pair<String, KeyMethod>
 
         suspend fun publicKeyOf(accountId: String): String?
+
+        /**
+         * Every founding key's credential id and stored transports, as JSON for
+         * the core's `sign_route` — `[{credential_id, transports}]`. The default
+         * is "nothing known", which routes as it always did.
+         */
+        suspend fun keyRoutesJson(address: String): String = "[]"
     }
 
     /** The live fee session, as `estimate_fee` needs it (research D7). */
@@ -245,7 +252,10 @@ class SendExecutor(
 
     private fun other(message: String): Nothing = throw SubmitRefused(SendSubmitFailure.Other(message))
 
-    private val spine = UserOpSpine(relay, accounts, signer)
+    private val spine = UserOpSpine(relay, accounts, signer, measureCall = { chainId, from, to, valueHex, data ->
+        (pool.call(chainId, "eth_estimateGas", listOf(JSONObject().put("from", from).put("to", to).put("value", valueHex).put("data", data))) as? RpcResult.Body)
+            ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
+    })
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
     private suspend fun submitInner(op: SendOperation.SubmitUserOp): String = try {

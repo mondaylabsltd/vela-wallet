@@ -231,6 +231,49 @@ export function hasPasskeyOverride(): boolean {
 	return override !== null;
 }
 
+/**
+ * HOW the person wants to sign this one request — the signing sheet's "Sign
+ * with" row (founder, 2026-09-19: creating and signing in let a person choose
+ * where their passkey is; signing silently took the platform authenticator).
+ *
+ * `auto` is what the browser does on its own and is the default: it looks at
+ * the credentials it is allowed and, finding one on this machine, goes straight
+ * to Touch ID — which is wrong for somebody who wants to approve on their phone
+ * or with the security key in their hand. The other three are WebAuthn L3
+ * `hints`, plus the transports that make the hint reachable: a credential
+ * registered as `internal` is never offered over a QR code unless the request
+ * also says `hybrid`.
+ *
+ * Per request, never persisted: the sheet resets it when it closes.
+ */
+export type SignMethod = 'auto' | 'platform' | 'hybrid' | 'security_key';
+let signMethod: SignMethod = 'auto';
+export function setSignMethod(method: SignMethod): void {
+	signMethod = method;
+}
+export function getSignMethod(): SignMethod {
+	return signMethod;
+}
+
+const METHOD_ROUTING: Record<
+	Exclude<SignMethod, 'auto'>,
+	{ hint: string; transports: AuthenticatorTransport[] }
+> = {
+	platform: { hint: 'client-device', transports: ['internal'] },
+	hybrid: { hint: 'hybrid', transports: ['hybrid', 'internal'] },
+	security_key: { hint: 'security-key', transports: ['usb', 'nfc', 'ble'] }
+};
+
+/** The request fields the chosen method adds; nothing at all for `auto`. */
+function methodOptions(): { hints?: string[] } {
+	return signMethod === 'auto' ? {} : { hints: [METHOD_ROUTING[signMethod].hint] };
+}
+
+/** A credential's transports under the chosen method; its own for `auto`. */
+function routedTransports(own: AuthenticatorTransport[]): AuthenticatorTransport[] {
+	return signMethod === 'auto' ? own : METHOD_ROUTING[signMethod].transports;
+}
+
 /** Abort the pending ceremony, if any (the core's `cancel_passkey_sign`). */
 export function cancelSign(): void {
 	pendingSign?.abort();
@@ -261,6 +304,7 @@ export async function signWithAny(
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				...methodOptions(),
 				...(credentials.length > 0
 					? {
 							allowCredentials: credentials.map((c) => {
@@ -268,10 +312,11 @@ export async function signWithAny(
 									.split(',')
 									.map((value) => value.trim())
 									.filter(Boolean) as AuthenticatorTransport[];
+								const transports = routedTransports(hints);
 								return {
 									type: 'public-key' as const,
 									id: hexToBytes(c.id) as BufferSource,
-									...(hints.length > 0 ? { transports: hints } : {})
+									...(transports.length > 0 ? { transports } : {})
 								};
 							})
 						}
@@ -320,11 +365,12 @@ export async function sign(
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				...methodOptions(),
 				allowCredentials: [
 					{
 						type: 'public-key',
 						id: hexToBytes(credentialId) as BufferSource,
-						...(hints.length > 0 ? { transports: hints } : {})
+						...(routedTransports(hints).length > 0 ? { transports: routedTransports(hints) } : {})
 					}
 				]
 			},

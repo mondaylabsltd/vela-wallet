@@ -214,6 +214,14 @@
 	let sendView = $state<SendView | null>(null);
 	let sendSession: SendSession | null = null;
 	const feeQuote = new FeeQuote();
+	/**
+	 * The signing sheet's OWN fee session. It used to be handed Send's, which was
+	 * harmless only while nothing priced a signing request; now the host asks for
+	 * the request's real quote, and doing that on Send's session would replace the
+	 * operation a half-filled send form is showing a fee for.
+	 */
+	const signingFee = new FeeQuote();
+	onMount(() => () => signingFee.dispose());
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */
 	let feeSheetOpen = $state(false);
 	/**
@@ -1506,7 +1514,7 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<SigningHost messages={data.signingMessages} fee={feeQuote} />
+<SigningHost messages={data.signingMessages} fee={signingFee} />
 
 <!--
   What fills the scanner's frame. One definition for both layouts — only one of

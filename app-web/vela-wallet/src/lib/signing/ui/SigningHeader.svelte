@@ -1,5 +1,7 @@
 <script lang="ts">
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import BrandMark from '$lib/ui/BrandMark.svelte';
+	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
 	import type { SigningModel } from '../model';
 
 	interface Props {
@@ -11,13 +13,27 @@
 </script>
 
 <header class="header">
-	<LetterAvatar letter={dapp.letter} tint={dapp.tint} size={36} />
+	{#if dapp.own}
+		<!-- The wallet asking itself: its own mark, never a letter on a disc. -->
+		<span class="own" style:width="36px" style:height="36px"><BrandMark size={22} /></span>
+	{:else}
+		<!-- The site's own icon over its initial: the letter shows until the icon
+		     lands, and stays when the site has none. -->
+		<span class="site">
+			<LetterAvatar letter={dapp.letter} tint={dapp.tint} size={36} />
+			<RemoteLogo urls={dapp.iconUrls} />
+		</span>
+	{/if}
 	<span class="who">
 		<span class="name">{dapp.name}</span>
-		<span class="host">{dapp.host}</span>
+		{#if dapp.host !== ''}<span class="host">{dapp.host}</span>{/if}
 	</span>
 	<span class="network">
-		<span class="dot" style:background={network.dot}></span>
+		<!-- The chain's logo over a drawn dot, which is what shows until it lands. -->
+		<span class="chain">
+			<span class="dot" style:background={network.dot}></span>
+			<RemoteLogo urls={network.logoUrl === undefined ? undefined : [network.logoUrl]} />
+		</span>
 		{network.name}
 	</span>
 </header>
@@ -65,6 +81,30 @@
 		background: var(--color-bg-sunken);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-base);
+	}
+
+	.own {
+		display: grid;
+		flex: none;
+		place-items: center;
+		/* The letter avatar's own box (36), set inline as that component does. */
+		border-radius: var(--radius-full);
+		background: var(--color-bg-sunken);
+	}
+
+	.site {
+		position: relative;
+		display: grid;
+		flex: none;
+	}
+
+	.chain {
+		position: relative;
+		display: grid;
+		flex: none;
+		place-items: center;
+		width: var(--space-xl);
+		height: var(--space-xl);
 	}
 
 	.dot {

@@ -83,6 +83,28 @@
       "offline": "Çevrimdışı",
       "httpsRequired": "HTTPS gerekli",
       "invalid": "Geçersiz"
+    },
+    "backup": {
+      "title": "Açık anahtarları Ethereum'a yedekle",
+      "backedUp": "Ethereum'a yedeklendi",
+      "notBackedUp": "Henüz yedeklenmedi",
+      "couldNotCheck": "Kontrol edilemedi",
+      "explain": "Yalnızca açık anahtarlar yayımlanır; böylece bu cüzdan Ethereum'dan bulunup yeniden kurulabilir. Özel anahtarlar cihazlarınızdan asla çıkmaz.",
+      "intent": "Açık anahtarları yedekle",
+      "registeredAs": "Kayıtlı ad",
+      "publicKeys": "Açık anahtar sayısı"
+    },
+    "keys": {
+      "title": "Anahtarlar",
+      "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
+      "keyN": "Anahtar {{n}}",
+      "notSynced": "Cihaza bağlı",
+      "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor.",
+      "publicKey": "Açık anahtar",
+      "credential": "Kimlik bilgisi",
+      "transport": "Aktarım",
+      "attestation": "Doğrulama beyanı",
+      "userVerified": "Kullanıcı doğrulandı"
     }
   }
 }

@@ -487,6 +487,53 @@ pub fn passkey_provider_png(
     )?)
 }
 
+/// "Sign with": which credential a ceremony is pinned to and how it is reached,
+/// for the method the person chose — `None` for `auto`. See
+/// `vela_core::wallet_keys::sign_route`.
+#[uniffi::export]
+#[must_use]
+pub fn sign_route(device_keys_json: String, method: String) -> Option<String> {
+    vela_core::wallet_keys::sign_route_json(&device_keys_json, &method)
+}
+
+/// Which passkeys control the wallet at `address` — the Settings keys view
+/// (spec 062). See `vela_core::wallet_keys`.
+#[uniffi::export]
+#[must_use]
+pub fn wallet_keys_step(address: String, device_keys_json: String, answers_json: String) -> String {
+    vela_core::wallet_keys::step_json(&address, &device_keys_json, &answers_json)
+}
+
+/// **Signing in when the index is gone** (spec 062): the registry contract's
+/// side of the index's two read questions, answered in the index's own JSON
+/// shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+/// try (in order) and the two `eth_call`s to make on one of them; the matching
+/// function turns the two raw results into the body, or nothing when that
+/// chain did not really answer (the shell then tries the next). Unit ids are
+/// per deployment: ask about a key's units on the chain that listed them.
+#[uniffi::export]
+pub fn registry_chain_key_plan(public_key_hex: String) -> Option<String> {
+    vela_core::registry_chain::key_status_plan_json(&public_key_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_key_status(has_entry_hex: String, groups_hex: String) -> Option<String> {
+    vela_core::registry_chain::key_status_json(&has_entry_hex, &groups_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_unit_plan(unit_id: u32) -> Option<String> {
+    vela_core::registry_chain::unit_plan_json(u64::from(unit_id))
+}
+
+/// See [`registry_chain_key_plan`].
+#[uniffi::export]
+pub fn registry_chain_unit(unit_id: u32, unit_hex: String, members_hex: String) -> Option<String> {
+    vela_core::registry_chain::unit_json(u64::from(unit_id), &unit_hex, &members_hex)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -499,8 +546,14 @@ pub fn registry_backup_step(
     address: String,
     founding_public_key_hex: String,
     answers_json: String,
+    target_chain: Option<u32>,
 ) -> String {
-    vela_core::registry_backup::step_json(&address, &founding_public_key_hex, &answers_json)
+    vela_core::registry_backup::step_json(
+        &address,
+        &founding_public_key_hex,
+        target_chain,
+        &answers_json,
+    )
 }
 
 /// **The registered name behind an address — the next step of the lookup.**
@@ -1281,6 +1334,46 @@ pub fn user_op_has_contract_call(calls: Vec<UserOpCall>) -> Result<bool, CoreErr
     Ok(vela_core::user_op::batch_has_contract_call(&inner_calls(
         &calls,
     )?))
+}
+
+/// The calls a shell must measure on their own (`eth_estimateGas` from the
+/// Safe's address) before submitting: every one that is more than a plain
+/// transfer, by index into `calls`. Empty = nothing to measure.
+#[uniffi::export]
+pub fn user_op_calls_to_measure(calls: Vec<UserOpCall>) -> Result<Vec<u32>, CoreError> {
+    Ok(inner_calls(&calls)?
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| !vela_core::user_op::is_plain_transfer_call(&call.data))
+        .map(|(index, _)| index as u32)
+        .collect())
+}
+
+/// The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
+/// `measured` are the shell's `eth_estimateGas` figures for the calls
+/// `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
+/// inner call. The draft's `call_gas_limit` is raised to the result when it is
+/// higher — an undeployed Safe's first contract call must not go out with the
+/// bundler's trivial "no code here" estimate. `None` = nothing to raise.
+#[uniffi::export]
+pub fn user_op_raise_call_gas(
+    draft: UserOpDraft,
+    measured: Vec<String>,
+    call_count: u32,
+) -> Result<UserOpDraft, CoreError> {
+    let measured: Vec<u128> = measured
+        .iter()
+        .map(|gas| u128_of(gas, "measured gas"))
+        .collect::<Result<_, _>>()?;
+    let Some(floor) = vela_core::user_op::inner_calls_gas_floor(&measured, call_count as usize)
+    else {
+        return Ok(draft);
+    };
+    let mut op = op_of(&draft)?;
+    if floor > op.call_gas_limit {
+        op.call_gas_limit = floor;
+    }
+    Ok(draft_of(&op))
 }
 
 /// A displayed quote is usable when it is positive and names a real address.

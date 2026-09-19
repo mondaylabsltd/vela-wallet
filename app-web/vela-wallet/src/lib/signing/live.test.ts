@@ -213,6 +213,58 @@ describe('a decoded request', () => {
 		const warnings = flagged.blocks.filter((b) => b.kind === 'warning');
 		expect(warnings).toHaveLength(3);
 		expect(warnings[0]).toMatchObject({ tone: 'danger' });
+		// …and says them in words, not in template slots: "Calling {{fn}} —"
+		// shipped once (spec 062 found it on the registry backup).
+		for (const warning of warnings) {
+			expect(JSON.stringify(warning)).not.toContain('{{');
+		}
+	});
+
+	it("the wallet's own registry backup is drawn verified, with rows and no warning", () => {
+		const backup = buildSigningModel(
+			inputs({
+				clear: {
+					...DECODED,
+					result: {
+						...DECODED.result!,
+						intent: 'Back up public keys',
+						contract_name: 'Vela passkey registry',
+						owner: 'Vela',
+						verified: true,
+						best_effort: false,
+						partial: false,
+						risk: 'safe',
+						fields: [
+							{
+								...DECODED.result!.fields[0],
+								label: 'Wallet',
+								value: 'Interleave',
+								role: 'generic',
+								format: 'raw',
+								address: null,
+								token_address: null
+							},
+							{
+								...DECODED.result!.fields[0],
+								label: 'Keys',
+								value: '3',
+								role: 'generic',
+								format: 'raw',
+								address: null,
+								token_address: null
+							}
+						]
+					}
+				}
+			})
+		)!;
+		expect(backup.blocks.filter((b) => b.kind === 'warning')).toEqual([]);
+		expect(backup.blocks[0]).toMatchObject({ kind: 'intent', text: 'Back up public keys' });
+		const rows = backup.blocks.find((b) => b.kind === 'rows');
+		expect(rows && 'rows' in rows ? rows.rows.map((r) => [r.label, r.value]) : null).toEqual([
+			['Wallet', 'Interleave'],
+			['Keys', '3']
+		]);
 	});
 });
 
@@ -375,5 +427,84 @@ describe('the deeper rungs of the ladder', () => {
 		)!;
 		expect(model.blocks).toHaveLength(1);
 		expect(model.blocks[0].kind).toBe('sentence');
+	});
+});
+
+describe('siteIconUrls', () => {
+	it('names where an https site keeps its icon, best first', async () => {
+		const { siteIconUrls } = await import('./live');
+		expect(siteIconUrls('https://app.uniswap.org')).toEqual([
+			'https://app.uniswap.org/apple-touch-icon.png',
+			'https://app.uniswap.org/favicon.ico'
+		]);
+	});
+
+	it('asks nothing of plain http, or of something that is not an origin', async () => {
+		const { siteIconUrls } = await import('./live');
+		expect(siteIconUrls('http://app.uniswap.org')).toEqual([]);
+		expect(siteIconUrls('not an origin')).toEqual([]);
+	});
+});
+
+describe('the fee coin can be switched, as it can when sending', () => {
+	const option = (over: Partial<FeeView['options'][number]>): FeeView['options'][number] => ({
+		symbol: 'ETH',
+		contract: null,
+		decimals: 18,
+		balance: '1500000000000000000',
+		recipient: '0x' + '11'.repeat(20),
+		usd_balance: '4500',
+		usd_price: '3000',
+		amount: '2100000000000000',
+		insufficient: false,
+		selected: true,
+		...over
+	});
+	const two: FeeView = {
+		...QUOTED_FEE,
+		options: [
+			option({}),
+			option({
+				symbol: 'USDC',
+				contract: '0x' + 'a0'.repeat(20),
+				decimals: 6,
+				balance: '42000000',
+				amount: '1270000',
+				selected: false
+			}),
+			option({
+				symbol: 'DAI',
+				contract: '0x' + '6b'.repeat(20),
+				balance: '100000000000000',
+				amount: '1270000000000000000',
+				insufficient: true,
+				selected: false
+			})
+		]
+	};
+	const feeOf = (over: Partial<SigningLiveInputs>) => buildSigningModel(inputs(over))!.fee;
+
+	it('closed, the row is the row it always was', () => {
+		const fee = feeOf({ fee: two });
+		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+
+	it("open, it lists every coin the relay takes — amounts in each coin, the core's verdict on each", () => {
+		const fee = feeOf({ fee: two, feeOpen: true });
+		if (fee.kind !== 'onchain' || !fee.selector) throw new Error('no selector');
+		expect(
+			fee.selector.options.map((o) => [o.id, o.name, o.fee, o.selected, o.insufficient])
+		).toEqual([
+			['native', 'ETH', '~0.0021 ETH', true, false],
+			['0x' + 'a0'.repeat(20), 'USDC', '~1.27 USDC', false, false],
+			// Drawn, and not pickable: hiding it would be a second filter beside the core's.
+			['0x' + '6b'.repeat(20), 'DAI', '~1.27 DAI', false, true]
+		]);
+		expect(fee.selector.options[1].balance).toBe('42 USDC');
+	});
+
+	it('with one coin there is nothing to choose, so nothing opens', () => {
+		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
+		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
 	});
 });

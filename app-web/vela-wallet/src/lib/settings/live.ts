@@ -68,6 +68,10 @@ import type {
 	UrlFieldModel,
 	AccountsSheetModel
 } from './model';
+import type { EthereumBackupState } from '$lib/services/registry-backup';
+import type { EthereumBackupRowModel, WalletKeysModel } from './model';
+import type { WalletKeys } from '$lib/services/wallet-keys';
+import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 
 // ---------------------------------------------------------------------------
 // Badges — the probe/health vocabularies, worded once.
@@ -1250,5 +1254,126 @@ export function liveRelayer(status: SendTreasuryStatus, m: RescueMessages): Rela
 		copyLabel: m.relayer.copyBtn,
 		callout: { tone: 'warning', text: m.relayer.disclaimer },
 		primary: m.relayer.retryBtn
+	};
+}
+
+// ---------------------------------------------------------------------------
+// The Ethereum backup row (spec 062 §5a)
+// ---------------------------------------------------------------------------
+
+/** The row for a state, or `undefined` when there is nothing to draw:
+ *  no registry on Ethereum (the feature is dark) or no record to back up. */
+export function ethereumBackupRow(
+	state: EthereumBackupState | 'checking',
+	m: SettingsMessages
+): EthereumBackupRowModel | undefined {
+	switch (state) {
+		case 'checking':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.checking,
+				tone: 'neutral',
+				actionable: false
+			};
+		case 'backed_up':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.backedUp,
+				tone: 'positive',
+				actionable: false
+			};
+		case 'not_backed_up':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.notBackedUp,
+				tone: 'caution',
+				actionable: true
+			};
+		case 'could_not_check':
+			return {
+				title: m.backup.title,
+				subtitle: m.backup.couldNotCheck,
+				tone: 'neutral',
+				actionable: false
+			};
+		case 'unavailable':
+		case 'not_registered':
+			return undefined;
+	}
+}
+
+/**
+ * The keys that control this wallet, with their Ethereum backup beneath them
+ * (spec 062). ONE block on both layouts: a person reads which keys there are,
+ * then what backing them up means.
+ *
+ * `keys === null` is "still asking" — the block is drawn with its title and a
+ * quiet loading line, never a guessed count. A registry that did not answer
+ * leaves the device's own memory on screen, labelled as such and without sync
+ * badges: a badge nobody can vouch for is not drawn.
+ */
+/** The registry explorer's facts for one key, in its order. Absent values are left out. */
+function keyDetails(key: WalletKeys['keys'][number], m: SettingsMessages) {
+	const transport = [key.authenticator_attachment, key.transports].filter(Boolean).join(' · ');
+	return [
+		{
+			label: m.keys.publicKey,
+			value: key.public_key_hex ? `0x${key.public_key_hex}` : '',
+			mono: true,
+			copy: true
+		},
+		{ label: m.keys.credential, value: key.credential_id, mono: true, copy: true },
+		{ label: 'AAGUID', value: key.aaguid, mono: true, copy: false },
+		{ label: m.keys.transport, value: transport, mono: false, copy: false },
+		{ label: m.keys.attestation, value: key.attestation_hex, mono: true, copy: false }
+	].filter((row) => row.value !== '');
+}
+
+/** `04‖x‖y` → `x[..4]…y[-4..]`; empty when there is no readable key. */
+function keyFingerprint(publicKeyHex: string): string {
+	const body = publicKeyHex.replace(/^0x/, '').replace(/^04(?=[0-9a-f]{128}$)/i, '');
+	return body.length >= 8 ? `${body.slice(0, 4)}…${body.slice(-4)}`.toLowerCase() : '';
+}
+
+export function walletKeysModel(
+	keys: WalletKeys | null,
+	backup: EthereumBackupState | 'checking',
+	m: SettingsMessages
+): WalletKeysModel {
+	const fallbackFor = (method: string) =>
+		method === 'security_key'
+			? m.keys.providerSecurityKey
+			: method === 'hybrid'
+				? m.keys.providerGeneric
+				: m.keys.providerPlatform;
+	const rows = (keys?.keys ?? []).map((key, index) => ({
+		name: key.name !== '' ? key.name : m.keys.keyN.replace('{{n}}', String(index + 1)),
+		holderFallback: fallbackFor(key.method),
+		fingerprint: keyFingerprint(key.public_key_hex),
+		pills: [
+			...(key.user_verified === true
+				? [{ text: m.keys.userVerified, tone: 'verified' as const }]
+				: []),
+			...(key.synced === null
+				? []
+				: [
+						key.synced
+							? { text: m.keys.synced, tone: 'synced' as const }
+							: { text: m.keys.notSynced, tone: 'local' as const }
+					])
+		],
+		details: keyDetails(key, m),
+		key: { ...key, synced: key.synced ?? true, method: key.method as CreateKeyRow['method'] }
+	}));
+	return {
+		title: m.keys.title,
+		subtitle: m.keys.subtitle,
+		count: keys === null ? '' : String(rows.length),
+		loading: keys === null,
+		note: keys !== null && keys.source === 'device' ? m.keys.fromDevice : undefined,
+		rows,
+		backup: ethereumBackupRow(backup, m),
+		backupExplain: m.backup.explain,
+		copy: { action: m.keys.copy, done: m.keys.copied }
 	};
 }

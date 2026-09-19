@@ -22,6 +22,8 @@ struct SigningSheet: View {
     /// `revoke`. The core decides what each means.
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
+    /// `nil` toggles the "Sign with" list; an id picks a method.
+    var onSignWith: (String?) -> Void = { _ in }
 
     @State private var techOverride: Bool?
 
@@ -32,7 +34,8 @@ struct SigningSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s16) {
-                SigningHeaderView(dapp: model.dapp, network: model.network)
+                SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
+                                  iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl)
                     .padding(.top, Tokens.Space.s8)
 
                 ForEach(model.blocks) { block in
@@ -45,6 +48,9 @@ struct SigningSheet: View {
                 SigningFeeView(fee: model.fee)
                 SigningSignerRow(label: model.signer.label, name: model.signer.name,
                                  seed: model.signer.seed)
+                if let signWith = model.signWith {
+                    SignWithRow(model: signWith, onSelect: onSignWith)
+                }
                 SlideToConfirmView(
                     hint: model.confirm.hint, action: model.confirm.action,
                     enabled: model.confirm.enabled, onConfirm: onConfirm

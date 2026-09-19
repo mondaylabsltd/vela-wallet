@@ -26,6 +26,7 @@ import type { TypedData } from '$lib/core/kernels';
 export interface SigningAccount {
 	id: string;
 }
+
 import { signWithAny, type Assertion } from '$lib/onboarding/core/passkey';
 import { rpcCall } from './rpc-adapter';
 import {
@@ -43,8 +44,29 @@ import {
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
-import { findAccountByCredentialId } from './accounts';
+import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { getAllNetworksSync } from './networks';
+
+/**
+ * The stored record for the wallet a request is FOR — by ADDRESS, never by
+ * credential.
+ *
+ * One passkey founds any number of wallets: a single-key one and a multi-key
+ * one share the same credential id (on-chain: units 10 and 12 of the golden
+ * key; in the parallel space: Parallel One and Parallel Multi). Looking the
+ * record up by credential picked whichever came first, and its key set then
+ * built the OTHER wallet's initCode — the bundler refused it with
+ * `AA14 initCode must return sender` the first time a multi-key Safe was
+ * deployed through this path (spec 062, Base, 2026-09-18). The send path had
+ * resolved by address since 026; this makes the dApp path do the same. The
+ * credential is only the fallback for an address no record carries.
+ */
+export function storedWalletFor(
+	account: SigningAccount,
+	safeAddress: string
+): SignerAccount | undefined {
+	return findAccountByAddress(safeAddress) ?? findAccountByCredentialId(account.id);
+}
 
 export interface DAppRequest {
 	id: string;
@@ -221,9 +243,10 @@ function buildContractSignature(assertion: Assertion, signerAddress?: string): s
  */
 async function signSafeMessage(
 	account: SigningAccount,
+	safeAddress: string,
 	safeHashHex: string
 ): Promise<{ assertion: Assertion; signerAddress?: string }> {
-	const stored = await findAccountByCredentialId(account.id);
+	const stored = storedWalletFor(account, safeAddress);
 	const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
 	const credentials = keySet
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
@@ -302,7 +325,7 @@ export async function handlePersonalSign(
 	const originalHash = keccak256(combined);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -328,7 +351,7 @@ export async function handleSignTypedData(
 
 	const originalHash = hashTypedData(typedData);
 	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -360,7 +383,7 @@ export async function handleSendTransaction(
 	// founding key; the set also builds an undeployed Safe's initCode). Falls
 	// back to the legacy single-key index lookup for unknown accounts.
 	let walletSigner: WalletSigner | undefined;
-	const stored = await findAccountByCredentialId(account.id);
+	const stored = storedWalletFor(account, safeAddress);
 	if (stored) {
 		// Only a genuinely multi-key account changes shape here — a single-key
 		// wallet keeps the exact historical string form (and bytes).
@@ -451,7 +474,7 @@ export async function handleGenericSign(
 	const originalHash = keccak256(jsonBytes);
 
 	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(account, toHex(safeHash));
+	const { assertion, signerAddress } = await signSafeMessage(account, safeAddress, toHex(safeHash));
 	return buildContractSignature(assertion, signerAddress);
 }
 
@@ -591,7 +614,7 @@ export async function handleSendCalls(
 	// founding key; the set also builds an undeployed Safe's initCode). Falls
 	// back to the legacy single-key index lookup for unknown accounts.
 	let walletSigner: WalletSigner | undefined;
-	const stored = await findAccountByCredentialId(account.id);
+	const stored = storedWalletFor(account, safeAddress);
 	if (stored) {
 		// Only a genuinely multi-key account changes shape here — a single-key
 		// wallet keeps the exact historical string form (and bytes).

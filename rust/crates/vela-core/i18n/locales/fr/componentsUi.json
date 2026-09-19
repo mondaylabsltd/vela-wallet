@@ -191,6 +191,7 @@
       "techIdentityToken": "Jeton",
       "techIdentityRecipient": "Destinataire",
       "copyValue": "Copier",
+      "signWith": "Signer avec",
       "viewOnExplorer": "Voir dans l’explorateur",
       "sendingToTokenContract": "Envoyé au contrat du jeton lui-même"
     },

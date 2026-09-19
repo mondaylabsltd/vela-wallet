@@ -1311,6 +1311,7 @@
    "techIdentityToken": "Token",
    "techIdentityRecipient": "Người nhận",
    "copyValue": "Sao chép",
+   "signWith": "Ký bằng",
    "viewOnExplorer": "Xem trên explorer",
    "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
   },
@@ -1565,6 +1566,28 @@
    "offline": "Ngoại tuyến",
    "httpsRequired": "Cần HTTPS",
    "invalid": "Không hợp lệ"
+  },
+  "backup": {
+   "title": "Sao lưu khóa công khai lên Ethereum",
+   "backedUp": "Đã sao lưu lên Ethereum",
+   "notBackedUp": "Chưa sao lưu",
+   "couldNotCheck": "Không kiểm tra được",
+   "explain": "Chỉ khóa công khai được công bố, để có thể tìm và dựng lại ví này từ Ethereum. Khóa riêng không bao giờ rời khỏi thiết bị của bạn.",
+   "intent": "Sao lưu khóa công khai",
+   "registeredAs": "Tên đã đăng ký",
+   "publicKeys": "Số khóa công khai"
+  },
+  "keys": {
+   "title": "Khóa",
+   "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
+   "keyN": "Khóa {{n}}",
+   "notSynced": "Gắn với thiết bị",
+   "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",
+   "publicKey": "Khóa công khai",
+   "credential": "Thông tin xác thực",
+   "transport": "Phương thức truyền",
+   "attestation": "Chứng thực",
+   "userVerified": "Đã xác minh người dùng"
   }
  },
  "contacts": {

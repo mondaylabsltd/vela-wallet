@@ -1447,6 +1447,56 @@ async function sendUserOp(
  * calldata (`claim()` = 4 bytes, `deposit(uint256)` = 36 bytes), which a length threshold would
  * wrongly wave through onto the too-low floor.
  */
+/**
+ * A floor for `callGasLimit` measured from the inner calls THEMSELVES.
+ *
+ * The bundler estimates `callGasLimit` as `eth_estimateGas({ to: sender, data:
+ * callData, from: EntryPoint })`. For a Safe that is NOT deployed yet the
+ * sender has no code, so that call "succeeds" trivially and the estimate is
+ * 21k plus calldata — about 118k for a 4.3M-gas contract call. Padded 1.5×
+ * twice it became 265,786, the bundler accepted the operation and then never
+ * bundled it (its execution would run out of gas), and the wallet reported a
+ * two-minute timeout. First met deploying the multi-key golden Safe on Base
+ * to back up its registry record (spec 062, 2026-09-18); it waits for ANY
+ * fresh chain whose first operation is a real contract call.
+ *
+ * The inner calls can be estimated on their own, from the Safe's address,
+ * whether or not the Safe has code — `eth_estimateGas` from a codeless
+ * account is an ordinary call. Each real contract call is measured and padded
+ * for the `executeUserOp` → (MultiSend →) CALL frames around it; plain
+ * transfers are not measured (the defaults cover them, and a transfer is not
+ * what this protects). `null` = no floor could be measured, which keeps the
+ * bundler's figure and the existing "could not estimate" guard.
+ */
+export async function innerCallsGasFloor(
+	chainId: number,
+	sender: string,
+	calls: MultiSendCall[]
+): Promise<bigint | null> {
+	const measured = calls.filter((c) => !isPlainTransferCall(c));
+	if (measured.length === 0) return null;
+	let total = 0n;
+	for (const call of measured) {
+		const response = await rpcCall(
+			'eth_estimateGas',
+			[
+				{
+					from: sender,
+					to: call.to,
+					value: '0x' + BigInt(call.value || '0').toString(16),
+					data: '0x' + toHex(call.data)
+				}
+			],
+			chainId
+		).catch(() => null);
+		const hex = response && !response.error ? response.result : null;
+		if (typeof hex !== 'string' || !hex.startsWith('0x')) return null;
+		// 25% for the call itself, plus the frames around it.
+		total += (BigInt(hex) * 125n) / 100n + 60_000n;
+	}
+	return total + 50_000n * BigInt(calls.length);
+}
+
 export function isPlainTransferCall(c: { data: Uint8Array }): boolean {
 	if (c.data.length === 0) return true; // native value transfer
 	return (
@@ -1557,6 +1607,10 @@ async function sendUserOpTempo(
 			? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
 			: bigintMax((est.verificationGasLimit * 15n) / 10n, TEMPO_VERIFICATION_GAS_UNDEPLOYED);
 		userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, callGasFloor);
+		if (hasContractCall) {
+			const floor = await innerCallsGasFloor(chainId, safeAddress, innerCalls);
+			if (floor !== null && floor > userOp.callGasLimit) userOp.callGasLimit = floor;
+		}
 		userOp.preVerificationGas = est.preVerificationGas + 10_000n;
 	} catch (err) {
 		console.error(
@@ -1795,6 +1849,16 @@ async function sendUserOpInBand(
 			? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
 			: bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_UNDEPLOYED);
 		userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, CALL_GAS_LIMIT);
+		if (hasContractCall) {
+			const floor = await innerCallsGasFloor(chainId, safeAddress, innerCalls);
+			if (floor !== null && floor > userOp.callGasLimit) {
+				console.log("[InBand] callGasLimit raised to the inner calls' own estimate", {
+					bundler: userOp.callGasLimit.toString(),
+					inner: floor.toString()
+				});
+				userOp.callGasLimit = floor;
+			}
+		}
 		userOp.preVerificationGas = est.preVerificationGas + 10_000n;
 	} catch (err) {
 		console.error(

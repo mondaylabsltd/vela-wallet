@@ -1,9 +1,11 @@
 <script lang="ts">
 	/**
 	 * A site or token's mark: its first letter on a tint of its own brand
-	 * colour (spec 022). Deliberately NOT a fetched favicon — a wallet that
-	 * downloads an icon from the site it is about to warn you about has handed
-	 * that site a tracking pixel and a way to impersonate a brand.
+	 * colour (spec 022). For a SITE this is the fallback, not the mark: the
+	 * signing header draws the site's own icon over it when one can be fetched
+	 * (founder ruling 2026-09-19, superseding 022's "never fetch a favicon").
+	 * The letter is what shows until the icon lands and what stays when the
+	 * site has none.
 	 */
 	interface Props {
 		letter: string;

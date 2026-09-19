@@ -53,17 +53,24 @@ pub const REGISTRY: &str = "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9";
 pub const SOURCE_CHAIN: u32 = 100;
 pub const TARGET_CHAIN: u32 = 1;
 
+/// Same-domain deployments a backup may go to. Ethereum is the product; Base
+/// is where the operator deployed a rehearsal copy (2026-09-18) so the whole
+/// send can be exercised for cents. Any other target is refused before a
+/// single call is made — the registry's frozen domain would make a mistaken
+/// chain a silent no-op, not an error.
+pub const TARGET_CHAINS: [u32; 2] = [TARGET_CHAIN, 8453];
+
 /// A key founds few wallets; the newest are the ones worth a call.
-const MAX_UNITS: u64 = 8;
+pub(crate) const MAX_UNITS: u64 = 8;
 
 const SIG_VERSION: &str = "VERSION()";
-const SIG_GROUPS_OF_KEY: &str = "getGroupsOfKey(bytes,uint256,uint256,bool)";
-const SIG_GET_UNIT: &str = "getUnit(uint256)";
+pub(crate) const SIG_GROUPS_OF_KEY: &str = "getGroupsOfKey(bytes,uint256,uint256,bool)";
+pub(crate) const SIG_GET_UNIT: &str = "getUnit(uint256)";
 const SIG_UNIT_BY_GROUP_KEY: &str = "getUnitByGroupKey(bytes)";
 const SIG_REGISTER_PAYLOAD: &str = "registerPayloadOf(uint256)";
 
 /// `Unit { rpId, metadata, groupPublicKey, contentHash, memberCount, createdAt }`.
-const UNIT_TUPLE: &str = "(string,bytes,bytes,bytes32,uint32,uint256)";
+pub(crate) const UNIT_TUPLE: &str = "(string,bytes,bytes,bytes32,uint32,uint256)";
 
 const PROOF: &str = "(bytes,string,uint256,uint256,uint256,uint256)";
 
@@ -129,7 +136,7 @@ fn done(state: BackupState) -> BackupStep {
 // Encoding the five questions
 // ---------------------------------------------------------------------------
 
-fn call_data(signature: &str, args: &[DynSolValue]) -> Option<String> {
+pub(crate) fn call_data(signature: &str, args: &[DynSolValue]) -> Option<String> {
     let mut data = primitives::function_selector(signature).ok()?;
     data.extend(DynSolValue::Tuple(args.to_vec()).abi_encode_params());
     Some(primitives::to_hex(&data, true))
@@ -152,14 +159,14 @@ fn ask(id: &str, chain_id: u32, signature: &str, args: &[DynSolValue]) -> Option
 
 /// The returned bytes of an answered call. `None` = nobody answered (or not
 /// hex) — which is never a verdict.
-fn returned(answer: &LookupAnswer) -> Option<Vec<u8>> {
+pub(crate) fn returned(answer: &LookupAnswer) -> Option<Vec<u8>> {
     if answer.outcome != LookupOutcome::Ok {
         return None;
     }
     primitives::from_hex(answer.body.as_deref()?).ok()
 }
 
-fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
+pub(crate) fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
     match DynSolType::parse(types)
         .ok()?
         .abi_decode_params(data)
@@ -170,12 +177,12 @@ fn decode(types: &str, data: &[u8]) -> Option<Vec<DynSolValue>> {
     }
 }
 
-struct Unit {
-    metadata: Vec<u8>,
-    group_public_key: Vec<u8>,
+pub(crate) struct Unit {
+    pub(crate) metadata: Vec<u8>,
+    pub(crate) group_public_key: Vec<u8>,
 }
 
-fn unit_from(value: &DynSolValue) -> Option<Unit> {
+pub(crate) fn unit_from(value: &DynSolValue) -> Option<Unit> {
     let fields = value.as_tuple()?;
     Some(Unit {
         metadata: fields.get(1)?.as_bytes()?.to_vec(),
@@ -185,7 +192,7 @@ fn unit_from(value: &DynSolValue) -> Option<Unit> {
 
 /// Is this unit's metadata about `address_lower`? A blob that does not decode
 /// is about nobody.
-fn names(unit: &Unit, address_lower: &str) -> bool {
+pub(crate) fn names(unit: &Unit, address_lower: &str) -> bool {
     RegistryMetadata::decode_hex(&primitives::to_hex(&unit.metadata, false))
         .is_ok_and(|metadata| metadata.address.to_lowercase() == address_lower)
 }
@@ -207,7 +214,44 @@ fn payload_is_this_unit(payload: &[u8], unit: &Unit) -> bool {
         && inputs.get(2).and_then(DynSolValue::as_bytes) == Some(unit.group_public_key.as_slice())
 }
 
-fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
+/// What a `register(...)` call says about the wallet it registers — for the
+/// signing sheet, which draws the backup as what it is rather than as a
+/// stranger's 4 KB contract call (spec 062 §5a).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegisterCall {
+    /// The wallet the record is FOR, EIP-55 as the metadata carries it.
+    pub wallet_address: String,
+    /// `key_names[0]` — the wallet's name as its owner registered it.
+    pub wallet_name: String,
+    /// The founding keys the record carries.
+    pub key_count: usize,
+}
+
+/// Read a `register(...)` calldata. `None` unless it is exactly that call with
+/// metadata this build can decode — then the sheet falls back to the ordinary
+/// ladder, never to a guess.
+#[must_use]
+pub fn describe_register_call(data: &[u8]) -> Option<RegisterCall> {
+    let register = Function::parse(&register_signature()).ok()?;
+    if data.len() < 4 || data[..4] != register.selector()[..] {
+        return None;
+    }
+    let inputs = register.abi_decode_input(&data[4..]).ok()?;
+    let metadata = inputs.get(1)?.as_bytes()?;
+    let members = inputs.get(4)?.as_array()?;
+    let metadata = RegistryMetadata::decode_hex(&primitives::to_hex(metadata, false)).ok()?;
+    let wallet_name = metadata.key_names.first()?.trim().to_owned();
+    if wallet_name.is_empty() || members.is_empty() {
+        return None;
+    }
+    Some(RegisterCall {
+        wallet_address: metadata.address,
+        wallet_name,
+        key_count: members.len(),
+    })
+}
+
+pub(crate) fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
     let bytes = primitives::from_hex(public_key_hex).ok()?;
     match bytes.len() {
         65 if bytes[0] == 0x04 => Some(bytes),
@@ -217,7 +261,7 @@ fn public_key_bytes(public_key_hex: &str) -> Option<Vec<u8>> {
     }
 }
 
-fn is_address(address: &str) -> bool {
+pub(crate) fn is_address(address: &str) -> bool {
     address
         .strip_prefix("0x")
         .is_some_and(|hex| hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
@@ -234,7 +278,21 @@ fn is_address(address: &str) -> bool {
 /// is the whole transcript, in any order.
 #[must_use]
 pub fn step(address: &str, founding_public_key_hex: &str, answers: &[LookupAnswer]) -> BackupStep {
+    step_to(address, founding_public_key_hex, TARGET_CHAIN, answers)
+}
+
+/// [`step`] towards a chosen [`TARGET_CHAINS`] entry.
+#[must_use]
+pub fn step_to(
+    address: &str,
+    founding_public_key_hex: &str,
+    target_chain: u32,
+    answers: &[LookupAnswer],
+) -> BackupStep {
     let could_not = || done(BackupState::CouldNotCheck);
+    if !TARGET_CHAINS.contains(&target_chain) {
+        return could_not();
+    }
     let Some(public_key) = public_key_bytes(founding_public_key_hex) else {
         return could_not();
     };
@@ -246,7 +304,7 @@ pub fn step(address: &str, founding_public_key_hex: &str, answers: &[LookupAnswe
 
     // 1. Is there anywhere to back up TO?
     let Some(target) = answer("target") else {
-        return ask("target", TARGET_CHAIN, SIG_VERSION, &[]).unwrap_or_else(could_not);
+        return ask("target", target_chain, SIG_VERSION, &[]).unwrap_or_else(could_not);
     };
     match returned(target) {
         None => return could_not(),
@@ -304,7 +362,7 @@ pub fn step(address: &str, founding_public_key_hex: &str, answers: &[LookupAnswe
     // 4. Is it on Ethereum already?
     let Some(mirrored) = answer("mirrored") else {
         let args = [DynSolValue::Bytes(unit.group_public_key.clone())];
-        return ask("mirrored", TARGET_CHAIN, SIG_UNIT_BY_GROUP_KEY, &args)
+        return ask("mirrored", target_chain, SIG_UNIT_BY_GROUP_KEY, &args)
             .unwrap_or_else(could_not);
     };
     let Some(exists) = returned(mirrored)
@@ -338,7 +396,7 @@ pub fn step(address: &str, founding_public_key_hex: &str, answers: &[LookupAnswe
     BackupStep::Done {
         state: BackupState::NotBackedUp,
         call: Some(BackupCall {
-            chain_id: TARGET_CHAIN,
+            chain_id: target_chain,
             to: REGISTRY.to_owned(),
             value: "0".to_owned(),
             data: primitives::to_hex(&payload, true),
@@ -351,11 +409,18 @@ pub fn step(address: &str, founding_public_key_hex: &str, answers: &[LookupAnswe
 /// the return a `BackupStep`. A transcript that does not parse is read as
 /// empty — the walk starts over rather than failing.
 #[must_use]
-pub fn step_json(address: &str, founding_public_key_hex: &str, answers_json: &str) -> String {
+pub fn step_json(
+    address: &str,
+    founding_public_key_hex: &str,
+    target_chain: Option<u32>,
+    answers_json: &str,
+) -> String {
     let answers: Vec<LookupAnswer> = serde_json::from_str(answers_json).unwrap_or_default();
-    serde_json::to_string(&step(address, founding_public_key_hex, &answers)).unwrap_or_else(|_| {
-        r#"{"type":"done","state":"could_not_check","call":null,"unit_id":null}"#.to_owned()
-    })
+    let target = target_chain.unwrap_or(TARGET_CHAIN);
+    serde_json::to_string(&step_to(address, founding_public_key_hex, target, &answers))
+        .unwrap_or_else(|_| {
+            r#"{"type":"done","state":"could_not_check","call":null,"unit_id":null}"#.to_owned()
+        })
 }
 
 #[cfg(test)]
@@ -664,15 +729,70 @@ mod tests {
     }
 
     #[test]
+    fn a_rehearsal_target_is_asked_the_same_questions_and_any_other_chain_is_refused() {
+        let key = founding_key();
+        let (id, chain, _) = asked(&step_to(SAFE, &key, 8453, &[]));
+        assert_eq!((id.as_str(), chain), ("target", 8453));
+        let transcript = [
+            deployed(),
+            groups(&[10]),
+            unit(10, SAFE, 2),
+            mirrored(false),
+        ];
+        let (id, chain, _) = asked(&step_to(SAFE, &key, 8453, &transcript));
+        assert_eq!(
+            (id.as_str(), chain),
+            ("payload", 100),
+            "the record still comes from Gnosis"
+        );
+        let mut with_payload = transcript.to_vec();
+        with_payload.push(payload(register_payload(SAFE, 2)));
+        let BackupStep::Done {
+            call: Some(call), ..
+        } = step_to(SAFE, &key, 8453, &with_payload)
+        else {
+            unreachable!("expected the call");
+        };
+        assert_eq!(call.chain_id, 8453);
+        // Gnosis itself, or any chain without a same-domain deployment: refused
+        // before a single request — never a call to send.
+        for wrong in [100, 10, 42161] {
+            assert_eq!(
+                step_to(SAFE, &key, wrong, &[]),
+                done(BackupState::CouldNotCheck)
+            );
+        }
+        let json = step_json(SAFE, &key, Some(8453), "[]");
+        assert!(json.contains(r#""chain_id":8453"#), "{json}");
+    }
+
+    #[test]
+    fn a_register_call_describes_the_wallet_it_registers() {
+        assert_eq!(
+            describe_register_call(&register_payload(SAFE, 2)),
+            Some(RegisterCall {
+                wallet_address: SAFE.to_owned(),
+                wallet_name: "Interleave".to_owned(),
+                key_count: 1,
+            })
+        );
+        assert_eq!(describe_register_call(&[0xde, 0xad, 0xbe, 0xef]), None);
+        assert_eq!(
+            describe_register_call(&register_payload(SAFE, 2)[..100]),
+            None
+        );
+    }
+
+    #[test]
     fn the_json_door_speaks_the_same_contract() {
-        let first = step_json(SAFE, &founding_key(), "[]");
+        let first = step_json(SAFE, &founding_key(), None, "[]");
         assert!(
             first.contains(r#""type":"ask""#) && first.contains(r#""chain_id":1"#),
             "{first}"
         );
         let answers = serde_json::to_string(&vec![ok("target", "0x")]).unwrap_or_default();
         assert_eq!(
-            step_json(SAFE, &founding_key(), &answers),
+            step_json(SAFE, &founding_key(), None, &answers),
             r#"{"type":"done","state":"unavailable","call":null,"unit_id":null}"#
         );
     }

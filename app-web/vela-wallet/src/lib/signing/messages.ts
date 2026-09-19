@@ -132,6 +132,10 @@ export interface SigningMessages {
 	balancesBlindSimulated: string;
 	balancesBestEffort: string;
 	feeLabel: string;
+	/** The fee row while the quote is in flight. */
+	feeEstimating: string;
+	/** The fee row after the quote failed; tapping it asks again. */
+	feeRetry: string;
 	feeTokenTitle: string;
 	feeEstimated: string;
 	feeBalance: string;
@@ -143,6 +147,17 @@ export interface SigningMessages {
 	techIdentityToken: string;
 	techIdentityRecipient: string;
 	copyValue: string;
+	/** The "Sign with" row: the create flow's own words for where a passkey is. */
+	/** The wallet's own key backup, in the person's language (the core's built-in result is English). */
+	backupIntent: string;
+	backupRegisteredAs: string;
+	backupAddress: string;
+	backupPublicKeys: string;
+	signWithLabel: string;
+	signWithAuto: string;
+	signWithPlatform: string;
+	signWithHybrid: string;
+	signWithSecurityKey: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;

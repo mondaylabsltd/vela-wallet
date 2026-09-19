@@ -48,26 +48,93 @@ object SigningLive {
         val money: WalletLive.Money = WalletLive.Money.dollars(),
         /** The page's host, for the SIWE verdict's words (spec 046). */
         val origin: String? = null,
+        /** The request's chain, for its logo. */
+        val chainId: Int = 0,
+        /** The person's "Sign with" choice for THIS request, and whether its list is open. */
+        val signMethod: String = "auto",
+        val signWithOpen: Boolean = false,
     )
+
+    /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
+    const val WALLET_TRANSPORT = "wallet"
+
+    /**
+     * Where a site's icon conventionally lives, best first. Https only: never
+     * over plain http, where anybody on the path could answer with somebody
+     * else's brand.
+     */
+    fun siteIconUrls(origin: String): List<String> {
+        if (!origin.startsWith("https://")) return emptyList()
+        val base = "https://" + origin.removePrefix("https://").substringBefore('/')
+        return if (base.length <= "https://".length) emptyList() else listOf("$base/apple-touch-icon.png", "$base/favicon.ico")
+    }
+
+    /** The "Sign with" row: the create flow's own words for where a passkey is. */
+    fun signWith(ctx: Context): SignWithModel {
+        val s = ctx.strings
+        val titles = linkedMapOf(
+            "auto" to s.t("common.automatic"),
+            "platform" to s.t("onboarding.create.methodPlatformTitle"),
+            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
+            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
+        )
+        return SignWithModel(
+            label = s.t("componentsUi.signing.signWith"),
+            value = titles[ctx.signMethod] ?: titles.getValue("auto"),
+            open = ctx.signWithOpen,
+            options = titles.map { (id, title) -> SignWithOption(id, title, id == ctx.signMethod) },
+        )
+    }
 
     private fun VelaStrings.s(key: String) = t("componentsUi.signing.$key")
     private fun VelaStrings.s(key: String, vars: Map<String, String>) = t("componentsUi.signing.$key", vars)
     private fun VelaStrings.a(key: String) = t("componentsUi.signingApprove.$key")
     private fun VelaStrings.a(key: String, vars: Map<String, String>) = t("componentsUi.signingApprove.$key", vars)
 
-    fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, clear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context, sim: SigningController.SimOutcome? = null): SigningScreenModel {
+    /** `registry_backup::REGISTRY` — the one contract the wallet's own backup request calls. */
+    private const val PASSKEY_REGISTRY = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+
+    /**
+     * The wallet's own key backup, in the person's language. The core's built-in
+     * results are English, like the descriptors beside them ("the words stay in
+     * the shell"); this one is OURS, and a Chinese sheet whose three most
+     * important lines were English read as half-finished (founder, 2026-09-19).
+     * Matched on the request being first-party AND the verified registry
+     * address — never on the English words.
+     */
+    fun localizedOwnBackup(clear: ClearSigningView, own: Boolean, strings: VelaStrings): ClearSigningView {
+        val result = clear.result ?: return clear
+        if (!own || !result.verified || result.contract_address?.equals(PASSKEY_REGISTRY, ignoreCase = true) != true) return clear
+        val labels = listOf("settingsModals.backup.registeredAs", "contacts.addressLabel", "settingsModals.backup.publicKeys").map(strings::t)
+        return clear.copy(
+            result = result.copy(
+                intent = strings.t("settingsModals.backup.intent"),
+                fields = result.fields.mapIndexed { index, field -> field.copy(label = labels.getOrElse(index) { field.label }) },
+            ),
+        )
+    }
+
+    fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, rawClear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context, sim: SigningController.SimOutcome? = null): SigningScreenModel {
         val s = ctx.strings
+        val clear = localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s)
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
         val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) + simBlocks(sim, ctx) + guardBlocks(guard, s)
+        // The wallet's own request (the key backup) is not a site: its own mark
+        // and name, and no host — "getvela.app" under a letter read as a stranger.
+        val own = request.transportId == WALLET_TRANSPORT
         return fallback.copy(
-            dappName = host,
-            dappHost = host,
+            dappName = if (own) "Vela Wallet" else host,
+            dappHost = if (own) "" else host,
             dappLetter = ExploreLive.letterOf(host),
             dappTint = ExploreLive.tintOf(host),
+            dappOwn = own,
+            dappIconUrls = if (own) emptyList() else siteIconUrls(request.origin),
             networkName = ctx.chainName,
             networkDot = ctx.chainDot,
+            networkLogoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(ctx.chainId),
+            signWith = signWith(ctx),
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,

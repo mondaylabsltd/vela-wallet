@@ -1311,6 +1311,7 @@
    "techIdentityToken": "토큰",
    "techIdentityRecipient": "받는 사람",
    "copyValue": "복사",
+   "signWith": "서명 방법",
    "viewOnExplorer": "탐색기에서 보기",
    "sendingToTokenContract": "토큰 자체 컨트랙트로 전송"
   },
@@ -1565,6 +1566,28 @@
    "offline": "오프라인",
    "httpsRequired": "HTTPS 필요",
    "invalid": "유효하지 않음"
+  },
+  "backup": {
+   "title": "공개 키를 이더리움에 백업",
+   "backedUp": "이더리움에 백업됨",
+   "notBackedUp": "아직 백업되지 않음",
+   "couldNotCheck": "확인할 수 없음",
+   "explain": "공개 키만 게시되며, 이더리움에서 이 지갑을 찾아 복원하는 데 쓰입니다. 개인 키는 기기를 벗어나지 않습니다.",
+   "intent": "공개 키 백업",
+   "registeredAs": "등록된 이름",
+   "publicKeys": "공개 키 수"
+  },
+  "keys": {
+   "title": "키",
+   "subtitle": "이 패스키 중 어느 하나로도 이 지갑에 서명할 수 있으며, 모든 네트워크에서 동일합니다.",
+   "keyN": "키 {{n}}",
+   "notSynced": "기기 전용",
+   "fromDevice": "레지스트리에 연결할 수 없습니다. 이 기기에 저장된 내용만 표시합니다.",
+   "publicKey": "공개 키",
+   "credential": "자격 증명",
+   "transport": "전송 방식",
+   "attestation": "증명",
+   "userVerified": "사용자 확인됨"
   }
  },
  "contacts": {

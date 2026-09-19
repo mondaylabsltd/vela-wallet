@@ -264,6 +264,38 @@ export interface SettingsMessages {
 		updatedLabel: string;
 		retry: string;
 	};
+	/** The Ethereum backup row (spec 062): the founding record's standing there. */
+	backup: {
+		title: string;
+		backedUp: string;
+		notBackedUp: string;
+		couldNotCheck: string;
+		checking: string;
+		/** What is being published, and what is not: PUBLIC keys only. */
+		explain: string;
+	};
+	/** The keys that control this wallet (spec 062). */
+	keys: {
+		title: string;
+		subtitle: string;
+		/** `Key {{n}}` — a key nobody named. */
+		keyN: string;
+		synced: string;
+		notSynced: string;
+		/** The registry did not answer; the rows are the device's memory. */
+		fromDevice: string;
+		providerPlatform: string;
+		providerGeneric: string;
+		providerSecurityKey: string;
+		/** The labels of what a key row opens onto — the registry explorer's facts. */
+		publicKey: string;
+		credential: string;
+		transport: string;
+		attestation: string;
+		userVerified: string;
+		copy: string;
+		copied: string;
+	};
 	relayer: {
 		title: string;
 		lead: string;
@@ -367,6 +399,28 @@ export const SETTINGS_KEYS = [
 	'settings.networks.online',
 	'settings.networks.slow',
 	'settingsModals.health.offline',
+	'settingsModals.backup.title',
+	'settingsModals.backup.backedUp',
+	'settingsModals.backup.notBackedUp',
+	'settingsModals.backup.couldNotCheck',
+	'componentsUi.funding.checking',
+	'settingsModals.keys.title',
+	'settingsModals.keys.subtitle',
+	'settingsModals.keys.keyN',
+	'settingsModals.keys.notSynced',
+	'settingsModals.keys.fromDevice',
+	'settingsModals.keys.publicKey',
+	'settingsModals.keys.credential',
+	'settingsModals.keys.transport',
+	'settingsModals.keys.attestation',
+	'settingsModals.keys.userVerified',
+	'settingsModals.backup.explain',
+	'componentsUi.signing.copyValue',
+	'receive.copied',
+	'onboarding.create.keySyncedBadge',
+	'onboarding.create.providerPlatform',
+	'onboarding.create.providerGeneric',
+	'onboarding.create.providerSecurityKey',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
 	'settingsModals.network.fieldRpcUrl',

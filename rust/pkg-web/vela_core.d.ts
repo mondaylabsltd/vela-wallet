@@ -791,8 +791,36 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array,
  * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
  * requests to perform, or the verdict and, when the wallet is not backed up,
  * the one call that would do it. No passkey is involved at any point.
+ * `target_chain` is Ethereum when absent; Base (8453) is the operator's
+ * rehearsal deployment; anything else is refused.
  */
-export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string): string;
+export function registryBackupStep(address: string, founding_public_key_hex: string, answers_json: string, target_chain?: number | null): string;
+
+/**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ */
+export function registryChainKeyPlan(public_key_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainKeyStatus(has_entry_hex: string, groups_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainUnit(unit_id: number, unit_hex: string, members_hex: string): string | undefined;
+
+/**
+ * See [`registry_chain_key_plan`].
+ */
+export function registryChainUnitPlan(unit_id: number): string | undefined;
 
 /**
  * **The registered name behind an address — the next step of the lookup.**
@@ -821,6 +849,14 @@ export function toQuantity(value: string): string;
  * choosing which contract-mirrored rule set applies).
  */
 export function validateClientData(kind: string, client_data_json: Uint8Array, authenticator_data: Uint8Array): void;
+
+/**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). `device_keys_json` is the account record's `keys` array (or a
+ * one-element array built from the legacy scalars); the answer is `ask` with
+ * `eth_call`s to perform, or `done` with the rows and where they came from.
+ */
+export function walletKeysStep(address: string, device_keys_json: string, answers_json: string): string;
 
 export function webauthnSigningHash(authenticator_data: Uint8Array, client_data_json: Uint8Array): Uint8Array;
 
@@ -988,7 +1024,11 @@ export interface InitOutput {
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
-    readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly registryChainKeyPlan: (a: number, b: number) => [number, number];
+    readonly registryChainKeyStatus: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryChainUnit: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly registryChainUnitPlan: (a: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
@@ -1020,6 +1060,7 @@ export interface InitOutput {
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

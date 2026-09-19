@@ -9564,13 +9564,14 @@ public func recoverPublicKeyFromAssertions(a: WebAuthnAssertion, b: WebAuthnAsse
  * requests to perform, or the verdict and, when the wallet is not backed up,
  * the one call that would do it. No passkey is involved at any point.
  */
-public func registryBackupStep(address: String, foundingPublicKeyHex: String, answersJson: String) -> String  {
+public func registryBackupStep(address: String, foundingPublicKeyHex: String, answersJson: String, targetChain: UInt32?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_registry_backup_step(
         FfiConverterString.lower(address),
         FfiConverterString.lower(foundingPublicKeyHex),
-        FfiConverterString.lower(answersJson),uniffiCallStatus
+        FfiConverterString.lower(answersJson),
+        FfiConverterOptionUInt32.lower(targetChain),uniffiCallStatus
     )
 })
 }
@@ -9597,6 +9598,59 @@ public func registryBuildMemberProof(authenticatorDataHex: String, clientDataJso
         FfiConverterString.lower(authenticatorDataHex),
         FfiConverterString.lower(clientDataJsonHex),
         FfiConverterString.lower(signatureDerHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ */
+public func registryChainKeyPlan(publicKeyHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_key_plan(
+        FfiConverterString.lower(publicKeyHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainKeyStatus(hasEntryHex: String, groupsHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_key_status(
+        FfiConverterString.lower(hasEntryHex),
+        FfiConverterString.lower(groupsHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainUnit(unitId: UInt32, unitHex: String, membersHex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_unit(
+        FfiConverterUInt32.lower(unitId),
+        FfiConverterString.lower(unitHex),
+        FfiConverterString.lower(membersHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * See [`registry_chain_key_plan`].
+ */
+public func registryChainUnitPlan(unitId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_chain_unit_plan(
+        FfiConverterUInt32.lower(unitId),uniffiCallStatus
     )
 })
 }
@@ -9673,6 +9727,20 @@ public func sha256(data: Data) -> Data  {
     )
 })
 }
+/**
+ * "Sign with": which credential a ceremony is pinned to and how it is reached,
+ * for the method the person chose — `None` for `auto`. See
+ * `vela_core::wallet_keys::sign_route`.
+ */
+public func signRoute(deviceKeysJson: String, method: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_route(
+        FfiConverterString.lower(deviceKeysJson),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
 public func toBase64url(data: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -9711,6 +9779,19 @@ public func userOpApplyEstimate(draft: UserOpDraft, verificationGasLimit: String
         FfiConverterString.lower(callGasLimit),
         FfiConverterString.lower(preVerificationGas),
         FfiConverterTypeGasFloorsRecord_lower(floors),uniffiCallStatus
+    )
+})
+}
+/**
+ * The calls a shell must measure on their own (`eth_estimateGas` from the
+ * Safe's address) before submitting: every one that is more than a plain
+ * transfer, by index into `calls`. Empty = nothing to measure.
+ */
+public func userOpCallsToMeasure(calls: [UserOpCall])throws  -> [UInt32]  {
+    return try  FfiConverterSequenceUInt32.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_calls_to_measure(
+        FfiConverterSequenceTypeUserOpCall.lower(calls),uniffiCallStatus
     )
 })
 }
@@ -9757,6 +9838,24 @@ public func userOpHasContractCall(calls: [UserOpCall])throws  -> Bool  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_user_op_has_contract_call(
         FfiConverterSequenceTypeUserOpCall.lower(calls),uniffiCallStatus
+    )
+})
+}
+/**
+ * The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
+ * `measured` are the shell's `eth_estimateGas` figures for the calls
+ * `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
+ * inner call. The draft's `call_gas_limit` is raised to the result when it is
+ * higher — an undeployed Safe's first contract call must not go out with the
+ * bundler's trivial "no code here" estimate. `None` = nothing to raise.
+ */
+public func userOpRaiseCallGas(draft: UserOpDraft, measured: [String], callCount: UInt32)throws  -> UserOpDraft  {
+    return try  FfiConverterTypeUserOpDraft_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_raise_call_gas(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterSequenceString.lower(measured),
+        FfiConverterUInt32.lower(callCount),uniffiCallStatus
     )
 })
 }
@@ -9823,6 +9922,20 @@ public func validateClientData(kind: ClientDataKind, clientDataJson: Data, authe
         FfiConverterData.lower(authenticatorData),uniffiCallStatus
     )
 }
+}
+/**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). See `vela_core::wallet_keys`.
+ */
+public func walletKeysStep(address: String, deviceKeysJson: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_wallet_keys_step(
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(deviceKeysJson),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
 }
 public func webauthnSigningHash(authenticatorData: Data, clientDataJson: Data) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
@@ -10264,13 +10377,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_recover_public_key_from_assertions() != 37092) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_registry_backup_step() != 7482) {
+    if (uniffi_vela_core_uniffi_checksum_func_registry_backup_step() != 53712) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_build_group_proof() != 16094) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_build_member_proof() != 44131) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_key_plan() != 57974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_key_status() != 55529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_unit() != 39814) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_chain_unit_plan() != 56149) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_group_public_key_from_seed() != 7492) {
@@ -10291,6 +10416,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 22739) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_to_base64url() != 33334) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10303,6 +10431,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_apply_estimate() != 50114) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_calls_to_measure() != 59686) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_draft() != 31118) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10310,6 +10441,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_has_contract_call() != 47699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_raise_call_gas() != 29305) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_relay_json() != 41999) {
@@ -10325,6 +10459,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_wallet_keys_step() != 48208) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_webauthn_signing_hash() != 22291) {

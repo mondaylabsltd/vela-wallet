@@ -549,6 +549,50 @@ pub fn passkey_provider_icon_data_uri(aaguid: &str, dark: bool) -> Option<String
     vela_core::passkey::provider_icon_data_uri(aaguid, dark)
 }
 
+/// **Signing in when the index is gone** (spec 062): the registry contract's
+/// side of the index's two read questions, answered in the index's own JSON
+/// shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+/// try (in order) and the two `eth_call`s to make on one of them; the matching
+/// function turns the two raw results into the body, or nothing when that
+/// chain did not really answer (the shell then tries the next). Unit ids are
+/// per deployment: ask about a key's units on the chain that listed them.
+#[wasm_bindgen(js_name = registryChainKeyPlan)]
+#[must_use]
+pub fn registry_chain_key_plan(public_key_hex: &str) -> Option<String> {
+    vela_core::registry_chain::key_status_plan_json(public_key_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[wasm_bindgen(js_name = registryChainKeyStatus)]
+#[must_use]
+pub fn registry_chain_key_status(has_entry_hex: &str, groups_hex: &str) -> Option<String> {
+    vela_core::registry_chain::key_status_json(has_entry_hex, groups_hex)
+}
+
+/// See [`registry_chain_key_plan`].
+#[wasm_bindgen(js_name = registryChainUnitPlan)]
+#[must_use]
+pub fn registry_chain_unit_plan(unit_id: u32) -> Option<String> {
+    vela_core::registry_chain::unit_plan_json(u64::from(unit_id))
+}
+
+/// See [`registry_chain_key_plan`].
+#[wasm_bindgen(js_name = registryChainUnit)]
+#[must_use]
+pub fn registry_chain_unit(unit_id: u32, unit_hex: &str, members_hex: &str) -> Option<String> {
+    vela_core::registry_chain::unit_json(u64::from(unit_id), unit_hex, members_hex)
+}
+
+/// Which passkeys control the wallet at `address` — the Settings keys view
+/// (spec 062). `device_keys_json` is the account record's `keys` array (or a
+/// one-element array built from the legacy scalars); the answer is `ask` with
+/// `eth_call`s to perform, or `done` with the rows and where they came from.
+#[wasm_bindgen(js_name = walletKeysStep)]
+#[must_use]
+pub fn wallet_keys_step(address: &str, device_keys_json: &str, answers_json: &str) -> String {
+    vela_core::wallet_keys::step_json(address, device_keys_json, answers_json)
+}
+
 /// **Backing the founding record up to Ethereum — the next step of the walk**
 /// (spec 062). Server-free: every request is an `eth_call` against the
 /// registry contract, on Gnosis (where the record lives) or Ethereum (where
@@ -556,14 +600,22 @@ pub fn passkey_provider_icon_data_uri(aaguid: &str, dark: bool) -> Option<String
 /// same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
 /// requests to perform, or the verdict and, when the wallet is not backed up,
 /// the one call that would do it. No passkey is involved at any point.
+/// `target_chain` is Ethereum when absent; Base (8453) is the operator's
+/// rehearsal deployment; anything else is refused.
 #[wasm_bindgen(js_name = registryBackupStep)]
 #[must_use]
 pub fn registry_backup_step(
     address: &str,
     founding_public_key_hex: &str,
     answers_json: &str,
+    target_chain: Option<u32>,
 ) -> String {
-    vela_core::registry_backup::step_json(address, founding_public_key_hex, answers_json)
+    vela_core::registry_backup::step_json(
+        address,
+        founding_public_key_hex,
+        target_chain,
+        answers_json,
+    )
 }
 
 /// **The registered name behind an address — the next step of the lookup.**

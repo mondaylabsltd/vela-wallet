@@ -83,6 +83,28 @@
       "offline": "Offline",
       "httpsRequired": "HTTPS obrigatório",
       "invalid": "Inválido"
+    },
+    "backup": {
+      "title": "Fazer backup das chaves públicas na Ethereum",
+      "backedUp": "Backup feito na Ethereum",
+      "notBackedUp": "Ainda sem backup",
+      "couldNotCheck": "Não foi possível verificar",
+      "explain": "Apenas as chaves públicas são publicadas, para que esta carteira possa ser encontrada e reconstruída a partir da Ethereum. As chaves privadas nunca saem dos seus dispositivos.",
+      "intent": "Backup das chaves públicas",
+      "registeredAs": "Registrada como",
+      "publicKeys": "Chaves públicas"
+    },
+    "keys": {
+      "title": "Chaves",
+      "subtitle": "Qualquer uma destas chaves de acesso pode assinar por esta carteira, em todas as redes.",
+      "keyN": "Chave {{n}}",
+      "notSynced": "Vinculada ao dispositivo",
+      "fromDevice": "Não foi possível consultar o registro. Mostrando o que este dispositivo lembra.",
+      "publicKey": "Chave pública",
+      "credential": "Credencial",
+      "transport": "Transporte",
+      "attestation": "Atestação",
+      "userVerified": "Usuário verificado"
     }
   }
 }

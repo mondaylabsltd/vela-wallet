@@ -549,6 +549,8 @@ export interface SettingsHomeModel {
 	tab: 'wallet' | 'contacts' | 'explore' | 'settings';
 	tabs: { wallet: string; contacts: string; explore: string; settings: string };
 	account: AccountRowModel;
+	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+	keys?: WalletKeysModel;
 	sections: SettingsSectionModel[];
 	appearance: { theme: SegmentedModel; avatar: SegmentedModel; textScale: TextScaleModel };
 	signOut: { label: string };
@@ -619,6 +621,58 @@ export interface DropdownModel {
 	rows: SelectRowModel[];
 }
 
+/**
+ * The Ethereum backup row (spec 062). One line, three states; the row is a
+ * button only while there is something to do — a link is not a verdict, so
+ * the wallet route checks again before it opens the sheet.
+ */
+export interface EthereumBackupRowModel {
+	title: string;
+	subtitle: string;
+	tone: 'neutral' | 'positive' | 'caution';
+	actionable: boolean;
+}
+
+/**
+ * The keys that control this wallet (spec 062) — drawn above the backup, because
+ * a person offered "back up your keys" is owed the sight of them first.
+ *
+ * `rows` is empty while the first answer is in flight; `note` is set when the
+ * registry did not answer and the rows are only what this device remembers.
+ */
+export interface WalletKeysModel {
+	title: string;
+	subtitle: string;
+	/** "3" — how many keys, beside the title. Empty while loading. */
+	count: string;
+	loading: boolean;
+	note?: string;
+	rows: WalletKeyRowModel[];
+	/** The founding record's standing on Ethereum; absent = nothing to draw. */
+	backup?: EthereumBackupRowModel;
+	/** Under the backup: PUBLIC keys only, private keys never leave the device. */
+	backupExplain: string;
+	copy: { action: string; done: string };
+}
+
+export interface WalletKeyRowModel {
+	/** The owner's label, or "Key n" when nobody recorded one. */
+	name: string;
+	/** Who holds it when the core's catalog knows; else the method's generic line. */
+	holderFallback: string;
+	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
+	fingerprint: string;
+	/** "User-verified", "Synced" / "Device-bound" — drawn as pills, the explorer's way. */
+	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
+	/**
+	 * What the row opens onto: the registry explorer's facts, each copyable.
+	 * Empty when only the device answered — then there is nothing to open.
+	 */
+	details: { label: string; value: string; mono: boolean; copy: boolean }[];
+	/** The row in the create flow's shape — what `PasskeyProviderMark` draws from. */
+	key: import('$lib/onboarding/generated/CreateKeyRow').CreateKeyRow;
+}
+
 export interface SettingsDesktopModel {
 	state: DesktopSettingsStateId;
 	title: string;
@@ -636,6 +690,8 @@ export interface SettingsDesktopModel {
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };
+		/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
+		keys?: WalletKeysModel;
 	};
 	appearance: {
 		title: string;

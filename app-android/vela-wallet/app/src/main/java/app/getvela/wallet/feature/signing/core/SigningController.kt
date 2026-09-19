@@ -65,6 +65,9 @@ class SigningController(
     /** The signing wallet: address and the pinned credential. */
     private val wallet: SignAccountRef,
     private val ports: Ports,
+    /** `eth_estimateGas` for one inner call, from the Safe's address (`UserOpSpine.measureCall`). */
+    measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
+        { _, _, _, _, _ -> null },
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
@@ -105,7 +108,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer),
+        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -167,6 +170,24 @@ class SigningController(
 
     private val _request = MutableStateFlow<IncomingRequest?>(null)
     val request: StateFlow<IncomingRequest?> = _request
+
+    /**
+     * "Sign with": WHERE the passkey that signs this request is. This controller
+     * lives for one request, so the choice cannot outlive the question it was
+     * made for. `auto` is the wallet's stored route, untouched.
+     */
+    val signMethod = MutableStateFlow("auto")
+    val signWithOpen = MutableStateFlow(false)
+
+    /** `null` toggles the list; an id picks a method and closes it. */
+    fun signWith(id: String?) {
+        if (id == null) {
+            signWithOpen.value = !signWithOpen.value
+            return
+        }
+        if (id in setOf("auto", "platform", "hybrid", "security_key")) signMethod.value = id
+        signWithOpen.value = false
+    }
 
     private val _closed = MutableStateFlow(false)
 

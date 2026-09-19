@@ -9,7 +9,11 @@
  * stranger's account for a frame after hydration).
  */
 import { error } from '@sveltejs/kit';
-import { resolveSettingsMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
+import {
+	resolveSettingsMessages,
+	resolveSigningMessages,
+	resolveWalletMessages
+} from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
 import { buildDesktopState, buildMobileState } from '$lib/settings/fixtures';
 import { EMPTY_ACCOUNT } from '$lib/settings/identity';
@@ -67,6 +71,12 @@ export const load: PageServerLoad = ({ params }) => {
 		 * here, so the sheet it summons has to be renderable here too — and its
 		 * words belong to the wallet corpus, where the wallet route reads them.
 		 */
-		signOut: walletMessages.signOut
+		signOut: walletMessages.signOut,
+		/**
+		 * The signing sheet's copy (spec 062). The key backup is signed HERE, over
+		 * the row that asked for it — not after a jump to the wallet route, which
+		 * left a person on a different page wondering what they had tapped.
+		 */
+		signingMessages: resolveSigningMessages(locale)
 	};
 };

@@ -39,11 +39,41 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
         .flex()
         .items_center()
         .gap(px(12.))
-        .child(letter_avatar(
-            model.dapp_letter.clone(),
-            model.dapp_tint,
-            36.,
-        ))
+        .child(if model.dapp_own {
+            // The wallet asking itself: its own mark, never a letter on a disc.
+            div()
+                .size(px(36.))
+                .flex_none()
+                .rounded_full()
+                .bg(theme.bg_sunken)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(crate::ui::vela_mark(theme, px(22.)))
+        } else {
+            // The site's own icon over its initial: a picture that fails to load
+            // draws nothing, so the letter beneath is what stays.
+            let mut mark = div()
+                .relative()
+                .size(px(36.))
+                .flex_none()
+                .child(letter_avatar(
+                    model.dapp_letter.clone(),
+                    model.dapp_tint,
+                    36.,
+                ));
+            for url in model.dapp_icon_urls.iter().rev() {
+                mark = mark.child(
+                    gpui::img(url.clone())
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size(px(36.))
+                        .rounded_full(),
+                );
+            }
+            mark
+        })
         .child(
             div()
                 .flex()
@@ -59,13 +89,13 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
                         .truncate()
                         .child(model.dapp_name.clone()),
                 )
-                .child(
+                .children((!model.dapp_host.is_empty()).then(|| {
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
                         .truncate()
-                        .child(model.dapp_host.clone()),
-                ),
+                        .child(model.dapp_host.clone())
+                })),
         )
         .child(
             div()
@@ -76,13 +106,28 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(
-                    div()
-                        .w(px(8.))
-                        .h(px(8.))
-                        .rounded_full()
-                        .bg(model.network_dot),
-                )
+                .child({
+                    // The chain's logo over the drawn dot.
+                    let mut chain = div()
+                        .relative()
+                        .size(px(16.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(div().size(px(8.)).rounded_full().bg(model.network_dot));
+                    if let Some(url) = &model.network_logo {
+                        chain = chain.child(
+                            gpui::img(url.clone())
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size(px(16.))
+                                .rounded_full(),
+                        );
+                    }
+                    chain
+                })
                 .child(
                     div()
                         .text_size(theme::text_row_sub())

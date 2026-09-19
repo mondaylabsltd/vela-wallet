@@ -19,6 +19,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
+	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
@@ -60,6 +61,8 @@
 		onaccountsignin?: () => void;
 		/** The account page is showing: the balance core refreshes its rows while it is. */
 		onaccountsopen?: (open: boolean) => void;
+		/** The Ethereum backup (spec 062): the keys block's one button. */
+		onethereumbackup?: () => void;
 		/** A storage row's action, by its own id (the phone's `onstorageclear`). */
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
@@ -78,6 +81,7 @@
 		onaccountcreate,
 		onaccountsignin,
 		onaccountsopen,
+		onethereumbackup,
 		onstorageclear,
 		onclearcaches
 	}: Props = $props();
@@ -177,6 +181,13 @@
 					oncreate={onaccountcreate}
 					onsignin={onaccountsignin}
 				/>
+
+				{#if model.account.keys !== undefined}
+					<!-- Which keys control this wallet, and their Ethereum backup beneath
+					     them (spec 062). Signed HERE: the page hosts the sheet. -->
+					<hr />
+					<KeysBlock model={model.account.keys} onbackup={() => onethereumbackup?.()} />
+				{/if}
 
 				<hr />
 

@@ -37,6 +37,11 @@
 import Foundation
 import VelaCore
 
+extension UserOpSpine.AccountPort {
+    /// Nothing known: the ceremony routes as it always did.
+    func keyRoutesJson(of address: String) async -> String { "[]" }
+}
+
 @MainActor
 final class UserOpSpine {
 
@@ -56,6 +61,9 @@ final class UserOpSpine {
         /// The pinned key's stored transports and method, for the ceremony's
         /// routing.
         func routing(of address: String) async -> (transports: String, method: KeyMethod)
+        /// Every founding key's credential id and stored transports, as JSON for
+        /// the core's `signRoute` — `[{credential_id, transports}]`.
+        func keyRoutesJson(of address: String) async -> String
     }
 
     enum Failure: Equatable {
@@ -72,11 +80,49 @@ final class UserOpSpine {
     private let relay: RelayClient
     private let accounts: AccountPort
     private let signer: () -> UserOpSigner
+    /// `eth_estimateGas({from, to, value, data})` on one chain — the gas hex, or
+    /// `nil` when nobody answered. The inner calls' own measurement (spec 062):
+    /// the relay estimates `callGasLimit` against the SENDER, and an undeployed
+    /// Safe has no code there, so its figure is 21k plus calldata whatever the
+    /// call does. Measured from the Safe's address instead, a codeless account
+    /// estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
+    private let measureCall: (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
 
-    init(relay: RelayClient, accounts: AccountPort, signer: @escaping () -> UserOpSigner) {
+    init(
+        relay: RelayClient,
+        accounts: AccountPort,
+        signer: @escaping () -> UserOpSigner,
+        measureCall: @escaping (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
+    ) {
         self.relay = relay
         self.accounts = accounts
         self.signer = signer
+        self.measureCall = measureCall
+    }
+
+    /// Every real contract call measured from the Safe's own address; the draft's
+    /// `callGasLimit` raised to the core's floor when that is higher. A call nobody
+    /// could measure leaves the relay's figure — and its existing guard — alone.
+    private func raisedToMeasuredFloor(
+        _ draft: UserOpDraft, chainId: Int, account: String, calls: [UserOpCall]
+    ) async -> UserOpDraft {
+        guard let toMeasure = try? userOpCallsToMeasure(calls: calls), !toMeasure.isEmpty else { return draft }
+        var measured: [String] = []
+        for index in toMeasure {
+            let call = calls[Int(index)]
+            let valueHex = call.value.hasPrefix("0x") ? call.value : "0x" + (Self.decimalToHex(call.value) ?? "0")
+            guard let hex = await measureCall(chainId, account, call.to, valueHex, call.data),
+                  let gas = UInt64(hex.dropFirst(hex.hasPrefix("0x") ? 2 : 0), radix: 16)
+            else { return draft }
+            measured.append(String(gas))
+        }
+        return (try? userOpRaiseCallGas(draft: draft, measured: measured, callCount: UInt32(calls.count))) ?? draft
+    }
+
+    /// A decimal wei string as bare hex. Values here are small enough for
+    /// `UInt64`… except when they are not — then the measurement is skipped.
+    private static func decimalToHex(_ decimal: String) -> String? {
+        decimal.isEmpty ? "0" : UInt64(decimal).map { String($0, radix: 16) }
     }
 
     private func other(_ message: String) -> Refused { Refused(failure: .other(message)) }
@@ -214,7 +260,7 @@ final class UserOpSpine {
                 preVerificationGas: preVerification,
                 floors: floors
             ) {
-                draft = applied
+                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
             }
         case .refused, .unreachable:
             // A plain transfer can ride the floors. A batch carrying a real
@@ -293,16 +339,37 @@ final class UserOpSpine {
 
     // MARK: - The one ceremony
 
+    /// The person's "Sign with" choice for the request in hand — `auto` unless a
+    /// signing sheet says otherwise (the spine is shared with Send, which never
+    /// sets it). WHICH key that pins, and how it is reached, is the core's.
+    var signMethod: () -> String = { "auto" }
+
+    /// The credential a ceremony is pinned to, its transports and method: the
+    /// person's choice when they made one, the stored route otherwise.
+    private func route(account: String, first: WalletKeyRecord) async -> (credentialId: String, transports: String, method: KeyMethod) {
+        let chosen = signMethod()
+        if chosen != "auto",
+           let json = signRoute(deviceKeysJson: await accounts.keyRoutesJson(of: account), method: chosen),
+           let picked = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
+           let credential = picked["credential_id"] as? String, !credential.isEmpty,
+           let method = (picked["method"] as? String).flatMap(KeyMethod.init(rawValue:))
+        {
+            return (credential, picked["transports"] as? String ?? "", method)
+        }
+        let stored = await accounts.routing(of: account)
+        return (first.credentialId, stored.transports, stored.method)
+    }
+
     private func assert(
         account: String,
         pinned: WalletKeyRecord,
         challenge: Data
     ) async throws -> Assertion {
-        let routing = await accounts.routing(of: account)
+        let routing = await route(account: account, first: pinned)
         do {
             return try await signer().sign(
                 challenge: challenge,
-                credentialIdHex: pinned.credentialId,
+                credentialIdHex: routing.credentialId,
                 transports: routing.transports,
                 method: routing.method
             )

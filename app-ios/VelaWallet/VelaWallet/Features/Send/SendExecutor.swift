@@ -502,6 +502,18 @@ final class SendExecutor {
 struct SendAccountPort: UserOpSpine.AccountPort {
     let accounts: AccountStore
 
+    func keyRoutesJson(of address: String) async -> String {
+        guard let record = await record(for: address) else { return "[]" }
+        let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
+            [
+                "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
+                "transports": key["transports"] as? String ?? "",
+            ]
+        }
+        let data = (try? JSONSerialization.data(withJSONObject: routes)) ?? Data("[]".utf8)
+        return String(decoding: data, as: UTF8.self)
+    }
+
     func keys(of address: String) async -> [WalletKeyRecord] {
         guard let record = await record(for: address) else { return [] }
         let keys = (record["keys"] as? [[String: Any]] ?? []).compactMap { key -> WalletKeyRecord? in

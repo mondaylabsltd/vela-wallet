@@ -410,6 +410,54 @@ struct IndexDownModel {
 }
 
 /// Everything one settings state needs.
+/// The keys that control this wallet (spec 062) — drawn under the account and
+/// above everything else, with the Ethereum backup as the block's last row.
+/// `rows` is empty while the first answer is in flight; `note` is set only when
+/// the registry did not answer and the rows are what this device remembers.
+struct WalletKeysModel {
+    let title: String
+    let subtitle: String
+    /// "3"; empty while loading — never a guessed count.
+    let count: String
+    let loading: Bool
+    let note: String?
+    let rows: [WalletKeyRowModel]
+    let backup: SettingsRowModel?
+    /// Under the backup: PUBLIC keys only; private keys never leave the device.
+    let backupExplain: String
+    let copyLabel: String
+    let copiedLabel: String
+}
+
+enum KeyPillTone { case verified, synced, local }
+
+struct KeyPillModel: Equatable {
+    let text: String
+    let tone: KeyPillTone
+}
+
+struct KeyDetailModel: Equatable, Identifiable {
+    let label: String
+    let value: String
+    let mono: Bool
+    let copy: Bool
+    var id: String { label }
+}
+
+struct WalletKeyRowModel: Identifiable {
+    let id: Int
+    let name: String
+    /// The vault's name when the catalog knows it; else the method's generic line.
+    let holder: String
+    /// `197d…647b` — what tells two unnamed keys apart.
+    let fingerprint: String
+    /// "User-verified", "Synced" / "Device-bound" — the registry explorer's pills.
+    let pills: [KeyPillModel]
+    /// What the row opens onto: the explorer's facts. Empty = nothing to open.
+    let details: [KeyDetailModel]
+    let key: CreateKeyRow
+}
+
 struct SettingsScreenModel {
     let state: SettingsStateId
     let title: String
@@ -419,6 +467,8 @@ struct SettingsScreenModel {
     let rescue: Bool
     let tabs: TabsModel
     var account: SettingsAccountRowModel
+    /// Live only (spec 062): the keys that control the wallet, and their backup.
+    var keys: WalletKeysModel?
     var sections: [SettingsSectionModel]
     var theme: SegmentedModel
     var avatar: SegmentedModel

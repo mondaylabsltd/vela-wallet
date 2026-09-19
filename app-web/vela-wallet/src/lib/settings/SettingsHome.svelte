@@ -27,6 +27,7 @@
 	import TabBar from '$lib/wallet/ui/TabBar.svelte';
 	import AboutPanel from './ui/AboutPanel.svelte';
 	import AccountRow from './ui/AccountRow.svelte';
+	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
 	import BalanceDetailBody from './ui/BalanceDetailBody.svelte';
@@ -59,6 +60,8 @@
 		onsignout?: () => void;
 		/** 通讯录 row — the contacts screens are their own route. */
 		onopencontacts?: () => void;
+		/** The Ethereum backup (spec 062): the keys block's one button. */
+		onethereumbackup?: () => void;
 		/** The network surfaces' live wiring (spec 024). Absent = gallery. */
 		onnetevent?: OnNetEvent;
 		/** The person chose a display currency in the sheet (spec 024 phase 5). */
@@ -93,6 +96,7 @@
 		onselecttab,
 		onsignout,
 		onopencontacts,
+		onethereumbackup,
 		onnetevent,
 		oncurrencyselect,
 		onstorageclear,
@@ -273,6 +277,13 @@
 			{#if !rescue}
 				{#if page === 'home'}
 					<AccountRow account={model.account} onselect={openAccounts} />
+
+					{#if model.keys !== undefined}
+						<!-- Under the account it belongs to (spec 062). -->
+						<div class="keys-block">
+							<KeysBlock model={model.keys} onbackup={() => onethereumbackup?.()} />
+						</div>
+					{/if}
 
 					{#each sections as section, index (index)}
 						{#if section.label !== undefined}
@@ -522,6 +533,10 @@
 {/if}
 
 <style>
+	.keys-block {
+		margin-top: var(--space-2xl);
+	}
+
 	.settings {
 		position: relative;
 		display: flex;

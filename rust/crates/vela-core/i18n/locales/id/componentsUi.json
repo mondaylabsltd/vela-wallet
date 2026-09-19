@@ -191,6 +191,7 @@
       "techIdentityToken": "Token",
       "techIdentityRecipient": "Penerima",
       "copyValue": "Salin",
+      "signWith": "Tanda tangani dengan",
       "viewOnExplorer": "Lihat di explorer",
       "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
     },

@@ -3,9 +3,15 @@ package app.getvela.wallet.feature.send.core
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.FailureKind
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
+import org.json.JSONObject
 import uniffi.vela_core_uniffi.RelayRejection
+import uniffi.vela_core_uniffi.WalletKeyRecord
 import uniffi.vela_core_uniffi.UserOpCall
+import uniffi.vela_core_uniffi.UserOpDraft
+import uniffi.vela_core_uniffi.userOpCallsToMeasure
+import uniffi.vela_core_uniffi.userOpRaiseCallGas
 import uniffi.vela_core_uniffi.UserOpFeeMode
 import uniffi.vela_core_uniffi.WebAuthnAssertion
 import uniffi.vela_core_uniffi.eip1271Signature
@@ -43,7 +49,39 @@ class UserOpSpine(
     private val relay: RelayClient,
     private val accounts: SendExecutor.AccountPort,
     private val signer: () -> UserOpSigner,
+    /**
+     * `eth_estimateGas({from, to, value, data})` on one chain — the gas hex, or
+     * `null` when nobody answered. The inner calls' own measurement (spec 062):
+     * the relay estimates `callGasLimit` against the SENDER, and an undeployed
+     * Safe has no code there, so its figure is 21k plus calldata whatever the
+     * call does. Measured from the Safe's address instead, a codeless account
+     * estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
+     */
+    private val measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
+        { _, _, _, _, _ -> null },
+    /**
+     * The person's "Sign with" choice for the request in hand — `auto` unless a
+     * signing sheet says otherwise. WHICH key that pins, and how it is reached,
+     * is the core's (`signRoute`); `auto` is the stored route, untouched.
+     */
+    private val signMethod: () -> String = { "auto" },
+    private val route: (keysJson: String, method: String) -> String? = { keys, method -> uniffi.vela_core_uniffi.signRoute(keys, method) },
 ) {
+    /** The credential a ceremony is pinned to, its transports and method. */
+    private suspend fun routeFor(account: String, first: WalletKeyRecord): Triple<String, String, KeyMethod> {
+        val chosen = signMethod()
+        if (chosen != "auto") {
+            runCatching { route(accounts.keyRoutesJson(account), chosen)?.let(::JSONObject) }.getOrNull()?.let { picked ->
+                val method = KeyMethod.entries.firstOrNull { it.wire == picked.optString("method") }
+                if (method != null && picked.optString("credential_id").isNotEmpty()) {
+                    return Triple(picked.optString("credential_id"), picked.optString("transports"), method)
+                }
+            }
+        }
+        val (transports, method) = accounts.routingOf(account)
+        return Triple(first.credentialId, transports, method)
+    }
+
     /** The displayed fee, signed verbatim. */
     data class Quoted(val amount: String, val recipient: String)
 
@@ -59,6 +97,33 @@ class UserOpSpine(
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
 
     /**
+     * Every real contract call measured from the Safe's own address; the draft's
+     * `callGasLimit` raised to the core's floor when that is higher. A call nobody
+     * could measure leaves the relay's figure — and its existing guard — alone.
+     */
+    private suspend fun raisedToMeasuredFloor(
+        draft: UserOpDraft,
+        chainId: Int,
+        account: String,
+        calls: List<UserOpCall>,
+    ): UserOpDraft {
+        val toMeasure = userOpCallsToMeasure(calls)
+        if (toMeasure.isEmpty()) return draft
+        val measured = ArrayList<String>(toMeasure.size)
+        for (index in toMeasure) {
+            val call = calls[index.toInt()]
+            val valueHex = if (call.value.startsWith("0x")) call.value else "0x" + java.math.BigInteger(call.value.ifBlank { "0" }).toString(16)
+            val hex = measureCall(chainId, account, call.to, valueHex, call.data) ?: return draft
+            measured += java.math.BigInteger(hex.removePrefix("0x"), 16).toString()
+        }
+        val raised = userOpRaiseCallGas(draft, measured, calls.size.toUInt())
+        if (raised.callGasLimit != draft.callGasLimit) {
+            VelaLog.event("userop.submit", "callGasLimit raised to the inner calls' own estimate", "relay" to draft.callGasLimit, "inner" to raised.callGasLimit)
+        }
+        return raised
+    }
+
+    /**
      * A page's message (spec 044): the Safe message hash under the Safe's
      * own domain is the passkey's challenge; the assertion is encoded as the
      * EIP-1271 envelope — `isValidSignature` verifies it on chain. One
@@ -71,9 +136,9 @@ class UserOpSpine(
         val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
             .getOrElse { other(it.message ?: "The message could not be hashed") }
         signingStarted()
-        val (transports, method) = accounts.routingOf(account)
+        val (credentialId, transports, method) = routeFor(account, pinned)
         val assertion: Assertion = try {
-            signer().sign(challenge, pinned.credentialId, transports, method)
+            signer().sign(challenge, credentialId, transports, method)
         } catch (failure: PasskeyFailure) {
             if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
             other(failure.message ?: "the passkey ceremony failed")
@@ -147,13 +212,16 @@ class UserOpSpine(
         }.getOrElse { other(it.message ?: "The operation could not be assembled.") }
         val hasContractCall = userOpHasContractCall(calls)
         when (val estimate = relay.estimateUserOpGas(chainId, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
-            is RelayClient.EstimateAnswer.Estimated -> draft = userOpApplyEstimate(
-                draft,
-                estimate.verificationGasLimit,
-                estimate.callGasLimit,
-                estimate.preVerificationGas,
-                floors,
-            )
+            is RelayClient.EstimateAnswer.Estimated -> {
+                draft = userOpApplyEstimate(
+                    draft,
+                    estimate.verificationGasLimit,
+                    estimate.callGasLimit,
+                    estimate.preVerificationGas,
+                    floors,
+                )
+                draft = raisedToMeasuredFloor(draft, chainId, account, calls)
+            }
             is RelayClient.EstimateAnswer.Refused, RelayClient.EstimateAnswer.Unreachable -> {
                 VelaLog.event("userop.submit", "estimate failed, defaults", "contract" to hasContractCall)
                 if (hasContractCall) {
@@ -164,9 +232,9 @@ class UserOpSpine(
         draft = userOpWithCalls(draft, calls, settled)
         val challenge = userOpSafeOpHash(draft, chainId.toUInt())
         signingStarted()
-        val (transports, method) = accounts.routingOf(account)
+        val (credentialId, transports, method) = routeFor(account, pinned)
         val assertion: Assertion = try {
-            signer().sign(challenge, pinned.credentialId, transports, method)
+            signer().sign(challenge, credentialId, transports, method)
         } catch (failure: PasskeyFailure) {
             if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
             other(failure.message ?: "the passkey ceremony failed")

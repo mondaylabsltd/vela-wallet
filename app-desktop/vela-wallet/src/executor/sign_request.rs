@@ -69,6 +69,14 @@ pub struct SignContext {
     pub keys: Vec<WalletKey>,
     pub key_method: KeyMethod,
     pub pinned_credential: Option<String>,
+    /// Every founding key's credential id and stored transports — what the
+    /// core's `sign_route` reads to pin the key of the chosen kind.
+    pub device_keys: Vec<vela_core::wallet_keys::DeviceKey>,
+    /// The person's "Sign with" choice for THIS request (founder, 2026-09-19):
+    /// the credential to pin and the method to route by. `None` = the stored
+    /// route above, untouched. Shared, because the context is cloned into the
+    /// executor when the request opens and the choice is made afterwards.
+    pub route_override: Arc<std::sync::Mutex<Option<(String, KeyMethod)>>>,
     pub ceremony: Ceremony,
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
@@ -76,6 +84,42 @@ pub struct SignContext {
 }
 
 impl SignContext {
+    /// The credential this request's ceremony is pinned to, and its method:
+    /// the person's choice when they made one, the stored route otherwise.
+    #[must_use]
+    pub fn route(&self) -> (Option<String>, KeyMethod) {
+        let chosen = self
+            .route_override
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        match chosen {
+            Some((credential, method)) => (Some(credential), method),
+            None => (self.pinned_credential.clone(), self.key_method),
+        }
+    }
+
+    /// "Sign with": `auto` clears the choice; anything else asks the core which
+    /// key that pins (`wallet_keys::sign_route`). An answer of "none" — an
+    /// unknown method, a wallet with no usable credential — leaves the stored
+    /// route in force rather than guessing.
+    pub fn choose_method(&self, method: &str) {
+        let route =
+            vela_core::wallet_keys::sign_route(&self.device_keys, method).and_then(|route| {
+                let method = match route.method.as_str() {
+                    "platform" => KeyMethod::Platform,
+                    "hybrid" => KeyMethod::Hybrid,
+                    "security_key" => KeyMethod::SecurityKey,
+                    _ => return None,
+                };
+                Some((route.credential_id, method))
+            });
+        *self
+            .route_override
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = route;
+    }
+
     #[must_use]
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         // Deliberately `SendContext::new`'s derivation, called rather than
@@ -87,6 +131,17 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
+            device_keys: account
+                .keys
+                .iter()
+                .map(|key| vela_core::wallet_keys::DeviceKey {
+                    credential_id: key.credential_id.clone(),
+                    public_key_hex: key.public_key_hex.clone(),
+                    name: key.name.clone(),
+                    transports: key.transports.clone(),
+                })
+                .collect(),
+            route_override: Arc::new(std::sync::Mutex::new(None)),
             ceremony: send.ceremony,
             signing_started: send.signing_started,
         }
@@ -227,12 +282,8 @@ fn sign_and_submit(
 
     let mut sign = |challenge: &[u8]| {
         ctx.signing_started.store(true, Ordering::SeqCst);
-        passkey::assert(
-            challenge,
-            ctx.pinned_credential.as_deref(),
-            ctx.key_method,
-            &ctx.ceremony,
-        )
+        let (credential, method) = ctx.route();
+        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
     };
     let submitted = user_op::submit(
         chain_id,

@@ -4,7 +4,7 @@ import { flowHandoffQuery, readFlowHandoff } from './contact-handoff';
 const ADDR = '0x' + 'a1'.repeat(20);
 
 describe('the contacts → wallet hand-off', () => {
-	it('round-trips each of the three journeys through the URL', () => {
+	it('round-trips each journey through the URL', () => {
 		for (const handoff of [
 			{ kind: 'send', recipient: ADDR } as const,
 			{ kind: 'receive' } as const,

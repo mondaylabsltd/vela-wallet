@@ -1311,6 +1311,7 @@
    "techIdentityToken": "トークン",
    "techIdentityRecipient": "受取人",
    "copyValue": "コピー",
+   "signWith": "署名方法",
    "viewOnExplorer": "エクスプローラーで表示",
    "sendingToTokenContract": "トークン自身のコントラクトへの送金"
   },
@@ -1565,6 +1566,28 @@
    "offline": "オフライン",
    "httpsRequired": "HTTPS が必要です",
    "invalid": "無効"
+  },
+  "backup": {
+   "title": "公開鍵を Ethereum にバックアップ",
+   "backedUp": "Ethereum にバックアップ済み",
+   "notBackedUp": "まだバックアップされていません",
+   "couldNotCheck": "確認できませんでした",
+   "explain": "公開されるのは公開鍵だけです。Ethereum からこのウォレットを見つけて復元するために使われます。秘密鍵が端末の外に出ることはありません。",
+   "intent": "公開鍵をバックアップ",
+   "registeredAs": "登録名",
+   "publicKeys": "公開鍵の数"
+  },
+  "keys": {
+   "title": "キー",
+   "subtitle": "どのパスキーでも、このウォレットの署名ができます。すべてのネットワークで共通です。",
+   "keyN": "キー {{n}}",
+   "notSynced": "この端末のみ",
+   "fromDevice": "レジストリに接続できません。この端末が覚えている内容を表示しています。",
+   "publicKey": "公開鍵",
+   "credential": "クレデンシャル",
+   "transport": "トランスポート",
+   "attestation": "アテステーション",
+   "userVerified": "本人確認済み"
   }
  },
  "contacts": {

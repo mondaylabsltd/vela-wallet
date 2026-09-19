@@ -54,6 +54,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.identicon.IdenticonImage
 import app.getvela.wallet.feature.settings.components.SettingsDivider
+import app.getvela.wallet.feature.settings.components.VelaWalletKeysBlock
 import app.getvela.wallet.feature.settings.components.SettingsSectionLabel
 import app.getvela.wallet.feature.settings.components.VelaAccountRow
 import app.getvela.wallet.feature.settings.components.VelaCallout
@@ -93,6 +94,8 @@ data class SettingsActions(
     val onSelectTab: (VelaTab) -> Unit = {},
     val onSignOut: () -> Unit = {},
     val onOpenContacts: () -> Unit = {},
+    /** The Ethereum backup row (spec 062); the caller decides whether there is anything to do. */
+    val onEthereumBackup: () -> Unit = {},
     /**
      * A row picked in one of the select sheets — currency today, the language
      * and format sheets when their machines arrive.
@@ -182,6 +185,7 @@ fun SettingsRoute(
         onRow = { id ->
             when (id) {
                 "contacts" -> actions.onOpenContacts()
+                SettingsLive.ETHEREUM_BACKUP_ROW -> actions.onEthereumBackup()
                 "networks" -> page = SettingsPage.Networks
                 "rpc-providers" -> page = SettingsPage.RpcProviders
                 "add-network" -> page = SettingsPage.AddNetwork
@@ -488,6 +492,9 @@ private fun SettingsHomeBody(
 ) {
     val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
+
+    // Under the account it belongs to (spec 062): which keys, then their backup.
+    model.keys?.let { VelaWalletKeysBlock(it, onRow) }
 
     model.sections.forEach { section ->
         if (section.label != null) {

@@ -30,17 +30,26 @@
 		markFailed(url);
 		failures += 1;
 	}
+
+	// Invisible until its bytes are in. The element has an opaque background (a
+	// transparent PNG must not show the letter through it), so a logo that is
+	// still loading — or hanging on a host that never answers — used to blank
+	// out the very fallback it sits over (founder-adjacent, 2026-09-19: a site
+	// with no icon drew an empty disc instead of its initial).
+	let loaded = $state<string | undefined>();
 </script>
 
 {#if src !== undefined}
 	<img
 		class="logo"
+		class:ready={loaded === src}
 		{src}
 		alt=""
 		loading="lazy"
 		decoding="async"
 		referrerpolicy="no-referrer"
 		draggable="false"
+		onload={() => (loaded = src)}
 		onerror={() => fail(src)}
 	/>
 {/if}
@@ -54,5 +63,10 @@
 		border-radius: var(--radius-full);
 		object-fit: cover;
 		background: var(--color-bg-base);
+		opacity: 0;
+	}
+
+	.logo.ready {
+		opacity: 1;
 	}
 </style>

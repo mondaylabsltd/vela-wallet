@@ -23,6 +23,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
+import app.getvela.wallet.feature.signing.components.SignWithRow
 import app.getvela.wallet.feature.signing.components.SigningAmount
 import app.getvela.wallet.feature.signing.components.SigningBalances
 import app.getvela.wallet.feature.signing.components.SigningCard
@@ -58,6 +59,7 @@ fun SigningSheet(
     /** Spec 044: the guard's chips and custom amount reach the machine. */
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
+    onSignWith: (String?) -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -65,7 +67,7 @@ fun SigningSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = modifier,
     ) {
-        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount)
+        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount, onSignWith = onSignWith)
     }
 }
 
@@ -77,6 +79,8 @@ fun SigningSheetContent(
     modifier: Modifier = Modifier,
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
+    /** `null` toggles the list; an id picks a method and closes it. */
+    onSignWith: (String?) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -97,6 +101,9 @@ fun SigningSheetContent(
             tint = model.dappTint,
             networkName = model.networkName,
             networkDot = model.networkDot,
+            own = model.dappOwn,
+            iconUrls = model.dappIconUrls,
+            networkLogoUrl = model.networkLogoUrl,
         )
 
         // The universal renderer: blocks in mock order, out. Nothing here knows
@@ -140,6 +147,7 @@ fun SigningSheetContent(
         TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
         SigningFee(model.fee)
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
+        model.signWith?.let { SignWithRow(it, onSignWith) }
         SlideToConfirm(
             hint = model.confirmHint,
             action = model.confirmAction,

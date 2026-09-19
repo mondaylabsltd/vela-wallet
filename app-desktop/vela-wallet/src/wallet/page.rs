@@ -457,6 +457,25 @@ pub struct WalletPage {
     /// which is what the gallery and an unsigned-in window get.
     #[cfg(not(target_os = "linux"))]
     signing_host: Option<gpui::Entity<crate::wallet::signing_host::SigningHost>>,
+    /// Where the active wallet's founding record stands on Ethereum (spec 062):
+    /// the address it was asked about, and the answer once there is one
+    /// (`None` = still asking). Asked of the chain, never of our server, each
+    /// time the Account page meets a different account.
+    backup_for: Option<String>,
+    backup_check: Option<(
+        vela_core::registry_backup::BackupState,
+        Option<vela_core::registry_backup::BackupCall>,
+    )>,
+    /// Which passkeys control that same wallet (spec 062), read from the
+    /// registry contract; `None` = still asking.
+    keys_check: Option<(
+        vela_core::wallet_keys::KeysSource,
+        Vec<vela_core::wallet_keys::WalletKeyRow>,
+    )>,
+    /// Which key rows are open, by founding position; and the `row:label` of
+    /// the value just copied, for the button's "Copied".
+    keys_open: std::collections::HashSet<usize>,
+    keys_copied: Option<String>,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -852,6 +871,20 @@ impl WalletPage {
             send_host: None,
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
+            backup_for: None,
+            backup_check: None,
+            keys_check: None,
+            // `VELA_KEYS_OPEN=1` (debug builds): the first key row starts open, so
+            // the details card can be looked at without a click — the same env-pin
+            // family as `VELA_PAGE` / `VELA_THEME`.
+            keys_open: if cfg!(debug_assertions)
+                && std::env::var("VELA_KEYS_OPEN").as_deref() == Ok("1")
+            {
+                std::collections::HashSet::from([0])
+            } else {
+                std::collections::HashSet::new()
+            },
+            keys_copied: None,
             menu_origin: None,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
@@ -5486,6 +5519,7 @@ impl WalletPage {
         let accounts_count = self.settings.accounts_count.clone();
         let accounts_total = self.settings.accounts_total.clone();
         self.sync_switcher(session, cx);
+        self.ensure_backup_check(cx);
         let s = &self.settings;
         // The COUNT is real; the total beside it is not stated at all, because
         // the switcher's cached per-account totals are a `balance_dashboard`
@@ -5828,6 +5862,571 @@ impl WalletPage {
             ))
     }
 
+    /// Ask the chain where the active wallet's founding record stands, once
+    /// per account this page meets (spec 062). Blocking reads, so off the
+    /// frame; a stale answer for a previous account is dropped.
+    fn ensure_backup_check(&mut self, cx: &mut Context<Self>) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        if self.backup_for.as_deref() == Some(account.address.as_str()) {
+            return;
+        }
+        // `VELA_SIGN_PROBE=1` (debug builds): raise the wallet's own signing column
+        // once, with its "Sign with" list open, so the column can be LOOKED at —
+        // there is no way to click this app from a shell. A zero-value call to
+        // itself on Gnosis; nothing is signed unless somebody slides.
+        #[cfg(all(debug_assertions, not(target_os = "linux")))]
+        if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
+            self.open_backup_signing(
+                vela_core::registry_backup::BackupCall {
+                    chain_id: 100,
+                    to: account.address.clone(),
+                    value: "0".to_owned(),
+                    data: "0x".to_owned(),
+                },
+                cx,
+            );
+            if let Some(host) = self.signing_host.clone() {
+                host.update(cx, |host, _| host.sign_with(None));
+            }
+        }
+        self.backup_for = Some(account.address.clone());
+        self.backup_check = None;
+        self.keys_check = None;
+        self.keys_copied = None;
+        // The record's key list in founding order; a legacy record is one key.
+        let device: Vec<vela_core::wallet_keys::DeviceKey> = if account.keys.is_empty() {
+            vec![vela_core::wallet_keys::DeviceKey {
+                credential_id: account.id.clone(),
+                public_key_hex: account.public_key_hex.clone(),
+                name: account.name.clone(),
+                transports: String::new(),
+            }]
+        } else {
+            account
+                .keys
+                .iter()
+                .map(|key| vela_core::wallet_keys::DeviceKey {
+                    credential_id: key.credential_id.clone(),
+                    public_key_hex: key.public_key_hex.clone(),
+                    name: key.name.clone(),
+                    transports: key.transports.clone(),
+                })
+                .collect()
+        };
+        let keys_address = account.address.clone();
+        cx.spawn(async move |page, cx| {
+            let asked = keys_address.clone();
+            let answer = cx
+                .background_executor()
+                .spawn(
+                    async move { crate::executor::registry::wallet_keys(&keys_address, &device) },
+                )
+                .await;
+            page.update(cx, |page, cx| {
+                if page.backup_for.as_deref() == Some(asked.as_str()) {
+                    page.keys_check = Some(answer);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+        let address = account.address.clone();
+        let key = account.keys.first().map_or_else(
+            || account.public_key_hex.clone(),
+            |key| key.public_key_hex.clone(),
+        );
+        cx.spawn(async move |page, cx| {
+            let asked = address.clone();
+            let answer = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::executor::registry::ethereum_backup_check(
+                        &address,
+                        &key,
+                        vela_core::registry_backup::TARGET_CHAIN,
+                    )
+                })
+                .await;
+            page.update(cx, |page, cx| {
+                if page.backup_for.as_deref() == Some(asked.as_str()) {
+                    page.backup_check = Some(answer);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The Ethereum backup row (spec 062): one line, three states, a button
+    /// only while there is something to do. Nothing at all when the registry is
+    /// not on Ethereum or the wallet has no record there to copy.
+    fn backup_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        use vela_core::registry_backup::BackupState;
+        let s = &self.settings;
+        let (subtitle, colour, call) = match &self.backup_check {
+            None => (s.backup_checking.clone(), theme.fg_subtle, None),
+            Some((BackupState::BackedUp, _)) => (s.backup_backed_up.clone(), theme.success, None),
+            Some((BackupState::NotBackedUp, call)) => (
+                s.backup_not_backed_up.clone(),
+                theme.fg_subtle,
+                call.clone(),
+            ),
+            Some((BackupState::CouldNotCheck, _)) => {
+                (s.backup_could_not_check.clone(), theme.fg_subtle, None)
+            }
+            Some((BackupState::Unavailable | BackupState::NotRegistered, _)) => return None,
+        };
+        let title = s.backup_title.clone();
+        let actionable = call.is_some();
+        let mut row = div()
+            .id("settings-ethereum-backup")
+            .flex()
+            .items_center()
+            // The key rows' own mark column, so the block reads as one list.
+            .gap(px(12.))
+            .child(
+                div()
+                    .size(px(theme::KEY_ROW_MARK))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::Upload,
+                        false,
+                        theme.fg_subtle,
+                        18.,
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            .child(title),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(colour)
+                            .child(subtitle),
+                    ),
+            );
+        if actionable {
+            row = row
+                .cursor_pointer()
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    if let Some(call) = call.clone() {
+                        page.open_backup_signing(call, cx);
+                    }
+                }));
+        }
+        Some(div().child(row.py(px(14.))))
+    }
+
+    /// The keys that control this wallet, with their Ethereum backup beneath
+    /// them (spec 062) — one block. A person offered "back up your keys" is
+    /// owed the sight of them first: what each is called, who is holding it,
+    /// whether it is synced. De-containered and hairline-divided like the rest
+    /// of the page; only the backup is a button.
+    fn keys_block(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        use vela_core::wallet_keys::KeysSource;
+        let s = &self.settings;
+        let title = s.keys_title.clone();
+        let subtitle = s.keys_subtitle.clone();
+        let from_device = s.keys_from_device.clone();
+        let synced = s.keys_synced.clone();
+        let not_synced = s.keys_not_synced.clone();
+        let key_n = s.keys_key_n.clone();
+        let lines = (
+            s.keys_provider_platform.clone(),
+            s.keys_provider_generic.clone(),
+            s.keys_provider_security_key.clone(),
+        );
+        let user_verified = s.keys_user_verified.clone();
+        let labels = (
+            s.keys_public_key.clone(),
+            s.keys_credential.clone(),
+            s.keys_transport.clone(),
+            s.keys_attestation.clone(),
+        );
+        let copy_label = s.keys_copy.clone();
+        let copied_label = s.keys_copied.clone();
+        let explain = s.backup_explain.clone();
+        let check = self.keys_check.clone();
+
+        let mut header = div().flex().items_baseline().gap(px(8.)).child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(title),
+        );
+        if let Some((_, keys)) = &check {
+            header = header.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(keys.len().to_string()),
+            );
+        }
+        let mut block = div()
+            .flex()
+            .flex_col()
+            .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
+            .child(header)
+            .child(
+                div()
+                    .pt(px(4.))
+                    .pb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(subtitle),
+            );
+
+        match check {
+            // The shape of one row, so the block does not jump when the answer lands.
+            None => {
+                block = block.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(12.))
+                        .py(px(14.))
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .child(
+                            div()
+                                .size(px(theme::KEY_ROW_MARK))
+                                .rounded_full()
+                                .bg(theme.divider),
+                        )
+                        .child(
+                            div()
+                                .w(px(160.))
+                                .h(px(10.))
+                                .rounded_full()
+                                .bg(theme.divider),
+                        ),
+                );
+            }
+            Some((source, keys)) => {
+                for (index, key) in keys.iter().enumerate() {
+                    let name = if key.name.is_empty() {
+                        key_n.replace("{{n}}", &(index + 1).to_string())
+                    } else {
+                        key.name.clone()
+                    };
+                    let holder = if key.provider_name.is_empty() {
+                        match key.method.as_str() {
+                            "security_key" => lines.2.clone(),
+                            "hybrid" => lines.1.clone(),
+                            _ => lines.0.clone(),
+                        }
+                    } else {
+                        gpui::SharedString::from(key.provider_name.clone())
+                    };
+                    let body = key.public_key_hex.trim_start_matches("04");
+                    let fingerprint = (body.len() >= 8)
+                        .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
+
+                    let mut row = div().flex().items_center().gap(px(12.)).py(px(14.));
+                    if let Some(mark) = super::components::passkey_mark(
+                        &mut self.identicons,
+                        &key.aaguid,
+                        theme.is_dark(),
+                        theme::KEY_ROW_MARK,
+                    ) {
+                        row = row.child(mark);
+                    } else if let Some(mark) = super::components::passkey_fallback_mark(
+                        &mut self.identicons,
+                        &key.authenticator_attachment,
+                        &key.transports,
+                        key.method == "security_key",
+                        theme,
+                        theme::KEY_ROW_MARK,
+                    ) {
+                        row = row.child(mark);
+                    } else {
+                        row = row.child(
+                            div()
+                                .size(px(theme::KEY_ROW_MARK))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(icon_img(
+                                    &mut self.icons,
+                                    Icon::Lock,
+                                    false,
+                                    theme.fg_subtle,
+                                    18.,
+                                )),
+                        );
+                    }
+                    let mut meta = div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(holder);
+                    if let Some(fingerprint) = fingerprint {
+                        meta = meta
+                            .child("·")
+                            .child(div().font_family(theme::font_mono()).child(fingerprint));
+                    }
+                    row = row.child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(theme.fg_base)
+                                    .child(name),
+                            )
+                            .child(meta),
+                    );
+                    // The registry explorer's pills; one nobody can vouch for is not drawn.
+                    let mut pills: Vec<(gpui::SharedString, gpui::Hsla)> = Vec::new();
+                    if key.user_verified == Some(true) {
+                        pills.push((user_verified.clone(), theme.info_base));
+                    }
+                    if let Some(is_synced) = key.synced {
+                        pills.push(if is_synced {
+                            (synced.clone(), theme.success)
+                        } else {
+                            (not_synced.clone(), theme.fg_subtle)
+                        });
+                    }
+                    for (text, colour) in pills {
+                        row = row.child(
+                            div()
+                                .flex_none()
+                                .px(px(8.))
+                                .py(px(2.))
+                                .rounded_full()
+                                .border_1()
+                                .border_color(colour)
+                                .text_size(theme::text_row_sub())
+                                .text_color(colour)
+                                .child(text),
+                        );
+                    }
+
+                    // What the row opens onto: the explorer's facts, the two a
+                    // person pastes elsewhere copyable. Nothing to open when only
+                    // the device answered.
+                    let transport = [
+                        key.authenticator_attachment.as_str(),
+                        key.transports.as_str(),
+                    ]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" · ");
+                    let details: Vec<(gpui::SharedString, String, bool, bool)> = [
+                        (
+                            labels.0.clone(),
+                            if key.public_key_hex.is_empty() {
+                                String::new()
+                            } else {
+                                format!("0x{}", key.public_key_hex)
+                            },
+                            true,
+                            true,
+                        ),
+                        (labels.1.clone(), key.credential_id.clone(), true, true),
+                        (
+                            gpui::SharedString::from("AAGUID"),
+                            key.aaguid.clone(),
+                            true,
+                            false,
+                        ),
+                        (labels.2.clone(), transport, false, false),
+                        (labels.3.clone(), key.attestation_hex.clone(), true, false),
+                    ]
+                    .into_iter()
+                    .filter(|(_, value, _, _)| !value.is_empty())
+                    .collect();
+                    let expandable = !key.credential_id.is_empty();
+                    let is_open = self.keys_open.contains(&index);
+                    let mut stateful = row.id(("settings-key-row", index));
+                    if expandable {
+                        stateful = stateful
+                            .child(icon_img(
+                                &mut self.icons,
+                                if is_open {
+                                    Icon::ChevronUp
+                                } else {
+                                    Icon::ChevronDown
+                                },
+                                false,
+                                theme.fg_subtle,
+                                14.,
+                            ))
+                            .cursor_pointer()
+                            .on_click(cx.listener(move |page, _, _, cx| {
+                                if !page.keys_open.remove(&index) {
+                                    page.keys_open.insert(index);
+                                }
+                                cx.notify();
+                            }));
+                    }
+                    let mut entry = div()
+                        .flex()
+                        .flex_col()
+                        .border_b_1()
+                        .border_color(theme.divider)
+                        .child(stateful);
+                    if expandable && is_open {
+                        let mut card = div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(12.))
+                            .p(px(16.))
+                            .mb(px(12.))
+                            .rounded(px(12.))
+                            .border_1()
+                            .border_color(theme.divider)
+                            .bg(theme.bg_sunken);
+                        for (slot, (label, value, mono, copyable)) in
+                            details.into_iter().enumerate()
+                        {
+                            let mut shown = div()
+                                .flex_1()
+                                .min_w(px(0.))
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_base)
+                                .child(gpui::SharedString::from(value.clone()));
+                            if mono {
+                                shown = shown.font_family(theme::font_mono());
+                            }
+                            let mut line = div()
+                                .flex()
+                                .items_start()
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .w(px(110.))
+                                        .flex_none()
+                                        .text_size(theme::text_row_sub())
+                                        .text_color(theme.fg_subtle)
+                                        .child(label),
+                                )
+                                .child(shown);
+                            if copyable {
+                                let copy_id = format!("{index}:{slot}");
+                                let done = self.keys_copied.as_deref() == Some(copy_id.as_str());
+                                line = line.child(
+                                    div()
+                                        .id(("settings-key-copy", index * 8 + slot))
+                                        .flex_none()
+                                        .px(px(8.))
+                                        .py(px(2.))
+                                        .rounded(px(6.))
+                                        .border_1()
+                                        .border_color(theme.divider)
+                                        .text_size(theme::text_row_sub())
+                                        .text_color(theme.fg_subtle)
+                                        .cursor_pointer()
+                                        .child(if done {
+                                            copied_label.clone()
+                                        } else {
+                                            copy_label.clone()
+                                        })
+                                        .on_click(cx.listener(move |page, _, _, cx| {
+                                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                                value.clone(),
+                                            ));
+                                            page.keys_copied = Some(copy_id.clone());
+                                            cx.notify();
+                                        })),
+                                );
+                            }
+                            card = card.child(line);
+                        }
+                        entry = entry.child(card);
+                    }
+                    block = block.child(entry);
+                }
+                if source == KeysSource::Device {
+                    block = block.child(
+                        div()
+                            .py(px(8.))
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_subtle)
+                            .child(from_device),
+                    );
+                }
+            }
+        }
+        match self.backup_row(theme, cx) {
+            // PUBLIC keys: "back up keys" read as handing over the keys themselves.
+            Some(backup) => block.child(backup).child(
+                div()
+                    .pl(px(theme::KEY_ROW_MARK + 12.))
+                    .pb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(explain),
+            ),
+            None => block,
+        }
+    }
+
+    /// The backup is one transaction the wallet asks ITSELF to sign: the same
+    /// signing column a dApp request opens, so the estimate, the fee, the
+    /// funding guidance, the passkey and the receipt are the existing ones.
+    #[cfg(not(target_os = "linux"))]
+    fn open_backup_signing(
+        &mut self,
+        call: vela_core::registry_backup::BackupCall,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(account) = money::active_account() else {
+            return;
+        };
+        let params = serde_json::json!([{
+            "from": account.address,
+            "to": call.to,
+            "value": "0x0",
+            "data": call.data,
+        }]);
+        let request = crate::wallet::signing_host::IncomingRequest {
+            id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: params.to_string(),
+            origin: "https://getvela.app".to_owned(),
+            transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
+            chain_id: call.chain_id,
+        };
+        // After it closes, ask again: the row should say what is true now.
+        self.backup_for = None;
+        self.open_signing_request(&account, request, cx);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn open_backup_signing(
+        &mut self,
+        _call: vela_core::registry_backup::BackupCall,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+
     /// Sign out and erase, shared by the live and mock account panels.
     #[allow(clippy::too_many_arguments, reason = "one footer, two call sites")]
     fn settings_account_footer(
@@ -5840,9 +6439,11 @@ impl WalletPage {
         erase_confirm: gpui::SharedString,
         cx: &mut Context<Self>,
     ) -> Div {
+        let keys = self.keys_block(theme, cx);
         div()
             .flex()
             .flex_col()
+            .child(keys)
             .child(div().h(px(1.)).bg(theme.divider).my(px(32.)))
             .child(
                 div()
@@ -8270,7 +8871,19 @@ impl WalletPage {
             transport_id: "browser".to_owned(),
             chain_id: self.browser_chain,
         };
+        self.open_signing_request(&account, request, cx);
+    }
+
+    /// The four signing machines for one request — a page's, or the wallet's own.
+    #[cfg(not(target_os = "linux"))]
+    fn open_signing_request(
+        &mut self,
+        account: &vela_core::app::Account,
+        request: crate::wallet::signing_host::IncomingRequest,
+        cx: &mut Context<Self>,
+    ) {
         let window_handle = self.window_handle;
+        let account = account.clone();
         let host = cx.new(|cx| {
             crate::wallet::signing_host::SigningHost::open(&account, request, window_handle, cx)
         });
@@ -8874,6 +9487,53 @@ impl WalletPage {
             model.dapp_name = name;
             model.dapp_host = dapp_host;
             model.dapp_letter = letter;
+            // The wallet's own request (the key backup) is not a site: its own
+            // mark and name, and no host. A site gets its own icon over its
+            // initial — https only, never over a channel anybody could answer on.
+            let own = host.transport_id == crate::wallet::signing_host::WALLET_TRANSPORT;
+            model.dapp_own = own;
+            if own {
+                model.dapp_name = gpui::SharedString::from("Vela Wallet");
+                model.dapp_host = gpui::SharedString::default();
+                // Matched on the VERIFIED registry address, never on "it is ours"
+                // alone and never on the English words: the first look at this
+                // column headed a plain self-transfer "备份公钥".
+                let is_backup = host.clear_view.result.as_ref().is_some_and(|result| {
+                    result.verified
+                        && result.contract_address.as_deref().is_some_and(|address| {
+                            address.eq_ignore_ascii_case(vela_core::registry_backup::REGISTRY)
+                        })
+                });
+                // …and its built-in lines, in the person's language. The core's
+                // are English, like the descriptors beside them; this one is
+                // OURS. First-party + the intent block it opens with.
+                if is_backup
+                    && let Some(signing_fixtures::Block::Intent { text, .. }) =
+                        model.blocks.first_mut()
+                {
+                    *text = self.signing.backup_intent.clone();
+                }
+                let mut relabelled = 0;
+                for block in model.blocks.iter_mut().filter(|_| is_backup) {
+                    if let signing_fixtures::Block::Rows(rows) = block {
+                        for row in rows.iter_mut() {
+                            if let Some(label) = self.signing.backup_labels.get(relabelled) {
+                                row.0 = label.clone();
+                                relabelled += 1;
+                            }
+                        }
+                    }
+                }
+            } else if let Some(base) = host.origin.strip_prefix("https://") {
+                let base = base.split('/').next().unwrap_or_default();
+                if !base.is_empty() {
+                    model.dapp_icon_urls = vec![
+                        gpui::SharedString::from(format!("https://{base}/apple-touch-icon.png")),
+                        gpui::SharedString::from(format!("https://{base}/favicon.ico")),
+                    ];
+                }
+            }
+            model.network_logo = crate::marks::chain_logo_url(host.chain_id);
             // …and on which chain, from the request too. The fixture's badge
             // said Ethereum over a Gnosis fee.
             model.network_name =
@@ -9058,6 +9718,7 @@ impl WalletPage {
                 model.signer_name.clone(),
                 &model.signer_seed,
             ))
+            .children(self.sign_with_row(theme, cx))
             .child(signing_components::slide_to_confirm(
                 theme,
                 &mut self.icons,
@@ -9066,6 +9727,120 @@ impl WalletPage {
                 confirm_action,
             ));
         column
+    }
+
+    /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
+    /// is (founder, 2026-09-19: creating and signing in let a person choose;
+    /// signing took the first key's stored route). Per request — the host lives
+    /// for one. Which key the choice pins is the core's (`sign_route`). Opens in
+    /// place: a dialog over the signing column is a modal under a modal.
+    #[cfg(not(target_os = "linux"))]
+    fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let (method, open) = {
+            let host = self.signing_host.as_ref()?.read(cx);
+            (host.sign_method.clone(), host.sign_with_open)
+        };
+        let options = self.signing.sign_with_options.clone();
+        let value = options
+            .iter()
+            .find(|(id, _)| *id == method)
+            .map_or_else(|| options[0].1.clone(), |(_, title)| title.clone());
+        fn pick(
+            id: Option<&'static str>,
+            cx: &mut Context<WalletPage>,
+        ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
+            cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
+                if let Some(host) = page.signing_host.clone() {
+                    host.update(cx, |host, cx| {
+                        host.sign_with(id);
+                        cx.notify();
+                    });
+                }
+                cx.notify();
+            })
+        }
+        let mut block = div().flex().flex_col().gap(px(8.)).child(
+            div()
+                .id("signing-sign-with")
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .cursor_pointer()
+                .on_click(pick(None, cx))
+                .child(
+                    div()
+                        .flex_1()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(self.signing.sign_with.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(value),
+                )
+                .child(icon_img(
+                    &mut self.icons,
+                    if open {
+                        Icon::ChevronUp
+                    } else {
+                        Icon::ChevronDown
+                    },
+                    false,
+                    theme.fg_muted,
+                    14.,
+                )),
+        );
+        if open {
+            let mut list = div()
+                .flex()
+                .flex_col()
+                .p(px(4.))
+                .rounded(px(12.))
+                .bg(theme.bg_sunken);
+            for (index, (id, title)) in options.into_iter().enumerate() {
+                let selected = id == method;
+                let mut option = div()
+                    .id(("signing-sign-with-option", index))
+                    .flex()
+                    .items_center()
+                    .px(px(16.))
+                    .py(px(10.))
+                    .rounded(px(8.))
+                    .cursor_pointer()
+                    .hover(|el| el.bg(theme.bg_raised))
+                    .on_click(pick(Some(id), cx))
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(theme::text_row_sub())
+                            .text_color(if selected {
+                                theme.fg_base
+                            } else {
+                                theme.fg_muted
+                            })
+                            .child(title),
+                    );
+                if selected {
+                    option = option.child(icon_img(
+                        &mut self.icons,
+                        Icon::Check,
+                        false,
+                        theme.accent,
+                        14.,
+                    ));
+                }
+                list = list.child(option);
+            }
+            block = block.child(list);
+        }
+        Some(block)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn sign_with_row(&mut self, _theme: &Theme, _cx: &mut Context<Self>) -> Option<Div> {
+        None
     }
 
     fn wallet_columns(

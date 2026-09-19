@@ -3500,12 +3500,15 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
  * same shape `registryNameStep` uses); the return is a `BackupStep` as JSON —
  * requests to perform, or the verdict and, when the wallet is not backed up,
  * the one call that would do it. No passkey is involved at any point.
+ * `target_chain` is Ethereum when absent; Base (8453) is the operator's
+ * rehearsal deployment; anything else is refused.
  * @param {string} address
  * @param {string} founding_public_key_hex
  * @param {string} answers_json
+ * @param {number | null} [target_chain]
  * @returns {string}
  */
-export function registryBackupStep(address, founding_public_key_hex, answers_json) {
+export function registryBackupStep(address, founding_public_key_hex, answers_json, target_chain) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -3515,13 +3518,92 @@ export function registryBackupStep(address, founding_public_key_hex, answers_jso
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.registryBackupStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        const ret = wasm.registryBackupStep(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(target_chain) ? Number.MAX_SAFE_INTEGER : (target_chain) >>> 0);
         deferred4_0 = ret[0];
         deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
+}
+
+/**
+ * **Signing in when the index is gone** (spec 062): the registry contract's
+ * side of the index's two read questions, answered in the index's own JSON
+ * shapes so a shell's existing parsing runs unchanged. `…Plan` = the chains to
+ * try (in order) and the two `eth_call`s to make on one of them; the matching
+ * function turns the two raw results into the body, or nothing when that
+ * chain did not really answer (the shell then tries the next). Unit ids are
+ * per deployment: ask about a key's units on the chain that listed them.
+ * @param {string} public_key_hex
+ * @returns {string | undefined}
+ */
+export function registryChainKeyPlan(public_key_hex) {
+    const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainKeyPlan(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {string} has_entry_hex
+ * @param {string} groups_hex
+ * @returns {string | undefined}
+ */
+export function registryChainKeyStatus(has_entry_hex, groups_hex) {
+    const ptr0 = passStringToWasm0(has_entry_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(groups_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainKeyStatus(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {number} unit_id
+ * @param {string} unit_hex
+ * @param {string} members_hex
+ * @returns {string | undefined}
+ */
+export function registryChainUnit(unit_id, unit_hex, members_hex) {
+    const ptr0 = passStringToWasm0(unit_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(members_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.registryChainUnit(unit_id, ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * See [`registry_chain_key_plan`].
+ * @param {number} unit_id
+ * @returns {string | undefined}
+ */
+export function registryChainUnitPlan(unit_id) {
+    const ret = wasm.registryChainUnitPlan(unit_id);
+    let v1;
+    if (ret[0] !== 0) {
+        v1 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v1;
 }
 
 /**
@@ -3670,6 +3752,35 @@ export function validateClientData(kind, client_data_json, authenticator_data) {
     const ret = wasm.validateClientData(ptr0, len0, ptr1, len1, ptr2, len2);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * Which passkeys control the wallet at `address` — the Settings keys view
+ * (spec 062). `device_keys_json` is the account record's `keys` array (or a
+ * one-element array built from the legacy scalars); the answer is `ask` with
+ * `eth_call`s to perform, or `done` with the rows and where they came from.
+ * @param {string} address
+ * @param {string} device_keys_json
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function walletKeysStep(address, device_keys_json, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(device_keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.walletKeysStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 

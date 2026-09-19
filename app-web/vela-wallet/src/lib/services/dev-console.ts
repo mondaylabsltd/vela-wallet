@@ -61,6 +61,35 @@ export function maybeInstallDevConsole(): void {
 	});
 	const vela = (window as unknown as { vela?: Record<string, unknown> }).vela ?? {};
 	Object.assign(vela, {
+		/**
+		 * The Ethereum backup (spec 062), before any screen draws it:
+		 * `vela.backup.check()` → where the founding record stands;
+		 * `vela.backup.start()` → the same, and the signing sheet when there is
+		 * something to sign (run it on the wallet route, which hosts the sheet).
+		 */
+		backup: {
+			/** `check(8453)` / `start(8453)` rehearse against the Base deployment. */
+			check: async (targetChainId?: number) => {
+				const [{ session }, backup, service] = await Promise.all([
+					import('$lib/session/core/session.svelte'),
+					import('$lib/backup/ethereum-backup'),
+					import('$lib/services/registry-backup')
+				]);
+				const account = session.view.accounts[session.view.active_index]?.account;
+				if (!account) return null;
+				return service.checkEthereumBackup(account.address, backup.foundingKeyOf(account), {
+					targetChainId
+				});
+			},
+			start: async (targetChainId?: number) => {
+				const [{ session }, backup] = await Promise.all([
+					import('$lib/session/core/session.svelte'),
+					import('$lib/backup/ethereum-backup')
+				]);
+				const account = session.view.accounts[session.view.active_index]?.account;
+				return account ? backup.startEthereumBackup(account, { targetChainId }) : null;
+			}
+		},
 		/** Drive one pool-routed read — the harness's entry into the router. */
 		poolCall: (method: string, params: unknown[], chainId: number) =>
 			poolRpcCall(method, params, chainId),

@@ -1314,6 +1314,7 @@
    "techIdentityToken": "Token",
    "techIdentityRecipient": "Destinatario",
    "copyValue": "Copiar",
+   "signWith": "Firmar con",
    "viewOnExplorer": "Ver en el explorador",
    "sendingToTokenContract": "Enviado al contrato del propio token"
   },
@@ -1568,6 +1569,28 @@
    "offline": "Sin conexión",
    "httpsRequired": "Se requiere HTTPS",
    "invalid": "Inválido"
+  },
+  "backup": {
+   "title": "Respaldar las llaves públicas en Ethereum",
+   "backedUp": "Respaldadas en Ethereum",
+   "notBackedUp": "Aún sin respaldo",
+   "couldNotCheck": "No se pudo comprobar",
+   "explain": "Solo se publican las llaves públicas, para poder encontrar y reconstruir esta billetera desde Ethereum. Las llaves privadas nunca salen de tus dispositivos.",
+   "intent": "Respaldar llaves públicas",
+   "registeredAs": "Registrada como",
+   "publicKeys": "Llaves públicas"
+  },
+  "keys": {
+   "title": "Llaves",
+   "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
+   "keyN": "Llave {{n}}",
+   "notSynced": "Ligada al dispositivo",
+   "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",
+   "publicKey": "Llave pública",
+   "credential": "Credencial",
+   "transport": "Transporte",
+   "attestation": "Atestación",
+   "userVerified": "Usuario verificado"
   }
  },
  "contacts": {

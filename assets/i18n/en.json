@@ -1350,6 +1350,7 @@
    "techIdentityToken": "Token",
    "techIdentityRecipient": "Recipient",
    "copyValue": "Copy",
+   "signWith": "Sign with",
    "viewOnExplorer": "View on explorer",
    "sendingToTokenContract": "Sent to the token’s own contract"
   },
@@ -1575,6 +1576,28 @@
    "offline": "Offline",
    "httpsRequired": "HTTPS required",
    "invalid": "Invalid"
+  },
+  "backup": {
+   "title": "Back up public keys to Ethereum",
+   "backedUp": "Backed up on Ethereum",
+   "notBackedUp": "Not backed up yet",
+   "couldNotCheck": "Could not check",
+   "explain": "Only public keys are published, so this wallet can be found and rebuilt from Ethereum. Private keys never leave your devices.",
+   "intent": "Back up public keys",
+   "registeredAs": "Registered as",
+   "publicKeys": "Public keys"
+  },
+  "keys": {
+   "title": "Keys",
+   "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
+   "keyN": "Key {{n}}",
+   "notSynced": "Device-bound",
+   "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
+   "publicKey": "Public key",
+   "credential": "Credential",
+   "transport": "Transport",
+   "attestation": "Attestation",
+   "userVerified": "User-verified"
   }
  },
  "contacts": {
