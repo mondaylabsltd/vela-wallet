@@ -1,6 +1,6 @@
 # Release build of the iOS shell (app-ios/VelaWallet): an UNSIGNED device
 # archive, packaged as an .ipa-shaped zip, kept as a workflow artifact on an
-# `ios-v*` tag.
+# archive of every release (release.yml calls this).
 #
 # NOT attached to a GitHub Release, by ruling (spec 063 §0): the phone apps ship
 # through the stores. An unsigned .ipa on a download page is a file nobody can
@@ -24,17 +24,24 @@
 name: iOS package
 
 on:
-  # Cutting an iOS build: `git tag ios-v1.0 && git push origin ios-v1.0`
-  # — one tag per push; several tags in one push trigger nothing (spec 063 FR-007).
-  # The tag's version must equal MARKETING_VERSION in the Xcode project.
-  push:
-    tags: ['ios-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
       - 'app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj'
       - 'rust/scripts/build-ios-xcframework.sh'
       - '.github/workflows/ios-package.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -53,15 +60,6 @@ jobs:
           done
           test -f app-ios/VelaWallet/VelaWallet.xcodeproj/xcshareddata/xcschemes/VelaWallet.xcscheme \
             || { echo "::error::the VelaWallet scheme is not shared — xcodebuild on a runner cannot see it"; exit 1; }
-      - name: A release tag must name MARKETING_VERSION
-        if: startsWith(github.ref, 'refs/tags/ios-v')
-        run: |
-          version=$(grep -m1 -oE 'MARKETING_VERSION = [^;]+' app-ios/VelaWallet/VelaWallet.xcodeproj/project.pbxproj | sed 's/MARKETING_VERSION = //')
-          tag="${GITHUB_REF_NAME#ios-v}"
-          if [ "$tag" != "$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME names $tag but the project says MARKETING_VERSION $version — bump it and re-tag"
-            exit 1
-          fi
 
   package:
     name: Build the unsigned archive
@@ -122,7 +120,14 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/VelaWallet.xcarchive" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            VELA_GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
             | tail -20
+          # The build setting has been waiting for a value since spec 058, and this
+          # workflow never passed one — so every archive said "build 1" (spec 064).
+          stamped=$(/usr/libexec/PlistBuddy -c 'Print :VelaGitCommit' \
+            "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app/Info.plist")
+          [ "$stamped" = "$(git rev-parse --short=7 HEAD)" ] || {
+            echo "::error::the archive says commit '$stamped', not $(git rev-parse --short=7 HEAD)"; exit 1; }
           test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
       - name: Package
         working-directory: app-ios/VelaWallet

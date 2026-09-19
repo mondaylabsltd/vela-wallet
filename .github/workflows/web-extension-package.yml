@@ -13,17 +13,24 @@
 name: Web extension package
 
 on:
-  # Cutting an extension release: `git tag extension-v0.1.0 && git push --tags`.
-  # The tag's version must equal `version` in extension/manifest.json; the
-  # metadata job checks that so the Web Store never sees a mismatched upload.
-  push:
-    tags: ['extension-v*']
+  # A release is cut by release.yml, which CALLS this workflow for the commit
+  # at the head of `release/vX.Y.Z` (spec 064). There is no tag trigger any
+  # more: one way to release, and this file stays the single definition of how
+  # the package is made. `workflow_dispatch` is the build check it has been
+  # since 0.9.0 — run it on a branch before merging anything that touches
+  # packaging, because a pull request skips every build job below.
+  workflow_call:
   workflow_dispatch:
   pull_request:
     paths:
       - 'app-web/vela-wallet/extension/**'
       - 'app-web/vela-wallet/vite.config.ts'
       - '.github/workflows/web-extension-package.yml'
+
+# Every build says which commit it is (spec 064 §3). Set here, from the commit
+# that was checked out, because a container build often cannot ask git itself.
+env:
+  VELA_GIT_COMMIT: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -51,15 +58,6 @@ jobs:
           if (!m.side_panel?.default_path) fail('side_panel.default_path is missing — requests must open in the side panel, never the action popup (README constraint 4)');
           console.log(`manifest ok: ${m.name} ${m.version}`);
           JS
-      - name: A release tag must name the manifest version
-        if: startsWith(github.ref, 'refs/tags/extension-v')
-        run: |
-          version=$(node -p "require('./app-web/vela-wallet/extension/manifest.json').version")
-          tag="${GITHUB_REF_NAME#extension-v}"
-          if [ "$tag" != "$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME names $tag but extension/manifest.json says $version — bump the manifest and re-tag"
-            exit 1
-          fi
 
   package:
     name: Build the extension
@@ -89,6 +87,15 @@ jobs:
           node scripts/gen-tokens.mjs --check
       - name: Build
         run: pnpm run build:extension
+      # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
+      - name: The extension says which build it is
+        run: |
+          version=$(node -p "require('./extension/manifest.json').version")
+          grep -rqF "${GITHUB_SHA:0:7}" extension/dist || {
+            echo "::error::extension/dist does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
+          if grep -rqF '6ab8f' extension/dist; then
+            echo "::error::extension/dist still carries the design mock's commit 6ab8f"; exit 1; fi
+          echo "extension $version @ ${GITHUB_SHA:0:7}"
       - name: Package
         id: package
         run: |
@@ -104,42 +111,3 @@ jobs:
           name: chrome-extension
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}.zip
           if-no-files-found: error
-
-  release:
-    name: Attach the package to the release
-    if: startsWith(github.ref, 'refs/tags/extension-v')
-    needs: [metadata, package]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      # Only for the install notes. They open the release so that the person who
-      # lands on this page is told how to install what is on it (spec 063
-      # FR-005) — SmartScreen on Windows, "Load unpacked" for the extension.
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app-web/vela-wallet/extension/release-notes.md
-          sparse-checkout-cone-mode: false
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Publish checksums alongside the package
-        working-directory: artifacts
-        run: |
-          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-extension"
-          mv "$RUNNER_TEMP/SHA256SUMS-extension" SHA256SUMS-extension
-          cat SHA256SUMS-extension
-      - name: Upload
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Vela Wallet Chrome extension $GITHUB_REF_NAME" \
-            --notes-file app-web/vela-wallet/extension/release-notes.md \
-            --generate-notes \
-            --verify-tag \
-            artifacts/* \
-          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
-            --repo "$GITHUB_REPOSITORY" --clobber
