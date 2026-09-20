@@ -822,6 +822,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 							chainName: chainName(chainId),
 							estSecs: receipt.typical_inclusion_s
 						}),
+						remainingTemplate: m['send.txRemaining'],
 						elapsedTemplate: m['send.txElapsed'],
 						slowLine: m['send.txSlowConfirm']
 					}

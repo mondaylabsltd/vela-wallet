@@ -609,7 +609,9 @@ export interface SendReceiptModel {
 		typicalS: number;
 		/** "Gnosis typically confirms in ~15s" — already filled. */
 		typicalLine: string;
-		/** "{{elapsed}}s elapsed — almost there" — the screen fills the number. */
+		/** "~{{remaining}}s remaining" — inside the typical time; the screen fills the number. */
+		remainingTemplate: string;
+		/** "{{elapsed}}s elapsed — almost there" — past it, where "almost" is true. */
 		elapsedTemplate: string;
 		/** Past twice the typical time. */
 		slowLine: string;
