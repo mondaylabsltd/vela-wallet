@@ -208,6 +208,10 @@
 			onapply={batch ? () => batch.apply() : undefined}
 		/>
 	{:else}
-		<SendReceipt model={body.model} oncta={() => (send ? send.done() : go('done'))} />
+		<SendReceipt
+			model={body.model}
+			layout="column"
+			oncta={() => (send ? send.done() : go('done'))}
+		/>
 	{/if}
 </ThirdPanel>

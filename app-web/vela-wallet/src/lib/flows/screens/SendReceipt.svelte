@@ -22,11 +22,19 @@
 
 	interface Props {
 		model: SendReceiptModel;
+		/**
+		 * Issue 199. A phone screen is short and the button belongs under the
+		 * thumb, so `screen` pins the foot to the bottom. The desktop's third
+		 * column is as tall as the window: pinned there, the status and the
+		 * button end up 900px apart with nothing between them, so `column`
+		 * keeps them one group and sets the group a little above the middle.
+		 */
+		layout?: 'screen' | 'column';
 		onexplorer?: () => void;
 		oncta?: () => void;
 	}
 
-	let { model, onexplorer, oncta }: Props = $props();
+	let { model, layout = 'screen', onexplorer, oncta }: Props = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -53,18 +61,40 @@
 	const elapsedS = $derived(
 		model.eta ? Math.max(0, Math.floor((now - model.eta.submittedAtMs) / 1000)) : 0
 	);
+	// Inside the typical time the line counts DOWN — "~9s remaining" is a
+	// promise with an end, "6s elapsed" is a stopwatch. "Almost there" waits
+	// until the typical time has passed, which is when it is true.
 	const etaLines = $derived.by(() => {
 		if (!model.eta) return [] as string[];
-		const { typicalS, typicalLine, elapsedTemplate, slowLine } = model.eta;
-		return [
-			typicalLine,
-			elapsedS >= typicalS * 2 ? slowLine : elapsedTemplate.replace('{{elapsed}}', String(elapsedS))
-		];
+		const { typicalS, typicalLine, remainingTemplate, elapsedTemplate, slowLine } = model.eta;
+		const second =
+			elapsedS < typicalS
+				? remainingTemplate.replace('{{remaining}}', String(typicalS - elapsedS))
+				: elapsedS < typicalS * 2
+					? elapsedTemplate.replace('{{elapsed}}', String(elapsedS))
+					: slowLine;
+		return [typicalLine, second];
+	});
+
+	// The ring round the disc. It eases toward full and never gets there:
+	// about 70% at the typical time, 86% at twice it, and a ceiling of 92%
+	// after that, so a transaction that takes three minutes is still visibly
+	// moving and one that takes ten seconds does not sit at 100% waiting.
+	// Only the confirmation closes it.
+	const progress = $derived.by(() => {
+		if (model.stage === 'confirmed') return 1;
+		if (model.stage !== 'submitted' || !model.eta) return undefined;
+		return 0.92 * (1 - Math.exp((-1.4 * elapsedS) / Math.max(1, model.eta.typicalS)));
 	});
 </script>
 
-<div class="receipt">
-	<StatusHero stage={model.stage} title={model.title} captions={[...model.captions, ...etaLines]} />
+<div class="receipt {layout}">
+	<StatusHero
+		stage={model.stage}
+		title={model.title}
+		captions={[...model.captions, ...etaLines]}
+		{progress}
+	/>
 
 	{#if model.breakdown !== undefined}
 		<div class="parts"><Breakdown rows={model.breakdown} title={model.breakdownTitle} /></div>
@@ -107,15 +137,37 @@
 		padding-top: var(--space-lg);
 	}
 
-	/* The buttons live at the bottom of the screen while the status sits near
-	   the top: the gap between them is where the waiting happens, and filling
-	   it would make the screen look busier than the moment is. */
+	/* On a phone the buttons live at the bottom of the screen while the
+	   status sits near the top: the gap between them is where the waiting
+	   happens, and filling it would make the screen look busier than the
+	   moment is. */
 	.foot {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-md);
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+
+	/* Issue 199: in a window-tall column that same gap is most of the screen.
+	   One group, 2:3 above the middle — the optical centre, where a dialog
+	   would sit. When the content outgrows the column (a long split) the
+	   spacers collapse to nothing and it scrolls as before. */
+	.column::before,
+	.column::after {
+		content: '';
+	}
+
+	.column::before {
+		flex: 2 1 0;
+	}
+
+	.column::after {
+		flex: 3 1 0;
+	}
+
+	.column .foot {
+		margin-top: 0;
 	}
 
 	.hash {
