@@ -39,7 +39,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-xs);
-		width: var(--layout-settingsNavW);
+		/* As wide as its longest label, and never narrower than the 216 the
+		   mocks measured (issue 198). A fixed 216 only ever fit English at the
+		   standard text size: "Service Endpoints" wrapped at the largest size,
+		   and ja/ru wrapped at the standard one — one two-line item in a list of
+		   one-line items. The labels are a closed set from the corpus, so the
+		   column is bounded by them; multiplying the width by --text-scale was
+		   tried first and still wrapped ru, ja, es, pt and fr. */
+		width: max-content;
+		min-width: var(--layout-settingsNavW);
 		flex-shrink: 0;
 		height: 100%;
 		padding: var(--space-xl) var(--space-lg);
@@ -69,6 +77,10 @@
 		color: var(--color-fg-muted);
 		text-align: start;
 		cursor: pointer;
+	}
+
+	button span {
+		white-space: nowrap;
 	}
 
 	button:hover {

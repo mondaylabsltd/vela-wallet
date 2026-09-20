@@ -25,8 +25,10 @@
 	<Identicon svg={header.identiconSvg} size="header" address={header.addressFull} />
 	<button type="button" class="text" aria-haspopup="dialog" {onclick}>
 		<span class="name-row">
-			<span class="name">{header.name}</span>
-			<Icon icon={UTILITY_ICONS['chevron-down']} size="sm" />
+			<!-- The full name on hover: the ellipsis below is the only place a long
+			     name is ever cut, and the switcher this opens prints it whole. -->
+			<span class="name" title={header.name}>{header.name}</span>
+			<span class="chevron"><Icon icon={UTILITY_ICONS['chevron-down']} size="sm" /></span>
 		</span>
 		<span class="address">{header.addressDisplay}</span>
 	</button>
@@ -60,14 +62,34 @@
 		gap: var(--space-sm);
 		color: var(--color-fg-base);
 		min-width: 0;
+		/* `min-width: 0` was never enough. This row is a start-aligned item of a
+		   column flex BUTTON, and there it takes its max-content width: a long
+		   name ran straight out of the sidebar and over the next column, the
+		   ellipsis on `.name` never fired, and the chevron — the only sign this
+		   is a switcher — went with it ("xiaoxiao · Key 2" already touched the
+		   edge; founder, 2026-09-20). Held to the button, the name gives way. */
+		max-width: 100%;
+	}
+
+	.chevron {
+		display: flex;
+		flex-shrink: 0;
 	}
 
 	.name {
 		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
-		white-space: nowrap;
+		/* Two lines, then the ellipsis. One line cut "xiaoxiao · Key 1" and
+		   "xiaoxiao · Key 2" to the same "xiaoxiao · K…" — the sidebar leaves a
+		   name about 137px, and the END of a name is what tells two accounts
+		   apart. `anywhere` because a name can be one unbroken word. */
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
+		line-height: var(--leading-tight);
 	}
 
 	.address {

@@ -54,7 +54,8 @@ export const TEST_ACCOUNT_SHORT = '0x0cE19C…084e2e';
 export const TEST_ACCOUNT_ADDRESS = '0x0cE19Cc09A0b561B1AB9ee3B88C93685F5084e2e';
 
 /** Runs before every document in the context: intro seen + wallet present. */
-export async function seedSignedIn(page: Page): Promise<void> {
+export async function seedSignedIn(page: Page, name?: string): Promise<void> {
+	const account = name === undefined ? TEST_ACCOUNT : { ...TEST_ACCOUNT, name };
 	await page.addInitScript((account) => {
 		window.localStorage.setItem('vela.intro.seen', String(Date.now()));
 		// Only when the profile has no wallet yet. This script runs before EVERY
@@ -65,7 +66,7 @@ export async function seedSignedIn(page: Page): Promise<void> {
 			window.localStorage.setItem('vela.accounts', JSON.stringify([account]));
 			window.localStorage.setItem('vela.activeAccountIndex', '0');
 		}
-	}, TEST_ACCOUNT);
+	}, account);
 }
 
 /**

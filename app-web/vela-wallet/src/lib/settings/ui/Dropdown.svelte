@@ -95,10 +95,21 @@
 		white-space: nowrap;
 	}
 
+	/* As wide as its widest choice, never narrower than its trigger. It was
+	   `inset-inline: 0` — exactly the 280 control column — while a choice is a
+	   label AND a note that does not wrap: in es-MX "Seguir al sistema" was
+	   squeezed to a word per line and "Sistema · Español (México)" still spilled
+	   out of the menu (founder, 2026-09-20; 15 of 15 locales at some text size).
+	   It grows toward the label, over its own row's empty middle, and stops at
+	   the row measure — the row's full width, since both end on the same edge.
+	   Past that a label may wrap again, which beats leaving the panel. */
 	.menu {
 		position: absolute;
-		inset-inline: 0;
+		inset-inline-end: 0;
 		top: 0;
+		width: max-content;
+		min-width: 100%;
+		max-width: var(--layout-rowMeasure);
 		z-index: 2;
 		padding-inline: var(--space-lg);
 		border: var(--border-hairline) solid var(--color-border-base);
