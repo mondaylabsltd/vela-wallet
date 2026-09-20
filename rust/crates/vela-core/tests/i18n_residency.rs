@@ -138,11 +138,27 @@ fn the_pinned_fallback_cannot_be_released() {
 
 #[test]
 fn residency_is_bounded_at_two_under_any_sequence() {
+    const SEQUENCE: [&str; 9] = ["ja", "de", "ru", "fr", "zh-TW", "it", "ko", "en", "pt-BR"];
+    // The byte bound is the largest PAIR this sequence can legitimately hold —
+    // measured, not remembered. It was a flat 140,000, which says nothing about
+    // residency and everything about how long the Russian corpus happened to be
+    // on the day it was written: Cyrillic is two bytes a letter, `ru` + `en`
+    // grew past it with eleven ordinary sentences (issues 204-206), and nothing
+    // had leaked. A third catalog left resident WOULD exceed the largest pair,
+    // by a whole catalog — which is the failure this loop exists to catch.
+    // SC-005's own budget (`ja` + `en`) is asserted, unchanged, in
+    // `cold_start_holds_only_the_active_language_and_the_fallback`.
+    let largest_pair = SEQUENCE
+        .iter()
+        .map(|lng| engine_with(lng).resident_bytes())
+        .max()
+        .unwrap_or(0);
+
     let mut engine = engine_with("en");
     // Hammer every transition the API allows; residency must never exceed two, and
     // `en` must always be one of them. This is the structural invariant FR-012 and
     // FR-013 encode — there is nowhere for a third catalog to go.
-    for lng in ["ja", "de", "ru", "fr", "zh-TW", "it", "ko", "en", "pt-BR"] {
+    for lng in SEQUENCE {
         if let Ok(c) = Catalog::embedded(lng) {
             engine.load_catalog(c);
         }
@@ -155,8 +171,8 @@ fn residency_is_bounded_at_two_under_any_sequence() {
         );
         assert!(resident.contains(&"en"), "{lng}: en is not resident");
         assert!(
-            engine.resident_bytes() <= SC005_BUDGET.max(140_000),
-            "{lng}: residency grew to {}",
+            engine.resident_bytes() <= largest_pair,
+            "{lng}: residency grew to {} — more than any two catalogs ({largest_pair})",
             engine.resident_bytes()
         );
         engine.release_catalog(lng);

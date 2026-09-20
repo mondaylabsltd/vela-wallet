@@ -17,13 +17,15 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
+import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
 import { chainName, nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
-import { moneyText, trimBalance } from '$lib/wallet/live';
+import { amountToInput } from '$lib/services/locale-format';
+import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
 import { feeLine, feeOptionPriceUsd, feeParts, feeSymbol } from './fee-line';
@@ -48,7 +50,8 @@ export interface SendLiveInputs {
 	m: WalletFlowMessages;
 	currency: CurrencyView;
 	identity: WalletIdentity;
-	identicon: (seed: string) => string;
+	/** `name` feeds the initials style; the identicon style ignores it. */
+	identicon: (seed: string, name?: string) => string;
 	/**
 	 * The picker is choosing SEVERAL tokens (spec 028 T440). A shell flag, on
 	 * purpose and by precedent: the core's `multi_select_mode` flips only when
@@ -349,12 +352,22 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		token?.price_usd != null ? (parseFloat(send.token_amount) || 0) * token.price_usd : null;
 
 	const split = send.split_mode;
+	// The split's sum in the display currency — the same arithmetic as the
+	// single form's line above, on the core's own total.
+	// Absent from a core built before the field existed — read as none.
+	const issues = split ? (send.split_row_issues ?? []) : [];
+	const splitSum = split ? parseFloat(send.confirm_amount) || 0 : 0;
+	// Nothing typed yet is not "≈ $0.00" — it is nothing to say.
+	const splitUsd = splitSum > 0 && token?.price_usd != null ? splitSum * token.price_usd : null;
 	// Which unit the figure is being TYPED in. `amount_fiat_code` is the
 	// figure's OWN code, never re-derived from the display context — the core
 	// is emphatic about that, and this file only reads it.
 	const inFiat = send.amount_fiat_code !== null;
 	const amountBlock = {
-		value: send.amount || '0',
+		// The figure as typed, in the person's decimal mark; the page hands the
+		// core a dot (`amountFromInput`), the same round trip the split rows and
+		// the importer's rate make.
+		value: amountToInput(send.amount) || '0',
 		// The line under the figure is the OTHER denomination (spec 021
 		// component 8; `05-screens-wallet.md:168` — "≈ $12.34" or "0.0042 ETH").
 		// It used to be the fiat value in BOTH modes, so a fiat-denominated
@@ -445,30 +458,55 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					detail: `${chainName(token.chain_id)} · ${fill(m['send.balanceLabel'], {
 						amount: trimBalance(token.balance)
 					})}`,
-					max: m['send.maxBtn']
+					// `Max` fills the SINGLE amount. In a split there is no single
+					// amount — the button wrote a field nobody could see and changed
+					// nothing on screen — so a split does not offer it.
+					max: split ? undefined : m['send.maxBtn']
 				}
 			: undefined,
 		// Split mode is the core's: it decides when one recipient becomes many,
 		// and the rows below are its drafts, not a list this file keeps.
 		addRecipient: split ? undefined : m['send.addRecipient'],
 		recipients: split
-			? send.recipients.map((draft, index) => ({
-					id: draft.id,
-					ordinal: fill(m['send.recipientN'], { n: index + 1 }),
-					name: draft.name ?? shortenAddress(draft.address),
-					address: draft.address,
-					identiconSvg: draft.address ? identicon(draft.address) : '',
-					amount: `${draft.amount} ${token?.symbol ?? ''}`.trim(),
-					amountValue: draft.amount,
-					addressLabel: m['send.recipientLabel'],
-					pickLabel: m['send.recipientPickAria'],
-					removeLabel: m['send.removeRecipient'],
-					// The core flags a row that repeats an earlier payee and says
-					// WHICH row it repeats; this file only picks the template
-					// (issue 203). A shell that compared the addresses itself
-					// would be a second rule to keep in step with the importer's.
-					duplicateNote: duplicateNote(send, draft.id, m)
-				}))
+			? send.recipients.map((draft, index) => {
+					// A row from the importer or the book knows who it pays. The
+					// editable card used to drop that and show a clipped address,
+					// so a payroll read as a column of hex; a named row now says
+					// both — the name a person recognises, the address that is paid.
+					const named = draft.name !== null && draft.name !== '' && draft.address !== '';
+					const issue = issues.find((row) => row.id === draft.id);
+					return {
+						id: draft.id,
+						ordinal: fill(m['send.recipientN'], { n: index + 1 }),
+						name: named ? (draft.name as string) : shortenAddress(draft.address),
+						addressShort: named ? shortenAddress(draft.address) : undefined,
+						address: draft.address,
+						// Artwork is for an ADDRESS. A half-typed "0x1234" drew somebody's
+						// face for nobody; the core says when the field is not one yet.
+						identiconSvg:
+							draft.address && issue?.address !== 'invalid'
+								? identicon(draft.address, draft.name ?? undefined)
+								: '',
+						amount: `${exactAmount(draft.amount)} ${token?.symbol ?? ''}`.trim(),
+						// The field shows the core's figure in the person's decimal
+						// mark and hands back a dot (`amountFromInput`, in the page):
+						// "1,5" typed raw counted as valid and then summed to nothing.
+						amountValue: amountToInput(draft.amount),
+						addressLabel: m['send.recipientLabel'],
+						addressPlaceholder: m['send.recipientPlaceholder'],
+						pickLabel: m['send.recipientPickAria'],
+						removeLabel: m['send.removeRecipient'],
+						// The core flags a row that repeats an earlier payee and says
+						// WHICH row it repeats; this file only picks the template
+						// (issue 203). A shell that compared the addresses itself
+						// would be a second rule to keep in step with the importer's.
+						duplicateNote: duplicateNote(send, draft.id, m),
+						// Only a field with something IN it can be wrong; an empty one
+						// is unfinished, and its prompt already says what it wants.
+						addressNote: issue?.address === 'invalid' ? m['send.batchBadAddress'] : undefined,
+						amountNote: issue?.amount === 'invalid' ? m['send.badAmount'] : undefined
+					};
+				})
 			: undefined,
 		recipientActions: split
 			? [
@@ -483,8 +521,28 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the row read "Total · XDAI" with no figure (spec 038 #D4).
 		summary: split
 			? {
-					label: m['send.splitTotalLabel'],
-					value: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim()
+					// "Total · 3 recipients", as the drawn SD2b has always said and
+					// the desktop and Android compose it.
+					label: `${m['send.splitTotalLabel']} · ${fill(
+						send.recipients.length === 1
+							? m['send.recipientCount_one']
+							: m['send.recipientCount_other'],
+						{ count: send.recipients.length }
+					)}`,
+					// Empty when a row cannot be summed yet — a dash, not a bare
+					// symbol with no figure in front of it.
+					value:
+						send.confirm_amount === ''
+							? '—'
+							: `${exactAmount(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
+					detail: splitUsd === null ? undefined : `≈ ${moneyText(splitUsd, currency)}`,
+					over: send.split_over_balance,
+					remaining:
+						send.split_remaining == null
+							? undefined
+							: fill(m['send.splitRemaining'], {
+									amount: `${trimBalance(send.split_remaining)} ${token?.symbol ?? ''}`.trim()
+								})
 				}
 			: undefined,
 		amount: split ? undefined : amountBlock,
@@ -499,8 +557,60 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// control's own refusal (issue 197): a dimmed toggle with no sentence
 		// is a refusal nobody can act on, which is exactly what the desktop
 		// says here too (`send_notice`).
-		alert: alertWords(inputs.alert, m) ?? liveWarning(send, m) ?? denomReason(send, m),
+		//
+		// A split has its own live verdict, `split_over_balance` — the same
+		// predicate Continue refuses on, which this shell only ever showed AFTER
+		// the refusal. And it does not take `amount_warning`: that one is derived
+		// from the single form's figure, which a split leaves behind, so it kept
+		// judging a number that was no longer on the screen.
+		alert:
+			alertWords(inputs.alert, m) ??
+			(split
+				? send.split_over_balance
+					? m['send.alertInsufficientBalanceBody']
+					: undefined
+				: (liveWarning(send, m) ?? denomReason(send, m))),
+		// In a split the gate closes for two reasons: the pre-check is out
+		// (`estimating_gas` — the button turns busy), or a row is unfinished — and
+		// the core says WHICH row and which field, so the sentence names it.
+		hint: split && !send.estimating_gas ? splitHint(issues, m) : undefined,
+		fillEmpty: split ? fillEmpty(send, issues, m, token?.symbol ?? '') : undefined,
 		cta: m['send.continueBtn']
+	};
+}
+
+/** The first unfinished recipient, and what it still needs. */
+function splitHint(issues: SendSplitRowIssue[], m: WalletFlowMessages): string | undefined {
+	const first = issues[0];
+	if (first === undefined) return undefined;
+	return fill(first.address === 'ok' ? m['send.splitNeedsAmount'] : m['send.splitNeedsAddress'], {
+		n: first.ordinal
+	});
+}
+
+/**
+ * "Use 0.5 ETH for the empty rows": offered while one row has a figure the core
+ * accepts and another has none. The figure is the first such row's, exactly as
+ * typed — nothing is computed.
+ */
+function fillEmpty(
+	send: SendView,
+	issues: SendSplitRowIssue[],
+	m: WalletFlowMessages,
+	symbol: string
+): { label: string; amount: string } | undefined {
+	const empty = issues.some((row) => row.amount === 'empty');
+	if (!empty) return undefined;
+	const flagged = new Map(issues.map((row) => [row.id, row.amount]));
+	const source = send.recipients.find(
+		(row) => row.amount.trim() !== '' && (flagged.get(row.id) ?? 'ok') === 'ok'
+	);
+	if (source === undefined) return undefined;
+	return {
+		amount: source.amount,
+		label: fill(m['send.splitFillEmpty'], {
+			amount: `${exactAmount(source.amount)} ${symbol}`.trim()
+		})
 	};
 }
 
@@ -713,20 +823,26 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	if (send.split_mode && send.recipients.length > 0) {
 		const symbol = token?.symbol ?? '';
 		const breakdown = send.recipients.map((draft) => ({
-			identiconSvg: draft.address ? identicon(draft.address) : undefined,
+			identiconSvg: draft.address ? identicon(draft.address, draft.name ?? undefined) : undefined,
 			address: draft.address || undefined,
 			label: draft.name ?? shortenAddress(draft.address),
-			value: `${draft.amount} ${symbol}`.trim(),
+			// A name never stands in for the address on the page that signs.
+			detail: draft.name ? shortenAddress(draft.address) : undefined,
+			mono: !draft.name,
+			value: `${exactAmount(draft.amount)} ${symbol}`.trim(),
 			// The form's repeat warning, said again on the page that signs
 			// (issue 203): two lines paying one payee are hardest to spot
 			// exactly where the avatars are identical and the sum looks right.
 			note: duplicateNote(send, draft.id, m)
 		}));
-		const countLine = fill(m['send.recipientCount_other'], { count: send.recipients.length });
+		const countLine = fill(
+			send.recipients.length === 1 ? m['send.recipientCount_one'] : m['send.recipientCount_other'],
+			{ count: send.recipients.length }
+		);
 		return {
 			...model,
 			mark: heroMark,
-			amount: `${send.confirm_amount} ${symbol}`.trim(),
+			amount: `${exactAmount(send.confirm_amount)} ${symbol}`.trim(),
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,

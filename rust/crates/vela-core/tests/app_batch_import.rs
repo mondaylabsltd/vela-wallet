@@ -1039,6 +1039,99 @@ fn over_cap_and_rejected_notices_never_hide_each_other() {
     assert_eq!(addrs, vec![a(), b()]);
 }
 
+/// The lines the parser refused are IN the view, as the person wrote them and
+/// with the reason — they were only ever counted, so a screen could say "2 rows
+/// skipped" and never which two. `rejected` still counts them all.
+#[test]
+fn refused_lines_are_listed_with_their_text_and_their_reason() {
+    let mut sut = rated(usdt("100000"), 8.0);
+    paste(
+        &mut sut,
+        format!(
+            "name,address,amount\nAlice,{},800\nMallory,0xdeadbeef,3000\nCarol,{},\nDave,{},12,5",
+            a(),
+            b(),
+            c()
+        ),
+    );
+    let view = sut.view();
+    let listed: Vec<_> = view
+        .errors
+        .iter()
+        .map(|e| (e.line, e.raw.as_str(), e.reason))
+        .collect();
+    assert_eq!(listed.len(), 2, "{listed:?}");
+    assert_eq!(listed[0].0, 2);
+    assert!(
+        listed[0].1.contains("0xdeadbeef"),
+        "the text a person searches for"
+    );
+    assert_eq!(listed[0].2, BatchParseReason::NoAddress);
+    assert_eq!(listed[1].0, 3);
+    assert!(listed[1].1.contains("Carol"));
+    assert_eq!(listed[1].2, BatchParseReason::NoAmount);
+    assert!(
+        view.rejected as usize >= view.errors.len(),
+        "`rejected` counts every refused line and every not-ok row"
+    );
+}
+
+/// A document that is not a table at all is thousands of refused lines; the
+/// view carries the first hundred and the count stays exact.
+#[test]
+fn the_refused_lines_are_capped_but_the_count_is_not() {
+    let mut sut = rated(usdt("100000"), 8.0);
+    let junk: String = (0..250).map(|i| format!("line {i} of prose\n")).collect();
+    paste(&mut sut, format!("{},800\n{junk}", a()));
+    let view = sut.view();
+    assert_eq!(view.errors.len(), 100);
+    assert_eq!(view.rejected, 250);
+    assert_eq!(view.recipient_count, 1);
+}
+
+/// A refused line's text is for finding it, not for carrying a pasted essay
+/// through the bridge on every keystroke — and a sheet is rarely ASCII.
+#[test]
+fn a_refused_lines_text_is_clipped_by_characters() {
+    let mut sut = rated(usdt("100000"), 8.0);
+    let essay = "薪".repeat(400);
+    paste(&mut sut, format!("{},800\n{essay}", a()));
+    let view = sut.view();
+    assert_eq!(view.errors.len(), 1);
+    assert_eq!(
+        view.errors[0].raw.chars().count(),
+        121,
+        "120 characters and the ellipsis"
+    );
+    assert!(view.errors[0].raw.ends_with('…'));
+}
+
+/// What the other shells pin about this view is unchanged: refused lines are
+/// NOT preview rows, and `rejected` counts what it always counted.
+#[test]
+fn listing_the_refused_lines_moves_nothing_the_shells_already_read() {
+    let mut sut = rated(usdt("100000"), 8.0);
+    paste(
+        &mut sut,
+        format!("{},800\n{},1600\n{},100\nnot-an-address, 1", a(), b(), a()),
+    );
+    let view = sut.view();
+    assert_eq!(view.preview.len(), 3, "two good rows and the duplicate");
+    assert_eq!(
+        view.rejected, 2,
+        "the duplicate, and the line with no address"
+    );
+    assert_eq!(view.recipient_count, 2);
+    assert_eq!(view.errors.len(), 1);
+}
+
+/// Nothing pasted, nothing refused.
+#[test]
+fn an_empty_importer_lists_no_errors() {
+    let sut = rated(usdt("100"), 8.0);
+    assert!(sut.view().errors.is_empty());
+}
+
 /// Invariant ④ — a capped total above the balance blocks apply, and Apply is
 /// a no-op while blocked.
 #[test]

@@ -763,6 +763,7 @@ function sendForm(
 				{
 					ordinal: fill(m['send.recipientN'], { n: 2 }),
 					name: 'Alice',
+					addressShort: CONTACTS[1].addressDisplay,
 					identiconSvg: identicon(CONTACTS[1].addressFull),
 					address: CONTACTS[1].addressFull,
 					amount: '30',
@@ -771,6 +772,7 @@ function sendForm(
 				{
 					ordinal: fill(m['send.recipientN'], { n: 3 }),
 					name: 'hold on',
+					addressShort: CONTACTS[6].addressDisplay,
 					identiconSvg: identicon(CONTACTS[6].addressFull),
 					address: CONTACTS[6].addressFull,
 					amount: '40',
@@ -784,7 +786,8 @@ function sendForm(
 			],
 			summary: {
 				label: `${m['send.splitTotalLabel']} · ${fill(m['send.recipientCount_other'], { count: 3 })}`,
-				value: '120 USDT · ≈$120.00'
+				value: '120 USDT',
+				detail: '≈ $120.00'
 			},
 			fee,
 			cta: m['send.continueBtn']
@@ -873,33 +876,92 @@ function feeTokenPick(m: WalletFlowMessages): FeeTokenPickModel {
 	};
 }
 
-function batchImport(m: WalletFlowMessages): BatchImportModel {
+function batchImport(m: WalletFlowMessages, identicon: Identicon): BatchImportModel {
+	const bob = CONTACTS[3];
 	return {
 		title: m['send.batchTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
+		unitCaption: m['send.batchUnitCaption'],
 		units: {
 			fiat: fill(m['send.batchUnitFiat'], { code: 'CNY' }),
 			token: fill(m['send.batchUnitToken'], { sym: 'USDT' })
 		},
 		unit: 'fiat',
-		pasteValue: '0xabc… , 5000\n0xdef… , 8000',
+		pasteValue:
+			'Alice, 0x9F3c…21aE, 5000\nBob, 0x44Aa…9C21, 8000\nAlice, 0x9F3c…21aE, 5000\nMallory, 0x12zz, 10',
 		pastePlaceholder: m['send.batchPastePlaceholder'],
-		importFile: `${m['send.batchImportFile']} (xlsx / csv / txt)`,
-		template: m['send.batchTemplate'],
-		rateSection: m['send.batchRateSection'],
-		rateLabel: fill(m['send.batchRateLabel'], { sym: 'USDT' }),
-		rateValue: '7.25 CNY',
-		rateHint: fill(m['send.batchRateHint'], { code: 'CNY', sym: 'USDT' }),
-		parsedLabel: fill(m['send.batchParsedCount'], { n: 3 }),
-		rows: [
-			{ ok: true, address: ALICE.addressDisplay, conversion: '5,000 CNY → 689.66' },
-			{ ok: true, address: '0x21aE…9F3c', conversion: '8,000 CNY → 1,103.45' },
-			{ ok: false, address: `0x12zz…${m['send.batchBadAddress']}`, conversion: '—' }
-		],
-		rejectedText: fill(m['send.batchRejected_one'], { count: 1 }),
+		tools: {
+			file: { label: m['send.batchImportFile'], busy: false },
+			template: { label: m['send.batchTemplate'], saved: false },
+			formats: 'xlsx · csv · txt'
+		},
+		rate: {
+			section: m['send.batchRateSection'],
+			lead: '1 USDT',
+			sign: '≈',
+			value: '7.25',
+			code: 'CNY',
+			editable: false,
+			edited: false,
+			reset: m['send.batchRateReset'],
+			hint: fill(m['send.batchRateHint'], { code: 'CNY', sym: 'USDT' }),
+			hintTone: 'plain'
+		},
+		preview: {
+			label: fill(m['send.batchParsedCount'], { n: 4 }),
+			rows: [
+				{
+					kind: 'row',
+					ok: true,
+					name: ALICE.name,
+					address: ALICE.addressDisplay,
+					addressFull: ALICE.addressFull,
+					identiconSvg: identicon(ALICE.addressFull),
+					amount: '689.655172 USDT',
+					source: '5,000 CNY'
+				},
+				{
+					kind: 'row',
+					ok: true,
+					name: bob.name,
+					address: bob.addressDisplay,
+					addressFull: bob.addressFull,
+					identiconSvg: identicon(bob.addressFull),
+					amount: '1,103.448276 USDT',
+					source: '8,000 CNY'
+				},
+				// The same person twice is what a sheet actually gets wrong: the
+				// first line keeps the payment and this one is skipped, by name.
+				{
+					kind: 'row',
+					ok: false,
+					name: ALICE.name,
+					address: ALICE.addressDisplay,
+					addressFull: ALICE.addressFull,
+					identiconSvg: identicon(ALICE.addressFull),
+					amount: '—',
+					note: m['send.batchDup']
+				},
+				// And a line that never became a row: the text to find it by in the
+				// sheet, and the reason. These were only ever counted.
+				{ kind: 'refused', text: 'Mallory , 0x12zz , 10', note: m['send.batchBadAddress'] }
+			]
+		},
+		notices: [fill(m['send.batchRejected_other'], { count: 2 })],
+		total: {
+			label: `${m['send.splitTotalLabel']} · ${fill(m['send.recipientCount_other'], { count: 2 })}`,
+			value: '1,793.103448 USDT',
+			detail: '13,000 CNY',
+			balance: fill(m['send.balanceLabel'], { amount: '53.4836 USDT' }),
+			// The drawn account holds 53 USDT and the sheet asks for 1,793: the
+			// picture is of the refusal, because that is the state with the most
+			// to say and the one that used to say nothing.
+			over: true,
+			overText: fill(m['send.batchOverBalance'], { sym: 'USDT' })
+		},
 		// Two of three rows parsed, so the button offers two — never three.
 		cta: fill(m['send.batchApply_other'], { count: 2 }),
-		ctaDisabled: false
+		ctaDisabled: true
 	};
 }
 
@@ -988,18 +1050,22 @@ function sendConfirm(
 							identiconSvg: identicon(ALICE.addressFull),
 							address: ALICE.addressFull,
 							label: ALICE.addressDisplay,
+							mono: true,
 							value: '50 USDT'
 						},
 						{
 							identiconSvg: identicon(CONTACTS[1].addressFull),
 							address: CONTACTS[1].addressFull,
 							label: 'Alice',
+							// On the page that signs, a name never stands alone.
+							detail: CONTACTS[1].addressDisplay,
 							value: '30 USDT'
 						},
 						{
 							identiconSvg: identicon(CONTACTS[6].addressFull),
 							address: CONTACTS[6].addressFull,
 							label: 'hold on',
+							detail: CONTACTS[6].addressDisplay,
 							value: '40 USDT'
 						}
 					]
@@ -1177,7 +1243,7 @@ export function buildFlowState(
 			return {
 				state,
 				base: { kind: 'send-form', model: sendForm(m, identicon, 'split') },
-				sheet: { kind: 'batch-import', model: batchImport(m) },
+				sheet: { kind: 'batch-import', model: batchImport(m, identicon) },
 				textScale: scale
 			};
 		case 'sd2e':
@@ -1381,7 +1447,7 @@ export function buildDesktopFlowState(
 				title: m['send.batchTitle'],
 				backLabel: back,
 				closeLabel: close,
-				body: { kind: 'batch-import', model: batchImport(m) }
+				body: { kind: 'batch-import', model: batchImport(m, identicon) }
 			};
 		case 'dsd4':
 			return {

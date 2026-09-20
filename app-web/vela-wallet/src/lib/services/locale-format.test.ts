@@ -13,6 +13,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { preferences } from './preferences.svelte';
 import {
+	amountFromInput,
+	amountToInput,
 	dateFormatOptions,
 	formatCompact,
 	formatDate,
@@ -65,6 +67,27 @@ describe('number presets', () => {
 		// Arabic-Indic digits map to ASCII, or the field would refuse a number a
 		// person can plainly see they typed.
 		expect(parseLocaleNumber('١٢٣٤,٥٦', 'dot_comma')).toBe('1234.56');
+	});
+
+	it('an editable amount is one number on both sides of the field', () => {
+		// The rate that was read as ten times itself: "7,5" under a comma preset
+		// is seven and a half, and the core only speaks dots.
+		expect(amountFromInput('7,5', 'dot_comma')).toBe('7.5');
+		expect(amountFromInput('7,5', 'space_comma')).toBe('7.5');
+		expect(amountToInput('7.5', 'dot_comma')).toBe('7,5');
+		// A numeric keypad's dot stays the decimal it was typed as — never
+		// grouping, which would make "0.5" arrive as 5.
+		expect(amountFromInput('0.5', 'dot_comma')).toBe('0.5');
+		expect(amountToInput('0.5', 'dot_comma')).toBe('0,5');
+		// Under a dot preset a comma is NOT guessed at: stripped, "1,5" pays 15;
+		// made a dot, "1,500" pays one and a half. It goes to the core as typed,
+		// and the core refuses what it cannot read.
+		expect(amountFromInput('1,5', 'comma_dot')).toBe('1,5');
+		expect(amountFromInput('1,500', 'comma_dot')).toBe('1,500');
+		expect(amountToInput('1500.25', 'comma_dot')).toBe('1500.25');
+		// Half-typed figures survive the round trip, or the caret would jump.
+		expect(amountToInput(amountFromInput('7,', 'dot_comma'), 'dot_comma')).toBe('7,');
+		expect(amountFromInput(' 12 ', 'comma_dot')).toBe('12');
 	});
 
 	it('a compact figure keeps the preset it abbreviates under', () => {

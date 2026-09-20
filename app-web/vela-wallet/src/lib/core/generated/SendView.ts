@@ -10,6 +10,7 @@ import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
 import type { SendRecipientRisk } from "./SendRecipientRisk";
+import type { SendSplitRowIssue } from "./SendSplitRowIssue";
 import type { SendStage } from "./SendStage";
 import type { SendToken } from "./SendToken";
 import type { SendTreasuryStatus } from "./SendTreasuryStatus";
@@ -122,7 +123,28 @@ split_over_balance: boolean,
  * sentence beside the repeating row, not a refusal, and never flags the
  * first occurrence: that is the row the repeat repeats.
  */
-split_duplicates: Array<SendDuplicateRowView>, picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
+split_duplicates: Array<SendDuplicateRowView>, 
+/**
+ * Split mode only: the rows `Continue` will not take, and which field of
+ * each is why ([`split_row_issues`]). Empty exactly when the rows pass the
+ * gate — it IS the gate's reason, so a shell never re-derives the address
+ * or amount rule to explain a dark button.
+ */
+split_row_issues: Array<SendSplitRowIssue>, 
+/**
+ * Split mode only: the balance less the rows' sum, in token units —
+ * "how much is left to give out". `None` while a row cannot be summed or
+ * the sum is over the balance (`split_over_balance` says that instead).
+ * The fee is NOT held back: for the native coin the pre-check still has
+ * the last word, and this figure never promises otherwise.
+ */
+split_remaining: string | null, 
+/**
+ * How many more recipients an import may add before the cap: the cap less
+ * the rows already started (blank rows do not count — an import drops
+ * them). The shell opens the importer with this as ITS cap.
+ */
+split_import_room: number, picker_target: string | null, multi_select_mode: boolean, multi_selected_ids: Array<string>, 
 /**
  * Every held id on the filtered chain that "select all valuable" would
  * sweep. The picker's master tick is `visible ∩ this`, all selected — the

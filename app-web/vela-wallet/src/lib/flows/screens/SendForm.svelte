@@ -10,6 +10,8 @@
 	 * fee row, summary line and CTA.
 	 */
 	import Button from '$lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
 	import AmountInput from '../ui/AmountInput.svelte';
 	import FeeRow from '../ui/FeeRow.svelte';
@@ -47,6 +49,14 @@
 		onrecipient?: (value: string) => void;
 		/** The core's gate: `can_continue`. Absent leaves the button armed. */
 		ctaDisabled?: boolean;
+		/**
+		 * The core's `estimating_gas`: Continue was pressed and the pre-check is
+		 * out, for as long as fifteen seconds. The gate closes for it too, and a
+		 * button that only went dark read as "you cannot" when it meant "wait".
+		 */
+		ctaBusy?: boolean;
+		/** One amount into every row that has none (`model.fillEmpty`). */
+		onfillEmpty?: (amount: string) => void;
 	}
 
 	let {
@@ -64,8 +74,13 @@
 		oncontinue,
 		onamount,
 		onrecipient,
-		ctaDisabled = false
+		ctaDisabled = false,
+		ctaBusy = false,
+		onfillEmpty
 	}: Props = $props();
+
+	/** The three doors into a split, each with the glyph of what it opens. */
+	const ACTION_ICONS = { add: 'plus', contacts: 'users-round', import: 'upload' } as const;
 </script>
 
 <div class="form">
@@ -152,27 +167,75 @@
 		</ul>
 	{/if}
 
+	{#if model.fillEmpty !== undefined && onfillEmpty}
+		{@const fill = model.fillEmpty}
+		<button type="button" class="fill" onclick={() => onfillEmpty(fill.amount)}>
+			<Icon icon={UTILITY_ICONS.copy} size="sm" />
+			{fill.label}
+		</button>
+	{/if}
+
 	{#if model.recipientActions !== undefined}
 		<GhostPillRow
-			items={model.recipientActions}
+			items={model.recipientActions.map((action) => ({
+				...action,
+				icon: ACTION_ICONS[action.id]
+			}))}
 			onselect={(id) => onrecipientAction?.(id as 'add' | 'contacts' | 'import')}
 		/>
 	{/if}
 
-	{#if model.summary !== undefined}
-		<SummaryLine label={model.summary.label} value={model.summary.value} />
+	{#if model.mode !== 'split' && model.summary !== undefined}
+		<SummaryLine
+			label={model.summary.label}
+			value={model.summary.value}
+			detail={model.summary.detail}
+			over={model.summary.over}
+		/>
 	{/if}
 
 	<FeeRow fee={model.fee} onopen={onfee} />
 
-	{#if model.alert !== undefined}
-		<p class="alert" role="alert">{model.alert}</p>
-	{/if}
+	<!--
+		A split can be sixty people long, and what it adds up to is the one
+		figure that matters while the rows are being typed. So in a split the
+		total, the core's refusal and Continue travel together at the bottom of
+		the screen, instead of waiting under the last card.
+	-->
+	<div class="foot" class:pinned={model.mode === 'split'}>
+		{#if model.mode === 'split' && model.summary !== undefined}
+			<SummaryLine
+				label={model.summary.label}
+				value={model.summary.value}
+				detail={model.summary.detail}
+				over={model.summary.over}
+				remaining={model.summary.remaining}
+			/>
+		{/if}
 
-	<div class="cta">
-		<Button variant="primary" shape="rounded" onclick={oncontinue} disabled={ctaDisabled}>
-			{model.cta}
-		</Button>
+		{#if model.alert !== undefined}
+			<p class="alert" role="alert">
+				<Icon icon={UTILITY_ICONS['circle-alert']} size="sm" />
+				<span>{model.alert}</span>
+			</p>
+		{:else if model.hint !== undefined}
+			<p class="alert hint">
+				<Icon icon={UTILITY_ICONS.info} size="sm" />
+				<span>{model.hint}</span>
+			</p>
+		{/if}
+
+		<div class="cta">
+			<Button
+				variant="primary"
+				shape="rounded"
+				onclick={oncontinue}
+				disabled={ctaDisabled && !ctaBusy}
+				loading={ctaBusy}
+			>
+				{model.cta}
+			</Button>
+		</div>
 	</div>
 </div>
 
@@ -245,14 +308,68 @@
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 	}
 
+	/* Offered only while it would do something, under the rows it would fill.
+	   Quiet: it edits the form, it does not move the money. */
+	.fill {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		align-self: flex-start;
+		padding: var(--space-sm) 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
+		cursor: pointer;
+	}
+
+	.fill:active {
+		transform: scale(var(--motion-press-button));
+	}
+
+	.foot {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
+	.pinned {
+		position: sticky;
+		inset-block-end: 0;
+		/* The form's own gap sits above it; the rule is where the list ends. */
+		padding-block-start: var(--space-sm);
+		background: var(--color-bg-base);
+		border-block-start: var(--border-hairline) solid var(--color-border-base);
+	}
+
 	.cta {
 		padding-block: var(--space-md) var(--space-xl);
 	}
+
 	/* The core's refusal, where the eye is when the button did nothing. */
 	.alert {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-sm);
 		margin: 0;
-		padding-top: var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-danger-base);
+		line-height: var(--leading-normal);
+		/* `--color-danger-base` was never a token, so this sentence — the core's
+		   refusal — had been printing in the body colour. */
+		color: var(--color-error-base);
+	}
+
+	/* Unfinished, not refused: the same place, in the quiet colour. */
+	.hint {
+		color: var(--color-fg-muted);
+	}
+
+	.alert :global(svg) {
+		flex-shrink: 0;
+		margin-block-start: var(--space-xs);
 	}
 </style>

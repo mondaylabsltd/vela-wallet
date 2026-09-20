@@ -288,8 +288,22 @@ for (let i = 1; i < PATHS.length; i++) {
 //   paying for something that is not theirs to pay for. On a network the
 //   person added — a local devnet, an internal chain — the operator may have
 //   no way to hold gas there at all, and `customLead` says so.
-if (PATHS.length !== 1662) fail(`expected 1662 paths (1575 leaf + 87 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1575) fail(`expected 1575 leaf paths, got ${leafSet.size}`);
+// + 11 more (issues 204-206, the multi-recipient send): what the split form and
+//   its importer did without saying, and what the person had no way to ask for.
+//   `send.batchUnitCaption` names the first choice on the importer;
+//   `send.batchTokenHint` — in token mode nothing is converted and the sheet's
+//   figures ARE the amounts (the template's 5000 is five thousand coins);
+//   `send.batchAddsToRows` / `send.batchReplacesRows` say what importing does to
+//   the people already on the form, and `send.batchReplaceInstead` /
+//   `send.batchAddInstead` are the way to choose the other; `send.badAmount` is a
+//   refused line's or a row's reason beside the existing "Invalid address";
+//   `send.splitNeedsAddress` / `send.splitNeedsAmount` name the row a dark
+//   Continue is waiting on (`{{n}}`, not `{{count}}`: it is an ordinal);
+//   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
+//   puts one amount in every empty row. Everything ELSE those issues needed was
+//   already here, in all fifteen locales, unread. No new branch.
+if (PATHS.length !== 1673) fail(`expected 1673 paths (1586 leaf + 87 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1586) fail(`expected 1586 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 87) fail(`expected 87 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

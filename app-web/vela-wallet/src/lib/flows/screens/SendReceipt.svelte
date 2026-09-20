@@ -26,7 +26,7 @@
 		 * Issue 199. A phone screen is short and the button belongs under the
 		 * thumb, so `screen` pins the foot to the bottom. The desktop's third
 		 * column is as tall as the window: pinned there, the status and the
-		 * button end up 900px apart with nothing between them, so `column`
+		 * button end up most of a screen apart with nothing between them, so `column`
 		 * keeps them one group and sets the group a little above the middle.
 		 */
 		layout?: 'screen' | 'column';

@@ -79,6 +79,10 @@
 		filterClass?(id: string): void;
 		/** The core's gates — `can_continue` / `can_confirm`. */
 		continueDisabled: boolean;
+		/** The core's `estimating_gas`: Continue is out checking, not refused. */
+		continueBusy?: boolean;
+		/** One amount into every split row that has none. */
+		fillEmptyAmounts?(amount: string): void;
 		confirmDisabled: boolean;
 	}
 
@@ -105,14 +109,16 @@
 
 	/** The batch importer's handlers, when its own core is live. */
 	interface BatchActions {
-	/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
-	rate: (text: string) => void;
-	resetRate: () => void;
+		/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
+		rate: (text: string) => void;
+		resetRate: () => void;
 		unit(id: string): void;
 		paste(text: string): void;
 		pickFile(): void;
 		saveTemplate(): void;
 		apply(): void;
+		/** Add to the people already on the form, or replace them. */
+		toggleMerge(): void;
 	}
 
 	interface Props {
@@ -248,6 +254,10 @@
 				onamount={send ? (value) => send.amountChanged(value) : undefined}
 				onrecipient={send ? (value) => send.recipientChanged(value) : undefined}
 				ctaDisabled={send?.continueDisabled ?? false}
+				ctaBusy={send?.continueBusy ?? false}
+				onfillEmpty={send?.fillEmptyAmounts
+					? (amount) => send.fillEmptyAmounts?.(amount)
+					: undefined}
 			/>
 		</FlowScreen>
 	{:else if base.kind === 'send-confirm'}
@@ -361,6 +371,7 @@
 					onfile={batch ? () => batch.pickFile() : undefined}
 					ontemplate={batch ? () => batch.saveTemplate() : undefined}
 					onapply={batch ? () => batch.apply() : undefined}
+					onmerge={batch ? () => batch.toggleMerge() : undefined}
 				/>
 			</BottomSheet>
 		{/if}

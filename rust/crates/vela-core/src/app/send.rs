@@ -168,6 +168,55 @@ pub fn recipients_are_valid(recipients: &[SendRecipientDraft]) -> bool {
             .all(|r| is_valid_address(r.address.trim()) && js_parse_float(&r.amount) > 0.0)
 }
 
+/// The split editor's unfinished rows, field by field — the reasons behind
+/// [`SendView::can_continue`] in a split.
+///
+/// The gate was one boolean over every row, so a dark `Continue` could not say
+/// WHICH of forty recipients was the problem; and it judged an amount by its
+/// leading digits (`recipients_are_valid`, ported verbatim), so `1,5` armed the
+/// button while [`sum_split_base_units`] could not read it — `Continue` then
+/// returned without a word and the total went blank. An amount is `Ok` here
+/// only when BOTH hold: it is positive, and it is a figure the batch can
+/// actually be built from. The gate now asks this list, so the button, the
+/// row's own message and the signature cannot disagree.
+pub fn split_row_issues(
+    recipients: &[SendRecipientDraft],
+    decimals: u32,
+) -> Vec<SendSplitRowIssue> {
+    recipients
+        .iter()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            let address = row.address.trim();
+            let address_state = if address.is_empty() {
+                SendRowFieldState::Empty
+            } else if is_valid_address(address) {
+                SendRowFieldState::Ok
+            } else {
+                SendRowFieldState::Invalid
+            };
+            let amount = row.amount.trim();
+            let amount_state = if amount.is_empty() {
+                SendRowFieldState::Empty
+            } else if js_parse_float(amount) > 0.0
+                && to_base_units(amount, decimals).is_some_and(|units| units > 0)
+            {
+                SendRowFieldState::Ok
+            } else {
+                SendRowFieldState::Invalid
+            };
+            (address_state != SendRowFieldState::Ok || amount_state != SendRowFieldState::Ok).then(
+                || SendSplitRowIssue {
+                    id: row.id.clone(),
+                    ordinal: index as u32 + 1,
+                    address: address_state,
+                    amount: amount_state,
+                },
+            )
+        })
+        .collect()
+}
+
 /// The split editor's repeated payees: for every row whose address a row ABOVE
 /// it already carries, that row's id and the 1-based position of the row it
 /// repeats.
@@ -977,6 +1026,15 @@ pub enum Event {
     SeedSplitRecipients {
         recipients: Vec<SendRecipientDraft>,
     },
+    /// The same rows, ADDED to what the person has already entered instead of
+    /// replacing it ([`append_split`]). A list brought to a form that already
+    /// has people on it is, nearly always, more people — and the seed above
+    /// threw the typed ones away without a word. A new variant rather than a
+    /// flag on the old one: every shell that still sends the old event keeps
+    /// exactly the behaviour it had.
+    AppendSplitRecipients {
+        recipients: Vec<SendRecipientDraft>,
+    },
     /// The split editor's whole-array onChange; ≤1 row collapses back to
     /// single mode carrying the remaining row.
     RecipientsChanged {
@@ -1372,6 +1430,32 @@ pub struct SendDuplicateRowView {
     pub first_ordinal: u32,
 }
 
+/// What one field of a split row still needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendRowFieldState {
+    Ok,
+    /// Nothing typed yet. Not a mistake — the row is unfinished, and a screen
+    /// that paints an untouched field red is shouting at someone mid-sentence.
+    Empty,
+    /// Something typed that is not an address / not an amount that can be
+    /// sent: a truncated `0x…`, `1,5`, `1e5`, `0`.
+    Invalid,
+}
+
+/// One split row that `Continue` will not take, and which of its fields is
+/// why ([`split_row_issues`]). Rows that are fine are not listed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendSplitRowIssue {
+    pub id: String,
+    /// 1-based position, the number the row wears ("Recipient 2").
+    pub ordinal: u32,
+    pub address: SendRowFieldState,
+    pub amount: SendRowFieldState,
+}
+
 /// One receipt line for batch sends (`ReceiptTransfer`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -1521,6 +1605,21 @@ pub struct SendView {
     /// sentence beside the repeating row, not a refusal, and never flags the
     /// first occurrence: that is the row the repeat repeats.
     pub split_duplicates: Vec<SendDuplicateRowView>,
+    /// Split mode only: the rows `Continue` will not take, and which field of
+    /// each is why ([`split_row_issues`]). Empty exactly when the rows pass the
+    /// gate — it IS the gate's reason, so a shell never re-derives the address
+    /// or amount rule to explain a dark button.
+    pub split_row_issues: Vec<SendSplitRowIssue>,
+    /// Split mode only: the balance less the rows' sum, in token units —
+    /// "how much is left to give out". `None` while a row cannot be summed or
+    /// the sum is over the balance (`split_over_balance` says that instead).
+    /// The fee is NOT held back: for the native coin the pre-check still has
+    /// the last word, and this figure never promises otherwise.
+    pub split_remaining: Option<String>,
+    /// How many more recipients an import may add before the cap: the cap less
+    /// the rows already started (blank rows do not count — an import drops
+    /// them). The shell opens the importer with this as ITS cap.
+    pub split_import_room: u32,
     pub picker_target: Option<String>,
     pub multi_select_mode: bool,
     pub multi_selected_ids: Vec<String>,
@@ -1630,6 +1729,7 @@ impl App for Send {
             Event::TapMax => tap_max(model),
             Event::EnterSplitMode => enter_split_mode(model),
             Event::SeedSplitRecipients { recipients } => seed_split(model, recipients),
+            Event::AppendSplitRecipients { recipients } => append_split(model, recipients),
             Event::RecipientsChanged { recipients } => recipients_changed(model, recipients),
             Event::OpenContactPicker { target } => {
                 model.picker_target = target;
@@ -1763,10 +1863,25 @@ impl App for Send {
         };
 
         let amount_resolves = js_parse_float(&token_amount) > 0.0;
+        // The split's gate and its reasons are one computation — asked whenever
+        // there IS a split, token or not. A split can exist before a token does
+        // (the book hands recipients over while the token list is still out),
+        // and "no token, so no issues" would arm `Continue` over blank rows.
+        // Eighteen places is the most any row could need; the addresses and the
+        // emptiness of an amount do not depend on it at all.
+        let split_issues = if model.split_mode {
+            let decimals = model
+                .selected_token
+                .as_ref()
+                .map_or(18, |token| token.decimals);
+            split_row_issues(&model.recipients, decimals)
+        } else {
+            Vec::new()
+        };
         let can_continue = !model.estimating_gas
             && !(locked && warning.is_some())
             && if model.split_mode {
-                recipients_are_valid(&model.recipients)
+                !model.recipients.is_empty() && split_issues.is_empty()
             } else if model.multi_select_mode {
                 is_valid_address(&model.recipient) && !picked.is_empty()
             } else {
@@ -1793,6 +1908,18 @@ impl App for Send {
                     }
                     None => false,
                 }
+            });
+
+        let split_remaining = model
+            .selected_token
+            .as_ref()
+            .filter(|_| model.split_mode)
+            .and_then(|token| {
+                let total = sum_split_base_units(&model.recipients, token.decimals)?;
+                let balance = to_base_units(&full_balance(token), token.decimals)?;
+                balance
+                    .checked_sub(total)
+                    .map(|left| from_base_units(left, token.decimals))
             });
 
         // The confirm slide's gate — and the same amount question `Continue`
@@ -1866,6 +1993,9 @@ impl App for Send {
             } else {
                 Vec::new()
             },
+            split_row_issues: split_issues,
+            split_remaining,
+            split_import_room: split_import_room(model),
             picker_target: model.picker_target.clone(),
             multi_select_mode: model.multi_select_mode,
             multi_selected_ids: model.multi_selected_ids.clone(),
@@ -2624,6 +2754,13 @@ fn toggle_fiat_input(model: &mut Model) -> Cmd {
 }
 
 fn tap_max(model: &mut Model) -> Cmd {
+    // `Max` fills the SINGLE amount, and a split has none: the rows are the
+    // amounts. It used to write that hidden field anyway (and could start a
+    // fee estimate for it), so the button changed nothing a person could see
+    // and left a stale figure behind for `amount_warning` to keep judging.
+    if model.split_mode {
+        return Command::done();
+    }
     let Some(token) = model.selected_token.clone() else {
         return Command::done();
     };
@@ -2833,7 +2970,11 @@ fn split_locked_out(model: &Model) -> bool {
 }
 
 fn enter_split_mode(model: &mut Model) -> Cmd {
-    if split_locked_out(model) {
+    // Entering a split twice must not be a way to lose one. This rebuilt the
+    // rows as `[the single recipient, blank]` every time it was called, so a
+    // shell whose "+ add recipient" sends this event while ALREADY in a split
+    // wiped forty imported people with one press.
+    if split_locked_out(model) || model.split_mode {
         return Command::done();
     }
     let Some(token) = model.selected_token.clone() else {
@@ -2885,6 +3026,79 @@ fn seed_split(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
                                          // nothing left to restate, so the field goes empty in token units.
     model.amount = DenominatedAmount::token("");
     model.recipients = rows;
+    model.split_mode = true;
+    model.show_batch_import = false;
+    model.show_contact_picker = false;
+    render()
+}
+
+/// A row the person has started: an address or an amount in it. Blank rows are
+/// scaffolding — the split opens with one — and are not carried past an import.
+fn row_is_started(row: &SendRecipientDraft) -> bool {
+    !row.address.trim().is_empty() || !row.amount.trim().is_empty()
+}
+
+/// How many more recipients an import may add: the cap less the rows already
+/// started. The importer is opened with this as its own cap, so its "only the
+/// first N will be sent" is true of what [`append_split`] then does.
+fn split_import_room(model: &Model) -> u32 {
+    let started = if model.split_mode {
+        model
+            .recipients
+            .iter()
+            .filter(|r| row_is_started(r))
+            .count()
+    } else {
+        usize::from(!model.recipient.trim().is_empty() || !model.amount.is_empty())
+    };
+    BATCH_MAX_RECIPIENTS.saturating_sub(started) as u32
+}
+
+/// [`Event::AppendSplitRecipients`]: the started rows stay, in their order and
+/// with their ids; the blank ones go; the new rows follow. From the single
+/// form, the one recipient being typed becomes the first row, exactly as
+/// `enter_split_mode` would have made it.
+///
+/// Nothing is de-duplicated here. The importer already dropped repeats WITHIN
+/// the list it read; a new row that repeats a typed one is named by
+/// [`duplicate_recipient_rows`] like any other repeat — warned, never dropped,
+/// because both were entered on purpose.
+fn append_split(model: &mut Model, rows: Vec<SendRecipientDraft>) -> Cmd {
+    if rows.is_empty() || split_locked_out(model) {
+        return Command::done();
+    }
+    let mut kept: Vec<SendRecipientDraft> = if model.split_mode {
+        model
+            .recipients
+            .iter()
+            .filter(|r| row_is_started(r))
+            .cloned()
+            .collect()
+    } else if !model.recipient.trim().is_empty() || !model.amount.is_empty() {
+        let amount = match model.selected_token.clone() {
+            Some(token) if !model.amount.is_empty() => model_token_amount(model, &token),
+            _ => String::new(),
+        };
+        vec![SendRecipientDraft {
+            id: make_recipient_id(model),
+            address: model.recipient.clone(),
+            amount,
+            name: None,
+        }]
+    } else {
+        Vec::new()
+    };
+    // Incoming ids are not trusted to be unique ACROSS imports: a shell that
+    // numbers its rows `b0…bN` sends the same ids the second time, and an id
+    // is what the duplicate warning, the contact picker's target and the row
+    // issues all point at. Every appended row gets a fresh one.
+    for mut row in rows {
+        row.id = make_recipient_id(model);
+        kept.push(row);
+    }
+    kept.truncate(BATCH_MAX_RECIPIENTS);
+    model.amount = DenominatedAmount::token("");
+    model.recipients = kept;
     model.split_mode = true;
     model.show_batch_import = false;
     model.show_contact_picker = false;
@@ -3152,6 +3366,14 @@ fn fee_over_balance(model: &Model, token: &SendToken) -> Option<SendAmountWarnin
 /// derivation instead of a `useEffect` + `useState` pair.
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN is an unresolved amount, not a valid one
 fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
+    // This verdict is about the SINGLE amount, and a split has none. Entering a
+    // split carries the typed figure into the first row and leaves its twin
+    // behind in `model.amount`, where this kept judging it: "not enough ETH"
+    // stayed on the form after every row had been corrected. A split has its
+    // own live verdicts — `split_over_balance`, `split_row_issues`.
+    if model.split_mode {
+        return None;
+    }
     let token = model.selected_token.as_ref()?;
     if model.amount.is_empty() {
         return None;
