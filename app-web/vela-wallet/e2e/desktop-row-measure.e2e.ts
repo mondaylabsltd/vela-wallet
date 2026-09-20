@@ -17,6 +17,11 @@
  *   (México)"). The note took what it needed, the label was squeezed to one
  *   word per line, and the note still spilled out of the menu.
  *
+ * - the sidebar's account name (founder, same day): "xiaoxiao · Key 2" already
+ *   touched the column's edge. The ellipsis written for it never fired — the
+ *   name row took its max-content width inside a column-flex button — so a
+ *   longer name ran out of the sidebar and took the switcher's chevron with it.
+ *
  * All pinned as measurements, because "looks fine on my screen" is how they
  * shipped.
  *
@@ -233,4 +238,66 @@ test.describe('dropdown menus hold their choices', () => {
 			expect(menusSeen).toBe(5);
 		});
 	}
+});
+
+test.describe("the sidebar's account name", () => {
+	test.use({ viewport: { width: 1440, height: 1000 } });
+
+	const NAMES = [
+		'hold on',
+		'xiaoxiao · Key 2',
+		'xiaoxiao savings account · Key 2',
+		// One unbroken word: nothing to wrap at but anywhere.
+		'Supercalifragilisticexpialidocious_wallet_for_everything_2026',
+		'我的长期储蓄与家庭备用金账户 · 钥匙 2'
+	];
+
+	for (const name of NAMES) {
+		test(`"${name}" stays inside the sidebar and keeps its chevron`, async ({ page }) => {
+			await quiet(page);
+			await seedSignedIn(page, name);
+			await page.goto('/en/settings');
+			const header = page.locator('aside.sidebar .top > .header');
+			await expect(header.locator('.name')).toHaveText(name);
+
+			for (const scale of TEXT_SCALES) {
+				await setTextScale(page, scale);
+				const found = await header.evaluate((el) => {
+					const box = (e: Element) => e.getBoundingClientRect();
+					const nameEl = el.querySelector<HTMLElement>('.name')!;
+					const chevron = box(el.querySelector('.name-row svg')!);
+					return {
+						headerRight: box(el).right,
+						nameRight: box(nameEl).right,
+						chevronLeft: chevron.left,
+						chevronRight: chevron.right,
+						chevronWidth: chevron.width,
+						lines: Math.round(box(nameEl).height / parseFloat(getComputedStyle(nameEl).lineHeight)),
+						title: nameEl.title
+					};
+				});
+				const where = `text scale ${scale}`;
+				// The chevron is the only sign this is a switcher: whole, inside the
+				// column, and after the name rather than under it.
+				expect(found.chevronWidth, where).toBeGreaterThan(0);
+				expect(found.chevronRight, where).toBeLessThanOrEqual(found.headerRight + 1);
+				expect(found.nameRight, where).toBeLessThanOrEqual(found.chevronLeft);
+				// Two lines, then the ellipsis — and the whole name still reachable.
+				expect(found.lines, where).toBeLessThanOrEqual(2);
+				expect(found.title).toBe(name);
+			}
+		});
+	}
+
+	test('a name that fits is never cut: one line, nothing hidden', async ({ page }) => {
+		await quiet(page);
+		await seedSignedIn(page, 'xiaoxiao · Key 2');
+		await page.goto('/en/settings');
+		const nameEl = page.locator('aside.sidebar .top > .header .name');
+		await expect(nameEl).toHaveText('xiaoxiao · Key 2');
+		const cut = await nameEl.evaluate(
+			(el) => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1
+		);
+		expect(cut).toBe(false);
+	});
 });
