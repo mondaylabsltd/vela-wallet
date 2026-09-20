@@ -114,7 +114,7 @@
 		color: var(--color-error-base);
 	}
 
-	/* 104 units across an 88px disc plus a --space-md gutter each side: the
+	/* 104 units across the 88-unit disc plus a --space-md gutter each side: the
 	   ring clears the disc rather than outlining it. */
 	.ring {
 		position: absolute;

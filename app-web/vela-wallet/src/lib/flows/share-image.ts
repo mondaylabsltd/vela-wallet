@@ -175,7 +175,7 @@ export function composeShareSvg(
 	const noteY = line2Y + 8 + 4;
 	const noteH = MARK + 8;
 	const noteText = escape(model.networkNote);
-	// The pill hugs its text: a mark, a gap, the note, in the drawn 11px face.
+	// The pill hugs its text: a mark, a gap, the note, in the drawn small face.
 	const noteTextW = Math.max(40, Math.ceil(noteText.length * 6.2));
 	const noteW = 4 + MARK + 6 + noteTextW + 12;
 	const noteX = CARD_W / 2 - noteW / 2;

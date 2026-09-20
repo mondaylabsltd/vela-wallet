@@ -44,7 +44,10 @@
 					>
 				{/if}
 				<span class="text">
-					<span class="label">{item.label}</span>
+					<span class="label" class:mono={item.mono === true}>
+						{item.label}
+					</span>
+					{#if item.detail !== undefined}<span class="detail">{item.detail}</span>{/if}
 					{#if item.note}<span class="note">{item.note}</span>{/if}
 				</span>
 				<span class="value">{item.value}</span>
@@ -106,6 +109,20 @@
 	.note {
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-warning-base);
+	}
+
+	/* An address is set in mono wherever it is the thing being read. */
+	.mono,
+	.detail {
+		font-family: var(--font-mono);
+	}
+
+	.detail {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	.label {

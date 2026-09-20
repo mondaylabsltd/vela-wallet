@@ -202,6 +202,39 @@ export function parseLocaleNumber(text: string, key?: NumberFormatKey): string {
 }
 
 /**
+ * The two halves of an EDITABLE amount field: a rate, one recipient's share.
+ *
+ * The core speaks dot-decimal and strips what it does not know, so a figure
+ * typed the way the person's own preset writes it was read as another number
+ * altogether — a rate of "7,5" applied as 75, a share of "1,5" counted as valid
+ * and then summed to nothing. A field shows the core's figure with the
+ * preset's decimal mark (`amountToInput`) and hands back what was typed with a
+ * dot in its place (`amountFromInput`), so the two stay one number.
+ *
+ * Deliberately NOT `parseLocaleNumber`: that reads a "." as grouping under a
+ * comma preset, and "0.5" from a numeric keypad would arrive as 5. A field has
+ * no grouping to strip (`inputSeparators`), so under a comma preset a dot is
+ * left to be the decimal it was typed as, and the field answers "0,5" — the
+ * reading is on screen either way.
+ *
+ * And under a DOT preset a comma is left exactly where it was typed. Stripping
+ * it as grouping turns "1,5" into 15; turning it into a dot turns "1,500" into
+ * one and a half. Neither can be told from the other one keystroke at a time,
+ * so this does not guess: the core refuses a figure it cannot read, and the
+ * form says so, which is the only answer that never pays the wrong amount.
+ */
+export function amountToInput(canonical: string, key?: NumberFormatKey): string {
+	const { decimal } = inputSeparators(key);
+	return decimal === '.' ? canonical : canonical.replace('.', decimal);
+}
+
+export function amountFromInput(typed: string, key?: NumberFormatKey): string {
+	const { decimal } = inputSeparators(key);
+	const compact = String(typed ?? '').replace(/\s/g, '');
+	return decimal === ',' ? compact.replace(/,/g, '.') : compact;
+}
+
+/**
  * Group an INTEGER DIGIT STRING with the chosen preset's grouping (Indian 2-3
  * included) WITHOUT routing through a JS `number`. This is the bigint-safe
  * entry point: a uint256 base-unit string must never become a `number`, because

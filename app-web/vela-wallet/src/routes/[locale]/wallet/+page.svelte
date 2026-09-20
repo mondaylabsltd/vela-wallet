@@ -49,6 +49,7 @@
 	import { followActiveAccount } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
+	import { amountFromInput } from '$lib/services/locale-format';
 	import { avatarSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
@@ -256,6 +257,13 @@
 	// which is the whole reason the machine exists.
 	let batchView = $state<BatchView | null>(null);
 	let batchSession: BatchImportSession | null = null;
+	/**
+	 * What an import does to the people already on the form. Adding is the
+	 * default — a list brought to a form that has people on it is nearly always
+	 * more people — and replacing is one quiet press away, said in words before
+	 * anything is imported. A choice about this one import, so it resets with it.
+	 */
+	let importReplaces = $state(false);
 
 	async function openBatch(): Promise<void> {
 		const token = sendView?.selected_token;
@@ -274,7 +282,11 @@
 				price_usd: token.price_usd
 			},
 			currency_code: currency.view.code,
-			max_recipients: 60
+			// The importer's cap is what an import can actually add: the core's cap
+			// less the rows already started (`split_import_room`). Opened at a flat
+			// sixty, its "only the first N will be sent" was a promise the append
+			// then broke by truncating past it.
+			max_recipients: sendView?.split_import_room ?? 60
 		});
 	}
 
@@ -282,6 +294,7 @@
 		batchSession?.dispose();
 		batchSession = null;
 		batchView = null;
+		importReplaces = false;
 	}
 
 	const batchActions = $derived(
@@ -291,32 +304,55 @@
 					unit: (id: string) =>
 						batchSession?.dispatch({ type: 'set_unit', unit: id === 'fiat' ? 'fiat' : 'token' }),
 					paste: (text: string) => batchSession?.dispatch({ type: 'set_raw_text', text }),
-					rate: (text: string) => batchSession?.dispatch({ type: 'edit_rate', text }),
+					// The core speaks dot-decimal and strips the rest, so a rate typed
+					// "7,5" under a comma preset was applied as 75.
+					rate: (text: string) =>
+						batchSession?.dispatch({ type: 'edit_rate', text: amountFromInput(text) }),
 					resetRate: () => batchSession?.dispatch({ type: 'reset_rate_to_auto' }),
 					pickFile: () => batchSession?.dispatch({ type: 'pick_file_requested' }),
 					saveTemplate: () => batchSession?.dispatch({ type: 'save_template_requested' }),
 					apply: () => {
-						const recipients = batchView?.recipients ?? [];
+						// `recipients` is filled even while the core refuses the import
+						// (a total over the balance), so the gate is asked, not the list:
+						// a dimmed button was the only thing standing in front of this.
+						if (!batchView?.can_apply) return;
+						const recipients = batchView.recipients;
 						if (recipients.length === 0) return;
-						// The core parsed and priced them; the send core seeds its split
-						// from exactly those rows, and nothing is recomputed here.
+						// The core parsed and priced them; the send core takes exactly
+						// those rows, and nothing is recomputed here. Ids are the core's
+						// to give: `b0…bN` was the same every import, and an id is what
+						// the row warnings point at.
 						sendSession?.dispatch({
-							type: 'seed_split_recipients',
-							recipients: recipients.map((r, index) => ({
-								id: `b${index}`,
+							type: importReplaces ? 'seed_split_recipients' : 'append_split_recipients',
+							recipients: recipients.map((r) => ({
+								id: '',
 								address: r.address,
 								amount: r.amount,
 								name: r.name
 							}))
 						});
 						closeBatch();
+					},
+					toggleMerge: () => {
+						importReplaces = !importReplaces;
 					}
 				}
 	);
 
 	const batchInputs = $derived(
 		batchView && sendView?.selected_token
-			? { batch: batchView, m: data.flowMessages, symbol: sendView.selected_token.symbol }
+			? {
+					batch: batchView,
+					m: data.flowMessages,
+					symbol: sendView.selected_token.symbol,
+					balance: sendView.selected_token.balance,
+					identicon: avatarSvgForClient,
+					// Whether there is anyone on the form for an import to add to — the
+					// core's own count, read back from the room it reports.
+					formHasRows: (sendView.split_import_room ?? 60) < 60,
+					replaces: importReplaces,
+					remaining: sendView.split_remaining
+				}
 			: undefined
 	);
 
@@ -498,11 +534,15 @@
 		contactsView = null;
 	}
 
-	/** A whole group as split-mode recipients: the core's `seed_split_recipients`, amounts blank. */
+	/**
+	 * A whole group as split-mode recipients, amounts blank — ADDED to whoever is
+	 * already on the form (`append_split_recipients`). It used to seed, which
+	 * replaces: picking a second group threw the first away.
+	 */
 	function seedGroup(group: ContactGroupView): void {
 		if (group.members.length === 0) return;
 		sendSession?.dispatch({
-			type: 'seed_split_recipients',
+			type: 'append_split_recipients',
 			recipients: group.members.map((member) => ({
 				id: '',
 				address: member.address,
@@ -688,7 +728,7 @@
 						sendSession?.dispatch({ type: 'confirm_multi_selection' });
 					},
 					amountChanged: (value: string) =>
-						sendSession?.dispatch({ type: 'set_amount', amount: value }),
+						sendSession?.dispatch({ type: 'set_amount', amount: amountFromInput(value) }),
 					// 最大 was drawn on the token card and wired to nothing (spec 028
 					// Phase 9, T489); the core's rule fills it fee-aware.
 					max: () => sendSession?.dispatch({ type: 'tap_max' }),
@@ -714,8 +754,25 @@
 						});
 					},
 					recipientRowChanged: (index: number, patch: { address?: string; amount?: string }) => {
-						const rows = (sendView?.recipients ?? []).map((row, i) =>
-							i === index ? { ...row, ...patch } : row
+						const typed =
+							patch.amount === undefined
+								? patch
+								: { ...patch, amount: amountFromInput(patch.amount) };
+						const rows = (sendView?.recipients ?? []).map((row, i) => {
+							if (i !== index) return row;
+							// A name came WITH an address — from the sheet, from the book.
+							// Retype the address and the name is somebody else's.
+							const renamed = typed.address !== undefined && typed.address !== row.address;
+							return { ...row, ...typed, name: renamed ? null : row.name };
+						});
+						sendSession?.dispatch({ type: 'recipients_changed', recipients: rows });
+					},
+					// One amount into every row that has none. A bulk edit of the drafts,
+					// like adding a row — the figure is one the person typed, and each
+					// row is then judged by the core like any other.
+					fillEmptyAmounts: (amount: string) => {
+						const rows = (sendView?.recipients ?? []).map((row) =>
+							row.amount.trim() === '' ? { ...row, amount } : row
 						);
 						sendSession?.dispatch({ type: 'recipients_changed', recipients: rows });
 					},
@@ -769,6 +826,7 @@
 					openBatch: () => void openBatch(),
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
 					continueDisabled: !sendView.can_continue,
+					continueBusy: sendView.estimating_gas,
 					confirmDisabled: !sendView.can_confirm
 				}
 	);

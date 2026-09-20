@@ -150,7 +150,11 @@ export const WALLET_FLOW_KEYS = [
 	'send.recipientLabel',
 	'send.recipientN',
 	'send.recipientDuplicate',
+	'send.recipientCount_one',
 	'send.recipientCount_other',
+	// The split row's own prompt: an empty field with nothing in it read as a
+	// line somebody forgot to draw.
+	'send.recipientPlaceholder',
 	'send.addRecipient',
 	'send.fromContacts',
 	'send.batchImport',
@@ -197,6 +201,34 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchApply_other',
 	'send.batchApply_one',
 	'send.batchApplyEmpty',
+	// The importer's verdicts (issues 204, 205). Every one of these has been in
+	// the corpus, in all fifteen locales, since the importer was ported — the
+	// core computed the judgement, the words were written, and this shell read
+	// neither, so its button went dark and said nothing.
+	'send.batchOverBalance',
+	'send.batchOverCap',
+	'send.batchDup',
+	'send.batchNoPrice',
+	'send.batchReading',
+	'send.batchTemplateSaved',
+	'send.batchImportFailedTitle',
+	'send.batchImportFailedBody',
+	// The sentences those issues did NOT find waiting (new with them): what the
+	// first choice on the importer is, what token mode does with the sheet's
+	// figures, what importing does to the people already on the form and how to
+	// choose the other, which row a dark Continue is waiting on, what is left to
+	// give out, and one amount for every empty row.
+	'send.batchUnitCaption',
+	'send.batchTokenHint',
+	'send.batchAddsToRows',
+	'send.batchReplacesRows',
+	'send.batchReplaceInstead',
+	'send.batchAddInstead',
+	'send.badAmount',
+	'send.splitNeedsAddress',
+	'send.splitNeedsAmount',
+	'send.splitRemaining',
+	'send.splitFillEmpty',
 
 	// send · the core's alerts, worded (spec 038 #D4)
 	'send.alertEstimateFailedTitle',
