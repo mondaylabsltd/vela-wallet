@@ -89,58 +89,64 @@
 		<div class="content">
 			<BalanceDisplay balance={model.balance} ontoggle={onbalancetoggle} {onstatus} />
 
-			<div class="actions">
-				<ActionButtonRow
-					layout="pills"
-					receive={model.actions.receive}
-					send={model.actions.send}
-					scan={model.actions.scan}
-					onreceive={() => (onflow === undefined ? (panel = 'receive') : onflow('receive'))}
-					onsend={() => onflow?.('send')}
-					onscan={() => onflow?.('scan')}
-				/>
-			</div>
+			<!-- Everything two-ended lives inside one measure (issue 195): the
+			     dock, the section headers and both lists end on the same line,
+			     and no row is wider than the eye can cross. The balance stays
+			     outside it — it is one-ended, and a large one needs the room. -->
+			<div class="measure">
+				<div class="actions">
+					<ActionButtonRow
+						layout="pills"
+						receive={model.actions.receive}
+						send={model.actions.send}
+						scan={model.actions.scan}
+						onreceive={() => (onflow === undefined ? (panel = 'receive') : onflow('receive'))}
+						onsend={() => onflow?.('send')}
+						onscan={() => onflow?.('scan')}
+					/>
+				</div>
 
-			<SectionHeader
-				title={model.activitySection.title}
-				action={model.activitySection.action}
-				onaction={() => onflow?.('activity')}
-			/>
-			{#each model.activityGroups as group (group.label)}
-				<p class="day">{group.label}</p>
+				<SectionHeader
+					title={model.activitySection.title}
+					action={model.activitySection.action}
+					onaction={() => onflow?.('activity')}
+				/>
+				{#each model.activityGroups as group (group.label)}
+					<p class="day">{group.label}</p>
+					<ul>
+						{#each group.rows as row, i (i)}
+							<li>
+								<ActivityRow
+									{row}
+									onclick={() => {
+										onactivity?.(row);
+										onflow?.('tx-detail');
+									}}
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/each}
+
+				<!-- The desktop's assets action reads 添加, so it opens the add-token
+			     panel stacked on the assets one — which is what makes the back
+			     chevron in the DT3L mock lead somewhere. -->
+				<SectionHeader
+					title={model.assetsSection.title}
+					action={model.assetsSection.action}
+					onaction={() => onflow?.('add-token')}
+				/>
 				<ul>
-					{#each group.rows as row, i (i)}
+					{#each model.assetRows as row, i (i)}
 						<li>
-							<ActivityRow
+							<AssetRow
 								{row}
-								onclick={() => {
-									onactivity?.(row);
-									onflow?.('tx-detail');
-								}}
+								onclick={() => (onasset === undefined ? (panel = 'asset-detail') : onasset(row))}
 							/>
 						</li>
 					{/each}
 				</ul>
-			{/each}
-
-			<!-- The desktop's assets action reads 添加, so it opens the add-token
-			     panel stacked on the assets one — which is what makes the back
-			     chevron in the DT3L mock lead somewhere. -->
-			<SectionHeader
-				title={model.assetsSection.title}
-				action={model.assetsSection.action}
-				onaction={() => onflow?.('add-token')}
-			/>
-			<ul>
-				{#each model.assetRows as row, i (i)}
-					<li>
-						<AssetRow
-							{row}
-							onclick={() => (onasset === undefined ? (panel = 'asset-detail') : onasset(row))}
-						/>
-					</li>
-				{/each}
-			</ul>
+			</div>
 		</div>
 	</main>
 
@@ -207,8 +213,13 @@
 		flex-direction: column;
 	}
 
+	/* Not scaled with the text size: a larger size fills the row from both
+	   ends, which is the point — the gap is what this measure exists to bound. */
+	.measure {
+		max-width: var(--layout-rowMeasure);
+	}
+
 	.actions {
-		max-width: calc(var(--layout-maxContentWidth) * 0.75);
 		padding-block: var(--space-2xl) var(--space-3xl);
 	}
 

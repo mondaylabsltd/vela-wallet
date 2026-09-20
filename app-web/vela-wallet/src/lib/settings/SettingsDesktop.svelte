@@ -396,7 +396,9 @@
 
 	.panel {
 		width: 100%;
-		max-width: var(--layout-maxContentWidth);
+		/* The row measure plus this panel's own gutters (issue 195): at the 800
+		   content column a label sat up to 480px from the control it names. */
+		max-width: calc(var(--layout-rowMeasure) + var(--space-5xl) * 2);
 		height: 100%;
 		overflow-y: auto;
 		padding: var(--space-4xl) var(--space-5xl) var(--space-5xl);

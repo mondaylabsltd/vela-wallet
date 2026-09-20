@@ -138,6 +138,11 @@ const WEB_ADDITIONS = [
 		'spec 023: the desktop panel\u2019s right-hand control column — measured 280 across DST2/DST3, so a dropdown, a segmented control and a slider all end on the same line'
 	],
 	[
+		'layout-rowMeasure',
+		'560px',
+		'issue 195: the widest a label\u2194value row grows on the desktop (an asset and its amount, a setting and its control). Rows are two-ended, so every pixel of column width past this lands as dead space BETWEEN the two things the eye has to connect \u2014 at the 800 content column a token sat 610px from its balance. 560 is the settings control column (280) doubled: the label gets as much room as the control and no more. NOT multiplied by --text-scale: larger text fills the row from both ends, and the gap is the thing being bounded'
+	],
+	[
 		'layout-settingsDialogW',
 		'520px',
 		'spec 023: the centred desktop dialog (DST4b / DSR1), measured 520 — wide enough for a URL in the mono face without becoming a second page'
