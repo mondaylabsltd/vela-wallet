@@ -172,7 +172,7 @@
 <style>
 	.surface {
 		min-height: 100dvh;
-		background: var(--color-bg-base);
+		background: oklch(from var(--color-bg-base) calc(l + 0.02) c h);
 	}
 
 	.page {
