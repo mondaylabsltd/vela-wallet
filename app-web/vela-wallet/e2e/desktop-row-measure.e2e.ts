@@ -11,8 +11,14 @@
  *   size and change with the language. English wrapped at the largest size
  *   (what was reported); ja and ru wrapped at the standard one.
  *
- * Both are pinned as measurements, because "looks fine on my screen" is how
- * they shipped.
+ * - the dropdown menus (founder, es-MX, 2026-09-20): the same family. The menu
+ *   was exactly as wide as the 280 control column, while a choice is a label
+ *   AND an unwrappable note ("Seguir al sistema" + "Sistema · Español
+ *   (México)"). The note took what it needed, the label was squeezed to one
+ *   word per line, and the note still spilled out of the menu.
+ *
+ * All pinned as measurements, because "looks fine on my screen" is how they
+ * shipped.
  *
  * Chromium only: nothing here is about storage.
  */
@@ -143,6 +149,88 @@ test.describe('issue 198', () => {
 			await setTextScale(page, 1.35);
 			const panel = await page.locator('main .panel').boundingBox();
 			expect(panel?.width).toBeGreaterThan(await rowMeasure(page));
+		});
+	}
+});
+
+test.describe('dropdown menus hold their choices', () => {
+	test.use({ viewport: { width: 1440, height: 1000 } });
+
+	/** Appearance carries the language menu; Localization the four format menus. */
+	const PAGES = [1, 2];
+
+	for (const locale of SUPPORTED_LOCALES) {
+		test(`${locale}: every choice is one line and inside its menu at every text size`, async ({
+			page
+		}) => {
+			await quiet(page);
+			await seedSignedIn(page);
+			await page.goto(`/${locale}/settings`);
+			const nav = page.locator('nav.settings-nav button');
+			await expect(nav.first()).toBeVisible();
+
+			let menusSeen = 0;
+			for (const index of PAGES) {
+				await setTextScale(page, 1);
+				await nav.nth(index).click();
+				const triggers = page.locator('main .dropdown .trigger');
+				await expect(triggers.first()).toBeVisible();
+
+				for (let t = 0; t < (await triggers.count()); t++) {
+					await setTextScale(page, 1);
+					await triggers.nth(t).click();
+					const menu = page.locator('main .dropdown .menu');
+					await expect(menu).toBeVisible();
+					menusSeen++;
+
+					for (const scale of TEXT_SCALES) {
+						await setTextScale(page, scale);
+						const found = await menu.evaluate((el) => {
+							const box = el.getBoundingClientRect();
+							const row = el.closest('.form-row')!.getBoundingClientRect();
+							const options = [...el.querySelectorAll('.select-row')];
+							// Not a height comparison between choices: this menu mixes scripts,
+							// and a CJK line is taller than a Latin one without having wrapped.
+							// Each label against ITSELF forced onto one line.
+							const wrapped = options.filter((o) => {
+								const label = o.querySelector<HTMLElement>('.label')!;
+								const now = label.getBoundingClientRect().height;
+								const before = label.style.whiteSpace;
+								label.style.whiteSpace = 'nowrap';
+								const oneLine = label.getBoundingClientRect().height;
+								label.style.whiteSpace = before;
+								return now > oneLine + 1;
+							});
+							return {
+								options: options.length,
+								wrapped: wrapped.map((o) => o.textContent?.trim()),
+								spilled: options.flatMap((o) =>
+									[...o.children]
+										.filter((c) => {
+											const r = c.getBoundingClientRect();
+											return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1);
+										})
+										.map((c) => c.textContent?.trim())
+								),
+								// It may grow past its trigger, but only into its own row.
+								leftOfRow: box.left < row.left - 1,
+								rightOfRow: box.right > row.right + 1
+							};
+						});
+						const where = `page ${index}, menu ${t}, text scale ${scale}`;
+						expect(found.wrapped, `wrapped — ${where}`).toEqual([]);
+						expect(found.spilled, `spilled out of the menu — ${where}`).toEqual([]);
+						expect(found.leftOfRow, `menu left its row — ${where}`).toBe(false);
+						expect(found.rightOfRow, `menu left its row — ${where}`).toBe(false);
+					}
+
+					await page.keyboard.press('Escape');
+					await expect(menu).toHaveCount(0);
+				}
+			}
+			// Language + currency + number + date + time. (The currency list is
+			// provider-driven and empty offline — counted, with nothing to measure.)
+			expect(menusSeen).toBe(5);
 		});
 	}
 });
