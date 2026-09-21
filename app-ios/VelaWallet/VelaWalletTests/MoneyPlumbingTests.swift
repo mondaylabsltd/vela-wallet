@@ -955,6 +955,7 @@ struct SendRefusalTests {
           "denom_toggle_reason": null, "confirm_amount_issue": null,
           "token_amount": "", "confirm_amount": "",
           "split_mode": false, "recipients": [], "split_over_balance": false,
+          "split_import_room": 60,
           "multi_select_mode": false, "multi_selected_ids": [],
           "multi_valuable_ids": [], "multi_chain_id": null, "multi_specs": [],
           "show_scanner": false, "show_contact_picker": false,

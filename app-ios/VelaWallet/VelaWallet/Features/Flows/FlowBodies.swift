@@ -704,7 +704,8 @@ struct SendFormBody: View {
             }
             // The core's sentence, where the person is looking when it becomes
             // true — not in an alert they have to dismiss to get back to it.
-            if let warning {
+            // A split's is said at the foot instead, beside its total.
+            if let warning, model.mode != .split {
                 Text(verbatim: warning)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.warningBase)
@@ -736,6 +737,15 @@ struct SendFormBody: View {
                 SummaryLineView(summary: summary)
             }
             FeeRowView(fee: model.fee, onOpen: onFee)
+            // A split's total, its refusal and Continue travel together: the
+            // refusal first, else which row is unfinished and why the button
+            // is dark.
+            if model.mode == .split, let line = warning ?? model.hint {
+                Text(verbatim: line)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(warning != nil ? theme.warningBase : theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
@@ -1120,6 +1130,13 @@ struct SendConfirmBody: View {
                         }
                     }
                 }
+            }
+
+            if let note = model.repeatNote {
+                Text(verbatim: note)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.warningBase)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if !model.breakdown.isEmpty {
