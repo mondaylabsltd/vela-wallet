@@ -209,6 +209,22 @@ class NetworkMachineTest {
         )
     }
 
+    /**
+     * What is typed in the add-network wizard's custom-RPC box is the core's
+     * `wizard.custom_rpc`, and that is what the live builder draws — so a
+     * keystroke echoes instead of vanishing into a fixture blank.
+     */
+    @Test
+    fun aTypedCustomRpcIsHeldByTheCore() {
+        val host = host(FakeStore())
+        host.send(NetEvent.Started)
+        host.settle { it.loaded }
+
+        host.send(NetEvent.CustomRpcEdited("https://my.rpc.example"))
+        val view = host.settle { it.wizard.custom_rpc == "https://my.rpc.example" }
+        assertEquals("https://my.rpc.example", view.wizard.custom_rpc)
+    }
+
     @Test
     fun aSearchFindsNothingWithoutTheIndex() {
         // `fetch_search_index` is fail-closed, so the wizard can offer no

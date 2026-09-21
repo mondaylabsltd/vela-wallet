@@ -619,6 +619,17 @@ class WalletController(
 
     fun switcherClosed() = balanceHost.dispatch(BalanceEvent.SwitcherClosed, BalanceEvent.serializer())
 
+    /**
+     * The RPC fix worked for this chain (the rescue sheet watched its probe
+     * answer): the core drops it from the failed set and reads again — the
+     * web's `balance.fixChainResolved`. Without this the hero kept naming a
+     * chain the person had just repaired until the next throttled refresh.
+     */
+    fun fixChainResolved(chainId: Int) {
+        VelaLog.event("balance", "fix chain resolved", "chain" to chainId)
+        balanceHost.dispatch(BalanceEvent.FixChainResolved(chainId), BalanceEvent.serializer())
+    }
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),
