@@ -234,6 +234,7 @@
 			// "Disconnect?" without saying what.
 			case 'clear-storage-item':
 			case 'remove-network':
+			case 'reset-endpoints':
 				return pending?.sheet.title ?? '';
 			case 'erase-device':
 				return model.eraseSheet.title;
@@ -420,7 +421,7 @@
 							onnetevent?.({ kind: 'endpoint', field: id as NetEndpointField, value })}
 						onfieldblur={(id) =>
 							onnetevent?.({ kind: 'endpoint-blur', field: id as NetEndpointField })}
-						onreset={() => onnetevent?.({ kind: 'endpoints-reset' })}
+						onreset={() => ask('reset-endpoints', '', model.endpoints.resetSheet)}
 					/>
 				{:else if page === 'storage'}
 					<StoragePanel
@@ -545,6 +546,15 @@
 							const id = pending?.id;
 							close();
 							if (id !== undefined) onnetevent?.({ kind: 'delete-network', id });
+						}}
+						oncancel={close}
+					/>
+				{:else if overlay === 'reset-endpoints' && pending}
+					<ConfirmSheet
+						sheet={pending.sheet}
+						onconfirm={() => {
+							close();
+							onnetevent?.({ kind: 'endpoints-reset' });
 						}}
 						oncancel={close}
 					/>

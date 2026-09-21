@@ -982,9 +982,20 @@ export function sha256(data: Uint8Array): Uint8Array;
  */
 export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
 
+/**
+ * `{value, unit}` — a byte count in 1024s, for the shell to format in the
+ * person's numbers.
+ */
+export function storageBytesDisplay(bytes: number): string;
+
 export function storageIsCacheKey(key: string): boolean;
 
 export function storageIsErasableKey(key: string): boolean;
+
+/**
+ * Is this key the wallet's at all (counted in the storage total)?
+ */
+export function storageIsOurs(key: string): boolean;
 
 /**
  * The row a key belongs to, or `undefined`.
@@ -995,6 +1006,11 @@ export function storageItemOfKey(key: string): string | undefined;
  * `[{id, group}]`, in the order the page draws them.
  */
 export function storageItems(): string;
+
+/**
+ * Records in a stored list value; `undefined` when it is not a list.
+ */
+export function storageRecordsIn(value: string): number | undefined;
 
 export function toBase64Url(data: Uint8Array): string;
 
@@ -1240,10 +1256,13 @@ export interface InitOutput {
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
+    readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;
+    readonly storageIsOurs: (a: number, b: number) => number;
     readonly storageItemOfKey: (a: number, b: number) => [number, number];
     readonly storageItems: () => [number, number];
+    readonly storageRecordsIn: (a: number, b: number) => number;
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];

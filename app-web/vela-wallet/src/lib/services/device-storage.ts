@@ -31,9 +31,10 @@
 import {
 	loadCore,
 	storageIsCacheKey,
-	storageIsErasableKey,
+	storageIsOurs,
 	storageItemOfKey,
-	storageItems
+	storageItems,
+	storageRecordsIn
 } from '$lib/core/client';
 import { PERM_PREFIX } from '$lib/dapp/keys';
 import { clearRecipientRiskCache } from './recipient-risk';
@@ -59,9 +60,6 @@ export const STORAGE_ITEM_IDS: readonly StorageItemId[] = [
 	'scan',
 	'dapps'
 ];
-
-/** Every key this app writes is namespaced; the enumeration is this prefix. */
-const VELA_KEY_PREFIX = 'vela.';
 
 let catalogRows: ReadonlyMap<StorageItemId, StorageGroupId> | null = null;
 
@@ -98,12 +96,12 @@ export function isCacheKey(key: string): boolean {
 }
 
 /**
- * Is this one of ours at all? Everything an erase would remove — the
- * namespace, and the one unprefixed cache the catalog knows — plus the key
- * the erase keeps on purpose, which is still Vela's on this device.
+ * Is this one of ours at all? The namespace and the one unprefixed cache the
+ * catalog knows — including the key the erase keeps on purpose, which is
+ * still Vela's on this device (`storage_catalog::is_ours`).
  */
 function isOurs(key: string): boolean {
-	return key.startsWith(VELA_KEY_PREFIX) || storageIsErasableKey(key);
+	return storageIsOurs(key);
 }
 
 export interface StorageItemReport {
@@ -132,14 +130,13 @@ function utf8Bytes(text: string): number {
 	return new TextEncoder().encode(text).length;
 }
 
-/** How many things a JSON array holds; a non-array value counts as one. */
+/**
+ * How many records a stored list holds — the core's reading, which also finds
+ * the list inside `{items|contacts|entries|records|grants: [...]}`; anything
+ * that is not a list counts as one.
+ */
 function recordsIn(value: string): number {
-	try {
-		const parsed: unknown = JSON.parse(value);
-		return Array.isArray(parsed) ? parsed.length : 1;
-	} catch {
-		return 1;
-	}
+	return storageRecordsIn(value) ?? 1;
 }
 
 async function entries(): Promise<Entry[]> {

@@ -456,6 +456,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			fiatLabel: k('settingsModals.endpoints.fiatLabel'),
 			fiatHint: k('settingsModals.endpoints.fiatHint'),
 			reset: k('settingsModals.endpoints.resetToDefaults'),
+			resetTitle: k('settingsModals.endpoints.resetTitle'),
+			resetBody: k('settingsModals.endpoints.resetBody'),
+			resetConfirm: k('settingsModals.endpoints.resetConfirm'),
+			resetCancel: k('settingsModals.endpoints.resetCancel'),
 			guide: k('settingsModals.endpoints.selfHostGuide')
 		},
 		storage: {

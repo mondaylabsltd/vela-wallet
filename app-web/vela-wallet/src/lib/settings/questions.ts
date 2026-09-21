@@ -8,6 +8,7 @@
  * words. The title names what goes: an untitled "Disconnect?" never said
  * which site.
  */
+import type { SettingsMessages } from './messages';
 import type { ConfirmSheetModel, NetworkRowModel, StorageModel } from './model';
 
 /**
@@ -38,4 +39,18 @@ export function removeNetworkQuestion(
 ): ConfirmSheetModel | undefined {
 	const row = networks.rows.find((entry) => entry.id === id);
 	return row === undefined ? undefined : { ...networks.removeSheet, title: row.name };
+}
+
+/**
+ * Service endpoints' Reset: every field goes back to Vela's own address, and
+ * whatever the person entered is forgotten (FR-010).
+ */
+export function resetEndpointsQuestion(m: SettingsMessages): ConfirmSheetModel {
+	return {
+		title: m.endpoints.resetTitle,
+		body: m.endpoints.resetBody,
+		confirm: m.endpoints.resetConfirm,
+		cancel: m.endpoints.resetCancel,
+		tone: 'danger'
+	};
 }

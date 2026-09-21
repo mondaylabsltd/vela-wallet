@@ -145,6 +145,8 @@ export type SettingsOverlayId =
 	| 'clear-storage-item'
 	/** Spec 072: removing a custom network, asked before it happens. */
 	| 'remove-network'
+	/** Spec 072: resetting the service endpoints, asked before it happens. */
+	| 'reset-endpoints'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -427,6 +429,8 @@ export interface EndpointsModel {
 	description: string;
 	fields: UrlFieldModel[];
 	reset: string;
+	/** Spec 072 (FR-010): what Reset asks before every field goes back. */
+	resetSheet: ConfirmSheetModel;
 	/** Desktop-only trailing link (DST6). */
 	guide?: string;
 }

@@ -76,8 +76,10 @@ import init, {
 	SignRequestCore,
 	storageIsCacheKey,
 	storageIsErasableKey,
+	storageIsOurs,
 	storageItemOfKey,
 	storageItems,
+	storageRecordsIn,
 	toHex,
 	TokenTrustCore,
 	TxTrackerCore,
@@ -134,7 +136,14 @@ export { registryResolveKeyStep, registryResolveUnitStep };
 // read, and what each stored key IS — its storage row, whether "clear all
 // caches" takes it, whether an erase does. JSON in and out, like the machines.
 export { prefsMigrations, prefsRead };
-export { storageIsCacheKey, storageIsErasableKey, storageItemOfKey, storageItems };
+export {
+	storageIsCacheKey,
+	storageIsErasableKey,
+	storageIsOurs,
+	storageItemOfKey,
+	storageItems,
+	storageRecordsIn
+};
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a

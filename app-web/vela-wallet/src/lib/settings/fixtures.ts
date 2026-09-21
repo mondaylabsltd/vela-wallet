@@ -11,6 +11,7 @@
  * composed HERE, because composition order is a translation concern and the
  * components must never learn one.
  */
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import type { SettingsMessages } from './messages';
 import type {
@@ -561,6 +562,7 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 			}
 		],
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: withGuide ? m.endpoints.guide : undefined
 	};
 }

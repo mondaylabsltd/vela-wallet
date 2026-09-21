@@ -379,7 +379,7 @@
 						onnetevent?.({ kind: 'endpoint', field: id as NetEndpointField, value })}
 					onfieldblur={(id) =>
 						onnetevent?.({ kind: 'endpoint-blur', field: id as NetEndpointField })}
-					onreset={() => onnetevent?.({ kind: 'endpoints-reset' })}
+					onreset={() => ask('reset-endpoints', '', model.endpoints.resetSheet)}
 				/>
 			{:else if page === 'storage'}
 				<!-- A row's Clear asks first, as on the phone: here it cleared the
@@ -450,7 +450,7 @@
 				</Button>
 			</div>
 		</Dialog>
-	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network') && pending}
+	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network' || overlay === 'reset-endpoints') && pending}
 		<!-- The phone's confirm sheet, in a dialog: titled with what goes. -->
 		<Dialog title={pending.sheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
 			<ConfirmSheet
@@ -461,6 +461,7 @@
 					closeOverlay();
 					if (id === undefined) return;
 					if (what === 'remove-network') onnetevent?.({ kind: 'delete-network', id });
+					else if (what === 'reset-endpoints') onnetevent?.({ kind: 'endpoints-reset' });
 					else onstorageclear?.(id);
 				}}
 				oncancel={closeOverlay}

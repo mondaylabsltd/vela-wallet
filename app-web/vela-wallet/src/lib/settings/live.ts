@@ -9,6 +9,7 @@
  * core's module doc assigns to shells.
  */
 
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
@@ -395,6 +396,7 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 			};
 		}),
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: m.endpoints.guide
 	};
 }
