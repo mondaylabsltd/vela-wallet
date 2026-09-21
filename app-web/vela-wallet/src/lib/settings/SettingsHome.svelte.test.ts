@@ -30,7 +30,7 @@ async function drawn(state: MobileSettingsStateId) {
 	await tick();
 	const root = screen.container;
 	const sheet = () => root.querySelector<HTMLElement>('[role="dialog"]');
-	const buttonIn = (scope: ParentNode, text: string) =>
+	const buttonIn = (scope: Element, text: string) =>
 		[...scope.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
 	return {
 		net,

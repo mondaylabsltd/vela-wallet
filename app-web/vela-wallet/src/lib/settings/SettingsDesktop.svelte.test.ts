@@ -36,7 +36,7 @@ async function drawn(model: SettingsDesktopModel = buildDesktopState('dst1', m, 
 	});
 	await tick();
 	const root = screen.container;
-	const buttonIn = (scope: ParentNode, text: string) =>
+	const buttonIn = (scope: Element, text: string) =>
 		[...scope.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
 	const dialog = () => root.querySelector<HTMLElement>('[role="dialog"]');
 	return {
