@@ -142,8 +142,14 @@ test('search → verdict → add → listed → survives a reload → removed', 
 	await expect(page.getByRole('button', { name: new RegExp(NAME) }).first()).toBeVisible();
 
 	// Removed from its own row's control (named for what it does, not the add
-	// label it used to borrow); a reload does not bring it back.
+	// label it used to borrow) — after the question it asks first, titled with
+	// the network (spec 072); a reload does not bring it back.
 	await page.getByRole('button', { name: en('settingsModals.network.removeTitle') }).click();
+	const question = page.getByRole('dialog', { name: new RegExp(NAME) });
+	await expect(question).toContainText(en('settingsModals.network.removeBody'));
+	await question
+		.getByRole('button', { name: en('settingsModals.network.removeConfirm'), exact: true })
+		.click();
 	await expect(page.getByRole('button', { name: new RegExp(NAME) })).toHaveCount(0);
 	await page.reload();
 	await openNetworks(page);
