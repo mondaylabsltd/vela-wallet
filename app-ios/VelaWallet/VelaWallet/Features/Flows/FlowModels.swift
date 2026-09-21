@@ -669,6 +669,10 @@ struct SendConfirmModel {
     /// 203): two lines paying one address are hardest to spot exactly here,
     /// where the avatars are identical and the sum looks right.
     var repeatNote: String?
+    /// "First time sending here" — the anti-poisoning tell, on the page that
+    /// signs. The core resolves it only while this page is up
+    /// (`confirm_probes`), so the form never has it to show. `nil` on a split.
+    var recipientTag: String?
     let cta: String
 }
 
