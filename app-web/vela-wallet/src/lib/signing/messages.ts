@@ -15,6 +15,8 @@
  * so interpolation happens at prerender, like the wallet's.
  */
 
+import type { SpeedWords } from '$lib/flows/speed-control';
+
 export interface SigningMessages {
 	panelTitle: string;
 	signingAccount: string;
@@ -137,6 +139,11 @@ export interface SigningMessages {
 	/** The fee row after the quote failed; tapping it asks again. */
 	feeRetry: string;
 	feeTokenTitle: string;
+	/**
+	 * The speed control under the fee row (spec 069) — the send form's words,
+	 * so the two surfaces name a speed identically.
+	 */
+	speed: SpeedWords;
 	feeEstimated: string;
 	feeBalance: string;
 	techFunction: string;

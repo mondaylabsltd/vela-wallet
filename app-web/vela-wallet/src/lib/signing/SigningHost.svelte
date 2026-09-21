@@ -24,10 +24,13 @@
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import { avatarSvgForClient } from '$lib/wallet/identicon';
-	import { IDLE_FEE_VIEW, type FeeQuote } from '$lib/flows/core/fee-quote.svelte';
+	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import type { FeeCall } from '$lib/core/generated/FeeCall';
+	import type { FeeTier } from '$lib/core/generated/FeeTier';
+	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
+	import { onMount } from 'svelte';
 	import { setSignMethod, type SignMethod } from '$lib/onboarding/core/passkey';
 
 	interface Props {
@@ -88,6 +91,28 @@
 		}
 	}
 
+	// The speed control (spec 069): the send form's own, over this sheet's fee
+	// session. A dApp transaction starts at the person's stored default, can be
+	// bumped for this one request, and — like a send — goes at the fastest speed
+	// where that costs no more. Every rule is the `fee_speed` core's.
+	const speedControl = new SpeedControl(
+		() => fee,
+		() => signView.request !== null && signView.surface !== 'hidden' && quotedFor !== ''
+	);
+	// Still choosing: the sheet is up and nothing has been signed yet. A free
+	// upgrade is never decided under somebody who already slid.
+	speedControl.attach(
+		() =>
+			signView.request !== null &&
+			signView.surface !== 'hidden' &&
+			!signView.is_signing &&
+			!signView.is_submitting
+	);
+	onMount(() => {
+		void speedControl.boot();
+		return () => speedControl.dispose();
+	});
+
 	// A transaction is shown WITH what it costs (the founder's standing rule:
 	// signing mirrors Send). Until this, no surface asked for the quote when a
 	// request arrived, so the web sheet drew no fee for anything — and the
@@ -96,12 +121,16 @@
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
+			// The request went: its one-shot speed goes with it.
+			if (quotedFor !== '') speedControl.reset();
 			quotedFor = '';
 			return;
 		}
 		if (quotedFor === request.id) return;
 		const calls = callsOf(request.kind, request.params_json);
 		if (calls === null) return;
+		// A new request starts at the stored default, never at the last one's pick.
+		speedControl.reset();
 		quotedFor = request.id;
 		const account = view.accounts.find(
 			(row) => row.account.address.toLowerCase() === identity.address.toLowerCase()
@@ -111,6 +140,9 @@
 			account: identity.address,
 			calls,
 			feeToken: null,
+			// HOW FAST is the speed control's to say: the stored default, a
+			// one-shot pick, or a free upgrade.
+			tier: speedControl.tier,
 			publicKeyHex: account
 				? (account.keys[0]?.public_key_hex ?? account.public_key_hex)
 				: undefined
@@ -156,8 +188,12 @@
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
-			fee: fee.view ?? IDLE_FEE_VIEW,
+			fee: speedControl.feeInForce,
 			feeOpen,
+			speed: {
+				view: speedControl.view,
+				feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
+			},
 			currency: currency.view,
 			m: messages,
 			identity,
@@ -190,7 +226,19 @@
 			max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
 			bundler_cost_wei: null,
 			gas_fee_token: fee.view?.fee_token ?? null,
-			quoted_fee: null,
+			// The fee this sheet DISPLAYED, signed verbatim — amount, recipient
+			// and the speed it was priced at (spec 069), as the phones and the
+			// desktop always have. Until now the web sent none, so its submit
+			// re-priced on its own and a speed picked here could not reach the
+			// relay. No recipient, no in-band quote: the core's own rule.
+			quoted_fee:
+				quote && quote.fee_recipient
+					? {
+							amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
+							recipient: quote.fee_recipient,
+							tier: quote.tier
+						}
+					: null,
 			fee_collector: null,
 			params_override_json: signingSheet.guard.rewritten_params_json,
 			intent: null
@@ -241,5 +289,9 @@
 			feeOpen = false;
 		}}
 		onsignwith={onSignWith}
+		onspeed={() => speedControl.toggle()}
+		onspeedpick={(id) => {
+			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);
+		}}
 	/>
 {/if}

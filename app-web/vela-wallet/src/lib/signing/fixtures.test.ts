@@ -27,7 +27,20 @@ describe('signing messages', () => {
 	it.each(SUPPORTED_LOCALES)('no signing string is empty in %s', (locale) => {
 		for (const [field] of KEYS) {
 			const value = resolveSigningMessages(locale)[field as keyof typeof messages];
-			expect(value?.trim(), `${field} in ${locale}`).not.toBe('');
+			// The speed control's words are a group (spec 069): every leaf of it.
+			const leaves =
+				typeof value === 'string'
+					? [value]
+					: [
+							value.label,
+							value.once,
+							value.free,
+							value.single,
+							value.gasPriceLabel,
+							...Object.values(value.names),
+							...Object.values(value.hints)
+						];
+			for (const leaf of leaves) expect(leaf?.trim(), `${field} in ${locale}`).not.toBe('');
 		}
 	});
 

@@ -20,11 +20,24 @@
 		oncustom?: (text: string) => void;
 		onfee?: () => void;
 		onfeepick?: (id: string) => void;
+		/** Spec 069: fold / unfold the speed control, and a one-shot pick. */
+		onspeed?: () => void;
+		onspeedpick?: (id: string) => void;
 		/** `null` toggles the list; an id picks a method and closes it. */
 		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onconfirm, onchip, oncustom, onfee, onfeepick, onsignwith }: Props = $props();
+	let {
+		model,
+		onconfirm,
+		onchip,
+		oncustom,
+		onfee,
+		onfeepick,
+		onspeed,
+		onspeedpick,
+		onsignwith
+	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
 	let techOverride = $state<boolean | undefined>();
@@ -37,7 +50,7 @@
 
 <div class="footer">
 	<TechDetails tech={model.tech} open={techOpen} ontoggle={() => (techOverride = !techOpen)} />
-	<FeeRow fee={model.fee} ontoggle={onfee} onpick={onfeepick} />
+	<FeeRow fee={model.fee} ontoggle={onfee} onpick={onfeepick} {onspeed} {onspeedpick} />
 	<SignerRow
 		label={model.signer.label}
 		name={model.signer.name}

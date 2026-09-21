@@ -179,6 +179,8 @@ export interface FeeTokenOption {
 	insufficient?: boolean;
 }
 
+import type { FeeSpeedModel } from '$lib/flows/model';
+
 export type FeeModel =
 	| {
 			kind: 'onchain';
@@ -186,6 +188,12 @@ export type FeeModel =
 			value: string;
 			/** Present only while the selector is open (cs33). */
 			selector?: { title: string; options: FeeTokenOption[] };
+			/**
+			 * The speed control under the fee (spec 069) — the send form's, so
+			 * a dApp transaction is priced at a speed the person can see and
+			 * change for this one request. Absent in the gallery.
+			 */
+			speed?: FeeSpeedModel;
 	  }
 	/** Off-chain signature: the ✓ line, in place of a fee row. */
 	| { kind: 'offchain'; note: string }

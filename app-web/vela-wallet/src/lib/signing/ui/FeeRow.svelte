@@ -3,6 +3,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
 	import PositiveNote from './PositiveNote.svelte';
+	import FeeSpeedRow from '$lib/flows/ui/FeeSpeedRow.svelte';
 	import type { FeeModel } from '../model';
 
 	interface Props {
@@ -11,9 +12,15 @@
 		ontoggle?: () => void;
 		/** A coin was chosen — its option id. Absent in the gallery, where the list is a picture. */
 		onpick?: (id: string) => void;
+		/**
+		 * The speed control under the fee (spec 069) — the send form's own,
+		 * so a dApp transaction's speed is chosen exactly as a send's is.
+		 */
+		onspeed?: () => void;
+		onspeedpick?: (id: string) => void;
 	}
 
-	let { fee, ontoggle, onpick }: Props = $props();
+	let { fee, ontoggle, onpick, onspeed, onspeedpick }: Props = $props();
 </script>
 
 {#if fee.kind === 'offchain'}
@@ -56,6 +63,9 @@
 			<span class="value">{fee.value}</span>
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>
+		{#if fee.speed}
+			<FeeSpeedRow speed={fee.speed} ontoggle={onspeed} onselect={onspeedpick} />
+		{/if}
 	{/if}
 {/if}
 

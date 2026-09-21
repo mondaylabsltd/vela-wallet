@@ -39,6 +39,7 @@ import {
 	feeSymbol
 } from './fee-line';
 import { chainMark, tokenMarkFor } from './marks';
+import { speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
 	FactRowModel,
 	FeeRowModel,
@@ -107,17 +108,7 @@ export interface SendLiveInputs {
 	};
 }
 
-/**
- * The tiers a person may be offered.
- *
- * `rapid` is excluded on purpose and permanently: the variant exists in
- * `FeeTier` and has a translation, but nothing constructs it, the relay has
- * never reported it, and a relay asked for it answers -32602 (spec 068, "a
- * dead fourth tier — leave it, never offer it"). Excluding it in the TYPE is
- * what stops a later `Object.keys`-style enumeration from putting it on a
- * screen.
- */
-export type OfferedTier = Exclude<FeeTier, 'rapid'>;
+export type { OfferedTier } from './speed-control';
 
 /**
  * What each offered tier is CALLED — the speed itself, never a number. The
@@ -347,56 +338,42 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 
 /**
  * The folded speed control (spec 068), drawn from the `fee_speed` core's view
- * (spec 069).
- *
- * Every figure is a REAL quote of THIS transaction at that tier — the core
- * echoes each tier's own settled quote and never scales one tier's number
- * into another's. Only the words and the fee line are made here.
+ * (spec 069) by the builder the signing sheet shares (`speed-control.ts`).
+ * Each option's fee goes through THIS screen's fee line, priced as the fee row
+ * above it is priced.
  */
 function feeSpeed(inputs: SendLiveInputs): FeeSpeedModel | undefined {
 	const speed = inputs.speed;
 	if (speed === undefined) return undefined;
-	const { view } = speed;
 	const m = inputs.m;
-	const tierOf = (tier: FeeTier): OfferedTier => (tier === 'rapid' ? 'fast' : tier);
+	return speedControlModel(speed.view, speedWords(m), (quote, tier) => {
+		const parts = feeParts(quote, speed.feeOptions(tier));
+		return feeLineParts(
+			parts,
+			feeUnitPriceUsd(parts.contract, quote.chain_id, inputs),
+			inputs.currency
+		);
+	});
+}
+
+/** The speed control's words, from the send screens' catalog. */
+export function speedWords(m: WalletFlowMessages): SpeedWords {
 	return {
 		label: m['send.feeSpeedLabel'],
-		// THEIR default (or their pick for this send), never a hardcoded one —
-		// this line and the Settings row read the same preference.
-		value: m[TIER_LABEL_KEY[tierOf(view.tier)]],
-		open: view.open,
-		onceNote: m['send.feeSpeedOnce'],
-		// Why the tier above is not the person's default (issue 686). The core
-		// never sets it beside the one-speed statement: a speed that buys
-		// nothing is not an upgrade.
-		freeNote: view.free_note ? m['send.feeSpeedFree'] : undefined,
-		singleNote: view.single ? m['send.feeSpeedSingle'] : undefined,
+		once: m['send.feeSpeedOnce'],
+		free: m['send.feeSpeedFree'],
+		single: m['send.feeSpeedSingle'],
 		gasPriceLabel: m['send.gasPriceLabel'],
-		gasPriceLine: view.gas_price_line,
-		options: view.options.map((option) => {
-			const tier = tierOf(option.tier);
-			const quote = option.fee;
-			const parts = quote ? feeParts(quote, speed.feeOptions(option.tier)) : null;
-			const line =
-				quote && parts
-					? feeLineParts(
-							parts,
-							feeUnitPriceUsd(parts.contract, quote.chain_id, inputs),
-							inputs.currency
-						)
-					: null;
-			return {
-				id: tier,
-				label: m[TIER_LABEL_KEY[tier]],
-				detail: m[TIER_HINT_KEY[tier]],
-				// "…" while this tier's own quote is out, "—" when there is none
-				// to be had. Never another tier's figure wearing this tier's name.
-				value: line ? line.coin : option.measuring ? '…' : '—',
-				valueFiat: line?.fiat ?? undefined,
-				gasPrice: option.gas_price ?? undefined,
-				selected: option.selected
-			};
-		})
+		names: {
+			fast: m[TIER_LABEL_KEY.fast],
+			standard: m[TIER_LABEL_KEY.standard],
+			slow: m[TIER_LABEL_KEY.slow]
+		},
+		hints: {
+			fast: m[TIER_HINT_KEY.fast],
+			standard: m[TIER_HINT_KEY.standard],
+			slow: m[TIER_HINT_KEY.slow]
+		}
 	};
 }
 

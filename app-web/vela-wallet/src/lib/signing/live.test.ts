@@ -10,6 +10,10 @@ import { describe, expect, it } from 'vitest';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
+import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
+import type { FeeTier } from '$lib/core/generated/FeeTier';
+import { FeeSpeedCore } from '$lib/core/client';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
@@ -176,6 +180,66 @@ describe('the fee the sheet shows', () => {
 
 	it('shows the coin alone when nothing can price it', () => {
 		expect(buildSigningModel(inputs())?.fee).toMatchObject({ value: '0.0021 ETH' });
+	});
+});
+
+/**
+ * Spec 069: the dApp sheet chooses a speed exactly as the send form does —
+ * the same core machine, the same builder, the same words.
+ */
+describe('the speed under the fee', () => {
+	/** The real `fee_speed` core, told the fee in force and nothing beside it. */
+	function speedView(preferred: FeeTier, pick?: FeeTier, open = false): FeeSpeedView {
+		const core = new FeeSpeedCore();
+		let view = JSON.parse(core.view()) as FeeSpeedView;
+		const send = (event: FeeSpeedEvent) => {
+			view = (JSON.parse(core.dispatch(JSON.stringify(event))) as { view: FeeSpeedView }).view;
+		};
+		send({ type: 'configure', preferred, number: 'comma_dot' });
+		if (pick) send({ type: 'pick', tier: pick });
+		if (open) send({ type: 'toggle' });
+		send({
+			type: 'quotes_changed',
+			chain_id: 1,
+			in_force: { busy: false, fee: QUOTED_FEE.fee },
+			previews: []
+		});
+		core.free();
+		return view;
+	}
+
+	it('is drawn folded under the fee, naming the tier in force', () => {
+		const model = buildSigningModel(
+			inputs({ speed: { view: speedView('fast'), feeOptions: () => [] } })
+		);
+		const fee = model?.fee;
+		expect(fee?.kind).toBe('onchain');
+		if (fee?.kind !== 'onchain') return;
+		expect(fee.speed?.label).toBe(m.speed.label);
+		expect(fee.speed?.value).toBe(m.speed.names.fast);
+		expect(fee.speed?.open).toBe(false);
+	});
+
+	it('opens onto three speeds, each with what it buys', () => {
+		const model = buildSigningModel(
+			inputs({ speed: { view: speedView('fast', undefined, true), feeOptions: () => [] } })
+		);
+		const fee = model?.fee;
+		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
+		expect(fee.speed?.options.map((option) => option.id)).toEqual(['fast', 'standard', 'slow']);
+		expect(fee.speed?.options[2].detail).toBe(m.speed.hints.slow);
+		// The option in force is this sheet's own fee.
+		expect(fee.speed?.options[0].value).toBe('0.0021 ETH');
+	});
+
+	it('never shows the previous speed’s money under a newly picked one (issue 681)', () => {
+		const model = buildSigningModel(
+			inputs({ speed: { view: speedView('fast', 'slow'), feeOptions: () => [] } })
+		);
+		const fee = model?.fee;
+		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
+		expect(fee.value).toBe(m.feeEstimating);
+		expect(fee.speed?.value).toBe(m.speed.names.slow);
 	});
 });
 
