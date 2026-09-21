@@ -21,12 +21,34 @@
 # The month is when the release is CUT, not which line of code it fixes: a fix
 # for 26.9.2 made in October is 26.10.0. There are no maintenance branches.
 #
+# The one exception: the 0.9 line, which may finish (0.9.4, 0.9.5 …) until the
+# first calendar version is released — see below.
+#
 # For tests: NOW=<epoch seconds> and TAGS="v26.9.0 v26.9.1" replace the clock
 # and `git tag`.
 set -euo pipefail
 
 version="${1:-}"
 die() { echo "::error::$*" >&2; exit 1; }
+
+tags="${TAGS-$(git tag -l 'v[0-9]*')}"
+has() { grep -qxF "v$1" <<<"$(tr ' ' '\n' <<<"$tags")"; }
+
+# The 0.9 line, finished (founder, 2026-09-21: 「坚持发 0.9.4」). Releases that
+# were already under way when CalVer was ruled keep counting 0.9.N — the next
+# revision only, never a skip — and ONLY until the first calendar release
+# exists. After that 0.x is below every version people hold, so it is refused.
+if [[ "$version" =~ ^0\.9\.(0|[1-9][0-9]*)$ ]]; then
+  rev="${BASH_REMATCH[1]}"
+  if grep -qE '^v[1-9][0-9]\.' <<<"$(tr ' ' '\n' <<<"$tags")"; then
+    die "$version is on the old 0.9 line, and calendar versions have begun. The next release is YY.M.REVISION — e.g. $(date -u +%y.%-m).0 or later."
+  fi
+  (( rev == 0 )) || has "0.9.$((rev - 1))" ||
+    die "$version skips a revision: v0.9.$((rev - 1)) has not been released."
+  has "0.9.$((rev + 1))" && die "$version is older than v0.9.$((rev + 1)), which is already released."
+  echo "$version — the 0.9 line, revision $rev (the last releases before calendar versioning)"
+  exit 0
+fi
 
 [[ "$version" =~ ^([1-9][0-9])\.([1-9]|1[0-2])\.(0|[1-9][0-9]*)$ ]] || die \
   "'$version' is not a Vela version. It is YY.M.REVISION — e.g. 26.9.0 — with no leading zeros (26.09.0 is rejected by cargo and by Chrome) and no suffix."
@@ -43,8 +65,6 @@ if [[ "$yy.$mm" != "$early" && "$yy.$mm" != "$late" ]]; then
   die "$version says $(printf '20%s-%02d' "$yy" "$mm"), and today is ${late/./ month } (YY M). The version is the month the release is cut: this one is $late.0 or later."
 fi
 
-tags="${TAGS-$(git tag -l 'v[0-9]*')}"
-has() { grep -qxF "v$1" <<<"$(tr ' ' '\n' <<<"$tags")"; }
 if (( rev > 0 )) && ! has "$yy.$mm.$((rev - 1))"; then
   die "$version skips a revision: v$yy.$mm.$((rev - 1)) has not been released. Revisions count up from .0 within a month."
 fi
