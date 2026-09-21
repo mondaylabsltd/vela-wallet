@@ -10505,8 +10505,13 @@ impl WalletPage {
                 speed_tier,
             );
             model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-            model.confirm_enabled =
-                signing_live::confirm_enabled(&host.view, &host.guard_view, fee, speed_tier);
+            model.confirm_enabled = signing_live::confirm_enabled(
+                &host.view,
+                &host.guard_view,
+                &host.clear_view,
+                fee,
+                speed_tier,
+            );
             if !funding && !signing_live::off_chain(&host.clear_view) {
                 speed_tiers = host
                     .speed_view()

@@ -28,7 +28,9 @@
 //! handed the ASSEMBLED operation as well: its page derives the same hash
 //! from the operation's own bytes and refuses what it cannot derive, and the
 //! answer is accepted only as a signature over the hash computed HERE.
-//! Either way the assertion that comes back goes into the same envelope.
+//! Either way the assertion that comes back goes into the same envelope. A
+//! message ([`sign_message`]) is the same choice over the Safe's
+//! `SafeMessage` hash, with nothing submitted.
 
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
@@ -39,14 +41,14 @@ use vela_core::app::fee_policy::{
 };
 use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
-use vela_core::primitives::from_hex;
+use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation, VERIFICATION_GAS_DEPLOYED,
     VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature, build_in_band_fee_leg,
     build_init_code_for_keys, build_multi_send_execute_call_data, build_user_op_signature,
-    calculate_safe_op_hash, encode_erc20_transfer, extract_client_data_fields,
-    inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash,
-    signer_address_for,
+    calculate_safe_op_hash, compute_safe_message_hash, eip1271_envelope_signature,
+    encode_erc20_transfer, extract_client_data_fields, inner_calls_gas_floor,
+    is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash, signer_address_for,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
@@ -712,6 +714,32 @@ fn sign_and_submit(
     Ok(hash)
 }
 
+/// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
+/// own `SafeMessage` hash over `original_hash` — a Safe verifies nothing
+/// else — and the envelope carries no validity window. One ceremony,
+/// nothing submitted. Answers the signature hex.
+pub fn sign_message(
+    chain_id: u32,
+    safe: &str,
+    original_hash: &[u8],
+    keys: &[WalletKey],
+    mut signer: Signer<'_>,
+) -> Result<String, SubmitFailure> {
+    let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
+        .map_err(|e| other(e.to_string()))?;
+    let assertion = signer.sign(&challenge, chain_id, safe, keys, None)?;
+    let hex = |text: &str| from_hex(text).map_err(|e| other(e.to_string()));
+    let signature = eip1271_envelope_signature(
+        &hex(&assertion.authenticator_data_hex)?,
+        &hex(&assertion.client_data_json_hex)?,
+        &hex(&assertion.signature_der_hex)?,
+        &assertion.credential_id,
+        keys,
+    )
+    .map_err(|e| other(e.to_string()))?;
+    Ok(to_hex(&signature, true))
+}
+
 /// The relay's sentence, classified the way `classifySubmit` does.
 fn classify_rejection(message: String) -> SubmitFailure {
     if message
@@ -821,11 +849,6 @@ fn raise_to_measured_floor(
 mod tests {
     use super::*;
     use vela_core::app::AccountKey;
-    // Only the fixture-signing test needs it, and that test is behind the
-    // feature — an import that is unused with the feature off is a warning
-    // sitting in front of the next real one.
-    #[cfg(feature = "dev-fixtures")]
-    use vela_core::primitives::to_hex;
 
     fn account(keys: usize) -> Account {
         Account {
@@ -1109,6 +1132,67 @@ mod tests {
         assert_eq!(
             channel.ended(),
             Some(crate::executor::clear_signer::Refusal::Closed)
+        );
+    }
+
+    /// A message through the Clear Signer (spec 071): the page is told the
+    /// site's own request and no operation, the answer is accepted only over
+    /// the Safe's `SafeMessage` hash of the original computed here, and it
+    /// comes back as the EIP-1271 envelope a passkey's would.
+    #[test]
+    fn a_message_through_the_clear_signer_is_the_same_1271_signature() {
+        use crate::executor::clear_signer::tests::{
+            callback_of, http, page_of, page_result, result_query, signing_key, wallet_key,
+        };
+        const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![wallet_key(&signing_key(7), &credential)];
+        let original = [0x42_u8; 32];
+        let challenge =
+            compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
+        let (channel, _changed) = Channel::new();
+        let ask = Ask {
+            method: "personal_sign".to_owned(),
+            params: serde_json::json!(["0x68656c6c6f", SAFE]),
+            origin: "https://app.example".to_owned(),
+            account_name: None,
+        };
+        // The request the page would get: the site's, and no operation.
+        let request = ask.request(100, SAFE, &keys, None);
+        assert_eq!(request["intent"]["method"], "personal_sign");
+        assert!(request["context"].get("operation").is_none());
+
+        let signed = std::thread::scope(|scope| {
+            let ceremony = scope.spawn(|| {
+                sign_message(
+                    100,
+                    SAFE,
+                    &original,
+                    &keys,
+                    Signer::ClearSigner {
+                        ask: &ask,
+                        page: "https://sign.getvela.app/",
+                        channel: &channel,
+                    },
+                )
+            });
+            let (port, token) = callback_of(&page_of(&channel));
+            let result = page_result(&signing_key(7), &credential, &challenge);
+            http(port, "GET", &result_query(&token, &result));
+            ceremony
+                .join()
+                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        });
+        let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
+        assert!(signature.starts_with("0x"));
+        // A one-key wallet signs through the shared WebAuthn signer.
+        assert!(
+            signature.to_lowercase().contains(
+                &vela_core::safe::WEBAUTHN_SIGNER
+                    .trim_start_matches("0x")
+                    .to_lowercase()
+            ),
+            "{signature}"
         );
     }
 
