@@ -333,8 +333,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
 //   leaf and no branch. The two sets share no path, so they simply add:
 //   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
-if (PATHS.length !== 1687) fail(`expected 1687 paths (1599 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1599) fail(`expected 1599 leaf paths, got ${leafSet.size}`);
+// 1692 (spec 070, 2026-09-22): +5 flat explore leaves — the in-app browser
+//   now survives a renderer death and says so (`pageCrashedTitle`,
+//   `pageCrashedBody`), its scan button routes every code and names the two it
+//   cannot use (`walletConnectUnsupported`, `scanUnrecognized`), and "Copy
+//   link" confirms itself (`linkCopied`). Everything else the browser's fixes
+//   needed was already in the corpus (`connect.browser.loadFailed`, `.retry`,
+//   `.a11yInsecure`, `explore.disconnect`). No new branch.
+if (PATHS.length !== 1692) fail(`expected 1692 paths (1604 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1604) fail(`expected 1604 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

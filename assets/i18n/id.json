@@ -1750,6 +1750,11 @@
   "siteMenu": "Menu situs",
   "account": "Akun",
   "addressBar": "Bilah alamat",
-  "close": "Tutup"
+  "close": "Tutup",
+  "pageCrashedTitle": "Halaman ini berhenti berfungsi",
+  "pageCrashedBody": "Halaman tertutup secara tak terduga. Dompetmu tidak terpengaruh — muat ulang untuk melanjutkan.",
+  "walletConnectUnsupported": "Tautan WalletConnect belum didukung. Buka dApp di Jelajahi dan hubungkan dari sana.",
+  "scanUnrecognized": "Kode ini bukan alamat web maupun alamat dompet.",
+  "linkCopied": "Tautan disalin"
  }
 }

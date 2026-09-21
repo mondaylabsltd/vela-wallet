@@ -1754,6 +1754,11 @@
   "siteMenu": "Menu del sito",
   "account": "Account",
   "addressBar": "Barra degli indirizzi",
-  "close": "Chiudi"
+  "close": "Chiudi",
+  "pageCrashedTitle": "Questa pagina ha smesso di funzionare",
+  "pageCrashedBody": "La pagina si è chiusa inaspettatamente. Il tuo wallet non è coinvolto: ricarica per continuare.",
+  "walletConnectUnsupported": "I link WalletConnect non sono supportati. Apri la dApp in Esplora e connettiti da lì.",
+  "scanUnrecognized": "Questo codice non è né un indirizzo web né un indirizzo di wallet.",
+  "linkCopied": "Link copiato"
  }
 }

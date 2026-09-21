@@ -1750,6 +1750,11 @@
   "siteMenu": "站點選單",
   "account": "帳戶",
   "addressBar": "網址欄",
-  "close": "閂"
+  "close": "閂",
+  "pageCrashedTitle": "此頁面已停止運作",
+  "pageCrashedBody": "頁面意外關閉。你的錢包不受影響——重新載入即可繼續。",
+  "walletConnectUnsupported": "暫不支援 WalletConnect 連結。請在「探索」中開啟該 dApp，並從頁面內連接。",
+  "scanUnrecognized": "此二維碼既不是網址，也不是錢包地址。",
+  "linkCopied": "連結已複製"
  }
 }

@@ -1750,6 +1750,11 @@
   "siteMenu": "Site menüsü",
   "account": "Hesap",
   "addressBar": "Adres çubuğu",
-  "close": "Kapat"
+  "close": "Kapat",
+  "pageCrashedTitle": "Bu sayfa çalışmayı durdurdu",
+  "pageCrashedBody": "Sayfa beklenmedik şekilde kapandı. Cüzdanın etkilenmedi — devam etmek için yeniden yükle.",
+  "walletConnectUnsupported": "WalletConnect bağlantıları desteklenmiyor. dApp’i Keşfet’te aç ve oradan bağlan.",
+  "scanUnrecognized": "Bu kod bir web adresi ya da cüzdan adresi değil.",
+  "linkCopied": "Bağlantı kopyalandı"
  }
 }

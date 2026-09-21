@@ -1760,6 +1760,11 @@
   "siteMenu": "站点菜单",
   "account": "账户",
   "addressBar": "地址栏",
-  "close": "关闭"
+  "close": "关闭",
+  "pageCrashedTitle": "此页面已停止运行",
+  "pageCrashedBody": "页面意外关闭。你的钱包不受影响——重新加载即可继续。",
+  "walletConnectUnsupported": "暂不支持 WalletConnect 链接。请在「探索」中打开该 dApp，并从页面内连接。",
+  "scanUnrecognized": "此二维码既不是网址，也不是钱包地址。",
+  "linkCopied": "链接已复制"
  }
 }

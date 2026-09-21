@@ -53,6 +53,11 @@
     "siteMenu": "Site menu",
     "account": "Account",
     "addressBar": "Address bar",
-    "close": "Close"
+    "close": "Close",
+    "pageCrashedTitle": "This page stopped working",
+    "pageCrashedBody": "The page closed unexpectedly. Your wallet is not affected — reload to continue.",
+    "walletConnectUnsupported": "WalletConnect links aren’t supported. Open the dApp in Explore and connect from there.",
+    "scanUnrecognized": "This code isn’t a web address or a wallet address.",
+    "linkCopied": "Link copied"
   }
 }

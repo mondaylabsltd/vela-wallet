@@ -1750,6 +1750,11 @@
   "siteMenu": "Menu trang",
   "account": "Tài khoản",
   "addressBar": "Thanh địa chỉ",
-  "close": "Đóng"
+  "close": "Đóng",
+  "pageCrashedTitle": "Trang này đã ngừng hoạt động",
+  "pageCrashedBody": "Trang đã đóng đột ngột. Ví của bạn không bị ảnh hưởng — tải lại để tiếp tục.",
+  "walletConnectUnsupported": "Không hỗ trợ liên kết WalletConnect. Hãy mở dApp trong Khám phá và kết nối từ đó.",
+  "scanUnrecognized": "Mã này không phải địa chỉ web hay địa chỉ ví.",
+  "linkCopied": "Đã sao chép liên kết"
  }
 }

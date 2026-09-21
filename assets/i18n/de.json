@@ -1750,6 +1750,11 @@
   "siteMenu": "Website-Menü",
   "account": "Konto",
   "addressBar": "Adressleiste",
-  "close": "Schließen"
+  "close": "Schließen",
+  "pageCrashedTitle": "Diese Seite funktioniert nicht mehr",
+  "pageCrashedBody": "Die Seite wurde unerwartet beendet. Deine Wallet ist nicht betroffen – lade neu, um fortzufahren.",
+  "walletConnectUnsupported": "WalletConnect-Links werden nicht unterstützt. Öffne die dApp in „Entdecken“ und verbinde dich dort.",
+  "scanUnrecognized": "Dieser Code ist weder eine Webadresse noch eine Wallet-Adresse.",
+  "linkCopied": "Link kopiert"
  }
 }

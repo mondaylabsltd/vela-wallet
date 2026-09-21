@@ -53,6 +53,11 @@
     "siteMenu": "Menu du site",
     "account": "Compte",
     "addressBar": "Barre d’adresse",
-    "close": "Fermer"
+    "close": "Fermer",
+    "pageCrashedTitle": "Cette page a cessé de fonctionner",
+    "pageCrashedBody": "La page s’est fermée de manière inattendue. Votre portefeuille n’est pas concerné — rechargez pour continuer.",
+    "walletConnectUnsupported": "Les liens WalletConnect ne sont pas pris en charge. Ouvrez la dApp dans Explorer et connectez-vous depuis la page.",
+    "scanUnrecognized": "Ce code n’est ni une adresse web ni une adresse de portefeuille.",
+    "linkCopied": "Lien copié"
   }
 }
