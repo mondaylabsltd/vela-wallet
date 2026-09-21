@@ -586,6 +586,12 @@ data class SendConfirmModel(
     val subline: String,
     val facts: List<FactRowModel>,
     val breakdown: List<BreakdownRowModel> = emptyList(),
+    /**
+     * "First time sending here" — the anti-poisoning tell, on the page that
+     * signs. The core resolves it only while this page is up (`confirm_probes`),
+     * so the form never had it to show.
+     */
+    val recipientTag: String? = null,
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,

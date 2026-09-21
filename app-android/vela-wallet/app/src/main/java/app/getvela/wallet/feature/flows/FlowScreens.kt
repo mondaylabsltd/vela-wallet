@@ -1509,6 +1509,17 @@ fun SendConfirmBody(
                 FactRow(fact = fact)
             }
         }
+        model.recipientTag?.let {
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg),
+            )
+        }
         if (model.breakdown.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             Column(
