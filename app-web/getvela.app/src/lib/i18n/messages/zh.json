@@ -67,6 +67,16 @@
 				"security-audits": "审计与已知问题",
 				"whitepaper": "白皮书",
 				"faq": "常见问题"
+			},
+			"ui": {
+				"browse": "浏览文档",
+				"hide": "收起文档",
+				"navLabel": "文档",
+				"onThisPage": "本页内容",
+				"edit": "在 GitHub 上编辑此页",
+				"pagerLabel": "文档翻页",
+				"previous": "← 上一页",
+				"next": "下一页 →"
 			}
 		},
 		"englishOnly": {

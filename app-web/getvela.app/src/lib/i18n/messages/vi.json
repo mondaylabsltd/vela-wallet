@@ -67,6 +67,16 @@
 				"security-audits": "Kiểm toán & vấn đề đã biết",
 				"whitepaper": "Whitepaper",
 				"faq": "Câu hỏi thường gặp"
+			},
+			"ui": {
+				"browse": "Xem tài liệu",
+				"hide": "Ẩn tài liệu",
+				"navLabel": "Tài liệu",
+				"onThisPage": "Trong trang này",
+				"edit": "Sửa trang này trên GitHub",
+				"pagerLabel": "Chuyển trang tài liệu",
+				"previous": "← Trước",
+				"next": "Tiếp →"
 			}
 		},
 		"englishOnly": {

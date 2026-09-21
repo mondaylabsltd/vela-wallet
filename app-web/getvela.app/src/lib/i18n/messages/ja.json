@@ -67,6 +67,16 @@
 				"security-audits": "監査と既知の問題",
 				"whitepaper": "ホワイトペーパー",
 				"faq": "よくある質問"
+			},
+			"ui": {
+				"browse": "ドキュメント一覧",
+				"hide": "一覧を閉じる",
+				"navLabel": "ドキュメント",
+				"onThisPage": "このページの内容",
+				"edit": "GitHub でこのページを編集",
+				"pagerLabel": "ドキュメントのページ移動",
+				"previous": "← 前へ",
+				"next": "次へ →"
 			}
 		},
 		"englishOnly": {

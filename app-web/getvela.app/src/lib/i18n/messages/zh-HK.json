@@ -67,6 +67,16 @@
 				"security-audits": "審計同已知問題",
 				"whitepaper": "白皮書",
 				"faq": "常見問題"
+			},
+			"ui": {
+				"browse": "瀏覽文件",
+				"hide": "收起文件",
+				"navLabel": "文件",
+				"onThisPage": "本頁內容",
+				"edit": "在 GitHub 上編輯此頁",
+				"pagerLabel": "文件翻頁",
+				"previous": "← 上一頁",
+				"next": "下一頁 →"
 			}
 		},
 		"englishOnly": {

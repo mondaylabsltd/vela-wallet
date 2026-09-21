@@ -67,6 +67,16 @@
 				"security-audits": "감사와 알려진 문제",
 				"whitepaper": "백서",
 				"faq": "자주 묻는 질문"
+			},
+			"ui": {
+				"browse": "문서 둘러보기",
+				"hide": "문서 목록 닫기",
+				"navLabel": "문서",
+				"onThisPage": "이 페이지 내용",
+				"edit": "GitHub에서 이 페이지 편집",
+				"pagerLabel": "문서 페이지 이동",
+				"previous": "← 이전",
+				"next": "다음 →"
 			}
 		},
 		"englishOnly": {

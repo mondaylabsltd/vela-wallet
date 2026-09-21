@@ -67,6 +67,16 @@
 				"security-audits": "Denetimler ve bilinen sorunlar",
 				"whitepaper": "Teknik doküman",
 				"faq": "SSS"
+			},
+			"ui": {
+				"browse": "Belgelere göz atın",
+				"hide": "Belgeleri gizle",
+				"navLabel": "Belgeler",
+				"onThisPage": "Bu sayfada",
+				"edit": "Bu sayfayı GitHub’da düzenleyin",
+				"pagerLabel": "Belge sayfaları",
+				"previous": "← Önceki",
+				"next": "Sonraki →"
 			}
 		},
 		"englishOnly": {

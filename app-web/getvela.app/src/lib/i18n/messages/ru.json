@@ -67,6 +67,16 @@
 				"security-audits": "Аудиты и известные проблемы",
 				"whitepaper": "Whitepaper",
 				"faq": "Вопросы и ответы"
+			},
+			"ui": {
+				"browse": "Открыть документацию",
+				"hide": "Скрыть документацию",
+				"navLabel": "Документация",
+				"onThisPage": "На этой странице",
+				"edit": "Редактировать на GitHub",
+				"pagerLabel": "Страницы документации",
+				"previous": "← Назад",
+				"next": "Далее →"
 			}
 		},
 		"englishOnly": {

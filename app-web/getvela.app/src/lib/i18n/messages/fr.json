@@ -67,6 +67,16 @@
 				"security-audits": "Audits et problèmes connus",
 				"whitepaper": "Livre blanc",
 				"faq": "FAQ"
+			},
+			"ui": {
+				"browse": "Parcourir la documentation",
+				"hide": "Masquer la documentation",
+				"navLabel": "Documentation",
+				"onThisPage": "Sur cette page",
+				"edit": "Modifier cette page sur GitHub",
+				"pagerLabel": "Pages de la documentation",
+				"previous": "← Précédent",
+				"next": "Suivant →"
 			}
 		},
 		"englishOnly": {

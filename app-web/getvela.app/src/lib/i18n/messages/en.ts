@@ -118,6 +118,17 @@ export const en = {
 				'security-audits': 'Audits & known issues',
 				whitepaper: 'Whitepaper',
 				faq: 'FAQ'
+			},
+			/** Docs page chrome: the phone sidebar toggle, the table of contents, the pager. */
+			ui: {
+				browse: 'Browse docs',
+				hide: 'Hide docs',
+				navLabel: 'Documentation',
+				onThisPage: 'On this page',
+				edit: 'Edit this page on GitHub',
+				pagerLabel: 'Docs pages',
+				previous: '← Previous',
+				next: 'Next →'
 			}
 		},
 		englishOnly: {

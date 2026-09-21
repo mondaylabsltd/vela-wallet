@@ -67,6 +67,16 @@
 				"security-audits": "Audit & masalah yang diketahui",
 				"whitepaper": "Whitepaper",
 				"faq": "Tanya jawab"
+			},
+			"ui": {
+				"browse": "Jelajahi dokumen",
+				"hide": "Sembunyikan dokumen",
+				"navLabel": "Dokumentasi",
+				"onThisPage": "Di halaman ini",
+				"edit": "Sunting halaman ini di GitHub",
+				"pagerLabel": "Navigasi halaman dokumen",
+				"previous": "← Sebelumnya",
+				"next": "Berikutnya →"
 			}
 		},
 		"englishOnly": {
