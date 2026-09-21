@@ -1410,6 +1410,58 @@ pub fn split_row_appended(rows: &[SendRecipientDraft]) -> Vec<SendRecipientDraft
     next
 }
 
+/// The figure "Use X for the empty rows" would copy (the web's `fillEmpty`):
+/// offered while the core flags a row's amount as empty and another row has a
+/// figure the core accepts. The first such row's, exactly as typed — nothing
+/// is computed. `None` outside a split, or when there is nothing to fill.
+#[must_use]
+pub fn split_fill_source(send: &SendView) -> Option<&str> {
+    use vela_core::app::send::SendRowFieldState;
+    if !send.split_mode
+        || !send
+            .split_row_issues
+            .iter()
+            .any(|row| row.amount == SendRowFieldState::Empty)
+    {
+        return None;
+    }
+    send.recipients
+        .iter()
+        .find(|row| {
+            !row.amount.trim().is_empty()
+                && send
+                    .split_row_issues
+                    .iter()
+                    .find(|issue| issue.id == row.id)
+                    .is_none_or(|issue| issue.amount == SendRowFieldState::Ok)
+        })
+        .map(|row| row.amount.as_str())
+}
+
+/// One amount into every row that has none (the web's `fillEmptyAmounts`): a
+/// bulk edit of the drafts, like adding a row. Rows with a figure keep it.
+#[must_use]
+pub fn split_empty_filled(rows: &[SendRecipientDraft], amount: &str) -> Vec<SendRecipientDraft> {
+    rows.iter()
+        .map(|row| {
+            let mut row = row.clone();
+            if row.amount.trim().is_empty() {
+                amount.clone_into(&mut row.amount);
+            }
+            row
+        })
+        .collect()
+}
+
+/// A figure about to be SENT, every digit kept (the web's `exactAmount`):
+/// only trailing fractional zeros go — `0.50` reads `0.5`, never rounded.
+fn exact_amount(amount: &str) -> &str {
+    if !amount.contains('.') {
+        return amount;
+    }
+    amount.trim_end_matches('0').trim_end_matches('.')
+}
+
 #[cfg(test)]
 mod split_tests {
     use super::*;
@@ -1997,6 +2049,14 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
             .into()
         }),
         summary_over: split && send.split_over_balance,
+        fill_empty: split_fill_source(send).map(|amount| {
+            fill(
+                &s.split_fill_empty,
+                "amount",
+                format!("{} {symbol}", exact_amount(amount)).trim(),
+            )
+            .into()
+        }),
         pick_contacts: (!split).then(|| s.from_contacts.clone()),
         notice: send_notice(i, false),
         fee: send_fee_row(i),
@@ -4077,6 +4137,71 @@ mod parity_tests {
             };
             let form = with_inputs(&over, send_form);
             assert!(form.remaining.is_none() && form.summary_over);
+        });
+    }
+
+    /// "Use X for the empty rows" (the web's `fillEmpty`): offered only while
+    /// a row is empty and another carries a figure the core accepts; the
+    /// figure is copied exactly as typed, into the empty rows only.
+    #[test]
+    fn a_split_offers_one_amount_for_the_empty_rows() {
+        crate::executor::storage::tests::with_temp_state("parity-split-fill", || {
+            let s = strings();
+            let empty = |id: &str, ordinal: u32| SendSplitRowIssue {
+                id: id.to_owned(),
+                ordinal,
+                address: SendRowFieldState::Ok,
+                amount: SendRowFieldState::Empty,
+            };
+            let view = SendView {
+                split_mode: true,
+                selected_token: Some(token(100, "xDAI", None, "10")),
+                recipients: vec![draft("rcpt_1", "0xaa", "0.50"), draft("rcpt_2", "0xbb", "")],
+                split_row_issues: vec![empty("rcpt_2", 2)],
+                ..CoreHost::<SendMachine>::new().view()
+            };
+            assert_eq!(split_fill_source(&view), Some("0.50"));
+            let form = with_inputs(&view, send_form);
+            assert_eq!(
+                form.fill_empty.as_deref(),
+                Some(fill(&s.split_fill_empty, "amount", "0.5 xDAI").as_str())
+            );
+
+            let filled = split_empty_filled(&view.recipients, "0.50");
+            assert_eq!(
+                filled[0], view.recipients[0],
+                "a row with a figure keeps it"
+            );
+            assert_eq!(filled[1].amount, "0.50");
+            assert_eq!(filled[1].id, "rcpt_2", "the row keeps its identity");
+
+            // No empty row, nothing to fill.
+            let none = SendView {
+                split_row_issues: Vec::new(),
+                ..view.clone()
+            };
+            assert!(with_inputs(&none, send_form).fill_empty.is_none());
+
+            // A figure the core rejects is never the one that is copied.
+            let rejected = SendView {
+                recipients: vec![draft("rcpt_1", "0xaa", "1,5"), draft("rcpt_2", "0xbb", "")],
+                split_row_issues: vec![
+                    SendSplitRowIssue {
+                        amount: SendRowFieldState::Invalid,
+                        ..empty("rcpt_1", 1)
+                    },
+                    empty("rcpt_2", 2),
+                ],
+                ..view.clone()
+            };
+            assert!(split_fill_source(&rejected).is_none());
+
+            // A single form never offers it.
+            let single = SendView {
+                split_mode: false,
+                ..view
+            };
+            assert!(with_inputs(&single, send_form).fill_empty.is_none());
         });
     }
 

@@ -677,6 +677,9 @@ struct SendBindings {
     /// would be a second opinion about what a row is.
     recipients: Vec<SendRecipientDraft>,
     split_focuses: Vec<gpui::FocusHandle>,
+    /// "Use X for the empty rows": the figure the offer copies, when the
+    /// form offers it (`flows_live::split_fill_source`).
+    fill_empty: Option<String>,
     /// What the notice's way-out means on THIS panel — derived by the same
     /// traversal that wrote the sentence, so the button and the words cannot
     /// disagree about what they are offering.
@@ -3616,6 +3619,7 @@ impl WalletPage {
                 self.split_focuses[..view.recipients.len()].to_vec()
             },
             recipients: view.recipients.clone(),
+            fill_empty: flows_live::split_fill_source(&view).map(str::to_owned),
             sweeping: self.send_sweeping,
             token_chain_ids: view.tokens.iter().map(|token| token.chain_id).collect(),
             multi_chain_id: view.multi_chain_id,
@@ -4106,6 +4110,7 @@ impl WalletPage {
             pick_group_rows: Vec::new(),
             split_amount_fields: Vec::new(),
             remove_recipient_rows: Vec::new(),
+            fill_empty: None,
         };
         // DR1L, live: one listener per network row, each remembering WHICH
         // chain it opened. The fixture keeps its single first-row listener,
@@ -4391,6 +4396,23 @@ impl WalletPage {
                                 },
                             ) as panels::Click
                         });
+                    }
+                    // "Use X for the empty rows": the whole list back, the
+                    // empty rows carrying the typed figure.
+                    if let Some(amount) = send.fill_empty.clone() {
+                        let rows = send.recipients.clone();
+                        let host = host.clone();
+                        actions.fill_empty = Some(Box::new(
+                            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                let next = flows_live::split_empty_filled(&rows, &amount);
+                                host.update(cx, |host, cx| {
+                                    host.dispatch(
+                                        SendEvent::RecipientsChanged { recipients: next },
+                                        cx,
+                                    );
+                                });
+                            },
+                        ) as panels::Click);
                     }
                     // "+ 添加收款人" in split mode appends a BLANK row rather
                     // than stepping panels — the same words do the same thing

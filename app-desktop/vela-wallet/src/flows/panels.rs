@@ -131,6 +131,8 @@ pub struct PanelActions {
     /// order the rows draw, so row N edits payee N.
     pub split_amount_fields: Vec<AddressField>,
     pub remove_recipient_rows: Vec<Click>,
+    /// DSD2bL, live: "Use X for the empty rows".
+    pub fill_empty: Option<Click>,
 }
 
 /// An editable field the page owns the state of.
@@ -1357,6 +1359,33 @@ fn send_form(
             },
             window,
         ));
+    }
+
+    // One amount into every row that has none (the web's `.fill`): a quiet
+    // underlined line under the rows, not a button competing with Continue.
+    if let Some(label) = &model.fill_empty
+        && let Some(action) = actions.fill_empty.take()
+    {
+        col = col.child(
+            div().flex().child(clickable(
+                "split-fill-empty",
+                Some(action),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .py(px(6.))
+                    .child(icon_img(icons, Icon::Copy, false, theme.fg_base, 14.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(theme.fg_base)
+                            .underline()
+                            .child(label.clone()),
+                    ),
+            )),
+        );
     }
 
     if !model.recipient_actions.is_empty() {
