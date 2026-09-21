@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -452,8 +453,12 @@ fun AssetsBody(
             }
         } else {
             shown.forEachIndexed { position, entry ->
-                if (position > 0) HairlineDivider()
-                AssetRow(model = entry.value, onClick = { onSelect(entry.index) })
+                // By holding, not position: a network filter re-lists these
+                // rows, and a slot must not carry another token's state (#267).
+                key(entry.value.id, entry.value.ticker, entry.value.chain) {
+                    if (position > 0) HairlineDivider()
+                    AssetRow(model = entry.value, onClick = { onSelect(entry.index) })
+                }
             }
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
                 // T1 sets this quiet and centred, not as a link: it is the way
@@ -801,13 +806,16 @@ fun SendPickBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         shown.forEachIndexed { position, entry ->
-            if (position > 0) HairlineDivider()
-            AssetRow(
-                model = entry.value,
-                selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
-                dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
-                onClick = { onSelect(entry.index) },
-            )
+            // By holding, not position (#267): see the wallet list.
+            key(entry.value.id, entry.value.ticker, entry.value.chain) {
+                if (position > 0) HairlineDivider()
+                AssetRow(
+                    model = entry.value,
+                    selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
+                    dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
+                    onClick = { onSelect(entry.index) },
+                )
+            }
         }
         // Issue 209: a list with nothing in it says so rather than showing a blank panel.
         if (shown.isEmpty()) {
