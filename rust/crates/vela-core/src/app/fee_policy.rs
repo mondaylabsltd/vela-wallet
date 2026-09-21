@@ -508,6 +508,28 @@ pub enum FeeOperation {
         deployed: bool,
         calls: Vec<FeeCall>,
     },
+    /// `eth_estimateGas({from, to, value, data})` for each call, ON ITS OWN,
+    /// from the Safe's address — the inner calls' own gas (spec 062).
+    ///
+    /// The relay estimates `callGasLimit` against the SENDER. An undeployed
+    /// Safe has no code there, so its figure is ~21k plus calldata whatever
+    /// the call does, and the submit raises `callGasLimit` to the measured
+    /// floor (`user_op::inner_calls_gas_floor`). A fee priced on the relay's
+    /// figure alone was then priced on a gas limit the op never carried, and
+    /// the relay's bundle-time reimbursement check refused it: stuck
+    /// "Submitted" for good. So the quote measures what the submit measures
+    /// and prices the same `callGasLimit`.
+    ///
+    /// `calls` holds only the contract calls (plain transfers are never
+    /// measured); issued alongside [`Self::EstimateUserOpGas`] whenever the
+    /// batch carries one, deployed or not — the web submit's rule. The shell
+    /// answers [`FeeShellResult::InnerCallsMeasured`] with one entry per call,
+    /// `None` for a call nobody could measure.
+    MeasureInnerCalls {
+        chain_id: u32,
+        from: String,
+        calls: Vec<FeeCall>,
+    },
     /// Quote staleness timer.
     StartTtl { ms: u32 },
 }
@@ -537,6 +559,12 @@ pub enum FeeShellResult {
     },
     UserOpGas {
         outcome: FeeGasOutcome,
+    },
+    /// The answer to [`FeeOperation::MeasureInnerCalls`]: gas per call, in
+    /// order, as decimal strings; `None` = that call could not be measured,
+    /// which leaves the relay's figure (the submit's own behaviour).
+    InnerCallsMeasured {
+        gas: Vec<Option<String>>,
     },
     TtlElapsed,
 }
@@ -1431,6 +1459,11 @@ struct Pending {
     bundler: Option<Option<FeeBundlerQuote>>,
     quotes: Option<Option<Vec<ParsedQuote>>>,
     recipient: Option<Option<String>>,
+    /// The estimating phase's two answers: the relay's simulation and the
+    /// inner calls' measured floor (`Some(None)` = nothing to raise, or
+    /// nothing was asked). Pricing waits for both.
+    user_op_gas: Option<FeeGasOutcome>,
+    inner_floor: Option<Option<u128>>,
 }
 
 /// What the pricing step needs once the simulation answers.
@@ -1818,9 +1851,17 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
             model.pending.recipient = Some(recipient);
             try_advance(model)
         }
-        (Phase::Estimating(plan), FeeShellResult::UserOpGas { outcome }) => {
-            let plan = plan.clone();
-            accept_gas_outcome(model, &plan, outcome)
+        (Phase::Estimating(_), FeeShellResult::UserOpGas { outcome }) => {
+            model.pending.user_op_gas = Some(outcome);
+            try_price(model)
+        }
+        (Phase::Estimating(_), FeeShellResult::InnerCallsMeasured { gas }) => {
+            let floor = model
+                .ctx
+                .as_ref()
+                .and_then(|ctx| measured_inner_floor(&ctx.calls, &gas));
+            model.pending.inner_floor = Some(floor);
+            try_price(model)
         }
         (Phase::Quoted, FeeShellResult::TtlElapsed) => {
             model.stale = true;
@@ -2101,6 +2142,22 @@ fn advance_generic(
     };
     est_calls.push(leg);
     let est_calldata_len = multisend_execute_calldata_len(&est_calls);
+    // The inner calls' own gas, measured beside the simulation so the quote
+    // prices the `callGasLimit` the submit will carry (see
+    // `FeeOperation::MeasureInnerCalls`). The fee leg is a plain transfer and
+    // is never measured, exactly as at submit.
+    let to_measure: Vec<FeeCall> = ctx
+        .calls
+        .iter()
+        .filter(|call| is_contract_call(call))
+        .cloned()
+        .collect();
+    model.pending.user_op_gas = None;
+    model.pending.inner_floor = if to_measure.is_empty() {
+        Some(None)
+    } else {
+        None
+    };
 
     model.phase = Phase::Estimating(PricePlan::Generic {
         network_fee_per_gas,
@@ -2112,15 +2169,75 @@ fn advance_generic(
         quoted,
         est_calldata_len,
     });
-    requests(
-        model,
-        vec![FeeOperation::EstimateUserOpGas {
+    let mut operations = vec![FeeOperation::EstimateUserOpGas {
+        chain_id: ctx.chain_id,
+        account: ctx.account.clone(),
+        deployed: ctx.deployed,
+        calls: est_calls,
+    }];
+    if !to_measure.is_empty() {
+        operations.push(FeeOperation::MeasureInnerCalls {
             chain_id: ctx.chain_id,
-            account: ctx.account.clone(),
-            deployed: ctx.deployed,
-            calls: est_calls,
-        }],
-    )
+            from: ctx.account.clone(),
+            calls: to_measure,
+        });
+    }
+    requests(model, operations)
+}
+
+/// More than a plain transfer (`user_op::is_plain_transfer_call`): a call the
+/// submit measures on its own. Calldata that is not hex is measured too — the
+/// shell's failure then leaves the relay's figure, as it would at submit.
+fn is_contract_call(call: &FeeCall) -> bool {
+    crate::primitives::from_hex(&call.data).map_or(true, |bytes| {
+        !crate::user_op::is_plain_transfer_call(&bytes)
+    })
+}
+
+/// The submit's floor (`user_op::inner_calls_gas_floor`) from the shell's
+/// measurements of `calls`' contract calls. Any call unmeasured — or an answer
+/// that does not line up with what was asked — is no floor at all, exactly as
+/// the submit drops its floor when one measurement fails.
+fn measured_inner_floor(calls: &[FeeCall], gas: &[Option<String>]) -> Option<u128> {
+    let expected = calls.iter().filter(|call| is_contract_call(call)).count();
+    if gas.len() != expected {
+        return None;
+    }
+    let measured = gas
+        .iter()
+        .map(|g| g.as_deref().and_then(parse_units))
+        .collect::<Option<Vec<u128>>>()?;
+    crate::user_op::inner_calls_gas_floor(&measured, calls.len())
+}
+
+/// Price once the estimating phase has both answers.
+fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
+    let Phase::Estimating(plan) = &model.phase else {
+        return Command::done();
+    };
+    let plan = plan.clone();
+    let Some(outcome) = model.pending.user_op_gas.clone() else {
+        return Command::done();
+    };
+    // An outcome that fails whatever the floor (missing context, a large op
+    // the relay could not simulate) surfaces at once, never behind a
+    // measurement it cannot use.
+    let floor_matters = match (&plan, &outcome) {
+        (PricePlan::Generic { .. }, FeeGasOutcome::Estimated { .. }) => true,
+        (
+            PricePlan::Generic {
+                est_calldata_len, ..
+            },
+            FeeGasOutcome::SimulationFailed,
+        ) => *est_calldata_len <= ESTIMATION_REQUIRED_CALLDATA,
+        _ => false,
+    };
+    let inner_floor = match model.pending.inner_floor {
+        Some(floor) => floor,
+        None if floor_matters => return Command::done(),
+        None => None,
+    };
+    accept_gas_outcome(model, &plan, outcome, inner_floor)
 }
 
 fn missing_quote_failure(fee_token_selected: bool) -> FeeFailure {
@@ -2173,6 +2290,10 @@ fn advance_tempo(
         let mut est_calls = ctx.calls.clone();
         est_calls.push(leg.clone());
         est_calls.push(leg);
+        // Tempo prices the un-padded simulation, never `callGasLimit`, so
+        // there is no floor to wait for.
+        model.pending.user_op_gas = None;
+        model.pending.inner_floor = Some(None);
         model.phase = Phase::Estimating(plan);
         return requests(
             model,
@@ -2191,6 +2312,7 @@ fn accept_gas_outcome(
     model: &mut Model,
     plan: &PricePlan,
     outcome: FeeGasOutcome,
+    inner_floor: Option<u128>,
 ) -> Command<FeeEffect, Event> {
     let Some(ctx) = model.ctx.clone() else {
         return Command::done();
@@ -2220,7 +2342,12 @@ fn accept_gas_outcome(
                 } else {
                     2_000_000
                 });
-                let est_cgl = narrow_saturating(mul_wide(cgl, 15) / w(10)).max(100_000);
+                // …and raised to the inner calls' measured floor, the same
+                // raise the submit applies (`user_op_raise_call_gas`): the fee
+                // is priced on the `callGasLimit` the op will carry.
+                let est_cgl = narrow_saturating(mul_wide(cgl, 15) / w(10))
+                    .max(100_000)
+                    .max(inner_floor.unwrap_or(0));
                 let est_pvg = add(pvg, 10_000);
                 let total_gas = add(add(est_vgl, est_cgl), est_pvg);
                 price_generic(model, &ctx, plan, total_gas)
@@ -2238,8 +2365,8 @@ fn accept_gas_outcome(
                 } else {
                     VERIFICATION_GAS_UNDEPLOYED
                 };
-                let mut total_gas =
-                    add(add(verification_gas, CALL_GAS_LIMIT), PRE_VERIFICATION_GAS);
+                let call_gas = CALL_GAS_LIMIT.max(inner_floor.unwrap_or(0));
+                let mut total_gas = add(add(verification_gas, call_gas), PRE_VERIFICATION_GAS);
                 // L2 rollup data-fee adjustments (`safe-transaction.ts:723-731`).
                 if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
                     total_gas = add(total_gas, ARBITRUM_STATIC_GAS_ADDER);

@@ -6,4 +6,4 @@ import type { FeeGasOutcome } from "./FeeGasOutcome";
 /**
  * What the shell observed.
  */
-export type FeeShellResult = { "type": "gas_price", eth_gas_price: string | null, base_fee: string | null, priority_fee: string | null, } | { "type": "bundler_quote", quote: FeeBundlerQuote | null, } | { "type": "in_band_quotes", quotes: Array<FeeAssetQuote> | null, } | { "type": "fee_recipient", recipient: string | null, } | { "type": "user_op_gas", outcome: FeeGasOutcome, } | { "type": "ttl_elapsed" };
+export type FeeShellResult = { "type": "gas_price", eth_gas_price: string | null, base_fee: string | null, priority_fee: string | null, } | { "type": "bundler_quote", quote: FeeBundlerQuote | null, } | { "type": "in_band_quotes", quotes: Array<FeeAssetQuote> | null, } | { "type": "fee_recipient", recipient: string | null, } | { "type": "user_op_gas", outcome: FeeGasOutcome, } | { "type": "inner_calls_measured", gas: Array<string | null>, } | { "type": "ttl_elapsed" };

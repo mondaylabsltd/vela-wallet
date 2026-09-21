@@ -184,7 +184,9 @@ final class SigningController {
         self.ports = ports
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
-        self.fees = FeeStore(relay: relay, accounts: accounts)
+        self.fees = FeeStore(
+            relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
+        )
 
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)

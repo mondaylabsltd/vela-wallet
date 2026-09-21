@@ -1,6 +1,6 @@
 //! The only place the `fee_policy` machine touches the outside world.
 //!
-//! Six operations, six reads. Every rule that used to live in `GasFeeCard`,
+//! Seven operations, seven reads. Every rule that used to live in `GasFeeCard`,
 //! `useSendController` and `estimateTransactionFee` — the bundler-quote
 //! acceptance, the gas-price fallback, the ×1.5 padding, the 1 KiB calldata
 //! cliff, the in-band pricing, the balance<fee gate — is `fee_policy.rs`'s.
@@ -89,6 +89,33 @@ impl Machine for FeePolicy {
                 }))
             }
 
+            FeeOperation::MeasureInnerCalls {
+                chain_id,
+                from,
+                calls,
+            } => {
+                let (chain_id, from, calls) = (*chain_id, from.clone(), calls.clone());
+                Answer::Blocking(Box::new(move || FeeShellResult::InnerCallsMeasured {
+                    // Each call on its own, from the Safe — the read the
+                    // submit's floor makes. What an unmeasured call means is
+                    // the core's.
+                    gas: calls
+                        .iter()
+                        .map(|call| {
+                            let value = match call.value.trim() {
+                                "" => 0,
+                                decimal => decimal.parse::<u128>().ok()?,
+                            };
+                            let value_hex = format!("0x{value:x}");
+                            user_op::measure_call_gas(
+                                chain_id, &from, &call.to, &value_hex, &call.data,
+                            )
+                            .map(|gas| gas.to_string())
+                        })
+                        .collect(),
+                }))
+            }
+
             FeeOperation::StartTtl { ms } => Answer::After(
                 Duration::from_millis(u64::from(*ms)),
                 FeeShellResult::TtlElapsed,
@@ -139,6 +166,11 @@ mod tests {
                 chain_id: 100,
                 account: "0x0".to_owned(),
                 deployed: true,
+                calls: Vec::new(),
+            },
+            FeeOperation::MeasureInnerCalls {
+                chain_id: 100,
+                from: "0x0".to_owned(),
                 calls: Vec::new(),
             },
         ];

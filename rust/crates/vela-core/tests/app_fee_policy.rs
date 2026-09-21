@@ -3106,6 +3106,307 @@ fn a_locally_estimated_fee_publishes_no_range() {
     assert_eq!(fee.max_gas_price, None);
 }
 
+// ===========================================================================
+// Machine — the inner calls' measured gas floor (issue #262 follow-up)
+// ===========================================================================
+
+/// A contract call (not a plain transfer): `claim()`-shaped calldata.
+fn contract_call() -> FeeCall {
+    FeeCall {
+        to: USDC.to_owned(),
+        value: "0".to_owned(),
+        data: "0x4e71d92d".to_owned(),
+    }
+}
+
+fn erc20_transfer_call() -> FeeCall {
+    FeeCall {
+        to: USDC.to_owned(),
+        value: "0".to_owned(),
+        data: encode_erc20_transfer(NATIVE_RECIPIENT, 1).expect("transfer"),
+    }
+}
+
+fn request_undeployed(calls: Vec<FeeCall>) -> Event {
+    Event::QuoteRequested {
+        chain_id: CHAIN,
+        account: ACCOUNT.to_owned(),
+        deployed: false,
+        public_key_available: true,
+        tier: FeeTier::Fast,
+        calls,
+        fee_token: None,
+    }
+}
+
+/// The relay's "no code at the sender" figure for an undeployed Safe: 21k
+/// plus calldata, whatever the call does.
+fn relay_trivial_estimate() -> Res {
+    Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "118000".to_owned(),
+            pre_verification_gas: "40000".to_owned(),
+        },
+    }
+}
+
+fn measured(gas: &[Option<&str>]) -> Res {
+    Res::InnerCallsMeasured {
+        gas: gas.iter().map(|g| g.map(str::to_owned)).collect(),
+    }
+}
+
+/// Dispatch + the three context reads; returns the estimating phase's ops.
+fn to_estimating(sut: &mut Sut, event: Event) -> Vec<Op> {
+    sut.dispatch(event);
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok())
+}
+
+/// The spec-062 live figure: a 4,308,125-gas registry call.
+const MEASURED_REGISTRY_CALL: u128 = 4_308_125;
+
+/// THE BUG: an undeployed Safe's first contract call was priced on the relay's
+/// trivial `callGasLimit`, the submit raised it to the measured floor, and the
+/// signed fee could not cover the op the relay then had to bundle. The quote
+/// now measures what the submit measures and prices the raised limit.
+#[test]
+fn undeployed_contract_call_is_priced_on_the_measured_floor() {
+    let mut sut = Sut::new();
+    let ops = to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    assert_eq!(ops.len(), 2, "simulation and measurement run side by side");
+    assert!(matches!(
+        ops[0],
+        Op::EstimateUserOpGas {
+            deployed: false,
+            ..
+        }
+    ));
+    assert_eq!(
+        ops[1],
+        Op::MeasureInnerCalls {
+            chain_id: CHAIN,
+            from: ACCOUNT.to_owned(),
+            calls: vec![contract_call()],
+        }
+    );
+    assert!(
+        sut.resolve(relay_trivial_estimate()).is_empty(),
+        "never priced before the measurement answers"
+    );
+    assert!(sut.view().busy);
+    let ops = sut.resolve(measured(&[Some(&MEASURED_REGISTRY_CALL.to_string())]));
+    assert_eq!(ops, vec![Op::StartTtl { ms: 30_000 }]);
+
+    // The floor the submit raises to (`user_op_raise_call_gas`): 5,495,156.
+    let floor =
+        vela_core::user_op::inner_calls_gas_floor(&[MEASURED_REGISTRY_CALL], 1).expect("a floor");
+    assert_eq!(floor, 5_495_156);
+    // Displayed = signed: the submit's padded relay figure is under the floor,
+    // so the op carries exactly `floor` — the quote must price exactly that.
+    let submit_cgl = vela_core::user_op::pad_gas_estimate(
+        vela_core::user_op::GasEstimate {
+            verification_gas_limit: 100_000,
+            call_gas_limit: 118_000,
+            pre_verification_gas: 40_000,
+        },
+        2_000_000,
+        200_000,
+    )
+    .call_gas_limit
+    .max(floor);
+    assert_eq!(submit_cgl, floor);
+
+    let fee = sut.view().fee.expect("quoted");
+    // 2,000,000 (undeployed vgl floor) + 5,495,156 + (40,000 + 10,000).
+    let total = 2_000_000 + submit_cgl + 50_000;
+    assert_eq!(fee.total_gas, total.to_string());
+    assert_eq!(fee.total_wei, (total * NETWORK_FEE * 3).to_string());
+}
+
+/// The measurement may answer first; the result is the same.
+#[test]
+fn the_measurement_may_answer_before_the_simulation() {
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::MeasureInnerCalls { .. }),
+        measured(&[Some(&MEASURED_REGISTRY_CALL.to_string())]),
+    );
+    assert!(ops.is_empty(), "still waiting for the simulation");
+    sut.resolve(relay_trivial_estimate());
+    assert_eq!(
+        sut.view().fee.expect("quoted").total_gas,
+        (2_000_000 + 5_495_156 + 50_000u128).to_string()
+    );
+}
+
+/// A call nobody could measure leaves the relay's figure — the submit's own
+/// behaviour, which drops its floor the same way.
+#[test]
+fn an_unmeasurable_call_keeps_the_relay_figure() {
+    // Relay: 118k × 1.5 = 177k.
+    let relay_total = (2_000_000 + 177_000 + 50_000u128).to_string();
+
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    sut.resolve(relay_trivial_estimate());
+    sut.resolve(measured(&[None]));
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, relay_total);
+
+    // One of two unmeasured is no floor at all, not half a floor.
+    let mut sut = Sut::new();
+    to_estimating(
+        &mut sut,
+        request_undeployed(vec![contract_call(), contract_call()]),
+    );
+    sut.resolve(relay_trivial_estimate());
+    sut.resolve(measured(&[Some("4308125"), None]));
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, relay_total);
+
+    // An answer that does not line up with the question is not a floor.
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    sut.resolve(relay_trivial_estimate());
+    sut.resolve(measured(&[Some("4308125"), Some("4308125")]));
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, relay_total);
+}
+
+/// The web submit measures every contract call, deployed or not, so the
+/// quote does too: a small call on a DEPLOYED Safe whose floor (×1.25 + 60k +
+/// 50k/call) out-grows the relay's padded figure is priced on the floor.
+#[test]
+fn a_deployed_safe_contract_call_is_measured_too() {
+    let mut sut = Sut::new();
+    let ops = to_estimating(&mut sut, request(CHAIN, vec![contract_call()]));
+    assert_eq!(ops.len(), 2);
+    assert!(matches!(ops[1], Op::MeasureInnerCalls { .. }));
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "80000".to_owned(),
+            pre_verification_gas: "40000".to_owned(),
+        },
+    });
+    sut.resolve(measured(&[Some("46000")]));
+    // Floor 46,000 × 1.25 + 60,000 + 50,000 = 167,500 > 80,000 × 1.5.
+    // 300,000 (deployed vgl floor) + 167,500 + 50,000.
+    assert_eq!(sut.view().fee.expect("quoted").total_gas, "517500");
+
+    // A floor BELOW the relay's padded figure changes nothing.
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request(CHAIN, vec![contract_call()]));
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Estimated {
+            verification_gas_limit: "100000".to_owned(),
+            call_gas_limit: "400000".to_owned(),
+            pre_verification_gas: "40000".to_owned(),
+        },
+    });
+    sut.resolve(measured(&[Some("46000")]));
+    assert_eq!(
+        sut.view().fee.expect("quoted").total_gas,
+        (300_000 + 600_000 + 50_000u128).to_string()
+    );
+}
+
+/// Plain transfers are never measured — no operation is asked for — and a
+/// mixed batch measures only its contract calls while every inner call counts
+/// toward the per-call frame allowance.
+#[test]
+fn only_contract_calls_are_measured() {
+    let native_send = FeeCall {
+        to: NATIVE_RECIPIENT.to_owned(),
+        value: "1".to_owned(),
+        data: "0x".to_owned(),
+    };
+    let mut sut = Sut::new();
+    let ops = to_estimating(
+        &mut sut,
+        request_undeployed(vec![native_send.clone(), erc20_transfer_call()]),
+    );
+    assert_eq!(ops.len(), 1, "transfers only → the simulation alone");
+    sut.resolve(relay_trivial_estimate());
+    assert!(sut.view().fee.is_some(), "priced without a measurement");
+
+    let mut sut = Sut::new();
+    let ops = to_estimating(
+        &mut sut,
+        request_undeployed(vec![native_send, contract_call()]),
+    );
+    assert_eq!(
+        ops[1],
+        Op::MeasureInnerCalls {
+            chain_id: CHAIN,
+            from: ACCOUNT.to_owned(),
+            calls: vec![contract_call()],
+        }
+    );
+    sut.resolve(relay_trivial_estimate());
+    sut.resolve(measured(&[Some("4308125")]));
+    // 5,385,156 + 60,000 + 50,000 × 2 inner calls = 5,545,156.
+    assert_eq!(
+        sut.view().fee.expect("quoted").total_gas,
+        (2_000_000 + 5_545_156 + 50_000u128).to_string()
+    );
+}
+
+/// A small op the relay could not simulate keeps the static fallback, raised
+/// to the measured floor when that is higher.
+#[test]
+fn the_static_fallback_is_raised_to_the_measured_floor() {
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::SimulationFailed,
+    });
+    assert!(sut.view().busy, "the floor still matters to the fallback");
+    sut.resolve(measured(&[Some("4308125")]));
+    // 2,000,000 + max(200,000, 5,495,156) + 100,000.
+    assert_eq!(
+        sut.view().fee.expect("static quote").total_gas,
+        (2_000_000 + 5_495_156 + 100_000u128).to_string()
+    );
+}
+
+/// Missing account context fails at once — it never waits on a measurement
+/// that could not change the answer.
+#[test]
+fn a_context_failure_does_not_wait_for_the_measurement() {
+    let mut sut = Sut::new();
+    to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::ContextUnavailable,
+    });
+    assert_eq!(sut.view().failed, Some(FeeFailure::EstimateFailed));
+    // The late measurement is a no-op.
+    assert!(sut.resolve(measured(&[Some("4308125")])).is_empty());
+    assert_eq!(sut.view().failed, Some(FeeFailure::EstimateFailed));
+}
+
+/// Tempo prices the un-padded simulation, never `callGasLimit`: nothing is
+/// measured there.
+#[test]
+fn tempo_never_measures() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(TEMPO_CHAIN, vec![contract_call()]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some(TEMPO_BASE_FEE_ATTO.to_string()),
+        base_fee: None,
+        priority_fee: None,
+    });
+    sut.resolve(Res::FeeRecipient {
+        recipient: Some(COLLECTOR.to_owned()),
+    });
+    let ops = sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![pathusd_row("5000000")]),
+    });
+    assert_eq!(ops.len(), 1);
+    assert!(matches!(ops[0], Op::EstimateUserOpGas { .. }));
+}
+
 // -- the fee-signal cache (issue 212): what a shell may hold -----------------
 
 mod fee_signal_cache {

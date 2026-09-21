@@ -699,6 +699,29 @@ pub fn key_hexes(keys: &[WalletKey]) -> Vec<String> {
     keys.iter().map(|key| key.public_key_hex.clone()).collect()
 }
 
+/// `eth_estimateGas({from, to, value, data})` for ONE inner call, from the
+/// Safe's own address — the measurement the submit's floor pads and the fee
+/// quote hands the core (`FeeOperation::MeasureInnerCalls`), read the same
+/// way by both. `None` = nobody could measure it.
+pub fn measure_call_gas(
+    chain_id: u32,
+    from: &str,
+    to: &str,
+    value_hex: &str,
+    data_hex: &str,
+) -> Option<u128> {
+    let params = serde_json::json!([{
+        "from": from,
+        "to": to,
+        "value": value_hex,
+        "data": data_hex,
+    }]);
+    pool::call(chain_id, "eth_estimateGas", params)
+        .ok()
+        .and_then(|answer| answer.get("result")?.as_str().map(str::to_owned))
+        .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
+}
+
 /// The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
 /// every real contract call measured from the Safe's address — a codeless
 /// account estimates like any other — so an UNDEPLOYED Safe's first contract
@@ -720,17 +743,8 @@ fn raise_to_measured_floor(
         .iter()
         .filter(|call| !is_plain_transfer_call(&call.data))
     {
-        let params = serde_json::json!([{
-            "from": safe,
-            "to": call.to,
-            "value": call.value_hex,
-            "data": format!("0x{}", vela_core::primitives::to_hex(&call.data, false)),
-        }]);
-        let Some(gas) = pool::call(chain_id, "eth_estimateGas", params)
-            .ok()
-            .and_then(|answer| answer.get("result")?.as_str().map(str::to_owned))
-            .and_then(|hex| u128::from_str_radix(hex.trim_start_matches("0x"), 16).ok())
-        else {
+        let data = format!("0x{}", vela_core::primitives::to_hex(&call.data, false));
+        let Some(gas) = measure_call_gas(chain_id, safe, &call.to, &call.value_hex, &data) else {
             return;
         };
         measured.push(gas);

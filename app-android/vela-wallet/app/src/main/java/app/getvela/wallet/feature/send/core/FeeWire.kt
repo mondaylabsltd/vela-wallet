@@ -212,6 +212,19 @@ sealed class FeeOperation {
         val calls: List<FeeCall> = emptyList(),
     ) : FeeOperation()
 
+    /**
+     * `eth_estimateGas` for each call on its own, from the Safe (`from`) —
+     * only the contract calls, issued beside the estimate so the quote prices
+     * the `callGasLimit` the submit will raise to.
+     */
+    @Serializable
+    @SerialName("measure_inner_calls")
+    data class MeasureInnerCalls(
+        val chain_id: Int,
+        val from: String,
+        val calls: List<FeeCall> = emptyList(),
+    ) : FeeOperation()
+
     @Serializable
     @SerialName("start_ttl")
     data class StartTtl(val ms: Int) : FeeOperation()
@@ -246,6 +259,11 @@ sealed class FeeShellResult {
     @Serializable
     @SerialName("user_op_gas")
     data class UserOpGas(val outcome: FeeGasOutcome) : FeeShellResult()
+
+    /** One entry per measured call, in order, decimal gas; `null` = nobody could measure it. */
+    @Serializable
+    @SerialName("inner_calls_measured")
+    data class InnerCallsMeasured(val gas: List<String?> = emptyList()) : FeeShellResult()
 
     @Serializable
     @SerialName("ttl_elapsed")

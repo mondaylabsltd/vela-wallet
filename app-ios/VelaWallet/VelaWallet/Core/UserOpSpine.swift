@@ -125,7 +125,7 @@ final class UserOpSpine {
 
     /// A decimal wei string as bare hex. Values here are small enough for
     /// `UInt64`… except when they are not — then the measurement is skipped.
-    private static func decimalToHex(_ decimal: String) -> String? {
+    static func decimalToHex(_ decimal: String) -> String? {
         decimal.isEmpty ? "0" : UInt64(decimal).map { String($0, radix: 16) }
     }
 

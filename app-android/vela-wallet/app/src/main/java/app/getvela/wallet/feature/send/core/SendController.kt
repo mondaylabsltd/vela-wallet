@@ -11,10 +11,12 @@ import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.RpcPool
+import app.getvela.wallet.feature.wallet.core.RpcResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import uniffi.vela_core_uniffi.BatchImportCore
 import app.getvela.wallet.feature.documents.DocumentPorts
 import uniffi.vela_core_uniffi.SendCore
@@ -82,6 +84,11 @@ class SendController(
     private val feeExecutor = FeeExecutor(
         relay = relay,
         keyHexes = { address: String -> accountPort.keysOf(address).map { it.publicKeyHex } },
+        // The quote measures the inner calls the way the submit spine does.
+        measureCall = { chainId, from, to, valueHex, data ->
+            (pool.call(chainId, "eth_estimateGas", listOf(JSONObject().put("from", from).put("to", to).put("value", valueHex).put("data", data))) as? RpcResult.Body)
+                ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
+        },
     )
 
     // -- the speed control (spec 069) ----------------------------------------------

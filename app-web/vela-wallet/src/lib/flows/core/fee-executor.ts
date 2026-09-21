@@ -2,7 +2,7 @@
 /**
  * The only place the `fee_policy` core touches the outside world.
  *
- * Six operations, six existing service calls. No branching on business
+ * Seven operations, seven existing service calls. No branching on business
  * meaning: every rule that used to live in `GasFeeCard`, `useSendController`
  * and `estimateTransactionFee` — the bundler-quote acceptance, the gas-price
  * fallback, the ×1.5 padding, the 1 KiB calldata cliff, the in-band pricing,
@@ -26,6 +26,7 @@ import {
 	fetchRawBundlerQuote,
 	fetchRawGasSignals,
 	keySetOf,
+	measureCallGas,
 	simulateUserOpGas
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress } from '$lib/services/accounts';
@@ -231,6 +232,28 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 				};
 			}
 
+			case 'measure_inner_calls': {
+				// The inner calls' own gas, each on its own from the Safe's address —
+				// the same read `innerCallsGasFloor` makes at submit. The floor rule
+				// (and what an unmeasured call means) is the core's; one entry per
+				// call, `null` where nobody answered.
+				const gas = await Promise.all(
+					operation.calls.map((call) =>
+						measureCallGas(
+							operation.chain_id,
+							operation.from,
+							call.to,
+							decimalToHex(call.value),
+							call.data
+						).catch(() => null)
+					)
+				);
+				return {
+					type: 'inner_calls_measured',
+					gas: gas.map((g) => (g === null ? null : g.toString()))
+				};
+			}
+
 			case 'start_ttl': {
 				// Staleness is advisory — the core only lights a refresh affordance
 				// with it. A cancelled timer belongs to a superseded quote, and the
@@ -282,6 +305,9 @@ export function feeOperationFailure(effect: FeeEffect): FeeShellResult {
 			// does not reject; reaching here means the encode itself threw, which is
 			// the shell failing to build a truthful op.
 			return { type: 'user_op_gas', outcome: { type: 'context_unavailable' } };
+		case 'measure_inner_calls':
+			// Nothing measured: the core keeps the relay's figure.
+			return { type: 'inner_calls_measured', gas: operation.calls.map(() => null) };
 		case 'start_ttl':
 			return { type: 'ttl_elapsed' };
 	}

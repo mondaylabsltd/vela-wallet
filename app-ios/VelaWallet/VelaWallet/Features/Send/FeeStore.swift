@@ -128,8 +128,12 @@ final class FeeStore {
     /// the core's own TTL is 30 s and a cold pool sweeps three passes.
     private static let settleDeadlineMs = 45_000
 
-    init(relay: RelayClient, accounts: UserOpSpine.AccountPort) {
-        self.executor = FeeExecutor(relay: relay, accounts: accounts)
+    init(
+        relay: RelayClient,
+        accounts: UserOpSpine.AccountPort,
+        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil }
+    ) {
+        self.executor = FeeExecutor(relay: relay, accounts: accounts, measureCall: measureCall)
         self.relay = relay
         self.inForce = newSession()
         self.speedCore = CoreStore(
