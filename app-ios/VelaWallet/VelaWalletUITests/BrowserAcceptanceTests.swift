@@ -55,6 +55,14 @@ final class BrowserAcceptanceTests: XCTestCase {
         return app
     }
 
+    /// A launch with `VELA_URL` opens straight into Explore (spec 070), where
+    /// the full-screen browser hides the tab bar; tap the tab only when it is
+    /// there to tap.
+    private func openExplore(_ app: XCUIApplication) {
+        let tab = app.buttons["探索"].firstMatch
+        if tab.waitForExistence(timeout: 3), tab.isHittable { tab.tap() }
+    }
+
     private func attach(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
@@ -134,7 +142,7 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30),
                       "the space must be open — everything after this signs something")
 
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
 
         // The page's own <h1>, painted by WebKit rather than by SwiftUI.
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30),
@@ -158,7 +166,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testTheAddressBarShowsThePagesOwnHost() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
 
         XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 30),
                       "the address bar shows a host the page is not on")
@@ -184,7 +192,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testFavouritesAndRecentsSurviveAForceQuit() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         // The star in the browser toolbar, by its corpus label.
@@ -240,7 +248,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testASiteAsksForAnAccountAndIsAnsweredOnce() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         app.webViews.buttons["Connect"].firstMatch.tap()
@@ -276,7 +284,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testThePageReadsAChainAndSwitchesIt() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         // `eth_chainId` needs no permission: it is the wallet's own answer
@@ -305,7 +313,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testEthSignIsRefusedWithoutReachingAnybody() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         app.webViews.buttons["eth_sign"].firstMatch.tap()
@@ -334,7 +342,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testDustLeavesTheSafeBecauseAPageAskedForIt() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         connect(app)
@@ -413,7 +421,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testTheDappSheetOffersASpeedAndNeverSignsOneItLeft() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -459,7 +467,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testAnUnlimitedApprovalIsStoppedUntilACapIsNamed() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -538,7 +546,7 @@ final class BrowserAcceptanceTests: XCTestCase {
     func testAMessageSignatureVerifiesOnChainThroughTheWalletsOwnProxy() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
-        app.buttons["探索"].firstMatch.tap()
+        openExplore(app)
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
         connect(app)
 
@@ -555,6 +563,11 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(slide.waitForExistence(timeout: 20))
         // No network fee to wait for: an off-chain signature costs nothing.
         XCTAssertTrue(slide.isEnabled, "a message signature must not wait for a fee quote")
+        // The parallel space signs with its built-in key: no passkey sheet
+        // follows the slide, and the sheet says so instead of offering
+        // choices it would not use (owner, 2026-09-22).
+        XCTAssertTrue(app.staticTexts["平行空间内置钥匙"].exists,
+                      "the sheet does not say the parallel space's key will sign")
         slide.coordinate(withNormalizedOffset: CGVector(dx: 0.06, dy: 0.5))
             .press(forDuration: 0.05,
                    thenDragTo: slide.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)))

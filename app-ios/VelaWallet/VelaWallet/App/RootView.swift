@@ -2327,7 +2327,8 @@ struct RootView: View {
             signWithOpen: live.signWithOpen,
             feeOpen: live.feeOpen,
             signMethods: live.offeredSignMethods(),
-            clearSignerNotice: live.clearSignerNotice
+            clearSignerNotice: live.clearSignerNotice,
+            parallelSpace: parallelSpace
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),

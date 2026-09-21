@@ -498,15 +498,18 @@ struct SignWithRow: View {
                 Text(verbatim: model.value)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
-                    .foregroundStyle(theme.fgMuted)
-                    .rotationEffect(.degrees(model.open ? 180 : 0))
+                // A row with nothing to choose is a statement, not a control.
+                if !model.options.isEmpty {
+                    LucideIcon(.chevronDown, size: LucideIconSize.rowGlyph)
+                        .foregroundStyle(theme.fgMuted)
+                        .rotationEffect(.degrees(model.open ? 180 : 0))
+                }
             }
             // The whole row is the target, not only its glyphs.
             .contentShape(Rectangle())
-            .onTapGesture { onSelect(nil) }
+            .onTapGesture { if !model.options.isEmpty { onSelect(nil) } }
             .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(model.options.isEmpty ? [] : .isButton)
 
             if model.open {
                 VStack(spacing: 0) {

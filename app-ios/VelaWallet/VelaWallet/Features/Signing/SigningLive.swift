@@ -42,6 +42,9 @@ enum SigningLive {
         var signMethods = ["auto"]
         /// How the Clear Signer last ended for this request without signing.
         var clearSignerNotice: ClearSignerNotice?
+        /// The parallel space is active: its built-in key signs every request,
+        /// so no passkey sheet will follow the slide (Debug builds only).
+        var parallelSpace = false
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -79,6 +82,21 @@ enum SigningLive {
     /// offers, in its order. A name this build has no words for is not drawn.
     static func signWith(context: Context) -> SignWithModel {
         let loc = context.loc
+        #if DEBUG
+        // The parallel space signs with its built-in key the moment the slide
+        // lands — there is no passkey sheet to wait for, and none of the
+        // choices below would be used. Say so, rather than leave the slide
+        // looking as if it did nothing (owner, 2026-09-22, on an iPhone).
+        // A developer marker, like the "PARALLEL SPACE" banner: not corpus.
+        if context.parallelSpace {
+            return SignWithModel(
+                label: loc.t("componentsUi.signing.signWith"),
+                value: "平行空间内置钥匙",
+                open: false,
+                options: []
+            )
+        }
+        #endif
         let options = context.signMethods.compactMap { id -> SignWithModel.Option? in
             guard let title = signMethodTitle(id, loc: loc) else { return nil }
             return .init(id: id, title: title, selected: id == context.signMethod,
