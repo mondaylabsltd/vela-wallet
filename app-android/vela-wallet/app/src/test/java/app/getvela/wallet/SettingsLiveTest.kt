@@ -21,6 +21,13 @@ import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetProviderView
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetChainMismatch
+import app.getvela.wallet.feature.settings.core.NetProviderTestView
+import app.getvela.wallet.feature.settings.CalloutTone
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.wallet.core.BalanceView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -205,6 +212,125 @@ class SettingsLiveTest {
         assertEquals("Alchemy", card.name)
     }
 
+    /**
+     * A provider card says what the core knows about THAT provider: whether a
+     * key is set, and what its test found. The fixture drew Alchemy connected
+     * with "supports 12" and Ankr unkeyed with "supports 8" on every device.
+     */
+    @Test
+    fun aProviderCardShowsItsKeyAndItsOwnTestCount() {
+        val view = NetView(
+            loaded = true,
+            providers = listOf(
+                NetProviderView(NetProviderId.Alchemy, key = "", has_key = false),
+                NetProviderView(
+                    NetProviderId.Drpc,
+                    key = "k",
+                    has_key = true,
+                    test = NetProviderTestView(done = true, ok_count = 3, total = 5),
+                ),
+                NetProviderView(
+                    NetProviderId.Ankr,
+                    key = "k",
+                    has_key = true,
+                    test = NetProviderTestView(done = false, ok_count = 1, total = 5),
+                ),
+            ),
+        )
+        val cards = SettingsLive.withNetworks(base(), view, strings).rpcProviders.providers
+
+        val notSet = strings.t(I18nKeys.SettingsUi.PROVIDER_NOT_SET)
+        assertEquals(SettingsTone.Neutral, cards[0].badge.tone)
+        assertEquals(notSet, cards[0].badge.label)
+        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY), cards[0].action)
+        assertNull("no test ran, so no count", cards[0].support)
+
+        assertEquals(SettingsTone.Ok, cards[1].badge.tone)
+        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_CHECK_KEY), cards[1].action)
+        assertNull("a keyed provider offers no get-key link", cards[1].link)
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.PROVIDER_SUPPORTS, mapOf("count" to "3", "total" to "5")),
+            cards[1].support,
+        )
+
+        assertNull("a test still running has no count yet", cards[2].support)
+    }
+
+    /**
+     * The network page shows what the probes found: an RPC that answers for
+     * another chain is a danger note (fast and wrong), and the explorer has
+     * its own pill. Before, the callout was always null and the header pill
+     * was the fixture's latency.
+     */
+    @Test
+    fun theNetworkPageNamesAWrongChainAndTheExplorersHealth() {
+        val fallback = base().networkDetail
+        val healthy = row(1, "Ethereum", custom = false).copy(
+            explorer_health = NetProbeHealth.Ok(80),
+        )
+        val clean = SettingsLive.networkDetail(fallback, healthy, strings)
+        assertNull(clean.callout)
+        assertTrue(clean.explorer.badge!!.label.endsWith("80ms"))
+        assertNull("the RPC was never probed", clean.rpc.badge)
+        assertEquals("an unprobed header is quiet, not a latency", SettingsTone.Neutral, clean.badge.tone)
+
+        val wrong = healthy.copy(
+            rpc_health = NetProbeHealth.Ok(40),
+            rpc_chain_mismatch = NetChainMismatch(expected_chain_id = 1, reported_chain_id = 56),
+        )
+        val detail = SettingsLive.networkDetail(fallback, wrong, strings)
+        assertEquals(CalloutTone.Danger, detail.callout!!.tone)
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.RPC_CHAIN_MISMATCH, mapOf("reported" to "56", "expected" to "1")),
+            detail.callout!!.text,
+        )
+        assertEquals(SettingsTone.Error, detail.rpc.tone)
+        assertTrue(detail.badge.label.endsWith("40ms"))
+    }
+
+    /** The balance-by-network sheet, from the balance core's view. */
+    @Test
+    fun theBalanceDetailIsTheViewsChainsNotTheFixtures() {
+        val view = BalanceView(
+            tokens = listOf(
+                BalanceToken(1, "ETH", "Ether", balance = "2", decimals = 18, price_usd = 1000.0),
+                BalanceToken(10, "ETH", "Ether", balance = "1", decimals = 18, price_usd = 1000.0),
+                BalanceToken(10, "OP", "Optimism", balance = "10", decimals = 18, token_address = "0xop", price_usd = 1.5),
+                BalanceToken(137, "POL", "Polygon", balance = "5", decimals = 18, price_usd = 0.5),
+            ),
+            unpriced_tokens = listOf(BalanceToken(8453, "ODD", "Odd", balance = "1.23456789", decimals = 18, token_address = "0xodd")),
+            failed_chain_ids = listOf(100, 137),
+            rate_limited_chain_ids = listOf(137),
+            banner_chain_ids = listOf(100),
+            display_total_usd = 3017.5,
+        )
+        val names = mapOf(1 to "Ethereum", 10 to "Optimism", 100 to "Gnosis", 137 to "Polygon", 8453 to "Base")
+        val usd = CurrencyView("USD", null, true)
+        val detail = SettingsLive.balanceDetail(base().balanceDetail, view, usd, names, strings)
+
+        // Rate-limited: grey, no button. Down: red, with the retry.
+        assertEquals(listOf("137", "100"), detail.pending.map { it.id })
+        assertNull("a rate limit heals itself; no retry", detail.pending[0].action)
+        assertEquals(SettingsTone.Neutral, detail.pending[0].tone)
+        assertEquals(SettingsTone.Error, detail.pending[1].tone)
+        assertEquals(strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY), detail.pending[1].action)
+        // Settled chains largest first; a still-pending chain is not also "done".
+        assertEquals(listOf("Ethereum", "Optimism"), detail.done.map { it.name })
+        assertEquals(WalletLive.Money.of(usd).fiat(2000.0), detail.done[0].amount)
+        assertEquals(WalletLive.Money.of(usd).fiat(1015.0), detail.done[1].amount)
+        assertEquals(
+            strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL, mapOf("amount" to WalletLive.Money.of(usd).fiat(3017.5))),
+            detail.summary,
+        )
+        assertEquals(listOf("ODD"), detail.unpriced.map { it.name })
+        assertTrue(detail.unpriced.single().status!!, detail.unpriced.single().status!!.startsWith("Base · "))
+        assertTrue("no fixture chain survives", (detail.pending + detail.done).none { it.name == "BNB Chain" })
+
+        val hidden = SettingsLive.balanceDetail(base().balanceDetail, view.copy(hidden = true), usd, names, strings)
+        assertTrue(hidden.done.all { it.amount == "••••" })
+        assertTrue(hidden.summary, hidden.summary.contains("••••"))
+    }
+
     // -- currency ------------------------------------------------------------
 
     @Test
@@ -318,6 +444,31 @@ class SettingsLiveTest {
         assertNull("no pill before a verdict", add.candidate!!.badge)
         assertEquals(emptyList<Any>(), add.checks)
         assertNull("the add button must not be reachable mid-check", add.primary)
+        assertNull("no custom RPC field before a verdict", add.customRpc)
+    }
+
+    /**
+     * The custom-RPC box shows what the core holds, so typing echoes. The
+     * live builder never set the field: the ST1 base has none, and the drawn
+     * one was a fixed blank.
+     */
+    @Test
+    fun theCustomRpcFieldIsTheWizardsOwnValue() {
+        fun compat(compatible: Boolean) = NetCompatibility(chain_id = 42220, compatible = compatible)
+        val checked = NetWizardView(
+            phase = NetWizardPhase.Checked,
+            chain_info = chainInfo(42220, "Celo Mainnet"),
+            custom_rpc = "https://my.rpc",
+            compat = compat(true),
+            can_add = true,
+        )
+        val field = SettingsLive.withWizard(base(), wizardView(checked), strings).addNetwork.customRpc
+        assertEquals("https://my.rpc", field!!.value)
+        assertEquals("custom-rpc", field.id)
+
+        // An incompatible chain is not rescued by a better RPC: no field (the web's rule).
+        val incompatible = checked.copy(compat = compat(false), can_add = false)
+        assertNull(SettingsLive.withWizard(base(), wizardView(incompatible), strings).addNetwork.customRpc)
     }
 
     @Test

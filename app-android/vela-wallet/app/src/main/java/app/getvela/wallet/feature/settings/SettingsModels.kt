@@ -383,6 +383,9 @@ data class BalanceDetailModel(
     val pending: List<BalanceDetailRowModel>,
     val sectionDone: String,
     val done: List<BalanceDetailRowModel>,
+    /** The hero's "couldn't be priced" line, answered by name (holdings in `status`). */
+    val sectionUnpriced: String = "",
+    val unpriced: List<BalanceDetailRowModel> = emptyList(),
 )
 
 /** SR4: fund this chain's bundler treasury. */

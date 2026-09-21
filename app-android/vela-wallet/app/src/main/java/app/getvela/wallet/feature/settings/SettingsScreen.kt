@@ -153,6 +153,8 @@ data class SettingsActions(
     val onFeedbackGithub: () -> Unit = {},
     val onOpenLink: (String) -> Unit = {},
     val onRelayerRetry: () -> Unit = {},
+    /** SR3's 立即重试 on a chain that did not answer, by chain id. */
+    val onBalanceRetry: (String) -> Unit = {},
     val onAccountSelect: (Int) -> Unit = {},
     val onAccountPrimary: () -> Unit = {},
     val onAccountSecondary: () -> Unit = {},
@@ -259,6 +261,7 @@ fun SettingsRoute(
         onFeedbackGithub = actions.onFeedbackGithub,
         onOpenLink = actions.onOpenLink,
         onRelayerRetry = actions.onRelayerRetry,
+        onBalanceRetry = actions.onBalanceRetry,
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
@@ -306,6 +309,7 @@ fun SettingsScreen(
     onFeedbackGithub: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
+    onBalanceRetry: (String) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -415,6 +419,7 @@ fun SettingsScreen(
                 onFeedbackGithub = onFeedbackGithub,
                 onOpenLink = onOpenLink,
                 onRelayerRetry = onRelayerRetry,
+                onBalanceRetry = onBalanceRetry,
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
@@ -1099,6 +1104,7 @@ private fun SettingsSheet(
     onFeedbackGithub: () -> Unit = {},
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
+    onBalanceRetry: (String) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -1168,7 +1174,7 @@ private fun SettingsSheet(
                 )
                 SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onDismiss)
-                SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail)
+                SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
@@ -1484,7 +1490,7 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit) {
 }
 
 @Composable
-private fun BalanceDetailSheetBody(model: BalanceDetailModel) {
+private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
     Text(
@@ -1494,13 +1500,7 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel) {
         fontSize = VelaTextSize.base,
         modifier = Modifier.padding(bottom = VelaSpacing.xl),
     )
-    Text(
-        text = model.sectionPending,
-        color = colors.fgBase,
-        fontFamily = VelaFontFamily,
-        fontWeight = VelaFontWeight.semibold,
-        fontSize = VelaTextSize.base,
-    )
+    BalanceDetailSection(model.sectionPending)
     Text(
         text = model.pendingNote,
         color = colors.fgSubtle,
@@ -1508,47 +1508,73 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel) {
         fontSize = VelaTextSize.sm,
         modifier = Modifier.padding(vertical = VelaSpacing.md),
     )
-    (model.pending + model.done).forEach { row ->
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
-        ) {
-            VelaChainMark(row.mark)
-            Column(modifier = Modifier.weight(1f)) {
+    model.pending.forEach { row -> BalanceDetailRow(row, onRetry) }
+    // Three sections, as the web draws them (BalanceDetailBody): the settled
+    // chains under their own label, and the unpriced holdings only when any.
+    BalanceDetailSection(model.sectionDone, top = VelaSpacing.xl)
+    model.done.forEach { row -> BalanceDetailRow(row, onRetry) }
+    if (model.unpriced.isNotEmpty()) {
+        BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
+        model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
+    }
+}
+
+@Composable
+private fun BalanceDetailSection(text: String, top: androidx.compose.ui.unit.Dp = 0.dp) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgBase,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.semibold,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier.padding(top = top, bottom = VelaSpacing.sm),
+    )
+}
+
+@Composable
+private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Unit) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        VelaChainMark(row.mark)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.name,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.lg,
+            )
+            if (row.status != null) {
+                // Rate-limiting gets a grey line and no button because it
+                // resolves itself; a dead RPC gets red and 立即重试.
                 Text(
-                    text = row.name,
-                    color = colors.fgBase,
+                    text = row.status,
+                    color = if (row.tone == SettingsTone.Error) colors.errorBase else colors.fgSubtle,
                     fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.lg,
-                )
-                if (row.status != null) {
-                    // Rate-limiting gets a grey line and no button because it
-                    // resolves itself; a dead RPC gets red and 立即重试.
-                    Text(
-                        text = row.status,
-                        color = if (row.tone == SettingsTone.Error) colors.errorBase else colors.fgSubtle,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.sm,
-                    )
-                }
-            }
-            if (row.action != null) {
-                Text(
-                    text = row.action,
-                    color = colors.infoBase,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.base,
+                    fontSize = VelaTextSize.sm,
                 )
             }
-            if (row.amount != null) {
-                Text(
-                    text = row.amount,
-                    color = colors.fgBase,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.lg,
-                )
-            }
+        }
+        if (row.action != null) {
+            // Drawn with no handler before: the retry reached nothing.
+            Text(
+                text = row.action,
+                color = colors.infoBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),
+            )
+        }
+        if (row.amount != null) {
+            Text(
+                text = row.amount,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.lg,
+            )
         }
     }
 }
