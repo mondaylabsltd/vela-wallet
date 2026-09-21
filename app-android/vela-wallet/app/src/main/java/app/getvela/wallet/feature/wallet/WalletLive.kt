@@ -425,6 +425,15 @@ object WalletLive {
         return TokenMarkModel(symbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
     }
 
+    /**
+     * A network by itself (the web's `chainMark`): the chain's own logo, no
+     * badge — the mark of "anything on this network", never of its coin.
+     */
+    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel {
+        val m = Marks.chainMark(chainId)
+        return TokenMarkModel(nativeSymbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
+    }
+
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
 
     /**

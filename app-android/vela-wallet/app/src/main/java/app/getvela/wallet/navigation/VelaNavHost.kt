@@ -31,6 +31,7 @@ import app.getvela.wallet.feature.wallet.BalanceStatusKind
 import app.getvela.wallet.feature.wallet.BalanceStatusModel
 import app.getvela.wallet.feature.flows.ShareCardCapture
 import app.getvela.wallet.feature.flows.ShareCardModel
+import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.SendOpenParams
 import app.getvela.wallet.feature.wallet.core.PayLink
 import kotlinx.coroutines.launch
@@ -466,8 +467,6 @@ fun VelaNavHost(
             var classFilter by rememberSaveable { mutableStateOf("all") }
             var chainFilter by rememberSaveable { mutableStateOf<Int?>(null) }
             var chainSheetOpen by remember { mutableStateOf(false) }
-            // Spec 048: a token detail's 转账 — that token, chosen once the send machine lists it.
-            var pendingSelectToken by remember { mutableStateOf<Pair<Int, String?>?>(null) }
             // Spec 048: a token detail's 收款 — that asset, applied once the receive flow has started the request machine.
             var pendingReceiveAsset by remember { mutableStateOf<ReceiveAssetPick?>(null) }
             val haptic = rememberVelaHaptic()
@@ -645,15 +644,6 @@ fun VelaNavHost(
                 // the send is open.
                 val send = application.container.send
                 val sendView by send.send.collectAsStateWithLifecycle()
-                LaunchedEffect(sendView.tokens.size, pendingSelectToken) {
-                    val wanted = pendingSelectToken ?: return@LaunchedEffect
-                    val token = sendView.tokens.firstOrNull { it.chain_id.toInt() == wanted.first && (it.token_address ?: "").equals(wanted.second ?: "", ignoreCase = true) }
-                    if (token != null) {
-                        pendingSelectToken = null
-                        VelaLog.event("send", "token preselected", "symbol" to token.symbol)
-                        send.selectToken(SendLive.tokenId(token))
-                    }
-                }
                 val feeView by send.fee.collectAsStateWithLifecycle()
                 val sendClosed by send.closed.collectAsStateWithLifecycle()
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
@@ -979,7 +969,16 @@ fun VelaNavHost(
                         },
                         onSendToken = { id ->
                             balances.tokens.firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }?.let { t ->
-                                pendingSelectToken = t.chain_id to t.token_address
+                                // Issue #268: the token rides INTO the open, as the web's
+                                // `preselected_symbol`/`preselected_network` — the core picks it
+                                // when its list lands and opens on the form. The shell used to
+                                // pick it itself, keyed on the list's SIZE: the list a previous
+                                // send left behind matched first, the open then reset the
+                                // machine to the picker, and the pick was already spent.
+                                application.container.pendingSendParams.value = SendOpenParams(
+                                    preselected_symbol = t.symbol,
+                                    preselected_network = SendExecutor.network(t.chain_id),
+                                )
                                 flows.enter(WalletFlowEntry.Send)
                             }
                         },
