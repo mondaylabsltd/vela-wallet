@@ -51,6 +51,10 @@
    "timeTitle": "时间格式",
    "timeSubtitle": "12 小时制或 24 小时制。"
   },
+  "feeSpeed": {
+   "title": "交易速度",
+   "subtitle": "在 Vela 发起的每笔转账都从这里开始。发送时仍可单独调整某一笔。"
+  },
   "advanced": {
    "networksTitle": "网络",
    "networksSubtitle": "RPC、区块浏览器与打包器地址",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "添加网络",
    "addNetworkSubtitle": "添加自定义 EVM 网络",
    "endpointsTitle": "服务节点",
-   "endpointsSubtitle": "链上数据、身份索引、打包器"
+   "endpointsSubtitle": "链上数据、身份索引、打包器",
+   "feeSpeedTitle": "交易速度",
+   "feeSpeedSubtitle": "每笔转账默认使用的速度"
   },
   "developer": {
    "treasuryTitle": "金库",
@@ -274,7 +280,7 @@
   "toLabel": "收款人",
   "estFeeLabel": "预估手续费",
   "estimatingFee": "估算中...",
-  "gasPriceLabel": "Gas 价格",
+  "gasPriceLabel": "Gas 出价",
   "gasPriceUserOpLabel": "Gas 价格（UserOp）",
   "gasLimitLabel": "Gas 限制",
   "walletDeployedLabel": "钱包已部署",
@@ -300,11 +306,20 @@
   "txHeldFees": "网络费用高于你确认的金额。交易正在等待,费用回落后会自动发送。",
   "txRejectedFees": "网络费用长时间高于你确认的金额,本次没有发送。请按当前费用重新发起。",
   "gasTier": {
-   "slow": "慢速",
+   "slow": "较慢",
    "standard": "标准",
    "rapid": "极速",
-   "fast": "快速"
+   "fast": "超快"
   },
+  "gasTierHintFast": "网络繁忙时也最先确认",
+  "gasTierHintStandard": "日常转账的平衡选择",
+  "gasTierHintSlow": "手续费最低，适合不着急时",
+  "feeRefresh": "刷新费用",
+  "feeStale": "这个数字有点旧了",
+  "feeSpeedLabel": "速度",
+  "feeSpeedOnce": "仅这一笔，下次仍用默认",
+  "feeSpeedFree": "这条网络上选「超快」不额外收费，这笔已改用「超快」。",
+  "feeSpeedSingle": "这条网络只有一种速度。",
   "lock": {
    "netTitle": "不支持该网络",
    "netBody": "此收款请求所在的网络 Vela 暂不支持（链 ID {{chainId}}）。",
@@ -716,7 +731,7 @@
    "headerSyncFailed": "跨设备同步",
    "identiconHint": "地址生成的身份图案",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "仅本机",
+   "keyDeviceOnlyBadge": "未同步",
    "keyHardwareBadge": "硬件",
    "keyLimitReached": "已达上限 7 把",
    "keySyncedBadge": "已同步",
@@ -738,7 +753,7 @@
    "methodSecurityKeyTitle": "USB 安全密钥",
    "nameTitle": "给钱包起个名字",
    "nameTooLong": "名字太长，放不进通行密钥——请缩短一些。",
-   "needSecondKeyHint": "这把密钥只存在本机，没有同步备份。设备一旦丢失，钱包就打不开了。",
+   "needSecondKeyHint": "这把密钥没有任何备份。一旦丢失，钱包就打不开了。再加一把吧。",
    "nextBtn": "继续",
    "openSettings": "打开设置",
    "pinAttemptsLeft": "剩余尝试次数：{{attempts}}",
@@ -749,8 +764,8 @@
    "progressMeterLabel": "推导地址",
    "progressSubtitle": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
    "progressTitle": "正在生成钱包",
-   "providerGeneric": "通行密钥",
-   "providerPlatform": "平台通行密钥",
+   "providerGeneric": "手机或平板",
+   "providerPlatform": "内置通行密钥",
    "providerSecurityKey": "安全密钥",
    "providerUnknown": "未识别的提供方",
    "removeKeyBtn": "移除",
@@ -1592,7 +1607,7 @@
    "title": "钥匙",
    "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
    "keyN": "钥匙 {{n}}",
-   "notSynced": "仅限本设备",
+   "notSynced": "未同步",
    "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
    "publicKey": "公钥",
    "credential": "凭证",

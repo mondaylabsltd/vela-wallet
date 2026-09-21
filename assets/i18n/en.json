@@ -51,6 +51,10 @@
    "timeTitle": "Time format",
    "timeSubtitle": "12-hour or 24-hour clock."
   },
+  "feeSpeed": {
+   "title": "Transaction speed",
+   "subtitle": "Every send you start in Vela begins here. You can still change a single one when you send it."
+  },
   "advanced": {
    "networksTitle": "Networks",
    "networksSubtitle": "RPC, Explorer & Bundler URLs",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Add Network",
    "addNetworkSubtitle": "Add custom EVM network",
    "endpointsTitle": "Service Endpoints",
-   "endpointsSubtitle": "Chain data, identity index, Bundler"
+   "endpointsSubtitle": "Chain data, identity index, Bundler",
+   "feeSpeedTitle": "Transaction speed",
+   "feeSpeedSubtitle": "What every send starts at"
   },
   "developer": {
    "treasuryTitle": "Treasury",
@@ -274,7 +280,7 @@
   "toLabel": "To",
   "estFeeLabel": "Est. Fee",
   "estimatingFee": "Estimating...",
-  "gasPriceLabel": "Gas Price",
+  "gasPriceLabel": "Gas Bid",
   "gasPriceUserOpLabel": "Gas Price (UserOp)",
   "gasLimitLabel": "Gas Limit",
   "walletDeployedLabel": "Wallet Deployed",
@@ -305,6 +311,15 @@
    "rapid": "Rapid",
    "fast": "Fast"
   },
+  "gasTierHintFast": "First to confirm, even when the network is busy",
+  "gasTierHintStandard": "Balanced for everyday transfers",
+  "gasTierHintSlow": "Lowest fee, if you can wait",
+  "feeRefresh": "Refresh fee",
+  "feeStale": "Measured a while ago",
+  "feeSpeedLabel": "Speed",
+  "feeSpeedOnce": "For this transaction only",
+  "feeSpeedFree": "Fast costs no more on this network, so this send uses Fast.",
+  "feeSpeedSingle": "This network has one speed.",
   "lock": {
    "netTitle": "Network not supported",
    "netBody": "This payment request is on a network Vela doesn't support yet (chain {{chainId}}).",
@@ -716,7 +731,7 @@
    "headerSyncFailed": "Cross-Device Sync",
    "identiconHint": "An identity pattern generated from the address",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "This device only",
+   "keyDeviceOnlyBadge": "Not synced",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limit of 7 reached",
    "keySyncedBadge": "Synced",
@@ -738,7 +753,7 @@
    "methodSecurityKeyTitle": "USB security key",
    "nameTitle": "Name your wallet",
    "nameTooLong": "This name is too long to fit in a passkey — please shorten it.",
-   "needSecondKeyHint": "This key exists only on this device, with no synced backup. Lose the device and the wallet cannot be opened.",
+   "needSecondKeyHint": "This key isn't backed up anywhere. Lose it and the wallet can't be opened. Add a second one.",
    "nextBtn": "Continue",
    "openSettings": "Open Settings",
    "pinAttemptsLeft": "Attempts left: {{attempts}}",
@@ -749,8 +764,8 @@
    "progressMeterLabel": "Deriving address",
    "progressSubtitle": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
    "progressTitle": "Creating your wallet",
-   "providerGeneric": "Passkey",
-   "providerPlatform": "Platform passkey",
+   "providerGeneric": "Phone or tablet",
+   "providerPlatform": "Built-in passkey",
    "providerSecurityKey": "Security key",
    "providerUnknown": "Unrecognized provider",
    "removeKeyBtn": "Remove",
@@ -1592,7 +1607,7 @@
    "title": "Keys",
    "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
    "keyN": "Key {{n}}",
-   "notSynced": "Device-bound",
+   "notSynced": "Not synced",
    "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
    "publicKey": "Public key",
    "credential": "Credential",

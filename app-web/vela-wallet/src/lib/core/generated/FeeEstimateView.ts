@@ -6,4 +6,19 @@ import type { FeeTier } from "./FeeTier";
  * Wire projection of [`FeeEstimate`] — amounts as decimal strings (never
  * JSON numbers; inventory open question 4).
  */
-export type FeeEstimateView = { chain_id: number, total_wei: string, max_fee_per_gas: string, network_fee_per_gas: string, relayer_fee_per_gas: string, bundler_gas_price: string, in_band_gas_basis: string, total_gas: string, deployed: boolean, tier: FeeTier, quoted: boolean, fee_asset: FeeAssetView, fee_recipient: string | null, };
+export type FeeEstimateView = { chain_id: number, total_wei: string, max_fee_per_gas: string, network_fee_per_gas: string, relayer_fee_per_gas: string, bundler_gas_price: string, in_band_gas_basis: string, 
+/**
+ * What the chain will actually charge per gas at this tier, in wei
+ * (issue 684) — the figure the speed picker draws beside each option, so
+ * every shell says the same number instead of deriving four of them.
+ * `None` = nothing honest to show; a shell draws nothing, never a 0.
+ */
+effective_gas_price: string | null, 
+/**
+ * The high end of that figure's range, in wei (issue 685): this tier's
+ * cap, `maxFeePerGas`, the most the chain can ever charge per gas at this
+ * speed. A shell draws `effective_gas_price ~ max_gas_price` — what the
+ * speed bids now, and how high it will go — or the single figure when the
+ * two are equal. `Some` exactly when `effective_gas_price` is.
+ */
+max_gas_price: string | null, total_gas: string, deployed: boolean, tier: FeeTier, quoted: boolean, fee_asset: FeeAssetView, fee_recipient: string | null, };

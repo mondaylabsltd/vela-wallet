@@ -27,6 +27,13 @@ confirmed: boolean,
  */
 synced: boolean, 
 /**
+ * Is [`Self::synced`] a FACT, or the benefit of the doubt? `false` when
+ * the attestation blob is unreadable and the `true` above is the gate
+ * failing open. The gate keeps failing open; a row with no answer draws no
+ * badge instead of a green "Synced" nobody verified (issue #207).
+ */
+synced_known: boolean, 
+/**
  * The authenticator model's AAGUID as a canonical uuid, or empty when
  * absent/all-zero. Shells pass it back to the core for the provider's
  * mark (`passkey_provider_png` / `passkeyProviderIconDataUri`).
@@ -37,8 +44,7 @@ aaguid: string,
  * vendored catalog: "Apple Passwords", "1Password", "Windows Hello".
  * Empty when the catalog does not know the model — hardware keys and
  * attestation-less registrations both land there — and the shells then
- * say what they always said, from [`Self::method`] and the two hint
- * fields above.
+ * say what they always said, from [`Self::kind`].
  *
  * Resolved HERE rather than in each shell so that four clients cannot
  * disagree about who holds a key (and so the lookup stays offline: asking
@@ -46,8 +52,16 @@ aaguid: string,
  */
 provider_name: string, 
 /**
- * Which kind of authenticator the person chose for this key. Drives the
- * row's icon and provider line; distinct from the three fields above,
- * which are what the authenticator reported about itself.
+ * Which kind of authenticator the person chose for this key — the tap in
+ * the method picker, kept for ceremony ROUTING only (which authenticator a
+ * later confirmation must return to). It is not what the row says.
  */
-method: KeyMethod, };
+method: KeyMethod, 
+/**
+ * What this key IS, from the authenticator's own report — where it lives.
+ * Rows draw their icon AND their caption from this one field, so the two
+ * cannot disagree (issue #207: a hardware-fob icon beside "Passkey" beside
+ * "This device only", from three unrelated signals). Falls back to
+ * [`Self::method`] when the authenticator reported nothing at all.
+ */
+kind: KeyMethod, };

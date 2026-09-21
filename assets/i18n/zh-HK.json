@@ -51,6 +51,10 @@
    "timeTitle": "時間格式",
    "timeSubtitle": "12 小時制或 24 小時制。"
   },
+  "feeSpeed": {
+   "title": "交易速度",
+   "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
+  },
   "advanced": {
    "networksTitle": "網絡",
    "networksSubtitle": "RPC、區塊鏈瀏覽器及 Bundler 網址",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "新增網絡",
    "addNetworkSubtitle": "新增自訂 EVM 網絡",
    "endpointsTitle": "服務端點",
-   "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler"
+   "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler",
+   "feeSpeedTitle": "交易速度",
+   "feeSpeedSubtitle": "每筆轉帳預設用嘅速度"
   },
   "developer": {
    "treasuryTitle": "資金庫",
@@ -267,7 +273,7 @@
   "toLabel": "至",
   "estFeeLabel": "預估費用",
   "estimatingFee": "正在估算⋯",
-  "gasPriceLabel": "Gas 價格",
+  "gasPriceLabel": "Gas 出價",
   "gasPriceUserOpLabel": "Gas 價格（UserOp）",
   "gasLimitLabel": "Gas 上限",
   "walletDeployedLabel": "錢包已部署",
@@ -317,11 +323,20 @@
   "txHeldFees": "網絡費用高於你確認嘅金額。交易正在等待,費用回落後會自動發送。",
   "txRejectedFees": "網絡費用長時間高於你確認嘅金額,今次冇發送。請按現時費用重新發起。",
   "gasTier": {
-   "slow": "慢速",
+   "slow": "較慢",
    "standard": "標準",
    "rapid": "極速",
-   "fast": "快速"
+   "fast": "超快"
   },
+  "gasTierHintFast": "網絡繁忙時都最先確認",
+  "gasTierHintStandard": "日常轉賬嘅平衡之選",
+  "gasTierHintSlow": "費用最平，唔趕時間啱用",
+  "feeRefresh": "重新整理費用",
+  "feeStale": "這個數字有啲舊",
+  "feeSpeedLabel": "速度",
+  "feeSpeedOnce": "只限呢一筆，下次仍用預設",
+  "feeSpeedFree": "呢個網絡揀「超快」唔使額外收費，呢一筆已改用「超快」。",
+  "feeSpeedSingle": "呢個網絡只有一種速度。",
   "batchImport": "匯入清單",
   "batchTitle": "匯入收款人",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -709,7 +724,7 @@
    "headerSyncFailed": "跨裝置同步",
    "identiconHint": "由地址整出嚟嘅身分圖案",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "淨係呢部機",
+   "keyDeviceOnlyBadge": "未同步",
    "keyHardwareBadge": "硬件",
    "keyLimitReached": "已經夠 7 條",
    "keySyncedBadge": "已同步",
@@ -731,7 +746,7 @@
    "methodSecurityKeyTitle": "USB 安全密鑰",
    "nameTitle": "幫個錢包改個名",
    "nameTooLong": "名稱太長，放不進通行密鑰——請縮短一些。",
-   "needSecondKeyHint": "呢條密鑰淨係喺呢部機，冇同步備份。部機唔見咗，個錢包就開唔到。",
+   "needSecondKeyHint": "呢條密鑰冇任何備份。一旦唔見咗，個錢包就開唔到。再加多一條啦。",
    "nextBtn": "繼續",
    "openSettings": "開啟設定",
    "pinAttemptsLeft": "剩餘嘗試次數：{{attempts}}",
@@ -742,8 +757,8 @@
    "progressMeterLabel": "推導緊地址",
    "progressSubtitle": "用 {{count}} 條密鑰推導地址。合約喺第一筆交易先部署，而家唔使 gas。",
    "progressTitle": "而家整緊個錢包",
-   "providerGeneric": "通行密鑰",
-   "providerPlatform": "平台通行密鑰",
+   "providerGeneric": "手機或者平板",
+   "providerPlatform": "內置通行密鑰",
    "providerSecurityKey": "安全鎖匙",
    "providerUnknown": "未識別嘅提供方",
    "removeKeyBtn": "移除",
@@ -1582,7 +1597,7 @@
    "title": "鎖匙",
    "subtitle": "當中任何一條通行密鑰都可以幫呢個錢包簽署，所有網絡通用。",
    "keyN": "鎖匙 {{n}}",
-   "notSynced": "只限呢部機",
+   "notSynced": "未同步",
    "fromDevice": "暫時連唔到註冊表，只顯示呢部機記得嘅內容。",
    "publicKey": "公鑰",
    "credential": "憑證",

@@ -21,4 +21,27 @@ usd_balance: string,
 /**
  * `None` when this network has no price source. Native gas still works.
  */
-usd_price: string | null, };
+usd_price: string | null, 
+/**
+ * The native coin's USD price from the SHELL's own price source (the
+ * balances feed / `native-price.ts`), for the `$0.01` native MINIMUM only
+ * — issue 682.
+ *
+ * A network the user ADDED is almost never in the relay's price feed, so
+ * `usd_price` comes back `None` and the minimum used to fall to a flat
+ * 0.001 of the coin: on XLayer's OKB (~$120) that is $0.12, twelve times
+ * the cent it is meant to approximate, on every send. The wallet already
+ * knew the price — the send screen rendered "≈$0.12" from it — so the
+ * shell hands it over here.
+ *
+ * Deliberately NOT folded into `usd_price`: that field is also the
+ * STABLECOIN conversion's rate, and its absence is a refusal we keep
+ * ("a zero/absent USD price is 'cannot quote', never rate 1"). This one
+ * is read by `calculate_in_band_fee_amount` for the native minimum and
+ * NOWHERE else, so a shell-derived price can never become a conversion
+ * rate. Meaningful only on the native row; ignored on a stablecoin row.
+ *
+ * `#[serde(default)]`: a shell with no price to offer simply omits it and
+ * gets exactly the answer it got before issue 682.
+ */
+native_usd_floor_price: string | null, };
