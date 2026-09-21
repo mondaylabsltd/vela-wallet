@@ -98,7 +98,7 @@
       "title": "钥匙",
       "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
       "keyN": "钥匙 {{n}}",
-      "notSynced": "仅限本设备",
+      "notSynced": "未同步",
       "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
       "publicKey": "公钥",
       "credential": "凭证",

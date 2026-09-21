@@ -128,13 +128,21 @@ pub fn status_key(status: StatusKey) -> &'static str {
 /// A key row's provider line.
 ///
 /// Keyed off what the AUTHENTICATOR REPORTED, not off the method the person
-/// chose — which is the opposite of the web client, and for a reason the row's
-/// own type spells out: `method` is the choice, the other three fields are what
-/// the device said about itself, and on desktop the two legitimately disagree.
-/// The FIRST key is minted before the key screen exists, so it carries
-/// `KeyMethod::default()` (platform) while being, unavoidably, a USB security
-/// key. Labelling that row "Platform passkey" would be the shell repeating a
-/// default back to the person as though it were a fact.
+/// chose: `method` is the choice, `kind` is the report, and on desktop the two
+/// legitimately disagree. The FIRST key is minted before the key screen exists,
+/// so it carries `KeyMethod::default()` (platform) while being, unavoidably, a
+/// USB security key. Labelling that row from the choice would be the shell
+/// repeating a default back to the person as though it were a fact.
+///
+/// The classification itself moved into the core as `CreateKeyRow::kind`
+/// (issue #207). The heuristic this used to run here called EVERY
+/// cross-platform key a security key, which mislabelled a phone reached by
+/// scanning a code — the same mistake the web client's icon made.
+///
+/// The three lines name the same three places the method picker names, in the
+/// picker's own words, so the row reads as an answer to the question that was
+/// asked. "This device" is true here in a way it is not in settings: this key
+/// was minted seconds ago on the machine in front of the person.
 ///
 /// This is the FALLBACK line. When the core's AAGUID catalog knows the model,
 /// the row shows the vault's own name and mark instead ("Apple Passwords",
@@ -142,14 +150,9 @@ pub fn status_key(status: StatusKey) -> &'static str {
 /// passkey providers, not the hundreds of hardware models in the FIDO metadata
 /// service, so this stays the answer for a USB key.
 fn provider_line(key: &CreateKeyRow) -> &'static str {
-    if key.authenticator_attachment == "cross-platform"
-        || key.transports.split(',').any(|t| t.trim() == "usb")
-    {
-        return "onboarding.create.providerSecurityKey";
-    }
-    match key.method {
-        KeyMethod::Platform => "onboarding.create.providerPlatform",
-        KeyMethod::Hybrid => "onboarding.create.providerGeneric",
+    match key.kind {
+        KeyMethod::Platform => "onboarding.create.methodPlatformTitle",
+        KeyMethod::Hybrid => "onboarding.create.methodHybridTitle",
         KeyMethod::SecurityKey => "onboarding.create.providerSecurityKey",
     }
 }
@@ -739,8 +742,17 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     let trailing: AnyElement = if key.confirmed {
         // Bare coloured text, not a filled pill: v2 puts the row itself in a
         // bordered card, and a second fill inside it is one surface too many.
-        // `仅本机` is a WARNING, not a neutral — a key with no sync is the one
-        // fact on this screen that can cost someone their wallet.
+        // `未同步` ("Not synced") is a WARNING, not a neutral — a key with no
+        // backup is the one fact on this screen that can cost someone their
+        // wallet. Since issue #207 the badge answers ONLY that question; where
+        // the key lives is the provider line's job, above.
+        //
+        // Read straight off `synced`, not through `synced_known`: the web list
+        // must draw nothing when nobody could read the attestation, because it
+        // also shows keys fetched from the registry. This list only ever holds
+        // keys minted in this very flow, and a registration that yields a
+        // public key always yields a readable 20-byte summary — so the unknown
+        // case cannot arrive here.
         let (label, fg) = if key.synced {
             (
                 loc.t("onboarding.create.keySyncedBadge"),
@@ -1398,9 +1410,8 @@ mod tests {
     ///
     /// `Submit` mints the founding key before the key screen exists, so the
     /// core sends `KeyMethod::default()` — platform. On this platform that is a
-    /// placeholder, not a report: the thing on the desk is a security key.
-    /// Rendering "Platform passkey" there is the shell repeating a default back
-    /// to the person as a fact.
+    /// placeholder, not a report: the thing on the desk is a security key. The
+    /// core now settles that in `kind`; the shell only renders it.
     #[test]
     fn a_usb_key_reads_as_a_security_key_whatever_the_method_says() {
         let usb = CreateKeyRow {
@@ -1409,9 +1420,11 @@ mod tests {
             transports: "usb".to_owned(),
             confirmed: true,
             synced: false,
+            synced_known: true,
             aaguid: String::new(),
             provider_name: String::new(),
             method: KeyMethod::Platform,
+            kind: KeyMethod::SecurityKey,
         };
         assert_eq!(
             provider_line(&usb),
@@ -1419,15 +1432,28 @@ mod tests {
             "the report outranks the default"
         );
 
-        // With nothing reported, the choice is all there is.
+        // With nothing reported, the core leaves the choice standing.
         let unreported = CreateKeyRow {
             authenticator_attachment: String::new(),
             transports: String::new(),
+            kind: KeyMethod::Platform,
             ..usb.clone()
         };
         assert_eq!(
             provider_line(&unreported),
-            "onboarding.create.providerPlatform"
+            "onboarding.create.methodPlatformTitle"
+        );
+
+        // Issue #207: a phone reached by scanning a code is not a fob, and the
+        // row must not call it one.
+        let phone = CreateKeyRow {
+            transports: "hybrid,internal".to_owned(),
+            kind: KeyMethod::Hybrid,
+            ..usb.clone()
+        };
+        assert_eq!(
+            provider_line(&phone),
+            "onboarding.create.methodHybridTitle"
         );
     }
 

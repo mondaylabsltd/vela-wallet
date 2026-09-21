@@ -98,7 +98,7 @@
       "title": "Keys",
       "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
       "keyN": "Key {{n}}",
-      "notSynced": "Device-bound",
+      "notSynced": "Not synced",
       "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
       "publicKey": "Public key",
       "credential": "Credential",

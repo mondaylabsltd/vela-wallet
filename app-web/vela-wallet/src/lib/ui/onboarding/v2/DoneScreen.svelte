@@ -13,6 +13,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import PasskeyProviderMark from './PasskeyProviderMark.svelte';
+	import { keyBadge, providerLineFor } from '$lib/onboarding/core/copy';
 	import { providerLabel } from '$lib/onboarding/core/passkey-directory.svelte';
 	import { isDarkTheme } from '$lib/theme.svelte';
 	import { identiconNormalizeSeed, identiconSvgCircular } from '$lib/onboarding/core/wasm-client';
@@ -99,17 +100,24 @@
 	<ul class="keys">
 		{#each keys as key, index (index)}
 			{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+			{@const where = holder ?? strings(providerLineFor(key.kind))}
+			{@const badge = keyBadge(key, strings)}
 			<li class="key">
-				<PasskeyProviderMark {key} label={holder ?? ''} />
+				<!--
+					The recap says the same three things the key list said, from the
+					same fields (issue 207): the mark and the line answer WHERE the
+					key lives, the badge answers only whether it is backed up. The
+					glyph fallback is passed here too, so a row the catalog cannot
+					name no longer leaves an empty leading slot and a ragged column.
+				-->
+				<PasskeyProviderMark {key} label={where} glyphFallback />
 				<span class="keyname">
 					{key.name}
-					{#if holder}<span class="provider">{holder}</span>{/if}
+					<span class="provider">{where}</span>
 				</span>
-				<span class="badge" data-tone={key.synced ? 'synced' : 'local'}>
-					{key.synced
-						? strings('onboarding.create.keySyncedBadge')
-						: strings('onboarding.create.keyDeviceOnlyBadge')}
-				</span>
+				{#if badge}
+					<span class="badge" data-tone={badge.tone}>{badge.text}</span>
+				{/if}
 			</li>
 		{/each}
 	</ul>

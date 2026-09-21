@@ -143,9 +143,11 @@ pub struct Draft {
     /// Browser-reported display hints from the create() credential.
     pub authenticator_attachment: String,
     pub transports: String,
-    /// Which kind of authenticator the person asked for. Recorded so the key
-    /// list can label the row by the choice rather than guessing from the
-    /// hints above, which describe what the authenticator reported instead.
+    /// Which kind of authenticator the person asked for. Recorded so a later
+    /// step can return to the SAME authenticator (the membership confirmation
+    /// is a `get()` against the credential just minted). It is not what the row
+    /// says: the row reads the hints above, through `CreateKeyRow::kind`
+    /// (issue #207).
     pub method: KeyMethod,
     /// Extracted at registration (the create() response carries the COSE
     /// key), so a duplicate authenticator is caught the moment it appears.
@@ -334,6 +336,11 @@ pub struct CreateKeyRow {
     /// attestation reads as `true` — display and the second-key gate both
     /// fail open.
     pub synced: bool,
+    /// Is [`Self::synced`] a FACT, or the benefit of the doubt? `false` when
+    /// the attestation blob is unreadable and the `true` above is the gate
+    /// failing open. The gate keeps failing open; a row with no answer draws no
+    /// badge instead of a green "Synced" nobody verified (issue #207).
+    pub synced_known: bool,
     /// The authenticator model's AAGUID as a canonical uuid, or empty when
     /// absent/all-zero. Shells pass it back to the core for the provider's
     /// mark (`passkey_provider_png` / `passkeyProviderIconDataUri`).
@@ -342,17 +349,22 @@ pub struct CreateKeyRow {
     /// vendored catalog: "Apple Passwords", "1Password", "Windows Hello".
     /// Empty when the catalog does not know the model — hardware keys and
     /// attestation-less registrations both land there — and the shells then
-    /// say what they always said, from [`Self::method`] and the two hint
-    /// fields above.
+    /// say what they always said, from [`Self::kind`].
     ///
     /// Resolved HERE rather than in each shell so that four clients cannot
     /// disagree about who holds a key (and so the lookup stays offline: asking
     /// a directory service would tell it which vault holds a Vela wallet).
     pub provider_name: String,
-    /// Which kind of authenticator the person chose for this key. Drives the
-    /// row's icon and provider line; distinct from the three fields above,
-    /// which are what the authenticator reported about itself.
+    /// Which kind of authenticator the person chose for this key — the tap in
+    /// the method picker, kept for ceremony ROUTING only (which authenticator a
+    /// later confirmation must return to). It is not what the row says.
     pub method: KeyMethod,
+    /// What this key IS, from the authenticator's own report — where it lives.
+    /// Rows draw their icon AND their caption from this one field, so the two
+    /// cannot disagree (issue #207: a hardware-fob icon beside "Passkey" beside
+    /// "This device only", from three unrelated signals). Falls back to
+    /// [`Self::method`] when the authenticator reported nothing at all.
+    pub kind: KeyMethod,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -524,8 +536,17 @@ impl App for CreateWallet {
                         transports: draft.transports.clone(),
                         confirmed: draft.proof.is_some(),
                         synced,
+                        synced_known: crate::passkey::attestation_backed_up(&draft.attestation_hex)
+                            .is_some(),
                         aaguid,
                         provider_name,
+                        // The report first; the person's tap only when the
+                        // authenticator said nothing about itself.
+                        kind: crate::passkey::reported_method(
+                            &draft.authenticator_attachment,
+                            &draft.transports,
+                        )
+                        .unwrap_or(draft.method),
                         method: draft.method,
                     }
                 })
@@ -1220,4 +1241,105 @@ fn request(model: &mut Model, operation: ShellOperation) -> Command<Effect, Even
         .then_send(move |result| Event::ShellCompleted { attempt, result });
     model.abort = Some(command.abort_handle());
     Command::all([command, render()])
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// The key list as the shells receive it, from drafts alone. The event
+    /// path is covered in `tests/app_create_wallet.rs`; this reaches the three
+    /// row fields directly because the shapes that matter here (a YubiKey, a
+    /// phone reached by a code, an attestation nobody can read) are properties
+    /// of the DRAFT, not of a ceremony.
+    fn rows(drafts: Vec<Draft>) -> Vec<CreateKeyRow> {
+        let model = Model {
+            name: "Ann".to_owned(),
+            stage: Stage::AddKeys,
+            drafts,
+            ..Model::default()
+        };
+        CreateWallet.view(&model).keys
+    }
+
+    fn draft(attachment: &str, transports: &str, method: KeyMethod) -> Draft {
+        Draft {
+            name: "Ann".to_owned(),
+            authenticator_attachment: attachment.to_owned(),
+            transports: transports.to_owned(),
+            method,
+            // A real 20-byte summary: version 1, an all-zero AAGUID, flags
+            // 0x45 (no BS bit — device-bound), two reserved bytes.
+            attestation_hex: "0100000000000000000000000000000000450000".to_owned(),
+            ..Draft::default()
+        }
+    }
+
+    /// Issue #207: the row must say what the key IS, whatever was tapped.
+    ///
+    /// The tap only chooses a ceremony — and on the web it does not even do
+    /// that, because `navigator.credentials` shows its own picker. Somebody who
+    /// taps "Phone or tablet" and then touches the YubiKey in the port must not
+    /// be told they have a phone.
+    #[test]
+    fn a_key_that_reports_itself_a_security_key_says_so_whatever_was_tapped() {
+        let rows = rows(vec![draft("cross-platform", "usb,nfc", KeyMethod::Hybrid)]);
+        assert_eq!(rows[0].kind, KeyMethod::SecurityKey, "the report decides");
+        assert_eq!(
+            rows[0].method,
+            KeyMethod::Hybrid,
+            "the choice survives untouched — it routes the ceremony"
+        );
+    }
+
+    /// The reporter's first row: a phone reached by scanning a code. Drawn as a
+    /// hardware fob before this, because `cross-platform` alone decided it.
+    #[test]
+    fn a_phone_reached_by_a_code_is_a_phone() {
+        let rows = rows(vec![draft(
+            "cross-platform",
+            "hybrid,internal",
+            KeyMethod::Platform,
+        )]);
+        assert_eq!(rows[0].kind, KeyMethod::Hybrid);
+    }
+
+    /// Nothing reported at all: the person's tap is all there is.
+    #[test]
+    fn a_silent_authenticator_leaves_the_choice_standing() {
+        let rows = rows(vec![draft("", "", KeyMethod::SecurityKey)]);
+        assert_eq!(rows[0].kind, KeyMethod::SecurityKey);
+    }
+
+    /// A badge nobody can vouch for is not drawn — but the GATE still fails
+    /// open, which is the part that keeps an honest provider out of a dead end.
+    #[test]
+    fn an_unreadable_attestation_is_synced_for_the_gate_and_unknown_for_the_badge() {
+        let mut unreadable = draft("platform", "internal", KeyMethod::Platform);
+        unreadable.attestation_hex = String::new();
+        let model = Model {
+            stage: Stage::AddKeys,
+            drafts: vec![unreadable],
+            ..Model::default()
+        };
+        let view = CreateWallet.view(&model);
+        assert!(
+            view.keys[0].synced,
+            "the gate keeps its benefit of the doubt"
+        );
+        assert!(
+            !view.keys[0].synced_known,
+            "nobody verified it, so no badge"
+        );
+        assert!(
+            !view.needs_second_key,
+            "failing open is the whole point of reading it as synced"
+        );
+
+        // A readable one answers both.
+        let readable = rows(vec![draft("platform", "internal", KeyMethod::Platform)]);
+        assert!(readable[0].synced_known);
+        assert!(!readable[0].synced, "flags 0x45 carries no BS bit");
+    }
 }

@@ -98,7 +98,7 @@
       "title": "Khóa",
       "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
       "keyN": "Khóa {{n}}",
-      "notSynced": "Gắn với thiết bị",
+      "notSynced": "Chưa đồng bộ",
       "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",
       "publicKey": "Khóa công khai",
       "credential": "Thông tin xác thực",

@@ -189,3 +189,20 @@ export function methodGlyph(
 			return { kind: 'mark', id: 'usb' };
 	}
 }
+
+/**
+ * The same three glyphs for a key ROW, where the question has already been
+ * answered (issue 207).
+ *
+ * Only `hybrid` differs, and the difference is the whole point: in the picker
+ * it is an OFFER — scan a code — so it wears the scanner. In a row it is a
+ * FACT: the key lives on a phone or tablet, so it wears the phone. A row that
+ * kept the scanner would be showing the person an action they already took, and
+ * a row that kept the old fob was calling that phone a piece of hardware.
+ */
+export function keyKindGlyph(
+	kind: 'platform' | 'hybrid' | 'security_key',
+	handheld: boolean = isHandheld()
+): MethodGlyph {
+	return kind === 'hybrid' ? { kind: 'lucide', name: 'smartphone' } : methodGlyph(kind, handheld);
+}

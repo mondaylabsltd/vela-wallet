@@ -559,9 +559,13 @@ fn two_keys(name: &str) -> Sut {
 }
 
 /// The add method is the person's choice, and it has to survive the round trip
-/// through the shell — the ceremony is selected from it, and the key row is
-/// labelled by it. A method that arrives at the shell as `Platform` when the
-/// person asked for a security key runs the wrong ceremony.
+/// through the shell — the ceremony is selected from it. A method that arrives
+/// at the shell as `Platform` when the person asked for a security key runs the
+/// wrong ceremony.
+///
+/// Since issue #207 it no longer LABELS the row: `kind` does, from what the
+/// authenticator reported. The two fields answer different questions and are
+/// checked here side by side so neither drifts into the other's job.
 #[test]
 fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     let mut sut = registered("Ann");
@@ -599,8 +603,13 @@ fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     assert_eq!(
         keys[1].method,
         KeyMethod::SecurityKey,
-        "the row must be labelled by the choice, not by what the authenticator reported"
+        "the choice must survive the round trip — it is what routes the ceremony"
     );
+    // …and `kind` is the other half of issue #207's split: the fixture
+    // authenticator reports `platform`/`hybrid,internal`, so that is what the
+    // ROW says, whatever was tapped. A row that drew the tap could show a
+    // hardware fob for a passkey that lives on this laptop.
+    assert_eq!(keys[1].kind, KeyMethod::Platform, "the row says what it IS");
 }
 
 /// The creation-time confirmation must run on the route that MINTED the key.

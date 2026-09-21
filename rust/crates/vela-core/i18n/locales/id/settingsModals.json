@@ -98,7 +98,7 @@
       "title": "Kunci",
       "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
       "keyN": "Kunci {{n}}",
-      "notSynced": "Terikat perangkat",
+      "notSynced": "Belum tersinkron",
       "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",
       "publicKey": "Kunci publik",
       "credential": "Kredensial",

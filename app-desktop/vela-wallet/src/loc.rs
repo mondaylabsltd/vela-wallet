@@ -282,12 +282,13 @@ mod tests {
 
     /// Where a translation is CORRECTLY identical to the English.
     ///
-    /// One entry, and it is a loanword: German-language passkey UI — Apple's,
-    /// Google's, and the browsers' — says "Passkey". Translating it would make
-    /// the wallet the odd one out on the same screen as the system's own
-    /// prompt. Listed rather than exempted by rule, so a second entry has to be
-    /// argued for in a diff.
-    const SAME_AS_ENGLISH: [(&str, &str); 1] = [("de", "onboarding.create.providerGeneric")];
+    /// EMPTY today. It held one entry, a loanword: `providerGeneric` was the
+    /// bare word "Passkey", which German-language passkey UI — Apple's,
+    /// Google's, and the browsers' — also says. Issue #207 made that key answer
+    /// "where does this key live" instead ("Phone or tablet"), which every
+    /// locale translates. Kept as a list rather than deleted, so a future entry
+    /// has to be argued for in a diff.
+    const SAME_AS_ENGLISH: [(&str, &str); 0] = [];
 
     /// Keys whose value is a term of art that most locales keep verbatim.
     ///

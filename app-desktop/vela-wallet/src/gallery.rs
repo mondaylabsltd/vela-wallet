@@ -103,20 +103,28 @@ fn key(name: &str, method: KeyMethod, confirmed: bool, synced: bool) -> CreateKe
     } else {
         ""
     };
+    let authenticator_attachment = if platform_key {
+        "platform".to_owned()
+    } else {
+        "cross-platform".to_owned()
+    };
+    let transports = if platform_key {
+        "internal,hybrid".to_owned()
+    } else {
+        "usb".to_owned()
+    };
     CreateKeyRow {
+        // What the core would decide from this shape, rather than a second
+        // opinion the gallery invents: the row the gallery draws has to be one
+        // the machine could really emit (issue #207).
+        kind: vela_core::passkey::reported_method(&authenticator_attachment, &transports)
+            .unwrap_or(method),
+        authenticator_attachment,
+        transports,
         name: name.to_owned(),
-        authenticator_attachment: if platform_key {
-            "platform".to_owned()
-        } else {
-            "cross-platform".to_owned()
-        },
-        transports: if platform_key {
-            "internal,hybrid".to_owned()
-        } else {
-            "usb".to_owned()
-        },
         confirmed,
         synced,
+        synced_known: true,
         aaguid: aaguid.to_owned(),
         provider_name: vela_core::passkey::provider_name(aaguid)
             .unwrap_or_default()

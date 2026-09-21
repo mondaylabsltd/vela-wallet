@@ -10,7 +10,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import AddMethodPicker from './AddMethodPicker.svelte';
-	import { providerLineFor } from '$lib/onboarding/core/copy';
+	import { keyBadge, providerLineFor } from '$lib/onboarding/core/copy';
 	import PasskeyProviderMark from './PasskeyProviderMark.svelte';
 	import { providerLabel } from '$lib/onboarding/core/passkey-directory.svelte';
 	import { isDarkTheme } from '$lib/theme.svelte';
@@ -62,12 +62,6 @@
 				: strings('onboarding.create.keysSubtitle')
 	);
 
-	function badgeFor(key: CreateKeyRow): { text: string; tone: 'synced' | 'local' } {
-		return key.synced
-			? { text: strings('onboarding.create.keySyncedBadge'), tone: 'synced' }
-			: { text: strings('onboarding.create.keyDeviceOnlyBadge'), tone: 'local' };
-	}
-
 	function pick(method: KeyMethod) {
 		pickerOpen = false;
 		onAddKey(method);
@@ -101,34 +95,32 @@
 
 		<ul class="rows">
 			{#each keys as key, index (index)}
-				{@const badge = badgeFor(key)}
+				{@const badge = keyBadge(key, strings)}
 				{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+				{@const where = holder ?? strings(providerLineFor(key.kind))}
 				<li class="row">
 					<!--
 						Who is holding this key, when the core's AAGUID catalog knows:
 						the vault's own mark and its own name. When it does not — a
 						hardware key, an authenticator that reported nothing — the row
-						says what it always said: the shape glyph and the generic line
-						for the method.
+						says where the key LIVES, from the authenticator's own report
+						(issue 207). Icon and caption read the same field, so they
+						cannot contradict each other.
 					-->
-					<PasskeyProviderMark
-						{key}
-						label={holder ?? strings(providerLineFor(key.method))}
-						glyphFallback
-					/>
+					<PasskeyProviderMark {key} label={where} glyphFallback />
 					<span class="who">
 						<span class="name">{key.name}</span>
-						<span class="meta">
-							{holder ?? strings(providerLineFor(key.method))}
-						</span>
+						<span class="meta">{where}</span>
 					</span>
 					<!--
 						One trailing slot, as the design draws it. A key that has not
 						confirmed its membership has no status to show yet, so the
-						retry TAKES that slot rather than crowding in beside it.
+						retry TAKES that slot rather than crowding in beside it. A key
+						whose attestation nobody could read has no badge either: the
+						slot stays empty rather than claiming a backup.
 					-->
 					{#if key.confirmed}
-						<span class="badge" data-tone={badge.tone}>{badge.text}</span>
+						{#if badge}<span class="badge" data-tone={badge.tone}>{badge.text}</span>{/if}
 					{:else}
 						<button
 							class="confirm"

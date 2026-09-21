@@ -98,7 +98,7 @@
       "title": "Chiavi",
       "subtitle": "Una qualsiasi di queste passkey può firmare per questo wallet, su tutte le reti.",
       "keyN": "Chiave {{n}}",
-      "notSynced": "Legata al dispositivo",
+      "notSynced": "Non sincronizzata",
       "fromDevice": "Registro non raggiungibile. Viene mostrato ciò che ricorda questo dispositivo.",
       "publicKey": "Chiave pubblica",
       "credential": "Credenziale",
