@@ -292,6 +292,8 @@ struct RootView: View {
         // cache on this client, only a fetch.
         let wallet = WalletStore(store: shelf, pool: pool, held: held)
         _wallet = State(initialValue: wallet)
+        // An incoming transfer the feed just found: the hero follows (#188).
+        activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
         _tokens = State(initialValue: ManageTokensStore(
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
