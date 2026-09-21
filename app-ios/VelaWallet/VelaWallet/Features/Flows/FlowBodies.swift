@@ -893,6 +893,8 @@ struct BatchImportBody: View {
     var onFile: () -> Void = {}
     var onTemplate: () -> Void = {}
     var onApply: () -> Void = {}
+    /// Add to the rows on the form, or replace them — the other of the two.
+    var onMerge: () -> Void = {}
     /// The live fields. `nil` renders exactly as drawn, so the gallery and the
     /// screenshot sweep stay pixel-identical.
     var pasteText: Binding<String>?
@@ -1037,6 +1039,50 @@ struct BatchImportBody: View {
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(model.noteIsError ? theme.errorBase : theme.fgMuted)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let total = model.total {
+                // What the import comes to, and what it is paid from — the
+                // number somebody checks before they press the button.
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: total.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: total.value)
+                            .typeRole(Typography.rowTitle.scaled(textScale))
+                            .foregroundStyle(total.over ? theme.errorBase : theme.fgBase)
+                    }
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: total.balance)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                        Spacer(minLength: Tokens.Space.s8)
+                        if let detail = total.detail {
+                            Text(verbatim: detail)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                        }
+                    }
+                    .foregroundStyle(theme.fgSubtle)
+                }
+                .padding(.top, Tokens.Space.s8)
+            }
+            if let merge = model.merge {
+                // Adding is the default; replacing is one tap away and says so.
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(verbatim: merge.note)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(action: onMerge) {
+                        Text(verbatim: merge.action)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.accentBase)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("send.batchMerge")
+                }
             }
 
             VelaButton(

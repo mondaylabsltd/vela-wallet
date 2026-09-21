@@ -263,6 +263,14 @@ struct SendViewWire: Decodable, Equatable {
     let splitMode: Bool
     let recipients: [SendRecipientDraftWire]
     let splitOverBalance: Bool
+    /// The balance less the rows' sum, in token units — "how much is left to
+    /// give out". `nil` while a row cannot be summed or the sum is over.
+    let splitRemaining: String?
+    /// How many more recipients an import may add: the cap less the rows
+    /// already started. The importer is opened with this as ITS cap, and it
+    /// is also how the shell knows the form already has people on it
+    /// (`< BatchStore.maxRecipients`).
+    let splitImportRoom: Int
 
     let multiSelectMode: Bool
     let multiSelectedIds: [String]

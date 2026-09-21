@@ -143,6 +143,14 @@ final class SendStore {
         dispatch(["type": "seed_split_recipients", "recipients": rows])
     }
 
+    /// The same rows ADDED to whoever is already on the form. A list brought
+    /// to a form that has people on it is, nearly always, more people — the
+    /// seed above replaces them (web #265). Also shuts the picker and the
+    /// importer, in the core.
+    func appendSplitRecipients(_ rows: [[String: Any]]) {
+        dispatch(["type": "append_split_recipients", "recipients": rows])
+    }
+
     // MARK: - Sweep
 
     /// The events one tap on the picker becomes, in the order the core needs
