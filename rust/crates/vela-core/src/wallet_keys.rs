@@ -649,7 +649,7 @@ mod tests {
         .is_some_and(|json| json.contains(r#""credential_id":"aa""#)));
     }
 
-    /// A blob this build cannot read is not a "Synced" badge (issue #207).
+    /// A blob this build cannot read is not a "Cloud-synced" badge (issue #207).
     ///
     /// The GATE — "does this wallet need a second key?" — reads
     /// `attestation_signals`, which says `true` there so an honest provider

@@ -742,10 +742,13 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     let trailing: AnyElement = if key.confirmed {
         // Bare coloured text, not a filled pill: v2 puts the row itself in a
         // bordered card, and a second fill inside it is one surface too many.
-        // `未同步` ("Not synced") is a WARNING, not a neutral — a key with no
-        // backup is the one fact on this screen that can cost someone their
-        // wallet. Since issue #207 the badge answers ONLY that question; where
-        // the key lives is the provider line's job, above.
+        // Cloud-synced or device-bound: a KIND of passkey, not a fault. The
+        // device-bound badge is neutral (`fg_muted`, as on the web): a security
+        // key or Windows Hello cannot be synced, so a warning tone — which this
+        // once was, reading `未同步` / "Not synced" — told people to go and do
+        // something there is nothing to do about. The real risk, every key being
+        // device-bound, is the "add a second key" hint's job. Where the key
+        // lives is the provider line's, above.
         //
         // Read straight off `synced`, not through `synced_known`: the web list
         // must draw nothing when nobody could read the attestation, because it
@@ -761,7 +764,7 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
         } else {
             (
                 loc.t("onboarding.create.keyDeviceOnlyBadge"),
-                theme.warning_base,
+                theme.fg_muted,
             )
         };
         div()
@@ -1252,7 +1255,7 @@ fn render_done(host: &FlowHost<'_>) -> Div {
         } else {
             (
                 loc.t("onboarding.create.keyDeviceOnlyBadge"),
-                theme.warning_base,
+                theme.fg_muted,
             )
         };
         keys = keys.child(

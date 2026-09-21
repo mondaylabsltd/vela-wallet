@@ -114,7 +114,7 @@ class RegistryBackupTest {
         // The holder line now names WHERE the key lives (issue 207): a hybrid
         // key is reached on a phone or tablet, not a nameless "Passkey".
         assertEquals(listOf("Apple Passwords", "Security key", "Phone or tablet"), block.rows.map { it.holder })
-        assertEquals(listOf(listOf("Synced"), listOf("Not synced"), listOf("Synced")), block.rows.map { row -> row.pills.map { it.text } })
+        assertEquals(listOf(listOf("Cloud-synced"), listOf("Device-bound"), listOf("Cloud-synced")), block.rows.map { row -> row.pills.map { it.text } })
         assertEquals(listOf("Public key", "Transport"), block.rows.first().details.map { it.label })
         assertTrue(block.backupExplain.contains("Private keys never leave"))
         assertEquals("abab…abab", block.rows.first().fingerprint)

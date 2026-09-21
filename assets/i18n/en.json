@@ -742,10 +742,10 @@
    "headerSyncFailed": "Cross-Device Sync",
    "identiconHint": "An identity pattern generated from the address",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Not synced",
+   "keyDeviceOnlyBadge": "Device-bound",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limit of 7 reached",
-   "keySyncedBadge": "Synced",
+   "keySyncedBadge": "Cloud-synced",
    "keyUnreadableBody": "A security key is plugged in, but this computer will not let the wallet read it. That is a permissions setting rather than a fault in the key — on Linux, install your distribution's FIDO udev rules (libu2f-udev, or systemd 252 and later, which sets them up itself), then unplug the key and plug it in again.",
    "keyUnreadableTitle": "Your security key can't be opened",
    "keysHint": "The wallet address is decided by this set of keys — none can be added or removed after creation.",
@@ -1618,13 +1618,13 @@
    "title": "Keys",
    "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
    "keyN": "Key {{n}}",
-   "notSynced": "Not synced",
+   "notSynced": "Device-bound",
    "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
    "publicKey": "Public key",
    "credential": "Credential",
    "transport": "Transport",
    "attestation": "Attestation",
-   "userVerified": "User-verified"
+   "userVerified": "Verify to use"
   }
  },
  "contacts": {

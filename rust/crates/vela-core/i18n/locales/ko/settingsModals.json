@@ -98,13 +98,13 @@
       "title": "키",
       "subtitle": "이 패스키 중 어느 하나로도 이 지갑에 서명할 수 있으며, 모든 네트워크에서 동일합니다.",
       "keyN": "키 {{n}}",
-      "notSynced": "동기화 안 됨",
+      "notSynced": "기기 전용",
       "fromDevice": "레지스트리에 연결할 수 없습니다. 이 기기에 저장된 내용만 표시합니다.",
       "publicKey": "공개 키",
       "credential": "자격 증명",
       "transport": "전송 방식",
       "attestation": "증명",
-      "userVerified": "사용자 확인됨"
+      "userVerified": "사용 시 인증 필요"
     }
   }
 }

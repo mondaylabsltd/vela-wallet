@@ -98,13 +98,13 @@
       "title": "Clés",
       "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
       "keyN": "Clé {{n}}",
-      "notSynced": "Non synchronisée",
+      "notSynced": "Liée à l'appareil",
       "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient.",
       "publicKey": "Clé publique",
       "credential": "Identifiant",
       "transport": "Transport",
       "attestation": "Attestation",
-      "userVerified": "Utilisateur vérifié"
+      "userVerified": "Vérification à chaque utilisation"
     }
   }
 }

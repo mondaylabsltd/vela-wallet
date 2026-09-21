@@ -288,8 +288,13 @@
 		color: var(--color-success-base);
 	}
 
+	/* Neutral, not a warning. "Device-bound" is a KIND of passkey (a security
+	   key, Windows Hello), not a fault: it cannot be synced, and there is
+	   nothing to go and fix. A warning tone read as "go and sync this", which is
+	   exactly what the owner ruled out. The real risk (every key device-bound)
+	   is said by the "add a second key" hint, where it can be acted on. */
 	.badge[data-tone='local'] {
-		color: var(--color-warning-base);
+		color: var(--color-fg-muted);
 	}
 
 	.spacer {

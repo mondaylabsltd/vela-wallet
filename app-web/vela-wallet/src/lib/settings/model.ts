@@ -677,7 +677,7 @@ export interface WalletKeyRowModel {
 	holderFallback: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
-	/** "User-verified", "Synced" / "Not synced" — drawn as pills, the explorer's way. */
+	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
 	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
 	/**
 	 * What the row opens onto: the registry explorer's facts, each copyable.

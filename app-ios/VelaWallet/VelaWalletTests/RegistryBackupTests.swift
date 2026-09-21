@@ -124,7 +124,7 @@ struct RegistryBackupTests {
         // The holder line now names WHERE the key lives (issue 207): a hybrid
         // key is reached on a phone or tablet, not a nameless "Passkey".
         #expect(block?.rows.map(\.holder) == ["Apple Passwords", "Security key", "Phone or tablet"])
-        #expect(block?.rows.map { $0.pills.map(\.text) } == [["Synced"], ["Not synced"], ["Synced"]])
+        #expect(block?.rows.map { $0.pills.map(\.text) } == [["Cloud-synced"], ["Device-bound"], ["Cloud-synced"]])
         #expect(block?.rows.first?.details.map(\.label) == ["Public key", "Transport"])
         #expect(block?.backupExplain.contains("Private keys never leave") == true)
         #expect(block?.rows.first?.fingerprint == "abab…abab")

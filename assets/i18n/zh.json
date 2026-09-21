@@ -742,10 +742,10 @@
    "headerSyncFailed": "跨设备同步",
    "identiconHint": "地址生成的身份图案",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "未同步",
+   "keyDeviceOnlyBadge": "设备绑定",
    "keyHardwareBadge": "硬件",
    "keyLimitReached": "已达上限 7 把",
-   "keySyncedBadge": "已同步",
+   "keySyncedBadge": "云同步",
    "keyUnreadableBody": "安全密钥已插入，但这台电脑不允许钱包读取它。这是权限设置的问题，密钥本身没坏——在 Linux 上，请安装发行版的 FIDO udev 规则（libu2f-udev；systemd 252 及以上会自动配置），然后拔出密钥再插回去。",
    "keyUnreadableTitle": "无法打开你的安全密钥",
    "keysHint": "钱包地址由这组密钥决定，创建后不能再增减。",
@@ -1618,13 +1618,13 @@
    "title": "钥匙",
    "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
    "keyN": "钥匙 {{n}}",
-   "notSynced": "未同步",
+   "notSynced": "设备绑定",
    "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
    "publicKey": "公钥",
    "credential": "凭证",
    "transport": "传输方式",
    "attestation": "认证声明",
-   "userVerified": "已验证用户"
+   "userVerified": "使用时需验证"
   }
  },
  "contacts": {

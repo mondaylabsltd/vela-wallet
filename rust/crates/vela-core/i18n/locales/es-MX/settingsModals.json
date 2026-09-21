@@ -98,13 +98,13 @@
       "title": "Llaves",
       "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
       "keyN": "Llave {{n}}",
-      "notSynced": "Sin sincronizar",
+      "notSynced": "Vinculada al dispositivo",
       "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",
       "publicKey": "Llave pública",
       "credential": "Credencial",
       "transport": "Transporte",
       "attestation": "Atestación",
-      "userVerified": "Usuario verificado"
+      "userVerified": "Verificación al usarla"
     }
   }
 }

@@ -735,10 +735,10 @@
    "headerSyncFailed": "기기 간 동기화",
    "identiconHint": "주소에서 생성된 식별 패턴",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "동기화 안 됨",
+   "keyDeviceOnlyBadge": "기기 전용",
    "keyHardwareBadge": "하드웨어",
    "keyLimitReached": "최대 7개 도달",
-   "keySyncedBadge": "동기화됨",
+   "keySyncedBadge": "클라우드 동기화",
    "keyUnreadableBody": "보안 키가 연결되어 있지만 이 컴퓨터가 지갑의 읽기를 허용하지 않습니다. 키 고장이 아니라 권한 설정 문제입니다. Linux에서는 배포판의 FIDO udev 규칙(libu2f-udev, 또는 자동 설정되는 systemd 252 이상)을 설치한 뒤 키를 뽑았다 다시 꽂으세요.",
    "keyUnreadableTitle": "보안 키를 열 수 없습니다",
    "keysHint": "지갑 주소는 이 키 묶음으로 정해집니다. 생성 후에는 더하거나 뺄 수 없습니다.",
@@ -1608,13 +1608,13 @@
    "title": "키",
    "subtitle": "이 패스키 중 어느 하나로도 이 지갑에 서명할 수 있으며, 모든 네트워크에서 동일합니다.",
    "keyN": "키 {{n}}",
-   "notSynced": "동기화 안 됨",
+   "notSynced": "기기 전용",
    "fromDevice": "레지스트리에 연결할 수 없습니다. 이 기기에 저장된 내용만 표시합니다.",
    "publicKey": "공개 키",
    "credential": "자격 증명",
    "transport": "전송 방식",
    "attestation": "증명",
-   "userVerified": "사용자 확인됨"
+   "userVerified": "사용 시 인증 필요"
   }
  },
  "contacts": {

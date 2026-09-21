@@ -447,7 +447,7 @@ data class WalletKeyRowModel(
     val holder: String,
     /** `197d…647b` — what tells two unnamed keys apart. */
     val fingerprint: String,
-    /** "User-verified", "Synced" / "Not synced" — the registry explorer's pills. */
+    /** "Verify to use", "Cloud-synced" / "Device-bound" — the registry explorer's pills. */
     val pills: List<KeyPillModel>,
     /** What the row opens onto: the explorer's facts. Empty = nothing to open. */
     val details: List<KeyDetailModel>,

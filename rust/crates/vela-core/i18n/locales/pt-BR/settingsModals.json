@@ -98,13 +98,13 @@
       "title": "Chaves",
       "subtitle": "Qualquer uma destas chaves de acesso pode assinar por esta carteira, em todas as redes.",
       "keyN": "Chave {{n}}",
-      "notSynced": "Não sincronizada",
+      "notSynced": "Vinculada ao aparelho",
       "fromDevice": "Não foi possível consultar o registro. Mostrando o que este dispositivo lembra.",
       "publicKey": "Chave pública",
       "credential": "Credencial",
       "transport": "Transporte",
       "attestation": "Atestação",
-      "userVerified": "Usuário verificado"
+      "userVerified": "Verificação ao usar"
     }
   }
 }

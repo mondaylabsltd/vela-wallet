@@ -738,10 +738,10 @@
    "headerSyncFailed": "Sincronização entre dispositivos",
    "identiconHint": "Um padrão de identidade gerado a partir do endereço",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Não sincronizada",
+   "keyDeviceOnlyBadge": "Vinculada ao aparelho",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limite de 7 atingido",
-   "keySyncedBadge": "Sincronizada",
+   "keySyncedBadge": "Sincronizada na nuvem",
    "keyUnreadableBody": "Há uma chave de segurança conectada, mas este computador não permite que a carteira a leia. É uma configuração de permissões, não um defeito da chave — no Linux, instale as regras udev de FIDO da sua distribuição (libu2f-udev, ou systemd 252 e posteriores, que as configura sozinho) e reconecte a chave.",
    "keyUnreadableTitle": "Não foi possível abrir sua chave de segurança",
    "keysHint": "O endereço da carteira é definido por este conjunto de chaves — depois de criada, não dá para adicionar nem remover.",
@@ -1611,13 +1611,13 @@
    "title": "Chaves",
    "subtitle": "Qualquer uma destas chaves de acesso pode assinar por esta carteira, em todas as redes.",
    "keyN": "Chave {{n}}",
-   "notSynced": "Não sincronizada",
+   "notSynced": "Vinculada ao aparelho",
    "fromDevice": "Não foi possível consultar o registro. Mostrando o que este dispositivo lembra.",
    "publicKey": "Chave pública",
    "credential": "Credencial",
    "transport": "Transporte",
    "attestation": "Atestação",
-   "userVerified": "Usuário verificado"
+   "userVerified": "Verificação ao usar"
   }
  },
  "contacts": {

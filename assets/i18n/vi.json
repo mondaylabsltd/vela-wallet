@@ -735,10 +735,10 @@
    "headerSyncFailed": "Đồng bộ đa thiết bị",
    "identiconHint": "Hoạ tiết nhận dạng sinh từ địa chỉ",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Chưa đồng bộ",
+   "keyDeviceOnlyBadge": "Gắn với thiết bị",
    "keyHardwareBadge": "Phần cứng",
    "keyLimitReached": "Đã đủ 7 khoá",
-   "keySyncedBadge": "Đã đồng bộ",
+   "keySyncedBadge": "Đồng bộ đám mây",
    "keyUnreadableBody": "Khoá bảo mật đã cắm, nhưng máy tính này không cho ví đọc nó. Đây là thiết lập quyền chứ không phải khoá bị hỏng — trên Linux, hãy cài bộ quy tắc udev FIDO của bản phân phối (libu2f-udev, hoặc systemd 252 trở lên vốn tự thiết lập), rồi rút khoá ra và cắm lại.",
    "keyUnreadableTitle": "Không mở được khoá bảo mật của bạn",
    "keysHint": "Địa chỉ ví do bộ khoá này quyết định — tạo xong không thêm bớt được.",
@@ -1608,13 +1608,13 @@
    "title": "Khóa",
    "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
    "keyN": "Khóa {{n}}",
-   "notSynced": "Chưa đồng bộ",
+   "notSynced": "Gắn với thiết bị",
    "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",
    "publicKey": "Khóa công khai",
    "credential": "Thông tin xác thực",
    "transport": "Phương thức truyền",
    "attestation": "Chứng thực",
-   "userVerified": "Đã xác minh người dùng"
+   "userVerified": "Cần xác minh khi dùng"
   }
  },
  "contacts": {

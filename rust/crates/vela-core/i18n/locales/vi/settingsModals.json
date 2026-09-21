@@ -98,13 +98,13 @@
       "title": "Khóa",
       "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
       "keyN": "Khóa {{n}}",
-      "notSynced": "Chưa đồng bộ",
+      "notSynced": "Gắn với thiết bị",
       "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",
       "publicKey": "Khóa công khai",
       "credential": "Thông tin xác thực",
       "transport": "Phương thức truyền",
       "attestation": "Chứng thực",
-      "userVerified": "Đã xác minh người dùng"
+      "userVerified": "Cần xác minh khi dùng"
     }
   }
 }

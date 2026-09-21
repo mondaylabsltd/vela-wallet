@@ -738,10 +738,10 @@
    "headerSyncFailed": "Sincronizzazione tra dispositivi",
    "identiconHint": "Un motivo identificativo generato dall'indirizzo",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Non sincronizzata",
+   "keyDeviceOnlyBadge": "Legata al dispositivo",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limite di 7 raggiunto",
-   "keySyncedBadge": "Sincronizzata",
+   "keySyncedBadge": "Sincronizzata nel cloud",
    "keyUnreadableBody": "Una chiave di sicurezza è collegata, ma questo computer non permette al portafoglio di leggerla. È un'impostazione di permessi, non un guasto della chiave: su Linux installa le regole udev FIDO della tua distribuzione (libu2f-udev, oppure systemd 252 e successivi, che le imposta da solo) e ricollega la chiave.",
    "keyUnreadableTitle": "Impossibile aprire la tua chiave di sicurezza",
    "keysHint": "L'indirizzo del wallet è deciso da questo insieme di chiavi: dopo la creazione non se ne aggiungono né tolgono.",
@@ -1611,13 +1611,13 @@
    "title": "Chiavi",
    "subtitle": "Una qualsiasi di queste passkey può firmare per questo wallet, su tutte le reti.",
    "keyN": "Chiave {{n}}",
-   "notSynced": "Non sincronizzata",
+   "notSynced": "Legata al dispositivo",
    "fromDevice": "Registro non raggiungibile. Viene mostrato ciò che ricorda questo dispositivo.",
    "publicKey": "Chiave pubblica",
    "credential": "Credenziale",
    "transport": "Trasporto",
    "attestation": "Attestazione",
-   "userVerified": "Utente verificato"
+   "userVerified": "Verifica a ogni uso"
   }
  },
  "contacts": {

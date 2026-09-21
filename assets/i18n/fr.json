@@ -738,10 +738,10 @@
    "headerSyncFailed": "Synchronisation multi-appareils",
    "identiconHint": "Un motif d'identité généré à partir de l'adresse",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Non synchronisée",
+   "keyDeviceOnlyBadge": "Liée à l'appareil",
    "keyHardwareBadge": "Matériel",
    "keyLimitReached": "Limite de 7 atteinte",
-   "keySyncedBadge": "Synchronisée",
+   "keySyncedBadge": "Synchronisée dans le cloud",
    "keyUnreadableBody": "Une clé de sécurité est branchée, mais cet ordinateur n'autorise pas le portefeuille à la lire. C'est un réglage de permissions, pas une panne de la clé — sous Linux, installez les règles udev FIDO de votre distribution (libu2f-udev, ou systemd 252 et plus, qui les met en place lui-même), puis débranchez et rebranchez la clé.",
    "keyUnreadableTitle": "Impossible d'ouvrir votre clé de sécurité",
    "keysHint": "L'adresse du portefeuille découle de cet ensemble de clés — après création, on n'en ajoute ni n'en retire.",
@@ -1611,13 +1611,13 @@
    "title": "Clés",
    "subtitle": "N'importe laquelle de ces clés d'accès peut signer pour ce portefeuille, sur tous les réseaux.",
    "keyN": "Clé {{n}}",
-   "notSynced": "Non synchronisée",
+   "notSynced": "Liée à l'appareil",
    "fromDevice": "Registre injoignable. Affichage de ce dont cet appareil se souvient.",
    "publicKey": "Clé publique",
    "credential": "Identifiant",
    "transport": "Transport",
    "attestation": "Attestation",
-   "userVerified": "Utilisateur vérifié"
+   "userVerified": "Vérification à chaque utilisation"
   }
  },
  "contacts": {

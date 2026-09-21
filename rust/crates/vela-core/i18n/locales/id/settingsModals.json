@@ -98,13 +98,13 @@
       "title": "Kunci",
       "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
       "keyN": "Kunci {{n}}",
-      "notSynced": "Belum tersinkron",
+      "notSynced": "Terikat perangkat",
       "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",
       "publicKey": "Kunci publik",
       "credential": "Kredensial",
       "transport": "Transport",
       "attestation": "Atestasi",
-      "userVerified": "Pengguna terverifikasi"
+      "userVerified": "Perlu verifikasi saat digunakan"
     }
   }
 }

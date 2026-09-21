@@ -735,10 +735,10 @@
    "headerSyncFailed": "Geräteübergreifende Synchronisierung",
    "identiconHint": "Ein aus der Adresse erzeugtes Identitätsmuster",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Nicht synchronisiert",
+   "keyDeviceOnlyBadge": "Gerätegebunden",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limit von 7 erreicht",
-   "keySyncedBadge": "Synchronisiert",
+   "keySyncedBadge": "Cloud-synchronisiert",
    "keyUnreadableBody": "Ein Sicherheitsschlüssel ist angeschlossen, aber dieser Computer lässt die Wallet ihn nicht lesen. Das ist eine Berechtigungseinstellung und kein Defekt des Schlüssels — installieren Sie unter Linux die FIDO-udev-Regeln Ihrer Distribution (libu2f-udev, oder systemd 252 und neuer, das sie selbst einrichtet), und stecken Sie den Schlüssel danach einmal aus und wieder ein.",
    "keyUnreadableTitle": "Ihr Sicherheitsschlüssel lässt sich nicht öffnen",
    "keysHint": "Die Wallet-Adresse ergibt sich aus diesem Schlüsselsatz — nach dem Erstellen kommt keiner dazu und keiner weg.",
@@ -1608,13 +1608,13 @@
    "title": "Schlüssel",
    "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
    "keyN": "Schlüssel {{n}}",
-   "notSynced": "Nicht synchronisiert",
+   "notSynced": "Gerätegebunden",
    "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat.",
    "publicKey": "Öffentlicher Schlüssel",
    "credential": "Anmeldedaten",
    "transport": "Transport",
    "attestation": "Attestierung",
-   "userVerified": "Nutzer verifiziert"
+   "userVerified": "Bestätigung bei Nutzung"
   }
  },
  "contacts": {

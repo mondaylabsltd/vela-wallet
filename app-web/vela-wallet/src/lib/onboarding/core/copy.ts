@@ -151,14 +151,15 @@ export function providerLineFor(kind: KeyMethod): string {
 /**
  * The one badge a key row wears, in the one place that decides it (issue 207).
  *
- * It answers EXACTLY ONE question — is this key backed up? — and never again
+ * It answers EXACTLY ONE question — is this passkey cloud-synced or
+ * device-bound? — a KIND of key, not a to-do, and never again
  * says anything about where the key lives. That was the contradiction the
  * reporter saw: a YubiKey badged "This device only", which a security key is by
  * definition not.
  *
  * `undefined` when nobody can vouch for the answer: an attestation this build
  * cannot read makes `synced` fail open to `true` for the second-key GATE, and a
- * gate is not a badge. Drawing a green "Synced" from that would be telling
+ * gate is not a badge. Drawing a green "Cloud-synced" from that would be telling
  * somebody their wallet is backed up on the strength of a guess.
  */
 export function keyBadge(

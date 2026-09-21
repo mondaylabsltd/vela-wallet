@@ -735,10 +735,10 @@
    "headerSyncFailed": "端末間の同期",
    "identiconHint": "アドレスから生成される識別パターン",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "未同期",
+   "keyDeviceOnlyBadge": "端末に紐付け",
    "keyHardwareBadge": "ハードウェア",
    "keyLimitReached": "上限 7 本に到達",
-   "keySyncedBadge": "同期済み",
+   "keySyncedBadge": "クラウド同期",
    "keyUnreadableBody": "セキュリティキーは接続されていますが、このコンピューターがウォレットに読み取りを許可していません。キーの故障ではなく権限の設定です。Linux では、ディストリビューションの FIDO udev ルール（libu2f-udev。systemd 252 以降は自動設定）を導入し、キーを一度抜き差ししてください。",
    "keyUnreadableTitle": "セキュリティキーを開けません",
    "keysHint": "ウォレットアドレスはこの鍵の組で決まります。作成後は追加も削除もできません。",
@@ -1608,13 +1608,13 @@
    "title": "キー",
    "subtitle": "どのパスキーでも、このウォレットの署名ができます。すべてのネットワークで共通です。",
    "keyN": "キー {{n}}",
-   "notSynced": "未同期",
+   "notSynced": "端末に紐付け",
    "fromDevice": "レジストリに接続できません。この端末が覚えている内容を表示しています。",
    "publicKey": "公開鍵",
    "credential": "クレデンシャル",
    "transport": "トランスポート",
    "attestation": "アテステーション",
-   "userVerified": "本人確認済み"
+   "userVerified": "使用時に本人確認"
   }
  },
  "contacts": {

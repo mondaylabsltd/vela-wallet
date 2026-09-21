@@ -339,7 +339,7 @@ pub struct CreateKeyRow {
     /// Is [`Self::synced`] a FACT, or the benefit of the doubt? `false` when
     /// the attestation blob is unreadable and the `true` above is the gate
     /// failing open. The gate keeps failing open; a row with no answer draws no
-    /// badge instead of a green "Synced" nobody verified (issue #207).
+    /// badge instead of a green "Cloud-synced" nobody verified (issue #207).
     pub synced_known: bool,
     /// The authenticator model's AAGUID as a canonical uuid, or empty when
     /// absent/all-zero. Shells pass it back to the core for the provider's

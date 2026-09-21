@@ -92,12 +92,12 @@ describe('walletKeysModel', () => {
 			'Phone or tablet'
 		]);
 		expect(model.rows[0].fingerprint).toBe('abab…abab');
-		// The badge answers ONE question — is it backed up — in the same words
+		// The badge answers ONE question — cloud-synced or device-bound — in the same words
 		// the create flow uses for the same fact (issue 207).
 		expect(model.rows.map((row) => row.pills.map((pill) => pill.text))).toEqual([
-			['User-verified', 'Synced'],
-			['Not synced'],
-			['Synced']
+			['Verify to use', 'Cloud-synced'],
+			['Device-bound'],
+			['Cloud-synced']
 		]);
 		// What a row opens onto: the explorer's facts, the two a person pastes elsewhere copyable.
 		expect(model.rows[0].details.map((d) => [d.label, d.copy])).toEqual([

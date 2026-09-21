@@ -98,13 +98,13 @@
       "title": "Anahtarlar",
       "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
       "keyN": "Anahtar {{n}}",
-      "notSynced": "Eşitlenmedi",
+      "notSynced": "Cihaza bağlı",
       "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor.",
       "publicKey": "Açık anahtar",
       "credential": "Kimlik bilgisi",
       "transport": "Aktarım",
       "attestation": "Doğrulama beyanı",
-      "userVerified": "Kullanıcı doğrulandı"
+      "userVerified": "Kullanırken doğrulama gerekir"
     }
   }
 }

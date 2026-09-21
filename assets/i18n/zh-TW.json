@@ -735,10 +735,10 @@
    "headerSyncFailed": "跨裝置同步",
    "identiconHint": "由地址產生的身分圖案",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "未同步",
+   "keyDeviceOnlyBadge": "裝置綁定",
    "keyHardwareBadge": "硬體",
    "keyLimitReached": "已達上限 7 把",
-   "keySyncedBadge": "已同步",
+   "keySyncedBadge": "雲端同步",
    "keyUnreadableBody": "安全金鑰已插入，但這台電腦不允許錢包讀取它。這是權限設定的問題，金鑰本身沒壞——在 Linux 上，請安裝發行版的 FIDO udev 規則（libu2f-udev；systemd 252 以上會自動設定），然後拔出金鑰再插回去。",
    "keyUnreadableTitle": "無法開啟你的安全金鑰",
    "keysHint": "錢包地址由這組密鑰決定，建立後不能再增減。",
@@ -1608,13 +1608,13 @@
    "title": "金鑰",
    "subtitle": "其中任何一把通行密鑰都能為這個錢包簽署，所有網路通用。",
    "keyN": "金鑰 {{n}}",
-   "notSynced": "未同步",
+   "notSynced": "裝置綁定",
    "fromDevice": "暫時連不上註冊表，僅顯示本機記得的內容。",
    "publicKey": "公鑰",
    "credential": "憑證",
    "transport": "傳輸方式",
    "attestation": "認證聲明",
-   "userVerified": "已驗證使用者"
+   "userVerified": "使用時需驗證"
   }
  },
  "contacts": {

@@ -114,8 +114,8 @@ for (const [name, mount, selector] of [
 			const [row] = rowText(container, selector);
 			expect(row).toContain('Security key');
 			expect(row).not.toContain('This device');
-			// The badge answers one question only, and it is not "where".
-			expect(row).toContain('Not synced');
+			// The badge names the KIND of passkey, and it is not "where".
+			expect(row).toContain('Device-bound');
 		});
 
 		it('draws a phone reached by a code as a phone, never as a hardware key', () => {
@@ -133,15 +133,15 @@ for (const [name, mount, selector] of [
 			const { container } = mount([key({ name: 'This laptop' })]);
 			const [row] = rowText(container, selector);
 			expect(row).toContain('This device');
-			expect(row).toContain('Synced');
-			expect(row).not.toContain('Not synced');
+			expect(row).toContain('Cloud-synced');
+			expect(row).not.toContain('Device-bound');
 		});
 
 		it('draws no badge when nobody can vouch for the backup', () => {
 			const { container } = mount([key({ synced: true, synced_known: false })]);
 			const [row] = rowText(container, selector);
-			expect(row).not.toContain('Synced');
-			expect(row).not.toContain('Not synced');
+			expect(row).not.toContain('Cloud-synced');
+			expect(row).not.toContain('Device-bound');
 		});
 
 		it('never lets the three slots contradict each other', () => {
