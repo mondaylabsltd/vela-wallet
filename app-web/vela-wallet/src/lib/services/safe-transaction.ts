@@ -1677,24 +1677,45 @@ export async function innerCallsGasFloor(
 	if (measured.length === 0) return null;
 	let total = 0n;
 	for (const call of measured) {
-		const response = await rpcCall(
-			'eth_estimateGas',
-			[
-				{
-					from: sender,
-					to: call.to,
-					value: '0x' + BigInt(call.value || '0').toString(16),
-					data: '0x' + toHex(call.data)
-				}
-			],
-			chainId
-		).catch(() => null);
-		const hex = response && !response.error ? response.result : null;
-		if (typeof hex !== 'string' || !hex.startsWith('0x')) return null;
+		const gas = await measureCallGas(
+			chainId,
+			sender,
+			call.to,
+			'0x' + BigInt(call.value || '0').toString(16),
+			'0x' + toHex(call.data)
+		);
+		if (gas === null) return null;
 		// 25% for the call itself, plus the frames around it.
-		total += (BigInt(hex) * 125n) / 100n + 60_000n;
+		total += (gas * 125n) / 100n + 60_000n;
 	}
 	return total + 50_000n * BigInt(calls.length);
+}
+
+/**
+ * `eth_estimateGas({ from, to, value, data })` for ONE inner call, from the
+ * Safe's own address — the measurement `innerCallsGasFloor` pads at submit and
+ * the fee executor hands the core at quote time (`measure_inner_calls`), so
+ * both read the same number the same way. `null` = nobody could measure it.
+ */
+export async function measureCallGas(
+	chainId: number,
+	from: string,
+	to: string,
+	valueHex: string,
+	dataHex: string
+): Promise<bigint | null> {
+	const response = await rpcCall(
+		'eth_estimateGas',
+		[{ from, to, value: valueHex, data: dataHex }],
+		chainId
+	).catch(() => null);
+	const hex = response && !response.error ? response.result : null;
+	if (typeof hex !== 'string' || !hex.startsWith('0x')) return null;
+	try {
+		return BigInt(hex);
+	} catch {
+		return null;
+	}
 }
 
 export function isPlainTransferCall(c: { data: Uint8Array }): boolean {

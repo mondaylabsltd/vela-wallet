@@ -17,7 +17,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const seams = vi.hoisted(() => ({
 	inBandQuotes: vi.fn(),
-	nativePrice: vi.fn((): number | null => null)
+	nativePrice: vi.fn((): number | null => null),
+	measureCallGas: vi.fn()
 }));
 
 vi.mock('$lib/services/bundler-service', () => ({
@@ -33,12 +34,13 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	fetchRawBundlerQuote: vi.fn(),
 	fetchRawGasSignals: vi.fn(),
 	keySetOf: vi.fn(),
+	measureCallGas: seams.measureCallGas,
 	simulateUserOpGas: vi.fn()
 }));
 
 vi.mock('$lib/services/accounts', () => ({ findAccountByAddress: vi.fn() }));
 
-import { createFeeExecutor } from './fee-executor';
+import { createFeeExecutor, feeOperationFailure } from './fee-executor';
 
 const ACCOUNT = '0x1111111111111111111111111111111111111111';
 const XLAYER = 196;
@@ -148,6 +150,79 @@ describe('the native floor price the executor hands the core (issue 682)', () =>
 			decimals: 18,
 			symbol: 'OKB',
 			usd_balance: '0'
+		});
+	});
+});
+
+/**
+ * The inner calls' own gas at QUOTE time (issue 262 follow-up): the core
+ * prices the `callGasLimit` the submit will raise to, so the executor must
+ * measure each call exactly as `innerCallsGasFloor` does — from the Safe, one
+ * `eth_estimateGas` per call — and hand every figure back in order, `null`
+ * where nobody answered. What an unmeasured call means is the core's.
+ */
+describe('measure_inner_calls', () => {
+	const SAFE = '0x4444444444444444444444444444444444444444';
+	const TARGET = '0x5555555555555555555555555555555555555555';
+	const effect = {
+		id: 2,
+		operation: {
+			type: 'measure_inner_calls' as const,
+			chain_id: 8453,
+			from: SAFE,
+			calls: [
+				{ to: TARGET, value: '0', data: '0x4e71d92d' },
+				{ to: TARGET, value: '1000', data: '0xdeadbeef' }
+			]
+		}
+	};
+
+	beforeEach(() => vi.clearAllMocks());
+
+	it('measures each call from the Safe, value as hex, answers decimal strings in order', async () => {
+		seams.measureCallGas.mockResolvedValueOnce(4_308_125n).mockResolvedValueOnce(null);
+		const execute = createFeeExecutor({
+			onView: () => {},
+			onError: () => {},
+			publicKeyHex: () => undefined
+		});
+		const result = await execute(effect, new AbortController().signal);
+		expect(result).toEqual({ type: 'inner_calls_measured', gas: ['4308125', null] });
+		expect(seams.measureCallGas).toHaveBeenNthCalledWith(
+			1,
+			8453,
+			SAFE,
+			TARGET,
+			'0x0',
+			'0x4e71d92d'
+		);
+		expect(seams.measureCallGas).toHaveBeenNthCalledWith(
+			2,
+			8453,
+			SAFE,
+			TARGET,
+			'0x3e8',
+			'0xdeadbeef'
+		);
+	});
+
+	it('a thrown measurement is an unmeasured call, never a rejection', async () => {
+		seams.measureCallGas
+			.mockRejectedValueOnce(new Error('rpc down'))
+			.mockResolvedValueOnce(21_000n);
+		const execute = createFeeExecutor({
+			onView: () => {},
+			onError: () => {},
+			publicKeyHex: () => undefined
+		});
+		const result = await execute(effect, new AbortController().signal);
+		expect(result).toEqual({ type: 'inner_calls_measured', gas: [null, '21000'] });
+	});
+
+	it('fails neutral: one null per call', () => {
+		expect(feeOperationFailure(effect)).toEqual({
+			type: 'inner_calls_measured',
+			gas: [null, null]
 		});
 	});
 });
