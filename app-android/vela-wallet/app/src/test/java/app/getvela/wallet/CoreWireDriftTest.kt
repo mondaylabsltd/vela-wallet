@@ -771,6 +771,15 @@ class CoreWireDriftTest {
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
+    /** Spec 071: the default "Sign with" and the Clear Signer page. */
+    @Test
+    fun signPreferenceMatchesTheGeneratedMirrors() {
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.SignPrefView>("SignPrefView")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefOperation>("SignPrefOperation")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.SignPrefShellResult>("SignPrefShellResult")
+        assertVariantsExist<app.getvela.wallet.feature.settings.core.SignPrefEvent>("SignPrefEvent")
+    }
+
     /** Spec 069: the default speed's machine and the speed control's. */
     @Test
     fun speedViewsEventsAndPreferenceMatchTheGeneratedMirrors() {

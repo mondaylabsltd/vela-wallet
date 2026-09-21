@@ -6,6 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.send.core.ClearSigner
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeSpeedView
@@ -85,6 +86,9 @@ class SigningController(
     private val numberPreset: () -> String = { "comma_dot" },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
+    /** Spec 071: the "Sign with" this sheet starts at (Settings' default), and the Clear Signer. */
+    defaultMethod: () -> String = { "auto" },
+    clearSigner: () -> ClearSigner? = { null },
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -134,7 +138,7 @@ class SigningController(
     val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }),
+        spine = UserOpSpine(relay, accounts, signer, measureCall, signMethod = { signMethod.value }, clearSigner = clearSigner),
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -165,6 +169,7 @@ class SigningController(
         now = now,
         receiptWaitMs = receiptWaitMs,
         receiptPollMs = receiptPollMs,
+        origin = { _request.value?.origin.orEmpty() },
     )
     private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
@@ -211,12 +216,14 @@ class SigningController(
     val request: StateFlow<IncomingRequest?> = _request
 
     /**
-     * "Sign with": WHERE the passkey that signs this request is. This controller
-     * lives for one request, so the choice cannot outlive the question it was
-     * made for. `auto` is the wallet's stored route, untouched.
+     * "Sign with": WHERE the passkey that signs this request is — or the Clear
+     * Signer (spec 071). This controller lives for one request, so the choice
+     * cannot outlive the question it was made for; it starts at Settings'
+     * default. `auto` is the wallet's stored route, untouched.
      */
-    val signMethod = MutableStateFlow("auto")
+    val signMethod = MutableStateFlow(defaultMethod())
     val signWithOpen = MutableStateFlow(false)
+
 
     /** `null` toggles the list; an id picks a method and closes it. */
     fun signWith(id: String?) {
@@ -224,7 +231,7 @@ class SigningController(
             signWithOpen.value = !signWithOpen.value
             return
         }
-        if (id in setOf("auto", "platform", "hybrid", "security_key")) signMethod.value = id
+        if (id in SIGN_METHODS) signMethod.value = id
         signWithOpen.value = false
     }
 
@@ -373,6 +380,12 @@ class SigningController(
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
     companion object {
+        /**
+         * `wallet_keys::SIGN_METHODS` — every value the picker may set. Pinned
+         * to the core's own list (`SignPrefView.offered`) by a JVM test.
+         */
+        val SIGN_METHODS = listOf("auto", "platform", "hybrid", "security_key", "clear_signer")
+
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,

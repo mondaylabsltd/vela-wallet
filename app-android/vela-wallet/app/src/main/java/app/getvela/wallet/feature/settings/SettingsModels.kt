@@ -45,6 +45,12 @@ enum class SettingsOverlay {
 
     /** The default transaction speed (spec 069): three speeds, each with what it buys. */
     FeeSpeed,
+
+    /** Spec 071: the default "Sign with" — the three places a passkey is, and the Clear Signer. */
+    SignWith,
+
+    /** Spec 071: which Clear Signer page the wallet opens. */
+    SignerPage,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
@@ -156,6 +162,25 @@ data class SelectSheetModel(
     val searchPlaceholder: String? = null,
     val footerNote: String? = null,
     val footerLink: String? = null,
+)
+
+/**
+ * Spec 071: the Clear Signer page's sheet — the address, why an address typed
+ * was refused, and whether the page can use this wallet's passkeys.
+ */
+@Immutable
+data class SignerPageModel(
+    val title: String = "",
+    val subtitle: String = "",
+    /** The address in force, as the field starts. */
+    val value: String = "",
+    /** `settings.signing.pageInvalid` / `pageInsecure` for the last address typed. */
+    val error: String? = null,
+    /** `settings.signing.pageForeign` when the page is off `getvela.app`. */
+    val foreign: String? = null,
+    val save: String = "",
+    /** "Use the official page" — `null` when it already is. */
+    val reset: String? = null,
 )
 
 @Immutable
@@ -504,6 +529,9 @@ data class SettingsScreenModel(
     val currencySheet: SelectSheetModel,
     /** Spec 069: the default transaction speed's sheet. */
     val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    /** Spec 071: the default "Sign with" sheet, and the Clear Signer page's. */
+    val signWithSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
+    val signerPage: SignerPageModel = SignerPageModel(),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,
     val timeSheet: SelectSheetModel,

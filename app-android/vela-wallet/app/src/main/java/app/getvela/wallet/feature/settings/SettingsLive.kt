@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.settings
 
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.settings.core.FeeTierPrefView
+import app.getvela.wallet.feature.settings.core.SignPrefView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.browser.ExploreLive
@@ -77,6 +78,64 @@ object SettingsLive {
                 )
             },
             feeSpeedSheet = sheet,
+        )
+    }
+
+    /**
+     * How this device signs by default (spec 071): the "Sign with" row and its
+     * sheet, the Clear Signer page row and its sheet — all from the `sign_pref`
+     * core, so the row, the sheet and every signing sheet say the same thing.
+     */
+    fun withSignPref(model: SettingsScreenModel, view: SignPrefView, s: VelaStrings): SettingsScreenModel {
+        val titles = mapOf(
+            "auto" to s.t("common.automatic"),
+            "platform" to s.t("onboarding.create.methodPlatformTitle"),
+            "hybrid" to s.t("onboarding.create.methodHybridTitle"),
+            "security_key" to s.t("onboarding.create.methodSecurityKeyTitle"),
+            "clear_signer" to s.t("componentsUi.signing.clearSignerTitle"),
+        )
+        val sheet = SelectSheetModel(
+            title = s.t("settings.signing.title"),
+            subtitle = s.t("settings.signing.subtitle"),
+            rows = view.offered.mapNotNull { id ->
+                val title = titles[id] ?: return@mapNotNull null
+                SelectRowModel(
+                    id = id,
+                    label = title,
+                    detail = if (id == "clear_signer") s.t("componentsUi.signing.clearSignerBody") else null,
+                    selected = id == view.method,
+                )
+            },
+        )
+        val official = s.t("settings.signing.pageOfficial")
+        val host = view.signer_url.substringAfter("://").substringBefore('/')
+        val page = SignerPageModel(
+            title = s.t("settings.signing.pageTitle"),
+            subtitle = s.t("settings.signing.pageSubtitle"),
+            value = view.signer_url,
+            error = when (view.signer_url_error) {
+                "invalid" -> s.t("settings.signing.pageInvalid")
+                "insecure" -> s.t("settings.signing.pageInsecure")
+                else -> null
+            },
+            foreign = if (view.signer_uses_wallet_passkeys) null else s.t("settings.signing.pageForeign"),
+            save = s.t("settings.signing.pageSave"),
+            reset = if (view.signer_url_is_default) null else s.t("settings.signing.pageReset"),
+        )
+        return model.copy(
+            sections = model.sections.map { section ->
+                section.copy(
+                    rows = section.rows.map { row ->
+                        when (row.id) {
+                            SettingsFixtures.SIGN_WITH_ROW -> row.copy(value = titles[view.method] ?: row.value)
+                            SettingsFixtures.SIGNER_PAGE_ROW -> row.copy(value = if (view.signer_url_is_default) official else host)
+                            else -> row
+                        }
+                    },
+                )
+            },
+            signWithSheet = sheet,
+            signerPage = page,
         )
     }
 

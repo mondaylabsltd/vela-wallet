@@ -591,6 +591,11 @@ fun VelaNavHost(
                 // Spec 044: a page asked for a signature — the sheet over whatever is
                 // showing, read from the four machines; dismissing is the refusal.
                 val signingController by application.container.signing.collectAsStateWithLifecycle()
+                // Spec 071: the Clear Signer's page, open for whichever signature asked.
+                val clearSigner = application.container.clearSigner
+                val clearSignerState by clearSigner.state.collectAsStateWithLifecycle()
+                val clearSignerNotice by clearSigner.notice.collectAsStateWithLifecycle()
+                val clearSignerWaiting = clearSignerState is app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel.State.Waiting
                 signingController?.let { controller ->
                     val signView by controller.sign.collectAsStateWithLifecycle()
                     val clearView by controller.clear.collectAsStateWithLifecycle()
@@ -616,6 +621,8 @@ fun VelaNavHost(
                         signMethod = signMethod,
                         signWithOpen = signWithOpen,
                         feeOpen = feeOpen,
+                        clearSignerWaiting = clearSignerWaiting,
+                        clearSignerNotice = clearSignerNotice,
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -642,8 +649,26 @@ fun VelaNavHost(
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
                                 onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
+                                onClearSignerReopen = clearSigner::reopen,
+                                onClearSignerCancel = clearSigner::cancel,
                             )
                         }
+                    }
+                }
+                // A send the person started has no signing sheet: the Clear
+                // Signer's waiting card stands on its own while the page is open.
+                if (clearSignerWaiting && signingController == null) {
+                    app.getvela.wallet.feature.signing.SigningLive.clearSignerWait(
+                        app.getvela.wallet.feature.signing.SigningLive.Context(
+                            strings = strings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
+                            nativeSymbol = "", walletName = "", walletAddress = "", clearSignerWaiting = true,
+                        ),
+                    )?.let { waitModel ->
+                        app.getvela.wallet.feature.signing.ClearSignerWaitingSheet(
+                            model = waitModel,
+                            onReopen = clearSigner::reopen,
+                            onCancel = clearSigner::cancel,
+                        )
                     }
                 }
                 BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
@@ -1611,6 +1636,8 @@ fun VelaNavHost(
                 val networks by settings.networks.collectAsStateWithLifecycle()
                 // Spec 069: the default transaction speed.
                 val feeTier by settings.feeTier.collectAsStateWithLifecycle()
+                // Spec 071: the default "Sign with" and the Clear Signer page.
+                val signPref by settings.signPref.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
                 val scope = rememberCoroutineScope()
@@ -1641,6 +1668,7 @@ fun VelaNavHost(
                 LaunchedEffect(Unit) {
                     settings.refreshCurrency()
                     settings.refreshFeeTier()
+                    settings.refreshSignPref()
                     settings.startNetworks()
                 }
                 LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
@@ -1677,6 +1705,7 @@ fun VelaNavHost(
                         theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
                     )
                     m = SettingsLive.withFeeTier(m, feeTier, strings)
+                    m = SettingsLive.withSignPref(m, signPref, strings)
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withConnections(m, connectedSites.sites, strings)
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
@@ -1818,6 +1847,7 @@ fun VelaNavHost(
                             val prefsStore = application.container.preferences
                             when (sheet) {
                                 SettingsOverlay.Currency -> settings.chooseCurrency(id)
+                                SettingsOverlay.SignWith -> settings.chooseSignMethod(id)
                                 SettingsOverlay.FeeSpeed ->
                                     app.getvela.wallet.feature.send.core.FeeTier.entries
                                         .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }
@@ -1881,6 +1911,8 @@ fun VelaNavHost(
                                 }
                             }
                         },
+                        onSignerUrlSave = settings::submitSignerUrl,
+                        onSignerUrlReset = settings::resetSignerUrl,
                     ),
                 )
             }

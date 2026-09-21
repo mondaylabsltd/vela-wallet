@@ -879,13 +879,17 @@ fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Mod
                             .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            option.title,
-                            color = if (option.selected) colors.fgBase else colors.fgMuted,
-                            fontFamily = VelaFontFamily,
-                            fontSize = VelaTextSize.base,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                            Text(
+                                option.title,
+                                color = if (option.selected) colors.fgBase else colors.fgMuted,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.base,
+                            )
+                            option.line?.let {
+                                Text(it, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                            }
+                        }
                         if (option.selected) {
                             Icon(VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
                         }
@@ -893,5 +897,32 @@ fun SignWithRow(model: SignWithModel, onSelect: (String?) -> Unit, modifier: Mod
                 }
             }
         }
+    }
+}
+
+/**
+ * The Clear Signer's page is open (spec 071): what to do there, a way back to
+ * it (a tab closed by mistake), and a way out. It stands where the slide was —
+ * the signature is being made on the page, not here.
+ */
+@Composable
+fun ClearSignerWaiting(
+    model: app.getvela.wallet.feature.signing.ClearSignerWaitModel,
+    onReopen: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
+            .padding(VelaSpacing.xl),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Text(model.title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.base)
+        Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(model.reopen, onReopen, Modifier.fillMaxWidth())
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(model.cancel, onCancel, Modifier.fillMaxWidth())
     }
 }

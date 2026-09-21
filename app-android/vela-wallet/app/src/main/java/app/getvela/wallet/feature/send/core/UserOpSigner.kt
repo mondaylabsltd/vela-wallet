@@ -47,3 +47,25 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
         method = method,
     )
 }
+
+/**
+ * The fourth "Sign with" (spec 071): a separate page decodes the request from
+ * the operation's own bytes, derives the digest itself and runs the ceremony.
+ *
+ * [requestJson] is the core's `clearSignerRequest`, [digest] the challenge the
+ * passkey path would sign, [keys] the account's. The answer comes back already
+ * judged by the core (this digest, one of these keys, a verified user), so the
+ * caller packs it exactly as a passkey's. A person who closes the page gets a
+ * [app.getvela.wallet.feature.onboarding.core.PasskeyFailure] of kind
+ * `Cancelled`; every other refusal is one carrying the sentence to show.
+ */
+interface ClearSigner {
+    suspend fun sign(requestJson: String, digest: ByteArray, keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>): Assertion
+}
+
+/**
+ * What a site asked for, as the Clear Signer shows it: the request's own
+ * method and params, and the site's origin. The wallet's own send has none —
+ * the core builds `wallet_sendCalls` from its calls.
+ */
+data class ClearSignerIntent(val method: String, val paramsJson: String, val origin: String)

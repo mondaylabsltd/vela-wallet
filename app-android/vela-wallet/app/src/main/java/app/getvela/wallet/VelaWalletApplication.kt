@@ -22,6 +22,8 @@ import app.getvela.wallet.feature.send.core.TrackStatus
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerTab
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.browser.core.BrowserController
@@ -286,6 +288,30 @@ class AppContainer(private val app: Application) {
     @Volatile
     var passkeySigner: UserOpSigner? = null
 
+    /** Spec 071: the Clear Signer's tab, attached by the activity in onCreate. */
+    @Volatile
+    var clearSignerTab: ClearSignerTab? = null
+
+    /**
+     * Spec 071: the fourth "Sign with" — one channel per process, one ceremony
+     * at a time. The page is `sign_pref`'s; the words are the corpus'.
+     */
+    val clearSigner: ClearSignerChannel by lazy {
+        ClearSignerChannel(
+            signerUrl = { settings.signPref.value.signer_url },
+            openPage = { url -> clearSignerTab?.open(url) ?: false },
+            bringBack = { clearSignerTab?.bringBack() },
+            words = {
+                ClearSignerChannel.Words(
+                    closed = i18nRuntime.t("componentsUi.signing.clearSignerClosed"),
+                    refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
+                    mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
+                    timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
+                )
+            },
+        )
+    }
+
     /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
     @Volatile
     var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
@@ -327,10 +353,13 @@ class AppContainer(private val app: Application) {
             },
             preferredTier = { settings.feeTier.value.tier },
             numberPreset = { Formats.current.resolvedNumber().wire },
+            signMethod = { settings.signPref.value.method },
+            clearSigner = { clearSigner },
         ).also { controller ->
             // Spec 069: the stored default speed, read now and followed after —
             // Settings changing it reaches a send already open.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                settings.refreshSignPref()
                 settings.refreshFeeTier()
                 settings.feeTier.collect { controller.preferenceChanged() }
             }
@@ -503,6 +532,8 @@ class AppContainer(private val app: Application) {
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
                 numberPreset = { Formats.current.resolvedNumber().wire },
+                defaultMethod = { settings.signPref.value.method },
+                clearSigner = { clearSigner },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->
@@ -624,6 +655,8 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             settings.ethereumDataBase().collect { base -> Marks.base = base }
         }
+        // Spec 071: how this device signs by default — read before any sheet can open.
+        settings.refreshSignPref()
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->

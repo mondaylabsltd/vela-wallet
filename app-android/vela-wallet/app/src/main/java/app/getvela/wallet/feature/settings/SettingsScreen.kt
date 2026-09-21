@@ -25,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -161,6 +162,9 @@ data class SettingsActions(
     /** The RPC fix sheet's URL being typed, and its Save & Retry / Done. */
     val onRpcFixField: (String) -> Unit = {},
     val onRpcFixPrimary: () -> Unit = {},
+    /** Spec 071: the Clear Signer page, as typed, and back to the official one. */
+    val onSignerUrlSave: (String) -> Unit = {},
+    val onSignerUrlReset: () -> Unit = {},
 )
 
 @Composable
@@ -200,6 +204,8 @@ fun SettingsRoute(
                 "language" -> overlay = SettingsOverlay.Language
                 "currency" -> overlay = SettingsOverlay.Currency
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
+                SettingsFixtures.SIGN_WITH_ROW -> overlay = SettingsOverlay.SignWith
+                SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -277,6 +283,8 @@ fun SettingsRoute(
             actions.onRpcFixPrimary()
             if (close) overlay = SettingsOverlay.None
         },
+        onSignerUrlSave = actions.onSignerUrlSave,
+        onSignerUrlReset = actions.onSignerUrlReset,
     )
 }
 
@@ -327,6 +335,8 @@ fun SettingsScreen(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
+    onSignerUrlSave: (String) -> Unit = {},
+    onSignerUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -439,6 +449,8 @@ fun SettingsScreen(
                 onAccountSecondary = onAccountSecondary,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
+                onSignerUrlSave = onSignerUrlSave,
+                onSignerUrlReset = onSignerUrlReset,
             )
         }
     }
@@ -1126,6 +1138,8 @@ private fun SettingsSheet(
     onAccountSecondary: () -> Unit = {},
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
+    onSignerUrlSave: (String) -> Unit = {},
+    onSignerUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1171,6 +1185,15 @@ private fun SettingsSheet(
                 SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
                     onSheetSelect(SettingsOverlay.FeeSpeed, it)
                 }
+                SettingsOverlay.SignWith -> SelectSheetBody(model.signWithSheet) {
+                    onSheetSelect(SettingsOverlay.SignWith, it)
+                }
+                SettingsOverlay.SignerPage -> SignerPageSheetBody(
+                    model.signerPage,
+                    onSave = onSignerUrlSave,
+                    onReset = onSignerUrlReset,
+                    onDone = onDismiss,
+                )
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)
                 }
@@ -1438,6 +1461,56 @@ private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onGithub).padding(top = VelaSpacing.lg),
     )
+}
+
+/**
+ * Spec 071: the Clear Signer page. The address is checked by the core, not
+ * here: a refused one leaves the old page in force and says why under the
+ * field; an accepted one closes the sheet.
+ */
+@Composable
+private fun SignerPageSheetBody(model: SignerPageModel, onSave: (String) -> Unit, onReset: () -> Unit, onDone: () -> Unit) {
+    val colors = VelaTheme.colors
+    var text by remember(model.value) { mutableStateOf(model.value) }
+    var saving by remember { mutableStateOf(false) }
+    LaunchedEffect(model.value, model.error) {
+        if (saving) {
+            saving = false
+            if (model.error == null) onDone()
+        }
+    }
+    SheetTitle(model.title, model.subtitle)
+    VelaUrlField(
+        label = model.title,
+        value = text,
+        tone = if (model.error != null) SettingsTone.Error else SettingsTone.Neutral,
+        onValueChange = { text = it },
+    )
+    model.error?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        Text(it, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+    }
+    model.foreign?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        VelaCallout(CalloutModel(tone = CalloutTone.Warning, text = it))
+    }
+    Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    VelaPrimaryButton(
+        model.save,
+        onClick = {
+            if (text.trim() == model.value) {
+                onDone()
+            } else {
+                saving = true
+                onSave(text)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    model.reset?.let {
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
+        VelaSecondaryButton(it, onClick = onReset, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @Composable

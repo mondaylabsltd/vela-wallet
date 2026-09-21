@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.send.core.SendExecutor
+import app.getvela.wallet.feature.send.core.ClearSignerIntent
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,6 +40,8 @@ class SignExecutor(
     /** How long the final answer waits for the receipt (the desktop's `await_receipt`); then the op hash answers. */
     private val receiptWaitMs: Long = 120_000L,
     private val receiptPollMs: Long = 3_000L,
+    /** The asking site's origin — what the Clear Signer names as the requester (spec 071). */
+    private val origin: () -> String = { "" },
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
@@ -165,6 +168,7 @@ class SignExecutor(
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
+                intent = ClearSignerIntent(op.method, op.params_json, origin()),
             )
             ports.opSubmitted(op.id, hash)
             // §4: the durable record precedes anything the dApp could poll —
@@ -191,7 +195,13 @@ class SignExecutor(
         val original = messageHash(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried nothing this wallet could sign")
         return try {
-            SignSubmitOutcome.Succeeded(spine.signMessage(op.chain_id, op.address, original, signingStarted = { ports.signingStarted() }))
+            SignSubmitOutcome.Succeeded(
+                spine.signMessage(
+                    op.chain_id, op.address, original,
+                    signingStarted = { ports.signingStarted() },
+                    intent = ClearSignerIntent(op.method, op.params_json, origin()),
+                ),
+            )
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled

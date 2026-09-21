@@ -60,6 +60,9 @@ class SendController(
     /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
+    /** Spec 071: the stored default "Sign with" — a send has no picker of its own — and the Clear Signer. */
+    signMethod: () -> String = { "auto" },
+    clearSigner: () -> ClearSigner? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -148,6 +151,8 @@ class SendController(
             ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable)
         },
         ports = ports,        identity = identity,
+        signMethod = signMethod,
+        clearSigner = clearSigner,
     )
 
     private val sendHost = CoreHost(

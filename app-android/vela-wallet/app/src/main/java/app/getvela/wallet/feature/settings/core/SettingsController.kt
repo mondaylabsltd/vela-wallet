@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.FeeTierPrefCore
+import uniffi.vela_core_uniffi.SignPrefCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
 
 /**
@@ -190,6 +191,41 @@ class SettingsController(
     /** An explicit pick in Settings — and only in Settings. */
     fun chooseFeeTier(tier: app.getvela.wallet.feature.send.core.FeeTier) =
         feeTierHost.dispatch(FeeTierPrefEvent.UserChose(tier), FeeTierPrefEvent.serializer())
+
+    // -- how this device signs by default (spec 071) ---------------------------
+
+    private val signPrefExecutor = SignPrefExecutor(store)
+
+    private val signPrefHost = CoreHost(
+        bridge = SignPrefCore().asBridge(),
+        scope = scope,
+        // `auto` and the official page, uncommitted: what signing did before
+        // there was a choice.
+        initial = SignPrefView(),
+        serializer = SignPrefView.serializer(),
+        perform = JsonShell.perform(SignPrefOperation.serializer(), SignPrefShellResult.serializer(), signPrefExecutor::perform),
+        escapedFailure = JsonShell.escapedFailure(
+            SignPrefOperation.serializer(),
+            SignPrefShellResult.serializer(),
+            fallback = SignPrefShellResult.Stored(),
+            answer = signPrefExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("settings.signPref.fault", "core fault", error) },
+    )
+
+    /** The default "Sign with" and the Clear Signer page — Settings shows them, every signature starts at them. */
+    val signPref: StateFlow<SignPrefView> = signPrefHost.view
+
+    fun refreshSignPref() = signPrefHost.dispatch(SignPrefEvent.Refresh, SignPrefEvent.serializer())
+
+    /** Settings only: a signing sheet's pick is one request's. */
+    fun chooseSignMethod(method: String) =
+        signPrefHost.dispatch(SignPrefEvent.MethodChosen(method), SignPrefEvent.serializer())
+
+    fun submitSignerUrl(text: String) =
+        signPrefHost.dispatch(SignPrefEvent.SignerUrlSubmitted(text), SignPrefEvent.serializer())
+
+    fun resetSignerUrl() = signPrefHost.dispatch(SignPrefEvent.SignerUrlReset, SignPrefEvent.serializer())
 
     /** The networks, endpoints and provider keys this device holds. */
     val networks: StateFlow<NetView> = networkHost.view
