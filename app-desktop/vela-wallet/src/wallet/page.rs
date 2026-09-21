@@ -3463,22 +3463,16 @@ impl WalletPage {
         vela_core::app::fee_policy::FeeView,
     )> {
         let host = self.send_host.as_ref()?.read(cx);
-        Some((host.view.clone(), host.fee_view.clone()))
+        Some((host.view.clone(), host.fee_view().clone()))
     }
 
     /// The speed control's inputs (spec 069): the core's view, and the fee
     /// session pricing each offered tier.
     fn send_speed(&self, cx: &Context<Self>) -> Option<flows_live::SpeedInputs> {
         let host = self.send_host.as_ref()?.read(cx);
-        let tier_views = host
-            .speed_view
-            .options
-            .iter()
-            .filter_map(|option| Some((option.tier, host.tier_view(option.tier)?.clone())))
-            .collect();
         Some(flows_live::SpeedInputs {
-            view: host.speed_view.clone(),
-            tier_views,
+            view: host.speed_view().clone(),
+            tier_views: host.speed_tier_views(),
         })
     }
 
@@ -4343,7 +4337,7 @@ impl WalletPage {
                     actions.toggle_speed = Some(on_host(SendHost::toggle_speed));
                     actions.pick_speed_rows = host
                         .read(cx)
-                        .speed_view
+                        .speed_view()
                         .options
                         .iter()
                         .map(|option| {
@@ -9557,10 +9551,14 @@ impl WalletPage {
         // Which of the two things this column is: the request, or the gas
         // account it cannot pay from.
         let mut funding = false;
+        // The speed control under the fee (spec 069) — the send form's own,
+        // and the tiers its options pick, in order.
+        let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
+        let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
-            let fee = &host.fee_view;
+            let fee = host.fee_view();
             // The gas account cannot pay: the sheet SWAPS to the top-up and
             // shows nothing else. Not stacked, not appended — the core calls
             // this surface "the in-sheet funding swap (BUG-1: never a stacked
@@ -9669,10 +9667,35 @@ impl WalletPage {
             // said Ethereum over a Gnosis fee.
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
-            model.fee = signing_live::fee_model(&host.clear_view, fee, &self.signing, &self.locale);
+            let speed_tier = Some(host.speed_view().tier);
+            model.fee = signing_live::fee_model(
+                &host.clear_view,
+                fee,
+                &self.signing,
+                &self.locale,
+                speed_tier,
+            );
             model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
             model.confirm_enabled =
-                signing_live::confirm_enabled(&host.view, &host.guard_view, fee);
+                signing_live::confirm_enabled(&host.view, &host.guard_view, fee, speed_tier);
+            if !funding && !signing_live::off_chain(&host.clear_view) {
+                speed_tiers = host
+                    .speed_view()
+                    .options
+                    .iter()
+                    .map(|option| option.tier)
+                    .collect();
+                signing_speed = Some(flows_live::speed_model(
+                    &flows_live::SpeedInputs {
+                        view: host.speed_view().clone(),
+                        tier_views: host.speed_tier_views(),
+                    },
+                    &self.flow_strings,
+                    None,
+                    fee,
+                    &self.locale,
+                ));
+            }
         }
         #[cfg(target_os = "linux")]
         let _ = cx;
@@ -9839,7 +9862,41 @@ impl WalletPage {
                     ),
             );
         if let Some(fee) = signing_components::fee(theme, &mut self.icons, &model.fee) {
-            column = column.child(fee);
+            let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
+            if let Some(speed) = &signing_speed {
+                // The same control, the same clicks, as the send form's.
+                #[cfg(not(target_os = "linux"))]
+                let toggle: Option<panels::Click> = Some(Box::new(cx.listener(
+                    |page, _: &gpui::ClickEvent, _, cx| {
+                        if let Some(host) = page.signing_host.as_ref() {
+                            host.update(cx, |host, cx| host.toggle_speed(cx));
+                        }
+                    },
+                )));
+                #[cfg(not(target_os = "linux"))]
+                let picks: Vec<panels::Click> = speed_tiers
+                    .iter()
+                    .map(|tier| {
+                        let tier = *tier;
+                        Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
+                            if let Some(host) = page.signing_host.as_ref() {
+                                host.update(cx, |host, cx| host.pick_speed(tier, cx));
+                            }
+                        })) as panels::Click
+                    })
+                    .collect();
+                #[cfg(target_os = "linux")]
+                let (toggle, picks): (Option<panels::Click>, Vec<panels::Click>) =
+                    (None, Vec::new());
+                fee_block = fee_block.child(panels::speed_control(
+                    theme,
+                    &mut self.icons,
+                    speed,
+                    toggle,
+                    picks,
+                ));
+            }
+            column = column.child(fee_block);
         }
         column = column
             .child(signing_components::signer_row(

@@ -1021,10 +1021,28 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
 /// view (spec 069). Every figure is that tier's OWN settled quote, echoed by
 /// the core; only the words and the fee line are made here.
 fn send_speed(i: &SendInputs<'_>) -> Option<Box<FeeSpeedModel>> {
-    let speed = i.speed?;
+    Some(Box::new(speed_model(
+        i.speed?,
+        i.s,
+        Some(i.send),
+        i.fee,
+        i.locale,
+    )))
+}
+
+/// The same control for any fee surface — the dApp signing sheet draws it too
+/// (spec 069), with no send view: each option is then written the way that
+/// sheet writes its own fee row.
+#[must_use]
+pub fn speed_model(
+    speed: &SpeedInputs,
+    s: &FlowStrings,
+    send: Option<&SendView>,
+    fee: &FeeView,
+    locale: &str,
+) -> FeeSpeedModel {
     let view = &speed.view;
-    let s = i.s;
-    Some(Box::new(FeeSpeedModel {
+    FeeSpeedModel {
         label: s.fee_speed_label.clone(),
         // THEIR default (or their pick for this send), never a hardcoded one.
         value: tier_name(s, view.tier),
@@ -1040,10 +1058,10 @@ fn send_speed(i: &SendInputs<'_>) -> Option<Box<FeeSpeedModel>> {
             .map(|option| {
                 let value = match (&option.fee, speed.view_of(option.tier)) {
                     (Some(quote), Some(tier_view)) => {
-                        SharedString::from(fee_line(Some(quote), Some(i.send), tier_view, i.locale))
+                        SharedString::from(fee_line(Some(quote), send, tier_view, locale))
                     }
                     (Some(quote), None) => {
-                        SharedString::from(fee_line(Some(quote), Some(i.send), i.fee, i.locale))
+                        SharedString::from(fee_line(Some(quote), send, fee, locale))
                     }
                     // "…" while this tier's own quote is out, "—" when there
                     // is none to be had.
@@ -1059,7 +1077,7 @@ fn send_speed(i: &SendInputs<'_>) -> Option<Box<FeeSpeedModel>> {
                 }
             })
             .collect(),
-    }))
+    }
 }
 
 /// A token row for the picker: the balance the core carries, priced by it too.

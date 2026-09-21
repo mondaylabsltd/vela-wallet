@@ -17,7 +17,7 @@ use vela_core::app::clear_signing::{
     ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearRisk, ClearSignField,
     ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
 };
-use vela_core::app::fee_policy::FeeView;
+use vela_core::app::fee_policy::{FeeTier, FeeView};
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel};
@@ -41,9 +41,31 @@ fn tone_of(risk: ClearRisk) -> Tone {
 /// `FeeView.confirm_fee_ready`". Taking any one of them alone arms a slide
 /// over an unpriced fee, or over an unlimited approval nobody capped — each
 /// of which is a signature the person did not agree to.
+///
+/// **The fee's say includes its speed** (spec 069): between a tap and that
+/// speed's own figure landing, the core's `confirm_fee_ready` is still true on
+/// the speed just left, and the slide must not sign it. `speed_tier` is the
+/// tier in force; `None` is a sheet with no speed control.
 #[must_use]
-pub fn confirm_enabled(sign: &SignView, guard: &GuardView, fee: &FeeView) -> bool {
-    sign.confirm_gate_open && guard.confirm_allowed && fee.confirm_fee_ready
+pub fn confirm_enabled(
+    sign: &SignView,
+    guard: &GuardView,
+    fee: &FeeView,
+    speed_tier: Option<FeeTier>,
+) -> bool {
+    sign.confirm_gate_open
+        && guard.confirm_allowed
+        && fee.confirm_fee_ready
+        && !fee_of_another_tier(fee, speed_tier)
+}
+
+/// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
+#[must_use]
+pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
+    let (Some(estimate), Some(tier)) = (&fee.fee, speed_tier) else {
+        return false;
+    };
+    vela_core::app::fee_speed::offered(estimate.tier) != vela_core::app::fee_speed::offered(tier)
 }
 
 /// What the shell knows about the request that the core does not hand back.
@@ -885,6 +907,14 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
     )
 }
 
+/// A signature that never touches a chain: no fee, and no speed to choose.
+#[must_use]
+pub fn off_chain(clear: &ClearSigningView) -> bool {
+    clear.result.as_ref().is_some_and(|result| {
+        result.sign_type != vela_core::app::clear_signing::ClearSignType::Transaction
+    })
+}
+
 /// The fee row, or the line that says there is no fee.
 ///
 /// An off-chain signature costs nothing, and saying "network fee: 0" would
@@ -895,12 +925,19 @@ pub fn fee_model(
     fee: &FeeView,
     s: &SigningStrings,
     locale: &str,
+    speed_tier: Option<FeeTier>,
 ) -> FeeModel {
-    let off_chain = clear.result.as_ref().is_some_and(|result| {
-        result.sign_type != vela_core::app::clear_signing::ClearSignType::Transaction
-    });
-    if off_chain {
+    if off_chain(clear) {
         return FeeModel::OffChain(s.ok_no_network_fee.clone());
+    }
+    // For the moment between a speed being picked and its own figure landing,
+    // the fee in hand is the previous speed's: "estimating", never its money.
+    if fee_of_another_tier(fee, speed_tier) {
+        return FeeModel::OnChain {
+            label: s.fee_label.clone(),
+            value: s.fee_estimating.clone(),
+            selector: None,
+        };
     }
     // The send screen's formatter, not a second one: two answers about what a
     // transaction costs, on two screens pricing the same operation, is how
@@ -1565,7 +1602,7 @@ mod tests {
         sign.confirm_gate_open = true;
         guard.confirm_allowed = true;
         fee.confirm_fee_ready = true;
-        assert!(confirm_enabled(&sign, &guard, &fee));
+        assert!(confirm_enabled(&sign, &guard, &fee, None));
 
         for drop_one in 0..3 {
             let (mut s, mut g, mut f) = (sign.clone(), guard.clone(), fee.clone());
@@ -1575,10 +1612,74 @@ mod tests {
                 _ => f.confirm_fee_ready = false,
             }
             assert!(
-                !confirm_enabled(&s, &g, &f),
+                !confirm_enabled(&s, &g, &f, None),
                 "any one machine withholding shuts the slide ({drop_one})"
             );
         }
+    }
+
+    /// Spec 069: between a speed being tapped and its own figure landing, the
+    /// core's gate is still open — on the speed just left. The row says
+    /// "estimating" and the slide stays shut; the figure lands, both follow.
+    #[test]
+    fn another_speeds_fee_neither_shows_nor_signs() {
+        use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView};
+        let mut sign =
+            crate::core_host::CoreHost::<vela_core::app::sign_request::SignRequest>::new().view();
+        let mut guard =
+            crate::core_host::CoreHost::<vela_core::app::approval_guard::ApprovalGuard>::new()
+                .view();
+        let mut fee =
+            crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        sign.confirm_gate_open = true;
+        guard.confirm_allowed = true;
+        fee.confirm_fee_ready = true;
+        fee.fee = Some(FeeEstimateView {
+            chain_id: 100,
+            total_wei: "2100000000000000".to_owned(),
+            max_fee_per_gas: "2000000000".to_owned(),
+            network_fee_per_gas: "1000000000".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "0".to_owned(),
+            in_band_gas_basis: "0".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
+            total_gas: "0".to_owned(),
+            deployed: true,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: Some("0xfee".to_owned()),
+        });
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+
+        // Picked Slow; the fee in hand is still Fast's.
+        assert!(!confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
+        let FeeModel::OnChain { value, .. } =
+            fee_model(&clear, &fee, &s, "en", Some(FeeTier::Slow))
+        else {
+            unreachable!("a transaction has an on-chain fee");
+        };
+        assert_eq!(value, s.fee_estimating);
+
+        // Its own figure lands.
+        if let Some(estimate) = fee.fee.as_mut() {
+            estimate.tier = FeeTier::Slow;
+        }
+        assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Slow)));
+        let FeeModel::OnChain { value, .. } =
+            fee_model(&clear, &fee, &s, "en", Some(FeeTier::Slow))
+        else {
+            unreachable!("a transaction has an on-chain fee");
+        };
+        assert_ne!(value, s.fee_estimating);
+        // The dead `rapid` reads as the `fast` it became.
+        if let Some(estimate) = fee.fee.as_mut() {
+            estimate.tier = FeeTier::Rapid;
+        }
+        assert!(confirm_enabled(&sign, &guard, &fee, Some(FeeTier::Fast)));
     }
 
     /// The detail fields belong to Advanced, not to the summary.

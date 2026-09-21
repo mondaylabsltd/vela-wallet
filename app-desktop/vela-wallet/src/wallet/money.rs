@@ -32,15 +32,11 @@
 //!
 //! ## The speed control (spec 069)
 //!
-//! Every rule of it is the `fee_speed` core's: which tier is in force, the
-//! free upgrade, the one-speed statement, which OTHER tiers must be kept
-//! priced. What this host owns is the sessions — the one in force, and one
-//! preview per tier the core names — and the reconcile step every shell runs:
-//! when the session in force is not pricing the tier in force, PROMOTE the
-//! preview that already priced this operation at that tier (the price tapped
-//! is the price paid, #681), else re-price once nothing is measuring. Each
-//! session carries a key, and an async answer is routed by it, so a result
-//! that outlived a promotion lands on the session that asked or nowhere.
+//! The fee sessions — the one in force and a preview per other tier — and the
+//! reconcile step between them and the `fee_speed` core are
+//! [`super::speed_control`], shared with the dApp signing sheet. What this
+//! host adds is the send machine's side: its `EstimateFee` is the question
+//! out on the session in force, and nothing re-prices over it.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -52,12 +48,9 @@ use vela_core::app::batch_import::{
     BatchImport, BatchOperation, BatchShellResult, BatchToken, BatchView, Event as BatchEvent,
 };
 use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeEstimateView, FeeFailure, FeeOperation, FeePolicy,
-    FeeShellResult, FeeTier, FeeView,
+    Event as FeeEvent, FeeCall, FeeEstimateView, FeeFailure, FeeTier, FeeView,
 };
-use vela_core::app::fee_speed::{
-    Event as SpeedEvent, FeeSpeed, FeeSpeedView, TierPreviewQuote, TierQuote,
-};
+use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::send::{
     BATCH_MAX_RECIPIENTS, Event as SendEvent, Send, SendAccountRef, SendAlertKind,
@@ -66,15 +59,15 @@ use vela_core::app::send::{
 };
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
 
-use futures::StreamExt as _;
-
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
 use crate::ctap::usb::TouchRequest;
 use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
-use crate::executor::{batch, chain, fee_signals, format_prefs, storage, tracker};
-use crate::resident::{self, Answer, Machine, ResidentCore};
+use crate::executor::{batch, storage, tracker};
+use crate::resident::{self, ResidentCore};
+
+use super::speed_control::{self, SpeedControl, SpeedHost};
 
 /// How often the ceremony channel and the signing flag are polled while a
 /// machine is busy. The same cadence onboarding uses.
@@ -90,23 +83,10 @@ pub struct PinDialog {
 pub struct SendHost {
     send: CoreHost<Send>,
     pub view: SendView,
-    /// The fee session in force: the quote the core pre-checks against, the
-    /// quote the confirm card shows and the quote that is signed.
-    fee: FeeSession,
-    pub fee_view: FeeView,
-    /// The other tiers' sessions, while the speed core wants them priced.
-    previews: Vec<FeeSession>,
-    next_session: u64,
-    /// Bumped whenever the session in force is asked to price again (a new
-    /// operation, a new tier, a refresh), so the previews follow it.
-    generation: u64,
-    /// The speed control (spec 069) — its decisions, not the sessions.
-    speed: CoreHost<FeeSpeed>,
-    pub speed_view: FeeSpeedView,
-    last_on_form: Option<bool>,
-    /// A speed pass is running; a nested one (an answer that arrived inline)
-    /// leaves the final report to it.
-    speed_syncing: bool,
+    /// The fee sessions and the speed control (spec 069): the session in
+    /// force is the quote the core pre-checks against, the quote the confirm
+    /// card shows and the quote that is signed.
+    speed: SpeedControl,
     /// The batch importer, born when the send machine shows its sheet and
     /// gone when it hides it (spec 032 phase 5). Its own machine: the parse,
     /// the conversion and the apply gate are its, and a stale paste or rate
@@ -120,9 +100,6 @@ pub struct SendHost {
     window_handle: WindowHandle,
     /// The `EstimateFee` effect the fee session is answering.
     pending_fee: Option<u64>,
-    /// Guards the deployment read: a slower one must not dispatch a quote
-    /// for a request that has been superseded.
-    fee_seq: u64,
     last_fee_busy: bool,
     /// The WHOLE estimate the send machine last heard, not its charge (#686):
     /// on a floor-clamped chain two tiers charge the same wei, and a stamp of
@@ -140,72 +117,6 @@ pub struct SendHost {
     signing_reported: bool,
     tracked_hash: Option<String>,
     last_track_status: Option<TrackStatus>,
-}
-
-/// What a fee session was asked to price. Replayed at another tier for the
-/// previews, and compared — minus the tier — to decide whether a preview
-/// priced the same operation as the session in force.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct QuoteAsk {
-    chain_id: u32,
-    account: String,
-    public_key_available: bool,
-    tier: FeeTier,
-    calls: Vec<FeeCall>,
-    fee_token: Option<String>,
-}
-
-impl QuoteAsk {
-    fn same_operation(&self, other: &Self) -> bool {
-        Self {
-            tier: other.tier,
-            ..self.clone()
-        } == *other
-    }
-
-    fn event(&self, deployed: bool) -> FeeEvent {
-        FeeEvent::QuoteRequested {
-            chain_id: self.chain_id,
-            account: self.account.clone(),
-            deployed,
-            public_key_available: self.public_key_available,
-            tier: self.tier,
-            calls: self.calls.clone(),
-            fee_token: self.fee_token.clone(),
-        }
-    }
-}
-
-/// One `fee_policy` session: the one in force, or a preview of another tier.
-struct FeeSession {
-    /// Unique for this host's life; every async answer carries it.
-    key: u64,
-    host: CoreHost<FeePolicy>,
-    view: FeeView,
-    ask: Option<QuoteAsk>,
-    /// The deployment status the ask was dispatched with; `None` while it is
-    /// being read, or when it could not be.
-    deployed: Option<bool>,
-    /// A deployment read is out before the dispatch — as much "measuring" as
-    /// the core's own `busy`.
-    reading: bool,
-    generation: u64,
-}
-
-impl FeeSession {
-    fn new(key: u64) -> Self {
-        let host = CoreHost::<FeePolicy>::new();
-        let view = host.view();
-        Self {
-            key,
-            host,
-            view,
-            ask: None,
-            deployed: None,
-            reading: false,
-            generation: 0,
-        }
-    }
 }
 
 /// Every address this wallet holds.
@@ -242,24 +153,12 @@ impl SendHost {
         let channel = CeremonyChannel::new();
         let ctx = SendContext::new(&account, channel.ceremony(window_handle));
         let send = CoreHost::<Send>::new();
-        let fee = FeeSession::new(0);
         let view = send.view();
-        let fee_view = fee.view.clone();
-        let speed = CoreHost::<FeeSpeed>::new();
-        let speed_view = speed.view();
         let display_code = display.code.clone();
         let mut host = Self {
             send,
             view,
-            fee,
-            fee_view,
-            previews: Vec::new(),
-            next_session: 1,
-            generation: 0,
-            speed,
-            speed_view,
-            last_on_form: None,
-            speed_syncing: false,
+            speed: SpeedControl::new(),
             batch: None,
             batch_view: None,
             display_code,
@@ -267,7 +166,6 @@ impl SendHost {
             channel,
             window_handle,
             pending_fee: None,
-            fee_seq: 0,
             last_fee_busy: false,
             last_fee: None,
             alert: None,
@@ -292,10 +190,11 @@ impl SendHost {
         // changes it — a send already open follows the new default until the
         // person picks one on it.
         let preference = resident::resident::<FeeTierPref>(cx);
-        cx.observe(&preference, |host, _, cx| host.configure_speed(cx))
-            .detach();
-        host.speed_dispatch(SpeedEvent::Reset, cx);
-        host.configure_speed(cx);
+        cx.observe(&preference, |host, _, cx| {
+            speed_control::configure(host, cx)
+        })
+        .detach();
+        speed_control::reset(&mut host, cx);
 
         host.dispatch(
             SendEvent::Open {
@@ -321,39 +220,12 @@ impl SendHost {
 
     /// An event for the fee session in force (a fee-coin pick, say).
     pub fn fee_dispatch(&mut self, event: FeeEvent, cx: &mut Context<Self>) {
-        let key = self.fee.key;
-        self.fee_dispatch_to(key, event, cx);
-    }
-
-    fn fee_dispatch_to(&mut self, key: u64, event: FeeEvent, cx: &mut Context<Self>) {
-        let Some(session) = self.session_mut(key) else {
-            return;
-        };
-        let pending = session.host.dispatch(event);
-        self.pump_fee(key, pending, cx);
+        speed_control::fee_dispatch(self, event, cx);
     }
 
     fn resolve_send(&mut self, id: u64, result: SendShellResult, cx: &mut Context<Self>) {
         let pending = self.send.resolve(id, result);
         self.pump_send(pending, cx);
-    }
-
-    /// An answer for the session that asked — found by its key, because it
-    /// may have been promoted, demoted or dropped since. Dropped: nobody is
-    /// waiting, and nothing else may hear it.
-    fn resolve_fee(&mut self, key: u64, id: u64, result: FeeShellResult, cx: &mut Context<Self>) {
-        let Some(session) = self.session_mut(key) else {
-            return;
-        };
-        let pending = session.host.resolve(id, result);
-        self.pump_fee(key, pending, cx);
-    }
-
-    fn session_mut(&mut self, key: u64) -> Option<&mut FeeSession> {
-        if self.fee.key == key {
-            return Some(&mut self.fee);
-        }
-        self.previews.iter_mut().find(|session| session.key == key)
     }
 
     fn pump_send(&mut self, pending: Vec<Pending<SendOperation>>, cx: &mut Context<Self>) {
@@ -540,78 +412,6 @@ impl SendHost {
         }
     }
 
-    fn pump_fee(&mut self, key: u64, pending: Vec<Pending<FeeOperation>>, cx: &mut Context<Self>) {
-        for effect in pending {
-            let id = effect.id;
-            match <FeePolicy as Machine>::perform(&effect.operation) {
-                Answer::Now(result) => self.resolve_fee(key, id, result, cx),
-                Answer::Blocking(work) => {
-                    cx.spawn(async move |host, cx| {
-                        let result = cx.background_executor().spawn(async move { work() }).await;
-                        host.update(cx, |host, cx| host.resolve_fee(key, id, result, cx))
-                            .ok();
-                    })
-                    .detach();
-                }
-                Answer::After(delay, result) => {
-                    cx.spawn(async move |host, cx| {
-                        cx.background_executor().timer(delay).await;
-                        host.update(cx, |host, cx| host.resolve_fee(key, id, result, cx))
-                            .ok();
-                    })
-                    .detach();
-                }
-                // `fee_policy` streams nothing today. Implemented rather than
-                // left as an `unreachable!`, because the day it does stream
-                // the difference between the two pumps would be a panic on a
-                // confirm screen — and this is the same eight lines the
-                // resident's own pump runs.
-                Answer::Streaming(work) => {
-                    let (tx, mut rx) = futures::channel::mpsc::unbounded();
-                    cx.spawn(async move |host, cx| {
-                        let work = cx
-                            .background_executor()
-                            .spawn(async move { work(&crate::resident::Sink::new(tx)) });
-                        while let Some(event) = rx.next().await {
-                            host.update(cx, |host, cx| host.fee_dispatch_to(key, event, cx))
-                                .ok();
-                        }
-                        let result = work.await;
-                        host.update(cx, |host, cx| host.resolve_fee(key, id, result, cx))
-                            .ok();
-                    })
-                    .detach();
-                }
-            }
-        }
-        let Some(session) = self.session_mut(key) else {
-            return;
-        };
-        session.view = session.host.view();
-        if key == self.fee.key {
-            self.fee_in_force_changed(cx);
-        }
-        self.speed_pass(cx);
-        self.ensure_watcher(cx);
-        cx.notify();
-    }
-
-    /// The session in force moved: mirror it into the send machine, answer
-    /// the send machine's question if it settled, and — when it settled as a
-    /// failure — forget the readings behind it, so a retry measures again
-    /// (issue 212).
-    fn fee_in_force_changed(&mut self, cx: &mut Context<Self>) {
-        self.fee_view = self.fee.view.clone();
-        if !self.fee_view.busy
-            && self.fee_view.failed.is_some()
-            && let Some(ask) = &self.fee.ask
-        {
-            fee_signals::invalidate(ask.chain_id);
-        }
-        self.sync_fee_to_send(cx);
-        self.settle_fee(cx);
-    }
-
     /// Start one send operation. The four screen-owned arms are performed
     /// here; everything else goes to the executor and, when it blocks, to
     /// the background executor with the answer routed back by effect id.
@@ -704,8 +504,9 @@ impl SendHost {
     /// `FeeQuote.requestQuote`: read the deployment status (never guessed),
     /// then ask the session; the answer arrives when its view settles.
     ///
-    /// HOW FAST is the shell's to say (spec 068): the tier the speed core has
-    /// in force — the stored default, a one-shot pick, or a free upgrade.
+    /// HOW FAST is the speed control's to say (spec 068): the tier the speed
+    /// core has in force — the stored default, a one-shot pick, or a free
+    /// upgrade.
     #[allow(clippy::too_many_arguments, reason = "the operation's own fields")]
     fn request_quote(
         &mut self,
@@ -723,62 +524,15 @@ impl SendHost {
             self.resolve_send(previous, estimate_failed(), cx);
         }
         self.pending_fee = Some(effect_id);
-        let ask = QuoteAsk {
+        speed_control::ask(
+            self,
             chain_id,
             account,
             public_key_available,
-            tier: self.speed_view.tier,
             calls,
             fee_token,
-        };
-        self.ask_in_force(ask, cx);
-    }
-
-    /// Price `ask` on the session in force: the deployment read first, then
-    /// the question. The ask is recorded NOW, before the read, so a preview of
-    /// the previous operation can never be promoted over a question the send
-    /// machine is still waiting on.
-    fn ask_in_force(&mut self, ask: QuoteAsk, cx: &mut Context<Self>) {
-        self.fee_seq += 1;
-        self.generation += 1;
-        let seq = self.fee_seq;
-        self.fee.generation = self.generation;
-        self.fee.ask = Some(ask.clone());
-        self.fee.deployed = None;
-        self.fee.reading = true;
-        self.speed_pass(cx);
-        let account = ask.account.clone();
-        let chain_id = ask.chain_id;
-        cx.spawn(async move |host, cx| {
-            let deployed = cx
-                .background_executor()
-                .spawn(async move { chain::is_deployed(&account, chain_id) })
-                .await;
-            host.update(cx, |host, cx| {
-                if seq != host.fee_seq {
-                    return;
-                }
-                host.fee.reading = false;
-                match deployed {
-                    // An indeterminate read never reaches the core: guessing
-                    // "deployed" ships an op without initCode, guessing
-                    // "undeployed" attaches one to a live account.
-                    Err(_) => {
-                        if let Some(id) = host.pending_fee.take() {
-                            host.resolve_send(id, estimate_failed(), cx);
-                        }
-                        host.speed_pass(cx);
-                    }
-                    Ok(deployed) => {
-                        host.fee.deployed = Some(deployed);
-                        let key = host.fee.key;
-                        host.fee_dispatch_to(key, ask.event(deployed), cx);
-                    }
-                }
-            })
-            .ok();
-        })
-        .detach();
+            cx,
+        );
     }
 
     /// The fee session's view, as the send machine's answer — judged against
@@ -787,14 +541,15 @@ impl SendHost {
         let Some(id) = self.pending_fee else {
             return;
         };
-        if self.fee_view.busy {
+        let fee_view = self.speed.fee_view();
+        if fee_view.busy {
             return;
         }
-        let outcome = if let Some(estimate) = &self.fee_view.fee {
+        let outcome = if let Some(estimate) = &fee_view.fee {
             SendFeeOutcome::Ok {
                 estimate: estimate.clone(),
             }
-        } else if let Some(failure) = self.fee_view.failed {
+        } else if let Some(failure) = fee_view.failed {
             SendFeeOutcome::Failed {
                 kind: map_failure(failure),
             }
@@ -810,256 +565,61 @@ impl SendHost {
     /// disarm the confirm slide, and a settled estimate replaces the one it
     /// pre-checked with (`GasFeeCard.onBusyChange` / `onFeeUpdate`).
     fn sync_fee_to_send(&mut self, cx: &mut Context<Self>) {
-        let busy = self.fee_view.busy;
+        let busy = self.speed.fee_view().busy;
         if busy != self.last_fee_busy {
             self.last_fee_busy = busy;
             self.dispatch(SendEvent::FeeBusyChanged { busy }, cx);
         }
-        if let Some(fee) = &self.fee_view.fee
-            && self.last_fee.as_ref() != Some(fee)
+        if let Some(fee) = self.speed.fee_view().fee.clone()
+            && self.last_fee.as_ref() != Some(&fee)
         {
             self.last_fee = Some(fee.clone());
-            self.dispatch(
-                SendEvent::FeeUpdated {
-                    estimate: fee.clone(),
-                },
-                cx,
-            );
+            self.dispatch(SendEvent::FeeUpdated { estimate: fee }, cx);
         }
     }
 
     // -- the speed control (spec 069) ----------------------------------------
 
-    fn speed_dispatch(&mut self, event: SpeedEvent, cx: &mut Context<Self>) {
-        // The machine asks the shell for nothing, so there is nothing to pump.
-        let _ = self.speed.dispatch(event);
-        self.speed_view = self.speed.view();
-        self.speed_pass(cx);
-        cx.notify();
+    /// The fee in force, as the fee row reads it.
+    pub fn fee_view(&self) -> &FeeView {
+        self.speed.fee_view()
     }
 
-    /// The stored default and the number preset, into the speed core.
-    fn configure_speed(&mut self, cx: &mut Context<Self>) {
-        let preferred = resident::resident::<FeeTierPref>(cx).read(cx).view().tier;
-        let number = format_prefs::current().number;
-        self.speed_dispatch(SpeedEvent::Configure { preferred, number }, cx);
+    /// The speed control, as the core decided it.
+    pub fn speed_view(&self) -> &FeeSpeedView {
+        self.speed.view()
     }
 
     /// A free upgrade is only decided while the person is still choosing:
     /// the confirm must not change tier under somebody reading it.
     fn sync_stage(&mut self, cx: &mut Context<Self>) {
         let on_form = self.view.stage == vela_core::app::send::SendStage::EnterDetails;
-        if self.last_on_form != Some(on_form) {
-            self.last_on_form = Some(on_form);
-            self.speed_dispatch(SpeedEvent::StageChanged { on_form }, cx);
-        }
+        speed_control::stage(self, on_form, cx);
     }
 
     /// Fold or unfold the control.
     pub fn toggle_speed(&mut self, cx: &mut Context<Self>) {
-        self.speed_dispatch(SpeedEvent::Toggle, cx);
+        speed_control::toggle(self, cx);
     }
 
     /// A tap on an option — one-shot: it prices and submits this send and
     /// never reaches the stored preference.
     pub fn pick_speed(&mut self, tier: FeeTier, cx: &mut Context<Self>) {
-        self.speed_dispatch(SpeedEvent::Pick { tier }, cx);
+        speed_control::pick(self, tier, cx);
     }
 
-    /// The refresh control: measure again. The held readings are dropped
-    /// FIRST (issue 212), so this is a new measurement and not the number
-    /// already on screen, and the other tiers are re-priced with it.
+    /// The refresh control: measure again, the held readings dropped first.
     pub fn refresh_fee(&mut self, cx: &mut Context<Self>) {
-        let Some(ask) = self.fee.ask.clone() else {
-            return;
-        };
-        fee_signals::invalidate(ask.chain_id);
-        if self.fee.reading {
-            return;
-        }
-        if self.fee.deployed.is_none() {
-            // The last attempt never reached the core, so `Requote` would be a
-            // no-op and the control a dead button: ask again for real.
-            self.ask_in_force(ask, cx);
-            return;
-        }
-        self.generation += 1;
-        self.fee.generation = self.generation;
-        self.fee_dispatch(FeeEvent::Requote, cx);
+        speed_control::refresh(self, cx);
     }
 
-    /// The session pricing `tier` — for formatting that option's fee with its
-    /// own fee-coin options.
-    pub fn tier_view(&self, tier: FeeTier) -> Option<&FeeView> {
-        if self.fee.ask.as_ref().is_some_and(|ask| ask.tier == tier) {
-            return Some(&self.fee.view);
-        }
-        self.previews
-            .iter()
-            .find(|session| session.ask.as_ref().is_some_and(|ask| ask.tier == tier))
-            .map(|session| &session.view)
+    /// Every (tier, view) the options can format a fee with.
+    pub fn speed_tier_views(&self) -> Vec<(FeeTier, FeeView)> {
+        self.speed.tier_views()
     }
 
     fn fees_idle(&self) -> bool {
-        self.fee.host.is_idle() && self.previews.iter().all(|session| session.host.is_idle())
-    }
-
-    /// Report every session to the speed core, then bring the sessions in
-    /// line with what it decided — until nothing moves.
-    fn speed_pass(&mut self, cx: &mut Context<Self>) {
-        if self.speed_syncing {
-            return;
-        }
-        self.speed_syncing = true;
-        for _ in 0..4 {
-            self.report_quotes();
-            if !self.reconcile(cx) {
-                break;
-            }
-        }
-        self.sync_previews(cx);
-        self.report_quotes();
-        self.speed_syncing = false;
-    }
-
-    fn report_quotes(&mut self) {
-        let previews = self
-            .previews
-            .iter()
-            .filter_map(|session| {
-                Some(TierPreviewQuote {
-                    tier: session.ask.as_ref()?.tier,
-                    busy: session.reading || session.view.busy,
-                    fee: session.view.fee.clone(),
-                })
-            })
-            .collect();
-        let _ = self.speed.dispatch(SpeedEvent::QuotesChanged {
-            chain_id: self.fee.ask.as_ref().map(|ask| ask.chain_id),
-            in_force: TierQuote {
-                busy: self.fee.reading || self.fee.view.busy,
-                fee: self.fee.view.fee.clone(),
-            },
-            previews,
-        });
-        self.speed_view = self.speed.view();
-    }
-
-    /// Rule 1 of the reconcile contract (`fee_speed.rs`): make the session in
-    /// force price the tier in force. Returns whether the sessions moved.
-    fn reconcile(&mut self, cx: &mut Context<Self>) -> bool {
-        let tier = self.speed_view.tier;
-        let Some(ask) = self.fee.ask.clone() else {
-            return false;
-        };
-        if ask.tier == tier {
-            return false;
-        }
-        if self.promote(tier, cx) {
-            return true;
-        }
-        // Never over a measurement that is out: the send machine may be
-        // waiting on it, and would hear its own question refused.
-        if self.fee.reading || self.fee.view.busy || self.pending_fee.is_some() {
-            return false;
-        }
-        self.ask_in_force(QuoteAsk { tier, ..ask }, cx);
-        false
-    }
-
-    /// THE PRICE YOU TAP IS THE PRICE YOU GET (issue 681): the preview that
-    /// already priced THIS operation at `tier` becomes the session in force,
-    /// with no second question to the relay — and the session it replaces
-    /// becomes the preview of its own tier, so nothing is re-measured.
-    ///
-    /// Refused (so the caller measures for real) when that preview has no
-    /// settled quote of its own, or priced a different operation than the one
-    /// the session in force was last asked about.
-    fn promote(&mut self, tier: FeeTier, cx: &mut Context<Self>) -> bool {
-        let Some(in_force) = self.fee.ask.clone() else {
-            return false;
-        };
-        let Some(index) = self.previews.iter().position(|session| {
-            session
-                .ask
-                .as_ref()
-                .is_some_and(|ask| ask.tier == tier && ask.same_operation(&in_force))
-                && !session.reading
-                && !session.view.busy
-                && session
-                    .view
-                    .fee
-                    .as_ref()
-                    .is_some_and(|fee| fee.tier == tier)
-        }) else {
-            return false;
-        };
-        let promoted = self.previews.remove(index);
-        let mut demoted = std::mem::replace(&mut self.fee, promoted);
-        // A deployment read still out for the demoted session must not
-        // dispatch onto the one now in force.
-        self.fee_seq += 1;
-        demoted.reading = false;
-        if demoted.ask.is_some() && demoted.deployed.is_some() {
-            self.previews.push(demoted);
-        }
-        self.fee_in_force_changed(cx);
-        true
-    }
-
-    /// Rule 2: a preview for every tier the core wants priced, pricing the
-    /// same operation as the session in force at the same generation; every
-    /// other preview dropped. Nothing is created while the session in force
-    /// is still reading its deployment status — its question is not settled
-    /// enough to replay.
-    fn sync_previews(&mut self, cx: &mut Context<Self>) {
-        let wanted = self.speed_view.previews.clone();
-        let base = match (&self.fee.ask, self.fee.deployed) {
-            (Some(ask), Some(deployed)) if !self.fee.reading => Some((ask.clone(), deployed)),
-            _ => None,
-        };
-        let generation = self.generation;
-        self.previews.retain(|session| {
-            let (Some(ask), Some((base, _))) = (&session.ask, &base) else {
-                return false;
-            };
-            wanted.contains(&ask.tier)
-                && ask.same_operation(base)
-                && session.generation == generation
-        });
-        let Some((base, deployed)) = base else {
-            return;
-        };
-        let missing: Vec<FeeTier> = wanted
-            .iter()
-            .copied()
-            .filter(|tier| {
-                !self
-                    .previews
-                    .iter()
-                    .any(|session| session.ask.as_ref().is_some_and(|ask| ask.tier == *tier))
-            })
-            .collect();
-        let mut started = Vec::new();
-        for tier in missing {
-            let key = self.next_session;
-            self.next_session += 1;
-            let mut session = FeeSession::new(key);
-            let ask = QuoteAsk {
-                tier,
-                ..base.clone()
-            };
-            session.ask = Some(ask.clone());
-            session.deployed = Some(deployed);
-            session.generation = generation;
-            self.previews.push(session);
-            started.push((key, ask));
-        }
-        // Installed first, asked second: an answer that arrives inline finds
-        // every session already in place.
-        for (key, ask) in started {
-            self.fee_dispatch_to(key, ask.event(deployed), cx);
-        }
+        self.speed.idle()
     }
 
     // -- the tracker ----------------------------------------------------------
@@ -1225,6 +785,35 @@ impl SendHost {
     }
 }
 
+/// The send machine's side of the speed control.
+impl SpeedHost for SendHost {
+    fn speed_control(&mut self) -> &mut SpeedControl {
+        &mut self.speed
+    }
+
+    /// Mirror the session in force into the send machine, and answer its
+    /// question if it settled.
+    fn in_force_changed(&mut self, cx: &mut Context<Self>) {
+        self.sync_fee_to_send(cx);
+        self.settle_fee(cx);
+    }
+
+    /// `EstimateFee` is out: its answer must be the question it asked.
+    fn answering(&self) -> bool {
+        self.pending_fee.is_some()
+    }
+
+    fn unreadable(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.pending_fee.take() {
+            self.resolve_send(id, estimate_failed(), cx);
+        }
+    }
+
+    fn fees_moved(&mut self, cx: &mut Context<Self>) {
+        self.ensure_watcher(cx);
+    }
+}
+
 fn estimate_failed() -> SendShellResult {
     SendShellResult::FeeEstimated {
         outcome: SendFeeOutcome::Failed {
@@ -1246,52 +835,11 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
 }
 
 #[cfg(test)]
-mod speed_ask_tests {
-    use super::*;
-
-    fn ask(tier: FeeTier, amount: &str) -> QuoteAsk {
-        QuoteAsk {
-            chain_id: 100,
-            account: "0xabc".to_owned(),
-            public_key_available: true,
-            tier,
-            calls: vec![FeeCall {
-                to: "0xdef".to_owned(),
-                value: amount.to_owned(),
-                data: "0x".to_owned(),
-            }],
-            fee_token: None,
-        }
-    }
-
-    /// A preview is promotable only when it priced THE SAME operation — the
-    /// tier aside. A preview of yesterday's amount must never answer a
-    /// question about today's (issue 681's guard).
-    #[test]
-    fn the_same_operation_is_everything_but_the_tier() {
-        assert!(ask(FeeTier::Fast, "1").same_operation(&ask(FeeTier::Slow, "1")));
-        assert!(!ask(FeeTier::Fast, "1").same_operation(&ask(FeeTier::Fast, "2")));
-        let mut other_coin = ask(FeeTier::Slow, "1");
-        other_coin.fee_token = Some("0xusdc".to_owned());
-        assert!(!ask(FeeTier::Fast, "1").same_operation(&other_coin));
-    }
-
-    /// The question a preview asks is the one in force, at its own tier.
-    #[test]
-    fn a_preview_asks_the_same_question_at_its_own_tier() {
-        let FeeEvent::QuoteRequested { tier, deployed, .. } =
-            ask(FeeTier::Standard, "1").event(true)
-        else {
-            unreachable!("a quote request");
-        };
-        assert_eq!(tier, FeeTier::Standard);
-        assert!(deployed);
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::chain;
+    use crate::resident::{Answer, Machine};
+    use vela_core::app::fee_policy::{FeeOperation, FeePolicy};
 
     /// The host without gpui: both machines pumped to quiescence on this
     /// thread, every blocking answer performed inline, the two timers left

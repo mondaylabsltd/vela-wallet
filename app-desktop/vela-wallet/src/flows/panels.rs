@@ -1352,7 +1352,7 @@ fn send_form(
 /// The speed control under the fee row (spec 068): folded, the word and the
 /// tier in force; open, the one-shot promise and three options — or, on a
 /// network with one speed, that one statement instead.
-fn speed_control(
+pub fn speed_control(
     theme: &Theme,
     icons: &mut IconCache,
     speed: &FeeSpeedModel,
