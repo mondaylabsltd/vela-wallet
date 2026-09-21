@@ -9,15 +9,13 @@
  *   a key nobody has written yet is erased by default,
  *   the named exception survives, and
  *   a survivor is REPORTED rather than reported as success.
+ *
+ * The rule is the core's since spec 072 (`storage_catalog::is_erasable_key`),
+ * so these run over the real one.
  */
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-	ERASE_KEEP_KEYS,
-	EraseIncompleteError,
-	eraseDeviceData,
-	isErasableKey,
-	VELA_KEY_PREFIX
-} from './erase-device';
+import { EraseIncompleteError, eraseDeviceData, isErasableKey } from './erase-device';
 
 /** An in-memory `localStorage`, with the two methods a sweep needs. */
 function fakeLocalStorage(seed: Record<string, string>) {
@@ -57,7 +55,9 @@ describe('the rule, stated as a rule', () => {
 		expect(isErasableKey('vela.contacts')).toBe(true);
 		expect(isErasableKey('vela.somethingNobodyHasWrittenYet')).toBe(true);
 		expect(isErasableKey('vela.perm.https://example.com')).toBe(true);
-		expect(VELA_KEY_PREFIX).toBe('vela.');
+		// The one cache written outside the namespace is ours too: the web's own
+		// rule used to leave the recipient lookups behind.
+		expect(isErasableKey('recipient_id:0xabc')).toBe(true);
 	});
 
 	it('leaves what is not ours alone', () => {
@@ -68,8 +68,7 @@ describe('the rule, stated as a rule', () => {
 
 	it('keeps exactly the one exception the contract names', () => {
 		// contracts/erase-scope.md is the authority; this is that document as a
-		// test. A second exception added without a reason fails here.
-		expect(ERASE_KEEP_KEYS).toEqual(['vela.pendingUploads']);
+		// test, against the core that now carries it.
 		expect(isErasableKey('vela.pendingUploads')).toBe(false);
 	});
 });
@@ -80,6 +79,7 @@ describe('the sweep', () => {
 			'vela.accounts': '[]',
 			'vela.intro.seen': '1',
 			'vela.pendingUploads': '[{"key":"unconfirmed"}]',
+			'recipient_id:0xabc': '{}',
 			dev_unlocked: '1'
 		});
 		vi.stubGlobal('localStorage', local);
@@ -92,6 +92,7 @@ describe('the sweep', () => {
 		expect(removed).toContain('vela.accounts');
 		expect(removed).toContain('vela.contacts');
 		expect(removed).toContain('vela.transactionHistory');
+		expect(removed).toContain('recipient_id:0xabc');
 		// The outbox and the foreign keys stand.
 		expect(local.snapshot()).toEqual({
 			'vela.pendingUploads': '[{"key":"unconfirmed"}]',

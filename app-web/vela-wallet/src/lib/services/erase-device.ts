@@ -1,5 +1,5 @@
-// Ported from src/services/erase-device.ts @ 28d25ae9 — one store became three,
-// the prefix rule and the keep-list are carried verbatim.
+// Ported from src/services/erase-device.ts @ 28d25ae9 — one store became three;
+// the rule itself moved into the core in spec 072.
 /**
  * "Erase this device" — the destructive counterpart to signing out (spec 028
  * T434, research D49, contracts/erase-scope.md).
@@ -9,7 +9,7 @@
  * every address-keyed record lines back up on the next sign-in. THIS is the
  * action that means "this browser is no longer mine".
  *
- * ## Why a prefix scan and not a key list
+ * ## Why a scan and not a key list
  *
  * Carried from the Expo module, including the reason it was rewritten once
  * already. Its predecessor walked a hand-maintained list of the eleven keys ONE
@@ -19,9 +19,20 @@
  * silently, because nothing about a delete-list fails when the app grows a key.
  * **A delete-list erase is wrong by default and only accidentally right.**
  *
- * So the direction is inverted: enumerate what is ACTUALLY stored, delete
- * everything under the `vela.` namespace, and name the exceptions. A key added
- * next year is erased on the day it is first written, with no edit here.
+ * So the direction is inverted: enumerate what is ACTUALLY stored and ask of
+ * each key whether an erase takes it. A key added next year is erased on the
+ * day it is first written, with no edit here.
+ *
+ * ## Whose rule
+ *
+ * The CORE's (`vela_core::storage_catalog::is_erasable_key`, spec 072): the
+ * `vela.` namespace and its one unprefixed cache, minus `vela.pendingUploads` —
+ * a passkey public key the index has never confirmed, whose retry needs no
+ * account list but which, deleted, could never be found at sign-in on any
+ * device. Every shell asks the same question; iOS used to walk a list.
+ *
+ * What stays here is what the core has no port for: listing three key-value
+ * stores, deleting from them, and the verification pass.
  *
  * ## Three stores, because the web has three
  *
@@ -31,43 +42,13 @@
  * `chrome.storage.local` (the `vela.perm.*` grants and the `ext_cache`
  * snapshot). All three are swept by the same rule; a store that is not present
  * in this build contributes nothing rather than failing.
- *
- * ## Why no core owns this
- *
- * The rule is `startsWith('vela.') && !KEEP.has(key)` applied to an ENUMERATION
- * of three key-value stores. The core has no port that can list keys, and
- * adding one so it could re-express a `startsWith` would leave the core holding
- * a string comparison while the enumeration, the retry and the verification
- * pass stayed in the shell anyway. The two judgements that ARE rules — the
- * prefix and the keep-list — are stated as exported constants below, so a
- * reader finds them without reading the loop.
  */
+import { loadCore, storageIsErasableKey } from '$lib/core/client';
 import { getAllKeys, removeItem } from './storage';
 
-/** Every key this app writes is namespaced. The scan is this prefix. */
-export const VELA_KEY_PREFIX = 'vela.';
-
-/**
- * The only `vela.` keys an erase leaves behind, and the reason is not
- * convenience. A record in `vela.pendingUploads` is a passkey public key the
- * index service has never confirmed; the retry on the next launch needs no
- * account list to re-send it, but a DELETED record can never be retried — and
- * that credential then cannot be found at login on any device. Erasing it
- * would downgrade "recoverable" to "possibly ruined", which is strictly worse
- * here than at sign-out, because the account list is going too and the retry is
- * the only remaining path to that key.
- *
- * Uploading first and erasing after was the alternative. It was rejected
- * because it makes a destructive action the person asked for depend on a
- * network that may be down.
- */
-export const ERASE_KEEP_KEYS: readonly string[] = ['vela.pendingUploads'];
-
-const KEEP = new Set<string>(ERASE_KEEP_KEYS);
-
-/** Would {@link eraseDeviceData} delete this key? */
+/** Would {@link eraseDeviceData} delete this key? The core's rule; runs after `loadCore()`. */
 export function isErasableKey(key: string): boolean {
-	return key.startsWith(VELA_KEY_PREFIX) && !KEEP.has(key);
+	return storageIsErasableKey(key);
 }
 
 /**
@@ -182,17 +163,17 @@ async function erasableEverywhere(): Promise<{
 }
 
 /**
- * Delete every `vela.` key except {@link ERASE_KEEP_KEYS}, then VERIFY.
+ * Delete every key {@link isErasableKey} names, in every store, then VERIFY.
  *
  * Resolves with the keys that were removed. Rejects with
  * {@link EraseIncompleteError} if anything survived — a caller that sends the
  * person back to first run on a rejected promise would be claiming an erase
  * that did not happen.
  *
- * Keys outside the `vela.` namespace are not this module's to judge and are
- * left alone.
+ * Keys that are not ours are not this module's to judge and are left alone.
  */
 export async function eraseDeviceData(): Promise<readonly string[]> {
+	await loadCore();
 	const doomed = await erasableEverywhere();
 
 	dropLocal(doomed.local);

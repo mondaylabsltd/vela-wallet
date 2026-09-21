@@ -10,11 +10,17 @@
 	 * reference, and it has none.
 	 */
 	import { untrack } from 'svelte';
-	import type { OnNetEvent } from './net-events';
+	import { OPENED_EVENT, type OnNetEvent } from './net-events';
 	import type { SettingsPrefEvent } from './pref-events';
+	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
-	import type { SettingsDesktopModel, SettingsOverlayId, SettingsPageId } from './model';
+	import type {
+		ConfirmSheetModel,
+		SettingsDesktopModel,
+		SettingsOverlayId,
+		SettingsPageId
+	} from './model';
 	import type { SidebarModel } from '$lib/wallet/model';
 	import Button from '$lib/ui/Button.svelte';
 	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
@@ -22,6 +28,7 @@
 	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
+	import ConfirmSheet from './ui/ConfirmSheet.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
 	import Dialog from './ui/Dialog.svelte';
 	import Dropdown from './ui/Dropdown.svelte';
@@ -90,6 +97,8 @@
 	let page = $state<SettingsPageId>(untrack(() => model.page));
 	let overlay = $state<SettingsOverlayId>(untrack(() => model.overlay));
 	let openDropdown = $state<string | undefined>(untrack(() => model.dropdown?.rowId));
+	/** The storage row or network waiting on an answer, and the question it asks. */
+	let pending = $state<{ id: string; sheet: ConfirmSheetModel } | null>(null);
 
 	// The account page has no open/close of its own: showing it IS opening the
 	// switcher, so the balance core hears both edges from the page choice.
@@ -128,21 +137,40 @@
 	function toggleDropdown(id: string) {
 		openDropdown = openDropdown === id ? undefined : id;
 	}
+
+	/**
+	 * Show a panel. Showing the providers or the endpoints IS the core event
+	 * the phone raises when it pushes the same page (`OPENED_EVENT`): without
+	 * it the providers' drafts were never seeded, and leaving a key's field
+	 * saved an empty draft over the key it showed (spec 072, P0).
+	 */
+	function openPage(id: SettingsPageId) {
+		page = id;
+		const opened = OPENED_EVENT[id];
+		if (opened !== undefined) onnetevent?.(opened);
+	}
+
+	function closeOverlay() {
+		overlay = 'none';
+		pending = null;
+	}
+
+	/** Put a destructive row's question up; the row acts only on its confirm. */
+	function ask(next: SettingsOverlayId, id: string, sheet: ConfirmSheetModel | undefined) {
+		if (sheet === undefined) return;
+		pending = { id, sheet };
+		overlay = next;
+	}
 </script>
 
 <div class="desktop">
 	{#if sidebar !== undefined}
 		<!-- The header's name button opens the switcher, which on this screen IS
 		     the account page. -->
-		<Sidebar {sidebar} {onnav} {onchainselect} onaccounts={() => (page = 'account')} />
+		<Sidebar {sidebar} {onnav} {onchainselect} onaccounts={() => openPage('account')} />
 	{/if}
 
-	<SettingsNavList
-		title={model.title}
-		items={model.nav}
-		selected={page}
-		onselect={(id) => (page = id)}
-	/>
+	<SettingsNavList title={model.title} items={model.nav} selected={page} onselect={openPage} />
 
 	<main>
 		<div class="panel">
@@ -212,10 +240,14 @@
 				</button>
 				<p class="sign-out-note">{model.account.signOutNote}</p>
 
+				<!-- The phone's erase, as a dialog: the same question, the same sweep,
+				     and a failure said in the dialog's own callout (spec 072). It was
+				     drawn here and did nothing. -->
 				<DangerCard
 					title={model.account.erase.title}
 					subtitle={model.account.erase.subtitle}
 					action={model.account.erase.action}
+					onselect={() => (overlay = 'erase-device')}
 				/>
 			{:else if page === 'appearance'}
 				<FormRow label={model.appearance.language.label}>
@@ -320,7 +352,7 @@
 					deleteLabel={model.networks.removeLabel}
 					expandable
 					onselect={(id) => onnetevent?.({ kind: 'select-network', id })}
-					ondelete={(id) => onnetevent?.({ kind: 'delete-network', id })}
+					ondelete={(id) => ask('remove-network', id, removeNetworkQuestion(model.networks, id))}
 				>
 					{#snippet detail()}
 						<NetworkDetailPanel
@@ -350,9 +382,16 @@
 					onreset={() => onnetevent?.({ kind: 'endpoints-reset' })}
 				/>
 			{:else if page === 'storage'}
+				<!-- A row's Clear asks first, as on the phone: here it cleared the
+				     whole address book on one click (spec 072). -->
 				<StoragePanel
 					panel={model.storage}
-					onclear={onstorageclear}
+					onclear={(id) =>
+						ask(
+							'clear-storage-item',
+							id,
+							storageClearQuestion(model.storage, id, model.clearCachesSheet.cancel)
+						)}
 					onclearcaches={() => (overlay = 'clear-caches')}
 				/>
 			{:else if page === 'about'}
@@ -366,7 +405,7 @@
 			title={model.addNetwork.title}
 			subtitle={model.addNetwork.subtitle}
 			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
+			onclose={closeOverlay}
 		>
 			<AddNetworkPanel
 				panel={model.addNetwork}
@@ -378,19 +417,11 @@
 			/>
 		</Dialog>
 	{:else if overlay === 'rpc-fix'}
-		<Dialog
-			title={model.rpcFix.title}
-			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
-		>
-			<RpcFixBody panel={model.rpcFix} onprimary={() => (overlay = 'none')} />
+		<Dialog title={model.rpcFix.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<RpcFixBody panel={model.rpcFix} onprimary={closeOverlay} />
 		</Dialog>
 	{:else if overlay === 'sign-out'}
-		<Dialog
-			title={model.account.signOutLabel}
-			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
-		>
+		<Dialog title={model.account.signOutLabel} closeLabel={model.closeLabel} onclose={closeOverlay}>
 			<p class="dialog-body">{model.account.signOutNote}</p>
 			<div class="dialog-actions">
 				<Button variant="danger" shape="rounded" onclick={onsignout}>
@@ -403,7 +434,7 @@
 		<Dialog
 			title={model.clearCachesSheet.title}
 			closeLabel={model.closeLabel}
-			onclose={() => (overlay = 'none')}
+			onclose={closeOverlay}
 		>
 			<p class="dialog-body">{model.clearCachesSheet.body}</p>
 			<div class="dialog-actions">
@@ -412,12 +443,38 @@
 					shape="rounded"
 					onclick={() => {
 						onclearcaches?.();
-						overlay = 'none';
+						closeOverlay();
 					}}
 				>
 					{model.clearCachesSheet.confirm}
 				</Button>
 			</div>
+		</Dialog>
+	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network') && pending}
+		<!-- The phone's confirm sheet, in a dialog: titled with what goes. -->
+		<Dialog title={pending.sheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<ConfirmSheet
+				sheet={pending.sheet}
+				onconfirm={() => {
+					const id = pending?.id;
+					const what = overlay;
+					closeOverlay();
+					if (id === undefined) return;
+					if (what === 'remove-network') onnetevent?.({ kind: 'delete-network', id });
+					else onstorageclear?.(id);
+				}}
+				oncancel={closeOverlay}
+			/>
+		</Dialog>
+	{:else if overlay === 'erase-device'}
+		<!-- Does NOT close on confirm, as on the phone: a failed erase is said in
+		     this dialog's callout, and a successful one leaves the page. -->
+		<Dialog title={model.eraseSheet.title} closeLabel={model.closeLabel} onclose={closeOverlay}>
+			<ConfirmSheet
+				sheet={model.eraseSheet}
+				onconfirm={() => onprefevent?.({ kind: 'erase' })}
+				oncancel={closeOverlay}
+			/>
 		</Dialog>
 	{/if}
 </div>

@@ -8,7 +8,10 @@ const STORAGE_SUITES = [
 	'**/parallel-entry.e2e.ts',
 	// 028's preferences: what a person chose has to survive a reload on every
 	// engine, and an erase has to leave nothing behind on any of them.
-	'**/preferences.e2e.ts'
+	'**/preferences.e2e.ts',
+	// 072's wide settings: a saved provider key survives its own panel, and a
+	// cleared row or an erase takes what it said and nothing else.
+	'**/settings-desktop.e2e.ts'
 ];
 
 export default defineConfig({

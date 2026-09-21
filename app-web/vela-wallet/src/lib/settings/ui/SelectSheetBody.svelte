@@ -4,6 +4,10 @@
 	 * an optional search field, the rows, and the language sheet's footer note.
 	 * `role="listbox"` wraps the rows so a screen reader reads a choice, not a
 	 * pile of buttons.
+	 *
+	 * The search field filters what it is drawn over (spec 072): the currency
+	 * sheet drew one that did nothing, over a list the rate sources make long.
+	 * A row matches on its code, its label or its caption ("yen" finds JPY).
 	 */
 	import type { SelectSheetModel } from '../model';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -16,6 +20,18 @@
 	}
 
 	let { sheet, onselect }: Props = $props();
+
+	let query = $state('');
+
+	const rows = $derived.by(() => {
+		const needle = query.trim().toLocaleLowerCase();
+		if (needle === '') return sheet.rows;
+		return sheet.rows.filter((row) =>
+			[row.id, row.label, row.caption ?? ''].some((text) =>
+				text.toLocaleLowerCase().includes(needle)
+			)
+		);
+	});
 </script>
 
 {#if sheet.searchPlaceholder !== undefined}
@@ -25,12 +41,13 @@
 			type="search"
 			placeholder={sheet.searchPlaceholder}
 			aria-label={sheet.searchPlaceholder}
+			bind:value={query}
 		/>
 	</label>
 {/if}
 
 <div class="rows" role="listbox" aria-label={sheet.title}>
-	{#each sheet.rows as row (row.id)}
+	{#each rows as row (row.id)}
 		<SelectRow {row} {onselect} />
 	{/each}
 </div>

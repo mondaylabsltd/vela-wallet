@@ -476,6 +476,7 @@
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }
 		};
+		model = withEraseFailure(model, m, eraseFailed);
 		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
 	});
 

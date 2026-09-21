@@ -4,25 +4,38 @@
  *
  * 023 drew the page with fixture numbers and 027 wired only its connections
  * group. This is the accounting behind the other two groups, and the one
- * place the page's clears are defined — as key lists, so a row's "Clear"
+ * place the page's clears are carried out — as key lists, so a row's "Clear"
  * and the page's byte count cannot disagree about what a row IS.
  *
- * ## The rule
+ * ## Whose rule
  *
- * Every key this app writes is `vela.`-namespaced (`erase-device.ts` scans
- * that prefix), in one of two stores: `localStorage` and the IndexedDB `kv`
- * store behind `storage.ts`. Each key belongs to exactly one drawn row, by
- * name or by prefix, and every row belongs to one of the three drawn groups.
- * A key nobody named is "your data": the safe default for a byte count,
- * because it is then never swept by "clear all caches".
+ * Which row a key belongs to, which group a row is in and what "clear all
+ * caches" takes are the CORE's (`vela_core::storage_catalog`, spec 072): four
+ * shells kept four copies of this table and they drifted — the phones filed a
+ * preference as a balance cache, and this file's "custom" row deleted the RPC
+ * provider keys and the service endpoints along with the tokens and networks
+ * it names. What stays here is what only a browser can do: enumerate its two
+ * stores (`localStorage` and the IndexedDB `kv` behind `storage.ts`), count
+ * bytes, delete, and empty the memory caches beside them.
  *
- * Two keys are deliberately NOT here: `vela.accounts` and
- * `vela.activeAccountIndex` are the wallet itself, and no storage row clears
- * them — that is sign-out's and erase's job. They are counted as your data.
+ * A key the catalog names no row for is "your data": the safe default for a
+ * byte count, because it is then never swept by "clear all caches". The
+ * wallet itself (`vela.accounts`, `vela.activeAccountIndex`) and the
+ * preferences are such keys — no storage row clears them; that is sign-out's
+ * and erase's job.
+ *
+ * Every function here that reads the catalog runs after `loadCore()`; the
+ * exported async ones await it themselves.
  */
 
-import { EXT_CACHE_KEY, PERM_PREFIX, REQUEST_PREFIX } from '$lib/dapp/keys';
-import { VELA_KEY_PREFIX } from './erase-device';
+import {
+	loadCore,
+	storageIsCacheKey,
+	storageIsErasableKey,
+	storageItemOfKey,
+	storageItems
+} from '$lib/core/client';
+import { PERM_PREFIX } from '$lib/dapp/keys';
 import { clearRecipientRiskCache } from './recipient-risk';
 import { invalidateAllPools } from './rpc-pool';
 import { clearSelectorCache } from './selector-registry';
@@ -32,7 +45,7 @@ import { clearTokenCache } from './wallet-api';
 
 export type StorageGroupId = 'user' | 'cache' | 'sessions';
 
-/** The drawn rows, by the ids the fixture layer already gives them. */
+/** The drawn rows, by the ids the fixture layer gives them — the catalog's own. */
 export type StorageItemId =
 	'transactions' | 'contacts' | 'custom' | 'browsing' | 'balances' | 'rates' | 'scan' | 'dapps';
 
@@ -47,79 +60,55 @@ export const STORAGE_ITEM_IDS: readonly StorageItemId[] = [
 	'dapps'
 ];
 
-export const GROUP_OF_ITEM: Record<StorageItemId, StorageGroupId> = {
-	transactions: 'user',
-	contacts: 'user',
-	custom: 'user',
-	browsing: 'user',
-	balances: 'cache',
-	rates: 'cache',
-	scan: 'cache',
-	dapps: 'sessions'
-};
+/** Every key this app writes is namespaced; the enumeration is this prefix. */
+const VELA_KEY_PREFIX = 'vela.';
 
-/** Exact keys, per row. */
-const ITEM_KEYS: Record<StorageItemId, readonly string[]> = {
-	transactions: ['vela.transactionHistory'],
-	contacts: ['vela.contacts', 'vela.contactGroups', 'vela.contacts.dismissed'],
-	custom: [
-		'vela.customNetworks',
-		'vela.customTokens',
-		'vela.networkConfig',
-		'vela.rpcProviders',
-		'vela.serviceEndpoints'
-	],
-	// The web has no in-app browser (spec 022): its history key is native-only,
-	// and the row honestly reads zero here.
-	browsing: [],
-	balances: ['vela.balanceCache'],
-	rates: ['vela.fiatRates.v1', 'vela.fxRates.v1', 'vela.fiatFeedAddrs.v1'],
-	scan: ['vela.rpc.banned'],
-	dapps: [EXT_CACHE_KEY]
-};
+let catalogRows: ReadonlyMap<StorageItemId, StorageGroupId> | null = null;
 
-/** Key prefixes, per row — for the stores that write one key per subject. */
-const ITEM_PREFIXES: Record<StorageItemId, readonly string[]> = {
-	transactions: [],
-	contacts: [],
-	custom: [],
-	browsing: [],
-	balances: [],
-	rates: [],
-	// Per-token metadata, per-address identity lookups, the transfer scan's
-	// cursors: everything a scan rebuilds on its own.
-	scan: ['vela.tokenMeta.', 'recipient_id:', 'vela.scan'],
-	dapps: [PERM_PREFIX, REQUEST_PREFIX]
-};
+/** The catalog's rows and their groups, read once from the core. */
+function catalog(): ReadonlyMap<StorageItemId, StorageGroupId> {
+	catalogRows ??= new Map(
+		(JSON.parse(storageItems()) as { id: StorageItemId; group: StorageGroupId }[]).map((row) => [
+			row.id,
+			row.group
+		])
+	);
+	return catalogRows;
+}
 
 /** Which drawn row a key belongs to, or `null` for your data nobody named. */
 export function itemOfKey(key: string): StorageItemId | null {
-	for (const id of STORAGE_ITEM_IDS) {
-		if (ITEM_KEYS[id].includes(key)) return id;
-	}
-	for (const id of STORAGE_ITEM_IDS) {
-		if (ITEM_PREFIXES[id].some((prefix) => key.startsWith(prefix))) return id;
-	}
-	return null;
+	return (storageItemOfKey(key) as StorageItemId | undefined) ?? null;
+}
+
+/** Which group a row is in. */
+export function groupOfItem(id: StorageItemId): StorageGroupId {
+	return catalog().get(id) ?? 'user';
 }
 
 /** Which group a key counts toward. */
 export function groupOfKey(key: string): StorageGroupId {
 	const item = itemOfKey(key);
-	return item === null ? 'user' : GROUP_OF_ITEM[item];
+	return item === null ? 'user' : groupOfItem(item);
 }
 
 /** Would "clear all caches" remove this key? Exactly the cache group's keys. */
 export function isCacheKey(key: string): boolean {
-	return groupOfKey(key) === 'cache';
+	return storageIsCacheKey(key);
 }
 
-/** Is this one of ours at all? The `vela.` namespace, plus the one unprefixed cache. */
+/**
+ * Is this one of ours at all? Everything an erase would remove — the
+ * namespace, and the one unprefixed cache the catalog knows — plus the key
+ * the erase keeps on purpose, which is still Vela's on this device.
+ */
 function isOurs(key: string): boolean {
-	return key.startsWith(VELA_KEY_PREFIX) || key.startsWith('recipient_id:');
+	return key.startsWith(VELA_KEY_PREFIX) || storageIsErasableKey(key);
 }
 
 export interface StorageItemReport {
+	/** The row's group, as the catalog files it. */
+	group: StorageGroupId;
 	bytes: number;
 	/** Records for the user rows and sites for dApps; keys for the caches. */
 	count: number;
@@ -178,7 +167,7 @@ async function entries(): Promise<Entry[]> {
 
 function emptyReport(): DeviceStorageReport {
 	const items = {} as Record<StorageItemId, StorageItemReport>;
-	for (const id of STORAGE_ITEM_IDS) items[id] = { bytes: 0, count: 0 };
+	for (const id of STORAGE_ITEM_IDS) items[id] = { group: groupOfItem(id), bytes: 0, count: 0 };
 	return { totalBytes: 0, keyCount: 0, groups: { user: 0, cache: 0, sessions: 0 }, items };
 }
 
@@ -199,6 +188,7 @@ function countFor(id: StorageItemId, entry: Entry): number {
 
 /** Measure both stores. Pure reading; nothing is touched. */
 export async function measureDeviceStorage(): Promise<DeviceStorageReport> {
+	await loadCore();
 	const report = emptyReport();
 	for (const entry of await entries()) {
 		const bytes = utf8Bytes(entry.key) + utf8Bytes(entry.value);
@@ -237,6 +227,7 @@ function dropMemoryCaches(): void {
  * data and sessions are untouched by construction (`isCacheKey`).
  */
 export async function clearAllCaches(): Promise<readonly string[]> {
+	await loadCore();
 	const doomed = (await entries()).filter((entry) => isCacheKey(entry.key));
 	const removed = await drop(doomed);
 	dropMemoryCaches();
@@ -250,9 +241,10 @@ export async function clearAllCaches(): Promise<readonly string[]> {
 export async function clearStorageItem(
 	id: Exclude<StorageItemId, 'dapps'>
 ): Promise<readonly string[]> {
+	await loadCore();
 	const doomed = (await entries()).filter((entry) => itemOfKey(entry.key) === id);
 	const removed = await drop(doomed);
-	if (GROUP_OF_ITEM[id] === 'cache') dropMemoryCaches();
+	if (groupOfItem(id) === 'cache') dropMemoryCaches();
 	return removed;
 }
 
