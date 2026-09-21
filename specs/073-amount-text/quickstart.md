@@ -23,3 +23,16 @@ cd app-desktop/vela-wallet && cargo test a_share_and_an_amount
 |---|---|---|---|
 | I1 | automatic (dot-comma) | `0,5` | 0.5 — "总额超过你的余额" against 0.46767, so the core read 0.5 |
 | I2 | stored comma-dot (pad and preset disagree) | `0` `,` `5` | 0.5 |
+
+## Gates (2026-09-22, `073-amount-text`)
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 1709 passed |
+| clippy `-D warnings`, `cargo fmt --check` (rust, desktop) | clean |
+| web `vitest` (all, extension built) | 1524 + the cap's refusal test |
+| web e2e chromium: batch, send-fee-over-balance, send-fee-fiat, fee-coin-switch | pass |
+| Android JVM | 644 |
+| iOS unit / UI (AmountTextDeviceTests) | 723 / 2 |
+| desktop `cargo test` | 493 |
+| `build-web --check`, `gen-core-types --check` | current |

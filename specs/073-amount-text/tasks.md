@@ -9,6 +9,7 @@
 - [x] T007 Desktop: `amount_edited` in the send amount, split share, custom cap; 493
 - [x] T008 Android phone pass (see quickstart)
 - [x] T009 iOS: `theListenerIsOnTheLoopbackOnly` (071) made robust to a parallel suite's wildcard listener on the same port
+- [x] T010 Core: under a decimal-point preset a whole-arriving figure whose commas are neither the decimal mark nor grouping ("1,5", "1,50") is refused — it read as 15 / 150 (the web's send figure since issue 231; caught by `batch.e2e.ts:196` once the split rows ran the rule). Core 17; browser test for the cap; batch e2e 7/7
 
 ## Later
 - iOS: the send form's balance line prints "0.46767" under a decimal-comma preset while the fiat line prints "¥3,35" (seen on the simulator).

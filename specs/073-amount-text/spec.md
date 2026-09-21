@@ -37,6 +37,10 @@ A pasted "1.234,56" or "1,234.56" is 1234.56 under any preset. A paste with no
 reading as one figure ("1.5e-7", "0x10", "4.5.6") is refused and the field keeps
 what it had — never salvaged digit by digit into a different sum (1.57).
 
+A comma that is neither the preset's decimal mark nor grouping ("1,5" or
+"1,50" arriving whole under a decimal-point preset) has no safe reading and is
+refused too — dropped as grouping it was 15 / 150.
+
 ### US3 — One rule (P1)
 The rule lives once, in the core; the web's TypeScript copy is removed.
 
