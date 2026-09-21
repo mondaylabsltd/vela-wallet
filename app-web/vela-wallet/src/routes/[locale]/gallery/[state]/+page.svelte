@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { loadCore } from '$lib/core/client';
 	import { toLocale } from '$lib/i18n/locales';
 	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
 	import WalletHome from '$lib/wallet/WalletHome.svelte';
@@ -25,6 +27,13 @@
 	const narrowStage = $derived(state === 'dc2n');
 	/** r4 is a render product, not a screen — it gets no phone frame. */
 	const bare = $derived(state === 'r4');
+
+	// The boards are fixtures, but their fields are the product's: the send
+	// amount cleans every keystroke through the core (spec 073), so a
+	// reviewer typing into it needs the core loaded, as every live route has.
+	onMount(() => {
+		void loadCore();
+	});
 </script>
 
 <svelte:head>

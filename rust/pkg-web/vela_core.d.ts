@@ -630,6 +630,18 @@ export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 export function abiEncodeUint256(value_hex: string): Uint8Array;
 
 /**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`
+ * (UTF-16 units, as `selectionStart` counts).
+ */
+export function amountTextCaret(raw: string, clean: string, caret: number): number;
+
+/**
+ * An amount field's text as the core reads it, or `undefined` for a paste
+ * with no reading as one figure (spec 073; `l10n::amount_text`).
+ */
+export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  */
@@ -1074,6 +1086,8 @@ export interface InitOutput {
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly activityfeedcore_view: (a: number) => [number, number, number, number];
+    readonly amountTextCaret: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly amountTextClean: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly approvalguardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

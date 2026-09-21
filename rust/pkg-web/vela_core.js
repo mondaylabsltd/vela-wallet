@@ -2858,6 +2858,48 @@ export function abiEncodeUint256(value_hex) {
 }
 
 /**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`
+ * (UTF-16 units, as `selectionStart` counts).
+ * @param {string} raw
+ * @param {string} clean
+ * @param {number} caret
+ * @returns {number}
+ */
+export function amountTextCaret(raw, clean, caret) {
+    const ptr0 = passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(clean, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.amountTextCaret(ptr0, len0, ptr1, len1, caret);
+    return ret >>> 0;
+}
+
+/**
+ * An amount field's text as the core reads it, or `undefined` for a paste
+ * with no reading as one figure (spec 073; `l10n::amount_text`).
+ * @param {string} raw
+ * @param {string} number
+ * @param {string | null} [previous]
+ * @param {boolean | null} [pasted]
+ * @returns {string | undefined}
+ */
+export function amountTextClean(raw, number, previous, pasted) {
+    const ptr0 = passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(number, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(previous) ? 0 : passStringToWasm0(previous, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.amountTextClean(ptr0, len0, ptr1, len1, ptr2, len2, isLikeNone(pasted) ? 0xFFFFFF : pasted ? 1 : 0);
+    let v4;
+    if (ret[0] !== 0) {
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v4;
+}
+
+/**
  * The Safe message hash a passkey signs for EIP-1271 (`SafeMessage(bytes)`
  * under the Safe's own domain) — the core's reading, for comparison.
  * @param {Uint8Array} original_hash
