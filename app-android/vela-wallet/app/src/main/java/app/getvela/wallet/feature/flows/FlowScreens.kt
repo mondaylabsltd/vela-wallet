@@ -1270,7 +1270,10 @@ fun BatchImportBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         HairlineDivider()
-        Row(
+        // The rate converts a FIAT sheet; in token units the core ignores it, so
+        // the row is not drawn at all (the web shows it only in fiat mode) —
+        // a rate beside "In XDAI" read as if it were being applied.
+        if (model.unit == BatchUnit.Fiat) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = VelaSpacing.md),

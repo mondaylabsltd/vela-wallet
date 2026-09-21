@@ -338,7 +338,9 @@ fun AmountInput(
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.Center) {
-                        if (typed.isEmpty()) Text(text = units.filter(AnnotatedString("0")).text, style = heroStyle.copy(color = colors.fgSubtle))
+                        // The placeholder carries the unit; the empty field draws nothing
+                        // (it drew " XDAI" too, on top of the placeholder's — device-found).
+                        if (typed.isEmpty()) Text(text = units.filter(AnnotatedString("0")).text, style = heroStyle.copy(color = colors.fgSubtle), maxLines = 1)
                         inner()
                     }
                 },
@@ -396,6 +398,9 @@ private fun amountUnits(prefix: String?, suffix: String?, unitColor: Color): Vis
     val lead = prefix.orEmpty()
     val tail = suffix?.let { " $it" }.orEmpty()
     return VisualTransformation { text ->
+        // Nothing typed: no unit either. The placeholder beside it already says
+        // "0 XDAI"; a unit on the empty field drew a second "XDAI" over it.
+        if (text.isEmpty()) return@VisualTransformation TransformedText(text, OffsetMapping.Identity)
         val drawn = buildAnnotatedString {
             withStyle(SpanStyle(color = unitColor)) { append(lead) }
             append(text)

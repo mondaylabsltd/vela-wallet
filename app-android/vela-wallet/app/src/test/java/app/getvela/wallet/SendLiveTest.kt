@@ -725,6 +725,18 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.BATCH_ADD_INSTEAD), replaces.mergeAction)
     }
 
+    /** Device-found: "In XDAI" still explained a USD rate the core ignores in token mode. */
+    @Test
+    fun `a token-denominated import says it converts nothing`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, show_batch_import = true)
+
+        val token = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, fiat_code = "USD"), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to "XDAI")), token.rateHint)
+        val fiat = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Fiat, fiat_code = "USD"), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to "USD", "sym" to "XDAI")), fiat.rateHint)
+    }
+
     // -- Spec 045 US4: the treasury pause's second exit ---------------------
 
     @Test
