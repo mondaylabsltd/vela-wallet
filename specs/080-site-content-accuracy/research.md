@@ -92,7 +92,7 @@ verified above:
 
 | Shell | Service endpoints | Per-network RPC |
 |---|---|---|
-| Web | All four honoured | Yes |
+| Web | Chain data, relay, fiat honoured; **the passkey index is ignored for create and sign-in** (`setRegistryUrl` never called), used for name lookups | Yes |
 | Desktop | All four; the passkey-index change applies after restart/sign-out; one field saves on each keystroke without a health check | Yes (explorer override ignored) |
 | Android | All four; **name lookups ignore the index override**; provider keys stored but unused | Yes |
 | iOS | **Page shows demo data and saves nothing** (event field-name mismatch); passkey index settable only in the sign-in endpoint sheet | Read-only |
@@ -130,9 +130,33 @@ privacy report, reproduced in audit-report.md §Legal.
 
 ## 6. External citations
 
-See §6 addendum once the external-citation report lands (audit coverage of the
-signer factory, bounty amounts, EntryPoint disclosure, Bybit facts, comparison
-table).
+Report received 2026-09-22. Corrections applied (audit-report.md F-4, F-5, H-10):
+Safe4337Module v0.3.0 has three reviews — Ackee (2024, one acknowledged warning),
+**Certora (Aug 2026, Medium M-01 acknowledged, not fixed)**, Nethermind (Aug 2026,
+no findings); the passkey module v0.2.1 additionally had a Nethermind review (Aug
+2026, no findings), and its factory and singleton were in scope of every v0.2.x
+review; the Safe bounty's top tier is "High, up to $1,000,000" (no Critical tier);
+the EntryPoint griefing disclosure (5 Feb 2026) — the $50k is from secondary
+reports and "never exploited" is unsourced, impact includes prolonged
+unavailability, and pending `handleOps` are visible in the public mempool; the
+pathUSD "DefiLlama assessment" has unclear provenance — cite Tempo's SECURITY.md;
+Bybit facts verified; MetaMask: limited gas sponsorship exists, the licence is
+source-available (non-commercial), EIP-7702 smart accounts are default for new
+users; Base App was renamed Coinbase Wallet on 10 Sep 2026 and account.base.app
+redirects; blog: the Ledger price (was $59, not $44) and the Family/Dharma/Loopring
+framing were wrong at their date.
+
+## 6a. Adversarial review (2026-09-22)
+
+An independent hostile reading of the rewritten English found two Fatal issues
+(third-party script on the passkey domain; "every service can be replaced" while
+the relay hard-codes Vela's chain directory), ten High (fee understated at
+"several times"; approval guard threshold; self-calls; key revocation; rpId rules;
+custody absolutes; relay powers; privacy; the signer factory missing from the
+network check; unverified recipient names) and many Medium/Low. All were fixed in
+en + zh before translation (commit 63bd439a); the product side of F1 was fixed
+with a Permissions-Policy header on getvela.app and removing analytics from
+/chain-setup. Details in audit-report.md.
 
 ## 7. Decisions
 
