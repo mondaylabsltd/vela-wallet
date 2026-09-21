@@ -30,6 +30,9 @@ use vela_core::app::clear_signing::{
 use vela_core::app::contacts::{
     ContactOperation, ContactShellResult, ContactsView, Event as ContactEvent,
 };
+use vela_core::app::dapp_browser::{
+    DbrOperation, DbrShellResult, DbrView, Event as DbrEvent,
+};
 use vela_core::app::dapp_permissions::{
     DpermOperation, DpermShellResult, DpermView, Event as DpermEvent,
 };
@@ -154,6 +157,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     SignOperation::export_all(&config)?;
     SignShellResult::export_all(&config)?;
     SignView::export_all(&config)?;
+    DbrEvent::export_all(&config)?;
+    DbrOperation::export_all(&config)?;
+    DbrShellResult::export_all(&config)?;
+    DbrView::export_all(&config)?;
     DpermEvent::export_all(&config)?;
     DpermOperation::export_all(&config)?;
     DpermShellResult::export_all(&config)?;
