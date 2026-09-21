@@ -222,34 +222,6 @@ pub fn remove_values(keys: &[String]) -> Result<()> {
     )
 }
 
-/// What this wallet is actually using on disk, and how many records it holds.
-///
-/// One JSON document, so the size is one `metadata` call and the record count
-/// is the sum of the array-valued keys plus one for each scalar. The settings
-/// screen said **2.4 MB / 216 records** to everybody; a person deciding whether
-/// to clear a cache deserves their own number.
-///
-/// `(bytes, records)`. Zero for both when the file is not there yet, which is a
-/// true statement about a wallet that has written nothing.
-#[must_use]
-pub fn usage() -> (u64, u32) {
-    let Ok(path) = path() else {
-        return (0, 0);
-    };
-    let bytes = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-    let records = read_all().map_or(0, |map| {
-        map.values()
-            .map(|value| match value {
-                // An array key holds N records; anything else is one.
-                Value::Array(items) => u32::try_from(items.len()).unwrap_or(u32::MAX),
-                Value::Null => 0,
-                _ => 1,
-            })
-            .sum()
-    });
-    (bytes, records)
-}
-
 /// Write one key, whole.
 ///
 /// Codecs live in the executors, not here — which is what lets a new machine
@@ -505,28 +477,6 @@ pub(crate) mod tests {
     /// `network_admin` saves the other three service URLs. The whole-value write
     /// this replaced meant configuring a self-hosted index silently unset the
     /// data, bundler and fiat endpoints — and saving those silently unset the
-    /// The storage panel's two figures, measured rather than asserted.
-    #[test]
-    fn usage_counts_records_and_measures_the_file() {
-        tests::with_temp_state("storage-usage", || {
-            // Nothing written yet: zero of both, which is true about a wallet
-            // that has stored nothing — not a failure to measure.
-            assert_eq!(usage(), (0, 0));
-
-            if write_value("vela.accounts", serde_json::json!([{ "a": 1 }, { "a": 2 }])).is_err()
-                || write_value("vela.balanceHidden", serde_json::json!("1")).is_err()
-                || write_value("vela.empty", serde_json::json!([])).is_err()
-            {
-                unreachable!("could not seed");
-            }
-            let (bytes, records) = usage();
-            // Two array entries plus one scalar. An empty array holds nothing
-            // and counts as nothing.
-            assert_eq!(records, 3);
-            assert!(bytes > 0, "the file is on disk and has a size");
-        });
-    }
-
     /// The raw view the shared rules read: a string as itself, a record as its
     /// JSON text — and a raw value written back lands as the same JSON value,
     /// so a record another shell reads is an object, not a quoted string.

@@ -66,7 +66,10 @@ use wallet::page::{Identity, WalletPage};
 /// somebody who already has a wallet.
 struct Root {
     onboarding: Option<gpui::Entity<OnboardingPage>>,
-    wallet: Option<gpui::Entity<WalletPage>>,
+    /// The wallet page, and the address it was built for.
+    wallet: Option<(gpui::Entity<WalletPage>, String)>,
+    /// The onboarding on screen was opened over the wallet to add an account.
+    adding: bool,
 }
 
 impl Root {
@@ -79,6 +82,7 @@ impl Root {
         Self {
             onboarding: None,
             wallet: None,
+            adding: false,
         }
     }
 }
@@ -97,6 +101,7 @@ impl Render for Root {
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
+                self.adding = false;
                 // And so do the resident machines. Contacts, networks and the
                 // chosen currency belong to the ACCOUNT; a resident that
                 // outlived a sign-out would show the previous person's address
@@ -108,8 +113,41 @@ impl Render for Root {
                     .clone();
                 root.child(page)
             }
+            // Another account is being added (spec 072): onboarding OVER the
+            // wallet rather than instead of it, so going back finds the page
+            // exactly as it was left.
+            SessionRoute::Wallet if let Some(entry) = session::adding_account(cx) => {
+                if !self.adding {
+                    self.onboarding = None;
+                }
+                self.adding = true;
+                let page = self
+                    .onboarding
+                    .get_or_insert_with(|| cx.new(|cx| OnboardingPage::adding(entry, window, cx)))
+                    .clone();
+                root.child(page)
+            }
             SessionRoute::Wallet => {
                 self.onboarding = None;
+                let added = std::mem::take(&mut self.adding);
+                // The active account changed under the page — one was added,
+                // or the switcher picked another. Everything the page and the
+                // resident machines hold was booted for the previous address
+                // (its name in the header, its hero, its address book), so
+                // they go, exactly as a sign-out drops them. A switch keeps
+                // the person where they were; a new account opens on its
+                // wallet.
+                let mut place = None;
+                if let Some((page, address)) = self.wallet.take() {
+                    if *address == view.address {
+                        self.wallet = Some((page, address));
+                    } else {
+                        if !added {
+                            place = Some(page.read(cx).place());
+                        }
+                        resident::drop_all(cx);
+                    }
+                }
                 let identity = Identity {
                     name: view
                         .accounts
@@ -117,11 +155,18 @@ impl Render for Root {
                         .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
                     address: view.address.clone(),
                 };
-                let page = self
-                    .wallet
-                    .get_or_insert_with(|| cx.new(|cx| WalletPage::signed_in(identity, window, cx)))
-                    .clone();
-                root.child(page)
+                let address = view.address.clone();
+                let (page, _) = self.wallet.get_or_insert_with(|| {
+                    let page = cx.new(|cx| {
+                        let mut page = WalletPage::signed_in(identity, window, cx);
+                        if let Some(place) = place {
+                            page.restore_place(place);
+                        }
+                        page
+                    });
+                    (page, address)
+                });
+                root.child(page.clone())
             }
         };
         // The parallel space's marker, over whichever screen is up. It renders

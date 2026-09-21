@@ -395,6 +395,9 @@ pub const STORAGE_RECORDS: u32 = 216;
 pub const STORAGE_SEGMENTS: [(f32, u32); 3] = [(0.5, 0x5a7cf6), (0.3, 0x3da872), (0.2, 0x85827a)];
 
 pub struct StorageItem {
+    /// The catalog's row id (`vela_core::storage_catalog::ITEMS`) — what a
+    /// row's action clears. A connected site's row carries `dapps`.
+    pub id: &'static str,
     pub label: SharedString,
     pub meta: SharedString,
     /// 清除 for most rows; 断开全部 for the dApp sessions one.
@@ -420,12 +423,14 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: None,
             items: vec![
                 StorageItem {
+                    id: "transactions",
                     label: s.item_transactions.clone(),
                     meta: SharedString::from(format!("{} · 1.0 MB", records(200))),
                     action: s.storage_clear.clone(),
                     destructive: true,
                 },
                 StorageItem {
+                    id: "contacts",
                     label: s.item_contacts.clone(),
                     meta: SharedString::from(format!(
                         "{} · 42 KB",
@@ -435,6 +440,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "custom",
                     label: s.item_custom.clone(),
                     meta: SharedString::from(format!(
                         "{} · 12 KB",
@@ -444,6 +450,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
                     destructive: true,
                 },
                 StorageItem {
+                    id: "browsing",
                     label: s.item_browsing.clone(),
                     meta: SharedString::from(format!("{} · 58 KB", records(31))),
                     action: s.storage_clear.clone(),
@@ -456,18 +463,21 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             action: Some(s.storage_clear_all.clone()),
             items: vec![
                 StorageItem {
+                    id: "balances",
                     label: s.item_balances.clone(),
                     meta: SharedString::from("0.6 MB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "rates",
                     label: s.item_rates.clone(),
                     meta: SharedString::from("96 KB"),
                     action: s.storage_clear.clone(),
                     destructive: false,
                 },
                 StorageItem {
+                    id: "scan",
                     label: s.item_scan.clone(),
                     meta: SharedString::from("31 KB"),
                     action: s.storage_clear.clone(),
@@ -479,6 +489,7 @@ pub fn storage_groups(s: &SettingsStrings) -> Vec<StorageGroup> {
             label: s.storage_connections.clone(),
             action: None,
             items: vec![StorageItem {
+                id: "dapps",
                 label: s.item_dapps.clone(),
                 meta: SharedString::from(fill(&s.count_sites, "count", "4")),
                 action: s.storage_disconnect_all.clone(),
@@ -562,6 +573,12 @@ pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)
     ]
 }
 
+/// Where each About link goes: its drawn value, over HTTPS.
+#[must_use]
+pub fn about_link_url(value: &str) -> String {
+    format!("https://{value}")
+}
+
 pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString)> {
     vec![
         (
@@ -575,6 +592,34 @@ pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString)> {
         (s.about_link_safe.clone(), SharedString::from("safe.global")),
     ]
 }
+
+// -- appearance / localization (spec 072) -------------------------------------
+
+/// Every shipped locale by its own name, in `vela_core::i18n::SUPPORTED`'s
+/// order — the web's `LOCALE_ENDONYMS`. An endonym is not translated: a
+/// person looking for their language looks for it in their language.
+pub const LOCALE_ENDONYMS: [(&str, &str); 15] = [
+    ("en", "English"),
+    ("zh", "简体中文"),
+    ("zh-TW", "繁體中文（台灣）"),
+    ("zh-HK", "繁體中文（香港）"),
+    ("ja", "日本語"),
+    ("ko", "한국어"),
+    ("vi", "Tiếng Việt"),
+    ("id", "Bahasa Indonesia"),
+    ("tr", "Türkçe"),
+    ("es-MX", "Español (México)"),
+    ("pt-BR", "Português (Brasil)"),
+    ("fr", "Français"),
+    ("de", "Deutsch"),
+    ("ru", "Русский"),
+    ("it", "Italiano"),
+];
+
+/// The currencies the picker offers — the web's drawn eight, the list the
+/// phones ship too. A committed code outside it is added by the live menu, so
+/// nobody's choice disappears from the list that shows it.
+pub const CURRENCY_CODES: [&str; 8] = ["USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND"];
 
 // -- rescue (DSR1) ------------------------------------------------------------
 
@@ -593,8 +638,17 @@ pub fn banner_text(s: &SettingsStrings) -> SharedString {
     ))
 }
 
-/// The four places SR2/DSR1 point at for a working endpoint.
-pub const RPC_PROVIDER_LINKS: [&str; 4] = ["Alchemy", "QuickNode", "dRPC", "Chainlist"];
+/// The four places SR2/DSR1 point at for a working endpoint, and where each
+/// goes — the web's `rpcFix` providers.
+pub const RPC_PROVIDER_LINKS: [(&str, &str); 4] = [
+    ("Alchemy", "https://alchemy.com"),
+    ("QuickNode", "https://quicknode.com"),
+    ("dRPC", "https://drpc.org"),
+    ("Chainlist", "https://chainlist.org"),
+];
+
+/// Where the endpoints panel's "Self-hosting guide →" goes (the web's).
+pub const SELF_HOST_GUIDE_URL: &str = "https://github.com/mondaylabsltd/vela-wallet";
 
 /// Find a network fixture by id. Panics only on a typo in this file's own
 /// constants, which a test catches before anybody runs the app.

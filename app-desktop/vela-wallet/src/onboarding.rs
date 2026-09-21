@@ -152,6 +152,10 @@ pub struct OnboardingPage {
     /// re-probe (`save_endpoint` → `Event::Start`), so a new answer from the
     /// index is allowed to raise it once more.
     endpoint_dismissed: bool,
+    /// Opened over a signed-in wallet to add another account (spec 072), so
+    /// every way out of it leads back to that wallet rather than to a first
+    /// run nobody is on.
+    adding: bool,
     /// Whether the ceremony-channel poll is running.
     ///
     /// A bool, NOT the `Task`. gpui cancels a task when its handle is dropped,
@@ -244,6 +248,7 @@ impl OnboardingPage {
             pin: None,
             pick: None,
             endpoint: None,
+            adding: false,
             watching: false,
         };
 
@@ -254,6 +259,28 @@ impl OnboardingPage {
         let pending = page.login.dispatch(vela_core::app::login::Event::Start);
         page.pump_login(pending, cx);
         page
+    }
+
+    /// Onboarding over a signed-in wallet: "create a new account" goes
+    /// straight into the journey, "sign in to an existing one" straight to its
+    /// methods. No launch animation and no introduction — this is a task
+    /// somebody started from Settings, not a first launch.
+    pub fn adding(entry: session::AddAccount, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let mut page = Self::new(window, cx);
+        page.adding = true;
+        page.launch = None;
+        page.intro = None;
+        match entry {
+            session::AddAccount::Create => page.start_create(cx),
+            session::AddAccount::SignIn => page.signin_methods_open = true,
+        }
+        page
+    }
+
+    /// Back to the wallet this was opened over, with no account added.
+    fn leave_adding(&mut self, cx: &mut Context<Self>) {
+        session::add_account_cancelled(cx);
+        cx.notify();
     }
 
     // -- the two entrances --------------------------------------------------
@@ -322,6 +349,10 @@ impl OnboardingPage {
         self.prompt = None;
         self.pin = None;
         self.pick = None;
+        // Opened to add an account: leaving the journey is leaving the task.
+        if self.adding {
+            self.leave_adding(cx);
+        }
         cx.notify();
     }
 
@@ -710,11 +741,28 @@ impl OnboardingPage {
             ));
 
         let endpoint = self.endpoint_surface(theme, window, cx);
+        // Over a signed-in wallet the welcome is a detour — a sign-in that
+        // failed lands here — so it carries the way back to that wallet.
+        let back = self.adding.then(|| {
+            div()
+                .id("adding-back")
+                .pb(px(FLOW_GAP_LG))
+                .cursor_pointer()
+                .text_size(theme::text_flow_sub())
+                .text_color(theme.fg_muted)
+                .hover(|el| el.text_color(theme.fg_base))
+                .on_click(cx.listener(|this, _, _, cx| this.leave_adding(cx)))
+                .child(SharedString::from(format!(
+                    "‹ {}",
+                    self.loc.t("onboarding.common.back")
+                )))
+        });
         div()
             .w_full()
             .max_w(px(FLOW_COLUMN_W))
             .flex()
             .flex_col()
+            .children(back)
             .child(top)
             .child(buttons.mt(px(GAP_HERO_CTA)))
             .children(endpoint)
@@ -774,6 +822,11 @@ impl OnboardingPage {
             on_pick,
             cx.listener(|this, _, _, cx| {
                 this.signin_methods_open = false;
+                // Opened from Settings to sign in to another account:
+                // dismissing the methods is going back to that wallet.
+                if this.adding && !this.login_view.busy {
+                    this.leave_adding(cx);
+                }
                 cx.notify();
             }),
         );

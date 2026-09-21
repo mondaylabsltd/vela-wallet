@@ -322,6 +322,15 @@ where
     entity
 }
 
+/// Forget one machine: its store was cleared under it (spec 072), and the
+/// next use boots it from what is on disk now — rather than a machine that
+/// still holds the cleared list writing it back.
+pub fn forget<A: 'static>(cx: &mut App) {
+    if cx.has_global::<Residents>() {
+        cx.global_mut::<Residents>().0.remove(&TypeId::of::<A>());
+    }
+}
+
 /// Forget every machine.
 ///
 /// Called on sign-out. Contacts, networks and the chosen currency belong to the
