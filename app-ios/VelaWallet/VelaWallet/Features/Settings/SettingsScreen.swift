@@ -68,6 +68,10 @@ struct SettingsScreen: View {
     /// "Back up keys to Ethereum" was tapped (spec 062). The host decides
     /// whether there is anything to send.
     var onEthereumBackup: (() -> Void)?
+    /// The Clear Signer page's Save and reset (spec 071). Save answers whether
+    /// the core took the address.
+    var onSaveSignerUrl: ((String) -> Bool)?
+    var onResetSignerUrl: (() -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -101,7 +105,9 @@ struct SettingsScreen: View {
         onAccountSignIn: (() -> Void)? = nil,
         endpointActions: SettingsEndpointActions? = nil,
         onOpenAccounts: (() -> Void)? = nil,
-        onEthereumBackup: (() -> Void)? = nil
+        onEthereumBackup: (() -> Void)? = nil,
+        onSaveSignerUrl: ((String) -> Bool)? = nil,
+        onResetSignerUrl: (() -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -120,6 +126,8 @@ struct SettingsScreen: View {
         self.endpointActions = endpointActions
         self.onOpenAccounts = onOpenAccounts
         self.onEthereumBackup = onEthereumBackup
+        self.onSaveSignerUrl = onSaveSignerUrl
+        self.onResetSignerUrl = onResetSignerUrl
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -198,7 +206,9 @@ struct SettingsScreen: View {
                     onConfirmStorage: {
                         if let id = pendingStorageItem?.id { onClearStorageItem?(id) }
                         pendingStorageItem = nil
-                    }
+                    },
+                    onSaveSignerUrl: onSaveSignerUrl,
+                    onResetSignerUrl: onResetSignerUrl
                 )
                     .themed(theme.scheme)
             }
@@ -395,6 +405,8 @@ struct SettingsScreen: View {
         case "language": overlay = .language
         case "currency": overlay = .currency
         case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
+        case SettingsFixtures.signWithRow: overlay = .signWith
+        case SettingsFixtures.signerPageRow: if model.signerPage != nil { overlay = .signerPage }
         case "number-format": overlay = .numberFormat
         case "date-format": overlay = .dateFormat
         case "time-format": overlay = .timeFormat

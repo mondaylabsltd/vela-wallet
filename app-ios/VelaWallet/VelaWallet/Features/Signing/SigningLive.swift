@@ -38,6 +38,10 @@ enum SigningLive {
         var signWithOpen = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
+        /// Every "Sign with" the core offers, in its order (`SignPrefView.offered`).
+        var signMethods = ["auto"]
+        /// How the Clear Signer last ended for this request without signing.
+        var clearSignerNotice: ClearSignerNotice?
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -70,21 +74,47 @@ enum SigningLive {
         return ["\(base)/apple-touch-icon.png", "\(base)/favicon.ico"]
     }
 
-    /// The "Sign with" row: the create flow's own words for where a passkey is.
+    /// The "Sign with" row: the create flow's own words for where a passkey
+    /// is, and the Clear Signer with its one line — for every value the core
+    /// offers, in its order. A name this build has no words for is not drawn.
     static func signWith(context: Context) -> SignWithModel {
         let loc = context.loc
-        let titles: [(String, String)] = [
-            ("auto", loc.t("common.automatic")),
-            ("platform", loc.t("onboarding.create.methodPlatformTitle")),
-            ("hybrid", loc.t("onboarding.create.methodHybridTitle")),
-            ("security_key", loc.t("onboarding.create.methodSecurityKeyTitle")),
-        ]
+        let options = context.signMethods.compactMap { id -> SignWithModel.Option? in
+            guard let title = signMethodTitle(id, loc: loc) else { return nil }
+            return .init(id: id, title: title, selected: id == context.signMethod,
+                         detail: signMethodDetail(id, loc: loc))
+        }
         return SignWithModel(
             label: loc.t("componentsUi.signing.signWith"),
-            value: titles.first { $0.0 == context.signMethod }?.1 ?? titles[0].1,
+            value: options.first(where: \.selected)?.title ?? loc.t("common.automatic"),
             open: context.signWithOpen,
-            options: titles.map { .init(id: $0.0, title: $0.1, selected: $0.0 == context.signMethod) }
+            options: options
         )
+    }
+
+    /// One "Sign with" value in words — the signing sheet's and Settings'.
+    static func signMethodTitle(_ id: String, loc: Loc) -> String? {
+        switch id {
+        case "auto": loc.t("common.automatic")
+        case "platform": loc.t("onboarding.create.methodPlatformTitle")
+        case "hybrid": loc.t("onboarding.create.methodHybridTitle")
+        case "security_key": loc.t("onboarding.create.methodSecurityKeyTitle")
+        case UserOpSpine.clearSignerMethod: loc.t("componentsUi.signing.clearSignerTitle")
+        default: nil
+        }
+    }
+
+    /// The line under a value: only the Clear Signer needs one — the other
+    /// four say where a key is, and this one says what it does instead.
+    static func signMethodDetail(_ id: String, loc: Loc) -> String? {
+        id == UserOpSpine.clearSignerMethod ? loc.t("componentsUi.signing.clearSignerBody") : nil
+    }
+
+    /// The Clear Signer's ending, when it left the request unsigned. Closed is
+    /// a person's own decision, told calmly; a refusal or a mismatch is not.
+    static func clearSignerBlocks(_ notice: ClearSignerNotice?, loc: Loc) -> [SigningBlock] {
+        guard let notice else { return [] }
+        return [.warning(tone: notice == .closed ? .caution : .danger, text: loc.t(notice.key))]
     }
 
     /// The wallet's own key backup, in the person's language. The core's
@@ -120,6 +150,7 @@ enum SigningLive {
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
         let blocks = statusBlocks(sign: sign, loc: loc)
+            + clearSignerBlocks(context.clearSignerNotice, loc: loc)
             + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                           dataBytes: dataBytes, context: context)
             // Only a TRANSACTION has balances to change. A message moves

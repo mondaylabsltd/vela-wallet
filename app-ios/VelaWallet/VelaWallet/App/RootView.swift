@@ -288,6 +288,13 @@ struct RootView: View {
         // survives a settings write (data-model §5).
         let settingsStore = SettingsStore(store: shelf, accounts: store, pool: pool)
         _settings = State(initialValue: settingsStore)
+        // How a signature is made where no signing sheet asks (Send): the
+        // stored "Sign with" — and the Clear Signer, on the page Settings
+        // names (spec 071).
+        spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
+        spine.clearSigner = ClearSigner(loc: loc, signerUrl: { [settingsStore] in
+            settingsStore.signPref?.signerUrl
+        })
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its
@@ -1068,6 +1075,9 @@ struct RootView: View {
                         // …and so is the default speed (spec 069): the send
                         // form's folded control shows it from the first open.
                         settings.openFeeTier()
+                        // …and how this device signs (spec 071): every signing
+                        // sheet, and Send, start at it.
+                        settings.openSignPref()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
                         // `network_admin` that had not been opened yet made the
@@ -1367,6 +1377,10 @@ struct RootView: View {
             pool: pool,
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
+            // Every request starts at the stored "Sign with" (spec 071); the
+            // sheet's own pick is that request's alone.
+            preferredSignMethod: { [settings] in settings.signPref?.method ?? "auto" },
+            offeredSignMethods: { [settings] in settings.signPref?.offered ?? ["auto"] },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -1396,8 +1410,11 @@ struct RootView: View {
             )
         )
         // The spine is shared with Send; it reads THIS request's "Sign with"
-        // choice, and goes back to `auto` the moment the controller is dropped.
-        userOpSpine.signMethod = { [weak controller] in controller?.signMethod ?? "auto" }
+        // choice, and goes back to the stored default the moment the
+        // controller is dropped.
+        userOpSpine.signMethod = { [weak controller, settings] in
+            controller?.signMethod ?? settings.signPref?.method ?? "auto"
+        }
         signing = controller
         controller.open(incoming)
     }
@@ -2021,10 +2038,17 @@ struct RootView: View {
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
-                model.base = .sendConfirm(SendLive.confirm(
+                var live = SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
                     display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
-                ))
+                )
+                // The Clear Signer's ending (spec 071): the core heard a
+                // cancelled ceremony and kept the confirmation up; this says
+                // why nothing was sent. The core's own notice goes first.
+                if live.notice == nil, let notice = send.clearSignerNotice {
+                    live.notice = loc.t(notice.key)
+                }
+                model.base = .sendConfirm(live)
             }
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
                 model.sheet = .feeToken(SendLive.feeSheet(fee, on: sheet, loc: loc))
@@ -2264,7 +2288,9 @@ struct RootView: View {
             simulation: live.simulation,
             signMethod: live.signMethod,
             signWithOpen: live.signWithOpen,
-            feeOpen: live.feeOpen
+            feeOpen: live.feeOpen,
+            signMethods: live.offeredSignMethods(),
+            clearSignerNotice: live.clearSignerNotice
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2715,7 +2741,15 @@ struct RootView: View {
                       let call = asked.check.call
                 else { return }
                 openEthereumBackup(call)
-            }
+            },
+            // The core validates the address and stores only what it accepts;
+            // the sheet closes on its verdict, and keeps the refusal on screen
+            // otherwise (spec 071).
+            onSaveSignerUrl: { text in
+                settings.submitSignerUrl(text)
+                return settings.signPref?.signerUrlError == nil
+            },
+            onResetSignerUrl: { settings.resetSignerUrl() }
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -2783,6 +2817,9 @@ struct RootView: View {
         }
         if let view = settings.feeTier {
             model = SettingsLive.withFeeTier(view, on: model, loc: loc)
+        }
+        if let view = settings.signPref {
+            model = SettingsLive.withSignPref(view, on: model, loc: loc)
         }
         // The switcher's rows are the SESSION's, with the balance core's
         // cached totals — after the currency, because the figures it writes
@@ -2974,6 +3011,10 @@ struct RootView: View {
             // The core validates and persists; a pick here is the ONE place
             // the stored default changes (the send screen's is one-shot).
             if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
+        case .signWith:
+            // The same rule for "Sign with" (spec 071); a name the core does
+            // not offer is ignored by the core.
+            settings.chooseSignMethod(id)
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
             let tag = id == "system" ? "auto" : id

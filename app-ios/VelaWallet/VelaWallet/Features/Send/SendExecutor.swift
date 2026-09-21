@@ -39,6 +39,10 @@ final class SendExecutor {
         /// The pending row is on disk: the feed re-reads, so the home shows it
         /// at submit (FR-006).
         var recordsPersisted: () -> Void = {}
+        /// The Clear Signer ended without a signature (spec 071). The core
+        /// hears a cancelled ceremony — back to confirm, nothing sent — and
+        /// the screen says which of the Clear Signer's sentences applies.
+        var clearSignerEnded: (ClearSignerNotice) -> Void = { _ in }
     }
 
     private let store: VelaStore
@@ -319,6 +323,7 @@ final class SendExecutor {
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
         } catch let refused as UserOpSpine.Refused {
+            if case .clearSigner(let notice) = refused.failure { ports.clearSignerEnded(notice) }
             return CoreJSON.string([
                 "type": "submit_failed", "failure": Self.failureWire(refused.failure),
             ])
@@ -419,6 +424,10 @@ final class SendExecutor {
     private static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
         switch failure {
         case .passkeyCancelled: return ["type": "passkey_cancelled"]
+        // Nothing was signed and the send may be signed another way: the
+        // core's cancelled ceremony, which keeps the confirmation on screen.
+        // The words are the screen's (`clearSignerEnded`).
+        case .clearSigner: return ["type": "passkey_cancelled"]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
         case .other(let message):
@@ -531,6 +540,10 @@ struct SendAccountPort: UserOpSpine.AccountPort {
         else if hints.contains("usb") || hints.contains("nfc") { method = .securityKey }
         else { method = .platform }
         return (transports, method)
+    }
+
+    func name(of address: String) async -> String? {
+        (await record(for: address)?["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     private func record(for address: String) async -> [String: Any]? {

@@ -44,6 +44,10 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// The default transaction speed (spec 069): three speeds, each with what
     /// it buys.
     case feeSpeed
+    /// The default "Sign with" (spec 071): every method the core offers.
+    case signWith
+    /// The Clear Signer page (spec 071): an address, saved or refused.
+    case signerPage
 
     var id: String { String(describing: self) }
 }
@@ -169,6 +173,22 @@ struct AccountsSheetModel {
     var rows: [AccountsSheetRowModel]
     let primary: String
     let secondary: String
+}
+
+/// The Clear Signer page's sheet (spec 071): the address in force, what the
+/// core said about the last one typed, and — whenever it is not a
+/// `getvela.app` page — that this wallet's passkeys will not sign there.
+struct SignerPageModel {
+    let title: String
+    let subtitle: String
+    let field: UrlFieldModel
+    /// `settings.signing.pageInvalid` / `pageInsecure`: nothing was stored.
+    let error: String?
+    /// `settings.signing.pageForeign`.
+    let foreign: String?
+    let save: String
+    /// "Use the official page" — only when another one is chosen.
+    let reset: String?
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.
@@ -510,6 +530,9 @@ struct SettingsScreenModel {
     var currencySheet: SelectSheetModel
     /// Spec 069: the default transaction speed's sheet.
     var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
+    /// Spec 071: the default "Sign with" and the Clear Signer page.
+    var signWithSheet = SelectSheetModel(title: "", rows: [])
+    var signerPage: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

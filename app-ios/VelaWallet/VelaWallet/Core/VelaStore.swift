@@ -73,6 +73,13 @@ struct VelaStore {
         /// tier name, judged by the core. Survives sign-out.
         static let feeTier = "vela.feeTier"
 
+        // Owned by `sign_pref` (spec 071). Raw, judged by the core; both
+        // survive sign-out.
+        /// The "Sign with" every signing sheet starts at.
+        static let signMethod = "vela.signMethod"
+        /// The Clear Signer page; absent is the official one.
+        static let clearSignerUrl = "vela.clearSignerUrl"
+
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet
         /// knew, so a cold start shows a figure instead of a spinner.

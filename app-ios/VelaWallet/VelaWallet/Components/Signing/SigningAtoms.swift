@@ -512,9 +512,19 @@ struct SignWithRow: View {
                 VStack(spacing: 0) {
                     ForEach(model.options) { option in
                         HStack {
-                            Text(verbatim: option.title)
-                                .typeRole(Typography.rowSub.scaled(textScale))
-                                .foregroundStyle(option.selected ? theme.fgBase : theme.fgMuted)
+                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                                Text(verbatim: option.title)
+                                    .typeRole(Typography.rowSub.scaled(textScale))
+                                    .foregroundStyle(option.selected ? theme.fgBase : theme.fgMuted)
+                                // What the option does, under its name — never
+                                // squeezed beside it (the speed sheet's rule).
+                                if let detail = option.detail {
+                                    Text(verbatim: detail)
+                                        .typeRole(Typography.flowCaption.scaled(textScale))
+                                        .foregroundStyle(theme.fgSubtle)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
                             Spacer()
                             if option.selected {
                                 LucideIcon(.check, size: LucideIconSize.rowGlyph)

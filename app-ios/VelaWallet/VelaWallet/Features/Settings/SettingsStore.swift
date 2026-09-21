@@ -25,6 +25,7 @@ import VelaCore
 extension NetworkAdminCore: CoreBridge {}
 extension DisplayCurrencyCore: CoreBridge {}
 extension FeeTierPrefCore: CoreBridge {}
+extension SignPrefCore: CoreBridge {}
 
 /// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
 /// real one, the factory `fast` when nothing was chosen.
@@ -56,6 +57,12 @@ final class SettingsStore {
     /// Settings shows it and every send starts at it.
     private(set) var feeTier: FeeTierPrefViewWire?
 
+    /// How this device signs by default, and which Clear Signer page it opens
+    /// (spec 071) — app-wide like the speed: every signing sheet starts at it.
+    /// Seeded with the machine's own first view, so a sheet raised before the
+    /// stored values land still lists what the core offers.
+    private(set) var signPref: SignPrefViewWire?
+
     /// `true` once the core has read all four stores. Mutations sent before it
     /// are dropped by the core.
     var isLoaded: Bool { networkAdmin?.loaded == true }
@@ -65,6 +72,7 @@ final class SettingsStore {
     private var core: CoreStore<NetViewWire>!
     private var currencyCore: CoreStore<CurrencyViewWire>!
     private var feeTierCore: CoreStore<FeeTierPrefViewWire>!
+    private var signPrefCore: CoreStore<SignPrefViewWire>!
 
     /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
     /// machine needs it because its first rate rung is Chainlink's fiat feeds
@@ -94,6 +102,14 @@ final class SettingsStore {
             onView: { [weak self] view in self?.feeTier = view },
             onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") }
         )
+        self.signPref = SignPrefViewWire.initial
+        let signPrefExecutor = SignPrefExecutor(store: store)
+        self.signPrefCore = CoreStore(
+            bridge: SignPrefCore(),
+            perform: { operation in signPrefExecutor.perform(operation) },
+            onView: { [weak self] view in self?.signPref = view },
+            onFault: { print("[vela-wallet] sign_pref fault: \($0)") }
+        )
     }
 
     /// Boot the default-speed machine. App-wide and idempotent, like the
@@ -107,6 +123,30 @@ final class SettingsStore {
     /// screen is one-shot and never comes here.
     func chooseFeeTier(_ tier: String) {
         feeTierCore.dispatch(CoreJSON.string(["type": "user_chose", "tier": tier]))
+    }
+
+    /// Boot the signing-preferences machine. App-wide and idempotent: the
+    /// first signing sheet starts at what it read, whether or not anybody has
+    /// opened Settings.
+    func openSignPref() {
+        signPrefCore.boot(CoreJSON.string(["type": "refresh"]))
+    }
+
+    /// Settings' "Sign with" — the default, and only from there: a sheet's own
+    /// pick is one request's and never comes here.
+    func chooseSignMethod(_ method: String) {
+        signPrefCore.dispatch(CoreJSON.string(["type": "method_chosen", "method": method]))
+    }
+
+    /// The Clear Signer page, as typed. The core validates, and stores
+    /// nothing it refuses.
+    func submitSignerUrl(_ text: String) {
+        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_submitted", "text": text]))
+    }
+
+    /// Back to the official page.
+    func resetSignerUrl() {
+        signPrefCore.dispatch(CoreJSON.string(["type": "signer_url_reset"]))
     }
 
     /// USD → that currency, through the display machine's own waterfall.
@@ -123,6 +163,9 @@ final class SettingsStore {
     func open() {
         core.boot(CoreJSON.string(["type": "started"]))
         openCurrency()
+        // The page's two signing rows read what is stored, however Settings
+        // was reached (spec 071).
+        openSignPref()
     }
 
     /// Boot the currency machine alone.
