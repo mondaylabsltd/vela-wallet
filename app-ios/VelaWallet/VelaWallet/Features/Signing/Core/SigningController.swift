@@ -95,6 +95,34 @@ final class SigningController {
         signWithOpen = false
     }
 
+    /// The fee row's coin list (the web's `feeOpen`). Which coins pay, what
+    /// each costs and which cannot are the fee machine's; the pick is a quote
+    /// PARAMETER the core re-prices the operation in, and the approve carries
+    /// the same view's `fee_token` (issue #262: an account holding USDT and no
+    /// ETH was quoted in ETH with no way to choose the coin it has).
+    private(set) var feeOpen = false
+
+    /// A tap on the fee row: a failed quote is asked again; with more than one
+    /// coin, the list opens or closes.
+    func feeTapped() {
+        guard let fee else { return }
+        if fee.failed != nil {
+            dispatch(feeCore, ["type": "requote"])
+        } else if fee.options.count > 1 {
+            feeOpen.toggle()
+        }
+    }
+
+    /// A coin from the list, by its row id (`SigningLive.nativeFeeId` = the
+    /// chain's own). A coin that cannot pay is refused by the core.
+    func pickFee(_ id: String) {
+        dispatch(feeCore, [
+            "type": "select_fee_asset",
+            "token": id == SigningLive.nativeFeeId ? NSNull() : id as Any,
+        ])
+        feeOpen = false
+    }
+
     private var signCore: CoreStore<SignViewWire>!
     private var clearCore: CoreStore<ClearSigningViewWire>!
     private var guardCore: CoreStore<GuardViewWire>!
@@ -438,14 +466,29 @@ final class SigningController {
         [
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
             "bundler_cost_wei": NSNull(),
-            "gas_fee_token": NSNull(),
-            "quoted_fee": fee?.fee.map { estimate in
-                ["amount": estimate.totalWei, "recipient": estimate.feeRecipient ?? ""] as [String: Any]
-            } as Any? ?? NSNull(),
+            // The coin the person picked pays, and the amount signed is in
+            // THAT coin — the send core's own rule (`submit_user_op`): an
+            // ERC-20 fee's amount rides in `fee_asset`; `total_wei` is the
+            // native figure and never what an ERC-20 leg moves.
+            "gas_fee_token": fee?.feeToken as Any? ?? NSNull(),
+            "quoted_fee": quotedFee(fee?.fee) as Any? ?? NSNull(),
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.result?.intent as Any? ?? NSNull(),
         ]
+    }
+
+    /// The fee the slide displayed, as signed: amount in the paying coin's
+    /// base units, and where it goes. No recipient → no quoted fee (the send
+    /// core's `submit_user_op` rule).
+    static func quotedFee(_ estimate: FeeEstimateWire?) -> [String: Any]? {
+        guard let estimate, let recipient = estimate.feeRecipient else { return nil }
+        let amount: String
+        switch estimate.feeAsset {
+        case .erc20(_, _, let erc20Amount, _): amount = erc20Amount
+        case .native: amount = estimate.totalWei
+        }
+        return ["amount": amount, "recipient": recipient]
     }
 
     /// The first call of a request: `to`, `data`, `value`.

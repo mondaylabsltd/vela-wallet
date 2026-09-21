@@ -1077,6 +1077,8 @@ struct RootView: View {
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onSignWith: { id in signing?.signWith(id) },
+                        onFee: { signing?.feeTapped() },
+                        onFeePick: { id in signing?.pickFee(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         onSelectTab: selectTab
@@ -2033,7 +2035,8 @@ struct RootView: View {
             sim: trust.trust?.sim,
             simulation: live.simulation,
             signMethod: live.signMethod,
-            signWithOpen: live.signWithOpen
+            signWithOpen: live.signWithOpen,
+            feeOpen: live.feeOpen
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2489,7 +2492,9 @@ struct RootView: View {
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
-                    onSignWith: { id in signing.signWith(id) }
+                    onSignWith: { id in signing.signWith(id) },
+                    onFee: { signing.feeTapped() },
+                    onFeePick: { id in signing.pickFee(id) }
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])
