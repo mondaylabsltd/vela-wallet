@@ -3802,10 +3802,9 @@ impl WalletPage {
     /// DSD2cL's total line, which reads what the importer's own view does not
     /// carry: the balance of the coin being split.
     ///
-    /// The import SEEDS the form on this branch (it replaces the rows), so
-    /// the line is measured against the whole balance; an import that adds
-    /// to rows already there draws from `split_remaining` instead — the
-    /// second argument, the web's `formHasRows && !replaces`.
+    /// An import that SEEDS the form (or replaces its rows) is measured
+    /// against the whole balance; one that adds to rows already there draws
+    /// from `split_remaining` instead — the web's `formHasRows && !replaces`.
     fn dress_batch_total(&self, body: &mut flow_fixtures::FlowBody, cx: &mut Context<Self>) {
         let flow_fixtures::FlowBody::BatchImport(model) = body else {
             return;
@@ -3823,7 +3822,7 @@ impl WalletPage {
             batch,
             &token.symbol,
             &token.balance,
-            None,
+            flows_live::batch_remaining(&host.view, host.batch_replaces),
             &self.flow_strings,
         );
     }
@@ -4078,6 +4077,8 @@ impl WalletPage {
             open_fee_token: bind(FlowStep::FeeToken, cx),
             open_contact_pick: bind(FlowStep::ContactPick, cx),
             open_add_token: bind(FlowStep::AddToken, cx),
+            open_receive: None,
+            delete_tx: None,
             open_scan: bind(FlowStep::Scan, cx),
             add_recipient: bind(FlowStep::AddRecipient, cx),
             open_batch_import: bind(FlowStep::BatchImport, cx),
@@ -4139,6 +4140,39 @@ impl WalletPage {
                     }))
                 })
                 .collect();
+        }
+
+        // DT4L, live: the empty state's caption says "tap here to see your
+        // address and receive tokens", so tapping it opens Receive — the
+        // web's `.empty-tap`, `go('receive')`.
+        if live && matches!(panel, FlowPanel::Dt1 | FlowPanel::Dt4) {
+            actions.open_receive = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    this.enter_flow(FlowEntry::Receive, cx);
+                    cx.notify();
+                },
+            )));
+        }
+
+        // DA2L, live: delete this record (the web's `deleteSelectedTx`). The
+        // feed tombstones it and drops the row at once (`DeleteRequested`);
+        // the chain keeps the transaction. The detail has nothing left to
+        // show, so the column steps back to the list it came from.
+        if live && matches!(panel, FlowPanel::Da2 | FlowPanel::Da3) {
+            actions.delete_tx = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(id) = this.tx_detail.take() else {
+                        return;
+                    };
+                    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            vela_core::app::activity_feed::Event::DeleteRequested { id },
+                            cx,
+                        );
+                    });
+                    this.flow_back(cx);
+                },
+            )));
         }
 
         // DT3L, live: a real field, and a CTA that saves what it found.

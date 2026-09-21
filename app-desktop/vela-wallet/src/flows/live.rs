@@ -469,39 +469,17 @@ pub fn tx_detail(
             .as_ref()
             .filter(|hash| !hash.is_empty())
             .map(|hash| SharedString::from(format!("{}/tx/{hash}", explorer_root(item.chain_id)))),
+        delete_label: Some(s.delete_record.clone()),
     })
 }
 
-/// Where the explorer links point for one chain: the built-in's own, the one
-/// the person gave a network they added, else Etherscan — the web's
-/// `explorerBaseURL(chainId) ?? FALLBACK_EXPLORER`, trailing slash stripped.
+/// Where the explorer links point for one chain: the chain's own
+/// (`custom_tokens::explorer_base` — the built-in's, or the one the person gave
+/// a network they added), else Etherscan — the web's
+/// `explorerBaseURL(chainId) ?? FALLBACK_EXPLORER`.
 fn explorer_root(chain_id: u32) -> String {
-    let own = BUILTIN_CHAINS
-        .iter()
-        .find(|chain| chain.chain_id == chain_id)
-        .map(|chain| chain.explorer_url.to_owned())
-        .or_else(|| {
-            let Ok(Some(serde_json::Value::Array(items))) =
-                crate::executor::storage::read_value(crate::executor::storage::KEY_CUSTOM_NETWORKS)
-            else {
-                return None;
-            };
-            items
-                .iter()
-                .find(|item| {
-                    item.get("chainId").and_then(serde_json::Value::as_u64)
-                        == Some(u64::from(chain_id))
-                })
-                .and_then(|item| item.get("explorerURL").and_then(serde_json::Value::as_str))
-                .map(str::to_owned)
-        })
-        .unwrap_or_default();
-    let own = own.trim_end_matches('/');
-    if own.is_empty() {
-        "https://etherscan.io".to_owned()
-    } else {
-        own.to_owned()
-    }
+    crate::executor::custom_tokens::explorer_base(chain_id)
+        .unwrap_or_else(|| crate::settings::fixtures::ETHEREUM_EXPLORER.to_owned())
 }
 
 /// A transaction's wall clock: "Today 11:20", "Yesterday 14:02", or the date.
@@ -743,6 +721,9 @@ pub fn receive_token_qr(
             None => s.label_native_token.clone(),
         },
     ));
+    // The copy beside that line copies the whole contract, not the shortened
+    // one it shows. The chain's own coin has none to copy.
+    qr.contract_copy = token.token_address.clone().map(SharedString::from);
     qr.centre = TokenMark {
         ticker: SharedString::from(token.symbol.clone()),
         badge: tint(token.chain_id),
@@ -1964,11 +1945,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 format!(
                     "{} · {}",
                     s.split_total,
-                    fill(
-                        &s.recipient_count,
-                        "count",
-                        &send.recipients.len().to_string()
-                    )
+                    s.recipients(send.recipients.len())
                 )
                 .into(),
                 // The core's SUM of the rows (`confirm_amount`); `token_amount`
@@ -2411,7 +2388,7 @@ fn receipt_parts(
     if rows.is_empty() {
         return (None, Vec::new());
     }
-    let title = fill(&s.recipient_count, "count", &rows.len().to_string());
+    let title = s.recipients(rows.len());
     (Some(title.into()), rows)
 }
 
@@ -2449,7 +2426,7 @@ fn detail_parts(
     if rows.is_empty() {
         return (None, Vec::new());
     }
-    let title = split.then(|| fill(&s.recipient_count, "count", &rows.len().to_string()).into());
+    let title = split.then(|| s.recipients(rows.len()).into());
     (title, rows)
 }
 
@@ -2655,12 +2632,7 @@ pub fn batch_total(
 ) -> Option<crate::flows::fixtures::BatchTotal> {
     let count = view.recipient_count;
     (count > 0).then(|| crate::flows::fixtures::BatchTotal {
-        label: format!(
-            "{} · {}",
-            s.split_total,
-            fill(&s.recipient_count, "count", &count.to_string())
-        )
-        .into(),
+        label: format!("{} · {}", s.split_total, s.recipients(count as usize)).into(),
         value: format!("{} {symbol}", view.total_token).into(),
         detail: view
             .total_fiat
@@ -2683,6 +2655,19 @@ pub fn batch_total(
             .over_balance
             .then(|| fill(&s.batch_over_balance, "sym", symbol).into()),
     })
+}
+
+/// What an import's total line is read against when it ADDS to rows already
+/// on the split form: the core's `split_remaining`. `None` — the whole
+/// balance — when the form is empty or the person chose to replace its rows
+/// (the web's `formHasRows && !replaces ? remaining : undefined`).
+#[must_use]
+pub fn batch_remaining(send: &SendView, replaces: bool) -> Option<&str> {
+    let form_has_rows =
+        (send.split_import_room as usize) < vela_core::app::send::BATCH_MAX_RECIPIENTS;
+    send.split_remaining
+        .as_deref()
+        .filter(|_| form_has_rows && !replaces)
 }
 
 /// DSD2cL — the batch importer. The parse, the duplicate check, the
@@ -2982,7 +2967,7 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
         });
-        let title = fill(&s.recipient_count, "count", "2");
+        let title = s.recipients(2);
         assert_eq!(receipt.breakdown_title.as_deref(), Some(title.as_str()));
         let labels: Vec<&str> = receipt
             .breakdown
@@ -3135,10 +3120,19 @@ mod tests {
             value,
             SharedString::from(shorten("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"))
         );
+        // The line is shortened; its copy carries the WHOLE contract.
+        assert_eq!(
+            qr.contract_copy.as_deref(),
+            Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
+        );
 
         // The chain's own coin has no contract, and says so in words.
         let eth = token(8453, "ETH", "1", None);
         let qr = receive_token_qr("0xabc", "Golden", &eth, &watch, &pay, &s, "en");
+        assert!(
+            qr.contract_copy.is_none(),
+            "a native coin has nothing to copy"
+        );
         assert_eq!(qr.contract.map(|c| c.1), Some(s.label_native_token.clone()));
     }
 
@@ -3543,6 +3537,15 @@ mod tests {
             // A row that no longer exists has no detail — the panel closes
             // rather than showing a stale one.
             assert!(tx_detail(&view, "gone", &s, false, "en-US").is_none());
+
+            // A live record can be deleted from its detail (the web's
+            // `deleteLabel`); the mocks cannot.
+            assert_eq!(received.delete_label.as_ref(), Some(&s.delete_record));
+            let drawn = crate::flows::fixtures::body(crate::flows::FlowPanel::Da2, &s);
+            let crate::flows::fixtures::FlowBody::TxDetail(drawn) = drawn else {
+                unreachable!("DA2L is a transaction detail")
+            };
+            assert!(drawn.delete_label.is_none(), "a picture deletes nothing");
         });
     }
 
@@ -4239,6 +4242,15 @@ mod parity_tests {
         let total = batch_total(&view, "USDT", "1000", None, &s)
             .unwrap_or_else(|| unreachable!("one row parsed"));
         assert_eq!(total.value, "689.66 USDT");
+        // One row is "1 recipient", not "1 recipients" (#288).
+        assert_eq!(
+            total.label.as_ref(),
+            format!(
+                "{} · {}",
+                s.split_total,
+                fill(&s.recipient_count_one, "count", "1")
+            )
+        );
         assert_eq!(total.detail.as_deref(), Some("5000 CNY"));
         assert_eq!(
             total.balance,
@@ -4282,6 +4294,32 @@ mod parity_tests {
             ..view
         };
         assert!(batch_total(&empty, "USDT", "1000", None, &s).is_none());
+    }
+
+    /// The total is read against what is left only when the import ADDS to
+    /// rows already on the form — an empty form, or a replace, draws from the
+    /// whole balance (#288).
+    #[test]
+    fn an_import_that_adds_reads_against_what_is_left() {
+        let blank = CoreHost::<SendMachine>::new().view();
+        let with_rows = SendView {
+            split_import_room: 57,
+            split_remaining: Some("7".to_owned()),
+            ..blank.clone()
+        };
+        assert_eq!(batch_remaining(&with_rows, false), Some("7"));
+        assert_eq!(batch_remaining(&with_rows, true), None, "a replace");
+        let empty_form = SendView {
+            split_import_room: u32::try_from(vela_core::app::send::BATCH_MAX_RECIPIENTS)
+                .unwrap_or(u32::MAX),
+            split_remaining: Some("7".to_owned()),
+            ..blank
+        };
+        assert_eq!(
+            batch_remaining(&empty_form, false),
+            None,
+            "nothing to add to"
+        );
     }
 
     /// "View on Explorer" leads to this account on the network's explorer —
