@@ -165,6 +165,8 @@ window.VelaCS.i18n.register('zh', {
   'ui.cannotSign': '这笔请求不能在此签署 —— 上面的理由已列出。关掉即拒绝。',
   'ui.dragToSign': '按住橙色圆点向右拖到底以签名。关掉页面即拒绝。',
   'ui.waitingRequest': '等待签名请求…',
+  'ui.waitingWallet': '正在连接这台设备上的钱包 App…… 如果浏览器询问是否允许此页面访问本设备上的其他应用，请允许。',
+  'ui.walletGone': '钱包 App 已不再等待这笔请求。请回到 App 重新发起。',
   'ui.waitingAuthenticator': '等待验证器…',
   'ui.signed': '已签名，结果已回传给请求方。',
   'ui.ceremonyCancelled': '仪式被取消或超时。',

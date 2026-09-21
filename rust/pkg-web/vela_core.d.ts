@@ -288,6 +288,24 @@ export class BrowserHistoryCore {
 }
 
 /**
+ * One loopback WebSocket connection, exactly as the phones run it.
+ */
+export class ClearSignerWs {
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * The socket closed: `"declined"` when a page that had the request went
+     * away, `""` when it never proved itself.
+     */
+    closed(): string;
+    /**
+     * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
+     */
+    feed(bytes: Uint8Array): string;
+    constructor(signer_url: string, token: string, id: string, request_json: string, digest: Uint8Array, keys_json: string);
+}
+
+/**
  * r" Clear-signing resolution pipeline and message risk verdicts.
  */
 export class ClearSigningCore {
@@ -642,6 +660,30 @@ export function checksumAddress(address_hex: string): string;
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
 
+export function clearSignerDefaultUrl(): string;
+
+/**
+ * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
+ * accountName?, credentialIdsHex, userOp?, feeLegIndex?}` → the page's
+ * `{intent, context}`.
+ */
+export function clearSignerRequest(input_json: string): string;
+
+/**
+ * The address normalised, or throws `"invalid"` / `"insecure"`.
+ */
+export function clearSignerUrl(input: string): string;
+
+export function clearSignerUsesWalletPasskeys(url: string): boolean;
+
+/**
+ * The page's answer judged against `digest` and the account's keys
+ * (`[{credentialId, publicKeyHex}]`): `{accepted: {credentialIdHex,
+ * signatureDer, authenticatorData, clientDataJSON}}` or `{refused: {code,
+ * detail}}`.
+ */
+export function clearSignerVerify(result_json: string, digest: Uint8Array, keys_json: string): string;
+
 export function computeSafeAddress(x: Uint8Array, y: Uint8Array): SafeAddressInfo;
 
 /**
@@ -938,6 +980,7 @@ export interface InitOutput {
     readonly __wbg_balancedashboardcore_free: (a: number, b: number) => void;
     readonly __wbg_batchimportcore_free: (a: number, b: number) => void;
     readonly __wbg_browserhistorycore_free: (a: number, b: number) => void;
+    readonly __wbg_clearsignerws_free: (a: number, b: number) => void;
     readonly __wbg_clearsigningcore_free: (a: number, b: number) => void;
     readonly __wbg_contactscore_free: (a: number, b: number) => void;
     readonly __wbg_createwalletcore_free: (a: number, b: number) => void;
@@ -992,6 +1035,14 @@ export interface InitOutput {
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly clearSignerDefaultUrl: () => [number, number];
+    readonly clearSignerRequest: (a: number, b: number) => [number, number, number, number];
+    readonly clearSignerUrl: (a: number, b: number) => [number, number, number, number];
+    readonly clearSignerUsesWalletPasskeys: (a: number, b: number) => number;
+    readonly clearSignerVerify: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly clearsignerws_closed: (a: number) => [number, number];
+    readonly clearsignerws_feed: (a: number, b: number, c: number) => [number, number];
+    readonly clearsignerws_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

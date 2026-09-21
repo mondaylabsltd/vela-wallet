@@ -184,7 +184,19 @@
 
   say('ui.waitingRequest');
   ns.intake
-    .receive({ onCode: function (code) { say('ui.comparisonCode', { code: code }); } })
+    .receive({
+      onCode: function (code) { say('ui.comparisonCode', { code: code }); },
+      // The loopback socket is slow to open only when the browser is asking
+      // the person first (Local Network Access).
+      onWaiting: function () { say('ui.waitingWallet'); },
+      onGone: function () {
+        if (answered) return;
+        answered = true; // nobody is listening for an answer any more
+        var slider = slot.querySelector('.slide');
+        if (slider) slider.classList.add('slide-off');
+        say('ui.walletGone');
+      },
+    })
     .then(show)
     .catch(function (error) {
       say(String(error.message || error));

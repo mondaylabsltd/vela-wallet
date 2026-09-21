@@ -6,7 +6,7 @@
 // and demands byte equality on the same inputs.
 //
 //   node samples/safeop-test.mjs
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +34,10 @@ const hex = (bytes) => '0x' + Buffer.from(bytes).toString('hex');
 // --- vela-core, as compiled for the web -------------------------------------
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
+// The committed build, whatever its content hash is this week.
+const wasmDir = join(repo, 'assets/wasm');
+const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+core.initSync({ module: readFileSync(join(wasmDir, wasmFile)) });
 
 // --- fixtures ---------------------------------------------------------------
 

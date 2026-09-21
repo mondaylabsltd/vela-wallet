@@ -357,6 +357,12 @@ pub fn step(address: &str, device: &[DeviceKey], answers: &[LookupAnswer]) -> Ke
 // "Sign with" — which key a ceremony is pinned to, and how it is reached
 // ---------------------------------------------------------------------------
 
+/// Every "Sign with" value, in the order every shell lists them: `auto` (do
+/// what the wallet always did), the three places a passkey can be, and the
+/// Clear Signer (spec 071) — a separate page that checks the request and runs
+/// the ceremony itself, which [`sign_route`] does not route.
+pub const SIGN_METHODS: [&str; 5] = ["auto", "platform", "hybrid", "security_key", "clear_signer"];
+
 /// Where one signing ceremony goes: the credential it is pinned to, the
 /// transports the request carries, and the method the shell routes by.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

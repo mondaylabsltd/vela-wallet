@@ -1,6 +1,6 @@
 // Where a signing intent comes in, and where the answer goes back.
 //
-// Four channels, one shape. Every adapter resolves to the same object:
+// Five channels, one shape. Every adapter resolves to the same object:
 //
 //   { intent, context, originVerified, requester, respond(result), reject(code) }
 //
@@ -142,6 +142,79 @@ window.VelaCS = window.VelaCS || {};
     });
   }
 
+  // --- 2b. same device, native app: a WebSocket on the app's loopback --------
+  //
+  // A phone app cannot catch a redirect to 127.0.0.1 — it is suspended the
+  // moment the browser tab covers it — but it can keep a loopback socket open
+  // while it shows this page in its own browser tab (SFSafariViewController,
+  // a Custom Tab). `#p=<port>&t=<token>`: the page connects, says hello with
+  // the token (proof the app that listens is the app that opened it), gets ONE
+  // intent and answers it once. A tab closed without answering closes the
+  // socket, and the app reads that as "closed without signing".
+  //
+  // The browser may first ask the person to let this page reach "other apps
+  // and services on this device" (Chrome's Local Network Access); the status
+  // line says so while the socket waits.
+
+  function fromWebSocket(options) {
+    var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    var port = Number(hash.get('p'));
+    var token = hash.get('t') || '';
+    if (!port || port < 1 || port > 65535 || !token) return null;
+    try {
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) { /* not fatal */ }
+
+    return new Promise(function (resolve, reject) {
+      var socket = new WebSocket('ws://127.0.0.1:' + port);
+      var settled = false;
+      var answered = false;
+      var waiting = setTimeout(function () {
+        if (options && options.onWaiting) options.onWaiting();
+      }, 1500);
+      function fail(message) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(waiting);
+        reject(new Error(message));
+      }
+      socket.onopen = function () {
+        clearTimeout(waiting);
+        socket.send(JSON.stringify({ v: 1, t: 'hello', token: token }));
+      };
+      // Before the intent: the wallet is not there (or stopped waiting).
+      // After it, unanswered: the wallet gave up — signing now would sign
+      // into nothing, so the page says so instead of offering the slider.
+      socket.onerror = function () { fail('ui.walletGone'); };
+      socket.onclose = function () {
+        if (settled && !answered && options && options.onGone) options.onGone();
+        fail('ui.walletGone');
+      };
+      socket.onmessage = function (event) {
+        var message = null;
+        try { message = JSON.parse(event.data); } catch (e) { return; }
+        if (!message || message.t !== 'intent' || settled) return;
+        settled = true;
+        function send(body) {
+          if (answered) return Promise.resolve();
+          answered = true;
+          try { socket.send(JSON.stringify(Object.assign({ v: 1, id: message.id }, body))); } catch (e) { /* gone */ }
+          return Promise.resolve();
+        }
+        resolve({
+          intent: message.intent,
+          context: message.context || {},
+          // Any app on the device could listen on a port; the token proves
+          // this one opened us, not who the requesting site is.
+          originVerified: false,
+          requester: message.intent && message.intent.origin,
+          respond: function (result) { return send({ t: 'result', result: result }); },
+          reject: function (code) { return send({ t: 'error', code: code || 'user_rejected' }); },
+        });
+      };
+    });
+  }
+
   // --- 3. inside the extension: the background worker holds the request -----
 
   function fromExtension() {
@@ -210,6 +283,7 @@ window.VelaCS = window.VelaCS || {};
     var adapters = {
       post: fromPostMessage,
       url: fromUrlFragment,
+      ws: function () { return fromWebSocket(options); },
       ext: fromExtension,
       ble: function () { return fromBle(options); },
     };
@@ -235,6 +309,7 @@ window.VelaCS = window.VelaCS || {};
     receive: receive,
     fromPostMessage: fromPostMessage,
     fromUrlFragment: fromUrlFragment,
+    fromWebSocket: fromWebSocket,
     fromExtension: fromExtension,
     fromBle: fromBle,
   };

@@ -1,0 +1,506 @@
+//! The Clear Signer (spec 071): what a clear-signing page receives, what it
+//! answers, and the channels between — one implementation for every wallet.
+//!
+//! The page (`app-web/clearsigning`) is the fourth way to sign. The three
+//! others answer *where the passkey is*; this one answers *where the person
+//! checks what they sign*: a separate, zero-dependency page that decodes the
+//! request from the operation's own bytes, derives the digest itself, runs
+//! the passkey ceremony in the browser and returns the assertion. The wallet
+//! then trusts nothing it did not check:
+//!
+//! - [`request`] — the page's `{intent, context}`, built from what the shell
+//!   already holds when it would sign: the method and params, the ASSEMBLED
+//!   user operation (the digest covers that, not the site's call), the fee
+//!   leg's index, the account and its credential ids.
+//! - [`verify`] — the page's answer, accepted only when the client data is a
+//!   `webauthn.get` over exactly the digest the WALLET computed, the user was
+//!   verified, the credential is one of this wallet's, and the P-256 signature
+//!   verifies under that credential's key. It returns the DER signature the
+//!   existing Safe envelope takes, so nothing downstream changes.
+//! - The channels: [`url_launch`] + [`parse_callback`] (URL fragment in,
+//!   loopback redirect or beacon out — the desktop), [`ws_launch`] + [`ws`]
+//!   (a WebSocket on the phone's own loopback, served byte for byte by this
+//!   crate — the phones), per `app-web/clearsigning/PROTOCOL.md`.
+//!
+//! Pure: no I/O, no clock, no randomness — the one-time token comes from the
+//! shell.
+
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
+use p256::ecdsa::signature::hazmat::PrehashVerifier as _;
+use p256::ecdsa::{Signature, VerifyingKey};
+use serde_json::{json, Map, Value};
+
+use crate::types::ClientDataKind;
+use crate::user_op::{UserOperation, WalletKey};
+use crate::webauthn::{validate_client_data, webauthn_signing_hash};
+
+pub mod ws;
+
+/// The official signer page (spec 071 [D]) — the host PROTOCOL.md names.
+/// A person may point Settings at their own deployment.
+pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
+
+/// The "Sign with" value that routes a request to the Clear Signer, next to
+/// `platform` | `hybrid` | `security_key` (`wallet_keys::SIGN_METHODS`).
+pub const METHOD: &str = "clear_signer";
+
+/// Why a signer page address cannot be used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignerUrlError {
+    /// Not a URL at all.
+    Invalid,
+    /// Neither https nor a loopback http page: the browser will not run a
+    /// passkey ceremony there (WebAuthn needs a secure context).
+    Insecure,
+}
+
+/// A signer page address the person typed, normalised (trimmed, a scheme
+/// added to a bare host, a trailing `/` on a bare origin) — or why it cannot
+/// be used. https anywhere; http only on this device's own loopback.
+pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
+    let text = input.trim();
+    if text.is_empty() || text.chars().any(char::is_whitespace) {
+        return Err(SignerUrlError::Invalid);
+    }
+    let text = if text.contains("://") {
+        text.to_owned()
+    } else {
+        format!("https://{text}")
+    };
+    let (scheme, rest) = text.split_once("://").ok_or(SignerUrlError::Invalid)?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = host_of(authority);
+    if host.is_empty() || authority.contains('@') {
+        return Err(SignerUrlError::Invalid);
+    }
+    match scheme.to_ascii_lowercase().as_str() {
+        "https" => {}
+        "http" if is_loopback(&host) => {}
+        "http" => return Err(SignerUrlError::Insecure),
+        _ => return Err(SignerUrlError::Invalid),
+    }
+    let path = &rest[authority.len()..];
+    let path = if path.is_empty() { "/" } else { path };
+    Ok(format!(
+        "{}://{}{}",
+        scheme.to_ascii_lowercase(),
+        authority.to_ascii_lowercase(),
+        path
+    ))
+}
+
+/// Whether a page at `url` can reach this wallet's passkeys. They were made
+/// for `getvela.app`, and a browser only lets a page use a passkey made for
+/// its own domain or a parent of it — a copy deployed anywhere else can show
+/// a request but cannot sign it (Settings says so).
+pub fn uses_wallet_passkeys(url: &str) -> bool {
+    let Some((scheme, rest)) = url.trim().split_once("://") else {
+        return false;
+    };
+    let host = host_of(rest.split(['/', '?', '#']).next().unwrap_or_default());
+    scheme.eq_ignore_ascii_case("https")
+        && (host == "getvela.app" || host.ends_with(".getvela.app"))
+}
+
+fn host_of(authority: &str) -> String {
+    let authority = authority.to_ascii_lowercase();
+    if let Some(v6) = authority.strip_prefix('[') {
+        return v6
+            .split(']')
+            .next()
+            .map(|h| format!("[{h}]"))
+            .unwrap_or_default();
+    }
+    authority.split(':').next().unwrap_or_default().to_owned()
+}
+
+fn is_loopback(host: &str) -> bool {
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "[::1]"
+        || host.starts_with("127.")
+}
+
+/// Why an answer from the page was not accepted, or what the page said.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ClearSignerError {
+    /// The answer is not the shape the protocol defines.
+    #[error("the Clear Signer's answer is malformed: {0}")]
+    Malformed(String),
+    /// Signed, but not over the digest this wallet computed — never submitted.
+    #[error("the Clear Signer signed something other than this request")]
+    WrongChallenge,
+    /// The user was not verified (no biometric / PIN).
+    #[error("the passkey did not verify the user")]
+    NotVerified,
+    /// The key that answered is not one of this wallet's.
+    #[error("the key that signed does not belong to this wallet")]
+    ForeignKey,
+    /// The signature does not verify under the wallet's key.
+    #[error("the signature does not verify")]
+    BadSignature,
+    /// The page's rules refused the request (unlimited approval, operation
+    /// mismatch, a method it cannot derive a digest for). Not the person.
+    #[error("the Clear Signer refused this request ({0})")]
+    Refused(String),
+    /// The person closed the page or declined.
+    #[error("the Clear Signer was closed without signing")]
+    Declined,
+    /// The answer came back with another request's token.
+    #[error("the answer belongs to another request")]
+    WrongToken,
+}
+
+impl ClearSignerError {
+    /// A stable name for the refusal, for shells that carry it as text (the
+    /// web, logs): `declined`, `refused`, `wrong_challenge`, `foreign_key`,
+    /// `bad_signature`, `not_verified`, `wrong_token`, `malformed`.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Malformed(_) => "malformed",
+            Self::WrongChallenge => "wrong_challenge",
+            Self::NotVerified => "not_verified",
+            Self::ForeignKey => "foreign_key",
+            Self::BadSignature => "bad_signature",
+            Self::Refused(_) => "refused",
+            Self::Declined => "declined",
+            Self::WrongToken => "wrong_token",
+        }
+    }
+}
+
+/// What the shell hands over to build a request.
+#[derive(Clone, Debug, Default)]
+pub struct RequestInput<'a> {
+    /// `eth_sendTransaction`, `wallet_sendCalls`, `personal_sign`,
+    /// `eth_signTypedData_v4`, … — a dApp's own, or synthesised for the
+    /// wallet's own send.
+    pub method: &'a str,
+    /// The JSON-RPC params, verbatim.
+    pub params: Value,
+    /// Who asked: the site's origin, or the wallet's own for its own sends.
+    pub origin: &'a str,
+    pub chain_id: u64,
+    pub chain_name: Option<&'a str>,
+    pub native_symbol: Option<&'a str>,
+    /// The Safe the signature is for.
+    pub account: &'a str,
+    /// The account's name — it points the person at a passkey.
+    pub account_name: Option<&'a str>,
+    /// The account's credential ids, hex (every shell stores them so).
+    pub credential_ids_hex: &'a [String],
+    /// The assembled operation, for transactions. The digest covers THIS.
+    pub user_op: Option<&'a UserOperation>,
+    /// Which MultiSend leg is the network fee (the wallet always appends it
+    /// last: `calls.len()`).
+    pub fee_leg_index: Option<usize>,
+}
+
+/// The page's `{intent, context}` (PROTOCOL.md §4, §8.1).
+pub fn request(input: &RequestInput<'_>) -> Value {
+    let mut context = Map::new();
+    context.insert("chainId".into(), json!(input.chain_id));
+    if let Some(name) = input.chain_name.filter(|n| !n.is_empty()) {
+        context.insert("chainName".into(), json!(name));
+    }
+    if let Some(symbol) = input.native_symbol.filter(|s| !s.is_empty()) {
+        context.insert("nativeSymbol".into(), json!(symbol));
+    }
+    context.insert("account".into(), json!(input.account));
+    if let Some(name) = input.account_name.filter(|n| !n.is_empty()) {
+        let letter: String = name
+            .chars()
+            .next()
+            .map(|c| c.to_uppercase().collect())
+            .unwrap_or_default();
+        context.insert("signer".into(), json!({ "name": name, "letter": letter }));
+    }
+    let allow: Vec<Value> = input
+        .credential_ids_hex
+        .iter()
+        .filter_map(|id| crate::primitives::from_hex(id).ok())
+        .map(|bytes| json!(URL_SAFE_NO_PAD.encode(bytes)))
+        .collect();
+    if !allow.is_empty() {
+        context.insert("allowCredentials".into(), Value::Array(allow));
+    }
+    if let Some(op) = input.user_op {
+        let mut operation = Map::new();
+        operation.insert("userOp".into(), user_op_json(op));
+        if let Some(index) = input.fee_leg_index {
+            operation.insert("feeLegIndex".into(), json!(index));
+        }
+        operation.insert("entryPoint".into(), json!(crate::safe::ENTRY_POINT));
+        operation.insert("module".into(), json!(crate::safe::SAFE_4337_MODULE));
+        context.insert("operation".into(), Value::Object(operation));
+    }
+    json!({
+        "intent": { "method": input.method, "params": input.params, "origin": input.origin },
+        "context": Value::Object(context),
+    })
+}
+
+/// The operation in the page's field names (`lib/safeop.js`), gas figures as
+/// decimal strings (`BigInt` reads them), bytes as `0x` hex.
+fn user_op_json(op: &UserOperation) -> Value {
+    json!({
+        "sender": op.sender,
+        "nonce": op.nonce,
+        "initCode": crate::primitives::to_hex(&op.init_code, true),
+        "callData": crate::primitives::to_hex(&op.call_data, true),
+        "verificationGasLimit": op.verification_gas_limit.to_string(),
+        "callGasLimit": op.call_gas_limit.to_string(),
+        "preVerificationGas": op.pre_verification_gas.to_string(),
+        "maxFeePerGas": op.max_fee_per_gas.to_string(),
+        "maxPriorityFeePerGas": op.max_priority_fee_per_gas.to_string(),
+        "paymasterAndData": crate::primitives::to_hex(&op.paymaster_and_data, true),
+    })
+}
+
+/// The inverse of the request's `userOp`: an operation in the page's field
+/// names (gas as decimal or `0x` strings, or numbers), for shells that hold
+/// the operation as JSON (the web).
+pub fn user_op_from_json(value: &Value) -> Option<UserOperation> {
+    let text = |name: &str| value.get(name).and_then(Value::as_str);
+    let bytes = |name: &str| match text(name) {
+        None | Some("") | Some("0x") => Some(Vec::new()),
+        Some(hex) => crate::primitives::from_hex(hex).ok(),
+    };
+    let gas = |name: &str| -> Option<u128> {
+        match value.get(name)? {
+            Value::Number(n) => n.as_u64().map(u128::from),
+            Value::String(s) => match s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+                Some(hex) => u128::from_str_radix(if hex.is_empty() { "0" } else { hex }, 16).ok(),
+                None => s.parse().ok(),
+            },
+            _ => None,
+        }
+    };
+    Some(UserOperation {
+        sender: text("sender")?.to_owned(),
+        nonce: text("nonce")?.to_owned(),
+        init_code: bytes("initCode")?,
+        call_data: bytes("callData")?,
+        verification_gas_limit: gas("verificationGasLimit")?,
+        call_gas_limit: gas("callGasLimit")?,
+        pre_verification_gas: gas("preVerificationGas")?,
+        max_fee_per_gas: gas("maxFeePerGas")?,
+        max_priority_fee_per_gas: gas("maxPriorityFeePerGas")?,
+        paymaster_and_data: bytes("paymasterAndData")?,
+        signature: Vec::new(),
+    })
+}
+
+/// An assertion the wallet accepted, in the shapes the Safe envelope takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Verified {
+    /// Hex, no `0x` — how every shell stores credential ids.
+    pub credential_id_hex: String,
+    pub signature_der: Vec<u8>,
+    pub authenticator_data: Vec<u8>,
+    pub client_data_json: Vec<u8>,
+}
+
+/// Accept the page's result (`{credentialId, signature, authenticatorData,
+/// clientDataJSON}`: base64url id, raw `r‖s` hex, hex bytes) only if it is a
+/// user-verified `webauthn.get` over exactly `digest`, by one of `keys`, with
+/// a signature that verifies under that key.
+pub fn verify(
+    result: &Value,
+    digest: &[u8],
+    keys: &[WalletKey],
+) -> Result<Verified, ClearSignerError> {
+    let field = |name: &str| {
+        result
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| ClearSignerError::Malformed(format!("missing {name}")))
+    };
+    let hex_field = |name: &str| {
+        field(name).and_then(|text| {
+            crate::primitives::from_hex(text)
+                .map_err(|_| ClearSignerError::Malformed(format!("{name} is not hex")))
+        })
+    };
+    let credential = URL_SAFE_NO_PAD
+        .decode(field("credentialId")?.trim_end_matches('='))
+        .map_err(|_| ClearSignerError::Malformed("credentialId is not base64url".into()))?;
+    let raw_signature = hex_field("signature")?;
+    let authenticator_data = hex_field("authenticatorData")?;
+    let client_data_json = hex_field("clientDataJSON")?;
+
+    // The Safe verifier's own byte rules, then the one it cannot check: that
+    // the challenge IS the digest this wallet computed.
+    validate_client_data(ClientDataKind::Get, &client_data_json, &authenticator_data).map_err(
+        |error| {
+            if error.to_string().contains("User Verification") {
+                ClearSignerError::NotVerified
+            } else {
+                ClearSignerError::Malformed(error.to_string())
+            }
+        },
+    )?;
+    let client: Value = serde_json::from_slice(&client_data_json)
+        .map_err(|_| ClearSignerError::Malformed("clientDataJSON is not JSON".into()))?;
+    let challenge = client
+        .get("challenge")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if challenge != URL_SAFE_NO_PAD.encode(digest) {
+        return Err(ClearSignerError::WrongChallenge);
+    }
+
+    let credential_hex = crate::primitives::to_hex(&credential, false).to_ascii_lowercase();
+    let key = keys
+        .iter()
+        .find(|key| {
+            key.credential_id
+                .trim_start_matches("0x")
+                .eq_ignore_ascii_case(&credential_hex)
+        })
+        .ok_or(ClearSignerError::ForeignKey)?;
+    let point = crate::primitives::from_hex(&key.public_key_hex)
+        .map_err(|_| ClearSignerError::Malformed("wallet key is not hex".into()))?;
+    let verifying = VerifyingKey::from_sec1_bytes(&point)
+        .map_err(|_| ClearSignerError::Malformed("wallet key is not a P-256 point".into()))?;
+    if raw_signature.len() != 64 {
+        return Err(ClearSignerError::Malformed("signature is not r‖s".into()));
+    }
+    let signature =
+        Signature::from_slice(&raw_signature).map_err(|_| ClearSignerError::BadSignature)?;
+    let signature = signature.normalize_s();
+    let prehash = webauthn_signing_hash(&authenticator_data, &client_data_json);
+    verifying
+        .verify_prehash(&prehash, &signature)
+        .map_err(|_| ClearSignerError::BadSignature)?;
+    Ok(Verified {
+        credential_id_hex: credential_hex,
+        signature_der: signature.to_der().as_bytes().to_vec(),
+        authenticator_data,
+        client_data_json,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Channels
+// ---------------------------------------------------------------------------
+
+/// `<base>sign.html?<query>` — the base may or may not end in `/`, or already
+/// name `sign.html`.
+fn sign_page(base: &str, query: &str) -> String {
+    let trimmed = base.trim();
+    let page = if trimmed.ends_with(".html") {
+        trimmed.to_owned()
+    } else if trimmed.ends_with('/') {
+        format!("{trimmed}sign.html")
+    } else {
+        format!("{trimmed}/sign.html")
+    };
+    format!("{page}?{query}")
+}
+
+/// URL fragment + loopback callback (PROTOCOL.md §7.2): the request deflated
+/// (`z=1`) and base64url'd into the fragment, which never reaches a server
+/// and which the page wipes from history at once.
+pub fn url_launch(base: &str, request: &Value, callback: &str, token: &str) -> String {
+    let deflated = miniz_oxide::deflate::compress_to_vec(request.to_string().as_bytes(), 9);
+    format!(
+        "{}#i={}&cb={}&t={}&z=1",
+        sign_page(base, "ch=url"),
+        URL_SAFE_NO_PAD.encode(deflated),
+        URL_SAFE_NO_PAD.encode(callback.as_bytes()),
+        percent(token),
+    )
+}
+
+/// What the loopback callback carried: `?t=<token>&result=<b64url json>` or
+/// `?t=<token>&error=<code>`. The token must be this request's.
+pub fn parse_callback(query: &str, token: &str) -> Result<Value, ClearSignerError> {
+    let mut got_token = None;
+    let mut result = None;
+    let mut error = None;
+    for pair in query.trim_start_matches('?').split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        let value = unpercent(value);
+        match key {
+            "t" => got_token = Some(value),
+            "result" => result = Some(value),
+            "error" => error = Some(value),
+            _ => {}
+        }
+    }
+    if got_token.as_deref() != Some(token) {
+        return Err(ClearSignerError::WrongToken);
+    }
+    if let Some(code) = error {
+        return Err(refusal(&code));
+    }
+    let encoded = result.ok_or_else(|| ClearSignerError::Malformed("no result".into()))?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded.trim_end_matches('='))
+        .map_err(|_| ClearSignerError::Malformed("result is not base64url".into()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|_| ClearSignerError::Malformed("result is not JSON".into()))
+}
+
+/// The page, told to connect to the wallet's loopback WebSocket (spec 071):
+/// `sign.html?ch=ws#p=<port>&t=<token>`.
+pub fn ws_launch(base: &str, port: u16, token: &str) -> String {
+    format!("{}#p={port}&t={}", sign_page(base, "ch=ws"), percent(token))
+}
+
+/// `user_rejected` (the person) vs everything else (the page's rules).
+pub(crate) fn refusal(code: &str) -> ClearSignerError {
+    match code {
+        "user_rejected" | "" => ClearSignerError::Declined,
+        other => ClearSignerError::Refused(other.to_owned()),
+    }
+}
+
+fn percent(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+fn unpercent(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let decoded = std::str::from_utf8(&bytes[i + 1..i + 3])
+                    .ok()
+                    .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+                match decoded {
+                    Some(byte) => {
+                        out.push(byte);
+                        i += 3;
+                    }
+                    None => {
+                        out.push(b'%');
+                        i += 1;
+                    }
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}

@@ -159,6 +159,8 @@ window.VelaCS.i18n.register('en', {
   'ui.cannotSign': 'This request cannot be signed here — the reasons are listed above. Closing refuses it.',
   'ui.dragToSign': 'Drag the orange dot all the way right to sign. Closing the page refuses.',
   'ui.waitingRequest': 'Waiting for a signing request…',
+  'ui.waitingWallet': 'Connecting to the wallet app on this device… If the browser asks whether this page may reach other apps on this device, allow it.',
+  'ui.walletGone': 'The wallet app is no longer waiting for this request. Go back to it and try again.',
   'ui.waitingAuthenticator': 'Waiting for the authenticator…',
   'ui.signed': 'Signed. The result went back to the requester.',
   'ui.ceremonyCancelled': 'The ceremony was cancelled or timed out.',

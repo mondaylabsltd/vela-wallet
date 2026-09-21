@@ -109,13 +109,19 @@ window.VelaCS = window.VelaCS || {};
   function typedDataHash(typedData) {
     var types = Object.assign({}, typedData.types);
     // The domain is hashed with the same machinery, so it must be in `types`.
+    // Undeclared, it is the populated fields in EIP-712's own order — never
+    // the order the domain object happened to be written in, which would
+    // give a separator the wallet (and every verifier) computes differently.
     if (!types.EIP712Domain) {
-      types.EIP712Domain = Object.keys(typedData.domain || {}).map(function (name) {
-        var kinds = {
-          name: 'string', version: 'string', chainId: 'uint256',
-          verifyingContract: 'address', salt: 'bytes32',
-        };
-        return { name: name, type: kinds[name] || 'string' };
+      var domain = typedData.domain || {};
+      types.EIP712Domain = [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' },
+        { name: 'salt', type: 'bytes32' },
+      ].filter(function (field) {
+        return domain[field.name] !== undefined && domain[field.name] !== null;
       });
     }
     var domainSeparator = hashStruct(types, 'EIP712Domain', typedData.domain || {});
@@ -152,7 +158,11 @@ window.VelaCS = window.VelaCS || {};
       return forAccount(personalSignHash(intent.params[0]), 'EIP-191');
     }
     if (intent.method.indexOf('signTypedData') >= 0) {
-      var raw = intent.params[1];
+      // The wallet's own pick (`sign_request::extract_request_chain_id`): the
+      // legacy names carry the data first; the rest carry `[address, data]`,
+      // falling back to the first when the second is missing.
+      var legacy = intent.method === 'eth_signTypedData' || intent.method === 'eth_signTypedData_v1';
+      var raw = legacy || intent.params[1] == null ? intent.params[0] : intent.params[1];
       var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
       return forAccount(typedDataHash(data), 'EIP-712');
     }

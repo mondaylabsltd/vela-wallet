@@ -2,7 +2,7 @@
 // recognition signal. Reference: vela-core's compiled wasm.
 //
 //   node samples/identicon-test.mjs
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,7 +17,10 @@ for (const file of ['lib/identicon-features.js', 'lib/identicon.js']) {
 const ours = globalThis.VelaCS.identicon;
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
+// The committed build, whatever its content hash is this week.
+const wasmDir = join(repo, 'assets/wasm');
+const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+core.initSync({ module: readFileSync(join(wasmDir, wasmFile)) });
 
 const seeds = [
   '0x88cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894',

@@ -16,7 +16,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { webcrypto } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,7 +49,10 @@ for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
 const lib = globalThis.VelaCS;
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
+// The committed build, whatever its content hash is this week.
+const wasmDir = join(repo, 'assets/wasm');
+const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+core.initSync({ module: readFileSync(join(wasmDir, wasmFile)) });
 
 // --- 1. assemble the request ------------------------------------------------
 

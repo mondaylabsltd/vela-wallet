@@ -8,8 +8,9 @@
 //   CHROME_BIN=… SB=… node samples/channels-test.mjs
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
+import { createServer as createTcpServer, connect as tcpConnect } from 'node:net';
 import { createHash, webcrypto } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +35,10 @@ const lib = globalThis.VelaCS;
 
 // vela-core, compiled — the reference the page's digest must agree with.
 const core = await import(join(root, '..', '..', 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(root, '..', '..', 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
+// The committed build, whatever its content hash is this week.
+const wasmDir = join(root, '..', '..', 'assets/wasm');
+const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+core.initSync({ module: readFileSync(join(wasmDir, wasmFile)) });
 
 function expectedSafeOpHash(op, chainId) {
   const bytes = core.attestSafeOpHash(JSON.stringify({
@@ -154,7 +158,13 @@ class Page {
         signCount: 0,
       },
     });
-    return { authenticatorId, credentialId: rawId.toString('base64url') };
+    const publicKey = Buffer.from(await webcrypto.subtle.exportKey('raw', pair.publicKey));
+    return {
+      authenticatorId,
+      credentialId: rawId.toString('base64url'),
+      // What the wallet stores for this key: hex id, uncompressed SEC1 point.
+      walletKey: { credentialId: rawId.toString('hex'), publicKeyHex: publicKey.toString('hex') },
+    };
   }
 }
 
@@ -342,6 +352,124 @@ try {
     check('tamper: a swapped recipient inside the operation is caught', refused && /altered during assembly/.test(warnings));
     check('tamper: the sheet shows the operation\'s OWN recipient, not the requested one',
       /0x9A8b|0x9a8b/.test(String(await page.ev("document.body.textContent"))));
+  }
+
+  // === 5. the phones' channel: a WebSocket on the app's loopback ==========
+  //
+  // The app's side is vela-core's own connection (the one Android and iOS
+  // run, over wasm here): a raw TCP listener that hands it bytes and writes
+  // back what it says. The page's side is the shipped `ch=ws` intake.
+  {
+    const WS_PORT = 8479;
+    const SIGNER = 'https://getvela.app/sign.html';
+    const personal = login.intent;
+    const account = login.context.account;
+    const chainId = login.context.chainId || 1;
+    const message = Buffer.from(personal.params[0].slice(2), 'hex');
+    const eip191 = lib.keccak.hash(new Uint8Array(Buffer.concat([
+      Buffer.from(`\x19Ethereum Signed Message:\n${message.length}`), message,
+    ])));
+    // The digest the WALLET computes — the page must arrive at the same one.
+    const digest = core.attestSafeMessageHash(eip191, BigInt(chainId), account);
+
+    // One listener, a fresh core connection per socket: `outcome` is the
+    // first verdict any of them reaches.
+    function listen(request, keys, token) {
+      const state = { outcome: null, closedAs: null, sockets: 0 };
+      const server = createTcpServer((socket) => {
+        state.sockets++;
+        const conn = new core.ClearSignerWs(SIGNER, token, 'r1', JSON.stringify(request), digest, JSON.stringify(keys));
+        socket.on('data', (bytes) => {
+          const step = JSON.parse(conn.feed(bytes));
+          if (step.write.length) socket.write(Buffer.from(step.write));
+          if (step.outcome && !state.outcome) state.outcome = step.outcome;
+          if (step.close) socket.end();
+        });
+        socket.on('close', () => {
+          const gone = conn.closed();
+          if (gone && !state.outcome) state.closedAs = gone;
+        });
+      });
+      server.listen(WS_PORT, '127.0.0.1');
+      return { state, server };
+    }
+    const request = { intent: personal, context: { ...login.context, chainId } };
+
+    // 5a. the whole round trip, verified by the core against the wallet's key
+    {
+      const page = await Page.open('about:blank');
+      const auth = await page.addAuthenticator();
+      const { state, server } = listen(
+        { ...request, context: { ...request.context, allowCredentials: [auth.credentialId] } },
+        [{ credentialId: 'aa', publicKeyHex: auth.walletKey.publicKeyHex.replace(/^04/, '05') }, auth.walletKey],
+        'tok-ws',
+      );
+      await page.send('Page.navigate', { url: `${SIGNER}?ch=ws&lang=en#p=${WS_PORT}&t=tok-ws` });
+      const ready = await waitFor(page, '!!window.__slider', 10000);
+      check('ws: the intent arrived over the loopback socket and rendered', ready,
+        String(await page.ev("document.getElementById('status').textContent")).slice(0, 60));
+      check('ws: the port and token are scrubbed from history', !(await page.ev('location.hash')).includes('tok-ws'));
+      check('ws: the page shows the same digest the wallet computed',
+        String(await page.ev("document.querySelector('.tech-body') && document.querySelector('.tech-body').textContent"))
+          .toLowerCase().includes(Buffer.from(digest).toString('hex').slice(0, 16)));
+      await page.ev('window.__slider.__confirm()', true);
+      for (let i = 0; i < 60 && !state.outcome; i++) await sleep(200);
+      check('ws: the core accepted the assertion (this digest, this key, verified user)',
+        !!(state.outcome && state.outcome.accepted), JSON.stringify(state.outcome || {}).slice(0, 90));
+      if (state.outcome && state.outcome.accepted) {
+        check('ws: the accepted signature is DER, as the Safe envelope takes',
+          state.outcome.accepted.signatureDer.startsWith('0x30'));
+        check('ws: it names the key that signed', state.outcome.accepted.credentialIdHex === auth.walletKey.credentialId);
+      }
+      server.close();
+    }
+
+    // 5b. a key the wallet does not hold is refused by the core
+    {
+      const page = await Page.open('about:blank');
+      await page.addAuthenticator();
+      const { state, server } = listen(request, [{ credentialId: 'bb', publicKeyHex: '04' + '11'.repeat(64) }], 'tok-foreign');
+      await page.send('Page.navigate', { url: `${SIGNER}?ch=ws&lang=en#p=${WS_PORT}&t=tok-foreign` });
+      await waitFor(page, '!!window.__slider', 10000);
+      await page.ev('window.__slider.__confirm()', true);
+      for (let i = 0; i < 60 && !state.outcome; i++) await sleep(200);
+      check('ws: a signature by a key that is not the wallet\'s is refused',
+        state.outcome && state.outcome.refused && state.outcome.refused.code === 'foreign_key', JSON.stringify(state.outcome));
+      server.close();
+    }
+
+    // 5c. closing the tab after the intent arrived = closed without signing
+    {
+      const page = await Page.open('about:blank');
+      const { state, server } = listen(request, [], 'tok-close');
+      await page.send('Page.navigate', { url: `${SIGNER}?ch=ws&lang=en#p=${WS_PORT}&t=tok-close` });
+      await waitFor(page, '!!window.__slider', 10000);
+      await fetch(`http://127.0.0.1:${CDP}/json/close/${page.targetId}`);
+      for (let i = 0; i < 40 && !state.outcome && !state.closedAs; i++) await sleep(150);
+      const said = state.outcome ? state.outcome.refused && state.outcome.refused.code : state.closedAs;
+      check('ws: a tab closed without signing ends the request as declined', said === 'declined', String(said));
+      server.close();
+    }
+
+    // 5d. a spent token and a foreign origin never get the intent
+    {
+      const page = await Page.open('about:blank');
+      const { state, server } = listen(request, [], 'tok-live');
+      await page.send('Page.navigate', { url: `${SIGNER}?ch=ws&lang=en#p=${WS_PORT}&t=tok-spent` });
+      await sleep(1500);
+      check('ws: a wrong token gets no intent and ends nothing',
+        !(await page.ev('!!window.__slider')) && !state.outcome && !state.closedAs);
+      const refusedHead = await new Promise((resolve) => {
+        const raw = tcpConnect(WS_PORT, '127.0.0.1', () => raw.write(
+          'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nOrigin: https://evil.example\r\n\r\n'));
+        raw.on('data', (bytes) => { resolve(bytes.toString().split('\r\n')[0]); raw.destroy(); });
+      });
+      check('ws: another origin is turned away at the handshake', refusedHead === 'HTTP/1.1 403 Forbidden', refusedHead);
+      check('ws: the page tells the person the wallet is not there',
+        /no longer waiting/.test(String(await page.ev("document.getElementById('status').textContent"))));
+      server.close();
+    }
   }
 
   // === 4. the extension, reached by a port from our own page ===============

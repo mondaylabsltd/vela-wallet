@@ -466,6 +466,88 @@ export class BrowserHistoryCore {
 if (Symbol.dispose) BrowserHistoryCore.prototype[Symbol.dispose] = BrowserHistoryCore.prototype.free;
 
 /**
+ * One loopback WebSocket connection, exactly as the phones run it.
+ */
+export class ClearSignerWs {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        ClearSignerWsFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_clearsignerws_free(ptr, 0);
+    }
+    /**
+     * The socket closed: `"declined"` when a page that had the request went
+     * away, `""` when it never proved itself.
+     * @returns {string}
+     */
+    closed() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.clearsignerws_closed(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * `{write: number[], close, outcome?}` — `outcome` as [`clear_signer_verify`].
+     * @param {Uint8Array} bytes
+     * @returns {string}
+     */
+    feed(bytes) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.clearsignerws_feed(this.__wbg_ptr, ptr0, len0);
+            deferred2_0 = ret[0];
+            deferred2_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * @param {string} signer_url
+     * @param {string} token
+     * @param {string} id
+     * @param {string} request_json
+     * @param {Uint8Array} digest
+     * @param {string} keys_json
+     */
+    constructor(signer_url, token, id, request_json, digest, keys_json) {
+        const ptr0 = passStringToWasm0(signer_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(token, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(request_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ptr4 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
+        const len4 = WASM_VECTOR_LEN;
+        const ptr5 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len5 = WASM_VECTOR_LEN;
+        const ret = wasm.clearsignerws_new(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, ptr5, len5);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        this.__wbg_ptr = ret[0];
+        ClearSignerWsFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) ClearSignerWs.prototype[Symbol.dispose] = ClearSignerWs.prototype.free;
+
+/**
  * r" Clear-signing resolution pipeline and message risk verdicts.
  */
 export class ClearSigningCore {
@@ -2855,6 +2937,122 @@ export function chooseNativePrice(dex, chainlink_local, chainlink_eth) {
 }
 
 /**
+ * @returns {string}
+ */
+export function clearSignerDefaultUrl() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.clearSignerDefaultUrl();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
+ * accountName?, credentialIdsHex, userOp?, feeLegIndex?}` → the page's
+ * `{intent, context}`.
+ * @param {string} input_json
+ * @returns {string}
+ */
+export function clearSignerRequest(input_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerRequest(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The address normalised, or throws `"invalid"` / `"insecure"`.
+ * @param {string} input
+ * @returns {string}
+ */
+export function clearSignerUrl(input) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(input, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerUrl(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function clearSignerUsesWalletPasskeys(url) {
+    const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.clearSignerUsesWalletPasskeys(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * The page's answer judged against `digest` and the account's keys
+ * (`[{credentialId, publicKeyHex}]`): `{accepted: {credentialIdHex,
+ * signatureDer, authenticatorData, clientDataJSON}}` or `{refused: {code,
+ * detail}}`.
+ * @param {string} result_json
+ * @param {Uint8Array} digest
+ * @param {string} keys_json
+ * @returns {string}
+ */
+export function clearSignerVerify(result_json, digest, keys_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray8ToWasm0(digest, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.clearSignerVerify(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} x
  * @param {Uint8Array} y
  * @returns {SafeAddressInfo}
@@ -4368,6 +4566,9 @@ const BatchImportCoreFinalization = (typeof FinalizationRegistry === 'undefined'
 const BrowserHistoryCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_browserhistorycore_free(ptr, 1));
+const ClearSignerWsFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_clearsignerws_free(ptr, 1));
 const ClearSigningCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_clearsigningcore_free(ptr, 1));
