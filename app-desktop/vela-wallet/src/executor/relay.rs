@@ -507,16 +507,37 @@ pub enum SubmitError {
     Unreachable,
 }
 
+/// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
+/// about speed. Two elements when no tier is named, which is the pre-068 wire
+/// exactly; never the dead `rapid`.
+fn submit_params(dict: Value, tier: Option<FeeTier>) -> Value {
+    match tier.and_then(vela_core::app::fee_speed::wire_tier) {
+        Some(tier) => json!([dict, ENTRY_POINT, tier_key(tier)]),
+        None => json!([dict, ENTRY_POINT]),
+    }
+}
+
 /// `eth_sendUserOperation`, with the retry loop a busy relay earns: up to
 /// three more tries, 3 s apart, on "currently processing" / "Retry later".
 /// The AA20 structural guard runs in the caller, which holds the deployment
 /// read.
+///
+/// `tier` is the speed the displayed fee was priced at, sent as the optional
+/// third parameter (spec 068's relay contract, on the desktop since 069). It
+/// is a NAME, never a wei figure: the relay resolves it against the base fee
+/// it reads at submit time and clamps the result between its inclusion floor
+/// and what the signed reimbursement funds. `None` sends the pre-068
+/// two-element params exactly. The dead `rapid` never gets here — the core
+/// drops it from the quoted fee — and is dropped again below regardless,
+/// because a relay refuses an unknown name with -32602 before any handler
+/// runs.
 pub fn send_user_op(
     op: &UserOperation,
     chain_id: u32,
     extra: &[(&str, &str)],
+    tier: Option<FeeTier>,
 ) -> Result<String, SubmitError> {
-    let dict = user_op_to_json(op, extra);
+    let params = submit_params(user_op_to_json(op, extra), tier);
     eprintln!(
         "[vela-wallet] relay: submitting sender={} nonce={} initCode={} callData={}B signature={}B",
         op.sender,
@@ -530,12 +551,8 @@ pub fn send_user_op(
         op.signature.len()
     );
     for attempt in 0..=SUBMIT_MAX_RETRIES {
-        let body = pool::bundler_call(
-            chain_id,
-            "eth_sendUserOperation",
-            json!([dict, ENTRY_POINT]),
-        )
-        .map_err(|_| SubmitError::Unreachable)?;
+        let body = pool::bundler_call(chain_id, "eth_sendUserOperation", params.clone())
+            .map_err(|_| SubmitError::Unreachable)?;
         if let Some(hash) = body.get("result").and_then(Value::as_str) {
             return Ok(hash.to_owned());
         }
@@ -753,6 +770,32 @@ pub fn parse_bundler_error(error: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 069: the speed the displayed fee was priced at is the third
+    /// parameter, by name; no speed is the two-element wire; `rapid` is never
+    /// sent, because the relay refuses it before any handler runs.
+    #[test]
+    fn a_submission_names_its_speed_as_the_third_parameter() {
+        let dict = json!({ "sender": "0x1" });
+        for (tier, name) in [
+            (FeeTier::Fast, "fast"),
+            (FeeTier::Standard, "standard"),
+            (FeeTier::Slow, "slow"),
+        ] {
+            assert_eq!(
+                submit_params(dict.clone(), Some(tier)),
+                json!([dict, ENTRY_POINT, name])
+            );
+        }
+        assert_eq!(
+            submit_params(dict.clone(), None),
+            json!([dict, ENTRY_POINT])
+        );
+        assert_eq!(
+            submit_params(dict.clone(), Some(FeeTier::Rapid)),
+            json!([dict, ENTRY_POINT])
+        );
+    }
 
     #[test]
     fn a_quote_row_needs_every_field_it_prices_with() {

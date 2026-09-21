@@ -17,15 +17,27 @@
 		onchip?: (id: string) => void;
 		onfee?: () => void;
 		onfeepick?: (id: string) => void;
+		onspeed?: () => void;
+		onspeedpick?: (id: string) => void;
 		onsignwith?: (id: string | null) => void;
 	}
 
-	let { model, onconfirm, onchip, onfee, onfeepick, onsignwith }: Props = $props();
+	let { model, onconfirm, onchip, onfee, onfeepick, onspeed, onspeedpick, onsignwith }: Props =
+		$props();
 </script>
 
 <div class="panel">
 	<SigningHeader dapp={model.dapp} network={model.network} />
-	<SigningBody {model} {onconfirm} {onchip} {onfee} {onfeepick} {onsignwith} />
+	<SigningBody
+		{model}
+		{onconfirm}
+		{onchip}
+		{onfee}
+		{onfeepick}
+		{onspeed}
+		{onspeedpick}
+		{onsignwith}
+	/>
 </div>
 
 <style>

@@ -691,6 +691,84 @@ struct SigningLiveTests {
         ), "a personal_sign has no network fee and must not wait for a quote")
     }
 
+    /// Spec 069: the sheet's fee card carries the send form's speed control,
+    /// drawn by the same builder — and a fee left from the speed just walked
+    /// away from neither shows under the new one's name nor opens the slide,
+    /// though the core's own gate is still open on it (issue 681).
+    @Test func theFeeCardCarriesTheSpeedControlAndNeverSignsAnotherSpeed() {
+        let openGate = SignViewWire(
+            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
+            pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
+            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
+            notice: nil, globalChainId: 100
+        )
+        func estimate(_ tier: String, _ wei: String) -> FeeEstimateWire {
+            FeeEstimateWire(
+                chainId: 100, totalWei: wei, maxFeePerGas: "2000000000", totalGas: "0", deployed: true,
+                quoted: true, feeAsset: .native, feeRecipient: "0xfee", tier: tier,
+                effectiveGasPrice: "1000000000", maxGasPrice: "2000000000"
+            )
+        }
+        func speed(_ tier: String, picked: Bool, options: [FeeSpeedOptionWire]) -> SendLive.SpeedInputs {
+            SendLive.SpeedInputs(
+                view: FeeSpeedViewWire(
+                    tier: tier, preferred: "fast", previews: [], open: !options.isEmpty, picked: picked,
+                    free: false, freeNote: false, single: false, gasPriceLine: true, options: options
+                ),
+                feeView: { _ in nil }
+            )
+        }
+        let fast = estimate("fast", "2100000000000000")
+        let feeAtFast = FeeViewWire(
+            busy: false, failed: nil, fee: fast, stale: false, feeToken: nil, options: [], confirmFeeReady: true
+        )
+        let request = SigningController.Incoming(
+            id: "r1", method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x38d7ea4c68000"}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: 100
+        )
+        func model(_ fee: FeeViewWire, _ speed: SendLive.SpeedInputs) -> SigningModel {
+            SigningLive.model(
+                fallback: SigningFixtures.build(.cs1, loc: loc), request: request, sign: openGate,
+                clear: clear(surface: .none, confirm: .confirmIntent("send")), guard: .empty,
+                fee: fee, context: context(), speed: speed
+            )
+        }
+        func feeValue(_ model: SigningModel) -> String? {
+            if case .onchain(_, let value, _, _) = model.fee { return value }
+            return nil
+        }
+
+        let open = model(feeAtFast, speed("fast", picked: false, options: [
+            FeeSpeedOptionWire(tier: "fast", selected: true, fee: fast, measuring: false, gasPrice: "1 ~ 2 gwei"),
+            FeeSpeedOptionWire(tier: "standard", selected: false, fee: nil, measuring: true, gasPrice: nil),
+            FeeSpeedOptionWire(tier: "slow", selected: false, fee: estimate("slow", "1000000000000000"),
+                               measuring: false, gasPrice: nil),
+        ]))
+        let control = open.feeSpeed
+        #expect(control != nil, "the sheet draws the speed control")
+        #expect(control?.label == loc.t("send.feeSpeedLabel"))
+        #expect(control?.value == loc.t("send.gasTier.fast"))
+        #expect(control?.options.map(\.id) == ["fast", "standard", "slow"])
+        // Each option in the words its row would use, minus the row's "~".
+        #expect(feeValue(open) == "~" + (control?.options.first?.value ?? ""))
+        #expect(control?.options[1].value == "…")
+        #expect(control?.options.first?.gasPrice == "1 ~ 2 gwei")
+        #expect(open.confirm.enabled)
+
+        let picked = model(feeAtFast, speed("slow", picked: true, options: []))
+        #expect(feeValue(picked) == loc.t("componentsUi.gas.estimating"))
+        #expect(!picked.confirm.enabled, "the slide never signs the speed walked away from")
+
+        let feeAtSlow = FeeViewWire(
+            busy: false, failed: nil, fee: estimate("slow", "1000000000000000"), stale: false,
+            feeToken: nil, options: [], confirmFeeReady: true
+        )
+        let landed = model(feeAtSlow, speed("slow", picked: true, options: []))
+        #expect(feeValue(landed)?.hasPrefix("~") == true)
+        #expect(landed.confirm.enabled)
+    }
+
     // -- Issue #262: the coin that pays -------------------------------------
 
     private func option(

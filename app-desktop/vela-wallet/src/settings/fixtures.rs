@@ -28,6 +28,9 @@ pub enum SettingsPage {
     Networks,
     RpcProviders,
     Endpoints,
+    /// The default transaction speed (spec 069) — between the endpoints and
+    /// the storage, as the web's desktop layout places it.
+    FeeSpeed,
     Storage,
     About,
 }
@@ -35,13 +38,14 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 8] = [
+    pub const ALL: [SettingsPage; 9] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
         SettingsPage::Networks,
         SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
+        SettingsPage::FeeSpeed,
         SettingsPage::Storage,
         SettingsPage::About,
     ];
@@ -54,6 +58,7 @@ impl SettingsPage {
             SettingsPage::Networks => Icon::Network,
             SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
+            SettingsPage::FeeSpeed => Icon::Clock,
             SettingsPage::Storage => Icon::HardDrive,
             SettingsPage::About => Icon::Info,
         }
@@ -67,6 +72,7 @@ impl SettingsPage {
             SettingsPage::Networks => s.nav_networks.clone(),
             SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
+            SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
             SettingsPage::Storage => s.nav_storage.clone(),
             SettingsPage::About => s.nav_about.clone(),
         }

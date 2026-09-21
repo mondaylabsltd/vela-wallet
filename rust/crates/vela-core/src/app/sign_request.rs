@@ -62,7 +62,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::approval_guard::enforce_no_unlimited;
-use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, TEMPO_FEE_TOKEN_DECIMALS};
+use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -126,6 +126,12 @@ pub struct SignQuotedFee {
     /// Base units of the fee asset, decimal string.
     pub amount: String,
     pub recipient: String,
+    /// The speed the displayed fee was priced at (spec 069), named on the
+    /// wire beside it — the shell copies it from the same estimate as
+    /// `amount`, so the relay is told the tier the person saw. `None` (or a
+    /// shell that predates it) names nothing: the pre-068 wire.
+    #[serde(default)]
+    pub tier: Option<FeeTier>,
 }
 
 /// The approve-tap payload — `approveRequest(opts)` (`dapp-connection.tsx:623`),
@@ -1547,7 +1553,12 @@ fn approve_with(
         intent: opts.intent.clone(),
         max_fee_per_gas: opts.max_fee_per_gas.clone(),
         gas_fee_token: opts.gas_fee_token.clone(),
-        quoted_fee: opts.quoted_fee.clone(),
+        // The tier the shell copied from the displayed estimate, filtered to
+        // one the relay accepts (spec 069): never the dead `rapid`.
+        quoted_fee: opts.quoted_fee.clone().map(|fee| SignQuotedFee {
+            tier: fee.tier.and_then(super::fee_speed::wire_tier),
+            ..fee
+        }),
         stage: Stage::Precheck,
         record_id: None,
         op_hash: None,

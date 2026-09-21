@@ -10,7 +10,7 @@
 mod support;
 
 use support::DomainDriver;
-use vela_core::app::fee_policy::{tempo_reimbursement, TEMPO_FEE_TOKEN_DECIMALS};
+use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
     extract_request_chain_id, is_signing_method, method_kind, required_capabilities,
     sign_account_index, Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
@@ -1248,6 +1248,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: "1".to_owned(), // below the $0.01 floor
             recipient: collector.to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1271,6 +1272,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: floor.clone(),
             recipient: "0x6666666666666666666666666666666666666666".to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1282,6 +1284,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: floor,
             recipient: collector.to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1297,6 +1300,53 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         ),
         "{ops:?}"
     );
+}
+
+/// Spec 069: the speed the displayed fee was priced at travels to the
+/// submission beside it, and the dead `rapid` never does.
+#[test]
+fn the_displayed_fee_names_its_tier_on_the_submission() {
+    for (shown, named) in [
+        (Some(FeeTier::Slow), Some(FeeTier::Slow)),
+        (Some(FeeTier::Fast), Some(FeeTier::Fast)),
+        (Some(FeeTier::Rapid), None),
+        (None, None),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(
+            Arrive::extension(
+                "rid-tier",
+                "eth_sendTransaction",
+                &plain_send_params(),
+                4_217,
+            )
+            .event(),
+        );
+        let collector = "0x5555555555555555555555555555555555555555";
+        let floor = tempo_reimbursement(0, 0, TEMPO_FEE_TOKEN_DECIMALS).to_string();
+        let ops = sut.dispatch(approve(SignApproveOpts {
+            quoted_fee: Some(SignQuotedFee {
+                amount: floor,
+                recipient: collector.to_owned(),
+                tier: shown,
+            }),
+            fee_collector: Some(collector.to_owned()),
+            ..SignApproveOpts::default()
+        }));
+        assert!(
+            matches!(ops.as_slice(), [Op::CheckBundlerFunding { .. }]),
+            "{ops:?}"
+        );
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        let submit = ops
+            .iter()
+            .find_map(|op| match op {
+                Op::SignAndSubmit { quoted_fee, .. } => Some(quoted_fee.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("a submission: {ops:?}"));
+        assert_eq!(submit.expect("quoted").tier, named, "{shown:?}");
+    }
 }
 
 // ===========================================================================

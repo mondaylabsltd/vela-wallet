@@ -14,11 +14,7 @@ import app.getvela.wallet.feature.wallet.core.RpcPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.BatchImportCore
 import app.getvela.wallet.feature.documents.DocumentPorts
 import uniffi.vela_core_uniffi.SendCore
@@ -59,6 +55,9 @@ class SendController(
     documents: () -> DocumentPorts? = { null },
     /** Spec 046 US3: a scanned chain the wallet lacks goes to the settings machine. */
     addNetwork: suspend (Long) -> SendAddNetworkOutcome = { SendAddNetworkOutcome.NotFound },
+    /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
+    private val preferredTier: () -> FeeTier = { FeeTier.Fast },
+    private val numberPreset: () -> String = { "comma_dot" },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -75,7 +74,6 @@ class SendController(
     /** The core said `Close`: the flow host pops the send. */
     val closed: StateFlow<Boolean> = _closed
 
-    private val relayRef = relay
     private val hapticPort: (SendHapticKind) -> Unit = haptic
     private val refreshPort: () -> Unit = refreshBalances
     private val feedChangedPort: () -> Unit = feedChanged
@@ -86,20 +84,13 @@ class SendController(
         keyHexes = { address: String -> accountPort.keysOf(address).map { it.publicKeyHex } },
     )
 
-    private val feeHost = CoreHost(
-        bridge = FeePolicyCore().asBridge(),
-        scope = scope,
-        initial = FeeView(),
-        serializer = FeeView.serializer(),
-        perform = JsonShell.perform(FeeOperation.serializer(), FeeShellResult.serializer(), feeExecutor::perform),
-        escapedFailure = JsonShell.escapedFailure(
-            FeeOperation.serializer(),
-            FeeShellResult.serializer(),
-            fallback = FeeShellResult.TtlElapsed,
-            answer = feeExecutor::neutralAnswer,
-        ),
-        onFault = { error -> VelaLog.failure("send.fee.fault", "core fault", error) },
-    )
+    // -- the speed control (spec 069) ----------------------------------------------
+
+    /** The fee sessions and their reconcile step — the very class the signing sheet runs. */
+    private val speedControl = SpeedControl(scope, relay, feeExecutor, preferredTier, numberPreset, area = "send")
+
+    /** The speed control, as the core decided it — the send form draws this. */
+    val speed: StateFlow<FeeSpeedView> = speedControl.speed
 
     private val ports: SendExecutor.SendPorts = object : SendExecutor.SendPorts {
         override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
@@ -206,12 +197,23 @@ class SendController(
 
     val batch: StateFlow<BatchView> = batchHost.view
 
-    /** The fee session's view — the fee-token sheet reads this. */
-    val fee: StateFlow<FeeView> = feeHost.view
+    /**
+     * The fee session in force — whichever session that is right now, so a
+     * promotion swaps what the fee row and the fee-token sheet read without
+     * either of them knowing (spec 069). `pending` folded into `busy`.
+     */
+    val fee: StateFlow<FeeView> = speedControl.fee
+
+    /** The fee view of the session pricing `tier` — for formatting that option's fee. */
+    fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 
     init {
         sendHost.start()
-        feeHost.start()
+        speedControl.start()
+        // The send leaving its form ends any free-upgrade question.
+        scope.launch {
+            sendHost.view.collect { view -> speedControl.stage(view.stage == SendStage.EnterDetails) }
+        }
         // The fee session's later word flows into the send machine: a
         // re-quote after a fee-token pick or a TTL expiry replaces the
         // estimate the confirm screen shows (desktop `sync_fee_to_send`).
@@ -219,7 +221,7 @@ class SendController(
             var lastFee: FeeEstimateView? = null
             var lastBusy = false
             var lastStale = false
-            feeHost.view.collect { view ->
+            fee.collect { view ->
                 if (view.busy != lastBusy) {
                     lastBusy = view.busy
                     dispatch(SendEvent.FeeBusyChanged(view.busy))
@@ -236,12 +238,10 @@ class SendController(
                 if (view.stale != lastStale) {
                     lastStale = view.stale
                     val current = send.value
-                    val request = lastQuote
-                    if (view.stale && !view.busy && request != null &&
+                    if (view.stale && !view.busy &&
                         current.stage == SendStage.Confirm && current.tx_status == SendTxStatus.Idle && !current.sending
                     ) {
-                        VelaLog.event("send.fee", "re-quote on stale", "chain" to request.chain_id)
-                        feeHost.dispatch(request, FeeEvent.serializer())
+                        speedControl.requoteStale()
                     }
                 }
             }
@@ -254,51 +254,23 @@ class SendController(
 
     // -- the fee bridge (research D7) ----------------------------------------------
 
-    /** The last quote asked, re-asked verbatim when it goes stale on the confirm page (spec 045 US4). */
-    @Volatile
-    private var lastQuote: FeeEvent.QuoteRequested? = null
-
     private suspend fun requestQuote(
         chainId: Int,
         account: String,
         calls: List<FeeCall>,
         gasFeeToken: String?,
         publicKeyAvailable: Boolean,
-    ): SendFeeOutcome {
-        val deployed = relayRef.isDeployed(chainId, account) ?: false
-        val before = feeHost.view.value.fee
-        val request = FeeEvent.QuoteRequested(
-            chain_id = chainId,
-            account = account,
-            deployed = deployed,
-            public_key_available = publicKeyAvailable,
-            tier = FeeTier.Fast,
-            calls = calls,
-            fee_token = gasFeeToken,
-        )
-        lastQuote = request
-        feeHost.dispatch(request, FeeEvent.serializer())
-        // Settled = not busy, and either a NEW estimate or a failure. The
-        // reference check is what keeps a stale estimate from answering a
-        // fresh request; every commit decodes a fresh object.
-        //
-        // Woken by `commits`, NOT by `view`: a re-quote at the same price is a
-        // view that `equals` the one before the request, and a StateFlow never
-        // delivers that to a collector that missed the `busy` in between — the
-        // wait then ran out its whole timeout with the answer sitting in the
-        // view (see `CoreHost.commits`).
-        val settled = withTimeoutOrNull(QUOTE_TIMEOUT_MS) {
-            feeHost.commits
-                .map { feeHost.view.value }
-                .first { view ->
-                    !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
-                }
-        } ?: return SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
-        val estimate = settled.fee
-        return when {
-            settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
-            estimate != null -> SendFeeOutcome.Ok(estimate)
-            else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
+    ): SendFeeOutcome = when (val quoted = speedControl.quote(chainId, account, publicKeyAvailable, calls, gasFeeToken)) {
+        SpeedControl.Quoted.Superseded -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
+        SpeedControl.Quoted.TimedOut -> SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
+        is SpeedControl.Quoted.Settled -> {
+            val settled = quoted.view
+            val estimate = settled.fee
+            when {
+                settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
+                estimate != null -> SendFeeOutcome.Ok(estimate)
+                else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
+            }
         }
     }
 
@@ -317,8 +289,28 @@ class SendController(
     fun open(account: SendAccountRef?, display: SendDisplayContext, params: SendOpenParams = SendOpenParams()) {
         _closed.value = false
         _alert.value = null
+        // A new send starts at the stored default: the one-shot pick, a free
+        // upgrade and the fold all die with the send before it (spec 068).
+        speedControl.reset()
         dispatch(SendEvent.Open(account = account, params = params, display = display))
     }
+
+    // -- the speed control (spec 069) -----------------------------------------------
+
+    /**
+     * The stored default or the number preset moved: a send already open
+     * follows the new default until the person picks a speed on it.
+     */
+    fun preferenceChanged() = speedControl.preferenceChanged()
+
+    /** Fold or unfold the control. */
+    fun toggleSpeed() = speedControl.toggle()
+
+    /** A tap on an option — one-shot, never the stored preference. */
+    fun pickSpeed(tier: FeeTier) = speedControl.pick(tier)
+
+    /** The refresh control: measure again, the held readings dropped first (issue 212). */
+    fun refreshFee() = speedControl.refresh()
 
     fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))
 
@@ -494,9 +486,6 @@ class SendController(
                 amount_base_units = request.amountBaseUnits,
             )
         } ?: SendScan.Text(data = text.trim())
-
-        /** Well above the core's own 15 s estimate timeout; a guard, not a policy. */
-        const val QUOTE_TIMEOUT_MS = 30_000L
     }
 }
 

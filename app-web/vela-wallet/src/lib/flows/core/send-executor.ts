@@ -61,6 +61,7 @@ import { clearTokenCache, fetchTokens } from '$lib/services/wallet-api';
 import type { SendChainInfo } from '$lib/core/generated/SendChainInfo';
 import type { SendShellResult } from '$lib/core/generated/SendShellResult';
 import type { SendTxRecord } from '$lib/core/generated/SendTxRecord';
+import { wireTier } from './wire-tier';
 import {
 	fromWireAmount,
 	toSendToken,
@@ -358,11 +359,11 @@ export function createSendExecutor(ports: SendShellPorts) {
 									amount: fromWireAmount(operation.quoted_fee.amount),
 									recipient: operation.quoted_fee.recipient,
 									// The speed the person was shown, named on the wire beside
-									// the reimbursement it was priced with (spec 068). Read
-									// from the live quote session at the moment of submission,
+									// the reimbursement it was priced with (spec 068). The core
+									// takes it from the SAME estimate as the amount (spec 069),
 									// so the screen and the chain cannot disagree about which
-									// tier this send is.
-									tier: ports.feeTier() ?? undefined
+									// tier this send is — and `rapid` never gets this far.
+									tier: wireTier(operation.quoted_fee.tier)
 								}
 							: undefined
 					);

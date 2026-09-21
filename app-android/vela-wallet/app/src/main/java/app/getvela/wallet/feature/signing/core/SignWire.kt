@@ -104,7 +104,12 @@ data class SignAccountRef(val address: String, val credential_id: String)
 data class SignDappIdentity(val name: String, val url: String? = null)
 
 @Serializable
-data class SignQuotedFee(val amount: String, val recipient: String)
+data class SignQuotedFee(
+    val amount: String,
+    val recipient: String,
+    /** The speed the displayed fee was priced at (spec 069), copied from the same estimate. */
+    val tier: app.getvela.wallet.feature.send.core.FeeTier? = null,
+)
 
 @Serializable
 data class SignErrorNotice(val kind: SignErrorKind, val detail: String? = null)

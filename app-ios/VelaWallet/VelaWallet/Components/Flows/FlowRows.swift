@@ -96,6 +96,20 @@ struct FactRowView: View {
     var onCopy: () -> Void = {}
 
     var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            row
+            // The reason under its row, in the row's own quiet voice (issue
+            // 686): a fact about the value, not a warning about it.
+            if let note = fact.note {
+                Text(verbatim: note)
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+            }
+        }
+        .padding(.vertical, Tokens.Space.s12)
+    }
+
+    private var row: some View {
         HStack(spacing: Tokens.Space.s8) {
             Text(verbatim: fact.label)
                 .typeRole(Typography.body.scaled(textScale))
@@ -120,7 +134,6 @@ struct FactRowView: View {
                 .accessibilityLabel(copy)
             }
         }
-        .padding(.vertical, Tokens.Space.s12)
     }
 
     /// The mono and prose faces are different role TYPES, so the choice is a

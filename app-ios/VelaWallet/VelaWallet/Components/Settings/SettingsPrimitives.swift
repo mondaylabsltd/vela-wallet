@@ -73,21 +73,25 @@ struct SettingsCallout: View {
     }
 }
 
-/// A chain's circular avatar — one letter over its own brand colour.
+/// A chain's circular avatar — its own logo when the chain-data endpoint has
+/// one (spec 047), else one letter over its brand colour, which is also what
+/// shows while the logo loads.
 struct ChainMark: View {
     let mark: ChainMarkModel
     var size: CGFloat = 32
 
     var body: some View {
-        Circle()
-            .fill(mark.color)
-            .frame(width: size, height: size)
-            .overlay(
-                Text(mark.letter)
-                    .typeRole(Typography.body)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
-            )
+        RemoteLogoView(urls: mark.logoUrl.map { [$0] } ?? [], size: size) {
+            Circle()
+                .fill(mark.color)
+                .frame(width: size, height: size)
+                .overlay(
+                    Text(mark.letter)
+                        .typeRole(Typography.body)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                )
+        }
     }
 }
 

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -198,10 +199,16 @@ private fun WalletHomeContent(
                     SectionMode.Rows -> {
                         Spacer(modifier = Modifier.height(VelaSpacing.sm))
                         model.assetRows.forEach { row ->
-                            AssetRow(
-                                model = row,
-                                onClick = { onFlow(WalletFlowEntry.TokenDetail, row.id) },
-                            )
+                            // Keyed by the holding, not the position: the list
+                            // re-sorts as balances land, and a row slot handed
+                            // to another token must not keep the last one's
+                            // state (its logo drew BNB with Tether's, #267).
+                            key(row.id, row.ticker, row.chain) {
+                                AssetRow(
+                                    model = row,
+                                    onClick = { onFlow(WalletFlowEntry.TokenDetail, row.id) },
+                                )
+                            }
                         }
                     }
                     SectionMode.Empty -> model.assetsSection.empty?.let {

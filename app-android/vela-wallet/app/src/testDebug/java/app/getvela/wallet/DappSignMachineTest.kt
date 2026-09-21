@@ -4,6 +4,7 @@ import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.RestAnswer
 import app.getvela.wallet.feature.send.core.StoreAccountPort
@@ -70,7 +71,9 @@ class DappSignMachineTest {
         port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", "0x3b9aca00")) }
         port.always("eth_maxPriorityFeePerGas") { FakeRelayPort.body("0x5f5e100") }
         port.always("pimlico_getUserOperationGasPrice") {
-            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", "0x77359400").put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")))
+            // A row per speed (spec 069): the sheet can price any of them.
+            fun row(max: String) = JSONObject().put("maxFeePerGas", max).put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")
+            FakeRelayPort.body(JSONObject().put("fast", row("0x77359400")).put("standard", row("0x59682f00")).put("slow", row("0x4a817c80")))
         }
         port.always("vela_getInBandGasQuote") {
             FakeRelayPort.body(JSONArray().put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "native").put("balance", "0x9f3306a949ca000").put("decimals", 18).put("symbol", "XDAI").put("usdBalance", "0.71").put("usdPrice", "1")))
@@ -78,7 +81,12 @@ class DappSignMachineTest {
         port.always("eth_estimateUserOperationGas") {
             FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
         }
-        port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.body("0xhash") }
+        port.always("eth_sendUserOperation") { params ->
+            events += "relay.send"
+            // Spec 069: the speed the displayed fee was priced at, by name.
+            events += "relay.tier:${params.getOrNull(2) ?: "-"}"
+            FakeRelayPort.body("0xhash")
+        }
         // The receipt: pending once, then landed — the answer is the TX hash.
         // Or (issue 262) it never lands: the op sits in the bundler.
         if (receiptLands) {
@@ -203,6 +211,30 @@ class DappSignMachineTest {
         val handoff = handoffs.singleOrNull()
         assertEquals("the tracker holds the op", "0xhash", handoff?.first)
         assertEquals("…and the very record it must settle", listOf(row.getString("id")), handoff?.second)
+    }
+
+    @Test
+    fun `a speed picked on the sheet is the speed priced, signed and named on the wire`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        // The stored default first — `fast` for everybody who never chose.
+        val first = withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        assertEquals(FeeTier.Fast, first.fee!!.tier)
+        assertEquals(FeeTier.Fast, c.speed.value.tier)
+        c.toggleSpeed()
+        c.pickSpeed(FeeTier.Slow)
+        assertTrue("a pick is one-shot, and says so", withTimeout(10_000) { c.speed.first { it.picked } }.tier == FeeTier.Slow)
+        // The sheet re-prices at the speed picked; the old figure never stands in.
+        // (Both speeds meet the $0.01 floor on this script, so only the NAME
+        // tells them apart — which is the thing the wire has to carry.)
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready && it.fee?.tier == FeeTier.Slow } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertTrue("the wire names the speed picked: $events", "relay.tier:slow" in events)
+        assertFalse("never the speed walked away from: $events", "relay.tier:fast" in events)
+        withTimeout(10_000) { c.closed.first { it } }
     }
 
     @Test

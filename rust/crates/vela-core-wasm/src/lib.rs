@@ -807,6 +807,39 @@ pub fn min_gas_price_wei(chain_id: u32) -> String {
     vela_core::app::fee_policy::min_gas_price_wei(chain_id).to_string()
 }
 
+/// Issue 212: how long a chain's fee signals may be held, in ms — the one
+/// number every shell's cache used to carry its own copy of.
+#[wasm_bindgen(js_name = feeSignalsCacheTtlMs)]
+#[must_use]
+pub fn fee_signals_cache_ttl_ms() -> u32 {
+    vela_core::app::fee_policy::FEE_SIGNALS_CACHE_TTL_MS
+}
+
+/// Issue 212: may this gas-signal read be held? Decimal wei in; see
+/// `fee_policy::gas_signals_cacheable`.
+#[wasm_bindgen(js_name = gasSignalsCacheable)]
+#[must_use]
+pub fn gas_signals_cacheable(
+    eth_gas_price: Option<String>,
+    block_answered: bool,
+    want_tip: bool,
+    priority_fee: Option<String>,
+) -> bool {
+    vela_core::app::fee_policy::gas_signals_cacheable(
+        eth_gas_price.as_deref(),
+        block_answered,
+        want_tip,
+        priority_fee.as_deref(),
+    )
+}
+
+/// Issue 212: may the relay's gas quote for one tier be held?
+#[wasm_bindgen(js_name = bundlerQuoteCacheable)]
+#[must_use]
+pub fn bundler_quote_cacheable(max_fee_per_gas: &str) -> bool {
+    vela_core::app::fee_policy::bundler_quote_cacheable(max_fee_per_gas)
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.

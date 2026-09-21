@@ -1503,6 +1503,36 @@ pub fn entry_point_address() -> String {
     vela_core::safe::ENTRY_POINT.to_owned()
 }
 
+/// Issue 212: how long a chain's fee signals may be held, in ms — the one
+/// number every shell's cache used to carry its own copy of.
+#[uniffi::export]
+pub fn fee_signals_cache_ttl_ms() -> u32 {
+    vela_core::app::fee_policy::FEE_SIGNALS_CACHE_TTL_MS
+}
+
+/// Issue 212: may this gas-signal read be held? Decimal wei in; see
+/// `fee_policy::gas_signals_cacheable`.
+#[uniffi::export]
+pub fn gas_signals_cacheable(
+    eth_gas_price: Option<String>,
+    block_answered: bool,
+    want_tip: bool,
+    priority_fee: Option<String>,
+) -> bool {
+    vela_core::app::fee_policy::gas_signals_cacheable(
+        eth_gas_price.as_deref(),
+        block_answered,
+        want_tip,
+        priority_fee.as_deref(),
+    )
+}
+
+/// Issue 212: may the relay's gas quote for one tier be held?
+#[uniffi::export]
+pub fn bundler_quote_cacheable(max_fee_per_gas: String) -> bool {
+    vela_core::app::fee_policy::bundler_quote_cacheable(&max_fee_per_gas)
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.

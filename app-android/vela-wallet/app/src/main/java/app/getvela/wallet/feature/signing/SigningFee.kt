@@ -27,11 +27,13 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.explore.components.LetterAvatar
+import app.getvela.wallet.feature.flows.components.FeeSpeedControl
 import app.getvela.wallet.feature.signing.components.SigningPositive
 
 /**
  * The fee row, and its expanded fee-token selector (mock CS33) — the last thing
- * between the request and the slide.
+ * between the request and the slide. Under the row, inside the same card, the
+ * speed control the send form draws (spec 069).
  */
 @Composable
 fun SigningFee(
@@ -41,13 +43,16 @@ fun SigningFee(
     onFee: () -> Unit = {},
     /** A coin from the list, by id (`SigningLive.NATIVE_FEE_ID` for the chain's own). */
     onPick: (String) -> Unit = {},
+    /** Spec 069: the speed control under the fee — fold/unfold, and a speed by id. */
+    onToggleSpeed: () -> Unit = {},
+    onPickSpeed: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (fee) {
         is FeeModel.Hidden -> Unit
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
-            SigningFeeBody(fee, onFee, onPick)
+            SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed)
             // Issue #262: the reason the slide below is shut, said where the fix is.
             fee.warning?.let {
                 Text(
@@ -64,15 +69,24 @@ fun SigningFee(
 }
 
 @Composable
-private fun SigningFeeBody(fee: FeeModel.OnChain, onFee: () -> Unit, onPick: (String) -> Unit) {
+private fun SigningFeeBody(
+    fee: FeeModel.OnChain,
+    onFee: () -> Unit,
+    onPick: (String) -> Unit,
+    onToggleSpeed: () -> Unit,
+    onPickSpeed: (String) -> Unit,
+) {
     val colors = VelaTheme.colors
     run {
-        if (fee.selectorTitle == null) {
+        if (fee.selectorTitle == null) Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(VelaRadius.lg))
+                .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg)),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(VelaRadius.lg))
-                    .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
                     .clickable(enabled = fee.tappable, onClick = onFee)
                     .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
@@ -99,6 +113,15 @@ private fun SigningFeeBody(fee: FeeModel.OnChain, onFee: () -> Unit, onPick: (St
                         modifier = Modifier.size(VelaIconSize.sm),
                     )
                 }
+            }
+            fee.speed?.let { speed ->
+                // The control pads its rows by `lg`; the row above by `xl`.
+                FeeSpeedControl(
+                    speed = speed,
+                    modifier = Modifier.padding(horizontal = VelaSpacing.sm).padding(bottom = VelaSpacing.sm),
+                    onToggle = onToggleSpeed,
+                    onPick = onPickSpeed,
+                )
             }
         } else {
             Column(

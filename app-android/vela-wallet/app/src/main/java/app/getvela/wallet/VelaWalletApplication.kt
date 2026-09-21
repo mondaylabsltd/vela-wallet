@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
 import app.getvela.wallet.feature.settings.SettingsOverlay
@@ -315,7 +316,15 @@ class AppContainer(private val app: Application) {
                 kotlinx.coroutines.withTimeoutOrNull(10_000L) { settings.networks.first { it.last_added_chain_id == chainId } }
                     ?.let { SendAddNetworkOutcome.Added } ?: SendAddNetworkOutcome.NotFound
             },
+            preferredTier = { settings.feeTier.value.tier },
+            numberPreset = { Formats.current.resolvedNumber().wire },
         ).also { controller ->
+            // Spec 069: the stored default speed, read now and followed after —
+            // Settings changing it reaches a send already open.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                settings.refreshFeeTier()
+                settings.feeTier.collect { controller.preferenceChanged() }
+            }
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.
             controller.onTrackSubmitted = { hash, ids, chain -> wallet.trackSubmitted(hash, ids, chain) }
@@ -461,6 +470,8 @@ class AppContainer(private val app: Application) {
                 signer = { ParallelSpaceHook.signer() ?: passkeySigner ?: error("no signer bound") },
                 knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
                 wallet = SignAccountRef(address = address, credential_id = credential),
+                preferredTier = { settings.feeTier.value.tier },
+                numberPreset = { Formats.current.resolvedNumber().wire },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->
@@ -509,6 +520,13 @@ class AppContainer(private val app: Application) {
             )
             signing.value = controller
             controller.open(request)
+            // Spec 069: the stored default, read now and followed while the
+            // sheet is up — a request can arrive before anything else read it.
+            // A child of this coroutine, so it ends with the sheet.
+            launch {
+                settings.refreshFeeTier()
+                settings.feeTier.collect { controller.preferenceChanged() }
+            }
             controller.closed.collect { closed -> if (closed) { if (signing.value === controller) signing.value = null; throw kotlinx.coroutines.CancellationException("answered") } }
         }
     }

@@ -50,7 +50,8 @@ class WalletLiveTest {
         view: BalanceView,
         feed: FeedView = FeedView(),
         currency: CurrencyView = CurrencyView(code = "USD"),
-    ) = WalletLive.home(base(), view, feed, currency, strings, chains)
+        chainFilter: Int? = null,
+    ) = WalletLive.home(base(), view, feed, currency, strings, chains, chainFilter = chainFilter)
 
     private fun token(
         symbol: String,
@@ -92,6 +93,43 @@ class WalletLiveTest {
 
         assertEquals("Arbitrum", rows[0].chain)
         assertEquals("Polygon", rows[1].chain)
+    }
+
+    /**
+     * The network filter (spec 048) narrows the home's holdings, as the web's
+     * home does: a network picked on the assets page is no longer invisible on
+     * the home while the send picker already obeys it. The hero total stays
+     * the whole wallet's.
+     */
+    @Test
+    fun `the home narrows its holdings to the network filter, not its total`() {
+        val view = BalanceView(
+            display_total_usd = 5.01,
+            tokens = listOf(
+                token("ETH", "0.002", price = 2500.0, chainId = 42161, name = "Ether"),
+                token("USDT", "0.01", price = 1.0, chainId = 137, name = "USDT"),
+            ),
+        )
+        val all = home(view)
+        val arbitrum = home(view, chainFilter = 42161)
+
+        assertEquals(listOf("Arbitrum", "Polygon"), all.assetRows.map { it.chain })
+        assertEquals(listOf("Arbitrum"), arbitrum.assetRows.map { it.chain })
+        assertEquals("the hero is the whole wallet's", all.balance, arbitrum.balance)
+    }
+
+    /** A network holding nothing, while others do, reads as empty — not loading, not blank. */
+    @Test
+    fun `a network filtered down to nothing is the empty state`() {
+        val view = BalanceView(
+            display_total_usd = 5.0,
+            holdings_loading = true,
+            tokens = listOf(token("ETH", "0.002", price = 2500.0, chainId = 42161, name = "Ether")),
+        )
+        val base = home(view, chainFilter = 8453)
+
+        assertTrue(base.assetRows.isEmpty())
+        assertEquals(SectionMode.Empty, base.assetsSection.mode)
     }
 
     /** A chain this device has no row for still says something, never a blank. */

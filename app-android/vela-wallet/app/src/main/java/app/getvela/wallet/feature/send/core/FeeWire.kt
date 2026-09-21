@@ -73,6 +73,15 @@ data class FeeEstimateView(
     val relayer_fee_per_gas: String,
     val bundler_gas_price: String,
     val in_band_gas_basis: String,
+    /**
+     * What this tier bids per gas now, and how high it will go — the two ends
+     * of the gas bid the speed control draws (issues 684/685), wei as decimal
+     * strings. `null` means nothing honest to show, never 0. Carried so the
+     * estimate handed back to the core (the send machine, the speed machine)
+     * is whole: a subset here would silently drop the figure.
+     */
+    val effective_gas_price: String? = null,
+    val max_gas_price: String? = null,
     val total_gas: String,
     val deployed: Boolean,
     val tier: FeeTier,
@@ -84,6 +93,12 @@ data class FeeEstimateView(
 @Serializable
 data class FeeBundlerQuote(
     val max_fee_per_gas: String,
+    /**
+     * The tip the relay will SIGN this tier with — the only per-tier number
+     * that buys priority, and one half of the gas bid the core publishes
+     * (issue 684). `null` when the row omits it; never 0 as a stand-in.
+     */
+    val max_priority_fee_per_gas: String? = null,
     val network_fee_per_gas: String? = null,
     val relayer_fee_per_gas: String? = null,
 )
@@ -99,6 +114,12 @@ data class FeeAssetQuote(
     val symbol: String,
     val usd_balance: String,
     val usd_price: String? = null,
+    /**
+     * The native coin's price from THIS shell's own source, for the $0.01
+     * native minimum only (issue 682). Omitted here: the core's default
+     * answer is the one Android gave before.
+     */
+    val native_usd_floor_price: String? = null,
 )
 
 @Serializable
