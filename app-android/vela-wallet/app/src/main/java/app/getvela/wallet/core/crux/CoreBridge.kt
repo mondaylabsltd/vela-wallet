@@ -16,6 +16,7 @@ import uniffi.vela_core_uniffi.ClearSigningCore
 import uniffi.vela_core_uniffi.SignRequestCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
 import uniffi.vela_core_uniffi.ExploreSitesCore
+import uniffi.vela_core_uniffi.DappBrowserCore
 import uniffi.vela_core_uniffi.DappPermissionsCore
 import uniffi.vela_core_uniffi.SendCore
 import uniffi.vela_core_uniffi.TxTrackerCore
@@ -94,6 +95,10 @@ fun ActivityFeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun ManageTokensCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+/** The in-app browser's decision half (spec 070). */
+fun DappBrowserCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun DappPermissionsCore.asBridge(): CoreBridge =

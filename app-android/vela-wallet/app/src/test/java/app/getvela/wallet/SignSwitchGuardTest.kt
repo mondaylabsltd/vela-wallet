@@ -32,7 +32,7 @@ class SignSwitchGuardTest {
         val switches: Boolean = true,
     ) : SignExecutor.Ports {
         val switched = mutableListOf<String>()
-        override fun respond(transportId: String, id: String, json: JSONObject) = Unit
+        override fun respond(transportId: String, id: String, payload: app.getvela.wallet.feature.signing.core.SignResponsePayload) = Unit
         override fun opSubmitted(id: String, userOpHash: String) = Unit
         override fun signingStarted() = Unit
         override fun recordsPersisted() = Unit

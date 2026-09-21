@@ -70,13 +70,14 @@ fun SiteMenuSheetContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
+                    val tone = if (sheet.secure) colors.successBase else colors.warningBase
                     Icon(
-                        VelaIcons.Lock, null, tint = colors.successBase,
+                        if (sheet.secure) VelaIcons.Lock else VelaIcons.TriangleAlert, null, tint = tone,
                         modifier = Modifier.size(VelaIconSize.xs),
                     )
                     Text(
                         text = sheet.statusLine,
-                        color = colors.successBase,
+                        color = tone,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.base,
                     )
@@ -131,6 +132,10 @@ fun ConnectionPanel(
     onClose: () -> Unit,
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Spec 070: the account row opens the account picker; `null` = drawn only. */
+    onSwitchAccount: (() -> Unit)? = null,
+    /** Spec 070: the network row picks the site's chain; `null` = drawn only. */
+    onNetwork: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -158,13 +163,14 @@ fun ConnectionPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
+                    val tone = if (connection.secure) colors.successBase else colors.warningBase
                     Icon(
-                        VelaIcons.Lock, null, tint = colors.successBase,
+                        if (connection.secure) VelaIcons.Lock else VelaIcons.TriangleAlert, null, tint = tone,
                         modifier = Modifier.size(VelaIconSize.xs),
                     )
                     Text(
                         text = connection.statusLine,
-                        color = colors.successBase,
+                        color = tone,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.base,
                     )
@@ -179,7 +185,9 @@ fun ConnectionPanel(
         Divider()
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = onSwitchAccount != null) { onSwitchAccount?.invoke() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
@@ -214,7 +222,9 @@ fun ConnectionPanel(
         Divider()
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = onNetwork != null) { onNetwork?.invoke() },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -239,6 +249,10 @@ fun ConnectionPanel(
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.lg,
                 )
+                // Pickable: say so the way the account row does.
+                if (onNetwork != null) {
+                    Icon(VelaIcons.ChevronRight, null, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.sm))
+                }
             }
         }
 
@@ -407,4 +421,96 @@ private fun Divider() {
             .height(VelaBorder.hairline)
             .background(VelaTheme.colors.borderBase),
     )
+}
+
+/** One row of a pick-one sheet (spec 070): the site's network, the account it sees. */
+@androidx.compose.runtime.Immutable
+data class PickerOption(val id: String, val label: String, val detail: String = "", val selected: Boolean = false)
+
+/**
+ * A pick-one sheet: a title and rows, the chosen one checked. The network a
+ * site is on and the account it sees are picked here — the choice is the
+ * core's to apply, this only says which.
+ */
+@Composable
+fun PickerSheetContent(
+    title: String,
+    options: List<PickerOption>,
+    closeLabel: String,
+    onClose: () -> Unit,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Column(modifier = modifier.padding(horizontal = VelaSizing.screenPaddingX).padding(bottom = VelaSpacing.xl)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = VelaSpacing.xl),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.xl2,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(VelaIcons.Close, closeLabel, tint = colors.fgMuted, modifier = Modifier.clickable(onClick = onClose))
+        }
+        options.forEachIndexed { index, option ->
+            if (index > 0) Box(Modifier.fillMaxWidth().height(VelaBorder.hairline).background(colors.borderBase))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPick(option.id) }
+                    .padding(vertical = VelaSpacing.xl),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                    Text(text = option.label, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (option.detail.isNotBlank()) {
+                        Text(text = option.detail, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
+                    }
+                }
+                if (option.selected) Icon(VelaIcons.Check, null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+            }
+        }
+    }
+}
+
+/**
+ * Where a page would be when there is none to show (spec 070): the renderer
+ * died, or the address could not be reached. One sentence of what happened,
+ * one of what to do, one button that does it.
+ */
+@Composable
+fun BrowserNotice(title: String, body: String, action: String, onAction: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgBase)
+            .padding(horizontal = VelaSizing.screenPaddingX, vertical = VelaSpacing.xl5),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Icon(VelaIcons.TriangleAlert, null, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xl2))
+        Text(text = title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.xl, textAlign = TextAlign.Center)
+        if (body.isNotBlank()) {
+            Text(text = body, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.Center)
+        }
+        Box(
+            modifier = Modifier
+                .height(VelaSizing.controlLg)
+                .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
+                .clickable(onClick = onAction)
+                .padding(horizontal = VelaSpacing.xl4),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = action, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.lg)
+        }
+    }
 }

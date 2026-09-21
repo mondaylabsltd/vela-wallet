@@ -34,7 +34,9 @@ import app.getvela.wallet.feature.signing.core.SigningController
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignAccountRef
 import app.getvela.wallet.feature.send.core.StoreAccountPort
-import app.getvela.wallet.feature.browser.core.BrowserExecutor
+import app.getvela.wallet.feature.browser.core.DbrOperation
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.RegistryBackup
 import app.getvela.wallet.feature.settings.core.WalletKeys
@@ -89,6 +91,13 @@ class AppContainer(private val app: Application) {
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
+
+    /**
+     * A code scanned from 探索 that is a payment (an address, an `ethereum:`
+     * request — spec 070): the send opens on it as if its own scanner had read
+     * it, so the core's `scan_resolved` decides what it means.
+     */
+    val pendingScan = MutableStateFlow<String?>(null)
     /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
     val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
@@ -341,7 +350,7 @@ class AppContainer(private val app: Application) {
         }
     }
 
-    /** The in-app browser (spec 044): the tab engines, the provider bridge, the request sink. */
+    /** The in-app browser (spec 044, on the core's `dapp_browser` since 070): the tab engines and what they carry. */
     val browser: BrowserController by lazy {
         BrowserController(
             context = app,
@@ -350,18 +359,25 @@ class AppContainer(private val app: Application) {
             pool = pool,
             feed = wallet.feedExecutor,
             relay = relay,
-            knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
             debuggable = BuildConfig.DEBUG,
         ).also { controller ->
-            // A page asked for a signature: the four signing machines are born
-            // for it, answer it, and die with it (spec 044 phase 4).
-            controller.onSignRequest = { request -> openSigning(controller, request) }
-            // The permissions machine is told the session's accounts as the
-            // desktop tells it at birth, and again on every change.
-            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            // The core forwards one signature at a time: the four signing
+            // machines are born for it, answer it, and die with it.
+            controller.onForwardToSigning = { operation -> openSigning(controller, operation) }
+            // The page behind the open sheet is gone and already answered.
+            controller.onCancelSigning = { tab, id ->
+                signing.value?.takeIf { open -> open.request.value?.let { it.transportId == tab && it.id == id } == true }?.cancel()
+            }
+            val follow = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+            // Every wallet address and the active one: every grant follows it.
+            follow.launch {
                 session.view.collect { view ->
                     if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
                 }
+            }
+            // The chains a page may switch to are the wallet's networks, live.
+            follow.launch {
+                settings.networks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
             }
         }
     }
@@ -371,11 +387,24 @@ class AppContainer(private val app: Application) {
 
     private val signingScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
-    private fun openSigning(browser: BrowserController, request: BrowserController.SignRequest) = openSigningRequest(
-        request = IncomingRequest(id = request.id, method = request.method, paramsJson = request.paramsJson, origin = request.origin, transportId = request.transportId, chainId = request.chainId),
-        answer = { transportId, id, json -> browser.answerFromSigning(transportId, id, json) },
-        rememberUserOp = { browser.rememberUserOp(it) },
-    )
+    private fun openSigning(browser: BrowserController, operation: DbrOperation.ForwardToSigning) {
+        // The user operation this request submitted, if any: the core translates
+        // the page's later receipt lookups by it.
+        var userOpHash: String? = null
+        openSigningRequest(
+            request = IncomingRequest(
+                id = operation.id,
+                method = operation.method,
+                paramsJson = operation.params_json,
+                origin = operation.origin,
+                transportId = operation.tab,
+                chainId = operation.chain_id,
+                grantedAddress = operation.granted_address,
+            ),
+            answer = { payload -> browser.signingAnswered(operation.tab, operation.id, payload, userOpHash) },
+            rememberUserOp = { userOpHash = it },
+        )
+    }
 
     /**
      * The Ethereum backup (spec 062): ONE transaction the wallet asks ITSELF to
@@ -399,7 +428,7 @@ class AppContainer(private val app: Application) {
                 transportId = WALLET_TRANSPORT,
                 chainId = call.chainId,
             ),
-            answer = { _, _, _ -> },
+            answer = {},
             rememberUserOp = {},
         )
     }
@@ -445,7 +474,7 @@ class AppContainer(private val app: Application) {
 
     private fun openSigningRequest(
         request: IncomingRequest,
-        answer: (transportId: String, id: String, json: JSONObject) -> Unit,
+        answer: (SignResponsePayload) -> Unit,
         rememberUserOp: (String) -> Unit,
     ) {
         signingScope.launch {
@@ -453,12 +482,14 @@ class AppContainer(private val app: Application) {
             val accountPort = StoreAccountPort(AccountStore(app))
             val credential = accountPort.keysOf(address).firstOrNull()?.credentialId
             if (address.isBlank() || credential == null) {
-                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, 4100, "No wallet account available"))
+                answer(SignResponsePayload.Err(4100, SignErrorKind.UnauthorizedAccount, "No wallet account available"))
                 return@launch
             }
-            // One request at a time: a second while the sheet is up is the core's ConsentBusy on the permissions side; here it is refused plainly.
+            // The browser core forwards one page request at a time; what can
+            // still be open here is the wallet's OWN request (the Ethereum
+            // backup). The page is refused plainly rather than queued behind it.
             signing.value?.let { open ->
-                answer(request.transportId, request.id, BrowserExecutor.errorJson(request.id, -32002, "Another request is open"))
+                answer(SignResponsePayload.Err(-32002, SignErrorKind.SubmitFailed, "Another request is open"))
                 return@launch
             }
             lateinit var controller: SigningController
@@ -479,8 +510,8 @@ class AppContainer(private val app: Application) {
                         ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")?.takeIf { it.startsWith("0x") }
                 },
                 ports = object : SigningController.Ports {
-                    override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
-                        answer(transportId, id, json)
+                    override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
+                        answer(payload)
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }

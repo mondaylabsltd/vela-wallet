@@ -84,7 +84,6 @@ android {
             assets.srcDir(projectDir.resolve("build/generated/velaI18n"))
             // Launch animations, same arrangement (spec 012).
             assets.srcDir(projectDir.resolve("build/generated/velaAnimations"))
-            assets.srcDir(projectDir.resolve("build/generated/velaProvider"))
         }
         // The parallel space's fixed keyset (spec 043, research D2): a SECOND
         // uniffi library, bindings and .so both in the debug source set, so a
@@ -176,23 +175,6 @@ val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {
 //
 // The include pattern is a GLOB, not a list, so adding a second animation needs
 // no edit here (FR-004).
-// The in-app browser's provider (spec 044, research D2): the SAME two files
-// the extension ships and the desktop injects. Copied from the web tree at
-// build time so there is one script, not a fork; `ProviderBridge` strips the
-// two module keywords at load, exactly as the desktop's `provider_script()`.
-val syncVelaProviderAssets = tasks.register<Sync>("syncVelaProviderAssets") {
-    description = "Copies the shared in-page provider (app-web/vela-wallet/extension) into build assets (spec 044)."
-    from(velaRepoRoot.resolve("app-web/vela-wallet/extension/inpage.js"))
-    from(velaRepoRoot.resolve("app-web/vela-wallet/extension/lib/protocol.js"))
-    into(layout.buildDirectory.dir("generated/velaProvider/provider"))
-    doLast {
-        val produced = destinationDir.listFiles { f -> f.name.endsWith(".js") }?.map { it.name }?.sorted() ?: emptyList()
-        check(produced == listOf("inpage.js", "protocol.js")) {
-            "expected inpage.js and protocol.js from app-web/vela-wallet/extension, found $produced"
-        }
-    }
-}
-
 val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
     description = "Copies launch animations (docs/design/onboarding/launch) into build assets (spec 012)."
     from(velaRepoRoot.resolve("docs/design/onboarding/launch")) {
@@ -219,10 +201,10 @@ val rustHostLib = tasks.register<Exec>("rustHostLib") {
 }
 
 tasks.named("preBuild") {
-    dependsOn(cargoNdkBuild, syncVelaI18nAssets, syncVelaAnimationAssets, syncVelaProviderAssets)
+    dependsOn(cargoNdkBuild, syncVelaI18nAssets, syncVelaAnimationAssets)
 }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
-    dependsOn(syncVelaI18nAssets, syncVelaAnimationAssets, syncVelaProviderAssets)
+    dependsOn(syncVelaI18nAssets, syncVelaAnimationAssets)
 }
 tasks.withType<Test>().configureEach {
     dependsOn(rustHostLib)

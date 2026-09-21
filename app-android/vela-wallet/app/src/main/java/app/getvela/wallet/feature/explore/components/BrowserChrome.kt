@@ -11,6 +11,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,6 +61,10 @@ import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
  * and the site menu. The pill shows the DOMAIN, never the full URL — the part
  * of an address that decides who you are talking to must not be pushed off the
  * end by a long path.
+ *
+ * Spec 070: a tap on the pill edits the full address in place (Go opens it in
+ * this tab); an insecure page shows a warning, never nothing; a hairline under
+ * the bar is the page's load.
  */
 @Composable
 fun AddressBar(
@@ -55,55 +76,99 @@ fun AddressBar(
     onClose: () -> Unit,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
+    url: String = "",
+    insecureLabel: String = "",
+    loading: Boolean = false,
+    progress: Int = 100,
+    onSubmitUrl: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(VelaSizing.hitTarget)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) { Icon(VelaIcons.Close, closeLabel, tint = colors.fgBase) }
-
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(TextFieldValue("")) }
+    val focus = remember { FocusRequester() }
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
-                .weight(1f)
-                .height(ExploreMetrics.addressPill)
-                .background(colors.bgRaised, CircleShape),
+                .fillMaxWidth()
+                .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            if (secure) {
-                Icon(
-                    VelaIcons.Lock,
-                    secureLabel,
-                    tint = colors.fgMuted,
-                    modifier = Modifier.size(VelaIconSize.xs),
-                )
-                Spacer(Modifier.size(VelaSpacing.md))
-            }
-            Text(
-                text = host,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.lg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+            Box(
+                modifier = Modifier
+                    .size(VelaSizing.hitTarget)
+                    .clickable { if (editing) editing = false else onClose() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(VelaIcons.Close, closeLabel, tint = colors.fgBase) }
 
-        Box(
-            modifier = Modifier
-                .size(VelaSizing.hitTarget)
-                .clickable(onClick = onMenu),
-            contentAlignment = Alignment.Center,
-        ) { Icon(VelaIcons.Ellipsis, menuLabel, tint = colors.fgBase) }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(ExploreMetrics.addressPill)
+                    .background(colors.bgRaised, CircleShape)
+                    .clickable(enabled = onSubmitUrl != null && !editing) {
+                        draft = TextFieldValue(url, selection = TextRange(0, url.length))
+                        editing = true
+                    }
+                    .padding(horizontal = VelaSpacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                if (editing) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go, keyboardType = KeyboardType.Uri),
+                        keyboardActions = KeyboardActions(onGo = {
+                            editing = false
+                            if (draft.text.isNotBlank()) onSubmitUrl?.invoke(draft.text)
+                        }),
+                        cursorBrush = SolidColor(colors.accentBase),
+                        textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focus),
+                    )
+                    LaunchedEffect(Unit) { focus.requestFocus() }
+                } else {
+                    if (secure) {
+                        Icon(VelaIcons.Lock, secureLabel, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xs))
+                        Spacer(Modifier.size(VelaSpacing.md))
+                    } else if (host.isNotBlank()) {
+                        Icon(VelaIcons.TriangleAlert, insecureLabel, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.xs))
+                        Spacer(Modifier.size(VelaSpacing.md))
+                    }
+                    Text(
+                        text = host,
+                        color = colors.fgBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.lg,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(VelaSizing.hitTarget)
+                    .clickable(onClick = onMenu),
+                contentAlignment = Alignment.Center,
+            ) { Icon(VelaIcons.Ellipsis, menuLabel, tint = colors.fgBase) }
+        }
+        // The load, as a hairline the width of the screen: present only while
+        // something is loading, so a finished page carries no chrome for it.
+        Box(Modifier.fillMaxWidth().height(VelaBorder.emphasis)) {
+            if (loading) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress.coerceIn(5, 100) / 100f)
+                        .fillMaxHeight()
+                        .background(colors.accentBase),
+                )
+            }
+        }
     }
 }
 
@@ -159,7 +224,7 @@ fun BrowserToolbar(
             }
         }
 
-        ToolbarIcon(VelaIcons.Star, bookmarkLabel, enabled = true) { onBookmark() }
+        ToolbarIcon(VelaIcons.Star, bookmarkLabel, enabled = true, tint = if (browser.bookmarked) colors.accentBase else null) { onBookmark() }
         Box(
             modifier = Modifier
                 .defaultMinSize(ExploreMetrics.tabCount, ExploreMetrics.tabCount)
@@ -183,6 +248,7 @@ private fun ToolbarIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     enabled: Boolean,
+    tint: androidx.compose.ui.graphics.Color? = null,
     onClick: () -> Unit,
 ) {
     val colors = VelaTheme.colors
@@ -193,7 +259,7 @@ private fun ToolbarIcon(
             .alpha(if (enabled) 1f else VelaOpacity.disabled),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, tint = if (enabled) colors.fgBase else colors.fgSubtle)
+        Icon(icon, label, tint = tint ?: if (enabled) colors.fgBase else colors.fgSubtle)
     }
 }
 

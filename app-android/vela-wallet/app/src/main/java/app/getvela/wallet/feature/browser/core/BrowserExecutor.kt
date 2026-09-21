@@ -2,127 +2,127 @@ package app.getvela.wallet.feature.browser.core
 
 import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.data.KeyValueStore
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * The `dapp_permissions` machine's eight arms (spec 044 T023; the desktop's
- * `wallet/browser_host.rs`).
+ * The `dapp_browser` machine's arms (spec 070; the desktop's and iOS's are
+ * the same list).
  *
  * ## What this file must never decide
  *
- * Whether an origin is connected, whether a frame may ask, whether a
- * request is a read or a signature, and which error code a refusal
- * carries. All of those are the core's, and every one of them is a
- * security rule. This performs: it reads and writes grants under the
- * desktop's key, answers the page in the wire's shapes, emits the
- * provider events, writes the "connected to" row, and hands a forwarded
- * request to whoever routes it.
+ * Whether an origin is connected, whether a frame may ask, what a method is,
+ * which chain a site is on, which page an answer belongs to and which error
+ * code a refusal carries. All of those are the core's, and every one is a
+ * security rule — the reason this file used to have two siblings
+ * (`DappRpc.kt`, `RequestRouter.kt`) and now has none. This performs: the
+ * grant and chain store, strings into a named tab, a read through the
+ * person's own pool, a receipt from the relay, the "connected to" row, and
+ * the hand-off to the signing sheet.
  */
 class BrowserExecutor(
     private val store: KeyValueStore,
     private val ports: Ports,
 ) {
     interface Ports {
-        /** `{dir:"res", id, result}` or `{dir:"res", id, error:{code,message}}`, to the page that asked. */
-        fun respond(id: String, json: JSONObject)
+        /** Post [messageJson] into [tab]'s page. No such tab: drop it — never another tab. */
+        fun deliver(tab: String, messageJson: String)
 
-        /** `{dir:"evt", event, data}` to the connected page. */
-        fun emit(json: JSONObject)
+        /** A node (or bundler) read through the pool: the JSON-RPC body, or `null` when nothing answered. */
+        suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject?
 
-        /** Every forwarded request still open is answered with this error. */
-        fun settleForwarded(code: Int, message: String)
+        /** The transaction hash a user operation landed in; `null` while it has not (or nobody answered). */
+        suspend fun userOpTxHash(chainId: Int, userOpHash: String): String?
+
+        /** Open the signing sheet for this request; its answer comes back as `signing_answered`. */
+        fun forwardToSigning(operation: DbrOperation.ForwardToSigning)
+
+        /** Close the sheet for this request: its page is gone and already answered. */
+        fun cancelSigning(tab: String, id: String)
 
         /** The feed's "connected to <site>" row (`type: "connect"`). */
         fun saveConnectionRecord(row: JSONObject)
-
-        /** A request the core forwarded: a signature, a wallet fact, or a chain read. */
-        fun forward(id: String, method: String, paramsJson: String, origin: String)
     }
 
-    suspend fun perform(operation: DpermOperation): DpermShellResult = when (operation) {
-        is DpermOperation.ReadGrant -> DpermShellResult.GrantRead(
-            origin = operation.origin,
-            grant = store.read(grantKey(operation.origin))?.let { raw ->
-                // A parse or storage failure answers "no grant": an unreadable
-                // grant is not a grant, and guessing one from a half-written
-                // record would connect a site nobody connected.
-                runCatching { Wire.json.decodeFromString(DpermGrant.serializer(), raw) }.getOrNull()
-            },
-        )
-        is DpermOperation.WriteGrant -> {
+    suspend fun perform(operation: DbrOperation): DbrShellResult = when (operation) {
+        DbrOperation.ListSites -> DbrShellResult.SitesListed(listSites())
+        is DbrOperation.WriteGrant -> {
             store.write(grantKey(operation.grant.origin), Wire.json.encodeToString(DpermGrant.serializer(), operation.grant))
-            DpermShellResult.Ack
+            DbrShellResult.Ack
         }
-        is DpermOperation.RemoveGrant -> {
-            store.write(grantKey(operation.origin), "")
-            DpermShellResult.Ack
+        is DbrOperation.RemoveGrant -> {
+            store.remove(grantKey(operation.origin))
+            DbrShellResult.Ack
         }
-        is DpermOperation.Respond -> {
-            ports.respond(operation.id, responseJson(operation.id, operation.payload))
-            DpermShellResult.Ack
+        is DbrOperation.WriteSiteChain -> {
+            store.write(chainKey(operation.origin), operation.chain_id.toString())
+            DbrShellResult.Ack
         }
-        is DpermOperation.EmitEvent -> {
-            ports.emit(eventJson(operation.event))
-            DpermShellResult.Ack
+        is DbrOperation.Deliver -> {
+            ports.deliver(operation.tab, operation.message_json)
+            DbrShellResult.Ack
         }
-        is DpermOperation.SettleForwarded -> {
-            ports.settleForwarded(operation.code, rejectMessage(operation.reason))
-            DpermShellResult.Ack
+        is DbrOperation.Read -> {
+            val params = runCatching { JSONArray(operation.params_json) }.getOrElse { JSONArray() }
+            DbrShellResult.ReadAnswered(ports.read(operation.chain_id, operation.method, params, operation.bundler)?.toString())
         }
-        is DpermOperation.SaveConnectionRecord -> {
+        is DbrOperation.ResolveUserOp -> DbrShellResult.UserOpResolved(ports.userOpTxHash(operation.chain_id, operation.user_op_hash))
+        is DbrOperation.ForwardToSigning -> {
+            ports.forwardToSigning(operation)
+            DbrShellResult.Ack
+        }
+        is DbrOperation.CancelSigning -> {
+            ports.cancelSigning(operation.tab, operation.id)
+            DbrShellResult.Ack
+        }
+        is DbrOperation.SaveConnectionRecord -> {
             ports.saveConnectionRecord(connectionRow(operation.address, operation.chain_id, operation.origin, System.currentTimeMillis()))
-            DpermShellResult.Ack
-        }
-        is DpermOperation.ForwardToSigning -> {
-            ports.forward(operation.id, operation.method, operation.params_json, operation.origin)
-            DpermShellResult.Ack
+            DbrShellResult.Ack
         }
     }
 
-    fun neutralAnswer(operation: DpermOperation): DpermShellResult = when (operation) {
-        is DpermOperation.ReadGrant -> DpermShellResult.GrantRead(operation.origin, null)
-        else -> DpermShellResult.Ack
+    /** What an operation answers when performing it threw: the page is still settled, by the core. */
+    fun neutralAnswer(operation: DbrOperation): DbrShellResult = when (operation) {
+        DbrOperation.ListSites -> DbrShellResult.SitesListed(emptyList())
+        is DbrOperation.Read -> DbrShellResult.ReadAnswered(null)
+        is DbrOperation.ResolveUserOp -> DbrShellResult.UserOpResolved(null)
+        else -> DbrShellResult.Ack
+    }
+
+    /**
+     * Every stored grant and chain. An unreadable grant is no grant: guessing
+     * one from a half-written record would connect a site nobody connected.
+     */
+    private suspend fun listSites(): List<DbrStoredSite> {
+        val sites = LinkedHashMap<String, DbrStoredSite>()
+        for (key in store.allKeys()) {
+            when {
+                key.startsWith(GRANT_PREFIX) -> {
+                    val origin = key.removePrefix(GRANT_PREFIX)
+                    val grant = store.read(key)?.takeIf { it.isNotBlank() }?.let { raw ->
+                        runCatching { Wire.json.decodeFromString(DpermGrant.serializer(), raw) }.getOrNull()
+                    } ?: continue
+                    sites[origin] = (sites[origin] ?: DbrStoredSite(origin)).copy(grant = grant)
+                }
+                key.startsWith(CHAIN_PREFIX) -> {
+                    val origin = key.removePrefix(CHAIN_PREFIX)
+                    val chain = store.read(key)?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: continue
+                    sites[origin] = (sites[origin] ?: DbrStoredSite(origin)).copy(chain_id = chain)
+                }
+            }
+        }
+        return sites.values.toList()
     }
 
     companion object {
-        /** `vela.perm.<origin>` — the desktop's key; one document per origin. */
-        fun grantKey(origin: String): String = "vela.perm.$origin"
+        const val GRANT_PREFIX = "vela.perm."
+        const val CHAIN_PREFIX = "vela.chain."
 
-        /** The wire's shapes; the core said WHICH shape. The words for a rejection are the shell's. */
-        fun responseJson(id: String, payload: DpermRespondPayload): JSONObject = when (payload) {
-            is DpermRespondPayload.Accounts -> JSONObject().put("dir", "res").put("id", id).put("result", org.json.JSONArray(payload.addresses))
-            is DpermRespondPayload.Permissions -> JSONObject().put("dir", "res").put("id", id).put(
-                "result",
-                if (payload.granted) org.json.JSONArray().put(JSONObject().put("parentCapability", "eth_accounts")) else org.json.JSONArray(),
-            )
-            is DpermRespondPayload.Error -> errorJson(id, payload.code, rejectMessage(payload.reason))
-        }
+        /** `vela.perm.<origin>` — every client's key; one document per origin. */
+        fun grantKey(origin: String): String = GRANT_PREFIX + origin
 
-        fun resultJson(id: String, result: Any?): JSONObject =
-            JSONObject().put("dir", "res").put("id", id).put("result", result ?: JSONObject.NULL)
-
-        fun errorJson(id: String, code: Int, message: String): JSONObject =
-            JSONObject().put("dir", "res").put("id", id).put("error", JSONObject().put("code", code).put("message", message))
-
-        /** An EIP-1193 event, in the envelope the provider already listens for. */
-        fun eventJson(event: DpermPageEvent): JSONObject = when (event) {
-            is DpermPageEvent.AccountsChanged -> JSONObject().put("dir", "evt").put("event", "accountsChanged").put("data", org.json.JSONArray(event.addresses))
-            is DpermPageEvent.ChainChanged -> JSONObject().put("dir", "evt").put("event", "chainChanged").put("data", event.chain_id_hex)
-            DpermPageEvent.Disconnect -> JSONObject().put("dir", "evt").put("event", "disconnect")
-        }
-
-        /** The shell's words for the core's reason (the desktop's table). */
-        fun rejectMessage(reason: DpermRejectReason): String = when (reason) {
-            DpermRejectReason.UnauthorizedFrame -> "Unauthorized frame"
-            DpermRejectReason.NoAccountAvailable -> "No wallet account available"
-            DpermRejectReason.ConsentBusy -> "Another connection request is open"
-            DpermRejectReason.InsecureOrigin -> "Signing requires a secure origin"
-            DpermRejectReason.UserRejected -> "User rejected the request"
-            DpermRejectReason.NavigatedAway -> "The page navigated away"
-            DpermRejectReason.BrowserClosed -> "The browser was closed"
-            DpermRejectReason.NotConnected -> "This site is not connected"
-            DpermRejectReason.StaleAuthorizedAddress -> "The authorized address changed"
-        }
+        /** `vela.chain.<origin>` — the extension's key for the chain a site is on. */
+        fun chainKey(origin: String): String = CHAIN_PREFIX + origin
 
         /** The "Connected to <app>" row, field for field the other clients' (`buildConnectionRecord`). */
         fun connectionRow(address: String, chainId: Int, origin: String, nowMs: Long): JSONObject = JSONObject()

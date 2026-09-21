@@ -434,7 +434,10 @@ fun VelaStorageBar(segments: List<StorageSegmentModel>, modifier: Modifier = Mod
                 .clip(RoundedCornerShape(VelaRadius.sm))
                 .background(colors.bgSunken),
         ) {
-            segments.forEach { segment ->
+            // An empty share draws nothing: Compose refuses a zero weight, and
+            // an emptied group (the last dApp disconnected, say) took the whole
+            // app down with it (device-found, spec 070).
+            segments.filter { it.fraction > 0f && it.fraction.isFinite() }.forEach { segment ->
                 Box(
                     modifier = Modifier
                         .weight(segment.fraction)

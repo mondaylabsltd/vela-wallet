@@ -38,6 +38,12 @@ data class IncomingRequest(
     /** The tab that asked; the answer goes there and nowhere else. */
     val transportId: String,
     val chainId: Int,
+    /**
+     * The address the site was shown (spec 070): the signer is pinned to it,
+     * and `sign_request` refuses (4100) rather than sign as anyone else.
+     * `null` for the wallet's own requests.
+     */
+    val grantedAddress: String? = null,
 )
 
 /**
@@ -143,8 +149,8 @@ class SigningController(
                 tryHandoff()
             }
 
-            override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
-                ports.respond(transportId, id, json)
+            override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
+                ports.respond(transportId, id, payload)
                 // The page has its answer: once the core has cleared the sheet
                 // this controller may go.
                 markAnswered()
@@ -270,7 +276,7 @@ class SigningController(
             SignEvent.RequestArrived(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,
                 transport_id = request.transportId, dedicated_transport = true, per_request_chain = request.chainId,
-                dapp = null, granted_address = null, requested_address = null, request_ts_ms = null, now_ms = now(),
+                dapp = null, granted_address = request.grantedAddress, requested_address = null, request_ts_ms = null, now_ms = now(),
             ),
         )
         // What it does. A transaction decodes from its call; typed data and a
@@ -325,6 +331,17 @@ class SigningController(
 
     /** Called by the container's response port so the sheet closes only once the page has its answer. */
     fun markAnswered() { answered = true; if (sign.value.surface == SignSurface.Hidden) _closed.value = true }
+
+    /**
+     * The page that asked is gone (spec 070): it already holds its 4900 from
+     * the browser core. The sheet closes without answering anybody; an
+     * operation already at the relay keeps its record and its tracker.
+     */
+    fun cancel() {
+        _request.value?.let { dispatchSign(SignEvent.TransportDropped(it.transportId)) }
+        answered = true
+        _closed.value = true
+    }
 
     init {
         // One request, one controller: its fee sessions end with it.

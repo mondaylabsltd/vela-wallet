@@ -400,6 +400,8 @@ class MainActivity : ComponentActivity() {
         val container = (application as VelaWalletApplication).container
         intent.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
         routeDeepLink(intent, container)
+        // Spec 070: the page in front's renderer dies on purpose — debug builds only.
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("vela.crashRenderer", false)) container.browser.debugCrashRenderer()
     }
 
     /** Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route. */

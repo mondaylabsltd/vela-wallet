@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -210,6 +211,8 @@ fun ExploreSearchField(
     modifier: Modifier = Modifier,
     /** Issue #273: the scan icon opens the scanner (a web address's code); without one it submits. */
     onScan: (() -> Unit)? = null,
+    /** Spec 070: lets the start page put the cursor here (the favourites' "+" tile). */
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val colors = VelaTheme.colors
     var text by remember { mutableStateOf("") }
@@ -252,7 +255,9 @@ fun ExploreSearchField(
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.lg,
                     ),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .let { base -> focusRequester?.let { base.then(androidx.compose.ui.Modifier.focusRequester(it)) } ?: base },
                 )
             }
         }
@@ -293,22 +298,26 @@ fun ExploreEmpty(copy: ExploreEmptyCopy, onBrowse: () -> Unit, modifier: Modifie
             fontSize = VelaTextSize.base,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(VelaSpacing.sm))
-        Box(
-            modifier = Modifier
-                .height(VelaSizing.controlLg)
-                .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
-                .clickable(onClick = onBrowse)
-                .padding(horizontal = VelaSpacing.xl4),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = copy.cta,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.semibold,
-                fontSize = VelaTextSize.lg,
-            )
+        // Spec 070: no call to action that goes nowhere — the live start page
+        // has no curated list to browse, so it passes no CTA.
+        if (copy.cta.isNotBlank()) {
+            Spacer(Modifier.height(VelaSpacing.sm))
+            Box(
+                modifier = Modifier
+                    .height(VelaSizing.controlLg)
+                    .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
+                    .clickable(onClick = onBrowse)
+                    .padding(horizontal = VelaSpacing.xl4),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = copy.cta,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.lg,
+                )
+            }
         }
     }
 }

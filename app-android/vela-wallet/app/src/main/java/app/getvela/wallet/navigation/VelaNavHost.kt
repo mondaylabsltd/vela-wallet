@@ -695,7 +695,14 @@ fun VelaNavHost(
                         // contacts screen used to load (device-found, phase 6).
                         application.container.contacts.open(session.address)
                         // Spec 046 US3: the home's 扫码 enters here with the scanner on top.
-                        if (flows.top == FlowState.S1) send.openScanner()
+                        // Spec 070: a payment code scanned in 探索 arrives already read.
+                        if (flows.top == FlowState.S1) {
+                            send.openScanner()
+                            application.container.pendingScan.value?.let { text ->
+                                application.container.pendingScan.value = null
+                                send.scanned(text)
+                            }
+                        }
                     }
                 }
                 LaunchedEffect(sendClosed) {
@@ -1058,29 +1065,42 @@ fun VelaNavHost(
                             ExploreFixtures.buildState(ExploreScreenState.E2, strings)
                                 .withIdentity(session.activeName, session.address)
                         }
-                        // Spec 044: the tab is a browser with a memory — the core's
-                        // favourites, groups, tabs and recents; a live page where
-                        // the demo page was drawn.
+                        // Spec 044/070: the tab is a browser with a memory — the core's
+                        // favourites, groups, tabs and recents — and every page's
+                        // requests are the core's `dapp_browser` to decide.
                         val browser = application.container.browser
+                        val context = LocalContext.current
                         LaunchedEffect(Unit) { browser.start() }
                         val engine by browser.current.collectAsStateWithLifecycle()
                         val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
                         val exploreView by browser.explore.collectAsStateWithLifecycle()
                         val historyView by browser.history.collectAsStateWithLifecycle()
-                        val permissions by browser.permissions.collectAsStateWithLifecycle()
-                        val browserChain by browser.browserChain.collectAsStateWithLifecycle()
+                        val dapp by browser.dapp.collectAsStateWithLifecycle()
+                        val networks by application.container.settings.networks.collectAsStateWithLifecycle()
+                        val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
+                        val siteChain = tabView?.chain_id ?: app.getvela.wallet.feature.browser.core.DbrTabView("").chain_id
                         val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
                             accountName = session.activeName,
                             accountAddress = session.address,
-                            chainName = chainNames[browserChain] ?: browserChain.toString(),
-                            chainDot = WalletLive.badge(browserChain.toLong()),
+                            chainName = chainNames[siteChain] ?: siteChain.toString(),
+                            chainDot = WalletLive.badge(siteChain.toLong()),
                         )
-                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, permissions, identity) {
-                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, permissions, identity)
+                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, tabView, identity) {
+                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity)
                         }
-                        val consentCard = permissions.consent?.let { c ->
-                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, engine?.let { engineState }, strings, identity)
+                        val consentCard = dapp.consent?.let { c ->
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
                         }
+                        // One-line notices the browser raises (a WalletConnect link, say).
+                        LaunchedEffect(browser) {
+                            browser.notices.collect { notice ->
+                                when (notice) {
+                                    app.getvela.wallet.feature.browser.core.BrowserController.Notice.WalletConnectUnsupported ->
+                                        android.widget.Toast.makeText(context, strings.t("explore.walletConnectUnsupported"), android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        val pageUrl = engineState.url
                         ExploreScreen(
                             model = liveModel,
                             // The drawn CS12 sheet belongs to the demo page, which a
@@ -1089,11 +1109,31 @@ fun VelaNavHost(
                             signing = null,
                             onSelectTab = select,
                             page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
-                            initialView = if (engine != null) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
+                            initialView = if (engine != null || tabView?.crashed == true) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
                             onOpenUrl = { browser.open(it) },
                             onClosePage = { browser.close() },
                             onPageBack = { browser.back() },
                             onPageForward = { browser.forward() },
+                            onPageReload = { browser.reload() },
+                            networkOptions = networks.networks.map { n ->
+                                app.getvela.wallet.feature.explore.components.PickerOption(
+                                    id = n.chain_id.toString(),
+                                    label = chainNames[n.chain_id.toInt()] ?: n.chain_id.toString(),
+                                    selected = n.chain_id.toInt() == siteChain,
+                                )
+                            },
+                            onPickNetwork = { id -> id.toIntOrNull()?.let(browser::pickSiteChain) },
+                            accountOptions = session.accounts.map { row ->
+                                app.getvela.wallet.feature.explore.components.PickerOption(
+                                    id = row.index.toString(),
+                                    label = row.name.ifBlank { app.getvela.wallet.feature.browser.ExploreLive.shortAddress(row.address) },
+                                    detail = app.getvela.wallet.feature.browser.ExploreLive.shortAddress(row.address),
+                                    selected = row.address.equals(session.address, ignoreCase = true),
+                                )
+                            },
+                            // Every connected site follows the wallet's account (the
+                            // core re-pins each grant and tells the pages).
+                            onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },
                             live = app.getvela.wallet.feature.explore.ExploreCallbacks(
                                 onOpenSite = { url -> browser.open(url) },
                                 onTabOpen = { id -> browser.selectTab(id) },
@@ -1111,31 +1151,50 @@ fun VelaNavHost(
                                 onSiteMenuPick = { id ->
                                     when (id) {
                                         "refresh" -> browser.reload()
-                                        "favorite" -> browser.addFavorite()
+                                        "favorite" -> browser.toggleFavorite()
                                         "close" -> browser.close()
+                                        "disconnect" -> browser.revoke()
+                                        "share" -> if (pageUrl.isNotBlank()) {
+                                            val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, pageUrl)
+                                            runCatching { context.startActivity(android.content.Intent.createChooser(share, null)) }
+                                        }
+                                        "copy" -> if (pageUrl.isNotBlank()) {
+                                            (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)
+                                                ?.setPrimaryClip(android.content.ClipData.newPlainText("url", pageUrl))
+                                            android.widget.Toast.makeText(context, strings.t("explore.linkCopied"), android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                        "system" -> if (pageUrl.isNotBlank()) {
+                                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(pageUrl))) }
+                                        }
                                     }
                                 },
-                                onBookmark = { browser.addFavorite() },
+                                onBookmark = { browser.toggleFavorite() },
                                 onRecentClear = { browser.clearRecent() },
                                 onDisconnect = { browser.revoke() },
                                 onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
                             ),
                             consent = consentCard,
-                            // Issue #273: the scan icon reads a web address's code and opens
-                            // it here — the send scanner's surface, camera permission and
-                            // photo path. Any other code is refused in one line; WalletConnect
-                            // is not how this wallet connects.
+                            // Issue #273, D1 option (b): a web address opens here; an
+                            // address or `ethereum:` request is a payment and goes to
+                            // Send; a WalletConnect code is named, not guessed at.
                             scanner = { onUrl, onClose ->
                                 var refusal by remember { mutableStateOf<String?>(null) }
                                 LiveScanSurface(
                                     model = remember(strings) { FlowFixtures.scan(strings) },
                                     callbacks = ScanCallbacks(
                                         onDecoded = { text ->
-                                            val url = app.getvela.wallet.feature.browser.ExploreLive.scannedUrl(text)
-                                            if (url != null) {
-                                                onUrl(url)
-                                            } else {
-                                                refusal = strings.t(I18nKeys.Flows.SCAN_INVALID_QR)
+                                            when (val scanned = app.getvela.wallet.feature.browser.ExploreLive.scanned(text)) {
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Url -> onUrl(scanned.url)
+                                                is app.getvela.wallet.feature.browser.ExploreLive.Scanned.Payment -> {
+                                                    onClose()
+                                                    application.container.pendingScan.value = scanned.text
+                                                    section = VelaTab.Wallet
+                                                    flows.push(FlowStep.Scan)
+                                                }
+                                                app.getvela.wallet.feature.browser.ExploreLive.Scanned.WalletConnect ->
+                                                    refusal = strings.t("explore.walletConnectUnsupported")
+                                                app.getvela.wallet.feature.browser.ExploreLive.Scanned.Unrecognized ->
+                                                    refusal = strings.t("explore.scanUnrecognized")
                                             }
                                         },
                                         onClose = onClose,
@@ -1583,6 +1642,8 @@ fun VelaNavHost(
                     settings.startNetworks()
                 }
                 LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
+                // The connected sites, live from the browser core (spec 070).
+                val connectedSites by application.container.browser.dapp.collectAsStateWithLifecycle()
                 LaunchedEffect(Unit) {
                     treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
                 }
@@ -1615,6 +1676,7 @@ fun VelaNavHost(
                     )
                     m = SettingsLive.withFeeTier(m, feeTier, strings)
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
+                    m = SettingsLive.withConnections(m, connectedSites.sites, strings)
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
                     m = SettingsLive.withFeedback(
@@ -1673,7 +1735,23 @@ fun VelaNavHost(
                             }
                         },
                         onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
-                        onStorageClear = { itemId -> scope.launch { DeviceStorage.clear(VelaStore(context), itemId); storageTick++ } },
+                        onStorageClear = { itemId ->
+                            scope.launch {
+                                when {
+                                    // One connected site (spec 070): the core revokes it,
+                                    // writes the store and tells any open page.
+                                    "://" in itemId -> application.container.browser.revoke(itemId)
+                                    // Every grant: gone from the store AND from the live
+                                    // core, which used to keep them until a restart.
+                                    itemId == "dapps" -> {
+                                        DeviceStorage.clear(VelaStore(context), itemId)
+                                        application.container.browser.revokeAll()
+                                    }
+                                    else -> DeviceStorage.clear(VelaStore(context), itemId)
+                                }
+                                storageTick++
+                            }
+                        },
                         onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
                         onErase = {
                             scope.launch {

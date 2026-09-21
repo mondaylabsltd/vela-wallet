@@ -1,7 +1,6 @@
 package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
-import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import kotlinx.coroutines.awaitCancellation
@@ -45,8 +44,12 @@ class SignExecutor(
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
 
     interface Ports {
-        /** The answer, to the transport (tab) that owns the request. */
-        fun respond(transportId: String, id: String, json: JSONObject)
+        /**
+         * The answer, to the transport (tab) that owns the request. The core's
+         * typed payload: a page's words and wire shape are `dapp_browser`'s
+         * (spec 070), not this executor's.
+         */
+        fun respond(transportId: String, id: String, payload: SignResponsePayload)
 
         /** The relay accepted: the core must hear this BEFORE the submit resolves. */
         fun opSubmitted(id: String, userOpHash: String)
@@ -82,7 +85,7 @@ class SignExecutor(
 
     suspend fun perform(operation: SignOperation): SignShellResult = when (operation) {
         is SignOperation.SendResponse -> {
-            ports.respond(operation.transport_id, operation.id, responseJson(operation.id, operation.payload))
+            ports.respond(operation.transport_id, operation.id, operation.payload)
             SignShellResult.Responded
         }
         // `null` means "proceed to submit" — including when a check itself
@@ -241,25 +244,6 @@ class SignExecutor(
 
         private fun isHexPayload(payload: String): Boolean =
             payload.startsWith("0x") && payload.length % 2 == 0 && payload.drop(2).all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
-
-        /** The page's answer in the wire's shape; the core chose `ok`/`err` and the code. */
-        fun responseJson(id: String, payload: SignResponsePayload): JSONObject = when (payload) {
-            is SignResponsePayload.Ok -> BrowserExecutor.resultJson(id, payload.result)
-            is SignResponsePayload.Err -> BrowserExecutor.errorJson(id, payload.code, payload.message ?: defaultMessage(payload.kind))
-        }
-
-        fun defaultMessage(kind: SignErrorKind): String = when (kind) {
-            SignErrorKind.UserRejected -> "User rejected the request"
-            SignErrorKind.WalletSwitchedChains -> "The wallet switched chains"
-            SignErrorKind.UnsupportedChain -> "Unsupported chain"
-            SignErrorKind.UnauthorizedAccount -> "Unauthorized account"
-            SignErrorKind.InvalidParams -> "Invalid params"
-            SignErrorKind.UnsupportedCapability -> "Unsupported capability"
-            SignErrorKind.UnlimitedApproval -> "Unlimited approvals are disabled"
-            SignErrorKind.FundingCancelled -> "Funding cancelled"
-            SignErrorKind.SubmitFailed -> "The transaction could not be submitted"
-            SignErrorKind.StaleFeeQuote -> "The fee quote expired"
-        }
 
         /**
          * The calls a request carries (the desktop's `calls_of`): one for

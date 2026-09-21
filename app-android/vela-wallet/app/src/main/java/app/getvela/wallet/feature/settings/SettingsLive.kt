@@ -546,6 +546,41 @@ object SettingsLive {
         )
     }
 
+    /**
+     * The Connections group, one row per connected site (spec 070 — the web's
+     * `withLiveConnections`, row for row). A grant is a standing permission, so
+     * a person has to see WHICH sites hold one, not only how many. `id` is the
+     * origin, so the row's clear names exactly the grant to revoke; the words
+     * say "Disconnect" (one site), never "Disconnect all". With no site
+     * connected the drawn "dApp permissions · 0" row stands.
+     */
+    fun withConnections(
+        model: SettingsScreenModel,
+        sites: List<app.getvela.wallet.feature.browser.core.DbrSiteView>,
+        strings: VelaStrings,
+    ): SettingsScreenModel {
+        if (sites.isEmpty()) return model
+        val label = strings.t(I18nKeys.SettingsUi.STORAGE_CONNECTIONS)
+        return model.copy(
+            storage = model.storage.copy(
+                groups = model.storage.groups.map { group ->
+                    if (group.label != label) return@map group
+                    group.copy(
+                        items = sites.map { site ->
+                            StorageItemModel(
+                                id = site.origin,
+                                label = site.origin.substringAfter("://"),
+                                meta = app.getvela.wallet.feature.browser.ExploreLive.shortAddress(site.address),
+                                action = strings.t("explore.disconnect"),
+                                destructive = true,
+                            )
+                        },
+                    )
+                },
+            ),
+        )
+    }
+
     internal fun bytesText(bytes: Long): Pair<String, String> = when {
         bytes >= 1_000_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000_000)), 1, 1) to "MB"
         bytes >= 1_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000)), 0, 0) to "KB"
