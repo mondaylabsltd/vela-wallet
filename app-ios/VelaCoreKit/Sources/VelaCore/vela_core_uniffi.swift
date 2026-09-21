@@ -12144,6 +12144,17 @@ public func storageIsErasableKey(key: String) -> Bool  {
 })
 }
 /**
+ * Is this key the wallet's at all (counted in the storage total)?
+ */
+public func storageIsOurs(key: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_is_ours(
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+})
+}
+/**
  * The row a key belongs to; `None` for the accounts and preferences.
  */
 public func storageItemOfKey(key: String) -> String?  {
@@ -12558,6 +12569,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_storage_is_erasable_key() != 56136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_is_ours() != 40697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_storage_item_of_key() != 39080) {

@@ -304,7 +304,7 @@ struct SettingsScreen: View {
                 actions: endpointActions,
                 onReset: endpointActions == nil ? nil : {
                     let reset = endpointActions?.onResetEndpoints
-                    ask(SettingsLive.resetEndpointsConfirm(model, loc: loc), in: .resetEndpoints) {
+                    ask(SettingsLive.resetEndpointsConfirm(loc: loc), in: .resetEndpoints) {
                         reset?()
                         endpointsGeneration += 1
                     }

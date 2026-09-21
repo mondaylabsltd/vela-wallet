@@ -380,6 +380,10 @@ enum I18nKeys {
         static let endpointFiat = "settingsModals.endpoints.fiatLabel"
         static let endpointFiatHint = "settingsModals.endpoints.fiatHint"
         static let endpointsReset = "settingsModals.endpoints.resetToDefaults"
+        static let endpointsResetTitle = "settingsModals.endpoints.resetTitle"
+        static let endpointsResetBody = "settingsModals.endpoints.resetBody"
+        static let endpointsResetConfirm = "settingsModals.endpoints.resetConfirm"
+        static let endpointsResetCancel = "settingsModals.endpoints.resetCancel"
 
             // Device storage.
         static let storageTitle = "settings.storage.title"

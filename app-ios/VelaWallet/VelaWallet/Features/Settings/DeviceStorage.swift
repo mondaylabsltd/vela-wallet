@@ -81,7 +81,8 @@ enum DeviceStorage {
         // the `vela.` namespace — is weighed with the rest.
         let keys = store.everyKey()
         let named = keys.compactMap { key in item(of: key).map { (key, $0) } }
-        let unnamed = store.allKeys().filter { item(of: $0) == nil }
+        // Ours by the core's rule (`storage_catalog::is_ours`), in no row.
+        let unnamed = keys.filter { storageIsOurs(key: $0) && item(of: $0) == nil }
         func bytes(_ key: String) -> Int { (store.rawValue(key) ?? "").utf8.count }
 
         let reports = items.map { item -> ItemReport in

@@ -180,18 +180,15 @@ enum SettingsLive {
         }
     }
 
-    /// The confirmation before "Reset to defaults": which addresses it
-    /// replaces, in the page's own labels — the only words a question about
-    /// four URLs needs.
-    static func resetEndpointsConfirm(_ model: SettingsScreenModel, loc: Loc) -> ConfirmSheetModel {
-        let changed = model.endpoints.fields
-            .filter { !$0.value.isEmpty && $0.value != $0.placeholder }
-            .map { "\($0.label) · \($0.value)" }
+    /// The confirmation before "Reset to defaults" (FR-010), in the corpus's
+    /// own words — the same question every shell asks.
+    static func resetEndpointsConfirm(loc: Loc) -> ConfirmSheetModel {
+        let k = I18nKeys.SettingsUi.self
         return ConfirmSheetModel(
-            title: model.endpoints.reset,
-            body: changed.isEmpty ? model.endpoints.description : changed.joined(separator: "\n"),
-            confirm: model.endpoints.reset,
-            cancel: loc.t(I18nKeys.SettingsUi.commonCancel),
+            title: loc.t(k.endpointsResetTitle),
+            body: loc.t(k.endpointsResetBody),
+            confirm: loc.t(k.endpointsResetConfirm),
+            cancel: loc.t(k.endpointsResetCancel),
             danger: true
         )
     }
