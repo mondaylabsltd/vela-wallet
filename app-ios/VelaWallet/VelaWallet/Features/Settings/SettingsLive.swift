@@ -812,6 +812,57 @@ enum SettingsLive {
 
     // MARK: - 存储 and 关于 (spec 058)
 
+    /// Storage → Connections: one row per connected site (spec 070 FR-017),
+    /// the web's `withLiveConnections`.
+    ///
+    /// The row is the SITE — its host, the account it sees, and Disconnect —
+    /// and its id is the origin, which is what a tap revokes. With nothing
+    /// connected the measured "dApp permissions" row stays, so the page still
+    /// says there is nothing there rather than drawing an empty group.
+    ///
+    /// Runs AFTER `withStorage`: the sizes are that function's, the rows are
+    /// this one's, and the other order would overwrite a site's address with
+    /// "0 B".
+    static func withConnections(
+        _ sites: [DbrSiteViewWire],
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        guard !sites.isEmpty else { return model }
+        let label = loc.t(I18nKeys.SettingsUi.storageConnections)
+        var live = model
+        live.storage = StorageModel(
+            title: model.storage.title,
+            subtitle: model.storage.subtitle,
+            amount: model.storage.amount,
+            unit: model.storage.unit,
+            summary: model.storage.summary,
+            segments: model.storage.segments,
+            groups: model.storage.groups.map { group in
+                guard group.label == label else { return group }
+                return StorageGroupModel(
+                    label: group.label,
+                    items: sites.map { site in
+                        StorageItemModel(
+                            id: site.origin,
+                            label: BrowserEngine.hostOf(origin: site.origin),
+                            meta: AddressText.short(site.address),
+                            // Singular: this row cuts off ONE site.
+                            action: loc.t("explore.disconnect"),
+                            destructive: true
+                        )
+                    },
+                    action: group.action
+                )
+            }
+        )
+        return live
+    }
+
+    /// Whether a storage row is a connected site (its id an origin) rather
+    /// than one of the measured rows.
+    static func isConnectionRow(_ id: String) -> Bool { id.contains("://") }
+
     /// The storage page, measured.
     ///
     /// The fixture keeps every label, every action word and the order of the

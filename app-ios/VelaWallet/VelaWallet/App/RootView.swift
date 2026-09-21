@@ -2664,7 +2664,18 @@ struct RootView: View {
             onPick: { overlay, id in settingsPicked(overlay, id) },
             onClearCaches: { clearSettingsCaches() },
             onClearStorageItem: { id in
+                // A connected site's own row: disconnect that ONE site, in
+                // the live browser — its open tabs hear it at once.
+                if SettingsLive.isConnectionRow(id) {
+                    browser.revoke(origin: id)
+                    storageTick += 1
+                    return
+                }
                 DeviceStorage.clear(shelf, item: id)
+                // "dApp permissions" clears the keys AND the browser's live
+                // copy of them (spec 070 FR-017): before, the core kept every
+                // grant in memory until the next launch.
+                if id == "dapps" { browser.revokeAll() }
                 storageTick += 1
                 // What was cleared is what the rest of the app was showing:
                 // balances re-read, the feed and the address book re-read
@@ -2734,6 +2745,10 @@ struct RootView: View {
         .task(id: session.view.address) { await readWalletKeys() }
         .task {
             settings.open()
+            // The connected sites are the browser core's to list; reading
+            // them does not need a page open (idempotent).
+            browser.startConnections()
+            tellBrowserAboutAccounts()
             // Both pages ask the core to read what is stored when they open.
             // Until 056 nothing sent either event, so two live pages rendered
             // whatever the machine happened to be holding.
@@ -2796,6 +2811,10 @@ struct RootView: View {
         // again after keys are removed.
         _ = storageTick
         model = SettingsLive.withStorage(DeviceStorage.measure(shelf), on: model, loc: loc)
+        // Every connected site, as the browser core holds them — after the
+        // measurement, whose numbers the rows would otherwise be overwritten
+        // by.
+        model = SettingsLive.withConnections(browser.dbr.sites, on: model, loc: loc)
         model = SettingsLive.withAbout(
             version: BuildInfo.version,
             commit: BuildInfo.commit,
