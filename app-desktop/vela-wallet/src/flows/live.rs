@@ -3090,6 +3090,7 @@ mod tests {
                 locale: "en",
                 identity_name: "Golden",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                speed: None,
             })
             .recipient_tag
         };
