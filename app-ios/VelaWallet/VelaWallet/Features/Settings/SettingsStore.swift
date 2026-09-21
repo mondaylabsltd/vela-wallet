@@ -163,6 +163,9 @@ final class SettingsStore {
     func open() {
         core.boot(CoreJSON.string(["type": "started"]))
         openCurrency()
+        // The page's two signing rows read what is stored, however Settings
+        // was reached (spec 071).
+        openSignPref()
     }
 
     /// Boot the currency machine alone.
