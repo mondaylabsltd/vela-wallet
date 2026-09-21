@@ -178,6 +178,14 @@ class SendController(
     /** The send machine's view — every screen reads this and nothing else. */
     val send: StateFlow<SendView> = sendHost.view
 
+    /**
+     * Every commit of the send machine. Wait on THIS for "the core answered",
+     * never on [send]: a view that `equals` the last one is never re-emitted,
+     * so an answer that changes nothing visible wakes no collector of the view
+     * (`CoreHost.commits`, the 2026-09-19 CI flake).
+     */
+    val commits: StateFlow<Long> = sendHost.commits
+
     // Spec 045 US3: the payroll batch — its own machine, hosted beside the send.
     private val batchExecutor = BatchExecutor(fiatRate = fiatRate, documents = documents)
 
