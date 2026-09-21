@@ -201,3 +201,16 @@ extension CameraScanner: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 }
+
+extension CameraScanner.Refusal {
+    /// The sentence for this refusal. One mapping for every scanner surface —
+    /// 发送's and 探索's say the same thing about the same camera.
+    @MainActor
+    func text(_ loc: Loc) -> String {
+        switch self {
+        case .denied, .restricted: loc.t("componentsUi.scanner.permissionText")
+        case .noCamera: loc.t("componentsUi.scanner.noCamera")
+        case .unavailable: loc.t("componentsUi.scanner.cameraUnavailable")
+        }
+    }
+}

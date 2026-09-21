@@ -12,6 +12,7 @@
 //  change, the gallery's state picker) still lands.
 //
 
+import AVFoundation
 import SwiftUI
 
 struct ExploreScreen: View {
@@ -42,6 +43,10 @@ struct ExploreScreen: View {
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
     var controller: BrowserController?
+    /// The camera behind the start page's scan button (issue 273) — the same
+    /// app-resident one 发送's scanner uses. `nil` in the gallery, where the
+    /// scanner is a picture of a frame.
+    var camera: CameraScanner?
     var onSelectTab: (WalletTab) -> Void = { _ in }
 
     @State private var viewOverride: ExploreView?
@@ -64,6 +69,12 @@ struct ExploreScreen: View {
     /// The open sheet is a site ASKING to connect, not a review of one that
     /// already is. Kept so a swipe can be read as the refusal it is.
     @State private var consentOpen = false
+    /// The scanner is up, over the whole screen, as it is in 发送.
+    @State private var scanning = false
+    /// A code was read and it is not a web address.
+    @State private var scanRefused = false
+    /// A picked photo had no code in it.
+    @State private var photoEmpty = false
 
     /// Which of the three views is on screen.
     ///
@@ -159,87 +170,10 @@ struct ExploreScreen: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
-            switch view {
-            case .tabs:
-                ExploreTabsScreen(
-                    tabs: model.tabs, copy: model.tabsScreen,
-                    onDone: { viewOverride = nil },
-                    onOpen: { id in
-                        controller?.selectTab(id)
-                        viewOverride = controller == nil ? .browsing : nil
-                    },
-                    onClose: { id in
-                        controller?.closeTab(id)
-                        // With a live browser the strip decides what is left;
-                        // the core never leaves it empty or unselected.
-                        viewOverride = controller == nil ? .start : nil
-                    },
-                    onNew: {
-                        controller?.newTab()
-                        viewOverride = .start
-                    },
-                    onCloseAll: {
-                        controller?.closeAllTabs()
-                        viewOverride = .start
-                    }
-                )
-            case .browsing:
-                AddressBarView(
-                    host: browserHost, secure: browserSecure,
-                    secureLabel: loc.t("explore.secureSite"),
-                    closeLabel: loc.t("explore.closePage"),
-                    menuLabel: loc.t("explore.siteMenu"),
-                    // The page keeps running — leaving it is not closing it
-                    // (FR-013). The tab is still there, and the switcher
-                    // brings it straight back.
-                    onClose: { viewOverride = .start },
-                    onMenu: { sheet = .siteMenu }
-                )
-                if let engine {
-                    ZStack {
-                        BrowserWebView(engine: engine)
-                            .accessibilityIdentifier("explore.page")
-                        // A page that could not be reached SAYS SO. Before
-                        // 058 both failure callbacks set `loading = false` and
-                        // nothing else, so an unreachable dApp was a white
-                        // rectangle under an empty address bar — silence a
-                        // person can only read as "the app is broken".
-                        if let failure = engine.failure {
-                            BrowserFailureView(
-                                title: loc.t("connect.browser.loadFailed"),
-                                detail: failure,
-                                retry: loc.t("connect.browser.retry"),
-                                onRetry: { engine.reload() }
-                            )
-                        }
-                    }
-                } else {
-                    ScrollView {
-                        DemoPageView(page: model.browser.page) {
-                            if signing != nil { signingUp = true }
-                        }
-                    }
-                }
-                BrowserToolbarView(
-                    browser: liveBrowser,
-                    backLabel: loc.t("explore.back"),
-                    forwardLabel: loc.t("explore.forward"),
-                    accountLabel: loc.t("explore.account"),
-                    connectedLabel: loc.t("explore.connectedTag"),
-                    bookmarkLabel: loc.t("explore.addToFavorites"),
-                    tabsLabel: loc.t("explore.tabs"),
-                    onBack: { controller?.goBack() },
-                    onForward: { controller?.goForward() },
-                    onAccount: { sheet = .connection },
-                    onBookmark: {
-                        guard let engine, !engine.url.isEmpty else { return }
-                        controller?.addFavorite(url: engine.url, title: engine.title)
-                    },
-                    onTabs: { viewOverride = .tabs }
-                )
-            case .start:
-                startPage
-                WalletTabBar(tabs: model.nav, selected: .explore, onSelect: onSelectTab)
+            if scanning {
+                scanSurface
+            } else {
+                content
             }
         }
         .background(theme.bgBase.ignoresSafeArea())
@@ -311,6 +245,109 @@ struct ExploreScreen: View {
             sheet = .connection
         }
         .onAppear { sheet = model.sheet?.kind }
+        // The viewfinder runs only while it is on screen, as in 发送. A camera
+        // left running behind the start page is a light nobody asked for.
+        .task(id: scanning) {
+            guard let camera else { return }
+            if scanning {
+                camera.onScan = { text in scanned(text) }
+                await camera.start()
+            } else {
+                camera.stop()
+            }
+        }
+        .onDisappear {
+            if scanning { camera?.stop() }
+            scanning = false
+        }
+    }
+
+    /// The three views. Split from `body` so the scanner can stand in for all
+    /// of them.
+    @ViewBuilder
+    private var content: some View {
+        switch view {
+        case .tabs:
+            ExploreTabsScreen(
+                tabs: model.tabs, copy: model.tabsScreen,
+                onDone: { viewOverride = nil },
+                onOpen: { id in
+                    controller?.selectTab(id)
+                    viewOverride = controller == nil ? .browsing : nil
+                },
+                onClose: { id in
+                    controller?.closeTab(id)
+                    // With a live browser the strip decides what is left;
+                    // the core never leaves it empty or unselected.
+                    viewOverride = controller == nil ? .start : nil
+                },
+                onNew: {
+                    controller?.newTab()
+                    viewOverride = .start
+                },
+                onCloseAll: {
+                    controller?.closeAllTabs()
+                    viewOverride = .start
+                }
+            )
+        case .browsing:
+            AddressBarView(
+                host: browserHost, secure: browserSecure,
+                secureLabel: loc.t("explore.secureSite"),
+                closeLabel: loc.t("explore.closePage"),
+                menuLabel: loc.t("explore.siteMenu"),
+                // The page keeps running — leaving it is not closing it
+                // (FR-013). The tab is still there, and the switcher
+                // brings it straight back.
+                onClose: { viewOverride = .start },
+                onMenu: { sheet = .siteMenu }
+            )
+            if let engine {
+                ZStack {
+                    BrowserWebView(engine: engine)
+                        .accessibilityIdentifier("explore.page")
+                    // A page that could not be reached SAYS SO. Before
+                    // 058 both failure callbacks set `loading = false` and
+                    // nothing else, so an unreachable dApp was a white
+                    // rectangle under an empty address bar — silence a
+                    // person can only read as "the app is broken".
+                    if let failure = engine.failure {
+                        BrowserFailureView(
+                            title: loc.t("connect.browser.loadFailed"),
+                            detail: failure,
+                            retry: loc.t("connect.browser.retry"),
+                            onRetry: { engine.reload() }
+                        )
+                    }
+                }
+            } else {
+                ScrollView {
+                    DemoPageView(page: model.browser.page) {
+                        if signing != nil { signingUp = true }
+                    }
+                }
+            }
+            BrowserToolbarView(
+                browser: liveBrowser,
+                backLabel: loc.t("explore.back"),
+                forwardLabel: loc.t("explore.forward"),
+                accountLabel: loc.t("explore.account"),
+                connectedLabel: loc.t("explore.connectedTag"),
+                bookmarkLabel: loc.t("explore.addToFavorites"),
+                tabsLabel: loc.t("explore.tabs"),
+                onBack: { controller?.goBack() },
+                onForward: { controller?.goForward() },
+                onAccount: { sheet = .connection },
+                onBookmark: {
+                    guard let engine, !engine.url.isEmpty else { return }
+                    controller?.addFavorite(url: engine.url, title: engine.title)
+                },
+                onTabs: { viewOverride = .tabs }
+            )
+        case .start:
+            startPage
+            WalletTabBar(tabs: model.nav, selected: .explore, onSelect: onSelectTab)
+        }
     }
 
     private var startPage: some View {
@@ -348,6 +385,11 @@ struct ExploreScreen: View {
                     onSubmit: { text in
                         controller?.open(text)
                         viewOverride = .browsing
+                    },
+                    onScan: {
+                        scanRefused = false
+                        photoEmpty = false
+                        scanning = true
                     }
                 )
                 .padding(.bottom, Tokens.Space.s20)
@@ -398,6 +440,85 @@ struct ExploreScreen: View {
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
             .padding(.bottom, Tokens.Space.s24)
         }
+    }
+
+    // MARK: - The scanner (issue 273)
+
+    /// 发送's scanner surface, over the whole screen. Only the meaning of a
+    /// read differs: here a code is a web address to open, or it is refused.
+    private var scanSurface: some View {
+        ScanSurfaceView(
+            model: WalletFlowFixtures.scan(loc),
+            onClose: { scanning = false },
+            onTool: { tool in scanTool(tool) },
+            session: liveSession,
+            refusalText: scanRefusalText,
+            refusalAction: grantAction,
+            torchOn: camera?.torchOn ?? false
+        )
+    }
+
+    /// Handed over only while there are frames to show: a preview layer on a
+    /// session with none is a black square where the drawn frame belongs.
+    private var liveSession: AVCaptureSession? {
+        guard let camera, camera.refusal == nil, camera.running else { return nil }
+        return camera.session
+    }
+
+    /// 授予权限, when a refused permission is the thing standing in the way.
+    private var grantAction: (label: String, act: () -> Void)? {
+        guard camera?.refusal == .denied else { return nil }
+        return (label: loc.t("componentsUi.scanner.grantPermission"), act: { openSettings() })
+    }
+
+    /// What is said under the frame. A code that WAS read and cannot be used
+    /// is not a camera failure, so it outranks the camera's own refusals.
+    private var scanRefusalText: String? {
+        if scanRefused { return loc.t("home.invalidQrTitle") }
+        if photoEmpty { return loc.t("componentsUi.scanner.noQrFoundMsg") }
+        return camera?.refusal?.text(loc)
+    }
+
+    /// A code decoded, from the camera or a photo. A web address opens exactly
+    /// as it would have from the search field; anything else is refused and
+    /// the viewfinder comes back — a poster with the wrong code in frame must
+    /// not end the scan, and re-arming at once would read it forever.
+    private func scanned(_ text: String) {
+        guard let url = ExploreScan.url(from: text) else {
+            scanRefused = true
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                if scanning { await camera?.start() }
+            }
+            return
+        }
+        scanning = false
+        controller?.open(url)
+        viewOverride = .browsing
+    }
+
+    private func scanTool(_ tool: ScanTool) {
+        switch tool {
+        case .torch: camera?.toggleTorch()
+        case .flip: camera?.flip()
+        case .gallery:
+            Task {
+                guard let image = await PhotoPicker.pick() else { return }
+                guard let payload = QrDecoder.decode(image: image) else {
+                    scanRefused = false
+                    photoEmpty = true
+                    return
+                }
+                photoEmpty = false
+                camera?.stop()
+                scanned(payload)
+            }
+        }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     @ViewBuilder

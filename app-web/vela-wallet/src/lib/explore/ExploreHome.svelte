@@ -3,6 +3,10 @@
 	import TabBar from '$lib/wallet/ui/TabBar.svelte';
 	import SigningSheet from '$lib/signing/SigningSheet.svelte';
 	import type { SigningModel } from '$lib/signing/model';
+	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
+	import type { ScanModel } from '$lib/flows/model';
+	import { scanner, scanNotice, type ScanNoticeMessages } from '$lib/flows/core/scanner.svelte';
+	import { exploreScanUrl } from './scan';
 	import AddressBar from './ui/AddressBar.svelte';
 	import BrowserToolbar from './ui/BrowserToolbar.svelte';
 	import ConnectionPanel from './ui/ConnectionPanel.svelte';
@@ -33,9 +37,15 @@
 		signing?: SigningModel;
 		/** The wallet's own tab bar. Absent in the gallery, where it is a picture. */
 		onselect?: (id: 'wallet' | 'contacts' | 'explore' | 'settings') => void;
+		/**
+		 * The scanner behind the search field's scan button (issue 273) — the
+		 * wallet's own, reading only web addresses here. Absent = the button
+		 * stays a picture, as everything else in a mock is.
+		 */
+		scan?: { model: ScanModel; messages: ScanNoticeMessages };
 	}
 
-	let { model, copy, signing, onselect }: Props = $props();
+	let { model, copy, signing, onselect, scan }: Props = $props();
 
 	// Pure UI state. Everything a person can DO on this screen lives here; the
 	// fixture decides only where the screen STARTS — so each piece is an
@@ -47,10 +57,113 @@
 
 	const view = $derived(viewOverride ?? model.view);
 	const sheet = $derived(sheetOverride === undefined ? model.sheet : (sheetOverride ?? undefined));
+
+	/** An address from the search field, or from a scanned code. */
+	function submit(): void {
+		viewOverride = 'browsing';
+	}
+
+	// --- The scanner (issue 273) ---------------------------------------------
+	//
+	// The wallet home's scanner (spec 028 T422): the same surface, the same
+	// camera, the same refusals. Only what a read MEANS differs — here a code
+	// is a web address to open, or it is refused in one line.
+
+	let scanning = $state(false);
+	let scanVideo = $state<HTMLVideoElement | null>(null);
+	let scanPicker = $state<HTMLInputElement | null>(null);
+	/** A code that WAS read and is not a web address. */
+	let scanUnusable = $state(false);
+
+	/**
+	 * As on the wallet home: a code nobody can use must not end the scan, and
+	 * re-arming at once would decode that same code forever.
+	 */
+	const SCAN_REARM_MS = 2000;
+	let scanRearm = 0;
+
+	$effect(() => {
+		const video = scanVideo;
+		if (!scanning || !video) return;
+		scanUnusable = false;
+		void scanner.start(video);
+		return () => {
+			clearTimeout(scanRearm);
+			scanner.stop();
+		};
+	});
+
+	// One code is acted on once: the read is taken off the surface first.
+	$effect(() => {
+		const found = scanner.result;
+		if (found === null) return;
+		scanner.clear();
+		scanned(found);
+	});
+
+	function scanned(value: string): void {
+		if (exploreScanUrl(value) !== null) {
+			scanning = false;
+			submit();
+			return;
+		}
+		scanUnusable = true;
+		clearTimeout(scanRearm);
+		scanRearm = setTimeout(() => {
+			if (scanning && scanVideo) void scanner.start(scanVideo);
+		}, SCAN_REARM_MS) as unknown as number;
+	}
+
+	function scanTool(id: 'gallery' | 'torch' | 'flip'): void {
+		if (id === 'gallery') scanPicker?.click();
+		else if (id === 'torch') void scanner.toggleTorch();
+		else void scanner.flip();
+	}
+
+	async function pickScanImage(event: Event): Promise<void> {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		// Cleared before reading: the same file picked twice fires no change.
+		input.value = '';
+		if (!file) return;
+		scanUnusable = false;
+		await scanner.pick(file);
+	}
+
+	const scanCopy = $derived(
+		scan
+			? scanNotice(
+					{ status: scanner.status, nothingFound: scanner.nothingFound, unusable: scanUnusable },
+					scan.messages
+				)
+			: undefined
+	);
 </script>
 
+<!-- What fills the scanner's frame; the file input is mounted so `click()` opens it. -->
+{#snippet scanFeed()}
+	<video class="scan-video" bind:this={scanVideo} muted playsinline></video>
+	<input
+		class="scan-picker"
+		type="file"
+		accept="image/*"
+		tabindex="-1"
+		aria-hidden="true"
+		bind:this={scanPicker}
+		onchange={pickScanImage}
+	/>
+{/snippet}
+
 <div class="explore">
-	{#if view === 'tabs'}
+	{#if scanning && scan}
+		<ScanSurface
+			model={scan.model}
+			feed={scanFeed}
+			notice={scanCopy}
+			ontool={scanTool}
+			onclose={() => (scanning = false)}
+		/>
+	{:else if view === 'tabs'}
 		<TabsScreen
 			tabs={model.tabs}
 			copy={model.tabsScreen}
@@ -98,7 +211,8 @@
 				<SearchField
 					placeholder={model.searchPlaceholder}
 					scanLabel={model.scanLabel}
-					onsubmit={() => (viewOverride = 'browsing')}
+					onscan={scan ? () => (scanning = true) : undefined}
+					onsubmit={submit}
 				/>
 			</div>
 
@@ -255,5 +369,25 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
+	}
+
+	.scan-video {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: var(--radius-md);
+		background: var(--color-bg-sunken);
+		pointer-events: none;
+	}
+
+	/* Mounted, not drawn: `click()` on a detached input opens nothing. */
+	.scan-picker {
+		position: absolute;
+		width: var(--border-hairline);
+		height: var(--border-hairline);
+		opacity: 0;
+		pointer-events: none;
 	}
 </style>

@@ -1088,6 +1088,7 @@ struct RootView: View {
                         onFeePick: { id in signing?.pickFee(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
+                        camera: camera,
                         onSelectTab: selectTab
                     )
                     .onChange(of: signing?.closed) { _, closed in
@@ -2256,13 +2257,7 @@ struct RootView: View {
     }
 
     private func scanRefusalText() -> String? {
-        switch camera.refusal {
-        case .denied: loc.t("componentsUi.scanner.permissionText")
-        case .restricted: loc.t("componentsUi.scanner.permissionText")
-        case .noCamera: loc.t("componentsUi.scanner.noCamera")
-        case .unavailable: loc.t("componentsUi.scanner.cameraUnavailable")
-        case nil: nil
-        }
+        camera.refusal?.text(loc)
     }
 
     private func openSettings() {
