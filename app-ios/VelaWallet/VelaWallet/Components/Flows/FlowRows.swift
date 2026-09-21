@@ -322,7 +322,9 @@ struct FeeTokenRowView: View {
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.rowTitle.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
-                    Text(verbatim: row.balanceLabel)
+                    Text(verbatim: row.insufficient
+                        ? (row.insufficientNote ?? row.balanceLabel)
+                        : row.balanceLabel)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
                 }
@@ -349,6 +351,11 @@ struct FeeTokenRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Drawn for context, answering to nothing — and `.disabled` rather
+        // than only a dimmer colour, so VoiceOver does not call it a button
+        // that works.
+        .disabled(row.insufficient)
+        .opacity(row.insufficient ? Tokens.Opacity.disabled : 1)
     }
 }
 

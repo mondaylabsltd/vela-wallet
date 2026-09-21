@@ -522,6 +522,14 @@ struct FeeTokenRowModel: Identifiable {
     let balanceLabel: String
     let fee: String
     let selected: Bool
+    /// The core's verdict that this coin cannot pay the fee. The row is still
+    /// drawn — it is context — but it answers to nothing: `select_fee_asset`
+    /// refuses it, and a row that looks like the others and silently does
+    /// nothing is how somebody believes they chose to pay gas in a coin they
+    /// do not hold (web issue 211).
+    var insufficient = false
+    /// What such a row says in place of its balance.
+    var insufficientNote: String?
 }
 
 struct FeeTokenPickModel {
@@ -583,8 +591,29 @@ struct BatchImportModel {
     /// facts this way: a file that could not be read and a total that cannot
     /// be paid are errors; a trimmed list and a saved template are not.
     var noteIsError = false
+    /// "Total · 3 recipients", in the token and the fiat, over the balance it
+    /// is paid from. `nil` until a row parses, and in the gallery.
+    var total: BatchTotalModel?
+    /// How an import meets rows already on the form, and the way to choose the
+    /// other. `nil` when the form is empty or the import cannot apply.
+    var merge: BatchMergeModel?
     let cta: String
     let ctaDisabled: Bool
+}
+
+struct BatchTotalModel {
+    let label: String
+    let value: String
+    var detail: String?
+    /// "Balance 12.5 xDAI", or — adding to rows already typed — "3 xDAI left".
+    let balance: String
+    /// The total cannot be paid; the note above says so, this colours it.
+    var over = false
+}
+
+struct BatchMergeModel {
+    let note: String
+    let action: String
 }
 
 /// SD3 — the confirmation.

@@ -8,9 +8,17 @@ import app.getvela.wallet.feature.wallet.core.ChainDex
 import app.getvela.wallet.feature.wallet.core.ChainInfo
 import app.getvela.wallet.feature.wallet.core.ChainNative
 import app.getvela.wallet.feature.wallet.core.ChainStable
+import app.getvela.wallet.feature.wallet.core.FeedEvent
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.FeedOperation
 import app.getvela.wallet.feature.wallet.core.FeedShellResult
+import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.refreshOnArrival
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import uniffi.vela_core_uniffi.ActivityFeedCore
 import app.getvela.wallet.feature.wallet.core.IncomingScan
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSeed
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSource
@@ -264,6 +272,55 @@ class IncomingScanTest {
         assertEquals(0, harness.scan.runOnce(wallet))
 
         assertEquals(1, storedRecords(harness).size)
+    }
+
+    /**
+     * Issue 188, on the real `activity_feed`: money that arrives while the
+     * app watches moves the TOTAL, not only the list. The core names the new
+     * row (`new_item_id`) only for a genuinely-new receipt after the first
+     * pass; the wallet forces one balance refresh per arrival off that.
+     */
+    @Test
+    fun `an arrival the feed celebrates forces one balance refresh`() = runBlocking<Unit> {
+        val logs = mutableListOf<JSONObject>()
+        val harness = harness(logs)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        scopes += scope
+        harness.feed.scan = { address -> harness.scan.runOnce(address) }
+        val feedHost = CoreHost(
+            bridge = ActivityFeedCore().asBridge(),
+            scope = scope,
+            initial = FeedView(),
+            serializer = FeedView.serializer(),
+            perform = JsonShell.perform(FeedOperation.serializer(), FeedShellResult.serializer(), harness.feed::perform),
+            escapedFailure = JsonShell.escapedFailure(
+                FeedOperation.serializer(),
+                FeedShellResult.serializer(),
+                fallback = FeedShellResult.HapticPlayed,
+                answer = harness.feed::neutralAnswer,
+            ),
+            onFault = { error -> throw AssertionError("shell fault: $error", error) },
+        )
+        val refreshes = AtomicInteger(0)
+        refreshOnArrival(scope, feedHost.view) { refreshes.incrementAndGet() }
+
+        // The first pass is spent whatever it finds — nothing to celebrate.
+        feedHost.dispatch(FeedEvent.AccountSwitched(wallet), FeedEvent.serializer())
+        feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+        delay(1_000)
+        assertEquals(0, refreshes.get())
+
+        // Then a transfer lands, and the next tick finds it.
+        logs += transferLog(usdc)
+        feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+        val celebrated = withTimeout(15_000) { feedHost.view.first { it.new_item_id != null } }
+        assertTrue(celebrated.new_item_id!!.startsWith("137-0xabc123-"))
+        withTimeout(5_000) { while (refreshes.get() == 0) delay(20) }
+
+        // A tick that finds nothing new refreshes nothing more.
+        feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+        delay(1_000)
+        assertEquals(1, refreshes.get())
     }
 
     // -- what should not ------------------------------------------------------

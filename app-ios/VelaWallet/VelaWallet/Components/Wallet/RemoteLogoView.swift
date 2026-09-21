@@ -99,7 +99,16 @@ struct RemoteLogoView<Fallback: View>: View {
                 image = hit
                 return
             }
-            image = await LogoStore.load(urls)
+            // A different set of candidates is a different coin. Keeping the
+            // last one's picture while the new one loads — or for good, when
+            // the new one has no logo — draws somebody else's asset on this
+            // row, which is worse than the lettermark.
+            image = nil
+            let loaded = await LogoStore.load(urls)
+            // The id moved on while this was out: its answer is for a row
+            // that is no longer here.
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }

@@ -113,6 +113,7 @@ impl FlowPanel {
     pub fn entry(entry: FlowEntry) -> Vec<FlowPanel> {
         match entry {
             FlowEntry::Receive => vec![FlowPanel::Dr1],
+            FlowEntry::ReceiveToken => vec![FlowPanel::Dr1, FlowPanel::Dr3],
             FlowEntry::Send => vec![FlowPanel::Dsd1],
             FlowEntry::Scan => vec![FlowPanel::Ds1],
             FlowEntry::Activity => vec![FlowPanel::Da1],
@@ -145,6 +146,9 @@ impl FlowPanel {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FlowEntry {
     Receive,
+    /// A held token's own code, from its detail panel (the web's
+    /// `receive-token`): straight to it, with the network list one step back.
+    ReceiveToken,
     Send,
     Scan,
     Activity,
@@ -220,6 +224,8 @@ pub struct FlowStrings {
     // Activity.
     pub history_title: SharedString,
     pub history_empty_filter: SharedString,
+    /// The unnarrowed history's empty line ("No Transactions Yet").
+    pub history_empty: SharedString,
     pub label_sent: SharedString,
     pub label_received: SharedString,
     pub tx_label_sent: String,
@@ -419,6 +425,12 @@ pub struct FlowStrings {
     pub batch_rate_failed: SharedString,
     pub batch_rate_reset: SharedString,
     pub batch_over_cap: SharedString,
+    /// The merge line (issue #265): what an import does to the rows already
+    /// on the form, and the way to choose the other.
+    pub batch_adds_to_rows: SharedString,
+    pub batch_replace_instead: SharedString,
+    pub batch_replaces_rows: SharedString,
+    pub batch_add_instead: SharedString,
     pub batch_over_balance: SharedString,
     pub batch_reading: SharedString,
     pub batch_rejected_other: String,
@@ -463,6 +475,7 @@ impl FlowStrings {
 
             history_title: s("history.navTitle"),
             history_empty_filter: s("history.emptyFilter"),
+            history_empty: s("history.emptyTitle"),
             label_sent: s("history.labelSent"),
             label_received: s("history.labelReceived"),
             tx_label_sent: raw("history.txLabelSent"),
@@ -622,6 +635,10 @@ impl FlowStrings {
             batch_rate_failed: s("send.batchRateFailed"),
             batch_rate_reset: s("send.batchRateReset"),
             batch_over_cap: s("send.batchOverCap"),
+            batch_adds_to_rows: s("send.batchAddsToRows"),
+            batch_replace_instead: s("send.batchReplaceInstead"),
+            batch_replaces_rows: s("send.batchReplacesRows"),
+            batch_add_instead: s("send.batchAddInstead"),
             batch_over_balance: s("send.batchOverBalance"),
             batch_reading: s("send.batchReading"),
             batch_rejected_other: raw("send.batchRejected_other"),
@@ -712,8 +729,9 @@ mod tests {
     fn every_panel_is_reachable_or_a_named_variant() {
         use std::collections::HashSet;
 
-        const ENTRIES: [FlowEntry; 7] = [
+        const ENTRIES: [FlowEntry; 8] = [
             FlowEntry::Receive,
+            FlowEntry::ReceiveToken,
             FlowEntry::Send,
             FlowEntry::Scan,
             FlowEntry::Activity,
@@ -734,16 +752,11 @@ mod tests {
             FlowStep::AddRecipient,
             FlowStep::Scan,
         ];
-        /// Same panel, different content — the asset QR (a row in DR1), the
-        /// outgoing transaction (a row in DA1), the empty asset list, and the
-        /// add-token form's native tab. Each is a state of a reachable panel
-        /// rather than a place a step leads to.
-        const VARIANTS: [FlowPanel; 4] = [
-            FlowPanel::Dr3,
-            FlowPanel::Da3,
-            FlowPanel::Dt4,
-            FlowPanel::Dt3b,
-        ];
+        /// Same panel, different content — the outgoing transaction (a row
+        /// in DA1), the empty asset list, and the add-token form's native tab.
+        /// Each is a state of a reachable panel rather than a place a step
+        /// leads to. (The asset QR, DR3, is entered from a token's detail.)
+        const VARIANTS: [FlowPanel; 3] = [FlowPanel::Da3, FlowPanel::Dt4, FlowPanel::Dt3b];
 
         let mut seen: HashSet<FlowPanel> = HashSet::new();
         let mut queue: Vec<FlowPanel> = ENTRIES.iter().flat_map(|e| FlowPanel::entry(*e)).collect();

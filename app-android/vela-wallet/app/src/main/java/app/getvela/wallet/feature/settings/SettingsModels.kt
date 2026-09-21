@@ -256,6 +256,8 @@ data class ProviderCardModel(
     val action: String,
     val support: String? = null,
     val link: String? = null,
+    /** Where [link] goes: the provider's own sign-up page (the label is not a URL). */
+    val linkUrl: String? = null,
 )
 
 @Immutable
@@ -383,6 +385,9 @@ data class BalanceDetailModel(
     val pending: List<BalanceDetailRowModel>,
     val sectionDone: String,
     val done: List<BalanceDetailRowModel>,
+    /** The hero's "couldn't be priced" line, answered by name (holdings in `status`). */
+    val sectionUnpriced: String = "",
+    val unpriced: List<BalanceDetailRowModel> = emptyList(),
 )
 
 /** SR4: fund this chain's bundler treasury. */

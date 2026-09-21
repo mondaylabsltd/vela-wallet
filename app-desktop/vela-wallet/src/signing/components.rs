@@ -764,7 +764,18 @@ fn kv_row(
 }
 
 /// The fee row, or the expanded fee-token selector (CS33 / DCS8).
-pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> {
+///
+/// `on_row` is the row's own tap — retry a failed quote, or open / close the
+/// coin list — and `on_pick` one listener per coin in drawn order, `None` for
+/// a coin that cannot pay (drawn for context, answers to nothing). The mocks
+/// pass neither.
+pub fn fee(
+    theme: &Theme,
+    icons: &mut IconCache,
+    fee: &FeeModel,
+    on_row: Option<crate::flows::panels::Click>,
+    on_pick: Vec<Option<crate::flows::panels::Click>>,
+) -> Option<Div> {
     match fee {
         FeeModel::Hidden => None,
         FeeModel::OffChain(note) => Some(
@@ -784,44 +795,77 @@ pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> 
             label,
             value,
             selector,
+            warning,
         } => {
+            // Said under the row, in the error colour: why the slide is shut.
+            let warning = warning.clone().map(|text| {
+                div()
+                    .px(px(16.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(text)
+            });
             let Some((title, options)) = selector else {
+                let row = div()
+                    .px(px(16.))
+                    .py(px(12.))
+                    .rounded(px(12.))
+                    .bg(theme.bg_sunken)
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(label.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_base)
+                                    .child(value.clone()),
+                            )
+                            .child(icon_img(
+                                icons,
+                                Icon::ChevronRight,
+                                false,
+                                theme.fg_muted,
+                                12.,
+                            )),
+                    );
                 return Some(
                     div()
-                        .px(px(16.))
-                        .py(px(12.))
-                        .rounded(px(12.))
-                        .bg(theme.bg_sunken)
                         .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .child(label.clone()),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .child(
-                                    div()
-                                        .text_size(theme::text_row_sub())
-                                        .text_color(theme.fg_base)
-                                        .child(value.clone()),
-                                )
-                                .child(icon_img(
-                                    icons,
-                                    Icon::ChevronRight,
-                                    false,
-                                    theme.fg_muted,
-                                    12.,
-                                )),
-                        ),
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(crate::flows::panels::clickable("signing-fee", on_row, row))
+                        .children(warning),
                 );
             };
+            let header = div()
+                .py(px(8.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(title.clone()),
+                )
+                .child(icon_img(
+                    icons,
+                    Icon::ChevronDown,
+                    false,
+                    theme.fg_muted,
+                    12.,
+                ));
             let mut col = div()
                 .px(px(16.))
                 .py(px(8.))
@@ -829,27 +873,13 @@ pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> 
                 .bg(theme.bg_sunken)
                 .flex()
                 .flex_col()
-                .child(
-                    div()
-                        .py(px(8.))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .child(title.clone()),
-                        )
-                        .child(icon_img(
-                            icons,
-                            Icon::ChevronDown,
-                            false,
-                            theme.fg_muted,
-                            12.,
-                        )),
-                );
-            for option in options {
+                .child(crate::flows::panels::clickable(
+                    "signing-fee-title",
+                    on_row,
+                    header,
+                ));
+            let mut on_pick = on_pick.into_iter();
+            for (i, option) in options.iter().enumerate() {
                 let mut row = div()
                     .p(px(8.))
                     .rounded(px(12.))
@@ -857,6 +887,8 @@ pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> 
                     .items_center()
                     .gap(px(12.))
                     .when(option.selected, |d| d.bg(theme.bg_raised))
+                    // A coin that cannot pay is shown, dimmed, and not offered.
+                    .when(option.insufficient, |d| d.opacity(0.45))
                     .child(letter_avatar(option.mark.0.clone(), option.mark.1, 32.))
                     .child(
                         div()
@@ -887,9 +919,21 @@ pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> 
                 if option.selected {
                     row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
                 }
-                col = col.child(row);
+                let action = on_pick.next().flatten().filter(|_| !option.insufficient);
+                col = col.child(crate::flows::panels::clickable(
+                    gpui::ElementId::from(("signing-fee-coin", i)),
+                    action,
+                    row,
+                ));
             }
-            Some(col)
+            Some(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.))
+                    .child(col)
+                    .children(warning),
+            )
         }
     }
 }

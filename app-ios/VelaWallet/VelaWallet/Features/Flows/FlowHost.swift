@@ -130,6 +130,8 @@ struct FlowHost: View {
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
     var onPickContact: ((Int) -> Void)?
+    /// A whole group from the picker, added to the split.
+    var onPickGroup: ((Int) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -141,6 +143,9 @@ struct FlowHost: View {
     var onBatchTemplate: (() -> Void)?
     var onBatchResetRate: (() -> Void)?
     var onBatchApply: (() -> Void)?
+    /// "Replace them instead" / "Add to them instead" under the importer:
+    /// which way an import meets the rows already on the form.
+    var onBatchMerge: (() -> Void)?
 
     /// The live viewfinder and what it has to say. Absent in the gallery, where
     /// the scanner is a picture of a frame.
@@ -212,6 +217,7 @@ struct FlowHost: View {
                         onNavigate: onNavigate,
                         onPickFeeToken: onPickFeeToken,
                         onPickContact: onPickContact,
+                        onPickGroup: onPickGroup,
                         // The importer's fields and its four edges. Declaring
                         // them on both hosts and forwarding NEITHER is what put
                         // a read-only paste box on a live sheet — the drawn
@@ -224,6 +230,7 @@ struct FlowHost: View {
                         onBatchTemplate: onBatchTemplate,
                         onBatchResetRate: onBatchResetRate,
                         onBatchApply: onBatchApply,
+                        onBatchMerge: onBatchMerge,
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
                         addTokenError: addTokenError,
@@ -417,6 +424,8 @@ private struct FlowSheetHost: View {
     var onNoticeSecondary: (() -> Void)?
     var onPickFeeToken: ((Int) -> Void)?
     var onPickContact: ((Int) -> Void)?
+    /// A whole group from the picker, added to the split.
+    var onPickGroup: ((Int) -> Void)?
     /// The batch importer's four live edges — the unit toggle, the file
     /// picker, the template and the apply — plus its two fields. Absent
     /// everywhere the sheet is a picture, which is the gallery and the
@@ -428,6 +437,9 @@ private struct FlowSheetHost: View {
     var onBatchTemplate: (() -> Void)?
     var onBatchResetRate: (() -> Void)?
     var onBatchApply: (() -> Void)?
+    /// "Replace them instead" / "Add to them instead" under the importer:
+    /// which way an import meets the rows already on the form.
+    var onBatchMerge: (() -> Void)?
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
     var addTokenError: String?
@@ -523,6 +535,7 @@ private struct FlowSheetHost: View {
             ContactPickBody(
                 model: m,
                 onScan: { onNavigate(.scan) },
+                onGroup: { index in onPickGroup?(index) },
                 onSelect: { index in onPickContact?(index) }
             )
         case .feeToken(let m):
@@ -534,6 +547,7 @@ private struct FlowSheetHost: View {
                 onFile: { onBatchFile?() },
                 onTemplate: { onBatchTemplate?() },
                 onApply: { onBatchApply?() },
+                onMerge: { onBatchMerge?() },
                 pasteText: batchPaste,
                 rateText: batchRate,
                 onResetRate: { onBatchResetRate?() }

@@ -43,9 +43,9 @@ use vela_core::app::send::{
 use crate::flows::fixtures::{
     AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow,
-    FilterChip, HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard,
-    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark,
-    address_lines,
+    FilterChip, HistoryGroup, HistoryPanel, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr,
+    RecipientCard, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip,
+    StatusTone, TokenMark, address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -164,8 +164,10 @@ pub fn assets(
         .collect();
 
     let settled = !view.holdings_loading && !view.balance_unknown;
-    // Narrowed to a chain that holds nothing is NOT the empty wallet: the
-    // guided "add a token" body would be answering a question nobody asked.
+    // Empty once the core has actually looked — or when the chosen chain
+    // holds nothing while others do. The web's `liveAssets` shows T4 for both:
+    // a narrowed list with nothing in it must still say something, and a
+    // blank column under a pill reads as a panel that failed to load.
     let filtered_empty = rows.is_empty() && !view.tokens.is_empty();
     AssetsPanel {
         // The chain filter's dots: the chains this person actually holds on,
@@ -189,7 +191,7 @@ pub fn assets(
         search_placeholder: s.assets_search.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
-        empty: (rows.is_empty() && settled && !filtered_empty).then(|| AssetsEmpty {
+        empty: (rows.is_empty() && (settled || filtered_empty)).then(|| AssetsEmpty {
             title: s.assets_empty_title.clone(),
             caption: s.assets_empty_caption.clone(),
             cta: s.add_token_title.clone(),
@@ -216,6 +218,33 @@ fn chain_dots(tokens: &[BalanceToken]) -> Vec<Hsla> {
 // ---------------------------------------------------------------------------
 // Activity — DA1L
 // ---------------------------------------------------------------------------
+
+/// DA1L's three modes — the web's `liveHistory`.
+///
+/// Rows when there are any; skeletons while the balance core has not ruled
+/// (the feed has nothing yet, and "no transactions" would be a guess); and
+/// once it has, one line — about THIS network when the list is narrowed to
+/// one, because "no transactions" under a filter would read as "none at all".
+#[must_use]
+pub fn history_panel(
+    view: &FeedView,
+    balance_unknown: bool,
+    filter: Option<u32>,
+    s: &FlowStrings,
+    wallet: &crate::wallet::WalletStrings,
+    hidden: bool,
+) -> HistoryPanel {
+    let groups = history(view, s, wallet, hidden);
+    let bare = groups.is_empty();
+    HistoryPanel {
+        groups,
+        loading: bare && balance_unknown,
+        empty: (bare && !balance_unknown).then(|| match filter {
+            Some(_) => s.history_empty_filter.clone(),
+            None => s.history_empty.clone(),
+        }),
+    }
+}
 
 /// The full history, grouped by day.
 ///
@@ -619,16 +648,61 @@ pub fn receive_qr(
         // ready to copy long before anybody has been told which networks it
         // is safe on.
         can_copy: pay.can_copy,
+        // A NETWORK code wears the network's own logo (the web's `chainMark`).
+        // The native coin's rule would put Ethereum's mark in the middle of a
+        // Base or Arbitrum code — the one picture on this screen that says
+        // which network the money should arrive on.
         centre: TokenMark {
             ticker: SharedString::from(symbol.clone()),
             badge: tint(chain_id),
-            logos: crate::marks::token_logos(chain_id, &symbol, None, &[]),
+            logos: crate::marks::chain_logos(chain_id),
         },
         warning: s.warning_reminder.clone(),
         save_image: s.save_image.clone(),
         view_on_explorer: s.view_on_explorer.clone(),
         deposits: deposits(watch, locale),
     }
+}
+
+/// DR3L — one held token's code, reached from its detail panel.
+///
+/// The same code as the network's (one address on every chain), about the
+/// token instead: its symbol in the title, its contract above the account
+/// card, its logo in the centre — the web's `liveReceiveQr` asset variant.
+#[must_use]
+pub fn receive_token_qr(
+    address: &str,
+    name: &str,
+    token: &BalanceToken,
+    watch: &ReceiveWatchView,
+    pay: &PaymentRequestView,
+    s: &FlowStrings,
+    locale: &str,
+) -> ReceiveQr {
+    let mut qr = receive_qr(address, name, token.chain_id, watch, pay, s, locale);
+    qr.title = SharedString::from(fill(
+        &fill(&s.qr_title_asset, "symbol", &token.symbol),
+        "network",
+        &chain_name(token.chain_id),
+    ));
+    qr.contract = Some((
+        s.token_contract.clone(),
+        match token.token_address.as_deref() {
+            Some(contract) => SharedString::from(shorten(contract)),
+            None => s.label_native_token.clone(),
+        },
+    ));
+    qr.centre = TokenMark {
+        ticker: SharedString::from(token.symbol.clone()),
+        badge: tint(token.chain_id),
+        logos: crate::marks::token_logos(
+            token.chain_id,
+            &token.symbol,
+            token.token_address.as_deref(),
+            &[],
+        ),
+    };
+    qr
 }
 
 /// What landed while this code was open.
@@ -1646,17 +1720,24 @@ fn build_notice(
     ))
 }
 
-/// The groups' member addresses, in the order `contact_pick` draws them —
-/// tapping a group seeds a split with everybody in it.
+/// The groups' members as split rows, in the order `contact_pick` draws
+/// them — tapping a group ADDS everybody in it to the form, amounts blank,
+/// each under the name the book knows them by (`name ?? resolved_name`, the
+/// web's `seedGroup`). The core assigns the row ids.
 #[must_use]
-pub fn contact_group_members(view: &ContactsView) -> Vec<Vec<String>> {
+pub fn contact_group_members(view: &ContactsView) -> Vec<Vec<SendRecipientDraft>> {
     view.groups
         .iter()
         .map(|group| {
             group
                 .members
                 .iter()
-                .map(|member| member.address.clone())
+                .map(|member| SendRecipientDraft {
+                    id: String::new(),
+                    address: member.address.clone(),
+                    amount: String::new(),
+                    name: member.name.clone().or_else(|| member.resolved_name.clone()),
+                })
                 .collect()
         })
         .collect()
@@ -2409,6 +2490,7 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
             None
         },
         rate_reset: view.rate_edited.then(|| s.batch_rate_reset.clone()),
+        merge: None,
         cta_enabled: view.can_apply,
         cta: if view.recipient_count == 0 {
             s.batch_apply_empty.clone()
@@ -2416,6 +2498,30 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
             fill(&s.batch_apply, "count", &view.recipient_count.to_string()).into()
         },
     }
+}
+
+/// The merge line under the importer (issue #265, the web's `merge`): said
+/// only when there is somebody on the form for an import to add to — the
+/// core's own count, read back from `split_import_room` — and only once the
+/// import can happen, beside the button that does it.
+#[must_use]
+pub fn batch_merge(
+    view: &BatchView,
+    split_import_room: u32,
+    replaces: bool,
+    s: &FlowStrings,
+) -> Option<(SharedString, SharedString)> {
+    let form_has_rows = (split_import_room as usize) < vela_core::app::send::BATCH_MAX_RECIPIENTS;
+    (form_has_rows && view.can_apply).then(|| {
+        if replaces {
+            (s.batch_replaces_rows.clone(), s.batch_add_instead.clone())
+        } else {
+            (
+                s.batch_adds_to_rows.clone(),
+                s.batch_replace_instead.clone(),
+            )
+        }
+    })
 }
 
 /// Which panel the send journey is on. The core's `stage` decides the step;
@@ -2705,6 +2811,50 @@ mod tests {
         assert!(qr.can_copy);
     }
 
+    /// A NETWORK code wears the network's logo, not its native coin's: on
+    /// Base the coin is ETH, and the coin's rule would put Ethereum's mark in
+    /// the middle of a Base code (the web's `chainMark`).
+    #[test]
+    fn a_network_code_wears_the_network_and_a_token_code_the_token() {
+        let s = strings();
+        let watch =
+            crate::core_host::CoreHost::<vela_core::app::receive_watch::ReceiveWatch>::new().view();
+        let pay = pay_view();
+        let qr = receive_qr("0xabc", "Golden", 8453, &watch, &pay, &s, "en");
+        assert_eq!(qr.centre.logos, crate::marks::chain_logos(8453));
+        assert_ne!(
+            qr.centre.logos,
+            crate::marks::token_logos(8453, "ETH", None, &[]),
+            "a Base code wore Ethereum's mark"
+        );
+        assert!(qr.contract.is_none(), "a network code names no contract");
+
+        // The token's own code: its mark, its contract, its symbol in the title.
+        let usdc = BalanceToken {
+            token_address: Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned()),
+            ..token(8453, "USDC", "5", Some(1.0))
+        };
+        let qr = receive_token_qr("0xabc", "Golden", &usdc, &watch, &pay, &s, "en");
+        assert_eq!(
+            qr.centre.logos,
+            crate::marks::token_logos(8453, "USDC", usdc.token_address.as_deref(), &[])
+        );
+        assert!(qr.title.contains("USDC"), "{}", qr.title);
+        let (label, value) = qr
+            .contract
+            .unwrap_or_else(|| unreachable!("no contract line"));
+        assert_eq!(label, s.token_contract);
+        assert_eq!(
+            value,
+            SharedString::from(shorten("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"))
+        );
+
+        // The chain's own coin has no contract, and says so in words.
+        let eth = token(8453, "ETH", "1", None);
+        let qr = receive_token_qr("0xabc", "Golden", &eth, &watch, &pay, &s, "en");
+        assert_eq!(qr.contract.map(|c| c.1), Some(s.label_native_token.clone()));
+    }
+
     /// A real `PaymentRequestView`, from a booted core.
     fn pay_view() -> PaymentRequestView {
         use vela_core::app::payment_request::{Event as PayEvent, PaymentRequest};
@@ -2810,6 +2960,20 @@ mod tests {
                 .empty
                 .is_some(),
             "the core ruled: genuinely empty"
+        );
+
+        // Narrowed to a chain that holds nothing while others hold something:
+        // the web's `filteredEmpty` — the empty body, never a blank column.
+        // Even while a refresh is still counting, because the rows that do
+        // exist already say the chain has nothing on it.
+        let mut narrowed = view();
+        narrowed.tokens = vec![token(100, "xDAI", "1", Some(1.0))];
+        narrowed.holdings_loading = true;
+        let panel = assets(&narrowed, &strings(), &wallet_strings(), "en-US", Some(1));
+        assert!(panel.rows.is_empty());
+        assert!(
+            panel.empty.is_some(),
+            "a chain with nothing on it drew a blank column"
         );
     }
 
@@ -3260,6 +3424,120 @@ mod tests {
                 "the panel lists {listed} and the hero says {hero}"
             );
         });
+    }
+
+    /// Issue #265's merge line: said only when somebody is already on the form
+    /// and the import can apply, and it offers the other choice.
+    #[test]
+    fn the_merge_line_speaks_only_when_there_are_rows_to_merge_with() {
+        use vela_core::app::batch_import::BatchImport;
+        use vela_core::app::send::BATCH_MAX_RECIPIENTS;
+        let s = strings();
+        let full = BATCH_MAX_RECIPIENTS as u32;
+        let ready = BatchView {
+            can_apply: true,
+            ..CoreHost::<BatchImport>::new().view()
+        };
+
+        // An empty form: nothing to add to, so nothing to say.
+        assert_eq!(batch_merge(&ready, full, false, &s), None);
+        // Rows on the form: adds by default, with the way to replace.
+        assert_eq!(
+            batch_merge(&ready, full - 2, false, &s),
+            Some((
+                s.batch_adds_to_rows.clone(),
+                s.batch_replace_instead.clone()
+            ))
+        );
+        // …and once the person chose to replace, the other way round.
+        assert_eq!(
+            batch_merge(&ready, full - 2, true, &s),
+            Some((s.batch_replaces_rows.clone(), s.batch_add_instead.clone()))
+        );
+        // An import that cannot apply says nothing about what it would do.
+        let blocked = BatchView {
+            can_apply: false,
+            ..ready
+        };
+        assert_eq!(batch_merge(&blocked, full - 2, false, &s), None);
+    }
+
+    /// A group pick carries each member's name — the one the person gave, or
+    /// the one the book resolved — so the split rows say WHO, not just where.
+    #[test]
+    fn a_group_pick_carries_each_members_name() {
+        use vela_core::app::contacts::{Contact, ContactGroupView, ContactKind, ContactSource};
+        let member = |address: &str, name: Option<&str>, resolved: Option<&str>| Contact {
+            address: address.to_owned(),
+            name: name.map(str::to_owned),
+            resolved_name: resolved.map(str::to_owned),
+            resolved_source: None,
+            kind: ContactKind::Eoa,
+            favorite: false,
+            note: None,
+            tx_count: 0,
+            last_used_ms: 0.0,
+            first_seen_ms: 0.0,
+            source: ContactSource::Manual,
+        };
+        let view = ContactsView {
+            loaded: true,
+            sections: Vec::new(),
+            contacts: Vec::new(),
+            groups: vec![ContactGroupView {
+                id: "grp_1".to_owned(),
+                name: "Payroll".to_owned(),
+                color: None,
+                members: vec![
+                    member("0xaa", Some("Ana"), Some("ana.eth")),
+                    member("0xbb", None, Some("bo.eth")),
+                    member("0xcc", None, None),
+                ],
+            }],
+            last_import: None,
+            import_failure: None,
+            export: None,
+            recipient: None,
+        };
+        let groups = contact_group_members(&view);
+        assert_eq!(groups.len(), 1);
+        let names: Vec<Option<&str>> = groups[0].iter().map(|r| r.name.as_deref()).collect();
+        assert_eq!(names, vec![Some("Ana"), Some("bo.eth"), None]);
+        assert!(
+            groups[0]
+                .iter()
+                .all(|r| r.amount.is_empty() && r.id.is_empty()),
+            "amounts are the person's to type, ids the core's to give"
+        );
+        assert_eq!(groups[0][2].address, "0xcc");
+    }
+
+    /// DA1L's three modes, the web's `liveHistory`: skeletons while nothing
+    /// has been ruled, one line once it has — about the network when the list
+    /// is narrowed — and the rows when there are any.
+    #[test]
+    fn an_empty_history_says_so_and_a_loading_one_waits() {
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let feed = FeedView {
+            rows: Vec::new(),
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+
+        let loading = history_panel(&feed, true, None, &s, &w, false);
+        assert!(loading.loading && loading.empty.is_none());
+
+        let empty = history_panel(&feed, false, None, &s, &w, false);
+        assert!(!empty.loading);
+        assert_eq!(empty.empty, Some(s.history_empty.clone()));
+
+        let narrowed = history_panel(&feed, false, Some(100), &s, &w, false);
+        assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
+        assert_ne!(s.history_empty, s.history_empty_filter);
     }
 
     /// Day headers become headings, and a heading with nothing under it is not
