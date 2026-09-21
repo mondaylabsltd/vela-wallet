@@ -348,6 +348,19 @@ pub struct FlowStrings {
     pub confirm_send: SharedString,
     pub confirm_total_line: String,
     pub assets_count: String,
+    /// The split form's per-row words (issues 203, #265): which earlier row a
+    /// repeat repeats, a field the core will not take, and what is left of
+    /// the balance to give out.
+    pub recipient_duplicate: String,
+    pub bad_amount: SharedString,
+    /// Why ⇄ is dimmed: no rate for the display currency (#197).
+    pub denom_toggle_no_rate: String,
+    pub split_remaining: String,
+    /// The importer's skipped-duplicate line.
+    pub batch_dup: SharedString,
+    /// Add-token: a native coin that answers an ERC-20 interface (spec 060).
+    pub native_alias_title: SharedString,
+    pub native_alias_message: SharedString,
 
     // Send · receipt.
     pub tx_submitted_title: SharedString,
@@ -580,6 +593,13 @@ impl FlowStrings {
             confirm_send: s("send.confirmSendBtn"),
             confirm_total_line: raw("send.confirmTotalLine"),
             assets_count: raw("componentsTx.receipt.assetsCount"),
+            recipient_duplicate: raw("send.recipientDuplicate"),
+            bad_amount: s("send.badAmount"),
+            denom_toggle_no_rate: raw("send.denomToggleNoRate"),
+            split_remaining: raw("send.splitRemaining"),
+            batch_dup: s("send.batchDup"),
+            native_alias_title: s("addToken.nativeAliasTitle"),
+            native_alias_message: s("addToken.nativeAliasMessage"),
 
             tx_submitted_title: s("send.txSubmittedTitle"),
             tx_waiting_confirm: s("send.txWaitingConfirm"),
@@ -672,6 +692,9 @@ mod tests {
             (s.fee_token_hint.as_ref(), "send.feeTokenHint"),
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
+            (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
+            (s.bad_amount.as_ref(), "send.badAmount"),
+            (s.batch_dup.as_ref(), "send.batchDup"),
             (
                 s.scan_from_gallery.as_ref(),
                 "componentsUi.scanner.fromGallery",
@@ -685,6 +708,9 @@ mod tests {
             (&s.qr_title_network, "{{network}}"),
             (&s.balance_label, "{{amount}}"),
             (&s.confirm_total_line, "{{fiat}}"),
+            (&s.recipient_duplicate, "{{n}}"),
+            (&s.split_remaining, "{{amount}}"),
+            (&s.denom_toggle_no_rate, "{{code}}"),
         ] {
             assert!(template.contains(var), "`{template}` must carry {var}");
         }

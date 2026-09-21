@@ -1575,19 +1575,20 @@ mod tests {
         assert!(notice.error);
         assert_eq!(notice.title, Some(s.batch_import_failed_title.clone()));
 
-        // Over balance: the refusal carries the figure it is about. (The
-        // unreadable file above outranks it — the priority order is the
-        // point, so this case has to clear that flag.)
+        // Over balance: said on the total line, beside the figure it is
+        // about (the web's `overText`) — not a second time as a notice.
         let batch = BatchView {
             file_error: false,
             over_balance: true,
+            recipient_count: 2,
             total_token: "13000".to_owned(),
             ..batch
         };
-        let notice = batch_import(&batch, "USDT", &s)
-            .notice
+        assert!(batch_import(&batch, "USDT", &s).notice.is_none());
+        let total = crate::flows::live::batch_total(&batch, "USDT", "12000", None, &s)
             .unwrap_or_else(|| unreachable!("over balance must say so"));
-        assert_eq!(notice.detail.as_deref(), Some("13000 USDT"));
+        assert_eq!(total.value, "13000 USDT");
+        assert!(total.over.is_some());
     }
 
     #[test]

@@ -649,7 +649,7 @@ pub fn recipient_card(
     window: &gpui::Window,
 ) -> Div {
     let RecipientRowActions { amount, remove } = row;
-    div()
+    let card = div()
         .flex()
         .items_center()
         .gap(px(10.))
@@ -717,7 +717,21 @@ pub fn recipient_card(
                 theme.fg_subtle,
                 14.,
             )),
-        ))
+        ));
+    // What the core says about this row, under the row it is about — a
+    // repeated payee (issue 203), a field it will not take. Amber: the person
+    // is still filling the form in, and the gate's own words say what blocks.
+    let mut block = div().flex().flex_col().gap(px(4.)).child(card);
+    for note in &recipient.notes {
+        block = block.child(
+            div()
+                .pl(px(48.))
+                .text_size(theme::text_label())
+                .text_color(theme.warning_base)
+                .child(note.clone()),
+        );
+    }
+    block
 }
 
 /// The send form's token card: which token, off which chain, out of how much.

@@ -462,7 +462,46 @@ pub fn tx_detail(
         positive: incoming,
         facts,
         view_on_explorer: s.view_on_explorer.clone(),
+        // The transaction's own page, when it has a hash to find it by (the
+        // web's `explorerTxURL`). An off-chain signature has nothing to open.
+        explorer_url: item
+            .tx_hash
+            .as_ref()
+            .filter(|hash| !hash.is_empty())
+            .map(|hash| SharedString::from(format!("{}/tx/{hash}", explorer_root(item.chain_id)))),
     })
+}
+
+/// Where the explorer links point for one chain: the built-in's own, the one
+/// the person gave a network they added, else Etherscan — the web's
+/// `explorerBaseURL(chainId) ?? FALLBACK_EXPLORER`, trailing slash stripped.
+fn explorer_root(chain_id: u32) -> String {
+    let own = BUILTIN_CHAINS
+        .iter()
+        .find(|chain| chain.chain_id == chain_id)
+        .map(|chain| chain.explorer_url.to_owned())
+        .or_else(|| {
+            let Ok(Some(serde_json::Value::Array(items))) =
+                crate::executor::storage::read_value(crate::executor::storage::KEY_CUSTOM_NETWORKS)
+            else {
+                return None;
+            };
+            items
+                .iter()
+                .find(|item| {
+                    item.get("chainId").and_then(serde_json::Value::as_u64)
+                        == Some(u64::from(chain_id))
+                })
+                .and_then(|item| item.get("explorerURL").and_then(serde_json::Value::as_str))
+                .map(str::to_owned)
+        })
+        .unwrap_or_default();
+    let own = own.trim_end_matches('/');
+    if own.is_empty() {
+        "https://etherscan.io".to_owned()
+    } else {
+        own.to_owned()
+    }
 }
 
 /// A transaction's wall clock: "Today 11:20", "Yesterday 14:02", or the date.
@@ -529,14 +568,21 @@ pub fn add_token(view: &MtokView, s: &FlowStrings) -> crate::flows::fixtures::Ad
                     badge: gpui::rgb(0x8A_8F_98).into(),
                     logos: crate::marks::Logos::default(),
                 },
-                name: if view.not_found {
+                // A native coin that also answers an ERC-20 interface is FOUND
+                // by the probe and refused by the core with a reason (spec
+                // 060) — "not found" would be the wrong words for it.
+                name: if view.native_alias {
+                    s.native_alias_title.clone()
+                } else if view.not_found {
                     s.not_found_title.clone()
                 } else if view.detecting {
                     s.searching_networks.clone()
                 } else {
                     s.search_token_btn.clone()
                 },
-                detail: if view.not_found {
+                detail: if view.native_alias {
+                    s.native_alias_message.clone()
+                } else if view.not_found {
                     s.not_found_message.clone()
                 } else {
                     SharedString::from("")
@@ -660,6 +706,11 @@ pub fn receive_qr(
         warning: s.warning_reminder.clone(),
         save_image: s.save_image.clone(),
         view_on_explorer: s.view_on_explorer.clone(),
+        // This account on this network's explorer — the web's
+        // `explorerAddressURL`, the same for a network's code and a token's.
+        explorer_url: (!address.is_empty())
+            .then(|| SharedString::from(format!("{}/address/{address}", explorer_root(chain_id)))),
+        contract_copy: None,
         deposits: deposits(watch, locale),
     }
 }
@@ -1703,9 +1754,16 @@ fn build_notice(
         .as_ref()
         .map(|warning| amount_warning_text(warning, chain_id, s))
         .or_else(|| {
-            send.denom_toggle_reason
-                .as_ref()
-                .map(|issue| cannot_convert(issue, s))
+            // The ⇄ row's own sentence (the web's `denomReason`): the swap
+            // has no rate, so the figure stays in the token — which is what
+            // the person should type in.
+            send.denom_toggle_reason.as_ref().map(|issue| {
+                SharedString::from(fill(
+                    &fill(&s.denom_toggle_no_rate, "code", &issue.code),
+                    "symbol",
+                    &issue.symbol,
+                ))
+            })
         })?;
     Some((
         SendNotice {
@@ -1741,6 +1799,36 @@ pub fn contact_group_members(view: &ContactsView) -> Vec<Vec<SendRecipientDraft>
                 .collect()
         })
         .collect()
+}
+
+/// What the core says about one split row, in the corpus's words.
+///
+/// A repeat names the row it repeats (issue 203) — the first occurrence is
+/// not the mistake, so it carries nothing. A field is flagged only when there
+/// is something IN it the core will not take: an empty one is unfinished, and
+/// the gate's own hint already asks for it.
+fn split_row_notes(send: &SendView, id: &str, s: &FlowStrings) -> Vec<SharedString> {
+    use vela_core::app::send::SendRowFieldState;
+    let mut notes = Vec::new();
+    if let Some(repeat) = send.split_duplicates.iter().find(|row| row.id == id) {
+        notes.push(
+            fill(
+                &s.recipient_duplicate,
+                "n",
+                &repeat.first_ordinal.to_string(),
+            )
+            .into(),
+        );
+    }
+    if let Some(issue) = send.split_row_issues.iter().find(|row| row.id == id) {
+        if issue.address == SendRowFieldState::Invalid {
+            notes.push(s.batch_bad_address.clone());
+        }
+        if issue.amount == SendRowFieldState::Invalid {
+            notes.push(s.bad_amount.clone());
+        }
+    }
+    notes
 }
 
 /// DSD2L / DSD2bL — recipient and amount.
@@ -1803,6 +1891,24 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
         )
     });
 
+    // Which unit the figure is TYPED in: the figure's own code, never the
+    // display currency (#231). The line under it is the OTHER denomination —
+    // the token while money is typed, the money while the token is (#197).
+    let fiat_code = send.amount_fiat_code.as_ref();
+    let other_line = match (fiat_code, token) {
+        (Some(_), Some(token)) => SharedString::from(format!(
+            "≈ {} {}",
+            trimmed_str(if send.token_amount.is_empty() {
+                "0"
+            } else {
+                &send.token_amount
+            }),
+            token.symbol
+        )),
+        (Some(_), None) => SharedString::default(),
+        (None, _) => fiat_line(usd, i.locale).unwrap_or_default(),
+    };
+
     SendForm {
         token: header,
         amount: (!split).then(|| {
@@ -1812,9 +1918,14 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 } else {
                     send.amount.clone()
                 }),
-                fiat_line(usd, i.locale).unwrap_or_default(),
+                other_line,
             )
         }),
+        amount_unit: (!split)
+            .then(|| SharedString::from(fiat_code.cloned().unwrap_or_else(|| symbol.clone()))),
+        // ⇄ exists only where the core offers it, and is live only where
+        // pressing it would change something; its refusal is the notice's.
+        denom_toggle: (!split && send.denom_toggle_shown).then_some(send.denom_toggle_enabled),
         recipient,
         add_recipient: (!split).then(|| s.add_recipient.clone()),
         recipients: if split {
@@ -1833,6 +1944,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                         .trim()
                         .to_owned()
                         .into(),
+                    notes: split_row_notes(send, &draft.id, s),
                 })
                 .collect()
         } else {
@@ -1860,13 +1972,27 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                 )
                 .into(),
                 // The core's SUM of the rows (`confirm_amount`); `token_amount`
-                // is the single field, empty in a split (spec 038 #D4).
-                format!("{} {symbol}", send.confirm_amount)
-                    .trim()
-                    .to_owned()
-                    .into(),
+                // is the single field, empty in a split (spec 038 #D4). Empty
+                // when a row cannot be summed yet: a dash, not a bare symbol.
+                if send.confirm_amount.is_empty() {
+                    SharedString::from("—")
+                } else {
+                    format!("{} {symbol}", send.confirm_amount)
+                        .trim()
+                        .to_owned()
+                        .into()
+                },
             )
         }),
+        remaining: send.split_remaining.as_ref().filter(|_| split).map(|left| {
+            fill(
+                &s.split_remaining,
+                "amount",
+                format!("{} {symbol}", trimmed_str(left)).trim(),
+            )
+            .into()
+        }),
+        summary_over: split && send.split_over_balance,
         pick_contacts: (!split).then(|| s.from_contacts.clone()),
         notice: send_notice(i, false),
         fee: send_fee_row(i),
@@ -1959,6 +2085,9 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
     // The last attempt's error is a NOTICE now, not a subline: several of
     // these have a way out (edit the amount, fund the relay) and a subline
     // cannot carry one.
+    let sweep = send
+        .multi_select_mode
+        .then(|| sweep_breakdown(send, i.locale));
     let notice = send_notice(i, true).or_else(|| {
         tx_error_text(send, s).map(|body| SendNotice {
             dismiss: None,
@@ -1985,15 +2114,30 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                 ),
             })
         },
-        amount: format!("{} {symbol}", send.confirm_amount)
-            .trim()
-            .to_owned()
+        amount: match &sweep {
+            // A sweep has no single headline figure: "3 assets".
+            Some((rows, _)) => fill(&s.assets_count, "n", &rows.len().to_string()).into(),
+            None => format!("{} {symbol}", send.confirm_amount)
+                .trim()
+                .to_owned()
+                .into(),
+        },
+        subline: match &sweep {
+            Some((_, total_usd)) => fill(
+                &fill(&s.confirm_total_line, "fiat", &money(*total_usd, i.locale)),
+                "network",
+                &chain_name(send.multi_chain_id.unwrap_or(chain_id)),
+            )
             .into(),
-        subline: fiat_line(usd, i.locale).unwrap_or_default(),
+            None => fiat_line(usd, i.locale).unwrap_or_default(),
+        },
         facts,
         // Spec 038 #D2: a split's confirm lists every recipient by name and
-        // amount — what is about to be signed, in full.
-        breakdown: if send.split_mode {
+        // amount — what is about to be signed, in full. A sweep lists every
+        // coin it moves, at the amount the signature will move.
+        breakdown: if let Some((rows, _)) = sweep {
+            rows
+        } else if send.split_mode {
             send.recipients
                 .iter()
                 .map(|draft| BreakdownRow {
@@ -2029,6 +2173,54 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             CtaState::Disabled
         },
     }
+}
+
+/// One amount of money, in the hero's own formatting (no `≈`).
+fn money(usd: f64, locale: &str) -> String {
+    format_fiat(
+        usd,
+        "USD",
+        "$",
+        locale,
+        crate::executor::format_prefs::fiat_options(),
+    )
+}
+
+/// SD3c — the sweep's rows and their summed value: every picked coin at the
+/// amount the signature will move — the core's reserved spec (`multi_specs`,
+/// net of the gas the fee coin pays), else the full balance the spec will
+/// become (the web's `sweepAmount`). Never a figure summed here on its own.
+fn sweep_breakdown(send: &SendView, locale: &str) -> (Vec<BreakdownRow>, f64) {
+    let mut total_usd = 0.0;
+    let rows = send
+        .tokens
+        .iter()
+        .filter(|token| send.multi_selected_ids.contains(&token.id()))
+        .map(|token| {
+            let amount = send
+                .multi_specs
+                .iter()
+                .find(|spec| spec.token_address == token.token_address)
+                .map_or(token.balance.as_str(), |spec| spec.amount.as_str());
+            let value = format!("{} {}", trimmed_str(amount), token.symbol);
+            let row_usd = token
+                .price_usd
+                .map(|price| amount.parse::<f64>().unwrap_or(0.0) * price);
+            if let Some(row_usd) = row_usd {
+                total_usd += row_usd;
+            }
+            BreakdownRow {
+                seed: None,
+                label: token.symbol.clone().into(),
+                value: match row_usd {
+                    Some(row_usd) => format!("{value} · ≈{}", money(row_usd, locale)),
+                    None => value,
+                }
+                .into(),
+            }
+        })
+        .collect();
+    (rows, total_usd)
 }
 
 /// DSD4L — the receipt.
@@ -2382,6 +2574,117 @@ pub fn contact_addresses(view: &ContactsView) -> Vec<String> {
         .collect()
 }
 
+/// The importer's list as the sheet had it: the rows that parsed and the
+/// lines the parser refused, in source order (both carry the same line
+/// numbering), so a refused line sits between its neighbours in the sheet —
+/// the web's `previewRows`. Every row that will not be paid says why.
+fn batch_rows(view: &BatchView, symbol: &str, s: &FlowStrings) -> Vec<BatchRow> {
+    use vela_core::app::batch_import::BatchParseReason;
+    let fiat = view.unit == BatchUnit::Fiat;
+    let mut rows: Vec<(u32, BatchRow)> = view
+        .preview
+        .iter()
+        .map(|row| {
+            // The core converted it; an unconvertible row carries no token
+            // amount, and showing the raw fiat there would read as if it had.
+            let sendable = !row.token_amount.is_empty() && row.token_amount != "0";
+            let amount = if sendable {
+                format!("{} {symbol}", row.token_amount)
+            } else {
+                "—".to_owned()
+            };
+            (
+                row.line,
+                BatchRow {
+                    ok: row.ok,
+                    address: row
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| row.address.clone())
+                        .into(),
+                    // A fiat sheet's figure exactly as the sheet wrote it, so
+                    // it can be read back against the sheet — beside what it
+                    // became (the mock's "5,000 CNY → 689.66").
+                    conversion: if fiat {
+                        format!("{} {} → {amount}", row.raw_amount, view.fiat_code).into()
+                    } else {
+                        amount.into()
+                    },
+                    note: if row.dup {
+                        Some(s.batch_dup.clone())
+                    } else if row.valid {
+                        None
+                    } else {
+                        Some(s.batch_bad_address.clone())
+                    },
+                },
+            )
+        })
+        .collect();
+    rows.extend(view.errors.iter().map(|error| {
+        (
+            error.line,
+            BatchRow {
+                ok: false,
+                address: error.raw.clone().into(),
+                conversion: SharedString::default(),
+                note: Some(match error.reason {
+                    BatchParseReason::NoAddress => s.batch_bad_address.clone(),
+                    BatchParseReason::NoAmount => s.bad_amount.clone(),
+                }),
+            },
+        )
+    }));
+    // Stable: a parsed row and a refused one never share a line number.
+    rows.sort_by_key(|(line, _)| *line);
+    rows.into_iter().map(|(_, row)| row).collect()
+}
+
+/// DSD2cL's total line (the web's `total`): what the import sends, in the
+/// token and — for a fiat sheet — in the sheet's currency, against what the
+/// account holds. `remaining` is the form's `split_remaining` when this
+/// import ADDS to rows already there: then that, not the whole balance, is
+/// what it draws from. `None` until a row parses.
+#[must_use]
+pub fn batch_total(
+    view: &BatchView,
+    symbol: &str,
+    balance: &str,
+    remaining: Option<&str>,
+    s: &FlowStrings,
+) -> Option<crate::flows::fixtures::BatchTotal> {
+    let count = view.recipient_count;
+    (count > 0).then(|| crate::flows::fixtures::BatchTotal {
+        label: format!(
+            "{} · {}",
+            s.split_total,
+            fill(&s.recipient_count, "count", &count.to_string())
+        )
+        .into(),
+        value: format!("{} {symbol}", view.total_token).into(),
+        detail: view
+            .total_fiat
+            .as_ref()
+            .map(|fiat| format!("{fiat} {}", view.fiat_code).into()),
+        balance: match remaining {
+            Some(left) => fill(
+                &s.split_remaining,
+                "amount",
+                &format!("{} {symbol}", trimmed_str(left)),
+            ),
+            None => fill(
+                &s.balance_label,
+                "amount",
+                &format!("{} {symbol}", trimmed_str(balance)),
+            ),
+        }
+        .into(),
+        over: view
+            .over_balance
+            .then(|| fill(&s.batch_over_balance, "sym", symbol).into()),
+    })
+}
+
 /// DSD2cL — the batch importer. The parse, the duplicate check, the
 /// fiat→token conversion, the cap and the apply gate are the core's; this
 /// only words them. The rule that matters: when no source can price the
@@ -2434,26 +2737,18 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
         rate_section: s.batch_rate_section.clone(),
         rate_value: rate_value.into(),
         rate_hint: rate_hint.into(),
-        parsed: fill(&s.batch_parsed, "n", &view.recipient_count.to_string()).into(),
-        rows: view
-            .preview
-            .iter()
-            .map(|row| BatchRow {
-                ok: row.ok,
-                address: row
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| row.address.clone())
-                    .into(),
-                // The core converted it; an unconvertible row carries no token
-                // amount, and showing the raw fiat there would read as if it had.
-                conversion: if row.token_amount.is_empty() {
-                    row.raw_amount.clone().into()
-                } else {
-                    format!("{} {symbol}", row.token_amount).into()
-                },
-            })
-            .collect(),
+        // Lines READ, not rows kept: the count above a list is the length of
+        // that list, refused lines included (the web's `seen`).
+        parsed: fill(
+            &s.batch_parsed,
+            "n",
+            &(view.preview.len() + view.errors.len()).to_string(),
+        )
+        .into(),
+        // The page adds it: the line reads the account's balance, which the
+        // importer's own view does not carry (`batch_total`).
+        total: None,
+        rows: batch_rows(view, symbol, s),
         rejected: rejected.into(),
         // A file that could not be read must SAY so — the core raises the
         // flag for exactly that, and a picker that silently does nothing is
@@ -2467,16 +2762,8 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
                 action: None,
                 error: true,
             })
-        } else if view.over_balance {
-            Some(SendNotice {
-                dismiss: None,
-                title: None,
-                body: s.batch_over_balance.clone(),
-                // The figure the refusal is about — no key needed for a number.
-                detail: Some(format!("{} {symbol}", view.total_token).into()),
-                action: None,
-                error: true,
-            })
+        // Over the balance is said on the total line (`batch_total`), beside
+        // the figure it is about — the web's `overText` — not twice.
         } else if view.over_cap {
             Some(SendNotice {
                 dismiss: None,
@@ -3106,6 +3393,19 @@ mod tests {
             crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
         }
 
+        // A native coin that also answers an ERC-20 interface: refused with
+        // its reason (spec 060), not "not found".
+        let mut native = base.clone();
+        native.native_alias = true;
+        match &add_token(&native, &s).result {
+            crate::flows::fixtures::AddTokenResult::Token { name, detail, .. } => {
+                assert_eq!(*name, s.native_alias_title);
+                assert_eq!(*detail, s.native_alias_message);
+                assert_ne!(*name, s.not_found_title);
+            }
+            crate::flows::fixtures::AddTokenResult::Network { .. } => unreachable!(),
+        }
+
         // Found: the token, its network and its scale.
         let mut found = base;
         found.found = vec![MtokFound {
@@ -3218,6 +3518,11 @@ mod tests {
             assert!(
                 received.facts[3].mono,
                 "a hash is compared character by character"
+            );
+            // "View on Explorer" opens this transaction on its own chain.
+            assert_eq!(
+                received.explorer_url.as_deref(),
+                Some("https://gnosisscan.io/tx/0xdead")
             );
 
             // The sent one, whose stored record says pending — it must NOT
@@ -3608,5 +3913,402 @@ mod tests {
         let hidden = history(&view, &s, &wallet_strings(), true);
         assert_eq!(hidden[0].rows[0].amount, crate::wallet::fixtures::MASK);
         assert_eq!(hidden[0].rows[0].unit, "xDAI");
+    }
+}
+
+/// The web-parity pass (#196/#197/#203/#231/#265): each builder reads the
+/// core's own answer and words it, as `live-send.ts` / `live-batch.ts` do.
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+    use crate::core_host::CoreHost;
+    use vela_core::app::batch_import::BatchPreviewRow;
+    use vela_core::app::batch_import::{BatchImport, BatchParseError, BatchParseReason};
+    use vela_core::app::send::{
+        Send as SendMachine, SendDuplicateRowView, SendMultiSpecView, SendRowFieldState,
+        SendSplitRowIssue,
+    };
+
+    fn strings() -> FlowStrings {
+        FlowStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    fn token(chain_id: u32, symbol: &str, address: Option<&str>, balance: &str) -> SendToken {
+        SendToken {
+            network: format!("chain-{chain_id}"),
+            chain_id,
+            symbol: symbol.to_owned(),
+            balance: balance.to_owned(),
+            decimals: 18,
+            token_address: address.map(str::to_owned),
+            price_usd: Some(2.0),
+            logo_urls: Vec::new(),
+            spam: false,
+        }
+    }
+
+    fn draft(id: &str, address: &str, amount: &str) -> SendRecipientDraft {
+        SendRecipientDraft {
+            id: id.to_owned(),
+            address: address.to_owned(),
+            amount: amount.to_owned(),
+            name: None,
+        }
+    }
+
+    /// Run `f` with a form built from `view`.
+    fn with_inputs<R>(view: &SendView, f: impl FnOnce(&SendInputs<'_>) -> R) -> R {
+        let s = strings();
+        let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        f(&SendInputs {
+            send: view,
+            fee: &fee,
+            s: &s,
+            wallet: &wallet,
+            locale: "en-US",
+            identity_name: "MultiTest",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        })
+    }
+
+    /// #203 / #265: each split row says what the core says about it — the
+    /// repeat names the row it repeats, a bad field is named, an empty one is
+    /// not — and the total says what is left, or that it is over.
+    #[test]
+    fn a_split_row_says_why_and_the_total_says_what_is_left() {
+        crate::executor::storage::tests::with_temp_state("parity-split", || {
+            let s = strings();
+            let view = SendView {
+                split_mode: true,
+                selected_token: Some(token(100, "xDAI", None, "10")),
+                recipients: vec![
+                    draft("rcpt_1", "0xaa", "1"),
+                    draft("rcpt_2", "0xaa", "2"),
+                    draft("rcpt_3", "0x12", "1,5"),
+                    draft("rcpt_4", "", ""),
+                ],
+                split_duplicates: vec![SendDuplicateRowView {
+                    id: "rcpt_2".to_owned(),
+                    first_ordinal: 1,
+                }],
+                split_row_issues: vec![
+                    SendSplitRowIssue {
+                        id: "rcpt_3".to_owned(),
+                        ordinal: 3,
+                        address: SendRowFieldState::Invalid,
+                        amount: SendRowFieldState::Invalid,
+                    },
+                    SendSplitRowIssue {
+                        id: "rcpt_4".to_owned(),
+                        ordinal: 4,
+                        address: SendRowFieldState::Empty,
+                        amount: SendRowFieldState::Empty,
+                    },
+                ],
+                confirm_amount: String::new(),
+                split_remaining: Some("7".to_owned()),
+                ..CoreHost::<SendMachine>::new().view()
+            };
+            let form = with_inputs(&view, send_form);
+            let notes: Vec<Vec<SharedString>> =
+                form.recipients.iter().map(|r| r.notes.clone()).collect();
+            assert!(
+                notes[0].is_empty(),
+                "the first occurrence is not the mistake"
+            );
+            assert_eq!(
+                notes[1],
+                vec![SharedString::from(fill(&s.recipient_duplicate, "n", "1"))]
+            );
+            assert_eq!(
+                notes[2],
+                vec![s.batch_bad_address.clone(), s.bad_amount.clone()]
+            );
+            assert!(notes[3].is_empty(), "an unfinished row is not wrong");
+
+            let (_, total) = form
+                .summary
+                .clone()
+                .unwrap_or_else(|| unreachable!("split"));
+            assert_eq!(total, "—", "a sum the core cannot make is a dash");
+            let left = form.remaining.clone().unwrap_or_default();
+            assert!(left.contains("7 xDAI"), "{left}");
+            assert!(!left.contains("{{"), "{left}");
+            assert!(!form.summary_over);
+            assert!(form.denom_toggle.is_none(), "a split has no single figure");
+
+            // Over the balance: no "left", and the total in error ink.
+            let over = SendView {
+                split_remaining: None,
+                split_over_balance: true,
+                confirm_amount: "12".to_owned(),
+                ..view
+            };
+            let form = with_inputs(&over, send_form);
+            assert!(form.remaining.is_none() && form.summary_over);
+        });
+    }
+
+    /// #197 / #231: ⇄ exists only where the core offers it, is live only
+    /// where it would change something, and the unit on the figure is the
+    /// figure's OWN code — the line under it the other denomination.
+    #[test]
+    fn the_denomination_toggle_and_the_unit_are_the_cores() {
+        crate::executor::storage::tests::with_temp_state("parity-denom", || {
+            let base = SendView {
+                selected_token: Some(token(100, "xDAI", None, "10")),
+                amount: "4".to_owned(),
+                token_amount: "4".to_owned(),
+                ..CoreHost::<SendMachine>::new().view()
+            };
+            let form = with_inputs(&base, send_form);
+            assert_eq!(form.denom_toggle, None, "not offered, not drawn");
+            assert_eq!(form.amount_unit.as_deref(), Some("xDAI"));
+            let (_, under) = form.amount.clone().unwrap_or_default();
+            assert!(
+                under.contains('$'),
+                "the money under a token figure: {under}"
+            );
+
+            let fiat = SendView {
+                amount_fiat_code: Some("EUR".to_owned()),
+                token_amount: "2.5".to_owned(),
+                denom_toggle_shown: true,
+                denom_toggle_enabled: true,
+                ..base.clone()
+            };
+            let form = with_inputs(&fiat, send_form);
+            assert_eq!(form.denom_toggle, Some(true));
+            assert_eq!(form.amount_unit.as_deref(), Some("EUR"));
+            let (_, under) = form.amount.clone().unwrap_or_default();
+            assert_eq!(under, "≈ 2.5 xDAI", "the token under a money figure");
+
+            let refused = SendView {
+                denom_toggle_shown: true,
+                denom_toggle_enabled: false,
+                ..base
+            };
+            let refused = SendView {
+                denom_toggle_reason: Some(SendUnitIssue {
+                    code: "CNY".to_owned(),
+                    symbol: "xDAI".to_owned(),
+                }),
+                ..refused
+            };
+            let form = with_inputs(&refused, send_form);
+            assert_eq!(form.denom_toggle, Some(false));
+            let why = form.notice.map(|n| n.body).unwrap_or_default();
+            assert!(why.contains("CNY") && !why.contains("{{"), "{why}");
+            assert_ne!(
+                why,
+                cannot_convert(
+                    &SendUnitIssue {
+                        code: "CNY".to_owned(),
+                        symbol: "xDAI".to_owned()
+                    },
+                    &strings()
+                ),
+                "the ⇄ row's own sentence, not the amount warning's"
+            );
+        });
+    }
+
+    /// SD3c: a sweep's confirm lists every coin at the amount the signature
+    /// moves — the core's reserved spec, else the full balance.
+    #[test]
+    fn a_sweep_confirm_lists_each_coins_amount() {
+        crate::executor::storage::tests::with_temp_state("parity-sweep", || {
+            let s = strings();
+            let tokens = vec![
+                token(100, "xDAI", None, "10"),
+                token(100, "USDC", Some("0xdd"), "5"),
+                token(1, "ETH", None, "1"),
+            ];
+            let view = SendView {
+                multi_select_mode: true,
+                multi_chain_id: Some(100),
+                multi_selected_ids: vec![tokens[0].id(), tokens[1].id()],
+                multi_specs: vec![SendMultiSpecView {
+                    token_address: None,
+                    decimals: 18,
+                    amount: "9.5".to_owned(),
+                }],
+                tokens,
+                ..CoreHost::<SendMachine>::new().view()
+            };
+            let confirm = with_inputs(&view, send_confirm);
+            assert_eq!(confirm.amount, fill(&s.assets_count, "n", "2"));
+            let rows: Vec<(String, String)> = confirm
+                .breakdown
+                .iter()
+                .map(|row| (row.label.to_string(), row.value.to_string()))
+                .collect();
+            assert_eq!(rows.len(), 2, "only the picked coins");
+            assert_eq!(rows[0].0, "xDAI");
+            assert!(
+                rows[0].1.starts_with("9.5 xDAI"),
+                "the reserved spec: {}",
+                rows[0].1
+            );
+            assert!(
+                rows[1].1.starts_with("5 USDC"),
+                "the full balance: {}",
+                rows[1].1
+            );
+            assert!(rows[1].1.contains("$10"), "priced: {}", rows[1].1);
+            assert!(confirm.subline.contains("Gnosis"), "{}", confirm.subline);
+            assert!(
+                confirm.subline.contains("$29"),
+                "9.5×2 + 5×2: {}",
+                confirm.subline
+            );
+            assert!(confirm.mark.is_none(), "one mark would name the wrong coin");
+        });
+    }
+
+    fn preview(line: u32, address: &str, raw: &str, token: &str) -> BatchPreviewRow {
+        BatchPreviewRow {
+            line,
+            name: None,
+            address: address.to_owned(),
+            valid: true,
+            dup: false,
+            raw_amount: raw.to_owned(),
+            token_amount: token.to_owned(),
+            ok: true,
+        }
+    }
+
+    /// The importer's list in sheet order, every unpaid line saying why, a
+    /// fiat sheet's own figure beside what it became, and a total measured
+    /// against the balance — or against what the form has left.
+    #[test]
+    fn the_batch_preview_says_why_and_totals_against_the_balance() {
+        let s = strings();
+        let base = CoreHost::<BatchImport>::new().view();
+        let view = BatchView {
+            unit: BatchUnit::Fiat,
+            fiat_code: "CNY".to_owned(),
+            preview: vec![
+                preview(1, "0xaa", "5000", "689.66"),
+                BatchPreviewRow {
+                    dup: true,
+                    ok: false,
+                    ..preview(3, "0xaa", "10", "1.38")
+                },
+                BatchPreviewRow {
+                    valid: false,
+                    ok: false,
+                    ..preview(4, "0x12", "10", "1.38")
+                },
+            ],
+            errors: vec![BatchParseError {
+                line: 2,
+                raw: "bob, lots".to_owned(),
+                reason: BatchParseReason::NoAmount,
+            }],
+            recipient_count: 1,
+            total_token: "689.66".to_owned(),
+            total_fiat: Some("5000".to_owned()),
+            ..base
+        };
+        let model = batch_import(&view, "USDT", &s);
+        let lines: Vec<(&str, Option<&SharedString>)> = model
+            .rows
+            .iter()
+            .map(|row| (row.address.as_ref(), row.note.as_ref()))
+            .collect();
+        assert_eq!(
+            lines,
+            vec![
+                ("0xaa", None),
+                ("bob, lots", Some(&s.bad_amount)),
+                ("0xaa", Some(&s.batch_dup)),
+                ("0x12", Some(&s.batch_bad_address)),
+            ],
+            "sheet order, each skipped line with its reason"
+        );
+        assert_eq!(model.rows[0].conversion, "5000 CNY → 689.66 USDT");
+        assert_eq!(model.parsed, fill(&s.batch_parsed, "n", "4"), "lines read");
+        assert!(
+            model.rows[1].conversion.is_empty(),
+            "a refused line has no figure"
+        );
+
+        let total = batch_total(&view, "USDT", "1000", None, &s)
+            .unwrap_or_else(|| unreachable!("one row parsed"));
+        assert_eq!(total.value, "689.66 USDT");
+        assert_eq!(total.detail.as_deref(), Some("5000 CNY"));
+        assert_eq!(
+            total.balance,
+            fill(
+                &s.balance_label,
+                "amount",
+                &format!("{} USDT", trimmed_str("1000"))
+            )
+        );
+        assert!(total.over.is_none());
+
+        // Adding to rows already on the form: measured against what is left.
+        let adding = batch_total(&view, "USDT", "1000", Some("700"), &s)
+            .unwrap_or_else(|| unreachable!("one row parsed"));
+        assert_eq!(
+            adding.balance,
+            fill(
+                &s.split_remaining,
+                "amount",
+                &format!("{} USDT", trimmed_str("700"))
+            )
+        );
+
+        // Over the balance: said on the total, with the symbol filled in.
+        let over = BatchView {
+            over_balance: true,
+            ..view.clone()
+        };
+        let total = batch_total(&over, "USDT", "10", None, &s)
+            .unwrap_or_else(|| unreachable!("one row parsed"));
+        let text = total.over.unwrap_or_default();
+        assert!(text.contains("USDT") && !text.contains("{{"), "{text}");
+        assert!(
+            batch_import(&over, "USDT", &s).notice.is_none(),
+            "not said twice"
+        );
+
+        // Nothing parsed: no total line at all.
+        let empty = BatchView {
+            recipient_count: 0,
+            ..view
+        };
+        assert!(batch_total(&empty, "USDT", "1000", None, &s).is_none());
+    }
+
+    /// "View on Explorer" leads to this account on the network's explorer —
+    /// the built-in's, a custom network's own, else Etherscan.
+    #[test]
+    fn the_explorer_link_is_the_networks_own() {
+        crate::executor::storage::tests::with_temp_state("parity-explorer", || {
+            assert_eq!(explorer_root(100), "https://gnosisscan.io");
+            assert_eq!(explorer_root(424_242), "https://etherscan.io");
+            assert!(
+                crate::executor::storage::write_value(
+                    crate::executor::storage::KEY_CUSTOM_NETWORKS,
+                    serde_json::json!([{ "chainId": 424_242, "explorerURL": "https://scan.example/" }]),
+                )
+                .is_ok()
+            );
+            assert_eq!(explorer_root(424_242), "https://scan.example");
+
+            let s = strings();
+            let watch = CoreHost::<vela_core::app::receive_watch::ReceiveWatch>::new().view();
+            let pay = CoreHost::<vela_core::app::payment_request::PaymentRequest>::new().view();
+            let qr = receive_qr("0xabc", "Golden", 100, &watch, &pay, &s, "en");
+            assert_eq!(
+                qr.explorer_url.as_deref(),
+                Some("https://gnosisscan.io/address/0xabc")
+            );
+            assert!(qr.contract_copy.is_none(), "a network code has no contract");
+        });
     }
 }
