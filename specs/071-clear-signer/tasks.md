@@ -20,7 +20,7 @@
 - [x] T012 The dApp path passes the request's own method/params/origin; the wallet's own send passes calls only
 - [x] T013 Signing sheet: picker from `SignPrefView.offered` + the Clear Signer's line; start at the default; waiting state with hint, reopen, cancel; refusal sentences
 - [x] T014 Settings: "Sign with" + "Clear Signer page" rows (SignPrefCore, store keys)
-- [x] T015 JVM tests (channel against a raw socket client with a real P-256 key; settings wiring; SIGN_METHODS pinned) — 637 pass; device pass C on the Xiaomi: C1–C3 a send signed on the page landed on Gnosis (`UserOperationEvent` success, 0xe3f7e00c…7117733), C4 closed tab, C5 a stranger's key, C6 an insecure page refused
+- [x] T015 JVM tests (channel against a raw socket client with a real P-256 key; settings wiring; SIGN_METHODS pinned) — 637 pass; device pass C on the Xiaomi: C1–C3 a send signed on the page landed on Gnosis (`UserOperationEvent` success, 0xe3f7e00c…7117733), C4 closed tab, C5 a stranger's key, C6 an insecure page refused, C7 a dApp's `personal_sign` through the Clear Signer verified on chain by the Safe (`isValidSignature` → 0x1626ba7e)
 
 ## Phase 4 — iOS
 
