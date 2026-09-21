@@ -48,6 +48,12 @@ export interface SignShellPorts {
 	/** `onSubmitted(hash)` — dispatches `Event::OpSubmitted` mid-`SignAndSubmit`. */
 	opSubmitted(id: string, userOpHash: string): void;
 	/**
+	 * The origin that sent request `id` — what the Clear Signer's page shows
+	 * as the requester (spec 071). `SignAndSubmit` does not carry it, and the
+	 * request is still the one on the sheet while it is being signed.
+	 */
+	requestOrigin(id: string): string;
+	/**
 	 * The sign-time simulation the last approve carried. Deliberately NOT core
 	 * state: `assetChanges` is a presentation blob the record stores for the
 	 * Connections-panel replay, and the core would only be forwarding it.

@@ -20,7 +20,10 @@ vi.mock('./accounts', () => ({
 		[ONE, MULTI].find((a) => a.address === address.toLowerCase()),
 	findAccountByCredentialId: (id: string) => [ONE, MULTI].find((a) => a.id === id)
 }));
-vi.mock('$lib/onboarding/core/passkey', () => ({ signWithAny: vi.fn() }));
+vi.mock('$lib/onboarding/core/passkey', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/onboarding/core/passkey')>()),
+	signWithAny: vi.fn()
+}));
 vi.mock('./rpc-adapter', () => ({ rpcCall: vi.fn() }));
 vi.mock('./safe-transaction', () => ({
 	keySetOf: vi.fn(),

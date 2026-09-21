@@ -24,6 +24,7 @@ import type { SignEffect } from './sign-types';
 const ports = {
 	transportFor: () => null,
 	opSubmitted: () => {},
+	requestOrigin: () => 'https://app.example',
 	assetSim: () => null,
 	switchActiveAccount: async () => {}
 };

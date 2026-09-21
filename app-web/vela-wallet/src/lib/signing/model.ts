@@ -250,7 +250,8 @@ export interface SigningModel {
 		label: string;
 		value: string;
 		open: boolean;
-		options: { id: string; title: string; selected: boolean }[];
+		/** `detail`: a second line saying what a choice is — the Clear Signer's (spec 071). */
+		options: { id: string; title: string; detail?: string; selected: boolean }[];
 	};
 	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:
@@ -259,4 +260,21 @@ export interface SigningModel {
 	confirm: { hint: string; action: string; enabled: boolean };
 	/** Desktop third-column heading — "签名请求". */
 	panelTitle: string;
+}
+
+/**
+ * The Clear Signer's own sheet (spec 071), over whatever a signature started
+ * from: while the page is open, "Waiting…" with its hint, "Open the page
+ * again" and Cancel; after, the one sentence the ending gets and a way to
+ * close it. Nothing was signed in any ending but one, and that one draws
+ * nothing — the signature simply goes on as a passkey's would.
+ */
+export interface ClearSignerModel {
+	waiting: boolean;
+	title: string;
+	hint?: string;
+	/** Only while waiting. */
+	reopen?: string;
+	/** Cancel while waiting; close after. */
+	dismiss: string;
 }

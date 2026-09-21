@@ -211,7 +211,8 @@ export function createSignExecutor(ports: SignShellPorts) {
 						{
 							id: operation.id,
 							method: operation.method,
-							params: parseParams(operation.params_json)
+							params: parseParams(operation.params_json),
+							origin: ports.requestOrigin(operation.id)
 						},
 						account,
 						operation.address,

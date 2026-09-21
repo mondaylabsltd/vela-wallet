@@ -167,6 +167,22 @@ export interface SigningMessages {
 	signWithPlatform: string;
 	signWithHybrid: string;
 	signWithSecurityKey: string;
+	/** Spec 071: the fourth "Sign with", and the one line saying what it is. */
+	signWithClearSigner: string;
+	signWithClearSignerBody: string;
+	/**
+	 * The Clear Signer's waiting sheet and the sentence each ending gets
+	 * (contract §5): the person closed the page, the page refused, what came
+	 * back does not match this request, or nothing came back in time.
+	 */
+	clearSignerWaiting: string;
+	clearSignerWaitingHint: string;
+	clearSignerReopen: string;
+	clearSignerCancel: string;
+	clearSignerClosed: string;
+	clearSignerRefused: string;
+	clearSignerMismatch: string;
+	clearSignerTimeout: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;
