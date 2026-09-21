@@ -1662,21 +1662,37 @@ fn build_notice(
     }
 
     // The transfer and its fee draw on the same coin, and together they do not
-    // fit. The core computed the ceiling; "Edit amount" is its own event.
+    // fit. The core computed the ceiling; "Edit amount" is its own event. It
+    // comes first in a split too — the core measures it against the rows'
+    // total, and it says the most that can be sent, which "exceeds your
+    // balance" does not.
+    //
+    // Every figure is a base-unit decimal string: the shell formats it, and
+    // exactly — a rounded "most you can send" could round up past it.
     if let Some(issue) = &send.same_asset_fee_issue {
+        let decimals = send
+            .selected_token
+            .as_ref()
+            .map_or(18, |token| token.decimals);
+        let human = |base: &str| {
+            base.parse::<u128>().map_or_else(
+                |_| base.to_owned(),
+                |units| vela_core::app::fee_policy::from_base_units(units, decimals),
+            )
+        };
         let body = fill(
             &fill(
                 &fill(
                     &fill(
-                        &fill(&s.same_fee_body, "amount", &issue.transfer_amount),
+                        &fill(&s.same_fee_body, "amount", &human(&issue.transfer_amount)),
                         "fee",
-                        &issue.fee_amount,
+                        &human(&issue.fee_amount),
                     ),
                     "total",
-                    &issue.total,
+                    &human(&issue.total),
                 ),
                 "balance",
-                &issue.balance,
+                &human(&issue.balance),
             ),
             "symbol",
             &issue.symbol,
@@ -1687,7 +1703,11 @@ fn build_notice(
             body: body.into(),
             detail: Some(
                 fill(
-                    &fill(&s.same_fee_max, "amount", &issue.max_transfer_amount),
+                    &fill(
+                        &s.same_fee_max,
+                        "amount",
+                        &human(&issue.max_transfer_amount),
+                    ),
                     "symbol",
                     &issue.symbol,
                 )
@@ -1710,6 +1730,13 @@ fn build_notice(
             error: true,
         };
         return Some((notice, None));
+    }
+
+    // A split says nothing more. The amount warning and ⇄'s refusal judge the
+    // single form's figure, which a split leaves behind — the same order the
+    // web, iOS and Android draw: ceiling, over-balance, then nothing.
+    if send.split_mode {
+        return None;
     }
 
     // On the confirm page the amount itself may have stopped resolving — a
@@ -3928,8 +3955,8 @@ mod parity_tests {
     use vela_core::app::batch_import::BatchPreviewRow;
     use vela_core::app::batch_import::{BatchImport, BatchParseError, BatchParseReason};
     use vela_core::app::send::{
-        Send as SendMachine, SendDuplicateRowView, SendMultiSpecView, SendRowFieldState,
-        SendSplitRowIssue,
+        Send as SendMachine, SendDuplicateRowView, SendFeeIssueView, SendMultiSpecView,
+        SendRowFieldState, SendSplitRowIssue,
     };
 
     fn strings() -> FlowStrings {
@@ -4050,6 +4077,61 @@ mod parity_tests {
             };
             let form = with_inputs(&over, send_form);
             assert!(form.remaining.is_none() && form.summary_over);
+        });
+    }
+
+    /// A split whose coin also pays the fee: the core's ceiling (measured
+    /// against the rows' total) comes first, then the over-balance sentence,
+    /// then nothing — the order all four shells draw.
+    #[test]
+    fn a_split_says_the_same_asset_ceiling_first() {
+        crate::executor::storage::tests::with_temp_state("parity-split-ceiling", || {
+            let s = strings();
+            let split = SendView {
+                selected_token: Some(token(100, "USDC", Some("0xusdc"), "0.8")),
+                split_mode: true,
+                split_over_balance: true,
+                // A stale single-form verdict a split must not say.
+                amount_warning: Some(SendAmountWarning::NotEnoughToken {
+                    symbol: "USDC".to_owned(),
+                }),
+                ..CoreHost::<SendMachine>::new().view()
+            };
+            let ceiling = SendView {
+                same_asset_fee_issue: Some(SendFeeIssueView {
+                    symbol: "USDC".to_owned(),
+                    transfer_amount: "750000000000000000".to_owned(),
+                    balance: "800000000000000000".to_owned(),
+                    fee_amount: "100000000000000000".to_owned(),
+                    total: "850000000000000000".to_owned(),
+                    max_transfer_amount: "700000000000000000".to_owned(),
+                }),
+                ..split.clone()
+            };
+            let notice = with_inputs(&ceiling, |i| send_notice(i, false))
+                .unwrap_or_else(|| unreachable!("the ceiling"));
+            assert_eq!(
+                notice.title.as_deref(),
+                Some(fill(&s.same_fee_title, "symbol", "USDC").as_str())
+            );
+            assert!(notice.body.contains("0.75"), "{}", notice.body);
+            assert!(notice.body.contains("0.85"), "{}", notice.body);
+            assert!(!notice.body.contains("750000"), "{}", notice.body);
+            let detail = notice.detail.clone().unwrap_or_default();
+            assert!(detail.contains("0.7 USDC"), "{detail}");
+
+            let over = with_inputs(&split, |i| send_notice(i, false))
+                .unwrap_or_else(|| unreachable!("over the balance"));
+            assert_eq!(over.body, s.insufficient_body);
+
+            let quiet = SendView {
+                split_over_balance: false,
+                ..split
+            };
+            assert!(
+                with_inputs(&quiet, |i| send_notice(i, false)).is_none(),
+                "a split does not say the single form's warning"
+            );
         });
     }
 

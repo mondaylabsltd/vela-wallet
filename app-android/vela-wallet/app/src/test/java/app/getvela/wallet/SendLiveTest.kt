@@ -360,6 +360,23 @@ class SendLiveTest {
     }
 
     @Test
+    fun `a split says the same-asset ceiling first, then over-balance, then nothing`() {
+        // The core measures the ceiling against the rows' TOTAL; its sentence
+        // names the most that can be sent, so it outranks "exceeds your balance".
+        val split = SendView(
+            stage = SendStage.EnterDetails, selected_token = xdai, split_mode = true, split_over_balance = true,
+            amount_warning = SendAmountWarning.NotEnoughToken("XDAI"),
+        )
+        val ceiling = split.copy(
+            same_asset_fee_issue = SendFeeIssueView(symbol = "XDAI", transfer_amount = "6000000000000000000", balance = "5000000000000000000", fee_amount = "100000000000000000", total = "6100000000000000000", max_transfer_amount = "4900000000000000000"),
+        )
+        val sentence = SendLive.formWarning(ceiling, ctx())!!
+        assertTrue(sentence, sentence.contains("4.9") && !sentence.contains("000000000"))
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), SendLive.formWarning(split, ctx()))
+        assertNull(SendLive.formWarning(split.copy(split_over_balance = false), ctx()))
+    }
+
+    @Test
     fun `half-typed text gets the placeholder identicon, a real address its own`() {
         val drawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
         val typing = SendLive.form(drawn, SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = "0xabc"), FeeView(), ctx())

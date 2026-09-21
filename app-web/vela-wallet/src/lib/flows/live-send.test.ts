@@ -558,6 +558,34 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			expect(form.alert).toBe(m['send.alertInsufficientBalanceBody']);
 		});
 
+		it('the same-asset ceiling outranks the over-balance sentence: it names the most to send', () => {
+			// 0.75 ETH across the rows, 0.8 held, a 0.1 ETH fee: the core's
+			// ceiling is measured against the split's total.
+			const issue = {
+				symbol: 'ETH',
+				transfer_amount: '750000000000000000',
+				balance: '800000000000000000',
+				fee_amount: '100000000000000000',
+				total: '850000000000000000',
+				max_transfer_amount: '700000000000000000'
+			};
+			const expected = `${fill(m['send.sameFeeTokenBody'], {
+				amount: '0.75',
+				fee: '0.1',
+				total: '0.85',
+				symbol: 'ETH',
+				balance: '0.8'
+			})} ${fill(m['send.sameFeeTokenMax'], { amount: '0.7', symbol: 'ETH' })}`;
+			expect(split({ same_asset_fee_issue: issue }).alert).toBe(expected);
+			expect(split({ same_asset_fee_issue: issue, split_over_balance: true }).alert).toBe(expected);
+			expect(expected).toContain('0.7 ETH');
+			// Without the ceiling, the split's own verdict; without either, nothing.
+			expect(split({ split_over_balance: true }).alert).toBe(
+				m['send.alertInsufficientBalanceBody']
+			);
+			expect(split({}).alert).toBeUndefined();
+		});
+
 		it('a dark Continue names the recipient it is waiting on, and what for', () => {
 			const waiting = split({
 				can_continue: false,
