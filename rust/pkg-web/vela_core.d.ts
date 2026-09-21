@@ -964,6 +964,12 @@ export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
 
+/**
+ * What a site's message request asks the account to sign, before the
+ * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+ */
+export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
+
 export function toBase64Url(data: Uint8Array): string;
 
 export function toHex(data: Uint8Array, prefixed: boolean): string;
@@ -1197,6 +1203,7 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signprefcore_new: () => number;
     readonly signprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

@@ -11104,6 +11104,22 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
+ * What a site's message request asks the account to sign, before the
+ * Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
+ * EIP-712 digest for typed data, picked where each method carries it.
+ * `None` when there is nothing to sign. One rule for every shell and the
+ * Clear Signer's page.
+ */
+public func signMessageHash(method: String, paramsJson: String) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_message_hash(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(paramsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * "Sign with": which credential a ceremony is pinned to and how it is reached,
  * for the method the person chose — `None` for `auto`. See
  * `vela_core::wallet_keys::sign_route`.
@@ -11861,6 +11877,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_message_hash() != 42225) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 22739) {

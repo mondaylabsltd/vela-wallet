@@ -213,6 +213,13 @@ pub fn hash_typed_data(typed_data_json: &str) -> JsResult<Vec<u8>> {
     vela_core::eip712::hash_typed_data(typed_data_json).map_err(err)
 }
 
+/// What a site's message request asks the account to sign, before the
+/// Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+#[wasm_bindgen(js_name = signMessageHash)]
+pub fn sign_message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
+    vela_core::sign_message::original_hash(method, params_json)
+}
+
 #[wasm_bindgen(js_name = encodeType)]
 pub fn encode_type(typed_data_json: &str) -> JsResult<String> {
     vela_core::eip712::encode_type(typed_data_json).map_err(err)

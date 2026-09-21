@@ -300,6 +300,16 @@ pub fn decode_calldata(sig: String, calldata: Vec<u8>) -> Result<AbiValue, CoreE
 // eip712
 // ---------------------------------------------------------------------------
 
+/// What a site's message request asks the account to sign, before the
+/// Safe's `SafeMessage` wrap: EIP-191 for `personal_sign` / `eth_sign`, the
+/// EIP-712 digest for typed data, picked where each method carries it.
+/// `None` when there is nothing to sign. One rule for every shell and the
+/// Clear Signer's page.
+#[uniffi::export]
+pub fn sign_message_hash(method: String, params_json: String) -> Option<Vec<u8>> {
+    vela_core::sign_message::original_hash(&method, &params_json)
+}
+
 #[uniffi::export]
 pub fn hash_typed_data(typed_data_json: String) -> Result<Vec<u8>, CoreError> {
     Ok(vela_core::eip712::hash_typed_data(&typed_data_json)?)

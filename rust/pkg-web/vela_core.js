@@ -4287,6 +4287,27 @@ export function sha256(data) {
 }
 
 /**
+ * What a site's message request asks the account to sign, before the
+ * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
+ * @param {string} method
+ * @param {string} params_json
+ * @returns {Uint8Array | undefined}
+ */
+export function signMessageHash(method, params_json) {
+    const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.signMessageHash(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {string}
  */

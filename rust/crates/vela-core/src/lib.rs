@@ -52,6 +52,7 @@ pub mod registry_metadata;
 pub mod registry_proof;
 pub mod registry_resolve;
 pub mod safe;
+pub mod sign_message;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
 /// the WebAuthn signature envelope, the v0.7 wire shape. Pure assembly; the

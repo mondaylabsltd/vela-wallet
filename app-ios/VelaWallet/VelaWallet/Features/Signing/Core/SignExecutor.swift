@@ -333,38 +333,12 @@ final class SignExecutor {
     /// `personal_sign` is the EIP-191 prefix over the bytes; `eth_sign` is the
     /// same envelope over `params[1]` (EIP-1474's rule, the params swapped);
     /// typed data is its EIP-712 digest, computed by the core.
+    /// What the site asked to sign, before the Safe's wrap — the core's one
+    /// rule (`sign_message::original_hash`), shared with Android, the desktop
+    /// and the Clear Signer's page. The copy that lived here read typed data
+    /// from `params[1]` even for `eth_signTypedData`, which carries it first.
     static func messageHash(method: String, paramsJson: String) -> Data? {
-        guard let data = paramsJson.data(using: .utf8),
-              let params = try? JSONSerialization.jsonObject(with: data) as? [Any]
-        else { return nil }
-
-        if method == "personal_sign" || method == "eth_sign" {
-            let index = method == "eth_sign" ? 1 : 0
-            guard params.count > index, let payload = params[index] as? String, !payload.isEmpty
-            else { return nil }
-            let bytes: Data = isHexPayload(payload)
-                ? ((try? fromHex(s: payload)) ?? Data())
-                : Data(payload.utf8)
-            let prefix = Data("\u{19}Ethereum Signed Message:\n\(bytes.count)".utf8)
-            return keccak256(data: prefix + bytes)
-        }
-
-        guard params.count > 1 else { return nil }
-        let typed: String
-        if let text = params[1] as? String {
-            typed = text
-        } else if let object = try? JSONSerialization.data(withJSONObject: params[1]),
-                  let text = String(data: object, encoding: .utf8) {
-            typed = text
-        } else {
-            return nil
-        }
-        return try? hashTypedData(typedDataJson: typed)
-    }
-
-    static func isHexPayload(_ payload: String) -> Bool {
-        payload.hasPrefix("0x") && payload.count % 2 == 0
-            && payload.dropFirst(2).allSatisfy { $0.isHexDigit }
+        signMessageHash(method: method, paramsJson: paramsJson)
     }
 
     /// What a transport is told when the operation carried no payload at

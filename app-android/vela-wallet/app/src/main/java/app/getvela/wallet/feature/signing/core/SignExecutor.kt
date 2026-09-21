@@ -236,24 +236,15 @@ class SignExecutor(
          * EIP-191 prefix over the bytes (hex or text, the web's rule); typed
          * data is its EIP-712 digest, computed by the core.
          */
-        fun messageHash(method: String, paramsJson: String): ByteArray? {
-            val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return null
-            // Spec 046 US2: `eth_sign` is `[address, data]` — the same EIP-191
-            // envelope over `data` (EIP-1474's rule), the params swapped. The
-            // sheet has already shown it as the danger it is (ClearSignMethod::EthSign).
-            return if (method == "personal_sign" || method == "eth_sign") {
-                val payload = params.optString(if (method == "eth_sign") 1 else 0).ifBlank { return null }
-                val bytes = if (isHexPayload(payload)) SendExecutor.unhex(payload) else payload.toByteArray(Charsets.UTF_8)
-                val prefix = "\u0019Ethereum Signed Message:\n${bytes.size}".toByteArray(Charsets.UTF_8)
-                uniffi.vela_core_uniffi.keccak256(prefix + bytes)
-            } else {
-                val typed = params.opt(1)?.let { if (it is String) it else it.toString() } ?: return null
-                runCatching { uniffi.vela_core_uniffi.hashTypedData(typed) }.getOrNull()
-            }
-        }
-
-        private fun isHexPayload(payload: String): Boolean =
-            payload.startsWith("0x") && payload.length % 2 == 0 && payload.drop(2).all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+        /**
+         * What the site asked to sign, before the Safe's wrap — the core's one
+         * rule (`sign_message::original_hash`), which the desktop and the
+         * Clear Signer's page share. It used to be copied here, reading typed
+         * data from `params[1]` even for `eth_signTypedData`, which carries it
+         * first.
+         */
+        fun messageHash(method: String, paramsJson: String): ByteArray? =
+            uniffi.vela_core_uniffi.signMessageHash(method, paramsJson)
 
         /**
          * The calls a request carries (the desktop's `calls_of`): one for

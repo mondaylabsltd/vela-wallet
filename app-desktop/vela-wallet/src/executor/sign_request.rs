@@ -380,47 +380,13 @@ fn sign_message(
 
 /// The methods the sheet signs as a message rather than submits.
 fn is_message(method: &str) -> bool {
-    method == "personal_sign" || method == "eth_sign" || method.contains("signTypedData")
+    vela_core::sign_message::is_message_method(method)
 }
 
-/// What the site asked to sign, hashed the way the Safe's verifier — and the
-/// Clear Signer's page (`lib/digest.js`) — hashes it: `personal_sign` is the
-/// EIP-191 envelope over its bytes (hex when it is hex, text otherwise);
-/// typed data is its EIP-712 digest, the core's. `None` for nothing to sign.
+/// What the site asked to sign, before the Safe's wrap — the core's one rule
+/// (`vela_core::sign_message`), which the Clear Signer's page shares.
 pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
-    let params: Value = serde_json::from_str(params_json).ok()?;
-    let params = params.as_array()?;
-    if method == "personal_sign" || method == "eth_sign" {
-        // `eth_sign` is `[address, data]` — the same envelope over `data`,
-        // the params swapped (EIP-1474).
-        let payload = params
-            .get(usize::from(method == "eth_sign"))?
-            .as_str()
-            .filter(|payload| !payload.is_empty())?;
-        let bytes = match payload.strip_prefix("0x") {
-            Some(hex) if hex.len() % 2 == 0 && hex.bytes().all(|b| b.is_ascii_hexdigit()) => {
-                vela_core::primitives::from_hex(payload).ok()?
-            }
-            _ => payload.as_bytes().to_vec(),
-        };
-        let mut preimage = format!("\u{19}Ethereum Signed Message:\n{}", bytes.len()).into_bytes();
-        preimage.extend_from_slice(&bytes);
-        return Some(vela_core::primitives::keccak256(&preimage));
-    }
-    // The legacy names carry the data first; the rest `[address, data]`,
-    // falling back to the first when the second is missing — the core's own
-    // pick (`extract_request_chain_id`), and the page's.
-    let legacy = method == "eth_signTypedData" || method == "eth_signTypedData_v1";
-    let raw = if legacy {
-        params.first()
-    } else {
-        params
-            .get(1)
-            .filter(|data| !data.is_null())
-            .or(params.first())
-    }?;
-    let json = raw.as_str().map_or_else(|| raw.to_string(), str::to_owned);
-    vela_core::eip712::hash_typed_data(&json).ok()
+    vela_core::sign_message::original_hash(method, params_json)
 }
 
 /// What the receipt wait means for the core.
