@@ -59,7 +59,7 @@ describe('classification', () => {
 		expect(itemOfKey('vela.ext.cache')).toBe('dapps');
 	});
 
-	test('the drawn rows are the catalog\'s, in its order', () => {
+	test("the drawn rows are the catalog's, in its order", () => {
 		// The fixture draws these ids and the core files keys under them; a row
 		// one side renamed would draw a meta line nobody measures.
 		const rows = JSON.parse(storageItems()) as { id: string }[];

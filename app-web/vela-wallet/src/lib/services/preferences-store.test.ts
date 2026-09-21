@@ -194,7 +194,7 @@ describe('what is written', () => {
 	});
 });
 
-describe('every shell\'s spelling reads the same (spec 072)', () => {
+describe("every shell's spelling reads the same (spec 072)", () => {
 	// Four shells wrote these five preferences four ways. The core reads them
 	// all and rewrites the older ones once; the store reads through it as soon
 	// as it is up, which is what `ready` waits for.
@@ -237,7 +237,7 @@ describe('every shell\'s spelling reads the same (spec 072)', () => {
 		});
 	});
 
-	it('reads and rewrites the desktop\'s formats record', async () => {
+	it("reads and rewrites the desktop's formats record", async () => {
 		const store = fakeLocalStorage({
 			'vela.formats': JSON.stringify({ number: 'dot_comma', date: 'iso', time: 'h12' })
 		});
