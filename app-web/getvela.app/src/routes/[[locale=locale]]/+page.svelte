@@ -8,6 +8,7 @@
 	import { LOCALES, pathFor } from '$lib/i18n/locales';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
+	import { BUILT_IN_NETWORKS, chainLogo } from '$lib/networks';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -44,10 +45,7 @@
 		{ href: '/docs/account-contract', external: false },
 		{ href: '/docs/signers', external: false },
 		{ href: '/docs/bybit-attack', external: false },
-		{
-			href: 'https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints',
-			external: true
-		}
+		{ href: '/docs/self-hosting', external: false }
 	] as const;
 
 	/**
@@ -63,18 +61,20 @@
 	 * eleven times is an advertisement, not a comparison.
 	 */
 	const COMPARE_TONES = [
-		{ vela: '', metamask: '', base: '' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'warn', metamask: 'yes', base: '' },
-		{ vela: 'warn', metamask: 'warn', base: 'yes' },
-		{ vela: 'yes', metamask: 'yes', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'yes', metamask: '', base: 'yes' },
-		{ vela: 'yes', metamask: 'yes', base: 'yes' },
-		{ vela: 'yes', metamask: '', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: 'warn' },
-		{ vela: 'yes', metamask: '', base: '' },
-		{ vela: 'warn', metamask: 'yes', base: 'yes' }
+		{ vela: '', metamask: '', base: '' }, // account type
+		{ vela: 'yes', metamask: '', base: 'yes' }, // signing key
+		{ vela: 'warn', metamask: 'yes', base: '' }, // transaction gas
+		{ vela: 'warn', metamask: '', base: 'yes' }, // sponsored gas
+		{ vela: 'yes', metamask: 'yes', base: 'warn' }, // custom networks
+		{ vela: 'yes', metamask: '', base: 'yes' }, // losing one key
+		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // batched transactions
+		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // decoded before signing
+		// The signing page exists but no app sends it requests yet (spec 080):
+		// an extra check you cannot use today is not a green cell.
+		{ vela: 'warn', metamask: 'yes', base: '' }, // an extra check
+		{ vela: 'yes', metamask: '', base: 'warn' }, // full self-hosting
+		{ vela: 'yes', metamask: 'warn', base: 'warn' }, // source code
+		{ vela: 'warn', metamask: 'yes', base: 'yes' } // maturity
 	] as const;
 
 	// Analytics helper
@@ -260,24 +260,8 @@
 		};
 	});
 
-	// Built-in networks (mirrors the wallet's DEFAULT_NETWORKS). Logos are the
-	// same source the wallet itself uses, so they always match in-app.
-	const NETWORKS = [
-		{ name: 'Ethereum', chainId: 1 },
-		{ name: 'BNB Chain', chainId: 56 },
-		{ name: 'Polygon', chainId: 137 },
-		{ name: 'Arbitrum', chainId: 42161 },
-		{ name: 'Optimism', chainId: 10 },
-		{ name: 'Base', chainId: 8453 },
-		{ name: 'Avalanche', chainId: 43114 },
-		{ name: 'Gnosis', chainId: 100 },
-		{ name: 'Unichain', chainId: 130 },
-		{ name: 'Monad', chainId: 143 },
-		{ name: 'World Chain', chainId: 480 },
-		{ name: 'Tempo', chainId: 4217 }
-	];
-	const chainLogo = (chainId: number) =>
-		`https://ethereum-data.awesometools.dev/chainlogos/eip155-${chainId}.png`;
+	// Built-in networks: one list, checked against vela-core by networks.test.ts.
+	const NETWORKS = BUILT_IN_NETWORKS;
 
 	// Structured data on the root page binds the "Vela Wallet" brand entity to
 	// getvela.app. It feeds Google the canonical site name (so results read

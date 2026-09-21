@@ -31,6 +31,7 @@
 				"blog": "ブログ",
 				"about": "Vela について",
 				"chainSetup": "チェーンのセットアップ",
+				"selfHosting": "セルフホスティングガイド",
 				"privacy": "プライバシー",
 				"terms": "利用規約"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "はじめに",
 				"using": "Vela を使う",
+				"keys": "鍵と復旧",
 				"security": "セキュリティ",
+				"selfHost": "自分で動かす",
 				"reference": "リファレンス"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "署名鍵とセキュリティキー",
 				"clear-signing": "クリア署名",
 				"clear-signing-self-host": "署名ページを自分で動かす",
+				"self-hosting": "セルフホスティングガイド",
 				"bybit-attack": "Bybit の事件",
 				"recovery": "復旧とサインイン",
 				"account-contract": "アカウントコントラクト",

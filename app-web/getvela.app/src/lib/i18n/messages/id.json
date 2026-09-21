@@ -31,6 +31,7 @@
 				"blog": "Blog",
 				"about": "Tentang",
 				"chainSetup": "Penyiapan chain",
+				"selfHosting": "Panduan hosting sendiri",
 				"privacy": "Privasi",
 				"terms": "Ketentuan"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "Memulai",
 				"using": "Menggunakan Vela",
+				"keys": "Kunci & pemulihan",
 				"security": "Keamanan",
+				"selfHost": "Jalankan sendiri",
 				"reference": "Referensi"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "Kunci penanda tangan & kunci keamanan",
 				"clear-signing": "Clear signing",
 				"clear-signing-self-host": "Hosting sendiri halaman tanda tangan",
+				"self-hosting": "Panduan hosting sendiri",
 				"bybit-attack": "Serangan Bybit",
 				"recovery": "Pemulihan & masuk",
 				"account-contract": "Kontrak akun",

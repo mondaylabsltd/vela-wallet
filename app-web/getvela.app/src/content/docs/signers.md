@@ -1,6 +1,6 @@
 ---
 title: Signers & security keys
-description: A Vela wallet can have up to seven signers — passkeys, a nearby device, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created, and this page explains why that is not a limitation we forgot to lift.
+description: "A Vela wallet can have up to seven signers — passkeys, a nearby phone, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created, and this page explains why that is not a limitation we forgot to lift."
 ---
 
 # Signers & security keys
@@ -20,12 +20,29 @@ Three kinds, and you can mix them freely:
 | **Security key** | A removable authenticator on USB or NFC | YubiKey and other FIDO2 keys |
 
 All three are WebAuthn credentials on the **P-256** curve. To the Safe they are
-indistinguishable: each is an owner whose signature the on-chain WebAuthn
-verifier checks the same way.
+indistinguishable: each is an owner whose signature Safe's passkey module
+checks on-chain the same way. (The first key is verified by Safe's shared
+signer; each additional key by its own small signer contract, created by Safe's
+factory the first time the wallet is deployed on a chain.)
+
+Which kinds each app can use:
+
+| App | This device | Nearby phone (QR) | Security key |
+| --- | --- | --- | --- |
+| Web wallet, browser extension | Yes | Yes | USB or NFC, through the browser |
+| Desktop (macOS, Windows, Linux) | macOS and Windows | Yes | USB |
+| Android | Yes (with Google Play services) | Yes | USB |
+| iOS | Yes | Yes | USB-C or Lightning YubiKey, firmware 5.8 or later |
+
+The desktop app's "this device" option (Touch ID, Windows Hello) and its Windows
+support in general are recent and less tested than the other routes; a phone or a
+security key is the dependable choice there today.
 
 A security key can be your **first** signer, not only a backup. If you would
-rather your wallet never depended on an Apple or Google account at all, that is
-the setting that does it — register a YubiKey at creation and sign with it.
+rather your wallet never depended on an Apple or Google account at all, create it
+with **two** security keys and keep one somewhere safe. (A wallet whose only key
+isn't synced anywhere can't be created: the app asks for a second key, because
+losing that one device would lose the wallet.)
 
 ## Why they are chosen at creation
 
@@ -45,9 +62,11 @@ So the question "can I add a key later?" has two honest answers:
 
 - **Before you fund it**: yes — the address has not been committed to anything,
   so create the wallet again with the keys you want.
-- **After you fund it**: the address is where your money is. Changing owners on
-  a deployed Safe is a Safe operation Vela does not currently expose. Plan the
-  key set at creation.
+- **After you fund it**: the address is where your money is. Safe itself can
+  change owners on a chain where your wallet is already deployed — but on every
+  chain where it isn't deployed yet, the same address still stands for the
+  original keys, so the owner sets would drift apart from chain to chain. Vela
+  doesn't offer owner changes for that reason. Plan the key set at creation.
 
 ## What this actually protects you from
 

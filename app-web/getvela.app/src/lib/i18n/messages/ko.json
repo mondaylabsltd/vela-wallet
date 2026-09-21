@@ -31,6 +31,7 @@
 				"blog": "블로그",
 				"about": "소개",
 				"chainSetup": "체인 설정",
+				"selfHosting": "셀프 호스팅 가이드",
 				"privacy": "개인정보 처리방침",
 				"terms": "이용약관"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "시작하기",
 				"using": "Vela 사용하기",
+				"keys": "키와 복구",
 				"security": "보안",
+				"selfHost": "직접 운영하기",
 				"reference": "레퍼런스"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "서명 키와 보안 키",
 				"clear-signing": "클리어 서명",
 				"clear-signing-self-host": "서명 페이지 직접 호스팅",
+				"self-hosting": "셀프 호스팅 가이드",
 				"bybit-attack": "바이비트 공격",
 				"recovery": "복구와 로그인",
 				"account-contract": "계정 컨트랙트",

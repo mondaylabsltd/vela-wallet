@@ -31,6 +31,7 @@
 				"blog": "Blog",
 				"about": "Über uns",
 				"chainSetup": "Chain-Einrichtung",
+				"selfHosting": "Anleitung zum Selbsthosten",
 				"privacy": "Datenschutz",
 				"terms": "AGB"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "Erste Schritte",
 				"using": "Vela nutzen",
+				"keys": "Schlüssel und Wiederherstellung",
 				"security": "Sicherheit",
+				"selfHost": "Selbst betreiben",
 				"reference": "Referenz"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "Signaturschlüssel und Sicherheitsschlüssel",
 				"clear-signing": "Klartext-Signatur",
 				"clear-signing-self-host": "Signaturseite selbst hosten",
+				"self-hosting": "Anleitung zum Selbsthosten",
 				"bybit-attack": "Der Bybit-Angriff",
 				"recovery": "Wiederherstellung und Anmeldung",
 				"account-contract": "Der Account-Vertrag",

@@ -1,6 +1,6 @@
 ---
 title: Networks & fees
-description: The 12 networks Vela supports, how account-abstraction gas fees work, who runs the relay and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
+description: "The 24 networks built into Vela, how to add another, exactly how a transaction's fee is calculated and who receives it, and what happens when a relay runs out of gas."
 ---
 
 <script>
@@ -9,134 +9,146 @@ description: The 12 networks Vela supports, how account-abstraction gas fees wor
 
 # Networks & fees
 
-## Supported networks
+## Built-in networks
 
-Vela ships with **12 EVM networks** built in:
+Vela has **24 networks** built in, all mainnets:
 
-| Network     | Native fee token |
-| ----------- | ---------------- |
-| Ethereum    | ETH              |
-| BNB Chain   | BNB              |
-| Polygon     | POL              |
-| Arbitrum    | ETH              |
-| Optimism    | ETH              |
-| Base        | ETH              |
-| Avalanche   | AVAX             |
-| Gnosis      | xDAI             |
-| Unichain    | ETH              |
-| Tempo       | USD              |
-| Monad       | MON              |
-| World Chain | ETH              |
+| Network | Gas paid in | Network | Gas paid in |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (the native coin) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (the native coin) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (no native coin) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Your wallet has the **same address on all of them**, so there's one address to
-share everywhere.
+On most of them you can also pay the fee in a USD stablecoin the relay accepts
+on that network (see below).
 
-You can also **add custom networks** (Settings → Networks). Because Vela is a
-smart-account wallet, a network has to provide the contracts Vela relies on —
-the ERC-4337 EntryPoint, the Safe contracts, and the **P-256 (RIP-7212)**
-signature precompile that verifies your passkey on-chain. Vela checks this
-automatically before letting you add a network.
+Your wallet has the **same address on every network**, because the address is
+computed from your keys, not from the chain.
 
-<Callout type="info" title="Why Gnosis shows up a lot">
-Beyond being one of the 12 networks, Gnosis Chain hosts Vela's **Passkey Index** —
-the contract that stores your public key and account name for cross-device
-recovery. That's separate from which network you transact on.
+## Adding another network
+
+You can add any EVM network under **Settings → Networks**, provided it has what
+a Vela wallet needs: eleven standard contracts (the ERC-4337 EntryPoint v0.7,
+the Safe v1.4.1 contracts, Safe's 4337 and passkey modules, MultiSend,
+Multicall3 and two deterministic deployers) and the **RIP-7212** precompile that
+verifies passkey signatures at address `0x100`. The wallet checks all of them,
+including a real signature check against the precompile, before it lets you
+add the network.
+
+The precompile is a hard requirement. Its address is part of how every Vela
+address is computed, so there is no fallback verifier and no way to deploy one
+later. If a chain has the precompile but is missing some of the contracts,
+[chain setup](/chain-setup) shows what is missing and deploys what anyone can
+deploy.
+
+## How a transaction is paid for
+
+Vela is an ERC-4337 wallet: you don't broadcast a transaction yourself. The app
+builds a **UserOperation**, you sign it with one of your keys, and a **relay**
+submits it on-chain and pays the gas up front. (ERC-4337 calls this role a
+bundler.) The relay gets paid back **inside your operation**: the payment is a
+transfer from your wallet to the relay that sits in the same batch as your
+transaction, so it is covered by your signature. There is no paymaster, nobody
+sponsors your gas, and nobody can refuse your transaction because of a
+sponsorship policy.
+
+### What the fee is
+
+The confirm screen shows one amount, in the fee coin and in your display
+currency. It is calculated like this:
+
+- **Gas the wallet reserves.** The wallet simulates the transaction and reserves
+  more gas than it expects to use: the verification and execution estimates are
+  each raised by half, with minimums (for example, verification is at least
+  300,000 gas once the wallet is deployed, and 2,000,000 for the transaction
+  that deploys it).
+- **Gas price.** The higher of the wallet's own reading of the network's gas
+  price and the relay's price for the speed you chose. The default speed is
+  *fast*, which the relay prices at about 1.8 × the base fee plus twice the
+  priority fee.
+- **Fee = 3 × reserved gas × gas price**, with a minimum of about $0.01. On Tempo
+  the multiple is 2 and the fee is paid in pathUSD.
+
+Because the reserve is padded and the price includes headroom, **the fee is
+usually several times what the transaction actually costs on-chain**. The relay
+pays the real cost and keeps the rest; nothing is refunded. On cheap networks
+this is cents; on Ethereum mainnet, and for the first transaction that deploys
+your wallet, it can be much more. The exact amount is on the confirm screen
+before you sign.
+
+<Callout type="info" title="What you see is what you pay">
+The fee amount and the address it goes to are part of the operation you sign. A
+relay that changed either would invalidate your signature, so you pay exactly
+the amount shown — no more, even if gas rises before inclusion. A wallet quote
+that is more than three times the wallet's own gas reading is refused.
 </Callout>
 
-## How fees work (account abstraction)
+### What you can pay with
 
-Vela uses **ERC-4337 account abstraction**, so a transaction isn't broadcast by
-you directly — it's a **UserOperation** handed to a **relay**, which submits it
-on-chain and is reimbursed for the gas. (The ERC-4337 spec calls that role a
-*bundler*. Vela's is called a relay because it does more than bundle: it quotes
-fees in band and runs the gas-account protocol below, neither of which is part
-of the standard.) A few things follow from that:
+- The network's **native coin**, always.
+- A **USD stablecoin** from the relay's list for that network, when the relay can
+  price the native coin. Stablecoins you hold none of are hidden.
+- On **Tempo**, which has no native coin, **pathUSD** only.
 
-- **Gas is paid from your own wallet's balance** — in the network's native token
-  (ETH, BNB, xDAI…) by default, or in a supported stablecoin where the relay
-  offers one; you pick the fee asset on the confirm screen. Tempo has no native
-  coin, so gas there is always settled in USD stablecoins. There's no ERC-4337
-  **paymaster** sponsoring — or gating — each transaction. (Vela may sponsor the
-  one-time _gas-account activation_ for new users; that's separate, and covered
-  below.)
-- The **relay quotes the gas price** — it is the single source of truth, and the
-  wallet displays that quote and signs exactly what it shows. There is no speed
-  picker: every transaction is submitted at high priority.
-- The total charge is the **network cost plus the relayer's service fee**, with
-  a small minimum charge on very cheap transactions. The relay's quote is the
-  price — there is no separate fee schedule to consult. One part goes to the
-  chain's validators; the rest pays the relayer that fronts the gas and runs
-  the infrastructure.
-- The confirm screen shows the **estimated fee** in the fee asset and in your
-  display currency before you sign. The quoted amount and its recipient are part
-  of what you sign, so the relayer is paid exactly what was shown — a changed
-  number would invalidate your signature.
+You choose the fee coin, and the speed (*slow*, *standard* or *fast*), on the
+confirm screen and in Settings.
 
-## Who runs the relay — and who gets the fees
+### Your first transaction on a network
 
-Every network points at a relay. By default that's **Vela's own relay**, and
-you can replace the endpoint under _Settings → Advanced → Service Endpoints_.
-One endpoint applies to every built-in network; a custom network keeps the
-relay URL you gave it when you added it.
+You can receive on any network before your wallet exists there. The first time
+you send from a network, that transaction also deploys your wallet contract (and
+one small signer contract for each extra key). The deployment gas is included in
+that transaction's fee, so the first send on each network costs more than the
+ones after it.
 
-An honest caveat about compatibility: the app quotes fees through a
-Vela-specific RPC method (`vela_getInBandGasQuote`), and the send flow fails
-without it. So the endpoint you point at must run
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) — Vela's instance or
-one you host yourself. A generic ERC-4337 bundler such as **Pimlico** or
-**Alchemy** doesn't implement that method, so it won't work end to end in the
-current release.
+When you send the **maximum** of a native coin, Vela keeps back enough for the
+fee.
 
-Whoever operates the relay for a network **collects that network's fees** —
-the relayer markup on every transaction and the gas-account activation deposit.
-Run your own vela-relay and those fees fund your infrastructure instead of
-Vela's; Vela takes no cut on traffic you route elsewhere.
+## Who runs the relay — and who gets the fee
 
-<Callout type="warning" title="The gas account is part of the vela-relay protocol">
-The **gas-account activation** step funds a dedicated relayer account for your
-wallet on each network. If you point the endpoint at a self-hosted vela-relay,
-the deposit funds your own relay's account, not Vela's.
-</Callout>
+By default every network uses **Vela's relay**, and the fee goes to Vela. You can
+point the wallet at a different relay under **Settings → Advanced → Service
+Endpoints**; one address serves every built-in network, and a custom network
+keeps the relay address it was added with. The relay must be
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) — Vela's or one you
+run — because the wallet asks for its fee quote with a Vela-specific method that
+generic bundlers such as Pimlico or Alchemy don't implement. Whoever runs the
+relay you use receives the fee; the [self-hosting guide](/docs/self-hosting#relay)
+explains how to run one.
 
-### Activating the gas account (Vela Relay)
+The relay receives an operation that is already signed. It can delay it or
+refuse it; it cannot change the recipient, the amount, the fee or anything else.
 
-On Vela's relay, your first transaction on each network **activates a dedicated
-gas account**. The app first asks the relay's treasury to fund it for you —
-this happens silently inside the send flow, and a sponsored wallet never sees a
-funding screen. Only when sponsorship is declined does the app show a top-up
-request: you send a small amount of the native token to the gas-account address
-it displays, and it tells you why sponsorship wasn't available.
+### When a relay runs out of gas
 
-**You pay the activation fee yourself** whenever free sponsorship isn't offered —
-namely when:
+A relay pays gas from its own **treasury** on each network. If that treasury is
+empty, the send screen tells you before you sign:
 
-- **Vela's treasury for that network is empty or low** — the free fund is
-  temporarily depleted on that chain.
-- **You've used up the free quota** — sponsorship is capped per wallet, so beyond
-  the first few it's self-funded.
-- **Vela's relay doesn't fund that network at all** — e.g. **custom or test
-  networks you added yourself**, which Vela holds no treasury for. (Route these to
-  your own relay if you'd rather skip activation entirely.)
+- On a network Vela's relay serves, the relay's operator (Vela) needs to top it
+  up; you can report it. If you can't wait, you can **optionally** send a small
+  amount of the native coin to the treasury yourself. That contribution is
+  **non-refundable** and does **not** pay for your own transaction.
+- On a custom network, funding the relay is up to whoever runs it — which may be
+  you.
 
-The activation deposit is **non-refundable** — it's the relayer's starting balance
-and tops itself up from gas refunds over time, though it can still run down and
-need **re-activating** later. The relayer address can also change on a service
-upgrade, which needs a fresh activation.
+There is no per-wallet gas account and no activation deposit: an earlier version
+of Vela had one, and it no longer exists.
 
-The fee comes out of your balance in the **fee asset** you picked — the native
-token by default. If a send is blocked for gas, it means your balance in that
-fee asset can't cover the fee; where the relay offers stablecoin gas, switching
-the fee asset on the confirm screen can unblock it.
+## How Vela reads each network
 
-When you send the **maximum** amount of a native token, Vela automatically
-reserves enough for gas so the transaction doesn't fail.
-
-## How Vela talks to each network
-
-Vela reads balances and submits transactions through a **pool of RPC endpoints**,
-not a single provider. It gathers endpoints from several sources, scores them by
-latency and reliability, and **fails over automatically** when one is slow or
-down — temporarily benching bad endpoints — so a single flaky node never takes
-the app offline.
+Vela reads balances and simulates transactions through a **pool of RPC
+endpoints** per network — the built-in ones, public fallbacks, and any provider
+keys or endpoints you add — and moves to the next one when an endpoint is slow
+or down. You can set your own endpoint per network under **Settings →
+Networks**.
 
 Next: [how passkeys work](/docs/passkeys).

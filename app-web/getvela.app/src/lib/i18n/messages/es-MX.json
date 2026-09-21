@@ -31,6 +31,7 @@
 				"blog": "Blog",
 				"about": "Acerca de",
 				"chainSetup": "Configurar una cadena",
+				"selfHosting": "Guía de autoalojamiento",
 				"privacy": "Privacidad",
 				"terms": "Términos"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "Primeros pasos",
 				"using": "Usar Vela",
+				"keys": "Llaves y recuperación",
 				"security": "Seguridad",
+				"selfHost": "Alójalo tú",
 				"reference": "Referencia"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "Firmantes y llaves de seguridad",
 				"clear-signing": "Firma legible",
 				"clear-signing-self-host": "Aloja tú la página de firma",
+				"self-hosting": "Guía de autoalojamiento",
 				"bybit-attack": "El ataque a Bybit",
 				"recovery": "Recuperación e inicio de sesión",
 				"account-contract": "El contrato de la cuenta",

@@ -1,6 +1,6 @@
 ---
 title: Send & receive
-description: How to receive and send tokens in Vela — one address across networks, clear-signed transactions, and how account abstraction actually moves your funds.
+description: "How to receive and send with Vela — one address on every network, sending to one or many people, how recipients are named, what you confirm, and how the relay moves your funds."
 ---
 
 <script>
@@ -12,66 +12,84 @@ description: How to receive and send tokens in Vela — one address across netwo
 ## Receive
 
 1. Open your wallet and tap **Receive**.
-2. Share your address — copy it, or let the sender scan the QR code.
-3. When the transfer confirms on-chain, the balance appears in your wallet.
+2. Share your address — copy it or show the QR code. The web wallet can also
+   make a payment request that includes an amount.
+3. When the transfer confirms on-chain, it appears in your balance.
 
-Two things worth knowing:
-
-- Your address is **the same on every supported network**, so you share one
-  address everywhere — just make sure the sender uses the right network.
-- You can **receive before your wallet is deployed**. Vela accounts are
-  counterfactual smart accounts, so funds can arrive at your address before the
-  contract exists on a given chain; it deploys itself on your first send there.
+- Your address is **the same on every network**, so you give out one address —
+  but the sender still has to use a network Vela supports, or one you've added.
+- You can **receive before your wallet is deployed** on a network. It deploys
+  itself on your first send there.
 
 ## Send
 
-1. Tap **Send** and pick the **token**.
-2. Enter the **amount** (you can toggle between the token and your display
-   currency) and the **recipient**. Vela resolves known recipients to a name
-   where it can — a Vela account, an ENS name, a Basename, and so on.
-3. **Review and confirm.** Vela shows the transfer, then asks for your passkey
-   (Face ID / Touch ID / fingerprint).
+1. Tap **Send** and choose the **token**.
+2. Enter the **amount** (in the token or in your display currency) and the
+   **recipient's address**, by pasting, scanning a QR code or picking a contact.
+3. **Review.** Vela shows what will happen, the fee, and the name it found for the
+   recipient, if any.
+4. **Confirm** with one of your keys — Face ID, a fingerprint, a PIN, or a touch
+   on your security key.
+
+### Sending to many, or sweeping
+
+- **Split** — send one token to several people in a single transaction. You can
+  paste a list or import a spreadsheet, and enter amounts in your currency.
+- **Sweep** — send several tokens to one address in a single transaction.
+
+Either way you sign once, and the transaction pays one fee.
+
+### Names for addresses
+
+When you enter an address, Vela looks up a name for it: first in its own
+registry (the name of another Vela wallet), then in `.bnb`, `.arb`, `.g`,
+Basename and ENS reverse records, read directly from each chain. This goes one
+way — it names an address you've entered. Typing a name such as `alice.eth` does
+not look up an address. Your saved **contacts** show their names too.
+
+### Fee coin and speed
+
+The confirm screen shows the fee in the fee coin and in your currency. You can
+pay in the network's coin or, where the relay accepts it, a USD stablecoin, and
+choose a speed (default: fast). When you send the **maximum** of a native coin,
+Vela keeps back enough for the fee. [How the fee is calculated](/docs/networks-and-fees).
 
 ### What happens when you confirm
 
-Vela doesn't just "broadcast" a transaction. Under the hood:
-
-1. It builds an ERC-4337 **UserOperation** for your Safe account.
-2. Your device signs it with a **WebAuthn (P-256)** assertion after your
-   biometric check.
+1. Vela builds an ERC-4337 **UserOperation** for your Safe, including the fee
+   payment to the relay.
+2. Your key signs it with a **WebAuthn (P-256)** assertion after verifying you.
 3. The signed operation goes to the **relay**, which submits it to the
-   EntryPoint; your Safe verifies the P-256 signature **on-chain** and executes.
+   EntryPoint; your Safe checks the P-256 signature on-chain and executes.
 
-<Callout type="info" title="The relayer can't tamper with your transaction">
-The relay receives an <strong>already-signed</strong> UserOperation. It can
-delay or decline to relay, but it cannot change the recipient, amount, or any
-other field — any change invalidates your signature. It's a liveness helper, not
-a custodian, and it's open source so you can run your own.
+<Callout type="info" title="The relay can't change your transaction">
+The relay receives an operation that is already signed. It can delay it or
+decline it, but cannot change the recipient, the amount or the fee — any change
+invalidates your signature. It is open source, and you can
+[run your own](/docs/self-hosting#relay).
 </Callout>
 
-### Clear signing — no blind approvals
-
-Before you sign, Vela decodes the transaction using **ERC-7730** descriptors and
-shows the **intent** (Send, Approve, Swap…), the **amounts and addresses**, and a
-risk indication — not opaque hex. When it can't fully decode a call, it shows an
-explicit **blind-sign warning** instead of pretending to understand it. An
-unlimited token approval is not just flagged — Vela rewrites it to a finite
-amount and refuses to submit an approval that would still be unlimited.
+Before you sign, Vela decodes what the transaction does and warns you about what
+it can't decode; see [clear signing](/docs/clear-signing).
 
 ## Before you hit send
 
-- **Check the first and last characters of the address.** Address-swapping
-  malware is real.
-- **Confirm the network.** Sending on the wrong network is the most common
-  expensive mistake. See [networks & fees](/docs/networks-and-fees).
-- **Start small with new recipients.** A tiny test transfer first is cheap
-  insurance.
+- **Check the start and end of the address.** Address-swapping malware is real,
+  and so are look-alike addresses planted in your history.
+- **Confirm the network.** Sending on the wrong network is a common, expensive
+  mistake.
+- **Start small with a new recipient.** A tiny test transfer is cheap insurance.
 
-Transactions are irreversible. There's no support desk that can claw back a send
-to the wrong address — that's the nature of self-custody.
+Transactions are irreversible. Nobody can claw back a send to the wrong address —
+that is the nature of self-custody.
 
-## Reading your history
+## Your activity
 
-Balances and history are read live from a pool of public RPC endpoints with
-automatic failover. If the network is slow, history may take a moment — a spinner
-means "still fetching," not "funds gone."
+Your activity combines what you sent from this device with token transfers read
+from each chain's logs. A plain native-coin transfer to you that arrives through
+another contract (for example, some exchange withdrawals) may not produce a log
+on some networks, so it can show in your balance without appearing in activity.
+Balances are read live through a pool of RPC endpoints with automatic failover; a
+spinner means "still fetching", not "funds gone".
+
+Next: [networks & fees](/docs/networks-and-fees).

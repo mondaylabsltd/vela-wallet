@@ -81,7 +81,9 @@ describe('catalog()', () => {
 	});
 
 	it('leaves external links and anchors alone', () => {
-		expect(catalog('zh').home.why.p1).toContain('href="https://account.base.app"');
+		expect(catalog('zh').home.why.p1).toContain(
+			'href="https://docs.cdp.coinbase.com/coinbase-wallet/overview"'
+		);
 	});
 
 	it('keeps chrome and notice readable in a locale whose pages fall back', () => {

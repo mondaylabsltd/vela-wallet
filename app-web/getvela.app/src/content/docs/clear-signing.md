@@ -31,15 +31,26 @@ Vela decodes both **contract calls** and **EIP-712 typed data** using
 [ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry)
 descriptors — small, shareable definitions of what a contract's functions mean.
 
-- When a **contract-specific descriptor** exists, the transaction is marked
-  **verified** and labeled with the contract's name.
-- When it doesn't, Vela falls back to **standard descriptors** for common shapes
-  — ERC-20 tokens, ERC-721 NFTs, ERC-4626 vaults, and ERC-2612 permits — so most
-  everyday actions still decode.
+Vela looks for a descriptor in this order:
 
-Token amounts are formatted using the token's **real on-chain decimals**. Vela
-never just assumes 18; if it can't confirm the decimals, it shows the value but
-**flags it as unverified** rather than guessing.
+1. **Built into the app** — descriptors for widely used contracts: the Uniswap,
+   PancakeSwap and SushiSwap routers, WETH, the Aave v3 pool, 1inch, Lido and
+   wstETH, and Seaport.
+2. **Fetched from Vela's chain-data server**, which republishes the public
+   ERC-7730 registry.
+3. **Standard shapes** — ERC-20 tokens, ERC-721 and ERC-1155 NFTs, ERC-4626
+   vaults and ERC-2612 permits — so most everyday actions still decode.
+
+When a descriptor written for that specific contract matches, the transaction is
+labelled **verified** with the contract's name. "Verified" means *a descriptor
+for this contract was found*, not that it was cryptographically checked:
+descriptors fetched from the chain-data server are not signed, so they are only
+as trustworthy as that server — which is one reason you can
+[run your own](/docs/self-hosting#chain-data).
+
+Token amounts are formatted using the token's **real on-chain decimals**. If Vela
+can't confirm a token's decimals, it shows the amount as if the token had 18 and
+**marks it unverified**, so a wrong number never looks like a checked one.
 
 ## Risk levels
 
@@ -49,12 +60,17 @@ Every decoded transaction gets a risk level so the dangerous patterns stand out:
 - **Danger** for the genuinely risky, like an **unlimited token approval**.
 - Lower risk for routine actions like staking or depositing.
 
-<Callout type="warning" title="Unlimited approvals are blocked">
-An "approve" that grants an unlimited allowance is one of the most common ways
-funds get drained later. Vela does more than mark these: it rewrites the request
-to a finite amount you choose, and a final check before submission refuses to
-send any approval that would still be unlimited. That guard reads the raw
-calldata directly, so it works even when no descriptor exists for the contract.
+<Callout type="warning" title="Unlimited on-chain approvals can't be submitted">
+An on-chain approval for an unlimited amount is one of the most common ways
+funds get drained later. When a dApp asks for one (<code>approve</code>,
+<code>increaseAllowance</code>, or Permit2's <code>approve</code>), Vela won't
+submit it until you change it to a specific amount, your balance, or a revoke —
+and a last check before submission refuses any approval that would still be
+unlimited, reading the raw calldata so it works with or without a descriptor.
+Two things it does not cap: <strong>signed permits</strong> (EIP-2612 and
+Permit2 signatures), which are shown with a caution and signed as requested,
+and NFT <code>setApprovalForAll</code>, which asks you to confirm the grant
+deliberately.
 </Callout>
 
 ## When Vela can't decode a call

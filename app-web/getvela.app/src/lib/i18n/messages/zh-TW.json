@@ -31,6 +31,7 @@
 				"blog": "部落格",
 				"about": "關於",
 				"chainSetup": "鏈設定",
+				"selfHosting": "自架指南",
 				"privacy": "隱私權政策",
 				"terms": "服務條款"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "開始使用",
 				"using": "使用 Vela",
+				"keys": "金鑰與復原",
 				"security": "安全",
+				"selfHost": "自己架設",
 				"reference": "參考"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "簽署金鑰與安全金鑰",
 				"clear-signing": "清晰簽署",
 				"clear-signing-self-host": "自己部署簽名頁",
+				"self-hosting": "自架指南",
 				"bybit-attack": "Bybit 攻擊事件",
 				"recovery": "復原與登入",
 				"account-contract": "帳戶合約",

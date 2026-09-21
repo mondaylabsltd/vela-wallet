@@ -31,6 +31,7 @@
 				"blog": "Blog",
 				"about": "Hakkında",
 				"chainSetup": "Zincir kurulumu",
+				"selfHosting": "Kendi kendine barındırma kılavuzu",
 				"privacy": "Gizlilik",
 				"terms": "Koşullar"
 			}
@@ -43,7 +44,9 @@
 			"groups": {
 				"gettingStarted": "Başlangıç",
 				"using": "Vela'yı kullanma",
+				"keys": "Anahtarlar ve kurtarma",
 				"security": "Güvenlik",
+				"selfHost": "Kendiniz çalıştırın",
 				"reference": "Referans"
 			},
 			"titles": {
@@ -57,6 +60,7 @@
 				"signers": "İmzalayıcılar ve güvenlik anahtarları",
 				"clear-signing": "Açık imzalama",
 				"clear-signing-self-host": "İmza sayfasını kendin barındır",
+				"self-hosting": "Kendi kendine barındırma kılavuzu",
 				"bybit-attack": "Bybit saldırısı",
 				"recovery": "Kurtarma ve giriş",
 				"account-contract": "Hesap sözleşmesi",

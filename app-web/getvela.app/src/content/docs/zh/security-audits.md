@@ -1,155 +1,152 @@
 ---
 title: 审计与已知问题
-description: Vela 依赖的每一个链上合约、谁审计的、审计过的版本和实际部署的是否一致，以及哪些部分根本没有审计。
+description: "Vela 依赖的每一个合约、谁审计了哪个版本、审计的版本是否就是部署的版本、我们在关注的未解决问题，以及哪些东西根本没有审计过。"
 ---
 
-「审计过」是一个关于某段特定代码某个特定版本的说法，所以这一页不打算把这个词拿来
-挥一挥就算——它列出确切的报告、确切的部署地址，以及被审计版本与被部署版本之间的
-差异。它同时列出哪些**没有**被审计，因为后面这份清单和前面那份一样承重。
+“经过审计”是针对特定版本的特定代码的说法，所以这一页列出具体的报告、提交和部署地址——也列出
+**没有**审计过的东西，这同样重要。
 
-最近一次核对：2026 年 8 月。如果你在这里发现错误，告诉我们，我们会改。
+最近一次核对：2026 年 9 月 22 日。如果你发现错误，告诉我们，我们会改。
 
 ## 资金路径
 
-有四层合约能碰到你的钱。四层全部是带有公开审计报告的第三方合约，而且每一处部署
-地址都是官方的规范部署。
+每一个能碰到你资金的合约，都是第三方代码的官方部署，并且都有公开的审查报告。
 
-### Safe v1.4.1 —— 账户本身
+### Safe v1.4.1——账户本身
 
-你的钱包是一个 [Safe](https://github.com/safe-global/safe-smart-account) 代理：
-SafeL2 单例、代理工厂、兼容性 fallback handler，以及用于批量交易的 MultiSend。
+你的钱包是一个 [Safe](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) 代理合约，
+使用 SafeL2 实现合约和 SafeProxyFactory。批量交易经由 MultiSend。
 
 [Ackee Blockchain 审计了 Safe v1.4.0](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)
-（终版报告为 2023 年 3 月）：11 项发现，没有关键级或高危级。我们部署的 v1.4.1 与
-被审计的 v1.4.0 之间，只差一处单行的 ERC-4337 兼容性修复
-（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）。
-MultiSend 的逻辑自[经 G0 Group 审计的 v1.3.0](https://github.com/safe-global/safe-smart-account/tree/main/docs)
-以来没有变过。所有地址都与
-[safe-deployments](https://github.com/safe-global/safe-deployments) 里的规范部署一致，
-而且这些合约在 [Safe Foundation 的漏洞赏金](https://docs.safefoundation.org/security/bug-bounty)
-范围内（关键级最高 100 万美元）。
+（终版报告 2023 年 3 月 16 日，修复复核 3 月 28 日）：11 项发现，没有严重或高危；两项中危被确认
+但未修改。审计范围是 SafeL2、SafeProxyFactory、CompatibilityFallbackHandler、MultiSendCallOnly 和
+SignMessageLib。v1.4.1 与 v1.4.0 只有一行功能性差异，是模块初始化中的 ERC-4337 兼容性修复
+（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）；Safe 征询了 Ackee，
+结论是无需重新审计。MultiSend 的逻辑自 v1.3.0 起未变，v1.3.0 由
+[G0 Group 审计](https://github.com/safe-global/safe-smart-account/tree/main/docs)。所有地址都与
+[safe-deployments](https://github.com/safe-global/safe-deployments) 一致。核心合约在
+[Safe 基金会漏洞赏金计划](https://docs.safefoundation.org/security/bug-bounty)范围内，最高一档
+赏金可达 100 万美元。
 
-有一件事审计覆盖不到：2025 年的 Bybit 事件。那次攻击攻陷的是 Safe 官方网页前端的
-构建流水线，而不是合约——
-[官方取证结论](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)
-认为 Safe 智能合约中没有漏洞。我们把它读作一堂关于网页与运维层的课，而那一层，
-正是你也应该拿来审视我们的地方。
+2025 年的 Bybit 事件不是合约层面的问题：攻击者篡改了 Safe 网页界面加载的 JavaScript，Safe 的
+[调查声明](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)确认合约没有漏洞。
+[我们关于它的那一页](/zh/docs/bybit-attack)解释了为什么同一类攻击关系到每一个钱包界面，包括我们的。
 
-### Safe4337Module v0.3.0 —— ERC-4337 适配器
+### Safe4337Module v0.3.0——ERC-4337 适配器
 
-部署在 `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`，即 v0.3.0 的规范地址
-（Sourcify 精确匹配——链上字节码就是被审计的那份代码）。
-[由 Ackee Blockchain 审计](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)
-（终版报告为 2024 年 3 月），没有任何高于「提示级」的未解决发现。我们使用的
-v0.3.0 + EntryPoint v0.7 + Safe ≥1.4.1 这个组合，正是审计报告和发布说明所描述的配置。
+部署在 `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`（Sourcify 完全匹配），同时也被设为你 Safe 的
+fallback handler。它接受过三次审查——
+[报告见此](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)：
 
-这个模块的历史上有一个已披露的问题：v0.1.0（2023 年）没有对 `initCode` 和
-`paymasterAndData` 签名，构成一个 gas 骚扰向量。它
-[已在 v0.2.0 中修复](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)，
-而且 v0.1.0 从未离开过测试网。我们用的是 v0.3.0，它继承了这个修复。
+- **Ackee Blockchain**，终版报告 2024 年 3 月：一项警告（使用编译器优化器）已确认，没有更高级别的
+  未决问题。
+- **Certora**，2026 年 8 月：一项**中危**发现，已确认但在 v0.3.0 中**未修复**——*授权变更不会让
+  同一批次中已通过验证的后续 UserOperation 失效*。见下文“已知问题”。
+- **Nethermind**，2026 年 8 月：没有发现。
 
-### SafeWebAuthnSharedSigner v0.2.1 —— 通行密钥签名器
+在钱包部署时启用该模块的 SafeModuleSetup v0.3.0（`0x2dd6…5b47`）在 Certora 和 Nethermind 的审查
+范围内。
 
-部署在 `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`，即 v0.2.1 的规范地址
-（通过 Safe 的单例工厂，在每条链上都相同）。
+这个模块有过一次公开披露的问题：v0.1.0 没有对 `initCode` 和 `paymasterAndData` 签名，存在消耗
+gas 的攻击面，[已在 v0.2.0 修复](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)；
+据 Safe 所说，v0.1.0 没有在测试网以外使用过。Vela 使用的是 v0.3.0，配合 EntryPoint v0.7 和
+Safe 1.4.1，正是该模块发布说明中的配置。
 
-「shared（共享）」的意思是什么、不是什么：共享的是*这份合约部署*，就像 Safe 的
-单例被共享一样。你的钥匙并不共享。每一个 Safe 都通过 delegatecall 调用
-`configure()`，把自己的 P-256 公钥存进自己的存储里。一个签名器实例对应的，恰好是
-每个 Safe 的一把通行密钥，别人的 Safe 用不了你的。
+### Safe 通行密钥模块 v0.2.1——签名器
 
-这里版本很重要。v0.2.0 的审计报告
-[明确写明](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.0/audit.md)
-共享签名器不在范围内——当时这份合约还不存在。覆盖我们所部署内容的，是 v0.2.1 的
-那几份：一场 [Hats Finance 审计竞赛](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
-（2024 年 6–7 月：零高危、零中危、三项低危——全部已修复），加上
-[Certora 对发布 commit 的复核](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)，
-没有新的发现。自发布以来没有任何合约级漏洞被披露；通行密钥相关合约也在
-Safe Foundation 的赏金范围内。
+你的第一把钥匙由 **SafeWebAuthnSharedSigner** 验证，地址 `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`。
+“共享”指的是合约部署是共享的，就像 Safe 的实现合约一样；你的钥匙并不共享。每个 Safe 都把自己的
+P-256 公钥存在自己的存储里。
 
-Safe 自己的文档建议：把通行密钥所有权与一条恢复路径搭配使用，而不是把单一凭证当成
-账户唯一的钥匙。Vela 怎么处理这件事，记在[恢复与登录](/zh/docs/recovery)里。
+其余每把钥匙各有一个签名器合约，由 **SafeWebAuthnSignerFactory**（`0x1d31F259eE307358a26dFb23EB365939E8641195`）
+创建，作为指向 **SafeWebAuthnSigner 实现合约**（`0x4E27b51350e6c2083EE19011120F50DAfEc5CA50`）的代理。
 
-链上的 P-256 验证直接使用 RIP-7212 预编译，没有 Solidity 的回退验证器。在启用任何
-网络之前，应用都会用一个真实签名去探测这个预编译，验证失败就拒绝该网络。有两条
-老实话：最初的 RIP-7212 规范存在一些边缘情况缺陷，
-[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) 正是为修复它们而写的
-（它们不影响格式正确的 WebAuthn 签名）；而一次探测，也不可能覆盖某条链的实现在
-不寻常执行上下文里可能发生偏差的每一种方式。
+覆盖这些合约 v0.2.1 版本的审查
+（[报告](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)）：
 
-### EntryPoint v0.7 —— ERC-4337 的入口点
+- 一次 [Hats Finance 审计竞赛](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
+  （2024 年 6 月至 7 月）：没有高危或中危发现；三项低危，全部修复。
+- **Certora** 对发布提交的审查：没有新发现。（更早的 v0.2.0 审计注明共享签名器当时尚未审计——
+  它是在那次审计之后才加入的。）
+- **Nethermind**，2026 年 8 月：没有发现。
+
+发布以来没有披露过合约层面的漏洞，通行密钥合约也在 Safe 基金会赏金计划范围内。
+
+通行密钥签名由链上的 **RIP-7212** 预编译验证，没有备用验证器。启用一条网络之前，App 会用一个真实
+签名检查预编译。两点保留：最初的 RIP-7212 规范有一些边界情况的缺陷，已由
+[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) 修正（只影响本就该验证失败的输入，不影响格式
+正确的 WebAuthn 签名）；另外，一次探测无法发现某条链的实现可能出现偏差的所有方式。
+
+### EntryPoint v0.7——执行你的操作
 
 部署在 `0x0000000071727De22E5E9d8BAf0edAc6f37da032`，即
-[v0.7.0 的规范部署](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)。
-[由 OpenZeppelin 审计](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
-（受以太坊基金会委托，2024 年 1 月）：零关键级、零高危、五项中危，全部已解决——
-而且被审计的那个 commit 就是被部署的版本。EntryPoint v0.7.0 在以太坊基金会的
-[ERC-4337 漏洞赏金](https://docs.erc4337.io/community/bug-bounty)范围内
-（最高 25 万美元）。
+[官方 v0.7.0 版本](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)。
+由 [OpenZeppelin 为以太坊基金会审计](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
+（2024 年 1 月）：没有严重或高危，五项中危，全部 24 项发现均已解决；修复复核的提交与发布版本一致。
+它在以太坊基金会 [ERC-4337 漏洞赏金计划](https://docs.erc4337.io/community/bug-bounty)范围内（最高
+25 万美元）。
 
-## 我们正在盯着的已知问题
+## 我们在关注的已知问题
 
-### EntryPoint 的骚扰向量
+### 同一批次内的授权变更（Safe4337Module，Certora M-01）
 
-2026 年 2 月，Trust Security 的安全研究员
-[披露](https://erc4337.substack.com/p/improving-useroperation-execution)
-了一个影响 v0.9 之前所有 EntryPoint 的骚扰与审查向量，其中包括我们在用的 v0.7。
-攻击者如果在一个已签名的 UserOperation 被打包之前截获它，就可以把它放进自己控制的
-调用帧里执行，并强制内层执行回滚——这笔操作失败了，但 gas 仍然被扣掉。以太坊基金会
-为这个发现支付了 5 万美元赏金；基金会将其归类为审查/骚扰向量，而不是盗取资金的
-向量，而且它从未被实际利用过。
+EntryPoint 会先验证一个批次里的所有操作，再逐个执行。所以如果某个操作删除了一位所有者，同一批次中
+排在后面、由这位所有者签名的操作依然能通过验证并执行。Safe 确认了这一点，没有修改 v0.3.0。
 
-它能做到的：浪费一笔手续费、拖延一笔交易。它做不到的：偷走资金，或者伪造签名。
-Vela 的暴露面很窄，因为 UserOperation 是直接送到中继的，不经过公开的内存池，
-所以几乎没有截获的机会——而最坏情况也被你早已同意的那笔费用所限定。修复只存在于
-EntryPoint v0.9（2025 年 11 月）；v0.7 本身没法打补丁。我们预计会随着周边技术栈
-——特别是 Safe 的 4337 模块系列——支持 v0.9 而迁移过去，到那时会在这里说明。
+对 Vela 来说影响很小：App 从不更换所有者，Vela 钱包本来也无法删除钥匙。但从原理上讲它很重要，
+因为它意味着在同一批次里，删掉一把被盗的钥匙并不能可靠地切断它。
 
-## 哪些没有审计
+### 已签名操作被截获（v0.9 之前的 EntryPoint）
 
-- **Vela 自己的合约。** 我们自己写的两个小合约，部署在 Gnosis 上：
-  [通行密钥公钥索引](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools)
-  （一个只追加的登记表，帮你的设备找到你的公钥）和它的批量辅助合约。它们没有经过
-  审计。从构造上说，它们不持有任何资金、没有所有者，也不能升级——它们是一层发现
-  机制，不是一层授权机制。花钱的权限永远来自配置在你 Safe 内部的那把通行密钥。
-  现实中最坏的故障是骚扰（有人抢占一条索引记录），这会让恢复变得不那么方便，
-  但动不了钱。早期费用设计里的那个 gas 结算拆分合约，已经不在交易流程中。
-- **Multicall3。** 它自己的 README [直说了](https://github.com/mds1/multicall3)：
-  「本合约未经审计。」我们用它的方式，正是其作者描述为安全的那一种——批量只读调用，
-  用于读取余额、代币元数据和价格。Vela 从不给它任何授权，它也从不持有资金。
-  出 bug 的最坏情况是读到一个错误的数值。
-- **CREATE2 部署器。**
-  [Arachnid 确定性部署代理](https://github.com/Arachnid/deterministic-deployment-proxy)
-  是生态标准的无状态部署器；它没有正式审计。如果某条链上它缺失或被改动过，
-  我们的网络检查会直接判定失败。
-- **Tempo 与 pathUSD。** Tempo 是我们十二条内置网络之一，它没有原生币；那里的 gas
-  用 pathUSD 稳定币结算。截至 2026 年 8 月，Tempo 的核心协议和 pathUSD 都没有公开的
-  安全审计，也没有漏洞赏金，而且一份独立的
-  [DefiLlama 抵押品评估](https://artifacts.llama.fi/md-exports/pathusd-collateral-assessment-april2026-1776332825042.md)
-  （2026 年 4 月）将 pathUSD 评为高风险。这是链一级的风险，任何钱包都无法缓解：
-  你放在 Tempo 上的资金，以及在那里的 gas 结算，都会继承它。请把 Tempo 当成这份
-  名单上最新、也最未经检验的一条链，并据此控制你的余额规模。等审计发布，
-  我们会更新这一节。
-- **Vela 本身。** 我们的应用和后端服务没有做过第三方审计。这是这一页上最大的一条
-  保留意见，我们把它写在站点顶部，老实的细节在
-  [Vela 仍在内测](/blog/vela-is-in-alpha)。请从小额开始。去读代码。
+2026 年 2 月，研究人员[披露](https://erc4337.substack.com/p/improving-useroperation-execution)了
+一种影响 v0.9 之前所有 EntryPoint（包括 v0.7）的干扰与审查手法。有人在操作上链前拿到签好名的操作，
+就能在自己控制的调用中执行它，并迫使内部执行回滚：操作失败，但手续费照扣。它影响的是调用了带重入
+保护的合约、或能被临时状态弄得回滚的操作；简单转账不受影响。如果反复针对提现流程下手，可能让资金
+在一段时间内无法取用。它无法伪造签名，也无法改变资金去向。
 
-## 自己去核实
+Vela 的中继直接提交操作，而不是经过共享内存池；但待上链的 `handleOps` 交易在公共内存池里仍然可见，
+所以这只是缩小了暴露面，并没有消除。修复只存在于 EntryPoint v0.9（2025 年 11 月）；v0.7 无法打补丁。
+迁移取决于 Safe 的 4337 模块何时支持 v0.9，届时本页会说明。
 
-上面每一个地址都是公开的规范部署，你可以对照官方的部署登记核实——
+## 没有审计过的
+
+- **Vela 自己的合约。**[公钥注册表](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)
+  `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`（Gnosis；以太坊和 Base 上地址相同）、它的域名注册表
+  `0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf`，以及被它们取代的早期索引
+  （`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`，仅作历史记录读取）。它们没有经过审计。它们不持有
+  资金、没有所有者、不能升级；它们是发现层，而不是授权层。花钱的权力只来自配置在你 Safe 里的钥匙。
+  现实中最坏的情况，是钱包在新设备上更难被找到，而不是资金被转走。
+- **Multicall3。**它的 README [直说](https://github.com/mds1/multicall3)“This contract is unaudited.”
+  Vela 只用它做批量读取——余额、代币信息、价格报价——从不涉及授权或资金。
+- **确定性部署器**（Arachnid 的 CREATE2 代理和 Safe 的 singleton factory）——生态标准、无状态，没有
+  正式审计。它们缺失或被篡改时，Vela 的网络检查会直接判定不通过。
+- **Tempo。**24 条内置网络之一，没有原生币；Vela 在那里用 pathUSD 稳定币支付 gas。截至 2026 年 9 月，
+  Tempo 的[安全政策](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)写明协议仍在审计中，
+  也没有启用漏洞赏金。你在 Tempo 上持有的资金、在那里支付的 gas，都带有这一链层面的风险；请把它当作
+  列表里最新、最未经考验的一条链。
+- **Vela 本身。**各个 App、后端服务以及上面那些合约，都没有经过第三方审计，目前也没有排期。这是本页
+  最大的保留。详情见 [Vela is in alpha](/blog/vela-is-in-alpha)。请先用小额，并去读代码。
+
+## 自己核对
+
+下面每一个地址都是公开的官方部署。可以对照
 [safe-deployments](https://github.com/safe-global/safe-deployments)、
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
-以及 [EntryPoint 的发布说明](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)：
+和 [EntryPoint 发布页](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)核实：
 
-| 合约 | 地址 |
-| ----------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1 | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1 | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| CompatibilityFallbackHandler v1.4.1 | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| MultiSend v1.4.1 | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| SafeModuleSetup v0.3.0 | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0 | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| 通行密钥公钥索引（Gnosis） | `0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3` |
+| 合约                                      | 地址                                         |
+| ----------------------------------------- | -------------------------------------------- |
+| SafeL2 实现合约 v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner 实现合约 v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| 公钥注册表（Vela，未审计）                | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+
+¹ 添加网络时会检查它；你的 Safe 实际使用 4337 模块作为 fallback handler。

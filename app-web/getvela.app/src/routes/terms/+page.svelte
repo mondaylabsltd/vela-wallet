@@ -5,127 +5,177 @@
 
 <svelte:head>
 	<title>Terms of Service — Vela Wallet</title>
-	<meta name="description" content="Vela Wallet Terms of Service" />
+	<meta
+		name="description"
+		content="The terms for using Vela Wallet, its apps and the services we run: self-custody, fees, risks and liability."
+	/>
 </svelte:head>
 
 <SiteHeader />
 
 <main class="container">
 	<h1>Terms of Service</h1>
-	<p class="updated">Last updated: May 12, 2026</p>
+	<p class="updated">Last updated: 22 September 2026</p>
 
 	<section>
-		<h2>1. Acceptance</h2>
+		<h2>1. Who we are, and acceptance</h2>
 		<p>
-			Vela Wallet is operated by MONDAY LABS LTD, 61 Bridge Street, Kington, United Kingdom, HR5
-			3DJ. By using Vela Wallet, you agree to these terms. If you do not agree, do not use the app.
+			Vela Wallet ("Vela") is made by MONDAY LABS LTD ("we"), a company registered in England and
+			Wales (company number 16988118), 61 Bridge Street, Kington, HR5 3DJ, United Kingdom. These
+			terms cover the website, the Vela apps and browser extension, and the backend services we run.
+			By using any of them you agree to these terms; if you do not agree, do not use them.
 		</p>
 	</section>
 
 	<section>
-		<h2>2. Self-Custody</h2>
+		<h2>2. Self-custody and your keys</h2>
 		<p>
-			Vela Wallet is a self-custodial wallet. You are solely responsible for your wallet and its
-			contents.
+			Vela is a self-custodial wallet. Your wallet is a smart-contract account controlled only by
+			the keys you create it with — passkeys held by your devices or password manager, other phones,
+			or hardware security keys. We never hold those keys and cannot move, freeze, recover or reset
+			your wallet or its funds.
 		</p>
 		<ul>
 			<li>
-				Your passkey private key is managed by your device's operating system (iCloud Keychain or
-				Google Password Manager). Vela Wallet cannot access, recover, or reset it.
+				A wallet has one to seven keys, chosen when you create it. They cannot be added, removed or
+				replaced afterwards.
 			</li>
 			<li>
-				If you lose access to your iCloud or Google account, you may permanently lose access to your
-				wallet. We cannot help you recover it.
+				<strong>Any one of your keys can move all of your funds on its own.</strong> Whoever obtains one
+				of your keys — or control of the account a synced passkey is stored in (for example your Apple
+				or Google account) — may be able to take your funds. Protect every key and every such account.
 			</li>
 			<li>
-				If your iCloud or Google account is compromised, your wallet control may also be
-				compromised. Use a strong password and enable two-factor authentication.
+				If you lose every key you created the wallet with, the wallet cannot be recovered by anyone,
+				including us.
 			</li>
-			<li>We cannot reverse, cancel, or modify any blockchain transaction once submitted.</li>
+			<li>Blockchain transactions cannot be reversed, cancelled or modified once submitted.</li>
 		</ul>
 		<p>
-			Creating a wallet publishes a <strong>public, permanent record</strong> to a smart contract on
-			the Gnosis blockchain: the wallet name you choose, your passkey's public key, your
-			authenticator's model (via its AAGUID) and WebAuthn flags, its credential id, and its
-			transport hints. This record is readable by anyone, cannot be edited or deleted, and is
-			required for cross-device sign-in and recovery — and, for a multi-passkey wallet, to
-			reconstruct the wallet's address at all. See the <a href="/privacy">Privacy Policy</a> for the
-			full list, and the <a href="/registry">registry</a> to browse exactly what is stored.
+			Creating a wallet publishes a permanent public record to a smart contract on the Gnosis
+			blockchain, including your public keys, wallet name, key labels and wallet address. It cannot
+			be edited or deleted. The <a href="/privacy">Privacy Policy</a> lists everything it contains.
 		</p>
 	</section>
 
 	<section>
-		<h2>3. No Financial Advice</h2>
-		<p>
-			Vela Wallet is a tool for managing cryptocurrency. We do not provide investment, financial,
-			tax, or legal advice. You are responsible for your own financial decisions.
-		</p>
-	</section>
-
-	<section>
-		<h2>4. Service Availability</h2>
-		<p>
-			We provide backend services (Passkey Index, Chain Data Index, Relay) on a best-effort basis.
-			These services may experience downtime, rate limiting, or discontinuation.
-		</p>
-		<p>
-			All backend services are open source. You can self-host them to eliminate dependency on our
-			infrastructure. See our <a
-				href="https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints"
-				target="_blank"
-				rel="noopener">self-hosting documentation</a
-			>.
-		</p>
-	</section>
-
-	<section>
-		<h2>5. Blockchain Risks</h2>
-		<p>
-			You acknowledge the inherent risks of blockchain technology, including but not limited to:
-		</p>
+		<h2>3. Fees and purchases</h2>
 		<ul>
-			<li>Token price volatility and potential total loss of value</li>
-			<li>Smart contract vulnerabilities (including the Safe contracts that power your wallet)</li>
-			<li>Network congestion, high gas fees, and failed transactions</li>
-			<li>Regulatory changes that may affect your ability to use cryptocurrency</li>
+			<li>
+				<strong>Transaction fees.</strong> Every transaction pays a fee to the relay that submits
+				it, taken from your wallet in the network's coin or a supported stablecoin. The amount is
+				shown before you sign, is part of what you sign, and covers the network's gas plus the relay
+				operator's margin; it is usually several times the transaction's on-chain cost. How it is
+				calculated is described in
+				<a href="/docs/networks-and-fees">networks &amp; fees</a>. When you use our relay, the fee
+				is paid to us. Fees are not refundable.
+			</li>
+			<li>
+				<strong>Relay top-ups.</strong> If a relay's own gas runs out on a network, the app may offer
+				you the option to send it a contribution. Such a contribution is voluntary, is paid to the relay's
+				operator, does not pay for your transaction, and is not refundable.
+			</li>
+			<li>
+				<strong>Apps.</strong> The web wallet, the browser extension and the desktop apps are free. Apps
+				bought from an app store are sold on that store's terms; anything you are entitled to under consumer
+				law is unaffected by these terms. You can also build any Vela app from its source code at no charge.
+			</li>
 		</ul>
 	</section>
 
 	<section>
-		<h2>6. Open Source</h2>
+		<h2>4. No financial advice</h2>
 		<p>
-			Vela Wallet is distributed under the MIT License. The software is provided "as is", without
-			warranty of any kind, express or implied. See the
+			Vela is software for managing crypto assets. We do not provide investment, financial, tax or
+			legal advice, and nothing we publish is a recommendation to buy, sell or hold any asset.
+		</p>
+	</section>
+
+	<section>
+		<h2>5. Services we run</h2>
+		<p>
+			We run the relay, the public-key index, the chain-data service and the exchange-rate service,
+			and we provide them on a best-effort basis. They may be slow, unavailable, rate-limited,
+			changed or discontinued, and the relay may delay or decline to submit a transaction. You can
+			run your own instead; the <a href="/docs/self-hosting">self-hosting guide</a> explains how, and
+			what cannot be replaced.
+		</p>
+	</section>
+
+	<section>
+		<h2>6. Risks you accept</h2>
+		<p>You acknowledge the risks of using blockchain software, including:</p>
+		<ul>
+			<li>the price of crypto assets can fall, including to zero;</li>
+			<li>
+				smart contracts can have undiscovered vulnerabilities — including the audited Safe, ERC-4337
+				and passkey contracts your wallet uses, and Vela's own registry contract;
+			</li>
+			<li>
+				Vela's own apps and services have not had an independent third-party security audit, and
+				Vela is alpha software;
+			</li>
+			<li>
+				token issuers can freeze or blocklist addresses, and networks can congest, fork or fail;
+			</li>
+			<li>laws and regulations can change and may affect your ability to use crypto assets.</li>
+		</ul>
+	</section>
+
+	<section>
+		<h2>7. Acceptable use</h2>
+		<p>
+			You must be at least 18 years old and allowed by the laws that apply to you to use Vela. Do
+			not use Vela for anything unlawful, including sanctions evasion or fraud, and do not attack or
+			overload the services we run.
+		</p>
+	</section>
+
+	<section>
+		<h2>8. Open-source software</h2>
+		<p>
+			Vela's source code is published under the licences in its repositories (for the wallet, the
 			<a
 				href="https://github.com/mondaylabsltd/vela-wallet/blob/main/LICENSE"
 				target="_blank"
-				rel="noopener">full license</a
-			>.
+				rel="noopener">MIT License</a
+			>). The software is provided "as is", without warranty of any kind, to the extent the law
+			allows.
 		</p>
 	</section>
 
 	<section>
-		<h2>7. Limitation of Liability</h2>
+		<h2>9. Limitation of liability</h2>
 		<p>
-			To the maximum extent permitted by law, Vela Wallet and its contributors shall not be liable
-			for any loss of funds, data, or profits arising from the use of this software. This includes
-			losses due to software bugs, smart contract exploits, passkey compromise, or service
-			unavailability.
+			To the maximum extent permitted by law, MONDAY LABS LTD is not liable for any loss of funds,
+			data or profits arising from your use of Vela, including losses caused by software defects,
+			smart-contract exploits, compromise of your keys or the accounts that hold them, or
+			unavailability of any service. Nothing in these terms limits or excludes liability that cannot
+			be limited or excluded by law, including liability for death or personal injury caused by
+			negligence, or for fraud.
 		</p>
 	</section>
 
 	<section>
-		<h2>8. Changes</h2>
+		<h2>10. Changes</h2>
 		<p>
-			We may update these terms from time to time. Continued use of Vela Wallet after changes
-			constitutes acceptance of the updated terms.
+			We may update these terms. When we do, the date at the top of this page changes. If you keep
+			using Vela after a change, the updated terms apply.
 		</p>
 	</section>
 
 	<section>
-		<h2>9. Contact</h2>
+		<h2>11. Governing law</h2>
 		<p>
-			Questions about these terms? Open an issue on
+			These terms are governed by the laws of England and Wales, and the courts of England and Wales
+			have jurisdiction, without affecting any mandatory consumer protections where you live.
+		</p>
+	</section>
+
+	<section>
+		<h2>12. Contact</h2>
+		<p>
+			Email <a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>, or open an issue on
 			<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
 				>GitHub</a
 			>.

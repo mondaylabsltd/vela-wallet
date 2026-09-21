@@ -1,10 +1,12 @@
 ---
 title: Why Vela has no seed phrase
-description: Seed phrases are the single biggest cause of lost crypto. Here's why we replaced them with passkeys, and what we gave up to do it.
+description: "Seed phrases ask people to guard a secret perfectly for years, and many lose funds when they can’t. Here’s why we replaced them with passkeys, and what we gave up to do it."
 date: 2026-06-09
 author: Shelchin
 tags: [security, passkeys, design]
 ---
+
+> **Corrections, 22 September 2026.** This post originally called seed phrases "the single biggest cause of lost crypto"; we don't have a source for that ranking, so the description now says what we can support. It also said passkeys use "the same technology that guards Apple Pay" — they don't: Apple Pay uses the Secure Element with card tokens, while passkeys are WebAuthn credentials held by a password manager or security key. And since August a Vela wallet can have up to seven keys, including hardware security keys that sync nowhere, so it no longer rests on one platform keychain. See [how passkeys work](/docs/passkeys) and [signers & security keys](/docs/signers).
 
 Almost every self-custodial wallet hands you twelve words and tells you that
 they are the most important thing you now own. Lose them and your money is gone.
@@ -29,7 +31,8 @@ to be password managers.
 ## Passkeys instead
 
 A passkey is a public/private key pair created and protected by your device — the
-same technology that guards Apple Pay and your fingerprint unlock. The crucial
+same technology that guards Apple Pay and your fingerprint unlock. *(Not
+accurate — see the correction above.)* The crucial
 part: no app, including Vela, ever gets to read the private key. Your device uses
 it to sign only after you authorize with your face or fingerprint.
 

@@ -60,13 +60,15 @@ designed so that moment never exists.
 
 <Callout type="info" title="Not a promise — an architecture">
 We can't access your keys. Not "we promise not to" — there is no code path in
-Vela that could. The wallet is a <a href="/docs/security-audits">Safe smart
+Vela that could. The wallet is a <a href="/docs/account-contract">Safe smart
 account</a> operated by a signature your device produces and we only ever
 receive.
 </Callout>
 
 We made Vela **open source** so you can check that for yourself, and
-**self-hostable** so your wallet never depends on our company staying online.
+**self-hostable** so that an existing wallet keeps working without our company's
+servers — with one limit, the domain your passkeys belong to, which the
+[self-hosting guide](/docs/self-hosting) explains along with the ways around it.
 And we built on unmodified
 [Safe contracts](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
 because the boring, battle-tested path is the right one when people's money is
@@ -89,9 +91,10 @@ device signs for the real domain, or it does not sign.
 And the choice isn't binary. A wallet can be created with **up to seven
 signers**, any one of which can sign on its own — passkeys on different devices,
 a nearby phone you scan, or a USB/NFC security key. If you'd rather your wallet
-didn't depend on a platform account at all, you can make the very first key a
-hardware security key. The one condition is timing: your address is derived from
-the full set of keys, so they're chosen when you create the wallet.
+didn't depend on a platform account at all, you can use hardware security keys
+only — two of them, since a wallet can't rest on a single key that syncs nowhere.
+The one condition is timing: your address is derived from the full set of keys,
+so they're chosen when you create the wallet.
 
 <Callout type="warning" title="What this does not buy you">
 Extra signers are a way back in, not a second lock. Because any single key can

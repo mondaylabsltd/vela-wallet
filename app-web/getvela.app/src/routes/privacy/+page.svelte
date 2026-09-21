@@ -5,184 +5,250 @@
 
 <svelte:head>
 	<title>Privacy Policy — Vela Wallet</title>
-	<meta name="description" content="Vela Wallet Privacy Policy" />
+	<meta
+		name="description"
+		content="What data Vela Wallet, its apps and its services handle, what becomes public on-chain, and how long anything is kept."
+	/>
 </svelte:head>
 
 <SiteHeader />
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: June 11, 2026</p>
+	<p class="updated">Last updated: 22 September 2026</p>
 
 	<section>
-		<h2>Overview</h2>
+		<h2>Who we are</h2>
 		<p>
-			Vela Wallet is a self-custodial cryptocurrency wallet. We are committed to protecting your
-			privacy. This policy explains what data we collect, why, and how it is handled.
+			Vela Wallet is made by MONDAY LABS LTD, a company registered in England and Wales (company
+			number 16988118), 61 Bridge Street, Kington, HR5 3DJ, United Kingdom. We are the data
+			controller for this website, the Vela apps and browser extension, and the backend services we
+			run for them. For privacy questions or requests, email
+			<a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>.
+		</p>
+		<p>
+			Vela is a self-custodial wallet: we never hold your keys or your funds. This policy says what
+			data exists anyway — on your device, on-chain, and on the servers involved — who can see it,
+			and for how long.
 		</p>
 	</section>
 
 	<section>
-		<h2>What We Do NOT Collect</h2>
+		<h2>What we never have</h2>
 		<ul>
 			<li>
-				<strong>Private keys</strong> — Your passkey private key is managed entirely by your operating
-				system (iCloud Keychain or Google Password Manager). Vela Wallet never has access to it.
+				<strong>Your private keys.</strong> They stay in your passkey provider — your device's password
+				manager (such as iCloud Keychain, Google Password Manager or 1Password), Windows Hello, another
+				phone, or a hardware security key. Vela only ever receives signatures.
 			</li>
+			<li><strong>A seed phrase.</strong> Vela doesn't use one.</li>
+			<li><strong>Your biometrics</strong> or your Apple, Google or password-manager account.</li>
 			<li>
-				<strong>Seed phrases</strong> — Vela Wallet does not use seed phrases. There are none to collect.
-			</li>
-			<li>
-				<strong>Transaction contents</strong> — We do not monitor, log, or analyze your on-chain transactions.
-			</li>
-			<li>
-				<strong>Personal identity</strong> — We do not require your name, email, phone number, or any
-				government ID to use the wallet.
-			</li>
-			<li>
-				<strong>Email or contact details</strong> — The website has no signup, no newsletter, and no email
-				capture. We have no way to email you, because we never ask for your address.
+				<strong>Your identity.</strong> We don't ask for your name, email, phone number or any ID, and
+				the website has no sign-up or newsletter.
 			</li>
 		</ul>
 	</section>
 
 	<section>
-		<h2>What We Store</h2>
-
-		<h3>What Goes On-Chain (Public and Permanent)</h3>
+		<h2>What becomes public on-chain</h2>
 		<p>
-			When you create a wallet, it is written to a <strong>public smart contract</strong> on the
-			Gnosis blockchain — the Passkey Registry — with a WebAuthn signature proving you hold the
-			passkey. Everything below is <strong>readable by anyone, forever</strong>, and cannot be
-			edited or deleted. You can browse exactly what is stored on the
-			<a href="/registry">registry page</a>. None of it can move your funds or sign on your behalf.
+			Creating a wallet writes a record to a <strong>public registry contract</strong> on Gnosis
+			Chain. It is readable by anyone, permanent, and cannot be edited or deleted by us or anyone
+			else. You can browse the records on the <a href="/registry">registry page</a>. For each wallet
+			it contains:
 		</p>
-		<p>For each wallet, the registry stores:</p>
 		<ul>
 			<li>
-				<strong>Your passkey's public key</strong> — the P-256 public key (never the private key).
+				each key's <strong>public key</strong> (never the private key) and its
+				<strong>credential ID</strong>;
 			</li>
 			<li>
-				<strong>The wallet name you chose</strong> and the <strong>Safe wallet address</strong>, its
-				Safe version, and its creation time. The name is public — choose one that does not reveal
-				your real identity if you prefer to stay pseudonymous.
+				each key's <strong>authenticator model</strong> (its AAGUID, which identifies the password manager
+				or security key that made it) and flags showing whether you were verified and whether the key
+				is synced;
 			</li>
+			<li>the transports the browser reported (for example "internal", "hybrid", "usb");</li>
 			<li>
-				<strong>Your authenticator's model</strong> — a 20-byte attestation carrying the
-				authenticator's AAGUID (which identifies the passkey provider, e.g. Apple Passwords, Google
-				Password Manager, a browser, a password manager, or a security key) and the WebAuthn flag
-				bits that indicate whether user verification happened and whether the passkey is syncable /
-				backed up.
+				the <strong>wallet name</strong> you chose and a <strong>label for each key</strong> — anyone
+				can look these up from your address, and other Vela users see your wallet name when they send
+				to you, so choose a name you're happy to make public;
 			</li>
+			<li>the <strong>wallet address</strong>, its Safe version and its creation time;</li>
 			<li>
-				<strong>The WebAuthn credential id</strong> — a per-site handle for the passkey (not a
-				secret; it cannot authenticate on its own).
-			</li>
-			<li>
-				<strong>Browser-reported hints</strong> — the authenticatorAttachment ("platform" /
-				"cross-platform") and the transport list ("internal", "hybrid", "usb", etc.).
-			</li>
-			<li>
-				<strong>The relying-party id</strong> (<code>getvela.app</code>) and a one-time group key
-				used only to close the record.
+				the complete <strong>signed registration data</strong>, including each key's WebAuthn client
+				data, which shows where the key was created (getvela.app, or our Android app's package and
+				signing identity).
 			</li>
 		</ul>
 		<p>
-			The registry is how your wallet's founding passkeys are recorded on-chain, as one immutable
-			group. Cross-device sign-in and recovery rely on it, and for a multi-passkey wallet it is
-			required: the wallet's address is derived from its <strong>full set of founding passkeys</strong>,
-			and a new device reconstructs that set — and therefore the correct address — from this public
-			record. (A new device can re-derive a single passkey from two of its signatures on its own, but
-			not the rest of a multi-key wallet's membership.)
-		</p>
-
-		<h3>What Never Leaves Your Device</h3>
-		<p>
-			Your passkey <strong>private key</strong>, your biometrics, and your operating-system account
-			(Apple ID / Google account) are never uploaded, never transmitted, and never written on-chain.
-			Wallet configuration, token balances, transaction history, and RPC endpoint preferences are
-			stored locally on your device and are not sent to our servers.
+			The same record is written if you sign in on a new device to a wallet that has none yet. You
+			(or anyone) can copy it to the same contract on Ethereum or Base. Older wallets may also
+			appear in the earlier index contracts this registry replaced. None of this can move your
+			funds.
 		</p>
 	</section>
 
 	<section>
-		<h2>The Website (getvela.app)</h2>
+		<h2>What our services receive</h2>
 		<p>
-			This policy also covers the getvela.app website, not just the wallet app. The website has no
-			accounts, no newsletter, and no email capture.
+			The apps talk to the services below by default. You can point the apps at your own copies
+			instead (see the <a href="/docs/self-hosting">self-hosting guide</a>); then these servers
+			receive nothing from you. All of them run on Cloudflare, which processes your IP address and
+			may do so outside the United Kingdom.
 		</p>
-		<p>
-			We use privacy-friendly, cookieless analytics to count page views and basic events (such as
-			which sections are viewed or which links are clicked). It runs on our own self-hosted instance
-			— your data is never sent to Google or any ad network. No cookies, no cross-site tracking, and
-			no device fingerprinting. We do not build advertising profiles, and we do not sell or share
-			this data.
-		</p>
-		<p>
-			The <a href="/registry">registry page</a> reads the smart contract directly from your browser
-			via public Gnosis RPC nodes — nothing there comes from our servers. To label each authenticator
-			it looks up the AAGUID (an already-public, non-personal identifier of the authenticator model)
-			against our AAGUID Explorer service; it never sends your credential id, public key, or wallet
-			address to that service.
-		</p>
-	</section>
-
-	<section>
-		<h2>Third-Party Services</h2>
-		<p>Vela Wallet interacts with the following external services:</p>
 		<ul>
 			<li>
-				<strong>Blockchain RPC nodes</strong> — To query balances and submit transactions. Your wallet
-				address is visible to these providers.
+				<strong>Public-key index</strong> (<code>p256-index-v2.getvela.app</code>) — receives your
+				registration record and your IP address before submitting the record on-chain (it pays the
+				gas), and keeps the submission record for 7 days after it lands, or 30 days if it fails.
+				When you sign in on a new device, it is asked which wallet your key belongs to. When you
+				enter or save an address, it may be asked for that address's Vela wallet name. Your IP
+				address is used, in a salted hashed form, to limit request rates.
 			</li>
 			<li>
-				<strong>Vela Relay</strong> — To relay ERC-4337 UserOperations to the blockchain. The relay
-				sees your signed transaction data but cannot modify it.
+				<strong>Relay</strong> (<code>vela-relay-cf.getvela.app</code>) — receives your wallet
+				address and each transaction you send, both before you sign (to quote the fee) and after,
+				along with your IP address. It logs your address and each operation's hash, keeps operations
+				for between one hour and 14 days so it can retry them, forwards them to node providers
+				(Alchemy and public RPC nodes) to submit them, and may include operation hashes in alerts to
+				its operators. The apps also send it, in a request header, the RPC address they rank first —
+				which can include an API key if you added one for a provider.
 			</li>
 			<li>
-				<strong>Chain Data Index</strong> — To fetch token metadata and chain information. No wallet-specific
-				data is sent.
+				<strong>Chain data</strong> (<code>ethereum-data.getvela.app</code>) — serves network
+				details, token lists, logos and transaction descriptors. Requests for logos and descriptors
+				include the token or contract address being displayed or signed (never your wallet address).
 			</li>
 			<li>
-				<strong>iCloud Keychain / Google Password Manager</strong> — Your passkey is synced by your operating
-				system. Refer to Apple's or Google's privacy policies for details.
+				<strong>Exchange rates</strong> (<code>vela-currency.getvela.app</code>) — receives no
+				wallet data; its request logs include IP addresses.
+			</li>
+			<li>
+				<strong>Authenticator directory</strong> (<code>aaguid-explorer.awesometools.dev</code>, run
+				by Vela's founder) — receives only an authenticator model ID, to show the name of your
+				security key or password manager.
+			</li>
+		</ul>
+		<p>We do not sell or share this data, build profiles from it, or use it for advertising.</p>
+	</section>
+
+	<section>
+		<h2>Third parties the apps contact directly</h2>
+		<ul>
+			<li>
+				<strong>RPC node providers</strong> for each network — see your address, your IP address and the
+				transactions the app simulates. Built-in public endpoints are used unless you set your own or
+				add a provider key.
+			</li>
+			<li>
+				<strong>Public function-selector databases</strong> (sourcify, openchain, 4byte) — receive a 4-byte
+				function selector when a transaction can't be decoded otherwise.
+			</li>
+			<li>
+				<strong>Apple's and Google's tunnel servers</strong> — carry the encrypted exchange when you sign
+				with a phone by scanning a QR code; on Android, Google Play services may handle passkey requests.
+			</li>
+			<li>
+				<strong>Your passkey provider</strong> (Apple, Google, a password manager) — stores and syncs
+				your passkeys under its own privacy policy.
+			</li>
+			<li>
+				<strong>dApp sites</strong> you connect to — see your wallet address once you connect; the signing
+				screen also loads the site's icon from the site itself.
 			</li>
 		</ul>
 	</section>
 
 	<section>
-		<h2>Data Retention</h2>
+		<h2>What stays on your device</h2>
 		<p>
-			Your wallet's registry record is stored indefinitely and immutably on the Gnosis blockchain —
-			it is append-only and cannot be edited or deleted by us or by anyone. On-device data is deleted
-			when you log out or uninstall the app. We do not maintain server-side backups of your local
-			wallet data.
+			Your account list, contacts, transaction history, settings, RPC provider keys, and the
+			permissions you've given dApps are stored in the app's storage on your device (in the browser
+			for the web wallet and extension). On iPhone, app storage can be included in your iCloud
+			device backup. The apps' built-in browsers keep site cookies and your browsing history
+			locally.
+		</p>
+		<p>
+			<strong>Signing out</strong> removes your accounts from the app but keeps your history,
+			contacts and settings. <strong>Settings → Erase this device</strong> deletes them in the web wallet
+			and Android app; erasing is not yet complete on iPhone and desktop, where uninstalling (and, on
+			desktop, deleting the app's folder in your user settings directory) removes the rest.
 		</p>
 	</section>
 
 	<section>
-		<h2>Open Source</h2>
+		<h2>Bug reports</h2>
 		<p>
-			Vela Wallet is fully open source. You can audit the code, verify our claims, and self-host all
-			backend services. See <a
-				href="https://github.com/mondaylabsltd/vela-wallet"
-				target="_blank"
-				rel="noopener">our GitHub repository</a
-			>.
+			The feedback option in the apps opens a pre-filled <strong>public</strong> GitHub issue in your
+			browser; on Android it includes the app version, your system and language, and recent error messages.
+			Nothing is sent until you review it and submit it yourself on GitHub, where it is public. It never
+			includes keys or balances.
 		</p>
 	</section>
 
 	<section>
-		<h2>Contact</h2>
+		<h2>The website (getvela.app)</h2>
+		<ul>
+			<li>
+				<strong>Analytics:</strong> we use Rybbit, a cookieless analytics tool, served from
+				<code>tj.appsdata.org</code>, to count page views and clicks on some buttons and which
+				sections of the home page are viewed. It sets no cookies and we don't use it for advertising
+				or share it.
+			</li>
+			<li>
+				<strong>Fonts:</strong> pages load fonts from Google Fonts, so Google receives your IP address
+				when you visit.
+			</li>
+			<li>
+				<strong>Registry page:</strong> reads the registry contract from your browser through public Gnosis
+				RPC nodes, and looks up authenticator names in the directory above using only the model ID.
+			</li>
+			<li>
+				<strong>Chain setup page:</strong> if you create a deployer key there, it is generated and stored
+				in your browser's local storage, and never sent to us.
+			</li>
+		</ul>
+	</section>
+
+	<section>
+		<h2>The browser extension</h2>
 		<p>
-			If you have questions about this privacy policy, open an issue on
-			<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
+			The extension can read and act on the pages you visit so that it can offer the wallet to
+			dApps. It stores which sites you've connected and which network each uses in your browser, and
+			forwards a connected site's read requests to your RPC nodes and relay. It sends nothing else.
+		</p>
+	</section>
+
+	<section>
+		<h2>Retention</h2>
+		<ul>
+			<li>On-chain registry records: permanent, by design.</li>
+			<li>Index submission records: 7 days after landing on-chain, 30 days if they fail.</li>
+			<li>
+				Relay operation records: between one hour and 14 days; logs as kept by our hosting provider.
+			</li>
+			<li>On your device: until you erase them or uninstall the app.</li>
+		</ul>
+	</section>
+
+	<section>
+		<h2>Your rights</h2>
+		<p>
+			You can ask what personal data our services hold about you, and ask us to delete it, at
+			<a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>. We keep very little, and we
+			cannot delete data written on-chain. You can also complain to the UK Information
+			Commissioner's Office.
+		</p>
+	</section>
+
+	<section>
+		<h2>Open source</h2>
+		<p>
+			The apps and services are public on
+			<a href="https://github.com/orgs/mondaylabsltd/repositories" target="_blank" rel="noopener"
 				>GitHub</a
-			>.
-		</p>
-		<p>
-			Vela Wallet is operated by MONDAY LABS LTD, 61 Bridge Street, Kington, United Kingdom, HR5 3DJ
-			— the data controller for this website.
+			>, so you can check what they do. When this policy changes, the date at the top changes too.
 		</p>
 	</section>
 </main>
@@ -217,13 +283,6 @@
 		margin-bottom: 12px;
 		text-align: left;
 	}
-	h3 {
-		font-size: 1rem;
-		font-weight: 600;
-		margin: 20px 0 8px;
-		color: var(--accent);
-	}
-
 	p {
 		color: var(--text-secondary);
 		line-height: 1.75;

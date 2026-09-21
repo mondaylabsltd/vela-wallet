@@ -6,6 +6,8 @@ author: Shelchin
 tags: [alpha, security, transparency]
 ---
 
+> **Update, 22 September 2026.** Two things have changed since this was written. A wallet can now have up to seven keys, including hardware security keys, so "your wallet is a passkey on your device" is no longer the whole picture — see [signers & security keys](/docs/signers). And not every backend service is MIT-licensed: the public-key index is public but has no licence file yet. The audit position below is unchanged.
+
 Vela is in alpha. I could bury that word three clicks deep, but instead it's in
 the top bar of the site, and this post is the honest version of what it means. If
 you're going to trust early software with money, you deserve to know exactly what
