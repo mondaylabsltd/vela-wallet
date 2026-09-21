@@ -2631,11 +2631,18 @@ fn provider_blurred(model: &mut Model, provider: NetProviderId) -> Command<NetEf
     if !model.loaded {
         return Command::done();
     }
-    let trimmed = model
-        .provider_drafts
-        .get(&provider)
-        .map(|k| k.trim().to_owned())
-        .unwrap_or_default();
+    // A field never edited since the page opened — or on a shell that never
+    // raised `ProvidersOpened` — showed the SAVED key, so leaving it keeps
+    // that key: an absent draft is "unchanged", never "cleared" (spec 072,
+    // found by the web's wide-layout test after FR-001).
+    let trimmed = match model.provider_drafts.get(&provider) {
+        Some(draft) => draft.trim().to_owned(),
+        None => model
+            .provider_keys
+            .get(provider)
+            .cloned()
+            .unwrap_or_default(),
+    };
     model.provider_drafts.insert(provider, trimmed.clone());
 
     // `saveRpcProviders`: trim every entry, DROP empties — a cleared key

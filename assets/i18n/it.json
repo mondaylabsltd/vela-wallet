@@ -1577,7 +1577,11 @@
    "fiatLabel": "TASSI FIAT",
    "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
    "resetToDefaults": "Ripristina i valori predefiniti",
-   "selfHostGuide": "Guida al self-hosting →"
+   "selfHostGuide": "Guida al self-hosting →",
+   "resetTitle": "Ripristinare gli endpoint dei servizi?",
+   "resetBody": "I quattro servizi tornano agli indirizzi di Vela. Gli indirizzi inseriti qui vengono dimenticati.",
+   "resetConfirm": "Ripristina",
+   "resetCancel": "Annulla"
   },
   "addNetwork": {
    "modalTitle": "Aggiungi rete",

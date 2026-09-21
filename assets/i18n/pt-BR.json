@@ -1577,7 +1577,11 @@
    "fiatLabel": "COTAÇÕES FIAT",
    "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
    "resetToDefaults": "Restaurar padrões",
-   "selfHostGuide": "Guia de auto-hospedagem →"
+   "selfHostGuide": "Guia de auto-hospedagem →",
+   "resetTitle": "Restaurar os endpoints de serviço?",
+   "resetBody": "Os quatro serviços voltam aos endereços da Vela. Os endereços que você inseriu aqui serão descartados.",
+   "resetConfirm": "Restaurar",
+   "resetCancel": "Cancelar"
   },
   "addNetwork": {
    "modalTitle": "Adicionar rede",

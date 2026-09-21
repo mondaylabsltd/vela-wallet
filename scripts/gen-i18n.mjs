@@ -346,8 +346,11 @@ for (let i = 1; i < PATHS.length; i++) {
 //   mismatch / timeout, reopen, the desktop tab's "signed, close me") and the
 //   `settings.signing` branch with 10 leaves (the default "Sign with" row, the
 //   signer page row, its three refusals, reset, save). 1692 + 20 + 1 = 1713.
-if (PATHS.length !== 1713) fail(`expected 1713 paths (1624 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1624) fail(`expected 1624 leaf paths, got ${leafSet.size}`);
+// 1717 (spec 072, 2026-09-22): +4 `settingsModals.endpoints.reset*` leaves —
+//   resetting the service endpoints is destructive (FR-010) and asks first on
+//   every shell; the corpus had the button and no question. No new branch.
+if (PATHS.length !== 1717) fail(`expected 1717 paths (1628 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1628) fail(`expected 1628 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

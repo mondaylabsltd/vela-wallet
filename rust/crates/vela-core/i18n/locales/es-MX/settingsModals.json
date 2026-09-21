@@ -42,7 +42,11 @@
       "fiatLabel": "TIPOS DE CAMBIO FIAT",
       "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
       "resetToDefaults": "Restablecer a los valores predeterminados",
-      "selfHostGuide": "Guía de autoalojamiento →"
+      "selfHostGuide": "Guía de autoalojamiento →",
+      "resetTitle": "¿Restablecer los endpoints de servicio?",
+      "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
+      "resetConfirm": "Restablecer",
+      "resetCancel": "Cancelar"
     },
     "addNetwork": {
       "modalTitle": "Agregar red",

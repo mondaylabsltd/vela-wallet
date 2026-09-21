@@ -126,6 +126,12 @@ pub fn storage_is_cache_key(key: String) -> bool {
     storage_catalog::is_cache_key(&key)
 }
 
+/// Is this key the wallet's at all (counted in the storage total)?
+#[uniffi::export]
+pub fn storage_is_ours(key: String) -> bool {
+    storage_catalog::is_ours(&key)
+}
+
 /// Would "erase this device" delete this key? Scan the namespace, keep the
 /// keep-list.
 #[uniffi::export]

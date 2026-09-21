@@ -1574,7 +1574,11 @@
    "fiatLabel": "법정화폐 환율",
    "fiatHint": "USD 기준 환율로 통화 목록을 구성합니다 — 더 넓은 범위의 소스로 교체 가능.",
    "resetToDefaults": "기본값으로 재설정",
-   "selfHostGuide": "직접 배포 가이드 →"
+   "selfHostGuide": "직접 배포 가이드 →",
+   "resetTitle": "서비스 엔드포인트를 재설정할까요?",
+   "resetBody": "네 가지 서비스 모두 Vela의 주소로 돌아갑니다. 여기에 입력한 주소는 삭제됩니다.",
+   "resetConfirm": "재설정",
+   "resetCancel": "취소"
   },
   "addNetwork": {
    "modalTitle": "네트워크 추가",

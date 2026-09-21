@@ -42,7 +42,11 @@
       "fiatLabel": "KURS FIAT",
       "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
       "resetToDefaults": "Setel Ulang ke Bawaan",
-      "selfHostGuide": "Panduan self-hosting →"
+      "selfHostGuide": "Panduan self-hosting →",
+      "resetTitle": "Setel ulang endpoint layanan?",
+      "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
+      "resetConfirm": "Setel Ulang",
+      "resetCancel": "Batal"
     },
     "addNetwork": {
       "modalTitle": "Tambah Jaringan",
