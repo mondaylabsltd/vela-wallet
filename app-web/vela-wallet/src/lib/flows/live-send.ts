@@ -26,6 +26,7 @@ import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { amountToInput } from '$lib/services/locale-format';
+import { fromBaseUnits } from '$lib/services/eip681';
 import { exactAmount, moneyText, trimBalance, unitAdornment } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
@@ -881,8 +882,15 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the refusal. And it does not take `amount_warning`: that one is derived
 		// from the single form's figure, which a split leaves behind, so it kept
 		// judging a number that was no longer on the screen.
+		//
+		// Ahead of both: the same-asset ceiling (`same_asset_fee_issue`), when
+		// the coin being sent also pays the fee. The core measures it against
+		// the split's TOTAL too, and it is the more specific sentence — it says
+		// the most that can be sent, where "exceeds your balance" does not. The
+		// order is the other three shells': ceiling, then the mode's own verdict.
 		alert:
 			alertWords(inputs.alert, m) ??
+			sameFeeWords(send, m) ??
 			(split
 				? send.split_over_balance
 					? m['send.alertInsufficientBalanceBody']
@@ -942,6 +950,30 @@ function denomReason(send: SendView, m: WalletFlowMessages): string | undefined 
 	return issue === null
 		? undefined
 		: fill(m['send.denomToggleNoRate'], { code: issue.code, symbol: issue.symbol });
+}
+
+/**
+ * The same-asset ceiling, worded: what the transfer and its fee need together,
+ * what there is, and the most that can be sent. Every figure arrives in base
+ * units; the shell only formats them (the phones' `formWarning`).
+ */
+function sameFeeWords(send: SendView, m: WalletFlowMessages): string | undefined {
+	const issue = send.same_asset_fee_issue;
+	if (issue == null) return undefined;
+	const decimals = send.selected_token?.decimals ?? 18;
+	const human = (base: string) => exactAmount(fromBaseUnits(BigInt(base), decimals));
+	const body = fill(m['send.sameFeeTokenBody'], {
+		amount: human(issue.transfer_amount),
+		fee: human(issue.fee_amount),
+		total: human(issue.total),
+		symbol: issue.symbol,
+		balance: human(issue.balance)
+	});
+	const most = fill(m['send.sameFeeTokenMax'], {
+		amount: human(issue.max_transfer_amount),
+		symbol: issue.symbol
+	});
+	return `${body} ${most}`;
 }
 
 /**
