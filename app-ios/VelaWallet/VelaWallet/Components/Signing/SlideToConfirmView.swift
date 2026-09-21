@@ -74,6 +74,15 @@ struct SlideToConfirmView: View {
             )
         }
         .frame(height: ExploreGeometry.slideTrack)
+        // Opened again after a slide: the ceremony ended with nothing signed
+        // (a cancelled passkey sheet, a closed Clear Signer page) and the
+        // request stayed open, so the slide is back at rest — a knob left at
+        // the far end is a request nobody can sign another way (spec 071).
+        .onChange(of: enabled) { _, open in
+            guard open, done else { return }
+            done = false
+            progress = 0
+        }
         .opacity(enabled ? 1 : Tokens.Opacity.disabled)
         .allowsHitTesting(enabled)
         // VoiceOver and Switch Control confirm by activating, not dragging.
