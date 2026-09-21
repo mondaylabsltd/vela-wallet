@@ -17,14 +17,15 @@ use crate::theme::{self, Theme};
 use crate::wallet::components::{activity_row, asset_row, empty_state, icon_img, token_icon_logos};
 
 use super::components::{
-    accent_button, address_card, fact_row, fee_row, filter_chips, flow_search, ghost_button,
+    accent_button, address_card, fact_row, fee_refresh_icon, fee_row, fee_speed_note,
+    fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button,
     inline_mark, mono_field, network_pill, network_row, qr_card, recipient_card, segmented_toggle,
     status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
-    DepositEntry, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr, ScanModal,
-    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
+    DepositEntry, FeeSpeedModel, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr,
+    ScanModal, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
 };
 
 /// One prepared click listener. The page builds these from `cx.listener`
@@ -63,6 +64,12 @@ pub struct PanelActions {
     pub open_send_form: Option<Click>,
     /// DSD2L: the fee row and the recipient picker.
     pub open_fee_token: Option<Click>,
+    /// DSD2L, live: measure the fee again (spec 068).
+    pub refresh_fee: Option<Click>,
+    /// DSD2L, live: fold or unfold the speed control, and one listener per
+    /// option in the order they draw — a pick is one-shot.
+    pub toggle_speed: Option<Click>,
+    pub pick_speed_rows: Vec<Click>,
     pub open_contact_pick: Option<Click>,
     /// DSD2L's recipient pills — one more payee, or a pasted list of them.
     pub add_recipient: Option<Click>,
@@ -1089,6 +1096,10 @@ fn send_form(
     mut actions: PanelActions,
 ) -> Div {
     let (mark, symbol, detail, max) = &model.token;
+    // The speed control's listeners, taken before the split rows borrow the
+    // rest of `actions`.
+    let toggle_speed = actions.toggle_speed.take();
+    let pick_speed = std::mem::take(&mut actions.pick_speed_rows);
     let mut col = column().child(token_header_card(
         theme,
         mark,
@@ -1303,18 +1314,79 @@ fn send_form(
             actions.notice_dismiss.take(),
         ));
     }
-    col.child(clickable(
-        "flow-fee-row",
-        actions.open_fee_token.take(),
-        fee_row(theme, icons, &model.fee),
-    ))
-    .child(cta_button(
+    // The fee row, and beside it the refresh control — outside the row's
+    // own click, so measuring again never opens the fee-coin sheet.
+    let mut fee_line =
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(div().flex_1().min_w(px(0.)).child(clickable(
+                "flow-fee-row",
+                actions.open_fee_token.take(),
+                fee_row(theme, icons, &model.fee),
+            )));
+    if model.fee.refresh.is_some() {
+        fee_line = fee_line.child(clickable(
+            "flow-fee-refresh",
+            actions.refresh_fee.take(),
+            fee_refresh_icon(theme, icons, &model.fee),
+        ));
+    }
+    let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee_line);
+    if model.fee.refresh.is_some() {
+        fee_block = fee_block.child(fee_stale_line(theme, &model.fee));
+    }
+    if let Some(speed) = &model.speed {
+        fee_block = fee_block.child(speed_control(theme, icons, speed, toggle_speed, pick_speed));
+    }
+    col.child(fee_block).child(cta_button(
         "flow-form-cta",
         theme,
         model.cta.clone(),
         model.cta_state,
         actions.advance.take(),
     ))
+}
+
+/// The speed control under the fee row (spec 068): folded, the word and the
+/// tier in force; open, the one-shot promise and three options — or, on a
+/// network with one speed, that one statement instead.
+fn speed_control(
+    theme: &Theme,
+    icons: &mut IconCache,
+    speed: &FeeSpeedModel,
+    toggle: Option<Click>,
+    picks: Vec<Click>,
+) -> Div {
+    let mut block = div().flex().flex_col().child(clickable(
+        "flow-speed-summary",
+        toggle,
+        fee_speed_summary(theme, icons, speed),
+    ));
+    // Folded AND open: the screen must never say "Fast" over a Settings row
+    // that says "Slow" without saying why.
+    if let Some(free) = &speed.free_note {
+        block = block.child(fee_speed_note(theme, free));
+    }
+    if !speed.open {
+        return block;
+    }
+    if let Some(single) = &speed.single_note {
+        return block.child(fee_speed_note(theme, single));
+    }
+    // Said BEFORE the options: somebody about to change one payment's speed
+    // needs to know first that every later payment is untouched.
+    block = block.child(fee_speed_note(theme, &speed.once_note));
+    let mut picks = picks.into_iter();
+    for (index, option) in speed.options.iter().enumerate() {
+        block = block.child(clickable(
+            ("flow-speed-option", index),
+            picks.next(),
+            fee_speed_option(theme, icons, speed, option),
+        ));
+    }
+    block
 }
 
 fn contact_pick(

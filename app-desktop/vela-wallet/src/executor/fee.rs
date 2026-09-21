@@ -21,7 +21,7 @@ use gpui::App;
 
 use vela_core::app::fee_policy::{Event, FeeOperation, FeePolicy, FeeShellResult};
 
-use crate::executor::{chain, relay, storage, user_op};
+use crate::executor::{fee_signals, relay, storage, user_op};
 use crate::resident::{Answer, Machine};
 
 impl Machine for FeePolicy {
@@ -38,7 +38,7 @@ impl Machine for FeePolicy {
             FeeOperation::FetchGasPrice { chain_id, want_tip } => {
                 let (chain_id, want_tip) = (*chain_id, *want_tip);
                 Answer::Blocking(Box::new(move || {
-                    let signals = chain::raw_gas_signals(chain_id, want_tip);
+                    let signals = fee_signals::gas_signals(chain_id, want_tip);
                     FeeShellResult::GasPrice {
                         eth_gas_price: signals.eth_gas_price,
                         base_fee: signals.base_fee,
@@ -50,7 +50,7 @@ impl Machine for FeePolicy {
             FeeOperation::FetchBundlerQuote { chain_id, tier } => {
                 let (chain_id, tier) = (*chain_id, *tier);
                 Answer::Blocking(Box::new(move || FeeShellResult::BundlerQuote {
-                    quote: relay::raw_bundler_quote(chain_id, tier),
+                    quote: fee_signals::bundler_quote(chain_id, tier),
                 }))
             }
 

@@ -33,8 +33,9 @@ use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigning, ClearSigningView, Event as ClearEvent,
 };
 use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier, FeeView,
+    Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeView,
 };
+use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::sign_request::{
     Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignQuotedFee, SignRequest,
     SignShellResult, SignView,
@@ -289,6 +290,14 @@ impl SigningHost {
         self.fee_seq += 1;
         let seq = self.fee_seq;
         let public_key_available = !self.ctx.keys.is_empty();
+        // The person's stored default speed (spec 069): a dApp transaction is
+        // priced — and, through the quoted fee, submitted — at the speed
+        // Settings names, which is `fast` for everybody who never chose.
+        let tier = crate::resident::resident::<FeeTierPref>(cx)
+            .read(cx)
+            .view()
+            .tier;
+        let tier = vela_core::app::fee_speed::offered(tier);
         cx.spawn(async move |host, cx| {
             let probe = account.clone();
             let deployed = cx
@@ -314,7 +323,7 @@ impl SigningHost {
                         account,
                         deployed,
                         public_key_available,
-                        tier: FeeTier::Fast,
+                        tier,
                         calls,
                         fee_token: None,
                     },
@@ -629,6 +638,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         quoted_fee: fee.fee.as_ref().map(|estimate| SignQuotedFee {
             amount: estimate.total_wei.clone(),
             recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+            // The speed this very estimate was priced at — named on the wire
+            // beside the amount (spec 069); the core drops a `rapid`.
+            tier: Some(estimate.tier),
         }),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
@@ -937,7 +949,7 @@ mod approve_tests {
             max_gas_price: None,
             total_gas: "21000".to_owned(),
             deployed: true,
-            tier: FeeTier::Fast,
+            tier: vela_core::app::fee_policy::FeeTier::Fast,
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
@@ -947,6 +959,7 @@ mod approve_tests {
         let quoted = Some(SignQuotedFee {
             amount: shown.total_wei.clone(),
             recipient: shown.fee_recipient.clone().unwrap_or_default(),
+            tier: Some(shown.tier),
         });
         let opts = SignApproveOpts {
             max_fee_per_gas: Some(shown.max_fee_per_gas.clone()),
@@ -964,6 +977,8 @@ mod approve_tests {
             .unwrap_or_else(|| unreachable!("a priced sheet approves with its price"));
         assert_eq!(signed.amount, shown.total_wei, "the figure on the screen");
         assert_eq!(signed.recipient, "0xee2c");
+        // …and the speed it was priced at, named beside it (spec 069).
+        assert_eq!(signed.tier, Some(shown.tier));
         assert_eq!(opts.max_fee_per_gas.as_deref(), Some("1500000000"));
     }
 
@@ -977,6 +992,7 @@ mod approve_tests {
         let quoted = none.map(|estimate| SignQuotedFee {
             amount: estimate.total_wei.clone(),
             recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+            tier: Some(estimate.tier),
         });
         assert!(quoted.is_none());
     }

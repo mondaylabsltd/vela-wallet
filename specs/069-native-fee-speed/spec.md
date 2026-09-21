@@ -82,8 +82,8 @@ Every shell does the same five things.
    measurement; the stale line ("这个数字有点旧了") reserves its height, is not
    shown while measuring nor over a figure of another tier.
 4. **The tier on the wire.** The quote is priced at the tier in force and the
-   submission names the settled quote's tier as `eth_sendUserOperation`'s
-   third parameter (never `rapid`); the relay reads it (spec 068 relay work,
+   submission names `quoted_fee.tier` as `eth_sendUserOperation`'s third
+   parameter (never `rapid`); the relay reads it (spec 068 relay work,
    deployed). The bundler quote's `maxPriorityFeePerGas` is read so the gas
    bid can be published.
 5. **The confirm restates the speed** only for a pick or a free upgrade (the
@@ -91,14 +91,26 @@ Every shell does the same five things.
 
 ### The dApp signing sheet [decided here]
 
-The web's signing sheet has no picker and quotes `fast`. A Settings row that
-says "default transaction speed" and is ignored by every dApp transaction
-would be a setting that lies, so on all four shells the signing sheet now
-**prices at the stored default and names it on the wire**, with the refresh
-control and stale line. It gets **no picker and no free upgrade** in 069 — an
-urgency override on the sheet is a follow-up, not a regression (today it is
-`fast` for everybody, and it stays `fast` for everybody who never changes the
-setting).
+A Settings row that says "default transaction speed" and is ignored by every
+dApp transaction would be a setting that lies. The native sheets already sign
+the fee they display (`SignApproveOpts.quoted_fee`), so on desktop, Android
+and iOS the sheet now **prices at the stored default and names it on the
+wire** (`SignQuotedFee.tier`, copied from the displayed estimate). It gets
+**no picker and no free upgrade** in 069; for everybody who never changes the
+setting it is `fast`, exactly as before.
+
+The web sheet is left as it is: it approves with `quoted_fee: null` and its
+submit path prices on its own, so there is no displayed quote whose tier it
+could name. Making it sign what it shows is a change to the web's dApp money
+path, recorded below as a follow-up rather than folded in here.
+
+### The tier on the wire, from one place
+
+`SendQuotedFee` (built by the `send` core) and `SignQuotedFee` (carried by
+the approve) now hold `tier`, taken from the same estimate as the amount and
+filtered to a name the relay accepts (`fee_speed::wire_tier` — never
+`rapid`). Every shell's submit path reads it there; the web's `feeTier()`
+port is gone.
 
 ### Per shell
 
@@ -137,4 +149,6 @@ Android → iOS, one commit per shell. The relay already honours a named tier
 ## Follow-ups (not in 069)
 
 - An urgency override (picker) on the dApp signing sheet.
+- The web signing sheet signs its displayed quote (today `quoted_fee: null`),
+  after which it can honour the stored default like the native sheets.
 - Per-chain default speeds (spec 068 rule 3).

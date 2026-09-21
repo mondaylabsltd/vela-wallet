@@ -146,12 +146,21 @@ fn quantity_text(value: Option<&Value>) -> Option<String> {
 }
 
 pub fn raw_gas_signals(chain_id: u32, want_tip: bool) -> RawGasSignals {
+    read_gas_signals(chain_id, want_tip).0
+}
+
+/// [`raw_gas_signals`], and whether the reading is COMPLETE: every leg that was
+/// asked for answered, and the price is positive. Only a complete reading may
+/// be held (`fee_signals`, issue 212) — without a positive `eth_gasPrice` the
+/// core falls to its 5-gwei default, and without the tip it under-prices
+/// Gnosis ~40×, and neither guess may be pinned for 15 s.
+pub fn read_gas_signals(chain_id: u32, want_tip: bool) -> (RawGasSignals, bool) {
     let gas_price = pool::call(chain_id, "eth_gasPrice", json!([])).ok();
     let block = pool::call(chain_id, "eth_getBlockByNumber", json!(["latest", false])).ok();
     let tip = want_tip
         .then(|| pool::call(chain_id, "eth_maxPriorityFeePerGas", json!([])).ok())
         .flatten();
-    RawGasSignals {
+    let signals = RawGasSignals {
         eth_gas_price: quantity_text(gas_price.as_ref().and_then(|b| b.get("result"))),
         base_fee: quantity_text(
             block
@@ -159,7 +168,21 @@ pub fn raw_gas_signals(chain_id: u32, want_tip: bool) -> RawGasSignals {
                 .and_then(|b| b.pointer("/result/baseFeePerGas")),
         ),
         priority_fee: quantity_text(tip.as_ref().and_then(|b| b.get("result"))),
-    }
+    };
+    // A block that ANSWERED without `baseFeePerGas` is a real pre-London
+    // reading, not a failed leg; a block that did not answer is.
+    let block_answered = block
+        .as_ref()
+        .and_then(|b| b.get("result"))
+        .is_some_and(Value::is_object);
+    let complete = signals
+        .eth_gas_price
+        .as_deref()
+        .and_then(|price| price.parse::<u128>().ok())
+        .is_some_and(|price| price > 0)
+        && block_answered
+        && (!want_tip || signals.priority_fee.is_some());
+    (signals, complete)
 }
 
 /// `getGasPrices`: the derived network price, cached 15 s, with the 5-gwei

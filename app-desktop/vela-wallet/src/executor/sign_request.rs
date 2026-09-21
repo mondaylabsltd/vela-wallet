@@ -238,6 +238,8 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
                 Some(user_op::QuotedFee {
                     amount: fee.amount.parse().ok()?,
                     recipient: fee.recipient.clone(),
+                    // The speed this fee was priced at (spec 069).
+                    tier: fee.tier,
                 })
             });
             let ctx = ctx.clone();

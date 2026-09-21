@@ -3466,6 +3466,22 @@ impl WalletPage {
         Some((host.view.clone(), host.fee_view.clone()))
     }
 
+    /// The speed control's inputs (spec 069): the core's view, and the fee
+    /// session pricing each offered tier.
+    fn send_speed(&self, cx: &Context<Self>) -> Option<flows_live::SpeedInputs> {
+        let host = self.send_host.as_ref()?.read(cx);
+        let tier_views = host
+            .speed_view
+            .options
+            .iter()
+            .filter_map(|option| Some((option.tier, host.tier_view(option.tier)?.clone())))
+            .collect();
+        Some(flows_live::SpeedInputs {
+            view: host.speed_view.clone(),
+            tier_views,
+        })
+    }
+
     /// Which panel the flow column shows. For a live send the CORE's stage
     /// decides, and the stack is rebuilt from it so the chevron stays truthful;
     /// a core that asked to leave takes the machines with it.
@@ -3539,6 +3555,7 @@ impl WalletPage {
                 locale: &self.locale,
                 identity_name: &identity.name,
                 identity_address: &identity.address,
+                speed: None,
             },
             panel == FlowPanel::Dsd3,
         );
@@ -3854,6 +3871,7 @@ impl WalletPage {
             | FlowPanel::Dsd4 => match self.send_views(cx) {
                 Some((send, fee)) => {
                     let identity = self.identity();
+                    let speed = self.send_speed(cx);
                     let inputs = flows_live::SendInputs {
                         send: &send,
                         fee: &fee,
@@ -3862,6 +3880,7 @@ impl WalletPage {
                         locale: &self.locale,
                         identity_name: &identity.name,
                         identity_address: &identity.address,
+                        speed: speed.as_ref(),
                     };
                     match panel {
                         FlowPanel::Dsd1 => flow_fixtures::FlowBody::SendPick(
@@ -3971,6 +3990,9 @@ impl WalletPage {
             open_tx_rows: Vec::new(),
             open_send_form: bind(FlowStep::SendForm, cx),
             open_fee_token: bind(FlowStep::FeeToken, cx),
+            refresh_fee: None,
+            toggle_speed: None,
+            pick_speed_rows: Vec::new(),
             open_contact_pick: bind(FlowStep::ContactPick, cx),
             open_add_token: bind(FlowStep::AddToken, cx),
             open_scan: bind(FlowStep::Scan, cx),
@@ -4306,6 +4328,33 @@ impl WalletPage {
                             cx.notify();
                         },
                     )));
+                    // Spec 069: measure again, and the speed control — every
+                    // decision behind it is the `fee_speed` core's.
+                    let on_host =
+                        |step: fn(&mut SendHost, &mut Context<SendHost>)| -> panels::Click {
+                            let host = host.clone();
+                            Box::new(
+                                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                    host.update(cx, step);
+                                },
+                            )
+                        };
+                    actions.refresh_fee = Some(on_host(SendHost::refresh_fee));
+                    actions.toggle_speed = Some(on_host(SendHost::toggle_speed));
+                    actions.pick_speed_rows = host
+                        .read(cx)
+                        .speed_view
+                        .options
+                        .iter()
+                        .map(|option| {
+                            let (host, tier) = (host.clone(), option.tier);
+                            Box::new(
+                                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                                    host.update(cx, |host, cx| host.pick_speed(tier, cx));
+                                },
+                            ) as panels::Click
+                        })
+                        .collect();
                     actions.advance = Some(to_host(SendEvent::Continue));
                 }
                 FlowPanel::Dsd2e => {
@@ -5330,6 +5379,10 @@ impl WalletPage {
             ),
             SettingsPage::RpcProviders => (self.settings.nav_rpc_providers.clone(), None),
             SettingsPage::Endpoints => (self.settings.nav_endpoints.clone(), None),
+            SettingsPage::FeeSpeed => (
+                self.settings.fee_speed_title.clone(),
+                Some(self.settings.fee_speed_subtitle.clone()),
+            ),
             SettingsPage::Storage => (
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
@@ -5407,6 +5460,7 @@ impl WalletPage {
             SettingsPage::Networks => self.settings_networks(theme, window, cx),
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
+            SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
             SettingsPage::Storage => self.settings_storage(theme),
             SettingsPage::About => self.settings_about(theme),
         };
@@ -7229,6 +7283,83 @@ impl WalletPage {
     }
 
     /// DST7 — how much of this device Vela is using, and what can be given back.
+    /// The default transaction speed (spec 069): the three speeds, each with
+    /// the line on what it buys, the stored one ticked. Choosing one commits
+    /// and persists at once — `fee_tier_pref` — and a send already open
+    /// follows it until the person picks a speed on that send.
+    fn settings_fee_speed(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        use vela_core::app::fee_policy::FeeTier;
+        use vela_core::app::fee_tier_pref::{Event as FeeTierPrefEvent, FeeTierPref};
+        let view = resident::resident::<FeeTierPref>(cx).read(cx).view();
+        let s = &self.flow_strings;
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .p(px(4.))
+            .rounded(px(12.))
+            .bg(theme.bg_sunken);
+        for (index, tier) in view.offered.iter().copied().enumerate() {
+            let (name, hint) = match tier {
+                FeeTier::Standard => (
+                    s.gas_tier_standard.clone(),
+                    s.gas_tier_hint_standard.clone(),
+                ),
+                FeeTier::Slow => (s.gas_tier_slow.clone(), s.gas_tier_hint_slow.clone()),
+                FeeTier::Fast | FeeTier::Rapid => {
+                    (s.gas_tier_fast.clone(), s.gas_tier_hint_fast.clone())
+                }
+            };
+            let selected = tier == view.tier;
+            list = list.child(
+                div()
+                    .id(ElementId::from(("settings-fee-speed", index)))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .px(px(12.))
+                    .py(px(10.))
+                    .rounded(px(10.))
+                    .cursor_pointer()
+                    .when(selected, |row| row.bg(theme.bg_raised))
+                    .hover(|row| row.bg(theme.bg_raised))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        resident::resident::<FeeTierPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(FeeTierPrefEvent::UserChose { tier }, cx);
+                        });
+                        cx.notify();
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(if selected {
+                                        theme.accent
+                                    } else {
+                                        theme.fg_base
+                                    })
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_subtle)
+                                    .child(hint),
+                            ),
+                    )
+                    .child(div().w(px(16.)).children(selected.then(|| {
+                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
+                    }))),
+            );
+        }
+        div().flex().flex_col().max_w(px(560.)).child(list)
+    }
+
     fn settings_storage(&mut self, theme: &Theme) -> Div {
         let s = &self.settings;
         // Live since 031. The panel told everybody 2.4 MB / 216 records, and a
@@ -11404,9 +11535,10 @@ mod tests {
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 8);
+        assert_eq!(SettingsPage::ALL.len(), 9);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
-        assert_eq!(SettingsPage::ALL[7], SettingsPage::About);
+        assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
+        assert_eq!(SettingsPage::ALL[8], SettingsPage::About);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips
