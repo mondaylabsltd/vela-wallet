@@ -60,6 +60,11 @@ final class CoreDriver {
     /// reporting the fault and nothing else — which is the honest thing when
     /// there is no failure to express.
     var toFailure: ((UInt64, Error) -> String?)?
+    /// The same, keyed by the OPERATION rather than the effect id: the
+    /// machine's neutral answer for what was asked (spec 070 — every browser
+    /// operation has one, so an answer the core refuses still settles a page
+    /// instead of leaving it waiting). Consulted when `toFailure` has none.
+    var neutralAnswer: (([String: Any]) -> String?)?
 
     private var running: [UInt64: Task<Void, Never>] = [:]
     private var disposed = false
@@ -143,12 +148,12 @@ final class CoreDriver {
                 return
             }
             self.running.removeValue(forKey: id)
-            self.resolve(id: id, resultJson: resultJson)
+            self.resolve(id: id, operation: operation, resultJson: resultJson)
         }
         running[id] = task
     }
 
-    private func resolve(id: UInt64, resultJson: String) {
+    private func resolve(id: UInt64, operation: [String: Any], resultJson: String) {
         guard !disposed else { return }
         do {
             apply(try CoreJSON.object(bridge.resolveEffect(effectId: id, resultJson: resultJson)))
@@ -165,7 +170,7 @@ final class CoreDriver {
             // then the fault is reported. If a second answer is refused too,
             // the loop stops there rather than recursing.
             onFault(error)
-            guard let failure = toFailure?(id, error) else { return }
+            guard let failure = toFailure?(id, error) ?? neutralAnswer?(operation) else { return }
             do {
                 apply(try CoreJSON.object(
                     bridge.resolveEffect(effectId: id, resultJson: failure)
