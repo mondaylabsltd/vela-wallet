@@ -306,6 +306,34 @@ struct SigningAssemblyTests {
         #expect(opts["max_fee_per_gas"] as? String == "1500000000")
     }
 
+    /// Issue #262: the approve signs the coin that was picked, in THAT coin's
+    /// units — the send core's own rule (`submit_user_op`).
+    @Test func theApproveCarriesThePickedStablecoinAndItsOwnAmount() {
+        let usdt = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        let picked = FeeViewWire(
+            busy: false, failed: nil,
+            fee: FeeEstimateWire(
+                chainId: 1, totalWei: "0", maxFeePerGas: "1", totalGas: "300000",
+                deployed: false, quoted: true,
+                feeAsset: .erc20(token: usdt, decimals: 6, amount: "1020000", symbol: "USDT"),
+                feeRecipient: "0xrelay"
+            ),
+            stale: false, feeToken: usdt, options: [], confirmFeeReady: true
+        )
+        let opts = SigningController.approveOpts(fee: picked, clear: .empty, guard: .empty)
+        #expect(opts["gas_fee_token"] as? String == usdt)
+        #expect((opts["quoted_fee"] as? [String: Any])?["amount"] as? String == "1020000")
+
+        let native = SigningController.approveOpts(fee: nil, clear: .empty, guard: .empty)
+        #expect(native["gas_fee_token"] is NSNull)
+        // No recipient, no quoted fee: an in-band leg with nowhere to pay is not one.
+        let noRecipient = FeeEstimateWire(
+            chainId: 1, totalWei: "5", maxFeePerGas: "1", totalGas: "1", deployed: true,
+            quoted: false, feeAsset: .native, feeRecipient: nil
+        )
+        #expect(SigningController.quotedFee(noRecipient) == nil)
+    }
+
     /// Each method reaches its own rung of the clear-signing ladder.
     @Test func eachMethodStartsTheRightResolution() {
         let tx = SigningController.clearKickoff(
@@ -647,6 +675,77 @@ struct SigningLiveTests {
         #expect(SigningLive.confirmEnabled(
             sign: openGate, guard: .empty, fee: unreadyFee, clear: clear(surface: .messageSign)
         ), "a personal_sign has no network fee and must not wait for a quote")
+    }
+
+    // -- Issue #262: the coin that pays -------------------------------------
+
+    private func option(
+        _ symbol: String, contract: String?, decimals: Int, balance: String, amount: String,
+        insufficient: Bool, selected: Bool
+    ) -> FeeOptionWire {
+        FeeOptionWire(
+            symbol: symbol, contract: contract, decimals: decimals, balance: balance,
+            recipient: "0xrelay", usdBalance: "0", usdPrice: nil, amount: amount,
+            insufficient: insufficient, selected: selected
+        )
+    }
+
+    /// The report's own wallet: 0 ETH and 2 USDT on Ethereum, quoted in ETH.
+    @Test func aFeeInACoinTheAccountDoesNotHoldSaysSoAndTheListOffersTheOneItHas() {
+        let eth = option("ETH", contract: nil, decimals: 18, balance: "0",
+                         amount: "400000000000000", insufficient: true, selected: true)
+        let usdt = option("USDT", contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                          decimals: 6, balance: "2000000", amount: "1020000",
+                          insufficient: false, selected: false)
+        let fee = FeeViewWire(
+            busy: false, failed: nil,
+            fee: FeeEstimateWire(
+                chainId: 1, totalWei: "400000000000000", maxFeePerGas: "1", totalGas: "300000",
+                deployed: false, quoted: true, feeAsset: .native, feeRecipient: "0xrelay"
+            ),
+            stale: false, feeToken: nil, options: [eth, usdt], confirmFeeReady: false
+        )
+        let closed = SigningLive.feeModel(clear: clear(surface: .clearSign), fee: fee, context: context())
+        guard case .onchain(_, _, let shut, let warning) = closed else {
+            Issue.record("a transaction's fee row is on-chain")
+            return
+        }
+        #expect(warning == loc.t("send.warnInsufficientGas", vars: ["sym": "ETH"]))
+        #expect(shut == nil, "the list is closed until the row is tapped")
+
+        var ctx = context()
+        ctx.feeOpen = true
+        guard case .onchain(_, _, let open?, _) = SigningLive.feeModel(
+            clear: clear(surface: .clearSign), fee: fee, context: ctx
+        ) else {
+            Issue.record("an open list with two coins is drawn")
+            return
+        }
+        #expect(open.title == loc.t("componentsUi.signing.feeTokenTitle"))
+        #expect(open.options.map(\.id) == [SigningLive.nativeFeeId, usdt.contract])
+        #expect(open.options[0].disabled, "ETH cannot pay: shown, not pickable")
+        #expect(!open.options[1].disabled)
+        #expect(open.options[1].balance == "2 USDT")
+        #expect(open.options[1].fee == "~1.02 USDT")
+
+        // A coin that pays is no warning; nor is a quote still in flight.
+        let paid = FeeViewWire(
+            busy: false, failed: nil, fee: fee.fee, stale: false, feeToken: nil,
+            options: [option("ETH", contract: nil, decimals: 18, balance: "1000000000000000000",
+                             amount: "400000000000000", insufficient: false, selected: true)],
+            confirmFeeReady: true
+        )
+        let busy = FeeViewWire(
+            busy: true, failed: nil, fee: fee.fee, stale: false, feeToken: nil,
+            options: [eth, usdt], confirmFeeReady: false
+        )
+        for view in [paid, busy] {
+            if case .onchain(_, _, _, let none) = SigningLive.feeModel(
+                clear: clear(surface: .clearSign), fee: view, context: ctx
+            ) {
+                #expect(none == nil)
+            }
+        }
     }
 
     /// The "as requested" chip is **disabled** for an unlimited approval, not

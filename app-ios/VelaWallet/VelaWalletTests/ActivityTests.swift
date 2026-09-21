@@ -30,6 +30,34 @@ struct ActivityTests {
         ]
     }
 
+    // MARK: - An arrival moves the balance (#188)
+
+    /// A NEW non-null `new_item_id` is an arrival and refreshes the balances —
+    /// once. The same id again, or the glow clearing, is not another one.
+    @Test func anIncomingTransferRefreshesTheBalanceOnce() {
+        let (store, defaults) = freshStore()
+        let accounts = AccountStore(defaults: defaults)
+        let pool = RpcPool(store: store, accounts: accounts)
+        let held = HeldTokens()
+        let activity = ActivityStore(
+            store: store, accounts: accounts, held: held,
+            trust: TokenTrustStore(store: store, pool: pool, accounts: accounts, held: held)
+        )
+        var refreshes = 0
+        activity.onNewItem = { refreshes += 1 }
+        func feed(_ id: String?) -> FeedViewWire {
+            FeedViewWire(rows: [], transactions: [], newItemId: id, toast: nil)
+        }
+        activity.commit(feed(nil))
+        #expect(refreshes == 0, "the first pass is not an arrival")
+        activity.commit(feed("rx-1"))
+        activity.commit(feed("rx-1"))
+        #expect(refreshes == 1)
+        activity.commit(feed(nil))
+        activity.commit(feed("rx-2"))
+        #expect(refreshes == 2)
+    }
+
     // MARK: - The local store
 
     /// The merge answers **how many were new** — the number the core celebrates

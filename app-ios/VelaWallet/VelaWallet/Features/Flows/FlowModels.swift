@@ -679,6 +679,48 @@ struct SendReceiptModel {
     /// and navigating away from it would abandon a prompt nobody can answer.
     /// Android has drawn this distinction since 043.
     var ctaCancels: Bool = false
+    /// While the relay has the op: when it was handed over and how long the
+    /// chain usually takes. The screen counts; the sentences come from here.
+    var eta: ReceiptEtaModel?
+    /// A split: "N recipients", then every one of them (web spec 038 #D2).
+    var breakdownTitle: String?
+    var breakdown: [BreakdownRowModel] = []
+}
+
+/// The submitted receipt's clock (web `SendReceipt.svelte`, spec 038 #D3).
+/// Only the number is the screen's; every sentence is filled here.
+struct ReceiptEtaModel: Equatable {
+    let submittedAtMs: Double
+    let typicalS: Int
+    /// "Gnosis typically confirms in ~15s" — already filled.
+    let typicalLine: String
+    /// "~{{remaining}}s remaining" — inside the typical time.
+    let remainingTemplate: String
+    /// "{{elapsed}}s elapsed — almost there" — past it, where "almost" is true.
+    let elapsedTemplate: String
+    /// Past twice the typical time.
+    let slowLine: String
+
+    func elapsedS(nowMs: Double) -> Int { max(0, Int((nowMs - submittedAtMs) / 1000)) }
+
+    /// Inside the typical time the line counts DOWN — "~9s remaining" is a
+    /// promise with an end, "6s elapsed" is a stopwatch.
+    func lines(nowMs: Double) -> [String] {
+        let elapsed = elapsedS(nowMs: nowMs)
+        let second = elapsed < typicalS
+            ? remainingTemplate.replacingOccurrences(of: "{{remaining}}", with: String(typicalS - elapsed))
+            : elapsed < typicalS * 2
+                ? elapsedTemplate.replacingOccurrences(of: "{{elapsed}}", with: String(elapsed))
+                : slowLine
+        return [typicalLine, second]
+    }
+
+    /// The ring round the disc eases toward full and never gets there: ~70%
+    /// at the typical time, ~86% at twice it, a ceiling of 92%. Only the
+    /// confirmation closes it.
+    func progress(nowMs: Double) -> Double {
+        0.92 * (1 - exp(-1.4 * Double(elapsedS(nowMs: nowMs)) / Double(max(1, typicalS))))
+    }
 }
 
 // MARK: - The screens

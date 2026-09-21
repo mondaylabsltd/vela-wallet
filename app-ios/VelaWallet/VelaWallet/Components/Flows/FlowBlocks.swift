@@ -264,10 +264,15 @@ struct StatusHeroView: View {
     let stage: ReceiptStage
     let title: String
     let captions: [String]
+    /// Issue 199: how far the chain's usual time has run, drawn as a ring
+    /// OUTSIDE the disc (the disc keeps its one size). `nil` draws none; the
+    /// confirmation closes it, green.
+    var progress: Double?
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
             disc
+                .overlay { ring }
                 .padding(.bottom, Tokens.Space.s16)
             Text(verbatim: title)
                 .typeRole(Typography.title.scaled(textScale))
@@ -296,6 +301,28 @@ struct StatusHeroView: View {
             .fill(discFill)
             .frame(width: WalletFlowGeometry.statusHero, height: WalletFlowGeometry.statusHero)
             .overlay { mark }
+    }
+
+    @ViewBuilder private var ring: some View {
+        if let progress {
+            ZStack {
+                if stage != .confirmed {
+                    Circle().stroke(theme.borderBase, lineWidth: WalletFlowGeometry.statusRingStroke)
+                }
+                Circle()
+                    .trim(from: 0, to: stage == .confirmed ? 1 : min(1, max(0, progress)))
+                    .stroke(
+                        stage == .confirmed ? theme.successBase : theme.accentBase,
+                        style: StrokeStyle(lineWidth: WalletFlowGeometry.statusRingStroke, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    // One second per step, linear: the screen ticks once a second.
+                    .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
+            }
+            // Clears the disc rather than outlining it (the web's --space-md gutter).
+            .padding(-Tokens.Space.s12)
+            .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder private var mark: some View {

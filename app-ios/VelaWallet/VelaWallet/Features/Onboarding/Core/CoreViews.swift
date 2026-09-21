@@ -73,12 +73,18 @@ struct CreateKeyRow: Decodable, Equatable, Identifiable {
     /// Backed up to a sync fabric. Unknown attestation reads as `true` —
     /// display and the second-key gate both fail open.
     let synced: Bool
+    /// Is `synced` a FACT, or the benefit of the doubt? `false` when the
+    /// attestation was unreadable — the row then draws no badge (issue #207).
+    let syncedKnown: Bool
     let aaguid: String
     /// The vault holding this key, resolved by the core from `aaguid`. Empty
     /// when the catalog does not know the model — the row then says what it
     /// always said, from `method`.
     let providerName: String
     let method: KeyMethod
+    /// What this key IS, from the authenticator's own report. Rows draw their
+    /// icon AND caption from this one field (issue #207); `method` is routing.
+    let kind: KeyMethod
 
     /// Position-based, because the core's list has no ids and position IS the
     /// canonical founding order the address derivation pins.

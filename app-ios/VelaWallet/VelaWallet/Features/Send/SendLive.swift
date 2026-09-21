@@ -612,8 +612,12 @@ enum SendLive {
             ),
             FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
-                value: view.fee.map { "~\(feeLine($0, view: view, fee: fee, display: display))" }
-                    ?? (model.facts.count > 3 ? model.facts[3].value : "—")
+                // With no estimate the row says so, as the form's row does —
+                // never the drawing's "~0.0021 ETH · ≈$0.55", a promise about
+                // somebody else's send (the web's `feeText`: `send.fee ?? fee.fee`).
+                value: (view.fee ?? fee?.fee).map { "~\(feeLine($0, view: view, fee: fee, display: display))" }
+                    ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
+                        ? loc.t("send.estimatingFee") : "—")
             ),
         ]
 
@@ -834,6 +838,8 @@ enum SendLive {
 
         let title: String
         var captions: [String]
+        var eta: ReceiptEtaModel?
+        let parts = receiptParts(view, symbol: symbol, loc: loc)
         switch stage {
         case .submitting:
             // Three states, three sentences — the Android receipt's own
@@ -857,16 +863,31 @@ enum SendLive {
             }
             captions = [loc.t("send.txWaitingConfirm")]
             if let seconds = view.receipt?.typicalInclusionS {
-                captions.append(loc.t("send.txTypicalTime", vars: [
+                let typical = loc.t("send.txTypicalTime", vars: [
                     "chainName": chain, "estSecs": String(seconds),
-                ]))
+                ])
+                // When the core says WHEN it was handed over, the screen counts
+                // (web `live-send.ts`, #199); the typical line leads the clock.
+                if let at = view.receipt?.submittedAtMs {
+                    eta = ReceiptEtaModel(
+                        submittedAtMs: at, typicalS: seconds, typicalLine: typical,
+                        // Filled with its own placeholder: the screen fills the number.
+                        remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
+                        elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
+                        slowLine: loc.t("send.txSlowConfirm")
+                    )
+                } else {
+                    captions.append(typical)
+                }
             }
         case .confirmed:
             title = loc.t("send.txConfirmedTitle", vars: [
                 "amount": trim(view.receipt?.amount ?? view.confirmAmount),
                 "symbol": symbol,
             ])
-            let to = view.recipientIdentity?.name ?? AddressText.short(view.recipient)
+            // A split names its count here and its people below; "To " with
+            // nobody after it was what the single-recipient line read as.
+            let to = parts.title ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
             captions = ["\(to) · \(chain)"]
         case .failed:
             title = loc.t("componentsTx.receipt.statusFailed")
@@ -923,8 +944,44 @@ enum SendLive {
                     : loc.t("send.txCloseBackground")
             }(),
             ctaAccent: stage == .confirmed || stage == .failed,
-            ctaCancels: stage == .submitting && view.txStatus == "signing"
+            ctaCancels: stage == .submitting && view.txStatus == "signing",
+            eta: eta,
+            breakdownTitle: parts.title,
+            breakdown: parts.rows
         )
+    }
+
+    /// A split's parts on the receipt as on the confirm (web `receiptParts`,
+    /// #261): from the receipt's own frozen transfers once the core has them,
+    /// from the drafts before that. Nothing for a single send or a sweep — the
+    /// sweep's parts are assets, and its one recipient is already the caption.
+    static func receiptParts(
+        _ view: SendViewWire, symbol: String, loc: Loc
+    ) -> (title: String?, rows: [BreakdownRowModel]) {
+        let frozen = view.receipt?.kind == "split" ? view.receipt?.transfers ?? [] : []
+        let rows: [BreakdownRowModel]
+        if !frozen.isEmpty {
+            rows = frozen.map { transfer in
+                BreakdownRowModel(
+                    identiconSeed: transfer.to,
+                    label: transfer.toName ?? AddressText.short(transfer.to),
+                    value: "\(transfer.amount) \(transfer.symbol)".trimmingCharacters(in: .whitespaces)
+                )
+            }
+        } else if view.splitMode {
+            rows = view.recipients.map { draft in
+                BreakdownRowModel(
+                    identiconSeed: draft.address.isEmpty ? nil : draft.address,
+                    label: draft.name ?? AddressText.short(draft.address),
+                    value: "\(draft.amount) \(symbol)".trimmingCharacters(in: .whitespaces)
+                )
+            }
+        } else {
+            rows = []
+        }
+        guard !rows.isEmpty else { return (nil, []) }
+        let key = rows.count == 1 ? "send.recipientCount_one" : "send.recipientCount_other"
+        return (loc.t(key, vars: ["count": String(rows.count)]), rows)
     }
 
     // MARK: - SD2F, the fee-token sheet

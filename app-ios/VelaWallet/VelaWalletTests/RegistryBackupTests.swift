@@ -103,7 +103,8 @@ struct RegistryBackupTests {
         WalletKeys.Row(
             key: CreateKeyRow(
                 name: name, authenticatorAttachment: "platform", transports: "internal", confirmed: true,
-                synced: synced ?? true, aaguid: "", providerName: provider, method: method
+                synced: synced ?? true, syncedKnown: synced != nil, aaguid: "", providerName: provider,
+                method: method, kind: method
             ),
             synced: synced,
             publicKeyHex: "04" + String(repeating: "ab", count: 64)

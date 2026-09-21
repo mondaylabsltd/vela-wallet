@@ -37,6 +37,10 @@ final class ActivityStore {
     private static let liveTickSeconds: UInt64 = 10
 
     private(set) var feed: FeedViewWire?
+    /// A transfer the scan just found moved the balances too (issue #188):
+    /// the host refetches them. Fired once per arrival — the core celebrates
+    /// only a genuinely-new incoming record, never the first pass.
+    var onNewItem: () -> Void = {}
     /// Whether the local store has been read at least once.
     ///
     /// The view cannot say: an unread machine and an account with no history
@@ -68,9 +72,16 @@ final class ActivityStore {
                 if operation["type"] as? String == "read_tx_store" { self?.hasRead = true }
                 return answer
             },
-            onView: { [weak self] view in self?.feed = view },
+            onView: { [weak self] view in self?.commit(view) },
             onFault: { print("[vela-wallet] activity_feed fault: \($0)") }
         )
+    }
+
+    /// The web's `feed.svelte.ts`: a NEW non-null `new_item_id` is an arrival.
+    func commit(_ view: FeedViewWire) {
+        let arrived = view.newItemId != nil && view.newItemId != feed?.newItemId
+        feed = view
+        if arrived { onNewItem() }
     }
 
     /// Called from the home screen's `.task`, with the signed-in address.
