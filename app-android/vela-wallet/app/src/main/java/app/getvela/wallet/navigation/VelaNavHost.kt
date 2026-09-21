@@ -1121,7 +1121,7 @@ fun VelaNavHost(
                         // own (spec 041); the fixture `model` only carries the
                         // labels the live builder cannot compute.
                         WalletScreen(
-                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
+                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames, chainFilter = chainFilter).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
                             },
