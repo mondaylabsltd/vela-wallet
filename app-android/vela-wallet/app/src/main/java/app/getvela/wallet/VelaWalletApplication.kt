@@ -471,6 +471,7 @@ class AppContainer(private val app: Application) {
                 knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
                 wallet = SignAccountRef(address = address, credential_id = credential),
                 preferredTier = { settings.feeTier.value.tier },
+                numberPreset = { Formats.current.resolvedNumber().wire },
                 // The inner calls' own gas floor (spec 062): without it an undeployed
                 // Safe's first contract call goes out with the relay's "no code here" figure.
                 measureCall = { chainId, from, to, valueHex, data ->
@@ -509,6 +510,13 @@ class AppContainer(private val app: Application) {
             )
             signing.value = controller
             controller.open(request)
+            // Spec 069: the stored default, read now and followed while the
+            // sheet is up — a request can arrive before anything else read it.
+            // A child of this coroutine, so it ends with the sheet.
+            launch {
+                settings.refreshFeeTier()
+                settings.feeTier.collect { controller.preferenceChanged() }
+            }
             controller.closed.collect { closed -> if (closed) { if (signing.value === controller) signing.value = null; throw kotlinx.coroutines.CancellationException("answered") } }
         }
     }

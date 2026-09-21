@@ -6,6 +6,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
@@ -114,7 +115,18 @@ object SigningLive {
         )
     }
 
-    fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, rawClear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context, sim: SigningController.SimOutcome? = null): SigningScreenModel {
+    fun model(
+        fallback: SigningScreenModel,
+        request: IncomingRequest,
+        sign: SignView,
+        rawClear: ClearSigningView,
+        guard: GuardView,
+        fee: FeeView,
+        ctx: Context,
+        sim: SigningController.SimOutcome? = null,
+        /** The sheet's speed control (spec 069); `null` draws the fee alone. */
+        speed: SendLive.SpeedInputs? = null,
+    ): SigningScreenModel {
         val s = ctx.strings
         val clear = localizedOwnBackup(rawClear, request.transportId == WALLET_TRANSPORT, s)
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
@@ -148,13 +160,13 @@ object SigningLive {
                 rawHex = facts?.second?.takeIf { dataBytes > 0 },
             ),
             techOpen = false,
-            fee = feeModel(clear, fee, ctx),
+            fee = feeModel(clear, fee, ctx, speed),
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
             confirmHint = s.s("slideToConfirm"),
             confirmAction = confirmLabel(clear, s),
-            confirmEnabled = confirmEnabled(sign, guard, fee, clear),
+            confirmEnabled = confirmEnabled(sign, guard, fee, clear, speed),
             panelTitle = s.s("signatureRequest"),
         )
     }
@@ -240,10 +252,25 @@ object SigningLive {
         )
     }
 
-    /** The slide opens only when the request, the guard and the fee all say it may — and the reading is in. */
-    fun confirmEnabled(sign: SignView, guard: GuardView, fee: FeeView, clear: ClearSigningView): Boolean {
-        val offChain = clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign || clear.surface == ClearSurface.EthSign || clear.surface == ClearSurface.BlindTypedData
-        return sign.confirm_gate_open && guard.confirm_allowed && (offChain || fee.confirm_fee_ready) && !sign.is_signing && !sign.is_submitting
+    /**
+     * The slide opens only when the request, the guard and the fee all say it
+     * may — and the reading is in. The fee's say includes its SPEED: between a
+     * tap and that speed's own figure landing, the core's `confirm_fee_ready`
+     * is still true on the speed just left, and the slide must not sign it.
+     */
+    fun confirmEnabled(sign: SignView, guard: GuardView, fee: FeeView, clear: ClearSigningView, speed: SendLive.SpeedInputs? = null): Boolean {
+        val feeReady = offChain(clear) || (fee.confirm_fee_ready && !ofAnotherTier(fee, speed))
+        return sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing && !sign.is_submitting
+    }
+
+    private fun offChain(clear: ClearSigningView): Boolean =
+        clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign ||
+            clear.surface == ClearSurface.EthSign || clear.surface == ClearSurface.BlindTypedData
+
+    /** NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). */
+    private fun ofAnotherTier(fee: FeeView, speed: SendLive.SpeedInputs?): Boolean {
+        val estimate = fee.fee ?: return false
+        return speed != null && SendLive.offered(estimate.tier) != SendLive.offered(speed.view.tier)
     }
 
     fun statusBlocks(sign: SignView, s: VelaStrings): List<SigningBlock> = buildList {
@@ -412,24 +439,34 @@ object SigningLive {
 
     private fun signedRaw(delta: String): String = if (delta.startsWith("-")) "−" + delta.drop(1) else "+$delta"
 
-    fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context): FeeModel {
-        val offChain = clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign || clear.surface == ClearSurface.EthSign || clear.surface == ClearSurface.BlindTypedData
-        if (offChain) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))
-        val estimate = fee.fee
+    fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context, speed: SendLive.SpeedInputs? = null): FeeModel {
+        if (offChain(clear)) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))
+        // For the moment between a speed being picked and its own figure
+        // landing, the fee in hand is the previous speed's: "estimating".
+        val estimate = fee.fee.takeIf { !ofAnotherTier(fee, speed) }
         val value = when {
             // The send screens' own line (issue 201): the coin that is ACTUALLY
             // paying — an in-band ERC-20 fee is its own amount under its own
             // ticker, never the native figure — and what it costs in money.
             // One formatter, because two surfaces pricing one operation must
             // not give two answers.
-            estimate != null -> {
-                val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)
-                "~" + SendLive.feeLine(parts, SendLive.feePriceUsd(parts.contract, fee), ctx.money)
-            }
+            estimate != null -> "~" + feeLine(estimate, fee, ctx)
             fee.failed != null -> ctx.strings.t("componentsUi.gas.estimateFailed")
             else -> ctx.strings.t("componentsUi.gas.estimating")
         }
-        return FeeModel.OnChain(label = ctx.strings.t("componentsUi.gas.networkFee"), value = value)
+        return FeeModel.OnChain(
+            label = ctx.strings.t("componentsUi.gas.networkFee"),
+            value = value,
+            // Each option in the words its row would use, minus the "~".
+            speed = speed?.let { inputs ->
+                SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
+            },
+        )
+    }
+
+    private fun feeLine(estimate: FeeEstimateView, fee: FeeView, ctx: Context): String {
+        val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)
+        return SendLive.feeLine(parts, SendLive.feePriceUsd(parts.contract, fee), ctx.money)
     }
 
     /** The slide's verb: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */

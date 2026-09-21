@@ -3,7 +3,15 @@ package app.getvela.wallet
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.send.core.FeeAssetView
+import app.getvela.wallet.feature.send.core.FeeEstimateView
+import app.getvela.wallet.feature.send.core.FeeSpeedOptionView
+import app.getvela.wallet.feature.send.core.FeeSpeedView
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.signing.FeeModel
 import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
@@ -66,6 +74,64 @@ class SigningLiveTest {
         val blind = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
         assertTrue(blind.blocks.any { it is SigningBlock.Warning })
         assertEquals(strings.t("componentsUi.signing.confirmLabel"), blind.confirmAction)
+    }
+
+    private fun estimate(tier: FeeTier, totalWei: String) = FeeEstimateView(
+        chain_id = 100, total_wei = totalWei, max_fee_per_gas = "2000000000", network_fee_per_gas = "0",
+        relayer_fee_per_gas = "0", bundler_gas_price = "0", in_band_gas_basis = "0", effective_gas_price = "1000000000",
+        max_gas_price = "2000000000", total_gas = "0", deployed = true, tier = tier, quoted = true,
+        fee_asset = FeeAssetView.Native, fee_recipient = "0xfee",
+    )
+
+    /** Spec 069: the sheet's fee card carries the send form's speed control, drawn by the same builder. */
+    @Test
+    fun `the fee card carries the speed control, each option its own fee`() {
+        val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
+        val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val fast = estimate(FeeTier.Fast, "2100000000000000")
+        val speed = FeeSpeedView(
+            tier = FeeTier.Fast,
+            open = true,
+            options = listOf(
+                FeeSpeedOptionView(FeeTier.Fast, selected = true, fee = fast, gas_price = "1 ~ 2 gwei"),
+                FeeSpeedOptionView(FeeTier.Standard, measuring = true),
+                FeeSpeedOptionView(FeeTier.Slow, fee = estimate(FeeTier.Slow, "1000000000000000")),
+            ),
+        )
+        val model = SigningLive.model(
+            drawn, request(params), sign, clear, GuardView(), FeeView(fee = fast, confirm_fee_ready = true), ctx,
+            speed = SendLive.SpeedInputs(speed) { null },
+        )
+        val fee = model.fee as FeeModel.OnChain
+        val control = fee.speed ?: error("the sheet draws the speed control")
+        assertEquals(strings.t(I18nKeys.Flows.FEE_SPEED_LABEL), control.label)
+        assertEquals(strings.t(I18nKeys.Flows.GAS_TIER_FAST), control.value)
+        assertEquals(listOf("fast", "standard", "slow"), control.options.map { it.id })
+        // Each option in its row's own words, minus the row's "~".
+        assertEquals(fee.value, "~" + control.options[0].value)
+        assertEquals("…", control.options[1].value)
+        assertTrue(control.options[2].value, control.options[2].value.startsWith("0.001 XDAI"))
+        assertEquals("1 ~ 2 gwei", control.options[0].gasPrice)
+        assertTrue(model.confirmEnabled)
+    }
+
+    @Test
+    fun `a speed just picked says estimating, and the slide waits for its own figure (issue 681)`() {
+        val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
+        val clear = ClearSigningView(resolved = true, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        // The core's gate is still open — on the speed just left.
+        val left = FeeView(fee = estimate(FeeTier.Fast, "2100000000000000"), confirm_fee_ready = true)
+        val picked = SendLive.SpeedInputs(FeeSpeedView(tier = FeeTier.Slow, picked = true)) { null }
+        val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), left, ctx, speed = picked)
+        assertEquals(strings.t("componentsUi.gas.estimating"), (model.fee as FeeModel.OnChain).value)
+        assertFalse("the slide never signs the speed walked away from", model.confirmEnabled)
+        // Its own figure lands: the row and the slide follow.
+        val landed = FeeView(fee = estimate(FeeTier.Slow, "1000000000000000"), confirm_fee_ready = true)
+        val settled = SigningLive.model(drawn, request(params), sign, clear, GuardView(), landed, ctx, speed = picked)
+        assertTrue((settled.fee as FeeModel.OnChain).value.startsWith("~0.001 XDAI"))
+        assertTrue(settled.confirmEnabled)
     }
 
     @Test

@@ -24,23 +24,33 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.explore.components.LetterAvatar
+import app.getvela.wallet.feature.flows.components.FeeSpeedControl
 import app.getvela.wallet.feature.signing.components.SigningPositive
 
 /**
  * The fee row, and its expanded fee-token selector (mock CS33) — the last thing
- * between the request and the slide.
+ * between the request and the slide. Under the row, inside the same card, the
+ * speed control the send form draws (spec 069).
  */
 @Composable
-fun SigningFee(fee: FeeModel, modifier: Modifier = Modifier) {
+fun SigningFee(
+    fee: FeeModel,
+    modifier: Modifier = Modifier,
+    onToggleSpeed: () -> Unit = {},
+    onPickSpeed: (String) -> Unit = {},
+) {
     val colors = VelaTheme.colors
     when (fee) {
         is FeeModel.Hidden -> Unit
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
-        is FeeModel.OnChain -> if (fee.selectorTitle == null) {
+        is FeeModel.OnChain -> if (fee.selectorTitle == null) Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg)),
+        ) {
             Row(
-                modifier = modifier
+                modifier = Modifier
                     .fillMaxWidth()
-                    .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
                     .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -66,6 +76,15 @@ fun SigningFee(fee: FeeModel, modifier: Modifier = Modifier) {
                         modifier = Modifier.size(VelaIconSize.sm),
                     )
                 }
+            }
+            fee.speed?.let { speed ->
+                // The control pads its rows by `lg`; the row above by `xl`.
+                FeeSpeedControl(
+                    speed = speed,
+                    modifier = Modifier.padding(horizontal = VelaSpacing.sm).padding(bottom = VelaSpacing.sm),
+                    onToggle = onToggleSpeed,
+                    onPick = onPickSpeed,
+                )
             }
         } else {
             Column(

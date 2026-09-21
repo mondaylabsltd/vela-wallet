@@ -479,12 +479,12 @@ object SendLive {
      * the fee session pricing each tier — whose fee-coin options format that
      * option's fee, as the fee row formats its own.
      */
-    internal class SpeedInputs(val view: FeeSpeedView, val feeViewOf: (FeeTier) -> FeeView?)
+    class SpeedInputs(val view: FeeSpeedView, val feeViewOf: (FeeTier) -> FeeView?)
 
     /** A tier as one this build offers: the dead `rapid` reads as the factory `fast`. */
-    private fun offered(tier: FeeTier): FeeTier = if (tier == FeeTier.Rapid) FeeTier.Fast else tier
+    internal fun offered(tier: FeeTier): FeeTier = if (tier == FeeTier.Rapid) FeeTier.Fast else tier
 
-    private fun tierName(tier: FeeTier, ctx: Context): String = ctx.strings.t(
+    private fun tierName(tier: FeeTier, s: VelaStrings): String = s.t(
         when (offered(tier)) {
             FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_STANDARD
             FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_SLOW
@@ -492,7 +492,7 @@ object SendLive {
         },
     )
 
-    private fun tierHint(tier: FeeTier, ctx: Context): String = ctx.strings.t(
+    private fun tierHint(tier: FeeTier, s: VelaStrings): String = s.t(
         when (offered(tier)) {
             FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_HINT_STANDARD
             FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_HINT_SLOW
@@ -505,13 +505,26 @@ object SendLive {
      * view (spec 069). Every figure is that tier's OWN settled quote, echoed
      * by the core; only the words and the fee line are made here.
      */
-    internal fun speedModel(speed: SpeedInputs, view: SendView, ctx: Context): FeeSpeedModel {
-        val s = ctx.strings
+    internal fun speedModel(speed: SpeedInputs, view: SendView, ctx: Context): FeeSpeedModel =
+        speedModel(speed, ctx.strings) { quote, fee -> feeText(quote, view, fee, ctx).first }
+
+    /**
+     * The same control for any fee surface — the dApp signing sheet draws it
+     * too (spec 069). [optionFee] writes one tier's quote the way that surface
+     * writes its own fee row, so an option never reads differently from the
+     * row it would become.
+     */
+    internal fun speedModel(
+        speed: SpeedInputs,
+        strings: VelaStrings,
+        optionFee: (FeeEstimateView, FeeView?) -> String,
+    ): FeeSpeedModel {
+        val s = strings
         val core = speed.view
         return FeeSpeedModel(
             label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
             // THEIR default (or their pick for this send), never a hardcoded one.
-            value = tierName(core.tier, ctx),
+            value = tierName(core.tier, s),
             open = core.open,
             onceNote = s.t(I18nKeys.Flows.FEE_SPEED_ONCE),
             freeNote = if (core.free_note) s.t(I18nKeys.Flows.FEE_SPEED_FREE) else null,
@@ -522,12 +535,12 @@ object SendLive {
                 val quote = option.fee
                 FeeSpeedOptionModel(
                     id = option.tier.name.lowercase(),
-                    label = tierName(option.tier, ctx),
-                    detail = tierHint(option.tier, ctx),
+                    label = tierName(option.tier, s),
+                    detail = tierHint(option.tier, s),
                     // "measuring" while this tier's own quote is out, "—" when
                     // there is none to be had.
                     value = when {
-                        quote != null -> feeText(quote, view, speed.feeViewOf(option.tier), ctx).first
+                        quote != null -> optionFee(quote, speed.feeViewOf(option.tier))
                         option.measuring -> "…"
                         else -> "—"
                     },
@@ -712,7 +725,7 @@ object SendLive {
                 speed?.takeIf { it.picked || it.free }?.let { chosen ->
                     FactRowModel(
                         label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
-                        value = tierName(chosen.tier, ctx),
+                        value = tierName(chosen.tier, ctx.strings),
                         note = if (chosen.picked) null else s.t(I18nKeys.Flows.FEE_SPEED_FREE),
                     )
                 },

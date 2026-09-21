@@ -7,26 +7,25 @@ import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.feature.send.core.FeeCall
-import app.getvela.wallet.feature.send.core.FeeEvent
+import app.getvela.wallet.feature.send.core.FeeSpeedView
 import app.getvela.wallet.feature.send.core.FeeExecutor
-import app.getvela.wallet.feature.send.core.FeeOperation
-import app.getvela.wallet.feature.send.core.FeeShellResult
 import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SendExecutor
+import app.getvela.wallet.feature.send.core.SpeedControl
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.ApprovalGuardCore
 import uniffi.vela_core_uniffi.ClearSigningCore
-import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.SignRequestCore
 
 /** One request from a page, with the shell's facts attached. */
@@ -72,9 +71,11 @@ class SigningController(
     /**
      * The stored default speed (spec 069): a dApp transaction is priced — and,
      * through the quoted fee, submitted — at the speed Settings names, which
-     * is `fast` for everybody who never chose.
+     * is `fast` for everybody who never chose, until the sheet's own speed
+     * control picks another. The number preset writes each speed's gas bid.
      */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
+    private val numberPreset: () -> String = { "comma_dot" },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
 ) {
@@ -162,17 +163,24 @@ class SigningController(
         escapedFailure = JsonShell.escapedFailure(GuardOperation.serializer(), GuardShellResult.serializer(), fallback = GuardShellResult.MetaResolved(null), answer = guardExecutor::neutralAnswer),
         onFault = { error -> VelaLog.failure("sign.guard.fault", "core fault", error) },
     )
-    private val feeHost: CoreHost<FeeView> = CoreHost(
-        bridge = FeePolicyCore().asBridge(), scope = scope, initial = FeeView(), serializer = FeeView.serializer(),
-        perform = JsonShell.perform(FeeOperation.serializer(), FeeShellResult.serializer(), feeExecutor::perform),
-        escapedFailure = JsonShell.escapedFailure(FeeOperation.serializer(), FeeShellResult.serializer(), fallback = FeeShellResult.TtlElapsed, answer = feeExecutor::neutralAnswer),
-        onFault = { error -> VelaLog.failure("sign.fee.fault", "core fault", error) },
-    )
+    /**
+     * The fee sessions and the speed control (spec 069) — the very class the
+     * send form runs, so the sheet's speeds, previews, free upgrade and
+     * "the price you tap is the price you get" cannot drift from the form's.
+     */
+    private val speedControl = SpeedControl(scope, relay, feeExecutor, preferredTier, numberPreset, area = "sign").start()
 
     val sign: StateFlow<SignView> = signHost.view
     val clear: StateFlow<ClearSigningView> = clearHost.view
     val guard: StateFlow<GuardView> = guardHost.view
-    val fee: StateFlow<FeeView> = feeHost.view
+    /** The fee in force — whichever session prices the tier in force right now. */
+    val fee: StateFlow<FeeView> = speedControl.fee
+
+    /** The speed control, as the core decided it — the sheet's fee card draws this. */
+    val speed: StateFlow<FeeSpeedView> = speedControl.speed
+
+    /** The fee view of the session pricing `tier` — for formatting that option's fee. */
+    fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 
     private val _request = MutableStateFlow<IncomingRequest?>(null)
     val request: StateFlow<IncomingRequest?> = _request
@@ -206,6 +214,8 @@ class SigningController(
 
     fun open(request: IncomingRequest) {
         _request.value = request
+        // Each request starts at the stored default: a pick is one-shot.
+        speedControl.reset()
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
         dispatchSign(SignEvent.AccountsChanged(listOf(wallet), 0))
         dispatchSign(
@@ -225,7 +235,7 @@ class SigningController(
         )
         SignExecutor.callsOf(request.method, request.paramsJson)?.let { calls ->
             val feeCalls = calls.map { FeeCall(to = it.to, value = it.value, data = it.data) }
-            requestQuote(request.chainId, feeCalls)
+            speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null)
             // Spec 046 US1: the one block a site cannot author. Read only.
             scope.launch {
                 val judged = runCatching { ports.simulate(request.chainId, wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) }
@@ -237,10 +247,10 @@ class SigningController(
             // while the sheet is still up and nothing is signing, ask again —
             // otherwise the slide stays shut with no way to open it.
             scope.launch {
-                feeHost.view.collect { fee ->
+                fee.collect { fee ->
                     val view = signHost.view.value
                     if (fee.stale && !fee.busy && view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && !answered) {
-                        requestQuote(request.chainId, feeCalls)
+                        speedControl.requoteStale()
                     }
                 }
             }
@@ -249,6 +259,9 @@ class SigningController(
         // dispatcher is forced so the JVM test can drive it too.
         scope.launch {
             signHost.view.collect { view ->
+                // A free upgrade is decided only while the person can still
+                // choose — never under a slide that has already gone.
+                speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
                 view.tracker_handoff?.takeIf { !handedOff }?.let { handoff ->
                     handedOff = true
                     pendingHandoff = handoff
@@ -259,27 +272,32 @@ class SigningController(
         }
     }
 
-    private fun requestQuote(chainId: Int, calls: List<FeeCall>) {
-        scope.launch {
-            val deployed = relay.isDeployed(chainId, wallet.address) ?: return@launch
-            feeHost.dispatch(
-                FeeEvent.QuoteRequested(
-                    chain_id = chainId, account = wallet.address, deployed = deployed, public_key_available = true,
-                    tier = preferredTier().let { if (it == FeeTier.Rapid) FeeTier.Fast else it },
-                    calls = calls, fee_token = null,
-                ),
-                FeeEvent.serializer(),
-            )
-        }
-    }
-
     @Volatile
     private var answered = false
 
     /** Called by the container's response port so the sheet closes only once the page has its answer. */
     fun markAnswered() { answered = true; if (sign.value.surface == SignSurface.Hidden) _closed.value = true }
 
+    init {
+        // One request, one controller: its fee sessions end with it.
+        scope.launch { closed.first { it }; speedControl.dispose() }
+    }
+
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value)))
+
+    // -- the speed control (spec 069) -----------------------------------------------
+
+    /** The stored default or the number preset moved: this sheet follows until a speed is picked on it. */
+    fun preferenceChanged() = speedControl.preferenceChanged()
+
+    /** Fold or unfold the control. */
+    fun toggleSpeed() = speedControl.toggle()
+
+    /** A tap on an option — one-shot, never the stored preference. */
+    fun pickSpeed(tier: FeeTier) = speedControl.pick(tier)
+
+    /** The refresh control: measure again, the held readings dropped first (issue 212). */
+    fun refreshFee() = speedControl.refresh()
     fun reject() = dispatchSign(SignEvent.RejectTapped)
     fun dismiss() = dispatchSign(SignEvent.DismissTapped)
     fun swipeDismissed() = dispatchSign(SignEvent.SwipeDismissed)

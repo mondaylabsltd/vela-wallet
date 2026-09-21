@@ -596,6 +596,7 @@ fun VelaNavHost(
                     val clearView by controller.clear.collectAsStateWithLifecycle()
                     val guardView by controller.guard.collectAsStateWithLifecycle()
                     val signFee by controller.fee.collectAsStateWithLifecycle()
+                    val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     val signMethod by controller.signMethod.collectAsStateWithLifecycle()
@@ -618,7 +619,10 @@ fun VelaNavHost(
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
                             val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
                             app.getvela.wallet.feature.signing.SigningSheet(
-                                model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx, signSim),
+                                model = app.getvela.wallet.feature.signing.SigningLive.model(
+                                    drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
+                                    speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
+                                ),
                                 // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
@@ -632,6 +636,8 @@ fun VelaNavHost(
                                 },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
                                 onSignWith = { controller.signWith(it) },
+                                onToggleSpeed = { controller.toggleSpeed() },
+                                onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
                             )
                         }
                     }
