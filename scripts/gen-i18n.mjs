@@ -315,8 +315,26 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `feeSpeedSingle` (the statement that replaces the options on a network
 //   whose speeds nothing tells apart, such as Tempo). Flat, beside
 //   `feeSpeedOnce`, for the same reason as the hints above. No new branch.
-if (PATHS.length !== 1676) fail(`expected 1676 paths (1588 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1588) fail(`expected 1588 leaf paths, got ${leafSet.size}`);
+// + 11 more (issues 204-206, the multi-recipient send): what the split form and
+//   its importer did without saying, and what the person had no way to ask for.
+//   `send.batchUnitCaption` names the first choice on the importer;
+//   `send.batchTokenHint` — in token mode nothing is converted and the sheet's
+//   figures ARE the amounts (the template's 5000 is five thousand coins);
+//   `send.batchAddsToRows` / `send.batchReplacesRows` say what importing does to
+//   the people already on the form, and `send.batchReplaceInstead` /
+//   `send.batchAddInstead` are the way to choose the other; `send.badAmount` is a
+//   refused line's or a row's reason beside the existing "Invalid address";
+//   `send.splitNeedsAddress` / `send.splitNeedsAmount` name the row a dark
+//   Continue is waiting on (`{{n}}`, not `{{count}}`: it is an ordinal);
+//   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
+//   puts one amount in every empty row. Everything ELSE those issues needed was
+//   already here, in all fifteen locales, unread. No new branch.
+// 1687 (merge of the two above, 2026-09-21): spec 068 and issue 686 added
+//   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
+//   leaf and no branch. The two sets share no path, so they simply add:
+//   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
+if (PATHS.length !== 1687) fail(`expected 1687 paths (1599 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1599) fail(`expected 1599 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

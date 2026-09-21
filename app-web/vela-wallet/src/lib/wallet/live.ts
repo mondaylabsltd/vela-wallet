@@ -208,6 +208,16 @@ export function trimBalance(balance: string, maxDecimals = 6): string {
 	return cut === '' ? whole : `${whole}${numberSeparators().decimal}${cut}`;
 }
 
+/**
+ * A token figure that is about to be SENT: the person's decimal mark, and
+ * every digit the core gave it. `trimBalance`'s six places are for a balance
+ * being glanced at — a share of 0.00022989 printed as 0.000229 is not what
+ * leaves the account, and a total must be the sum of the rows above it.
+ */
+export function exactAmount(amount: string): string {
+	return trimBalance(amount, Number.MAX_SAFE_INTEGER);
+}
+
 // ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------

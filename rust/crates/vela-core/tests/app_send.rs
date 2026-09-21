@@ -21,13 +21,13 @@ use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, F
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
-    recipients_are_valid, sum_split_base_units, Event, ReentryLock, Send, SendAccountRef,
-    SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo, SendDisplayContext,
-    SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason, SendLockError,
-    SendOpenParams, SendOperation as Op, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
-    SendRecipientDraft, SendScan, SendShellResult as Res, SendStage, SendSubmitFailure,
-    SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryProbe,
-    SendTreasuryStatus, SendTxErrorKey, SendTxStatus, SendUnitIssue, SendView,
+    recipients_are_valid, split_row_issues, sum_split_base_units, Event, ReentryLock, Send,
+    SendAccountRef, SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo,
+    SendDisplayContext, SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason,
+    SendLockError, SendOpenParams, SendOperation as Op, SendReceiptKind, SendReceiptOutcome,
+    SendReceiptStatus, SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res,
+    SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
+    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxStatus, SendUnitIssue, SendView,
     BATCH_MAX_RECIPIENTS,
 };
 
@@ -2037,6 +2037,403 @@ fn split_continue_rejects_invalid_rows_and_over_balance_totals() {
         }]
     );
     assert_eq!(sut.view().stage, SendStage::EnterDetails);
+}
+
+// ---------------------------------------------------------------------------
+// The split says what it is doing (issues 204-206 follow-up)
+// ---------------------------------------------------------------------------
+
+fn draft(id: &str, address: &str, amount: &str) -> SendRecipientDraft {
+    SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: None,
+    }
+}
+
+/// A dark `Continue` names its rows. One boolean over forty recipients could
+/// not say which of them was unfinished, or whether it was the address or the
+/// amount — so every shell either said nothing or re-derived the rule.
+#[test]
+fn split_row_issues_name_the_row_and_the_field() {
+    let rows = vec![
+        draft("a", RECIPIENT, "1"),
+        draft("b", "", ""),
+        draft("c", "0xbbbb", "2"),
+        draft("d", RECIPIENT_B, "0"),
+        draft("e", &format!("  {RECIPIENT_B}  "), " 0.5 "),
+    ];
+    let issues = split_row_issues(&rows, 18);
+    let seen: Vec<_> = issues
+        .iter()
+        .map(|i| (i.id.as_str(), i.ordinal, i.address, i.amount))
+        .collect();
+    use SendRowFieldState::{Empty, Invalid, Ok};
+    assert_eq!(
+        seen,
+        vec![
+            ("b", 2, Empty, Empty),
+            ("c", 3, Invalid, Ok),
+            ("d", 4, Ok, Invalid),
+        ],
+        "finished rows (a, and e once trimmed) are not listed"
+    );
+}
+
+/// The core gap that armed `Continue` on a batch it could not build: an amount
+/// was judged by its leading digits ("1,5" reads as 1), the sum could not read
+/// it, and the press returned without a word while the total went blank. The
+/// gate and the row's own state are now one computation.
+#[test]
+fn an_amount_that_cannot_be_summed_closes_the_gate_and_says_which_row() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    for garbage in ["1,5", "1e5", "1abc", "0.0000000000000000001"] {
+        sut.dispatch(Event::RecipientsChanged {
+            recipients: vec![
+                draft("rcpt_1", RECIPIENT, "0.5"),
+                draft("rcpt_2", RECIPIENT_B, garbage),
+            ],
+        });
+        let view = sut.view();
+        assert!(!view.can_continue, "{garbage:?} must not arm Continue");
+        assert_eq!(view.split_row_issues.len(), 1, "{garbage:?}");
+        assert_eq!(view.split_row_issues[0].id, "rcpt_2");
+        assert_eq!(view.split_row_issues[0].address, SendRowFieldState::Ok);
+        assert_eq!(view.split_row_issues[0].amount, SendRowFieldState::Invalid);
+    }
+    // Corrected, the list empties and the gate opens — together.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            draft("rcpt_1", RECIPIENT, "0.5"),
+            draft("rcpt_2", RECIPIENT_B, "1.5"),
+        ],
+    });
+    let view = sut.view();
+    assert!(view.split_row_issues.is_empty());
+    assert!(view.can_continue);
+    assert_eq!(view.confirm_amount, "2");
+}
+
+/// A split can exist before a token does — the book hands recipients over while
+/// the token list is still out. "No token, so no issues" would arm `Continue`
+/// over rows with no amounts; the old one-boolean gate kept it shut, and so
+/// must this one.
+#[test]
+fn a_split_with_no_token_yet_still_answers_for_its_rows() {
+    let mut sut = boot(vec![eth("2")]); // tokens known, none SELECTED
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: vec![draft("", RECIPIENT, ""), draft("", RECIPIENT_B, "")],
+    });
+    let view = sut.view();
+    assert!(view.split_mode);
+    assert!(view.selected_token.is_none());
+    assert_eq!(view.split_row_issues.len(), 2);
+    assert!(view
+        .split_row_issues
+        .iter()
+        .all(|i| i.address == SendRowFieldState::Ok && i.amount == SendRowFieldState::Empty));
+    assert!(!view.can_continue);
+}
+
+/// Outside a split there are no rows to have issues.
+#[test]
+fn the_single_form_reports_no_row_issues() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    let view = sut.view();
+    assert!(view.split_row_issues.is_empty());
+    assert_eq!(view.split_remaining, None);
+}
+
+/// "How much is left to give out" is the core's subtraction, in base units —
+/// never a shell's float.
+#[test]
+fn split_remaining_is_the_balance_less_the_rows() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            draft("rcpt_1", RECIPIENT, "0.5"),
+            draft("rcpt_2", RECIPIENT_B, ""),
+        ],
+    });
+    assert_eq!(sut.view().split_remaining.as_deref(), Some("1.5"));
+
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            draft("rcpt_1", RECIPIENT, "0.5"),
+            draft("rcpt_2", RECIPIENT_B, "0.300000000000000001"),
+        ],
+    });
+    assert_eq!(
+        sut.view().split_remaining.as_deref(),
+        Some("1.199999999999999999"),
+        "exact to the wei"
+    );
+
+    // Over the balance there is nothing left — `split_over_balance` says that.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            draft("rcpt_1", RECIPIENT, "1.5"),
+            draft("rcpt_2", RECIPIENT_B, "0.6"),
+        ],
+    });
+    let view = sut.view();
+    assert_eq!(view.split_remaining, None);
+    assert!(view.split_over_balance);
+
+    // And a row that cannot be summed leaves nothing to subtract from.
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            draft("rcpt_1", RECIPIENT, "1,5"),
+            draft("rcpt_2", RECIPIENT_B, "0.1"),
+        ],
+    });
+    assert_eq!(sut.view().split_remaining, None);
+}
+
+/// `Max` fills the single amount, and a split has none. It used to write that
+/// hidden field (and could start a fee estimate for it), so the button changed
+/// nothing a person could see.
+#[test]
+fn max_does_nothing_in_a_split() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    let before = sut.view();
+    let ops = sut.dispatch(Event::TapMax);
+    assert!(
+        ops.is_empty(),
+        "no estimate is started for a field nobody sees"
+    );
+    assert_eq!(sut.view(), before, "and nothing on the view moves");
+}
+
+/// The single form's live verdict does not follow the person into a split: the
+/// figure it judges is left behind there.
+#[test]
+fn the_single_amount_warning_does_not_haunt_a_split() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "5".to_owned(),
+    });
+    assert!(sut.view().amount_warning.is_some(), "5 of a 2 ETH balance");
+    sut.dispatch(Event::EnterSplitMode);
+    let view = sut.view();
+    assert_eq!(view.amount_warning, None);
+    assert!(
+        view.split_over_balance,
+        "the split's own verdict says it instead"
+    );
+}
+
+/// A list brought to a form that already has people on it is more people.
+#[test]
+fn appending_keeps_what_was_typed_and_drops_the_blank_rows() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.5".to_owned(),
+    });
+    sut.dispatch(Event::EnterSplitMode); // the typed row + one blank
+    sut.dispatch(Event::OpenBatchImport);
+    assert_eq!(
+        sut.view().split_import_room,
+        BATCH_MAX_RECIPIENTS as u32 - 1
+    );
+
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: vec![SendRecipientDraft {
+            id: String::new(),
+            address: RECIPIENT_B.to_owned(),
+            amount: "0.25".to_owned(),
+            name: Some("Bob".to_owned()),
+        }],
+    });
+    let view = sut.view();
+    assert!(view.split_mode);
+    assert!(
+        !view.show_batch_import,
+        "the sheet is shut, as the seed shuts it"
+    );
+    let rows: Vec<_> = view
+        .recipients
+        .iter()
+        .map(|r| (r.address.as_str(), r.amount.as_str(), r.name.as_deref()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![(RECIPIENT, "0.5", None), (RECIPIENT_B, "0.25", Some("Bob"))],
+        "typed row first, blank row gone, imported row after"
+    );
+    assert_eq!(view.recipients[0].id, "rcpt_1", "a kept row keeps its id");
+    assert!(view.recipients[1].id.starts_with("rcpt_"));
+    assert_eq!(view.confirm_amount, "0.75");
+}
+
+/// The older event is untouched: every shell that still sends it gets exactly
+/// what it always got.
+#[test]
+fn seeding_still_replaces() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::SeedSplitRecipients {
+        recipients: vec![draft("", RECIPIENT_B, "0.25")],
+    });
+    let view = sut.view();
+    assert_eq!(view.recipients.len(), 1);
+    assert_eq!(view.recipients[0].address, RECIPIENT_B);
+}
+
+/// From the single form the recipient being typed becomes the first row, as
+/// `EnterSplitMode` would have made it.
+#[test]
+fn appending_from_the_single_form_carries_the_recipient_in() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: vec![draft("", RECIPIENT_B, "0.25")],
+    });
+    let view = sut.view();
+    let addresses: Vec<_> = view.recipients.iter().map(|r| r.address.as_str()).collect();
+    assert_eq!(addresses, vec![RECIPIENT, RECIPIENT_B]);
+    assert_eq!(
+        view.recipients[0].amount, "",
+        "no amount was typed, so none is invented"
+    );
+}
+
+/// A repeat between a typed row and an appended one is WARNED, like any other
+/// repeat between rows entered on purpose — never silently dropped.
+#[test]
+fn an_appended_repeat_of_a_typed_payee_is_named_not_dropped() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![draft("rcpt_1", RECIPIENT, "0.1"), draft("rcpt_2", "", "")],
+    });
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: vec![draft("", RECIPIENT, "0.2")],
+    });
+    let view = sut.view();
+    assert_eq!(view.recipients.len(), 2);
+    assert_eq!(view.split_duplicates.len(), 1);
+    assert_eq!(view.split_duplicates[0].first_ordinal, 1);
+    assert!(view.can_continue, "warned, not refused");
+}
+
+/// Two imports in a row from a shell that numbers its rows the same way each
+/// time: every row still gets an id of its own.
+#[test]
+fn appended_rows_never_share_an_id() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    let batch = || {
+        vec![
+            draft("b0", RECIPIENT, "0.1"),
+            draft("b1", RECIPIENT_B, "0.1"),
+        ]
+    };
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: batch(),
+    });
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: batch(),
+    });
+    let view = sut.view();
+    assert_eq!(view.recipients.len(), 4);
+    let mut ids: Vec<_> = view.recipients.iter().map(|r| r.id.clone()).collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(
+        ids.len(),
+        4,
+        "ids are what the warnings and the picker point at"
+    );
+    // …and the repeats are named against the right rows.
+    let repeats: Vec<_> = view
+        .split_duplicates
+        .iter()
+        .map(|d| (d.id.clone(), d.first_ordinal))
+        .collect();
+    assert_eq!(
+        repeats,
+        vec![
+            (view.recipients[2].id.clone(), 1),
+            (view.recipients[3].id.clone(), 2)
+        ]
+    );
+}
+
+/// Entering a split twice is not a way to lose one: a shell whose "+ add
+/// recipient" sends `EnterSplitMode` while already in a split used to rebuild
+/// the rows as `[the single recipient, blank]`.
+#[test]
+fn entering_a_split_twice_keeps_the_rows() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SeedSplitRecipients {
+        recipients: vec![
+            draft("", RECIPIENT, "0.1"),
+            draft("", RECIPIENT_B, "0.2"),
+            draft("", RECIPIENT, "0.3"),
+        ],
+    });
+    let before = sut.view();
+    sut.dispatch(Event::EnterSplitMode);
+    assert_eq!(sut.view().recipients, before.recipients);
+}
+
+/// The wire is JSON and three shells write it by hand. The old event, in the
+/// shape they send today, still means what it meant; the new one is reachable
+/// by its tag alone.
+#[test]
+fn the_seed_and_append_events_read_from_the_json_shells_send() {
+    let seed: Event = serde_json::from_str(&format!(
+        r#"{{"type":"seed_split_recipients","recipients":[{{"id":"b0","address":"{RECIPIENT}","amount":"1","name":null}}]}}"#
+    ))
+    .expect("the shape every shell sends today");
+    assert!(matches!(seed, Event::SeedSplitRecipients { ref recipients } if recipients.len() == 1));
+
+    let append: Event = serde_json::from_str(&format!(
+        r#"{{"type":"append_split_recipients","recipients":[{{"id":"","address":"{RECIPIENT}","amount":"1","name":"Alice"}}]}}"#
+    ))
+    .expect("the new variant");
+    assert!(matches!(append, Event::AppendSplitRecipients { .. }));
+}
+
+/// The cap holds across an append, and the room the importer is opened with is
+/// what is actually left.
+#[test]
+fn appending_respects_the_cap_and_reports_the_room() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    let many = |n: usize| -> Vec<SendRecipientDraft> {
+        (0..n)
+            .map(|i| draft("", RECIPIENT, &format!("{}", i + 1)))
+            .collect()
+    };
+    sut.dispatch(Event::SeedSplitRecipients {
+        recipients: many(58),
+    });
+    assert_eq!(sut.view().split_import_room, 2);
+    sut.dispatch(Event::AppendSplitRecipients {
+        recipients: many(5),
+    });
+    let view = sut.view();
+    assert_eq!(view.recipients.len(), BATCH_MAX_RECIPIENTS);
+    assert_eq!(view.split_import_room, 0);
 }
 
 /// The headline on the signing page and the sum the money gates read are the

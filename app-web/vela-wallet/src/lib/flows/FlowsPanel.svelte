@@ -87,6 +87,10 @@
 		pickContactFor?(index: number | null): void;
 		filterClass?(id: string): void;
 		continueDisabled: boolean;
+		/** The core's `estimating_gas`: Continue is out checking, not refused. */
+		continueBusy?: boolean;
+		/** One amount into every split row that has none. */
+		fillEmptyAmounts?(amount: string): void;
 		confirmDisabled: boolean;
 	}
 
@@ -99,6 +103,8 @@
 		pickFile(): void;
 		saveTemplate(): void;
 		apply(): void;
+		/** Add to the people already on the form, or replace them. */
+		toggleMerge(): void;
 	}
 
 	interface Props {
@@ -193,6 +199,8 @@
 			onamount={send ? (value) => send.amountChanged(value) : undefined}
 			onrecipient={send ? (value) => send.recipientChanged(value) : undefined}
 			ctaDisabled={send?.continueDisabled ?? false}
+			ctaBusy={send?.continueBusy ?? false}
+			onfillEmpty={send?.fillEmptyAmounts ? (amount) => send.fillEmptyAmounts?.(amount) : undefined}
 		/>
 	{:else if body.kind === 'send-confirm'}
 		<SendConfirm
@@ -218,6 +226,7 @@
 			onfile={batch ? () => batch.pickFile() : undefined}
 			ontemplate={batch ? () => batch.saveTemplate() : undefined}
 			onapply={batch ? () => batch.apply() : undefined}
+			onmerge={batch ? () => batch.toggleMerge() : undefined}
 		/>
 	{:else}
 		<SendReceipt

@@ -87,6 +87,23 @@ use ts_rs::TS;
 /// with batch-send; exported here as the canonical value.
 pub const BATCH_MAX_RECIPIENTS: u32 = 60;
 
+/// How many refused lines the view carries (see [`BatchView::errors`]).
+pub const BATCH_MAX_ERROR_ROWS: usize = 100;
+
+/// How much of a refused line's text the view carries. The view is rebuilt and
+/// serialised on every keystroke in the paste box; a pasted document with
+/// page-long lines must not ride along a hundred times over. Enough to find the
+/// line by, which is all it is for.
+pub const BATCH_MAX_ERROR_TEXT: usize = 120;
+
+/// The first `max` characters — never a byte slice, a sheet is rarely ASCII.
+fn clip(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((cut, _)) => format!("{}…", &text[..cut]),
+        None => text.to_owned(),
+    }
+}
+
 /// The downloadable CSV template, byte-for-byte (`BatchImportSheet.tsx:42-46`).
 pub const TEMPLATE_CSV: &str = "name,address,amount\n\
 Alice,0x1111111111111111111111111111111111111111,5000\n\
@@ -223,15 +240,32 @@ pub struct BatchParsedRow {
     pub raw_amount: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Why a line of the sheet could not become a payment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
 pub enum BatchParseReason {
+    /// No cell of the line is an address (`0x` + 40 hex) — a typo'd or
+    /// truncated address lands here, which is the case a person most needs
+    /// named: the line LOOKS paid and is not.
     NoAddress,
+    /// An address, but no readable amount in the amount column: blank, text,
+    /// or a figure written with a decimal comma.
     NoAmount,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One line the parser refused, as the person wrote it. These are IN the view
+/// (issue 204's follow-up): they were only ever counted into `rejected`, so a
+/// screen could say "2 rows skipped" and never which two or why — and the
+/// person went hunting through a sixty-line sheet for a missing digit.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
 pub struct BatchParseError {
+    /// 1-based among the DATA lines (a header is not counted) — the same
+    /// numbering as [`BatchPreviewRow::line`], so the two lists interleave.
     pub line: u32,
+    /// The line's cells, joined. The text is what a person searches their
+    /// sheet for; the number is only an order.
     pub raw: String,
     pub reason: BatchParseReason,
 }
@@ -1194,6 +1228,11 @@ pub struct BatchView {
     /// kept. Shown TOGETHER with `rejected` when both hold; the notices
     /// never hide each other (`BatchImportSheet.tsx:365-377`).
     pub over_cap: bool,
+    /// The lines the parser refused, in source order — what `rejected` counts
+    /// beyond the not-ok preview rows. Capped at [`BATCH_MAX_ERROR_ROWS`]: a
+    /// pasted document that is not a table at all is ten thousand of these,
+    /// and the first hundred already say so. `rejected` stays the exact count.
+    pub errors: Vec<BatchParseError>,
     /// Rows that will not be sent: invalid + duplicate + unconverted rows
     /// plus the parser's error lines.
     pub rejected: u32,
@@ -1383,6 +1422,7 @@ impl App for BatchImport {
                 rate_edited: false,
                 preview: Vec::new(),
                 over_cap: false,
+                errors: Vec::new(),
                 rejected: 0,
                 recipient_count: 0,
                 total_token: "0".to_owned(),
@@ -1409,6 +1449,7 @@ impl App for BatchImport {
             rate_edited: model.rate_edited,
             preview: derived.preview,
             over_cap: derived.over_cap,
+            errors: derived.errors,
             rejected: derived.rejected,
             recipient_count: derived.recipients.len() as u32,
             total_token: derived.total_token,
@@ -1503,6 +1544,7 @@ fn accept(model: &mut Model, result: BatchShellResult) -> Command<BatchEffect, E
 struct Derived {
     preview: Vec<BatchPreviewRow>,
     over_cap: bool,
+    errors: Vec<BatchParseError>,
     rejected: u32,
     recipients: Vec<BatchRecipient>,
     total_token: String,
@@ -1598,6 +1640,16 @@ fn derived(model: &Model, token: &BatchToken) -> Derived {
     Derived {
         preview,
         over_cap,
+        errors: parsed
+            .errors
+            .iter()
+            .take(BATCH_MAX_ERROR_ROWS)
+            .map(|error| BatchParseError {
+                line: error.line,
+                raw: clip(&error.raw, BATCH_MAX_ERROR_TEXT),
+                reason: error.reason,
+            })
+            .collect(),
         rejected,
         recipients,
         total_token: from_base_units(total_base, token.decimals),

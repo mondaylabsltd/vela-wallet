@@ -388,7 +388,16 @@ export interface RecipientCardModel {
 	/** Live rows only: the core's draft id, so a per-row pick can name its target. */
 	id?: string;
 	ordinal: string;
+	/** Who the row pays, as it reads at rest: a name when there is one, else the short address. */
 	name: string;
+	/**
+	 * The short address UNDER a name. A row that arrived from a spreadsheet or
+	 * the book carries a name, and the editable card used to drop it and show
+	 * a clipped address instead — so a payroll of forty people read as forty
+	 * hex strings. The name is what the person recognises; the address is what
+	 * is paid, so a named row shows both.
+	 */
+	addressShort?: string;
 	/** The seed of the artwork — what the identicon viewer shows beside it. */
 	address: string;
 	identiconSvg: string;
@@ -400,8 +409,18 @@ export interface RecipientCardModel {
 	amountValue?: string;
 	/** Live rows only: the field names the editable card announces. */
 	addressLabel?: string;
+	/** Live rows only: what an empty address field asks for. */
+	addressPlaceholder?: string;
 	pickLabel?: string;
 	removeLabel: string;
+	/**
+	 * Live rows only: what the core says is wrong with a field that has
+	 * something IN it (`split_row_issues`, state `invalid`) — "Invalid address",
+	 * "Not a valid amount". An empty field gets no note: the row is unfinished,
+	 * not mistaken, and its prompt already says what it wants.
+	 */
+	addressNote?: string;
+	amountNote?: string;
 	/**
 	 * Live rows only (issue 203): this row pays an address an EARLIER row
 	 * already pays, and this sentence names which one. The core decides it
@@ -601,8 +620,27 @@ export interface SendFormModel {
 	recipients?: RecipientCardModel[];
 	/** split only: add / from contacts / import, as ghost pills. */
 	recipientActions?: { id: 'add' | 'contacts' | 'import'; label: string }[];
-	/** split and sweep: the total line above the fee. */
-	summary?: { label: string; value: string };
+	/**
+	 * split and sweep: the total line above the fee. `detail` is the same sum
+	 * in the display currency; `over` is the core's `split_over_balance` — the
+	 * total is more than the account holds, and the figure says so in the
+	 * refusal colour BEFORE Continue is pressed rather than after.
+	 */
+	summary?: {
+		label: string;
+		value: string;
+		detail?: string;
+		over?: boolean;
+		/** split only: "2.25 ETH left" — the core's `split_remaining`. */
+		remaining?: string;
+	};
+	/**
+	 * split only: one amount into every row that has none — offered when a row
+	 * has a figure and another does not. The common split is the same amount to
+	 * everyone (a bonus, a refund, a group from the book arrives with no amounts
+	 * at all), and typing it forty times is the form failing at its one job.
+	 */
+	fillEmpty?: { label: string; amount: string };
 	fee: FeeRowModel;
 	/**
 	 * The speed control under the fee row (spec 068). Absent in surfaces that
@@ -616,6 +654,13 @@ export interface SendFormModel {
 	 * phone raised these as native alerts, this shell had logged them.
 	 */
 	alert?: string;
+	/**
+	 * split only: why Continue is dark when nothing has been refused — WHICH
+	 * recipient is still missing its address or its amount (the core's
+	 * `split_row_issues`). Not an alert: nothing went wrong, something is
+	 * unfinished.
+	 */
+	hint?: string;
 	cta: string;
 }
 
@@ -662,29 +707,117 @@ export interface FeeTokenPickModel {
 	}[];
 }
 
+/**
+ * A line of the sheet the parser refused, as the person wrote it: there is no
+ * address to draw and nobody to name, only the text to find it by and the
+ * reason. These were counted ("2 rows skipped") and never shown.
+ */
+export interface BatchRefusedModel {
+	kind: 'refused';
+	text: string;
+	note: string;
+}
+
+/** One parsed line of SD2c: who is paid, what they get, and why not when they do not. */
+export interface BatchRowModel {
+	kind: 'row';
+	ok: boolean;
+	/** The sheet's own name for the person, when it has a name column. */
+	name?: string;
+	/** Short form for the row; `addressFull` is the identicon's seed and the hover text. */
+	address: string;
+	addressFull: string;
+	identiconSvg: string;
+	/** What is SENT — "6.642752 BNB" — or a dash when nothing can be. */
+	amount: string;
+	/** The figure as the sheet wrote it, "5000 USD": fiat mode only. */
+	source?: string;
+	/** Why the row is skipped, in the corpus's words. */
+	note?: string;
+}
+
 /** SD2c — the recipient importer. */
 export interface BatchImportModel {
 	title: string;
 	closeLabel: string;
+	/** "How the amounts are written" — the toggle was a choice with no question. */
+	unitCaption: string;
 	units: { fiat: string; token: string };
 	unit: 'fiat' | 'token';
 	pasteValue: string;
 	pastePlaceholder: string;
-	importFile: string;
-	template: string;
-	rateSection: string;
-	rateLabel: string;
-	rateValue: string;
-	/** Live only (spec 038 #E6): the rate as typed, editable in place. */
-	rateInput?: string;
-	/** The person overrode the fetched rate; the reset control shows. */
-	rateEdited?: boolean;
-	/** "Auto" — the reset control's word. */
-	rateReset?: string;
-	rateHint: string;
-	parsedLabel: string;
-	rows: { ok: boolean; address: string; conversion: string }[];
-	rejectedText?: string;
+	/**
+	 * The two ways a list arrives without being pasted (issue 205). Each says
+	 * what state it is in — a pick that is still reading, a template that was
+	 * saved, a file that could not be read — where before two grey words did
+	 * the same thing whatever happened.
+	 */
+	tools: {
+		file: { label: string; busy: boolean };
+		template: { label: string; saved: boolean };
+		/** "xlsx · csv · txt" — extensions, not words. */
+		formats: string;
+		/** The picked file, by name: a workbook leaves the paste box empty. */
+		fileName?: string;
+		error?: string;
+	};
+	/**
+	 * Fiat mode only. In token mode no conversion happens, and a rate row there
+	 * is a control for something that is not going on — with a sentence under
+	 * it ("read as USD…") that is false.
+	 */
+	rate?: {
+		section: string;
+		/** "1 BNB" — the left side of the equation. */
+		lead: string;
+		/**
+		 * "≈" while the figure mirrors the market, "=" once the person has
+		 * typed their own: a pinned rate is exact, a fetched one is not
+		 * (issue 206).
+		 */
+		sign: '≈' | '=';
+		/** The figure, in the person's decimal mark. Empty while unknown. */
+		value: string;
+		/** "USD" — the unit the figure is in, which the row never said. */
+		code: string;
+		/** Live only: the figure can be typed in place (spec 038 E6). */
+		editable: boolean;
+		edited: boolean;
+		reset: string;
+		hint: string;
+		/** `warning`: the rate is unknown and nothing converts until one is typed. */
+		hintTone: 'plain' | 'warning';
+	};
+	/**
+	 * Token mode's one sentence, where the rate would be: the sheet's figures
+	 * ARE the amounts. The template's 5000 is five thousand coins there.
+	 */
+	unitHint?: string;
+	/** Absent until something has been pasted or picked. Source order, refused lines among the rest. */
+	preview?: { label: string; rows: (BatchRowModel | BatchRefusedModel)[] };
+	/** Skipped rows, rows past the cap — shown together, never one hiding the other. */
+	notices: string[];
+	/**
+	 * What the import adds up to, against what the account holds. This is the
+	 * line issue 204 was missing: fifty-nine rows summed to more than the
+	 * balance, the core refused, and the screen showed a dark button.
+	 */
+	total?: {
+		label: string;
+		value: string;
+		/** The sheet's own figures summed, "13,000 USD": fiat mode only. */
+		detail?: string;
+		balance: string;
+		over: boolean;
+		/** The refusal, when `over`. */
+		overText?: string;
+	};
+	/**
+	 * The form already has people on it: what this import will do to them, and
+	 * the way to choose the other. Adding is the default; the core's seed had
+	 * always replaced, and no screen had said either.
+	 */
+	merge?: { note: string; action: string };
 	cta: string;
 	ctaDisabled: boolean;
 }
@@ -723,6 +856,18 @@ export interface BreakdownRowModel {
 	/** With `identiconSvg`: its seed, for the viewer. */
 	address?: string;
 	label: string;
+	/**
+	 * The short address under a NAME. On the page that signs, a name is a
+	 * claim and the address is what is paid: a row from a spreadsheet can call
+	 * any address "Alice", so the confirm never shows the one without the other.
+	 */
+	detail?: string;
+	/**
+	 * The label IS an address (nobody named it), so it is set in mono. Said by
+	 * whoever built the row — guessing it from "has an address, has no detail"
+	 * put every named row of the receipt and the detail page in mono too.
+	 */
+	mono?: boolean;
 	value: string;
 	/**
 	 * A sentence under the label. The split's confirm uses it to repeat the

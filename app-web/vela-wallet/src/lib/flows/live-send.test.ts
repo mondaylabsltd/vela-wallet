@@ -8,6 +8,7 @@ import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
+import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { buildFlowState } from './fixtures';
 import {
@@ -78,6 +79,9 @@ const EMPTY_SEND: SendView = {
 	recipients: [],
 	split_over_balance: false,
 	split_duplicates: [],
+	split_row_issues: [],
+	split_remaining: null,
+	split_import_room: 60,
 	picker_target: null,
 	multi_select_mode: false,
 	multi_selected_ids: [],
@@ -504,6 +508,147 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 		expect(form.summary?.value).toBe('0.06 ETH');
 	});
 
+	// Issues 204-206, the multi-recipient send. Each of these is something the
+	// split form did without a word; each test pins the word.
+	describe('a split says what it is doing', () => {
+		const bob = '0x' + 'cd'.repeat(20);
+		const split = (over: Partial<SendView>) =>
+			liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: { ...ETH, price_usd: 3000 },
+					split_mode: true,
+					can_continue: true,
+					confirm_amount: '0.75',
+					recipients: [
+						{ id: 'a', address: alice, amount: '0.5', name: 'Alice' },
+						{ id: 'b', address: bob, amount: '0.25', name: null }
+					],
+					...over
+				})
+			);
+
+		it('counts the people in the total and prices the sum', () => {
+			const form = split({});
+			expect(form.summary?.label).toBe('Total · 2 recipients');
+			expect(form.summary?.value).toBe('0.75 ETH');
+			expect(form.summary?.detail).toBe('≈ $2,250.00');
+			expect(form.summary?.over).toBe(false);
+		});
+
+		it('prices nothing while there is nothing to price', () => {
+			const form = split({ confirm_amount: '0' });
+			expect(form.summary?.detail).toBeUndefined();
+			// A row that cannot be summed leaves the core's total empty — a dash,
+			// never a bare symbol.
+			expect(split({ confirm_amount: '' }).summary?.value).toBe('—');
+		});
+
+		it('an imported row keeps its name — over the address it pays, never instead of it', () => {
+			const [named, bare] = split({}).recipients ?? [];
+			expect(named.name).toBe('Alice');
+			expect(named.addressShort).toBe(shortenAddress(alice));
+			expect(bare.name).toBe(shortenAddress(bob));
+			expect(bare.addressShort).toBeUndefined();
+		});
+
+		it('a total over the balance says so BEFORE Continue is pressed', () => {
+			const form = split({ split_over_balance: true });
+			expect(form.summary?.over).toBe(true);
+			expect(form.alert).toBe(m['send.alertInsufficientBalanceBody']);
+		});
+
+		it('a dark Continue names the recipient it is waiting on, and what for', () => {
+			const waiting = split({
+				can_continue: false,
+				split_row_issues: [
+					{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' },
+					{ id: 'c', ordinal: 3, address: 'empty', amount: 'empty' }
+				]
+			});
+			expect(waiting.hint).toBe('Recipient 2 needs an amount.');
+			expect(waiting.alert).toBeUndefined();
+			expect(
+				split({
+					can_continue: false,
+					split_row_issues: [{ id: 'a', ordinal: 1, address: 'invalid', amount: 'ok' }]
+				}).hint
+			).toBe('Recipient 1 needs an address.');
+			// While the pre-check is out the gate is closed for another reason,
+			// and the button says that one itself.
+			expect(
+				split({
+					can_continue: false,
+					estimating_gas: true,
+					split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+				}).hint
+			).toBeUndefined();
+			expect(split({}).hint).toBeUndefined();
+		});
+
+		it('only a field with something IN it is called wrong', () => {
+			const [first, second] =
+				split({
+					split_row_issues: [
+						{ id: 'a', ordinal: 1, address: 'invalid', amount: 'invalid' },
+						{ id: 'b', ordinal: 2, address: 'empty', amount: 'empty' }
+					]
+				}).recipients ?? [];
+			expect(first.addressNote).toBe('Invalid address');
+			expect(first.amountNote).toBe('Not a valid amount');
+			// Unfinished is not mistaken: the prompt already says what it wants.
+			expect(second.addressNote).toBeUndefined();
+			expect(second.amountNote).toBeUndefined();
+		});
+
+		it('says what is left to give out — the core’s subtraction, not this file’s', () => {
+			expect(split({ split_remaining: '0.75' }).summary?.remaining).toBe('0.75 ETH left');
+			expect(split({ split_remaining: null }).summary?.remaining).toBeUndefined();
+		});
+
+		it('offers one amount for every empty row, only while it would do something', () => {
+			const offered = split({
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.5', name: null },
+					{ id: 'b', address: bob, amount: '', name: null }
+				],
+				split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+			});
+			expect(offered.fillEmpty).toEqual({
+				amount: '0.5',
+				label: 'Use 0.5 ETH for the empty rows'
+			});
+			// No empty row, nothing to fill.
+			expect(split({}).fillEmpty).toBeUndefined();
+			// A figure the core rejects is never the one that is copied.
+			expect(
+				split({
+					recipients: [
+						{ id: 'a', address: alice, amount: '1,5', name: null },
+						{ id: 'b', address: bob, amount: '', name: null }
+					],
+					split_row_issues: [
+						{ id: 'a', ordinal: 1, address: 'ok', amount: 'invalid' },
+						{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }
+					]
+				}).fillEmpty
+			).toBeUndefined();
+		});
+
+		it('a split does not offer Max — there is no single amount for it to fill', () => {
+			expect(split({}).token?.max).toBeUndefined();
+			expect(liveSendForm(formModel(), inputs({ selected_token: ETH })).token?.max).toBeDefined();
+		});
+
+		it('an empty row asks for an address', () => {
+			const form = split({
+				recipients: [{ id: 'a', address: '', amount: '', name: null }]
+			});
+			expect(form.recipients?.[0].addressPlaceholder).toBe(m['send.recipientPlaceholder']);
+			expect(form.recipients?.[0].identiconSvg).toBe('');
+		});
+	});
+
 	// Issue #203: the same payee could take two lines of one batch with
 	// nothing on screen saying so. The core names the repeats; these two
 	// tests say the form and the signing page both repeat what it named.
@@ -524,6 +669,34 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 		expect(form.recipients?.[0].duplicateNote).toBeUndefined();
 		expect(form.recipients?.[1].duplicateNote).toBeUndefined();
 		expect(form.recipients?.[2].duplicateNote).toBe(fill(m['send.recipientDuplicate'], { n: 1 }));
+	});
+
+	it('the signing page never shows a name without the address it pays', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				confirm_amount: '0.06',
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.03', name: 'Alice' },
+					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
+				]
+			})
+		);
+		// A sheet can call any address "Alice": the name is a claim, the address
+		// is what is signed for.
+		expect(confirm.breakdown?.[0]).toMatchObject({
+			label: 'Alice',
+			detail: shortenAddress(alice),
+			mono: false
+		});
+		// Nobody named the second: the address is the label, set as one.
+		expect(confirm.breakdown?.[1]).toMatchObject({
+			label: shortenAddress('0x' + 'cd'.repeat(20)),
+			mono: true
+		});
+		expect(confirm.breakdown?.[1].detail).toBeUndefined();
 	});
 
 	it('the signing page says it too — the last screen before a signature', () => {

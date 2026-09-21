@@ -128,6 +128,6 @@
 	.alert {
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-danger-base);
+		color: var(--color-error-base);
 	}
 </style>

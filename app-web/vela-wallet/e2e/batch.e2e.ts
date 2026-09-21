@@ -74,6 +74,11 @@ async function openSendForm(page: import('@playwright/test').Page): Promise<void
 	await stubRelay(page, RELAY, happyRelay('0x' + 'd4'.repeat(32), '0x' + 'e5'.repeat(32)));
 
 	await page.goto('/en/parallel');
+	// The button is in the server's HTML before the page hydrates; pressed then,
+	// it does nothing and the wait below runs out the whole test. The fixture
+	// list is filled on mount, after the core loads — a row in it means the
+	// handlers are attached. Invisible on a quiet machine, a flake on a busy one.
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	await page.waitForURL(/\/en\/wallet$/);
 	await seedNetworkOverrides(
@@ -81,7 +86,8 @@ async function openSendForm(page: import('@playwright/test').Page): Promise<void
 		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
 	);
 	await page.reload();
-	await expect(page.getByText('$9,000', { exact: true })).toBeVisible({ timeout: 25_000 });
+	// "$9,000" or, under a decimal-comma preset, "$9.000".
+	await expect(page.getByText(/^\$9[.,]000$/)).toBeVisible({ timeout: 25_000 });
 
 	await page
 		.getByRole('button', { name: en('componentsUi.dock.send') })
@@ -124,6 +130,196 @@ test('a pasted table becomes a split send — and an unpriceable currency refuse
 		name: new RegExp(en('send.batchApply_other').replace(/\{\{.*?\}\}/g, '.*'))
 	});
 	if (await apply.count()) await expect(apply.first()).toBeDisabled();
+});
+
+test('a list the account cannot pay says so beside the button it disarms (issue 204)', async ({
+	page
+}) => {
+	await openSendForm(page);
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	await page
+		.getByRole('button', { name: en('send.batchImport') })
+		.first()
+		.click();
+	const paste = page.locator('textarea').first();
+	await expect(paste).toBeVisible({ timeout: 20_000 });
+
+	// Token mode: the figures ARE the amounts, and the screen says so where the
+	// rate would otherwise be — with no rate row pretending to convert them.
+	await page
+		.getByRole('tab', { name: en('send.batchUnitToken').replace('{{sym}}', 'ETH') })
+		.click();
+	await expect(
+		page.getByText(en('send.batchTokenHint').replace('{{sym}}', 'ETH'), { exact: true })
+	).toBeVisible();
+	await expect(page.getByText(en('send.batchRateSection'), { exact: true })).toHaveCount(0);
+
+	// 2 + 2 ETH against a balance of 3. The core refuses; the reporter saw a dark
+	// button and nothing else.
+	await paste.fill(`${ALICE},2\n${BOB},2`);
+	const apply = page.getByRole('button', {
+		name: new RegExp(en('send.batchApply_other').replace(/\{\{.*?\}\}/g, '.*'))
+	});
+	await expect(apply.first()).toBeDisabled();
+	await expect(
+		page.getByText(en('send.batchOverBalance').replace('{{sym}}', 'ETH'), { exact: true })
+	).toBeVisible();
+	await expect(page.getByText('4 ETH', { exact: true })).toBeVisible();
+
+	// Within the balance the refusal goes and the button arms.
+	await paste.fill(`${ALICE},1\n${BOB},1.5`);
+	await expect(apply.first()).toBeEnabled();
+	await expect(
+		page.getByText(en('send.batchOverBalance').replace('{{sym}}', 'ETH'), { exact: true })
+	).toHaveCount(0);
+});
+
+// The five things the split could not say or do, driven through the REAL core
+// (no vitest instantiates the send or the importer machine): which line of a
+// sheet is bad, which recipient is unfinished, importing ADDS to what was typed,
+// Max is not offered where it fills nothing, and a decimal comma is read as one.
+
+const row = (page: import('@playwright/test').Page, n: number) =>
+	page.getByRole('textbox', {
+		name: `${en('send.recipientN').replace('{{n}}', String(n))} · ${en('send.recipientLabel')}`
+	});
+const amount = (page: import('@playwright/test').Page, n: number) =>
+	page.getByRole('textbox', {
+		name: `${en('send.recipientN').replace('{{n}}', String(n))} · ETH`
+	});
+const needs = (key: 'send.splitNeedsAddress' | 'send.splitNeedsAmount', n: number) =>
+	en(key).replace('{{n}}', String(n));
+
+test('a dark Continue names the recipient it waits on, and a wrong field says so', async ({
+	page
+}) => {
+	await openSendForm(page);
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	const advance = page.getByRole('button', { name: en('send.continueBtn') }).first();
+
+	// Max fills the single amount; a split has none, so it is not offered.
+	await expect(page.getByRole('button', { name: en('send.maxBtn'), exact: true })).toHaveCount(0);
+
+	// Nothing typed: the first recipient needs an address. Nothing is called wrong.
+	await expect(page.getByText(needs('send.splitNeedsAddress', 1), { exact: true })).toBeVisible();
+	await expect(page.getByText(en('send.batchBadAddress'), { exact: true })).toHaveCount(0);
+	await expect(advance).toBeDisabled();
+
+	await row(page, 1).fill(ALICE);
+	await expect(page.getByText(needs('send.splitNeedsAmount', 1), { exact: true })).toBeVisible();
+	await amount(page, 1).fill('0.5');
+	await expect(page.getByText(needs('send.splitNeedsAddress', 2), { exact: true })).toBeVisible();
+	// What is left to give out: 3 held, 0.5 given.
+	await expect(
+		page.getByText(en('send.splitRemaining').replace('{{amount}}', '2.5 ETH'), { exact: true })
+	).toBeVisible();
+
+	// Something IN a field that cannot be used is called wrong, on its row.
+	await row(page, 2).fill('0x1234');
+	await expect(page.getByText(en('send.batchBadAddress'), { exact: true })).toBeVisible();
+	await row(page, 2).fill(BOB);
+	await expect(page.getByText(en('send.batchBadAddress'), { exact: true })).toHaveCount(0);
+
+	// "1,5" used to ARM the button (judged by its leading digit) and then do
+	// nothing when pressed. Under this browser's dot preset the comma is not
+	// guessed at: the core refuses the figure, the row says so, the gate stays shut.
+	await amount(page, 2).fill('1,5');
+	await expect(page.getByText(en('send.badAmount'), { exact: true })).toBeVisible();
+	await expect(advance).toBeDisabled();
+
+	// One amount for every empty row: clear it, and the offer appears.
+	await amount(page, 2).fill('');
+	const fillAll = page.getByRole('button', {
+		name: en('send.splitFillEmpty').replace('{{amount}}', '0.5 ETH')
+	});
+	await expect(fillAll).toBeVisible();
+	await fillAll.click();
+	await expect(amount(page, 2)).toHaveValue('0.5');
+	await expect(fillAll).toHaveCount(0);
+	await expect(advance).toBeEnabled();
+});
+
+test('importing adds to the people already typed, and says which line of the sheet is bad', async ({
+	page
+}) => {
+	await openSendForm(page);
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	await row(page, 1).fill(ALICE);
+	await amount(page, 1).fill('0.5');
+
+	await page
+		.getByRole('button', { name: en('send.batchImport') })
+		.first()
+		.click();
+	const paste = page.locator('textarea').first();
+	await expect(paste).toBeVisible({ timeout: 20_000 });
+	await page
+		.getByRole('tab', { name: en('send.batchUnitToken').replace('{{sym}}', 'ETH') })
+		.click();
+	await paste.fill(`Bob,${BOB},0.25\nMallory,0x12zz,1\nCarol,${CARO},`);
+
+	// The two refused lines are on the list, as written, each with its reason.
+	await expect(page.getByText(/Mallory/).first()).toBeVisible();
+	await expect(page.getByText(en('send.batchBadAddress'), { exact: true })).toBeVisible();
+	await expect(page.getByText(en('send.badAmount'), { exact: true })).toBeVisible();
+
+	// Somebody is already on the form: the import says it ADDS to them, and the
+	// other choice is one press away — and says what it would do before it does.
+	await expect(page.getByText(en('send.batchAddsToRows'))).toBeVisible();
+	await page.getByRole('button', { name: en('send.batchReplaceInstead') }).click();
+	await expect(page.getByText(en('send.batchReplacesRows'))).toBeVisible();
+	await page.getByRole('button', { name: en('send.batchAddInstead') }).click();
+	await expect(page.getByText(en('send.batchAddsToRows'))).toBeVisible();
+
+	await page
+		.getByRole('button', { name: en('send.batchApply_one').replace('{{count}}', '1') })
+		.click();
+
+	// Alice, typed by hand, is still first; the blank row is gone; Bob follows.
+	await expect(row(page, 1)).toHaveValue(ALICE);
+	await expect(amount(page, 1)).toHaveValue('0.5');
+	await expect(row(page, 2)).toHaveValue(BOB);
+	await expect(amount(page, 2)).toHaveValue('0.25');
+	await expect(row(page, 3)).toHaveCount(0);
+	await expect(page.getByText('0.75 ETH', { exact: true })).toBeVisible();
+});
+
+test('a decimal comma is read as one where the person writes numbers that way', async ({
+	browser
+}) => {
+	const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+	const page = await context.newPage();
+	await page.addInitScript(() =>
+		localStorage.setItem('vela.localePrefs', JSON.stringify({ numberFormat: 'dot_comma' }))
+	);
+	await openSendForm(page);
+
+	// The single amount: "0,5" is a half, and the field keeps showing it that way.
+	const single = page.getByRole('textbox', { name: 'ETH', exact: true });
+	await single.fill('0,5');
+	await expect(single).toHaveValue('0,5');
+	await expect(page.getByText(/≈\s*\$1\.500,00/)).toBeVisible();
+
+	// And a split row: 0,5 + 0,25 is three quarters, not "cannot be summed".
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	await row(page, 1).fill(ALICE);
+	await row(page, 2).fill(BOB);
+	await amount(page, 2).fill('0,25');
+	await expect(page.getByText('0,75 ETH', { exact: true })).toBeVisible();
+	await expect(page.getByText(en('send.badAmount'), { exact: true })).toHaveCount(0);
+	await context.close();
 });
 
 test('the same payee twice is named on the row that repeats it (issue 203)', async ({ page }) => {

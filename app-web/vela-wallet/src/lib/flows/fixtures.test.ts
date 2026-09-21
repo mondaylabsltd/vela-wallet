@@ -277,7 +277,8 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(m.base.model.recipients).toHaveLength(3);
 		const total = m.base.model.recipients?.reduce((n, r) => n + Number(r.amount), 0);
 		expect(total).toBe(120);
-		expect(m.base.model.summary?.value).toBe('120 USDT · ≈$120.00');
+		expect(m.base.model.summary?.value).toBe('120 USDT');
+		expect(m.base.model.summary?.detail).toBe('≈ $120.00');
 	});
 
 	it('sd2d sweeps three tokens to one address and says so', () => {
@@ -291,12 +292,21 @@ describe('fixture canon (zh mock verbatim)', () => {
 	it('sd2c counts only the rows it can actually import', () => {
 		const m = buildFlowState('sd2c', zh, IDENTICON_STUB);
 		if (m.sheet?.kind !== 'batch-import') throw new Error('expected the import sheet');
-		const good = m.sheet.model.rows.filter((r) => r.ok).length;
-		expect(good).toBe(2);
-		// The CTA promises what it delivers — three parsed, two importable.
-		expect(m.sheet.model.parsedLabel).toContain('3');
+		const rows = (m.sheet.model.preview?.rows ?? []).flatMap((row) =>
+			row.kind === 'row' ? [row] : []
+		);
+		expect(rows.filter((r) => r.ok)).toHaveLength(2);
+		// The CTA promises what it delivers — four lines read, two importable —
+		// and the row that is not says why.
+		expect(m.sheet.model.preview?.label).toContain('4');
 		expect(m.sheet.model.cta).toContain('2');
-		expect(m.sheet.model.rejectedText).toContain('1');
+		expect(m.sheet.model.notices[0]).toContain('2');
+		// A line that never became a row is drawn too, as it was written.
+		expect(m.sheet.model.preview?.rows.some((row) => row.kind === 'refused')).toBe(true);
+		expect(rows.find((r) => !r.ok)?.note).toBe(zh['send.batchDup']);
+		// The drawn state is the refusal, with its reason on screen.
+		expect(m.sheet.model.ctaDisabled).toBe(true);
+		expect(m.sheet.model.total?.overText).toBeTruthy();
 	});
 
 	it('sd2f offers one fee token as chosen and the rest not', () => {
