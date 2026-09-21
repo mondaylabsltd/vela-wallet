@@ -184,6 +184,11 @@ enum SettingsFixtures {
                                      icon: .plus, subtitle: loc.t(k.addNetworkSubtitle)),
                     SettingsRowModel(id: "endpoints", title: loc.t(k.endpointsTitle),
                                      icon: .zap, subtitle: loc.t(k.endpointsSubtitle)),
+                    // Spec 069: the default transaction speed — between the
+                    // endpoints and the storage, as the web places it.
+                    SettingsRowModel(id: feeSpeedRow, title: loc.t("settings.advanced.feeSpeedTitle"),
+                                     icon: .clock, subtitle: loc.t("settings.advanced.feeSpeedSubtitle"),
+                                     value: loc.t("send.gasTier.fast")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
                                      icon: .hardDrive, subtitle: loc.t(k.storageSubtitle)),
                 ],
@@ -497,6 +502,28 @@ enum SettingsFixtures {
                                 footerLink: loc.t(k.languageContributeCta))
     }
 
+    /// The Settings row id of the default speed (spec 069).
+    static let feeSpeedRow = "fee-speed"
+
+    /// The default speed's sheet: the three speeds, fastest first, each with
+    /// the line on what it buys — never `rapid`, which nothing offers.
+    static func feeSpeedSheet(_ loc: Loc, selected: String) -> SelectSheetModel {
+        SelectSheetModel(
+            title: loc.t("settings.feeSpeed.title"),
+            rows: [
+                ("fast", "send.gasTierHintFast"),
+                ("standard", "send.gasTierHintStandard"),
+                ("slow", "send.gasTierHintSlow"),
+            ].map { tier, hint in
+                SelectRowModel(
+                    id: tier, label: loc.t("send.gasTier.\(tier)"),
+                    selected: tier == selected, detail: loc.t(hint)
+                )
+            },
+            subtitle: loc.t("settings.feeSpeed.subtitle")
+        )
+    }
+
     private static func currencySheet(_ loc: Loc) -> SelectSheetModel {
         let k = I18nKeys.SettingsUi.self
         return SelectSheetModel(
@@ -746,6 +773,7 @@ enum SettingsFixtures {
             signOutSheet: signOutSheet(loc, warned: state == .st3b),
             languageSheet: languageSheet(loc, current: "zh"),
             currencySheet: currencySheet(loc),
+            feeSpeedSheet: feeSpeedSheet(loc, selected: "fast"),
             numberSheet: formatSheet(loc, title: loc.t(k.numberTitle),
                                      subtitle: loc.t(k.numberSubtitle), samples: numberSamples,
                                      notes: [4: loc.t(k.noteIndian)]),

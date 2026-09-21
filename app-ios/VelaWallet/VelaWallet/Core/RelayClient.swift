@@ -128,7 +128,7 @@ final class RelayClient {
         case resolved(confirmed: Bool, txHash: String, sender: String?, logs: [[String: Any]])
     }
 
-    struct GasSignals {
+    struct GasSignals: Equatable {
         let ethGasPrice: String?
         let baseFee: String?
         let priorityFee: String?
@@ -148,6 +148,27 @@ final class RelayClient {
 
     private var quoteCache: [String: (quotes: [[String: Any]], at: Double)] = [:]
     private var infoCache: [String: (info: AccountInfo, at: Double)] = [:]
+
+    // The fee's inputs, held still (issue 212; iOS's since spec 069). The fee
+    // session re-samples on every quote run, and since 069 up to three
+    // sessions price one send at once, one per speed. Uncached, a recipient
+    // edit re-rolled the gas price, and three tiers priced on three readings
+    // could not be compared. A COMPLETE reading is held 15 s per chain — the
+    // web's `fetchRawGasSignals` window — and dropped by the refresh control,
+    // a failed quote and every submit (`invalidateFeeSignals`). The epoch
+    // stops a read that was in flight when somebody asked for a fresh one
+    // from landing its older answer in the cache.
+    private static let feeSignalsTTLMs: Double = 15_000
+    private var gasSignalsCache: [String: (signals: GasSignals, at: Double)] = [:]
+    private var bundlerQuoteCache: [String: (quote: [String: Any], at: Double)] = [:]
+    private var feeSignalsEpoch: [Int: Int] = [:]
+
+    /// Forget this chain's held readings, so the next quote run measures again.
+    func invalidateFeeSignals(chainId: Int) {
+        feeSignalsEpoch[chainId, default: 0] += 1
+        gasSignalsCache = gasSignalsCache.filter { !$0.key.hasPrefix("\(chainId):") }
+        bundlerQuoteCache = bundlerQuoteCache.filter { !$0.key.hasPrefix("\(chainId):") }
+    }
 
     init(
         port: RelayPort,
@@ -314,17 +335,31 @@ final class RelayClient {
 
     /// `pimlico_getUserOperationGasPrice`, one tier.
     func bundlerQuote(chainId: Int, tier: String) async -> [String: Any]? {
+        let key = "\(chainId):\(tier)"
+        if let held = bundlerQuoteCache[key], now() - held.at < Self.feeSignalsTTLMs {
+            return held.quote
+        }
+        let epoch = feeSignalsEpoch[chainId, default: 0]
         guard let result = await bundlerValue(
             chainId: chainId, method: "pimlico_getUserOperationGasPrice", params: []
         ) as? [String: Any],
             let row = result[tier] as? [String: Any],
             let maxFee = Self.decimalOfHex(row["maxFeePerGas"])
         else { return nil }
-        return [
+        let quote: [String: Any] = [
             "max_fee_per_gas": maxFee,
+            // The tip this tier is signed with — what the core turns into the
+            // gas bid on screen (issue 684). Absent on a generic bundler.
+            "max_priority_fee_per_gas": Self.decimalOfHex(row["maxPriorityFeePerGas"]).map { $0 as Any } ?? NSNull(),
             "network_fee_per_gas": Self.decimalOfHex(row["networkFeePerGas"]).map { $0 as Any } ?? NSNull(),
             "relayer_fee_per_gas": Self.decimalOfHex(row["relayerFeePerGas"]).map { $0 as Any } ?? NSNull(),
         ]
+        // Never a zero cap, which the core rejects as degenerate: "the relay
+        // did not answer" is not a measurement worth holding.
+        if maxFee != "0", feeSignalsEpoch[chainId, default: 0] == epoch {
+            bundlerQuoteCache[key] = (quote, now())
+        }
+        return quote
     }
 
     /// `eth_estimateUserOperationGas` for a draft's relay JSON.
@@ -377,16 +412,24 @@ final class RelayClient {
     /// (`parse_existing_user_op_hash` — an idempotent re-submit, never a second
     /// spend) and classifies the rest. No Swift here decides what a refusal
     /// means.
-    func sendUserOp(chainId: Int, opJson: String) async -> SubmitAnswer {
+    ///
+    /// `tier` is the speed the displayed fee was priced at, sent as the
+    /// optional third parameter (spec 068's relay contract; iOS's since 069).
+    /// A NAME, never a wei figure: the relay resolves it at submit time and
+    /// clamps it between its inclusion floor and what the signed reimbursement
+    /// funds. `nil` sends the pre-068 two-element params exactly, and the dead
+    /// `rapid` is never sent — a relay refuses an unknown name with -32602.
+    func sendUserOp(chainId: Int, opJson: String, tier: String? = nil) async -> SubmitAnswer {
         guard let op = Self.object(fromJSON: opJson) else {
             return .rejected(errorJson: Self.errorEnvelope("the operation could not be encoded"))
         }
+        let params = Self.submitParams(op, tier: tier)
         var attempt = 0
         while true {
             switch await bundlerCall(
                 chainId: chainId,
                 method: "eth_sendUserOperation",
-                params: [op, entryPointAddress()]
+                params: params
             ) {
             case .value(let value):
                 guard let hash = value as? String, hash.hasPrefix("0x") else {
@@ -472,6 +515,11 @@ final class RelayClient {
     /// The three raw gas signals, each `nil` when unreadable; the core prices
     /// with what it has, and only a failed `eth_gasPrice` triggers its default.
     func gasSignals(chainId: Int, wantTip: Bool) async -> GasSignals {
+        let key = "\(chainId):gas:\(wantTip)"
+        if let held = gasSignalsCache[key], now() - held.at < Self.feeSignalsTTLMs {
+            return held.signals
+        }
+        let epoch = feeSignalsEpoch[chainId, default: 0]
         let gasPrice = await chainCall(chainId: chainId, method: "eth_gasPrice", params: [])
         let block = await chainCall(
             chainId: chainId, method: "eth_getBlockByNumber", params: ["latest", false]
@@ -481,11 +529,30 @@ final class RelayClient {
         let tip: Any? = wantTip
             ? await chainCall(chainId: chainId, method: "eth_maxPriorityFeePerGas", params: [])
             : nil
-        return GasSignals(
+        let signals = GasSignals(
             ethGasPrice: Self.decimalOfHex(gasPrice),
             baseFee: Self.decimalOfHex((block as? [String: Any])?["baseFeePerGas"]),
             priorityFee: Self.decimalOfHex(tip)
         )
+        // Only a COMPLETE reading is held: every leg that was asked for
+        // answered, and the price is positive. A block that ANSWERED without a
+        // base fee is a real pre-London reading; one that did not answer is a
+        // failed leg.
+        let positive = signals.ethGasPrice.map { $0 != "0" } ?? false
+        let complete = positive && block is [String: Any] && (!wantTip || signals.priorityFee != nil)
+        if complete, feeSignalsEpoch[chainId, default: 0] == epoch {
+            gasSignalsCache[key] = (signals, now())
+        }
+        return signals
+    }
+
+    /// `[userOperation, entryPoint, tier?]`: two elements, or three with a
+    /// speed. Only the three offered names ever reach the relay.
+    static func submitParams(_ op: Any, tier: String?) -> [Any] {
+        guard let tier, ["fast", "standard", "slow"].contains(tier) else {
+            return [op, entryPointAddress()]
+        }
+        return [op, entryPointAddress(), tier]
     }
 
     /// `EntryPoint.getNonce(sender, 0)` as a hex quantity; `nil` when

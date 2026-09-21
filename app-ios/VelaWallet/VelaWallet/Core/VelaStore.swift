@@ -69,6 +69,9 @@ struct VelaStore {
 
         // Owned by `display_currency` (spec 050).
         static let displayCurrency = "vela.displayCurrency"
+        /// The default transaction speed (spec 068; iOS's since 069). A bare
+        /// tier name, judged by the core. Survives sign-out.
+        static let feeTier = "vela.feeTier"
 
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet

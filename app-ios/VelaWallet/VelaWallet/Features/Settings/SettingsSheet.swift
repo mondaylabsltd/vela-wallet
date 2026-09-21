@@ -66,6 +66,11 @@ struct SettingsSheet: View {
                         sheet: model.currencySheet,
                         onPick: { id in onPick?(.currency, id) }
                     )
+                case .feeSpeed:
+                    SelectSheetBody(
+                        sheet: model.feeSpeedSheet,
+                        onPick: { id in onPick?(.feeSpeed, id) }
+                    )
                 case .numberFormat:
                     SelectSheetBody(
                         sheet: model.numberSheet,

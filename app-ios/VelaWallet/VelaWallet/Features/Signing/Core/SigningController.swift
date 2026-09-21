@@ -135,12 +135,14 @@ final class SigningController {
         spine: UserOpSpine,
         store: VelaStore,
         pool: RpcPool,
+        preferredTier: @escaping () -> String = { "fast" },
         ports: Ports
     ) {
         self.wallet = wallet
         self.relay = relay
         self.pool = pool
         self.ports = ports
+        self.preferredTier = preferredTier
 
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
@@ -294,6 +296,11 @@ final class SigningController {
         }
     }
 
+    /// The stored default speed (spec 069): a dApp transaction is priced —
+    /// and, through the quoted fee, submitted — at the speed Settings names,
+    /// which is `fast` for everybody who never chose.
+    private let preferredTier: () -> String
+
     private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
         Task { [weak self] in
@@ -306,7 +313,7 @@ final class SigningController {
                 "account": wallet.address,
                 "deployed": deployed,
                 "public_key_available": true,
-                "tier": "fast",
+                "tier": ["fast", "standard", "slow"].contains(preferredTier()) ? preferredTier() : "fast",
                 "calls": feeCalls,
                 "fee_token": NSNull(),
             ])
@@ -439,8 +446,11 @@ final class SigningController {
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
             "bundler_cost_wei": NSNull(),
             "gas_fee_token": NSNull(),
+            // …with the speed this very estimate was priced at, named on the
+            // wire beside the amount (spec 069); the core drops a `rapid`.
             "quoted_fee": fee?.fee.map { estimate in
-                ["amount": estimate.totalWei, "recipient": estimate.feeRecipient ?? ""] as [String: Any]
+                ["amount": estimate.totalWei, "recipient": estimate.feeRecipient ?? "", "tier": estimate.tier]
+                    as [String: Any]
             } as Any? ?? NSNull(),
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),

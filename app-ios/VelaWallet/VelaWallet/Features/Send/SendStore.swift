@@ -187,7 +187,7 @@ final class SendStore {
     /// report until there is an estimate, and a busy or failed session says so
     /// through `feeBusyChanged` and the form's own warning instead.
     func feeUpdated(_ estimate: FeeEstimateWire) {
-        dispatch(["type": "fee_updated", "estimate": Self.estimateEvent(estimate)])
+        dispatch(["type": "fee_updated", "estimate": estimate.coreJSON])
     }
     func feeBusyChanged(_ busy: Bool) {
         dispatch(["type": "fee_busy_changed", "busy": busy])
@@ -228,34 +228,5 @@ final class SendStore {
             "type": "display_changed",
             "display": Self.display(code: code, rate: rate, decimals: fiatDecimals),
         ])
-    }
-
-    /// `FeeEstimateView` as `send`'s `FeeUpdated` carries it.
-    private static func estimateEvent(_ estimate: FeeEstimateWire) -> [String: Any] {
-        var asset: [String: Any]
-        switch estimate.feeAsset {
-        case .native:
-            asset = ["type": "native"]
-        case .erc20(let token, let decimals, let amount, let symbol):
-            asset = [
-                "type": "erc20", "token": token, "decimals": decimals, "amount": amount,
-                "symbol": symbol.map { $0 as Any } ?? NSNull(),
-            ]
-        }
-        return [
-            "chain_id": estimate.chainId,
-            "total_wei": estimate.totalWei,
-            "max_fee_per_gas": estimate.maxFeePerGas,
-            "network_fee_per_gas": "0",
-            "relayer_fee_per_gas": "0",
-            "bundler_gas_price": "0",
-            "in_band_gas_basis": "0",
-            "total_gas": estimate.totalGas,
-            "deployed": estimate.deployed,
-            "tier": "fast",
-            "quoted": estimate.quoted,
-            "fee_asset": asset,
-            "fee_recipient": estimate.feeRecipient.map { $0 as Any } ?? NSNull(),
-        ]
     }
 }

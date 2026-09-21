@@ -648,6 +648,11 @@ struct SendFormBody: View {
     /// The core's live refusal, under the fields.
     var warning: String?
     var ctaDisabled = false
+    /// Spec 069: measure the fee again; fold or unfold the speed control; a
+    /// one-shot pick. Absent in the gallery.
+    var onRefreshFee: (() -> Void)? = nil
+    var onToggleSpeed: () -> Void = {}
+    var onPickSpeed: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -735,7 +740,12 @@ struct SendFormBody: View {
             if let summary = model.summary {
                 SummaryLineView(summary: summary)
             }
-            FeeRowView(fee: model.fee, onOpen: onFee)
+            VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                FeeRowView(fee: model.fee, onOpen: onFee, onRefresh: onRefreshFee)
+                if let speed = model.speed {
+                    FeeSpeedControlView(speed: speed, onToggle: onToggleSpeed, onPick: onPickSpeed)
+                }
+            }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)

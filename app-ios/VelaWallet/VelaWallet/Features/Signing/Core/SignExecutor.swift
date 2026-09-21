@@ -202,7 +202,9 @@ final class SignExecutor {
         let quoted = (operation["quoted_fee"] as? [String: Any]).map {
             UserOpSpine.Quoted(
                 amount: $0["amount"] as? String ?? "0",
-                recipient: $0["recipient"] as? String ?? ""
+                recipient: $0["recipient"] as? String ?? "",
+                // The speed the displayed fee was priced at (spec 069).
+                tier: $0["tier"] as? String
             )
         }
 

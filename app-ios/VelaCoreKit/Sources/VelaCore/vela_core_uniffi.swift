@@ -3540,6 +3540,324 @@ public func FfiConverterTypeFeePolicyCore_lower(_ value: FeePolicyCore) -> UInt6
 
 
 /**
+ * The speed control of one send surface (spec 069): the tier in force,
+ * the free upgrade, the one-speed statement and each tier's gas bid.
+ */
+public protocol FeeSpeedCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The speed control of one send surface (spec 069): the tier in force,
+ * the free upgrade, the one-speed statement and each tier's gas bid.
+ */
+open class FeeSpeedCore: FeeSpeedCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_feespeedcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_feespeedcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_feespeedcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feespeedcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feespeedcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feespeedcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeSpeedCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FeeSpeedCore
+
+    public static func lift(_ handle: UInt64) throws -> FeeSpeedCore {
+        return FeeSpeedCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FeeSpeedCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeSpeedCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FeeSpeedCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeedCore_lift(_ handle: UInt64) throws -> FeeSpeedCore {
+    return try FfiConverterTypeFeeSpeedCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeSpeedCore_lower(_ value: FeeSpeedCore) -> UInt64 {
+    return FfiConverterTypeFeeSpeedCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The default transaction speed (spec 068): the stored tier every send
+ * starts at, the factory `fast` when nothing was chosen. Spec 069 brings
+ * it to the native Settings screens.
+ */
+public protocol FeeTierPrefCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The default transaction speed (spec 068): the stored tier every send
+ * starts at, the factory `fast` when nothing was chosen. Spec 069 brings
+ * it to the native Settings screens.
+ */
+open class FeeTierPrefCore: FeeTierPrefCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_feetierprefcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_feetierprefcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_feetierprefcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feetierprefcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feetierprefcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feetierprefcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeeTierPrefCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = FeeTierPrefCore
+
+    public static func lift(_ handle: UInt64) throws -> FeeTierPrefCore {
+        return FeeTierPrefCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: FeeTierPrefCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeTierPrefCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: FeeTierPrefCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeTierPrefCore_lift(_ handle: UInt64) throws -> FeeTierPrefCore {
+    return try FfiConverterTypeFeeTierPrefCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeeTierPrefCore_lower(_ value: FeeTierPrefCore) -> UInt64 {
+    return FfiConverterTypeFeeTierPrefCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * A translation engine.
  *
  * Wraps `RwLock` because `#[uniffi::export]` methods take `&self` while
@@ -10734,6 +11052,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_view() != 13790) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_dispatch() != 22984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_resolve_effect() != 2711) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_view() != 28979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_dispatch() != 20547) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_resolve_effect() != 13462) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_view() != 22442) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_logincore_dispatch() != 64128) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10873,6 +11209,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_feepolicycore_new() != 46847) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_feespeedcore_new() != 48356) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_feetierprefcore_new() != 13328) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_logincore_new() != 62417) {
