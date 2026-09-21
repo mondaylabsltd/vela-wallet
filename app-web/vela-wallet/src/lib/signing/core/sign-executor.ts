@@ -53,6 +53,7 @@ import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
 import type { SignEffect, SignShellPorts } from './sign-types';
 import { signErrorMessage } from './sign-types';
+import { wireTier } from '$lib/flows/core/wire-tier';
 
 export { signErrorMessage } from './sign-types';
 
@@ -223,7 +224,10 @@ export function createSignExecutor(ports: SignShellPorts) {
 						operation.quoted_fee
 							? {
 									amount: fromWireWei(operation.quoted_fee.amount),
-									recipient: operation.quoted_fee.recipient
+									recipient: operation.quoted_fee.recipient,
+									// The speed the displayed fee was priced at (spec 069), when
+									// the approve carried one.
+									tier: wireTier(operation.quoted_fee.tier)
 								}
 							: undefined,
 						// The never-unlimited gate is the CORE's on this path: `proceed_submit`

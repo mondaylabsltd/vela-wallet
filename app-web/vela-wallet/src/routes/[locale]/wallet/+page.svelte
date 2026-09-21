@@ -82,26 +82,18 @@
 	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
 		makeRecipientId,
-		offeredTier,
-		OFFERED_TIERS,
 		sendTokenId,
-		speedSetVerdict,
 		visibleSendTokens,
-		type OfferedTier,
 		type SendClassFilter
 	} from '$lib/flows/live-send';
 	import { prefetchForSend } from '$lib/services/safe-transaction';
 	import type { BatchView } from '$lib/core/generated/BatchView';
 	import { FeeQuote, IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
 	import type { FeeView } from '$lib/core/generated/FeeView';
+	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
-	import { FASTEST_TIER } from '$lib/flows/speed-choice';
-	import {
-		freeSpeedPartner,
-		freeSpeedSwap,
-		pickInForce,
-		previewTiers
-	} from '$lib/flows/core/free-speed';
+	import { FeeSpeedSession, reconcileSpeed } from '$lib/flows/core/fee-speed.svelte';
+	import { resolvedFormatKeys } from '$lib/services/locale-format';
 	import { feeKey } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681 } from '$lib/services/eip681';
@@ -240,47 +232,52 @@
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */
 	let feeSheetOpen = $state(false);
 
-	// --- Speed (spec 068) -----------------------------------------------------
+	// --- Speed (spec 068, decided by the core since 069) ----------------------
 	//
 	// Folded away until the person opens it, and what it shows folded is THEIR
-	// stored default. A pick here is ONE-SHOT: it lives on `sendTier`, which
-	// dies with the send, and never reaches `fee_tier_pref`. That is the whole
-	// point — urgency is per-transaction, thrift is not, and a preference that
-	// silently drifts is one nobody can trust.
-	let speedOpen = $state(false);
-	/** This send's tier, when the person picked one. `null` ⇒ their default. */
-	let sendTier = $state<OfferedTier | null>(null);
-	/** The person's stored default, as a tier this shell offers. */
-	const preferredTier = $derived<OfferedTier>(offeredTier(feeTierPreference.view.tier));
+	// stored default. A pick here is ONE-SHOT: it dies with the send and never
+	// reaches `fee_tier_pref`. Every rule the control keeps — the tier in force,
+	// the free upgrade (issue 686 A), the one-speed statement (686 B), each
+	// tier's gas bid, which tiers to keep priced — is the `fee_speed` core's,
+	// the same machine desktop, Android and iOS drive. What stays here is the
+	// fee SESSIONS, and the reconcile rule that keeps them in step with it.
+	const speed = new FeeSpeedSession();
+	/** The tier THIS send runs at, as the core decided it. */
+	const sendSpeedTier = $derived<FeeTier>(speed.view.tier);
 	/**
-	 * This send runs at the FASTEST speed because, on this network, it costs
-	 * exactly what the person's slower default costs (issue 686). Like
-	 * `sendTier` it dies with the send and never reaches `fee_tier_pref`; unlike
-	 * it, nobody chose it — so it never outranks a pick, and the control says in
-	 * one line why the tier in force is not the one Settings names.
+	 * Run a step that may move the tier in force, then bring the sessions in
+	 * line AT ONCE (the reconcile rule, `fee_speed.rs`): promote the preview
+	 * that priced this operation at the new tier — a tap, or a free upgrade the
+	 * core just took — else re-price. At once, not in an effect of its own: the
+	 * preview effect below re-prices the OTHER tiers the moment the core's
+	 * `previews` change, and run first it would dispose the very session the
+	 * person tapped, turning "the price you tap is the price you get" (issue
+	 * 681) back into a second, possibly different, answer.
 	 */
-	let freeFast = $state(false);
-	const sendSpeedTier = $derived<OfferedTier>(
-		sendTier ?? (freeFast && preferredTier !== FASTEST_TIER ? FASTEST_TIER : preferredTier)
-	);
-	/**
-	 * The one tier a free upgrade is judged against (issue 686) — `null`, so no
-	 * extra quote at all, for anybody whose default is already the fastest, for
-	 * any send with a pick on it, and once the send has left its form (the
-	 * confirm must not change tier under the person reading it). See
-	 * `freeSpeedPartner`.
-	 */
-	const freePartner = $derived(
-		freeSpeedPartner(sendTier, preferredTier, sendSpeedTier, sendView?.stage === 'enter_details')
-	);
+	function speedStep(step: () => void): void {
+		step();
+		if (sendSession !== null) reconcileSpeed(speed.view.tier, feeQuote, tierPreview);
+	}
+	$effect(() => {
+		const preferred = feeTierPreference.view.tier;
+		const number = resolvedFormatKeys().number;
+		untrack(() => speedStep(() => speed.configure(preferred, number)));
+	});
+	$effect(() => {
+		// A free upgrade is only decided while the person is still choosing: the
+		// confirm is the last screen before a signature, and the tier it names
+		// must not change under somebody reading it.
+		speed.stage(sendView?.stage === 'enter_details');
+	});
 	/**
 	 * The OTHER tiers' figures: all of them while the control is open, and —
-	 * folded — only the free-upgrade partner, when there is one.
+	 * folded — only the free-upgrade partner, when there is one. Which tiers
+	 * that is, is the core's (`previews`).
 	 */
 	const tierPreview = new TierPreview();
 	$effect(() => {
 		const base = feeQuote.lastRequest;
-		const tiers = previewTiers(speedOpen, OFFERED_TIERS, sendSpeedTier, freePartner);
+		const tiers = speed.view.previews;
 		if (tiers.length === 0 || sendView === null || base === null) {
 			tierPreview.hide();
 			return;
@@ -294,75 +291,42 @@
 		);
 	});
 	/**
-	 * Take the fastest speed when it is free, and give it back when it is not
-	 * (issue 686). Decided from two SETTLED quotes of this same operation —
-	 * the one in force and its partner's — and carried out by PROMOTING the
-	 * partner's session (issue 681), never by a re-quote, so what the row
-	 * shows, what the send machine signs (the `fee_updated` mirror below) and
-	 * the tier named on the wire (`feeTier`) are one quote. See
-	 * `freeSpeedSwap` for every rule it keeps.
-	 *
-	 * The promotion runs untracked, because it writes the very rows and views
-	 * the decision reads — an effect re-running on its own write is
-	 * `effect_update_depth_exceeded`, which shows up as a blank wallet page.
+	 * Tell the core what every session holds, whenever any of it moves. The
+	 * core reads the tier each quote was priced at, so nothing is filtered here.
+	 * Untracked dispatch: it writes `speed.view`, which the effects around it
+	 * read, and must not re-run on its own write.
 	 */
 	$effect(() => {
-		const partner = freePartner;
-		const next = freeSpeedSwap({
-			feeQuote,
-			tierPreview,
-			preferred: preferredTier,
-			inForce: sendSpeedTier,
-			partner
-		});
-		if (next === null || partner === null) return;
-		untrack(() => {
-			if (tierPreview.promote(feeQuote, partner)) freeFast = next;
-		});
+		void feeQuote.view;
+		void feeQuote.pending;
+		void feeQuote.lastRequest;
+		for (const row of tierPreview.rows) {
+			void row.quote.view;
+			void row.quote.pending;
+		}
+		untrack(() => speedStep(() => speed.quotes(feeQuote, tierPreview)));
 	});
 	/**
-	 * Re-price THIS send when the tier in force changes.
+	 * …and once more whenever the tier or a measurement moves: a tier that
+	 * changed while a measurement was out (which the core may be waiting on,
+	 * so nothing supersedes it) is re-priced the moment that measurement lands.
 	 *
-	 * The tier is a quote PARAMETER, and the `send` core does not model it:
-	 * `form_estimate_key` (send.rs) is token | payee | fee-coin, so once the
-	 * form's estimate has landed, ANY event that only goes through
-	 * `schedule_form_estimate` short-circuits on a key that cannot see a speed.
-	 * Asking the core to re-estimate by re-choosing the same fee coin therefore
-	 * did nothing at all, and the fee row went on showing the OLD tier's money
-	 * under the NEW tier's name until Continue's pre-check quietly re-priced it
-	 * one screen later. So the shell re-asks its OWN session — the session the
-	 * fee row renders — and the `fee_updated` mirror below carries the answer
-	 * into the send machine exactly as it does after a fee-coin switch.
+	 * The tier is a quote PARAMETER the `send` core does not model
+	 * (`form_estimate_key` is token | payee | fee-coin), so this is the shell
+	 * re-asking its OWN session, and the `fee_updated` mirror below carries the
+	 * answer into the send machine as it does after a fee-coin switch.
 	 *
-	 * It watches the TIER rather than firing on the tap, so a preference that
-	 * arrives late (`feeTierPreference.boot()` reads IndexedDB after the send
-	 * sheet may already be open) re-prices too, instead of flipping the label
-	 * over a figure priced at the factory default.
-	 *
-	 * Since issue 681 a TAP normally never gets here: `pickSpeed` promotes the
-	 * preview session the person tapped, which leaves `lastRequest.tier` equal
-	 * to the tier now in force, and the guard below returns. What is left for
-	 * this effect is the case its comment was always about — a tier arriving
-	 * with nothing priced for it — plus the one where the tapped row had no
-	 * settled quote to give. Both genuinely need a measurement.
-	 *
-	 * Never while a measurement is out: superseding a quote the CORE asked for
-	 * would make it hear its own request as a refusal. `pending` falling is
-	 * itself a dependency, so the re-ask happens the moment the slot is free.
-	 *
-	 * `lastRequest` is read UNTRACKED on purpose: `requestQuote` writes it, and
-	 * an effect that both read and wrote it would re-run on its own write —
-	 * `effect_update_depth_exceeded`, which shows up as a blank wallet page.
+	 * `pending` is read so the re-ask happens the moment a measurement the core
+	 * may be waiting on has landed; everything the step writes is untracked —
+	 * an effect re-running on its own write is `effect_update_depth_exceeded`,
+	 * which shows up as a blank wallet page.
 	 */
 	$effect(() => {
 		const tier = sendSpeedTier;
-		if (feeQuote.pending) return;
+		void feeQuote.pending;
 		untrack(() => {
 			if (sendSession === null) return;
-			const base = feeQuote.lastRequest;
-			// Nothing priced yet — the first quote carries this tier itself.
-			if (base === null || base.tier === tier) return;
-			void feeQuote.requestQuote({ ...base, tier });
+			reconcileSpeed(tier, feeQuote, tierPreview);
 		});
 	});
 	/** Leaving the route is not `closeSend()` — a send left open runs neither. */
@@ -370,6 +334,7 @@
 		signingFee.dispose();
 		feeQuote.dispose();
 		tierPreview.hide();
+		speed.dispose();
 	});
 	/**
 	 * The fee in force, as the fee row reads it.
@@ -388,45 +353,14 @@
 		busy: (feeQuote.view ?? IDLE_FEE_VIEW).busy || feeQuote.pending
 	});
 	/**
-	 * One row per offered tier. The row for the tier in force is the MAIN
-	 * session's view — the same object the fee row above renders — so the
-	 * selected option and the fee it is beside are one number, not two.
+	 * The fee-coin options of the session pricing `tier`, for formatting its
+	 * option's fee — the session in force for the tier in force, else its
+	 * preview.
 	 */
-	const speedRows = $derived(
-		OFFERED_TIERS.map((tier) => {
-			if (tier === sendSpeedTier) {
-				return { tier, view: feeInForce, busy: feeQuote.pending };
-			}
-			const row = tierPreview.rows.find((candidate) => candidate.tier === tier);
-			// No session yet (the control was just opened): "…", never "—". A
-			// dash would claim the tier cannot be priced.
-			return { tier, view: row?.quote.view ?? IDLE_FEE_VIEW, busy: row?.quote.pending ?? true };
-		})
-	);
-	/**
-	 * Chains whose three speeds last settled as one (issue 686 B), so the
-	 * control reopened there says so at once. The previews are real sessions
-	 * that fold away with the control, and without this every open on Tempo
-	 * drew three rows — the very choice-that-does-nothing — for a round trip
-	 * before they collapsed into the statement. Only ever what the numbers
-	 * last said: a settled set that differs forgets the chain again, and a set
-	 * still measuring (or failed) is no evidence either way. Kept for the life
-	 * of the page, not the send: whether a network has a speed to choose does
-	 * not change between payments.
-	 */
-	let oneSpeedChains = $state<number[]>([]);
-	$effect(() => {
-		const verdict = speedSetVerdict(speedRows);
-		const chain = feeInForce.fee?.chain_id;
-		if (verdict === null || chain === undefined) return;
-		untrack(() => {
-			const known = oneSpeedChains.includes(chain);
-			if (verdict === 'one' && !known) oneSpeedChains = [...oneSpeedChains, chain];
-			if (verdict === 'several' && known) {
-				oneSpeedChains = oneSpeedChains.filter((candidate) => candidate !== chain);
-			}
-		});
-	});
+	function speedFeeOptions(tier: FeeTier): FeeView['options'] {
+		if (tier === sendSpeedTier) return feeInForce.options;
+		return tierPreview.rows.find((row) => row.tier === tier)?.quote.view.options ?? [];
+	}
 	/**
 	 * The picker is choosing SEVERAL tokens (spec 028 T440). Shell state by
 	 * precedent — the phone's `sweepActive` is its chain filter, a shell
@@ -802,16 +736,6 @@
 					// the surface moved on. Neither is a verdict about a fee — the
 					// core hears the same "not estimated" either way.
 					return { type: 'failed', kind: 'estimate_failed' };
-				},
-				// Read at the moment of submission from the session the fee row
-				// renders: the tier named on the wire is the tier the figure the
-				// person approved was priced at, or nothing at all.
-				// `rapid` is never asked for, so it can never come back — and if it
-				// ever did, "no tier" is the honest answer rather than a name the
-				// relay refuses or a neighbouring tier this quote was not priced at.
-				feeTier: () => {
-					const tier = feeQuote.view.fee?.tier;
-					return tier === undefined || tier === 'rapid' ? null : tier;
 				}
 			}
 		});
@@ -846,9 +770,7 @@
 		sendClassFilter = 'all';
 		// A one-shot tier dies with the send (spec 068): the next one starts at
 		// the stored default again, which is the promise the picker makes.
-		speedOpen = false;
-		sendTier = null;
-		freeFast = false;
+		speed.reset();
 		tierPreview.hide();
 		feeQuote.dispose();
 		// The mirror below memoizes what it last told the send machine. A new
@@ -1049,40 +971,16 @@
 					// first (issue 212), so this is a genuinely fresh measurement and
 					// not the number that is already on screen.
 					refreshFee: () => feeQuote.requote(),
-					toggleSpeed: () => {
-						speedOpen = !speedOpen;
-					},
+					toggleSpeed: () => speed.toggle(),
 					pickSpeed: (id: string) => {
 						if (id !== 'fast' && id !== 'standard' && id !== 'slow') return;
-						speedOpen = false;
-						if (id === sendSpeedTier) {
-							// While a free upgrade is in question, tapping the tier in
-							// force is a DECISION too (issue 686): an upgraded Fast must
-							// not fall back if the fees later part, and a Slow tapped
-							// while Fast was still measuring must not be overruled when
-							// Fast settles at the same fee. See `pickInForce`.
-							sendTier = pickInForce(sendTier, freePartner, id);
-							return;
-						}
-						// THE PRICE YOU TAP IS THE PRICE YOU GET (issue 681).
-						//
-						// The row the person tapped is not a guess at what that tier
-						// costs — it is a settled quote of THIS operation at THAT tier,
-						// from a session of its own. So the session in force takes it
-						// over, and nothing is asked of the relay at all.
-						//
-						// Asking again was the defect: gas moves, and the 15 s
-						// fee-signal window (issue 212) can roll over while the picker
-						// sits open, so the second answer could differ from the figure
-						// that was tapped — "我选择的价格和展示的价格不一致了". Even when
-						// the two agreed, the row flickered through a busy state for a
-						// round trip that bought nothing.
-						tierPreview.promote(feeQuote, id);
-						// Named either way. When that row had nothing settled to give
-						// (still measuring, or failed), promotion refuses and the
-						// re-price effect above does the honest thing instead: a real
-						// measurement, with the row saying so while it is out.
-						sendTier = id;
+						// THE PRICE YOU TAP IS THE PRICE YOU GET (issue 681). The row the
+						// person tapped is a settled quote of THIS operation at THAT tier,
+						// so the session in force takes it over (`speedStep`) and nothing
+						// is asked of the relay. A tap on the tier already in force is a
+						// decision too while a free upgrade is in question — the core's
+						// `pick_in_force` — and nothing at all otherwise.
+						speedStep(() => speed.pick(id));
 					},
 					openBatch: () => void openBatch(),
 					openScanner: () => sendSession?.dispatch({ type: 'open_scanner' }),
@@ -1181,19 +1079,7 @@
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
 					alert: sendAlert,
-					speed: {
-						open: speedOpen,
-						tier: sendSpeedTier,
-						// A deliberate one-shot pick, which is what the confirm restates.
-						picked: sendTier !== null,
-						// …or the fastest speed taken because it is free (issue 686),
-						// which the control explains and the confirm restates too.
-						free: sendTier === null && sendSpeedTier !== preferredTier,
-						oneSpeedKnown:
-							feeQuote.lastRequest !== null &&
-							oneSpeedChains.includes(feeQuote.lastRequest.chainId),
-						rows: speedRows
-					}
+					speed: { view: speed.view, feeOptions: speedFeeOptions }
 				}
 			: undefined
 	);
@@ -1370,6 +1256,7 @@
 		void session.boot();
 		void currency.boot();
 		void feeTierPreference.boot();
+		void speed.boot();
 		preferences.boot();
 		// Money in flight outlives every screen (spec 026 T232): an operation
 		// submitted before the tab closed is settled by the tracker's own
