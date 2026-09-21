@@ -941,7 +941,10 @@ enum SettingsLive {
     static func mark(chainId: Int, name: String) -> ChainMarkModel {
         let letter = name.trimmingCharacters(in: .whitespaces).first
             .map { String($0).uppercased() } ?? "?"
-        return ChainMarkModel(letter: letter, color: chainColor(chainId))
+        // The chain's own logo over the letter, as every other surface that
+        // names a chain draws it (Android's `VelaChainMark`, the web's).
+        return ChainMarkModel(letter: letter, color: chainColor(chainId),
+                              logoUrl: Marks.chainLogoURL(chainId))
     }
 
     /// One chain, one colour, for every surface that draws a dot. Internal

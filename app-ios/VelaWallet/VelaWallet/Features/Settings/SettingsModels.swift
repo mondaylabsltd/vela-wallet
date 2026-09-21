@@ -183,10 +183,13 @@ struct ConfirmSheetModel {
     var callout: CalloutModel?
 }
 
-/// A chain's circular avatar: a letter over a fixture-supplied brand colour.
+/// A chain's circular avatar: a letter over a fixture-supplied brand colour,
+/// under the chain's own logo when the chain-data endpoint has one.
 struct ChainMarkModel {
     let letter: String
     let color: Color
+    /// The chain's logo (spec 047) — `nil` on a fixture, which draws the letter.
+    var logoUrl: String? = nil
 }
 
 struct SettingsNetworkRowModel: Identifiable {
