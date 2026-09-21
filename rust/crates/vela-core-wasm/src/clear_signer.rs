@@ -82,36 +82,24 @@ pub fn clear_signer_request(input_json: &str) -> Result<String, JsValue> {
         .transpose()
         .map_err(super::err)?
         .unwrap_or_default();
-    let chain_id = input
-        .get("chainId")
-        .and_then(Value::as_u64)
-        .unwrap_or_default();
-    let account = text("account").unwrap_or_default();
-    let (method, params) = match text("method").filter(|m| !m.is_empty()) {
-        Some(method) => (
-            method,
-            input
-                .get("params")
-                .cloned()
-                .unwrap_or(Value::Array(Vec::new())),
-        ),
-        None => (
-            "wallet_sendCalls",
-            clear_signer::own_send_params(chain_id, account, &calls),
-        ),
-    };
     let built = clear_signer::request(&RequestInput {
-        method,
-        params,
+        method: text("method").unwrap_or_default(),
+        params: input
+            .get("params")
+            .cloned()
+            .unwrap_or(Value::Array(Vec::new())),
         origin: text("origin").unwrap_or_default(),
-        chain_id,
+        chain_id: input
+            .get("chainId")
+            .and_then(Value::as_u64)
+            .unwrap_or_default(),
         chain_name: text("chainName"),
         native_symbol: text("nativeSymbol"),
-        account,
+        account: text("account").unwrap_or_default(),
         account_name: text("accountName"),
         credential_ids_hex: &ids,
         user_op: op.as_ref(),
-        fee_leg_index: (op.is_some() && !calls.is_empty()).then_some(calls.len()),
+        calls: &calls,
     });
     Ok(built.to_string())
 }

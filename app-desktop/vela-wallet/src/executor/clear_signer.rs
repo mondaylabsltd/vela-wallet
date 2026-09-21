@@ -348,15 +348,6 @@ impl Ask {
         keys: &[WalletKey],
         operation: Option<(&UserOperation, &[MultiSendCall])>,
     ) -> Value {
-        let (method, params) = if self.method.is_empty() {
-            let calls = operation.map_or(&[][..], |(_, calls)| calls);
-            (
-                "wallet_sendCalls",
-                clear_signer::own_send_params(u64::from(chain_id), account, calls),
-            )
-        } else {
-            (self.method.as_str(), self.params.clone())
-        };
         let credential_ids: Vec<String> =
             keys.iter().map(|key| key.credential_id.clone()).collect();
         let chain_name = crate::executor::custom_tokens::network_name(chain_id);
@@ -365,8 +356,8 @@ impl Ask {
             .find(|chain| chain.chain_id == chain_id)
             .map(|chain| chain.native_symbol);
         clear_signer::request(&RequestInput {
-            method,
-            params,
+            method: &self.method,
+            params: self.params.clone(),
             origin: &self.origin,
             chain_id: u64::from(chain_id),
             chain_name: Some(&chain_name),
@@ -375,7 +366,7 @@ impl Ask {
             account_name: self.account_name.as_deref(),
             credential_ids_hex: &credential_ids,
             user_op: operation.map(|(op, _)| op),
-            fee_leg_index: operation.map(|(_, calls)| calls.len()),
+            calls: operation.map_or(&[][..], |(_, calls)| calls),
         })
     }
 }

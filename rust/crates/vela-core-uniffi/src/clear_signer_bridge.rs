@@ -42,21 +42,17 @@ pub fn clear_signer_request(
     draft: Option<UserOpDraft>,
 ) -> Result<String, CoreError> {
     let op = draft.as_ref().map(op_of).transpose()?;
-    let (method, params) = if input.method.is_empty() {
-        let calls = inner_calls(&input.calls)?;
-        (
-            "wallet_sendCalls",
-            clear_signer::own_send_params(u64::from(input.chain_id), &input.account, &calls),
-        )
+    let calls = inner_calls(&input.calls)?;
+    // Only a site's own request carries params; the wallet's own send is
+    // built by the core from its calls.
+    let params = if input.method.is_empty() {
+        serde_json::Value::Null
     } else {
-        let params = serde_json::from_str(&input.params_json)
-            .map_err(|e| CoreError::Internal(format!("params_json: {e}")))?;
-        (input.method.as_str(), params)
+        serde_json::from_str(&input.params_json)
+            .map_err(|e| CoreError::Internal(format!("params_json: {e}")))?
     };
-    // The wallet appends the fee leg after the calls, on every chain.
-    let fee_leg_index = (op.is_some() && !input.calls.is_empty()).then_some(input.calls.len());
     let built = clear_signer::request(&RequestInput {
-        method,
+        method: &input.method,
         params,
         origin: &input.origin,
         chain_id: u64::from(input.chain_id),
@@ -66,7 +62,7 @@ pub fn clear_signer_request(
         account_name: input.account_name.as_deref(),
         credential_ids_hex: &input.credential_ids_hex,
         user_op: op.as_ref(),
-        fee_leg_index,
+        calls: &calls,
     });
     Ok(built.to_string())
 }

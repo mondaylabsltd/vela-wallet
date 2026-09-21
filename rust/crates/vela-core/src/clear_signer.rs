@@ -174,12 +174,13 @@ impl ClearSignerError {
 #[derive(Clone, Debug, Default)]
 pub struct RequestInput<'a> {
     /// `eth_sendTransaction`, `wallet_sendCalls`, `personal_sign`,
-    /// `eth_signTypedData_v4`, … — a dApp's own, or synthesised for the
-    /// wallet's own send.
+    /// `eth_signTypedData_v4`, … — a site's own. EMPTY for the wallet's own
+    /// send, which no site asked for: the intent is then `wallet_sendCalls`
+    /// of [`Self::calls`] ([`own_send_params`]).
     pub method: &'a str,
-    /// The JSON-RPC params, verbatim.
+    /// The JSON-RPC params, verbatim (unused when `method` is empty).
     pub params: Value,
-    /// Who asked: the site's origin, or the wallet's own for its own sends.
+    /// Who asked: the site's origin; empty for the wallet's own send.
     pub origin: &'a str,
     pub chain_id: u64,
     pub chain_name: Option<&'a str>,
@@ -192,9 +193,10 @@ pub struct RequestInput<'a> {
     pub credential_ids_hex: &'a [String],
     /// The assembled operation, for transactions. The digest covers THIS.
     pub user_op: Option<&'a UserOperation>,
-    /// Which MultiSend leg is the network fee (the wallet always appends it
-    /// last: `calls.len()`).
-    pub fee_leg_index: Option<usize>,
+    /// For a transaction, the calls the operation carries BEFORE its fee leg.
+    /// The wallet appends the fee last on every chain, so the page is told
+    /// the fee is leg `calls.len()`.
+    pub calls: &'a [crate::user_op::MultiSendCall],
 }
 
 /// The page's `{intent, context}` (PROTOCOL.md §4, §8.1).
@@ -228,15 +230,23 @@ pub fn request(input: &RequestInput<'_>) -> Value {
     if let Some(op) = input.user_op {
         let mut operation = Map::new();
         operation.insert("userOp".into(), user_op_json(op));
-        if let Some(index) = input.fee_leg_index {
-            operation.insert("feeLegIndex".into(), json!(index));
+        if !input.calls.is_empty() {
+            operation.insert("feeLegIndex".into(), json!(input.calls.len()));
         }
         operation.insert("entryPoint".into(), json!(crate::safe::ENTRY_POINT));
         operation.insert("module".into(), json!(crate::safe::SAFE_4337_MODULE));
         context.insert("operation".into(), Value::Object(operation));
     }
+    let (method, params) = if input.method.is_empty() {
+        (
+            "wallet_sendCalls",
+            own_send_params(input.chain_id, input.account, input.calls),
+        )
+    } else {
+        (input.method, input.params.clone())
+    };
     json!({
-        "intent": { "method": input.method, "params": input.params, "origin": input.origin },
+        "intent": { "method": method, "params": params, "origin": input.origin },
         "context": Value::Object(context),
     })
 }

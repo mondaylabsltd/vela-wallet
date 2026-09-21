@@ -174,7 +174,11 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
         account_name: Some("savings"),
         credential_ids_hex: &ids,
         user_op: Some(&op),
-        fee_leg_index: Some(1),
+        calls: &[vela_core::user_op::MultiSendCall {
+            to: SAFE.into(),
+            value_hex: "0x1".into(),
+            data: vec![],
+        }],
     });
     assert_eq!(built["intent"]["method"], "eth_sendTransaction");
     assert_eq!(built["intent"]["origin"], "https://app.uniswap.org");
@@ -537,4 +541,34 @@ fn the_loopback_callback_is_found_in_the_browsers_request() {
     assert_eq!(callback_query("GET /favicon.ico HTTP/1.1\r\n"), None);
     assert_eq!(callback_query("PUT /vela?t=x HTTP/1.1\r\n"), None);
     assert_eq!(callback_query(""), None);
+}
+
+#[test]
+fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
+    let op = sample_op();
+    let calls = [vela_core::user_op::MultiSendCall {
+        to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".into(),
+        value_hex: "0x38d7ea4c68000".into(),
+        data: vec![],
+    }];
+    let built = request(&RequestInput {
+        method: "",
+        origin: "",
+        chain_id: 100,
+        account: SAFE,
+        user_op: Some(&op),
+        calls: &calls,
+        ..Default::default()
+    });
+    assert_eq!(built["intent"]["method"], "wallet_sendCalls");
+    assert_eq!(
+        built["intent"]["origin"], "",
+        "the page draws an empty origin as the wallet itself"
+    );
+    let batch = &built["intent"]["params"][0];
+    assert_eq!(batch["chainId"], "0x64");
+    assert_eq!(batch["from"], SAFE);
+    assert_eq!(batch["calls"][0]["value"], "0x38d7ea4c68000");
+    assert_eq!(batch["calls"][0]["data"], "0x");
+    assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
 }
