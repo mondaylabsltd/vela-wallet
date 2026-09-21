@@ -11,7 +11,8 @@ import uniffi.vela_core_uniffi.userOpFloors
 import uniffi.vela_core_uniffi.userOpRelayJson
 
 /**
- * The `fee_policy` machine's six arms (spec 043 T025).
+ * The `fee_policy` machine's seven arms (spec 043 T025; `MeasureInnerCalls`
+ * since the issue #262 follow-up).
  *
  * Numbers in, numbers out: the three gas signals, the relay's quote, the
  * in-band fee assets, the fee recipient, and a gas estimate for the batch the
@@ -23,6 +24,14 @@ class FeeExecutor(
     private val relay: RelayClient,
     /** The wallet's founding keys, for an undeployed account's initCode. */
     private val keyHexes: suspend (account: String) -> List<String>,
+    /**
+     * `eth_estimateGas({from, to, value, data})` for one call — the gas hex, or
+     * `null` when nobody answered. The same read `UserOpSpine.measureCall` makes
+     * at submit, so the quote prices the `callGasLimit` the op will carry
+     * (issue #262 follow-up). Unwired = nothing measured = the relay's figure.
+     */
+    private val measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
+        { _, _, _, _, _ -> null },
 ) {
 
     suspend fun perform(operation: FeeOperation): FeeShellResult = arm(operation).also { result ->
@@ -35,6 +44,7 @@ class FeeExecutor(
         is FeeShellResult.InBandQuotes -> "quotes=${result.quotes?.size ?: "-"}"
         is FeeShellResult.FeeRecipient -> "recipient=${result.recipient?.take(10) ?: "-"}"
         is FeeShellResult.UserOpGas -> "gas=${result.outcome::class.simpleName}"
+        is FeeShellResult.InnerCallsMeasured -> "inner=${result.gas.joinToString(",") { it ?: "-" }}"
         FeeShellResult.TtlElapsed -> "ttl"
     }
 
@@ -59,6 +69,18 @@ class FeeExecutor(
         )
 
         is FeeOperation.EstimateUserOpGas -> FeeShellResult.UserOpGas(estimate(operation))
+
+        is FeeOperation.MeasureInnerCalls -> FeeShellResult.InnerCallsMeasured(
+            // Each call on its own, from the Safe. What an unmeasured call means
+            // (no floor — the relay's figure) is the core's.
+            operation.calls.map { call ->
+                runCatching {
+                    val valueHex = "0x" + java.math.BigInteger(call.value.ifBlank { "0" }).toString(16)
+                    measureCall(operation.chain_id, operation.from, call.to, valueHex, call.data)
+                        ?.let { java.math.BigInteger(it.removePrefix("0x"), 16).toString() }
+                }.getOrNull()
+            },
+        )
 
         is FeeOperation.StartTtl -> {
             delay(operation.ms.toLong())
@@ -122,6 +144,7 @@ class FeeExecutor(
         is FeeOperation.FetchInBandQuotes -> FeeShellResult.InBandQuotes(null)
         is FeeOperation.FetchFeeRecipient -> FeeShellResult.FeeRecipient(null)
         is FeeOperation.EstimateUserOpGas -> FeeShellResult.UserOpGas(FeeGasOutcome.ContextUnavailable)
+        is FeeOperation.MeasureInnerCalls -> FeeShellResult.InnerCallsMeasured(operation.calls.map { null })
         is FeeOperation.StartTtl -> FeeShellResult.TtlElapsed
     }
 }

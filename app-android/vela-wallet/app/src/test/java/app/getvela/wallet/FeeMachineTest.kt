@@ -46,9 +46,15 @@ class FeeMachineTest {
     @After
     fun stop() = scope.cancel()
 
-    private fun host(): CoreHost<FeeView> {
+    /** What the executor's `eth_estimateGas` seam was asked, `from|to|value|data`. */
+    private val measured = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    private fun host(measure: String? = null): CoreHost<FeeView> {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
-        val executor = FeeExecutor(relay, keyHexes = { emptyList() })
+        val executor = FeeExecutor(relay, keyHexes = { emptyList() }, measureCall = { _, from, to, value, data ->
+            measured += "$from|$to|$value|$data"
+            measure
+        })
         return CoreHost(
             bridge = FeePolicyCore().asBridge(),
             scope = scope,
@@ -149,5 +155,31 @@ class FeeMachineTest {
         host.dispatch(request(), FeeEvent.serializer())
         val settled = withTimeout(15_000) { host.view.first { !it.busy && (it.fee != null || it.failed != null) } }
         assertNotNull("no quotes, no estimate: the core must say which failure", settled.failed)
+    }
+
+    /**
+     * Issue #262 follow-up: a contract call's own gas, measured from the Safe,
+     * raises the `callGasLimit` the fee is priced on — the same raise the
+     * submit spine makes, so the signed fee covers the op it signs.
+     * Relay: vgl 100k → 300k floor, cgl 200k × 1.5 = 300k, pvg 50k + 10k.
+     */
+    @Test
+    fun `a contract call is priced on its measured gas, not the relay's figure`() = runBlocking {
+        scriptRelay()
+        val call = FeeCall(to = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141", value = "0", data = "0x4e71d92d")
+        val contract = request().copy(calls = listOf(call))
+
+        val plain = host()
+        plain.dispatch(contract, FeeEvent.serializer())
+        val unmeasured = withTimeout(15_000) { plain.view.first { !it.busy && (it.fee != null || it.failed != null) } }
+        assertEquals("nobody measured: the relay's figure", "660000", unmeasured.fee?.total_gas)
+
+        measured.clear()
+        val measuring = host(measure = "0x41bc9d") // 4,308,125
+        measuring.dispatch(contract, FeeEvent.serializer())
+        val raised = withTimeout(15_000) { measuring.view.first { !it.busy && (it.fee != null || it.failed != null) } }
+        // 4,308,125 × 1.25 + 60,000 + 50,000 = 5,495,156; + 300,000 + 60,000.
+        assertEquals("5855156", raised.fee?.total_gas)
+        assertEquals(listOf("$safe|${call.to}|0x0|0x4e71d92d"), measured.toList())
     }
 }
