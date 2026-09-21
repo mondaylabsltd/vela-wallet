@@ -113,7 +113,7 @@ checked against [claim-ledger.md](claim-ledger.md).
 - [x] T092 Screenshots at 1440 and 390 px, en and zh: `/`, `/docs`, `/docs/self-hosting`, `/docs/install`, `/get-started`, `/roadmap`; read each
 - [x] T093 Adversarial expert review by an independent reviewer of the pages in SC-003; fix anything found
 - [x] T094 Write `specs/080-site-content-accuracy/results.md`: what changed, verification, the SC-004 click table, product gaps for follow-up (research D9), open items for the founder
-- [ ] T095 Commit by area with explicit paths, push `080-site-content-accuracy`, open the PR
+- [x] T095 Commit by area with explicit paths, push `080-site-content-accuracy`, open the PR
 
 ## Dependencies & execution order
 
