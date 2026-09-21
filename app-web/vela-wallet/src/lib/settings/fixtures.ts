@@ -40,6 +40,7 @@ import type {
 	SettingsOverlayId,
 	SettingsPageId,
 	SettingsSectionModel,
+	SignerPageModel,
 	StorageModel
 } from './model';
 
@@ -321,6 +322,23 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					title: m.advanced.feeSpeedTitle,
 					subtitle: m.advanced.feeSpeedSubtitle,
 					value: m.feeSpeed.fast,
+					trailing: 'chevron'
+				},
+				// Spec 071, beside the speed: the other thing every signature
+				// starts at. The fixture draws the factory default and the
+				// official page.
+				{
+					id: 'sign-with',
+					icon: 'pencil',
+					title: m.signing.title,
+					value: m.signing.methods.auto,
+					trailing: 'chevron'
+				},
+				{
+					id: 'clear-signer-page',
+					icon: 'link-2',
+					title: m.signing.pageTitle,
+					value: m.signing.pageOfficial,
 					trailing: 'chevron'
 				},
 				{
@@ -730,6 +748,48 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 	};
 }
 
+/** The official Clear Signer page (`clear_signer::DEFAULT_SIGNER_URL`). */
+const OFFICIAL_SIGNER_URL = 'https://sign.getvela.app/';
+
+/**
+ * The default "Sign with" (spec 071): the five the core offers, in its order,
+ * named as the signing sheet names them. The subtitle is load-bearing, as the
+ * speed sheet's is: this is where every signature STARTS, and a single one
+ * can still be signed another way.
+ */
+function signWithSheet(m: SettingsMessages): SelectSheetModel {
+	return {
+		title: m.signing.title,
+		subtitle: m.signing.subtitle,
+		rows: [
+			{ id: 'auto', label: m.signing.methods.auto, selected: true },
+			{ id: 'platform', label: m.signing.methods.platform },
+			{ id: 'hybrid', label: m.signing.methods.hybrid },
+			{ id: 'security_key', label: m.signing.methods.security_key },
+			{
+				id: 'clear_signer',
+				label: m.signing.methods.clear_signer,
+				detail: m.signing.clearSignerBody
+			}
+		]
+	};
+}
+
+/** The Clear Signer's page, official — what a device that never chose opens. */
+function signerPage(m: SettingsMessages): SignerPageModel {
+	return {
+		title: m.signing.pageTitle,
+		subtitle: m.signing.pageSubtitle,
+		field: {
+			id: 'signer-url',
+			label: m.signing.pageTitle,
+			value: OFFICIAL_SIGNER_URL,
+			placeholder: OFFICIAL_SIGNER_URL
+		},
+		save: m.signing.pageSave
+	};
+}
+
 function currencySheet(m: SettingsMessages): SelectSheetModel {
 	return {
 		title: m.currency.title,
@@ -1053,6 +1113,8 @@ export function buildMobileState(
 		languageSheet: languageSheet(m, 'zh'),
 		currencySheet: currencySheet(m),
 		feeSpeedSheet: feeSpeedSheet(m),
+		signWithSheet: signWithSheet(m),
+		signerPage: signerPage(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1113,6 +1175,8 @@ export function buildDesktopState(
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
 		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
+		// Spec 071, beside the speed as on the phone.
+		{ id: 'signing', icon: 'pencil', label: m.signing.title },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		{ id: 'about', icon: 'info', label: m.about.title }
 	];
@@ -1218,6 +1282,19 @@ export function buildDesktopState(
 					value: m.feeSpeed.fast
 				}
 			]
+		},
+		signing: {
+			title: m.signing.title,
+			description: m.signing.subtitle,
+			rows: [
+				{
+					id: 'sign-with',
+					label: m.signing.title,
+					kind: 'dropdown',
+					value: m.signing.methods.auto
+				}
+			],
+			page: signerPage(m)
 		},
 		networks: {
 			title: m.advanced.networksTitle,

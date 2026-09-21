@@ -371,6 +371,27 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			standardHint: k('send.gasTierHintStandard'),
 			slowHint: k('send.gasTierHintSlow')
 		},
+		signing: {
+			title: k('settings.signing.title'),
+			subtitle: k('settings.signing.subtitle'),
+			// The signing sheet's own names, so the two surfaces cannot drift.
+			methods: {
+				auto: k('common.automatic'),
+				platform: k('onboarding.create.methodPlatformTitle'),
+				hybrid: k('onboarding.create.methodHybridTitle'),
+				security_key: k('onboarding.create.methodSecurityKeyTitle'),
+				clear_signer: k('componentsUi.signing.clearSignerTitle')
+			},
+			clearSignerBody: k('componentsUi.signing.clearSignerBody'),
+			pageTitle: k('settings.signing.pageTitle'),
+			pageSubtitle: k('settings.signing.pageSubtitle'),
+			pageOfficial: k('settings.signing.pageOfficial'),
+			pageInvalid: k('settings.signing.pageInvalid'),
+			pageInsecure: k('settings.signing.pageInsecure'),
+			pageForeign: k('settings.signing.pageForeign'),
+			pageReset: k('settings.signing.pageReset'),
+			pageSave: k('settings.signing.pageSave')
+		},
 		networks: {
 			count: k('settings.networks.count'),
 			custom: k('settings.networks.custom'),
