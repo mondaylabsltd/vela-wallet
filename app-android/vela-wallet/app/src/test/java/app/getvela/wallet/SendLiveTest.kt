@@ -471,6 +471,41 @@ class SendLiveTest {
         assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
     }
 
+    /** Issue #272: the refusal that dims the button reads as a warning, not as helper text. */
+    @Test
+    fun `an over-balance total is a warning, a saved template is not`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, show_batch_import = true)
+
+        val over = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, over_balance = true, recipient_count = 3), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_OVER_BALANCE, mapOf("sym" to "XDAI")), over.note)
+        assertTrue(over.noteWarning)
+        assertTrue(over.ctaDisabled)
+
+        val saved = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, template_saved = true), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_TEMPLATE_SAVED), saved.note)
+        assertFalse(saved.noteWarning)
+    }
+
+    /** Issue #271: with someone already on the form, the sheet says the import ADDS — and offers the other. */
+    @Test
+    fun `the batch sheet says whether an import adds to or replaces the form's rows`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val ready = BatchView(opened = true, unit = WireBatchUnit.Token, recipient_count = 1, can_apply = true, recipients = listOf(BatchRecipient(recipient, "0.001", null)))
+
+        val empty = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_import_room = 60)
+        assertNull("nobody on the form: nothing to add to", SendLive.batchImport(drawn.model, ready, empty, ctx()).merge)
+
+        val typed = empty.copy(recipient = recipient, split_import_room = 59)
+        val adds = SendLive.batchImport(drawn.model, ready, typed, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_ADDS_TO_ROWS), adds.merge)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_REPLACE_INSTEAD), adds.mergeAction)
+
+        val replaces = SendLive.batchImport(drawn.model, ready, typed, ctx(), replaces = true)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_REPLACES_ROWS), replaces.merge)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_ADD_INSTEAD), replaces.mergeAction)
+    }
+
     // -- Spec 045 US4: the treasury pause's second exit ---------------------
 
     @Test

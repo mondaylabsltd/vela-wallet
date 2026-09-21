@@ -36,6 +36,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -721,13 +723,23 @@ fun RecipientField(
                         }
                 }
             }
+            // Issue #270: the field's doors look like buttons — a filled disc with
+            // an edge, not a bare grey glyph that read as decoration. They are how
+            // a wrong pick or a wrong scan is put right.
+            val door = Modifier
+                .clip(CircleShape)
+                .background(colors.bgBase, CircleShape)
+                .border(1.dp, colors.borderBase, CircleShape)
             FlowIconButton(
                 icon = VelaIcons.UserRound,
                 label = field.pickLabel,
+                modifier = door,
+                tint = colors.fgBase,
                 onClick = onPick,
             )
             field.scanLabel?.let {
-                FlowIconButton(icon = VelaIcons.QrCode, label = it, onClick = onScan)
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                FlowIconButton(icon = VelaIcons.QrCode, label = it, modifier = door, tint = colors.fgBase, onClick = onScan)
             }
         }
         field.note?.let {

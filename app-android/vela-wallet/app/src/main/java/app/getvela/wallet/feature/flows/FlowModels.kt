@@ -514,6 +514,14 @@ data class BatchImportModel(
     val rateEdited: Boolean = false,
     val rateReset: String? = null,
     val note: String? = null,
+    /**
+     * The note is a refusal (over the balance, over the cap) — the reason the
+     * button is dim — and is drawn as one, not as helper text (issue #272).
+     */
+    val noteWarning: Boolean = false,
+    /** Issue #271: what applying does to the rows already on the form, and the way to choose the other. */
+    val merge: String? = null,
+    val mergeAction: String? = null,
 )
 
 /** SD3 — the confirmation. */
