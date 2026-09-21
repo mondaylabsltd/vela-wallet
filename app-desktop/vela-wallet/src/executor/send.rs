@@ -396,6 +396,8 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                 Some(QuotedFee {
                     amount: fee.amount.parse().ok()?,
                     recipient: fee.recipient.clone(),
+                    // The speed this fee was priced at (spec 069).
+                    tier: fee.tier,
                 })
             });
             // The keys the flow opened with; a legacy record with none

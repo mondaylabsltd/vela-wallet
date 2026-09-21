@@ -14,6 +14,7 @@ import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
+import uniffi.vela_core_uniffi.FeeTierPrefCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
 
 /**
@@ -152,6 +153,43 @@ class SettingsController(
 
     /** The display currency the core has settled on. */
     val currency: StateFlow<CurrencyView> = currencyHost.view
+
+    // -- the default transaction speed (spec 068; Android's since 069) --------
+
+    private val feeTierExecutor = FeeTierExecutor(store)
+
+    private val feeTierHost = CoreHost(
+        bridge = FeeTierPrefCore().asBridge(),
+        scope = scope,
+        // The factory `fast`, uncommitted: what every send did before there
+        // was a choice, so a surface drawn before the read lands shows today's
+        // behaviour rather than a guess.
+        initial = FeeTierPrefView(),
+        serializer = FeeTierPrefView.serializer(),
+        perform = JsonShell.perform(
+            FeeTierPrefOperation.serializer(),
+            FeeTierPrefShellResult.serializer(),
+            feeTierExecutor::perform,
+        ),
+        escapedFailure = JsonShell.escapedFailure(
+            FeeTierPrefOperation.serializer(),
+            FeeTierPrefShellResult.serializer(),
+            fallback = FeeTierPrefShellResult.StoredTier(null),
+            answer = feeTierExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("settings.feeTier.fault", "core fault", error) },
+    )
+
+    /** The stored default speed — Settings shows it, every send starts at it. */
+    val feeTier: StateFlow<FeeTierPrefView> = feeTierHost.view
+
+    /** Re-read the preference; coalesced while a read is out. */
+    fun refreshFeeTier() =
+        feeTierHost.dispatch(FeeTierPrefEvent.Refresh, FeeTierPrefEvent.serializer())
+
+    /** An explicit pick in Settings — and only in Settings. */
+    fun chooseFeeTier(tier: app.getvela.wallet.feature.send.core.FeeTier) =
+        feeTierHost.dispatch(FeeTierPrefEvent.UserChose(tier), FeeTierPrefEvent.serializer())
 
     /** The networks, endpoints and provider keys this device holds. */
     val networks: StateFlow<NetView> = networkHost.view

@@ -33,7 +33,8 @@ use crate::flows::FlowStrings;
 use crate::wallet::fill;
 use vela_core::app::batch_import::{BatchRateStatus, BatchUnit, BatchView};
 use vela_core::app::contacts::ContactsView;
-use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeView};
+use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView};
+use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::send::{
     SendAddNetworkMsg, SendAmountWarning, SendHoldReason, SendLockError, SendReceiptStatus,
     SendRecipientDraft, SendStage, SendToken, SendTreasuryAsset, SendTxStatus, SendUnitIssue,
@@ -42,10 +43,10 @@ use vela_core::app::send::{
 
 use crate::flows::fixtures::{
     AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
-    CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow,
-    FilterChip, HistoryGroup, HistoryPanel, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr,
-    RecipientCard, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip,
-    StatusTone, TokenMark, address_lines,
+    CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
+    FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
+    ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice,
+    SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -384,6 +385,7 @@ pub fn tx_detail(
             // character by character, and that needs the mono face.
             mono: named.is_none(),
             copyable: true,
+            note: None,
         });
     }
     facts.push(FactRow {
@@ -396,6 +398,7 @@ pub fn tx_detail(
         }),
         mono: false,
         copyable: false,
+        note: None,
     });
     facts.push(FactRow {
         label: s.detail_date.clone(),
@@ -403,6 +406,7 @@ pub fn tx_detail(
         lead: FactLead::None,
         mono: false,
         copyable: false,
+        note: None,
     });
     // Only if there IS one. An empty hash row on an off-chain signature invites
     // "which transaction?" — the same reason the mock omits the contract row on
@@ -414,6 +418,7 @@ pub fn tx_detail(
             lead: FactLead::None,
             mono: true,
             copyable: true,
+            note: None,
         });
     }
 
@@ -854,6 +859,44 @@ pub struct SendInputs<'a> {
     pub locale: &'a str,
     pub identity_name: &'a str,
     pub identity_address: &'a str,
+    /// The speed control (spec 068), as the `fee_speed` core decided it.
+    /// `None` draws none.
+    pub speed: Option<&'a SpeedInputs>,
+}
+
+/// The speed core's view, and the fee session pricing each tier — whose
+/// fee-coin options format that option's fee, as the fee row formats its own.
+pub struct SpeedInputs {
+    pub view: FeeSpeedView,
+    pub tier_views: Vec<(FeeTier, FeeView)>,
+}
+
+impl SpeedInputs {
+    fn view_of(&self, tier: FeeTier) -> Option<&FeeView> {
+        self.tier_views
+            .iter()
+            .find(|(candidate, _)| *candidate == tier)
+            .map(|(_, view)| view)
+    }
+}
+
+/// A tier's NAME — the speed itself, never a number. `rapid` is dead (spec
+/// 068) and reads as the factory `fast`, the core's own answer for it.
+fn tier_name(s: &FlowStrings, tier: FeeTier) -> SharedString {
+    match tier {
+        FeeTier::Standard => s.gas_tier_standard.clone(),
+        FeeTier::Slow => s.gas_tier_slow.clone(),
+        FeeTier::Fast | FeeTier::Rapid => s.gas_tier_fast.clone(),
+    }
+}
+
+/// …and what it buys, the line under the name.
+fn tier_hint(s: &FlowStrings, tier: FeeTier) -> SharedString {
+    match tier {
+        FeeTier::Standard => s.gas_tier_hint_standard.clone(),
+        FeeTier::Slow => s.gas_tier_hint_slow.clone(),
+        FeeTier::Fast | FeeTier::Rapid => s.gas_tier_hint_fast.clone(),
+    }
 }
 
 fn native_symbol(chain_id: u32) -> String {
@@ -1031,7 +1074,16 @@ fn fee_symbol(send: &SendView, fee: &FeeView) -> (String, u32) {
 
 fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
     let (symbol, chain_id) = fee_symbol(i.send, i.fee);
-    let quote = i.send.fee.as_ref().or(i.fee.fee.as_ref());
+    let in_hand = i.send.fee.as_ref().or(i.fee.fee.as_ref());
+    // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681). On the
+    // path where a pick re-measures, the estimate in hand still belongs to the
+    // speed just left — the send machine keeps it across a tier change — and
+    // "…" is the honest thing to show until this speed's own figure lands.
+    let of_another_tier = in_hand.zip(i.speed).is_some_and(|(fee, speed)| {
+        vela_core::app::fee_speed::offered(fee.tier) != speed.view.tier
+    });
+    let quote = in_hand.filter(|_| !of_another_tier);
+    let measuring = i.send.fee_busy || i.fee.busy;
     FeeRow {
         // A figure the relay did not quote — a local fallback from defaults —
         // is an ESTIMATE and is labelled as one (spec 038 finding 14).
@@ -1053,11 +1105,84 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
                 &[],
             ),
         },
-        value: if i.send.fee_busy || i.fee.busy {
+        value: if measuring || of_another_tier {
             i.s.fee_pending.clone()
         } else {
             SharedString::from(fee_line(quote, Some(i.send), i.fee, i.locale))
         },
+        refresh: i.speed.map(|_| i.s.fee_refresh.clone()),
+        // A measurement is out — whoever started it — the same fact the "…"
+        // reads, so the row never claims to be settled and measuring at once.
+        refreshing: measuring,
+        // `FeeView.stale` had no consumer on the desktop: the 30 s TTL ran out
+        // and nothing said so. Not while a fresh measurement is out ("old" is
+        // about to stop being true), and not over a row with no figure of its
+        // own on it — "from a while ago" is a fact about a number.
+        stale_note: (i.fee.stale && !measuring && !of_another_tier && quote.is_some())
+            .then(|| i.s.fee_stale.clone()),
+    }
+}
+
+/// The folded speed control (spec 068), drawn from the `fee_speed` core's
+/// view (spec 069). Every figure is that tier's OWN settled quote, echoed by
+/// the core; only the words and the fee line are made here.
+fn send_speed(i: &SendInputs<'_>) -> Option<Box<FeeSpeedModel>> {
+    Some(Box::new(speed_model(
+        i.speed?,
+        i.s,
+        Some(i.send),
+        i.fee,
+        i.locale,
+    )))
+}
+
+/// The same control for any fee surface — the dApp signing sheet draws it too
+/// (spec 069), with no send view: each option is then written the way that
+/// sheet writes its own fee row.
+#[must_use]
+pub fn speed_model(
+    speed: &SpeedInputs,
+    s: &FlowStrings,
+    send: Option<&SendView>,
+    fee: &FeeView,
+    locale: &str,
+) -> FeeSpeedModel {
+    let view = &speed.view;
+    FeeSpeedModel {
+        label: s.fee_speed_label.clone(),
+        // THEIR default (or their pick for this send), never a hardcoded one.
+        value: tier_name(s, view.tier),
+        open: view.open,
+        once_note: s.fee_speed_once.clone(),
+        free_note: view.free_note.then(|| s.fee_speed_free.clone()),
+        single_note: view.single.then(|| s.fee_speed_single.clone()),
+        gas_price_label: s.gas_price_label.clone(),
+        gas_price_line: view.gas_price_line,
+        options: view
+            .options
+            .iter()
+            .map(|option| {
+                let value = match (&option.fee, speed.view_of(option.tier)) {
+                    (Some(quote), Some(tier_view)) => {
+                        SharedString::from(fee_line(Some(quote), send, tier_view, locale))
+                    }
+                    (Some(quote), None) => {
+                        SharedString::from(fee_line(Some(quote), send, fee, locale))
+                    }
+                    // "…" while this tier's own quote is out, "—" when there
+                    // is none to be had.
+                    (None, _) if option.measuring => s.fee_pending.clone(),
+                    (None, _) => SharedString::from("—"),
+                };
+                FeeSpeedOption {
+                    label: tier_name(s, option.tier),
+                    detail: tier_hint(s, option.tier),
+                    value,
+                    gas_price: option.gas_price.clone().map(SharedString::from),
+                    selected: option.selected,
+                }
+            })
+            .collect(),
     }
 }
 
@@ -1232,6 +1357,7 @@ mod sweep_tests {
             locale: "en-US",
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
         }
     }
 
@@ -1346,6 +1472,7 @@ mod treasury_tests {
                 locale: "en-US",
                 identity_name: "MultiTest",
                 identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                speed: None,
             };
 
             let notice = send_notice(&inputs, false).unwrap_or_else(|| unreachable!("a stop"));
@@ -2000,6 +2127,7 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
         pick_contacts: (!split).then(|| s.from_contacts.clone()),
         notice: send_notice(i, false),
         fee: send_fee_row(i),
+        speed: send_speed(i),
         // The 15s pre-check is a WAIT, not a refusal: the button says so
         // rather than going dead (busy ≠ disabled).
         cta: if send.estimating_gas {
@@ -2039,13 +2167,14 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         .recipient_identity
         .as_ref()
         .and_then(|identity| identity.name.clone());
-    let facts = vec![
+    let mut facts = vec![
         FactRow {
             label: s.from_label.clone(),
             value: i.identity_name.to_owned().into(),
             lead: FactLead::Identicon(i.identity_address.to_owned().into()),
             mono: false,
             copyable: false,
+            note: None,
         },
         FactRow {
             label: s.to_label.clone(),
@@ -2056,6 +2185,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             lead: FactLead::Identicon(send.recipient.clone().into()),
             mono: to_name.is_none(),
             copyable: false,
+            note: None,
         },
         FactRow {
             label: s.detail_chain.clone(),
@@ -2067,6 +2197,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             }),
             mono: false,
             copyable: false,
+            note: None,
         },
         FactRow {
             label: s.est_fee.clone(),
@@ -2084,8 +2215,26 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             lead: FactLead::None,
             mono: false,
             copyable: false,
+            note: None,
         },
     ];
+    // The speed, but only when it was CHOSEN for this send, or taken because
+    // it was free (spec 068 / issue 686). The confirm is the last screen
+    // before a signature: a payment bumped off the usual pace says so here,
+    // where a mis-tap is still cheap to undo — and a free upgrade says why.
+    // A send at the stored default adds no row.
+    if let Some(speed) = i.speed.map(|speed| &speed.view)
+        && (speed.picked || speed.free)
+    {
+        facts.push(FactRow {
+            label: s.fee_speed_label.clone(),
+            value: tier_name(s, speed.tier),
+            lead: FactLead::None,
+            mono: false,
+            copyable: false,
+            note: (!speed.picked).then(|| s.fee_speed_free.clone()),
+        });
+    }
     // The last attempt's error is a NOTICE now, not a subline: several of
     // these have a way out (edit the amount, fund the relay) and a subline
     // cannot carry one.
@@ -2993,6 +3142,7 @@ mod tests {
             locale: "en",
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
         })
     }
 
@@ -3038,6 +3188,7 @@ mod tests {
             locale: "en",
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
         });
         let title = s.recipients(2);
         assert_eq!(receipt.breakdown_title.as_deref(), Some(title.as_str()));
@@ -3991,6 +4142,267 @@ mod tests {
     }
 }
 
+/// The speed control on the desktop (spec 069): every decision is the
+/// `fee_speed` core's, driven here the way `SendHost` drives it; what these
+/// pin is the half this file owns — which words and which figure each
+/// decision becomes.
+#[cfg(test)]
+mod speed_tests {
+    use super::*;
+    use crate::core_host::CoreHost;
+    use vela_core::app::fee_policy::{FeePolicy, FeeTier};
+    use vela_core::app::fee_speed::{Event as SpeedEvent, FeeSpeed, TierPreviewQuote, TierQuote};
+    use vela_core::app::send::Send as SendMachine;
+    use vela_core::l10n::number::NumberPreset;
+
+    fn quote(tier: FeeTier, total_wei: &str, range: Option<(&str, &str)>) -> FeeEstimateView {
+        FeeEstimateView {
+            chain_id: 100,
+            total_wei: total_wei.to_owned(),
+            max_fee_per_gas: "0".to_owned(),
+            network_fee_per_gas: "0".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "0".to_owned(),
+            in_band_gas_basis: "0".to_owned(),
+            effective_gas_price: range.map(|(low, _)| low.to_owned()),
+            max_gas_price: range.map(|(_, high)| high.to_owned()),
+            total_gas: "0".to_owned(),
+            deployed: true,
+            tier,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: Some("0xfee".to_owned()),
+        }
+    }
+
+    /// The core, configured, reported the given sessions — re-reported until
+    /// the tier in force settles, the way the host's promotion leaves it.
+    fn speed(
+        preferred: FeeTier,
+        on_form: bool,
+        open: bool,
+        pick: Option<FeeTier>,
+        rows: &[FeeEstimateView],
+    ) -> SpeedInputs {
+        let mut core = CoreHost::<FeeSpeed>::new();
+        let _ = core.dispatch(SpeedEvent::Configure {
+            preferred,
+            number: NumberPreset::CommaDot,
+        });
+        let _ = core.dispatch(SpeedEvent::StageChanged { on_form });
+        if let Some(tier) = pick {
+            let _ = core.dispatch(SpeedEvent::Pick { tier });
+        }
+        if open {
+            let _ = core.dispatch(SpeedEvent::Toggle);
+        }
+        for _ in 0..3 {
+            let tier = core.view().tier;
+            let _ = core.dispatch(SpeedEvent::QuotesChanged {
+                chain_id: Some(100),
+                in_force: TierQuote {
+                    busy: false,
+                    fee: rows.iter().find(|row| row.tier == tier).cloned(),
+                },
+                previews: rows
+                    .iter()
+                    .filter(|row| row.tier != tier)
+                    .map(|row| TierPreviewQuote {
+                        tier: row.tier,
+                        busy: false,
+                        fee: Some(row.clone()),
+                    })
+                    .collect(),
+            });
+            if core.view().tier == tier {
+                break;
+            }
+        }
+        let fee_view = CoreHost::<FeePolicy>::new().view();
+        SpeedInputs {
+            view: core.view(),
+            tier_views: [FeeTier::Fast, FeeTier::Standard, FeeTier::Slow]
+                .into_iter()
+                .map(|tier| (tier, fee_view.clone()))
+                .collect(),
+        }
+    }
+
+    fn inputs<'a>(
+        send: &'a SendView,
+        fee: &'a FeeView,
+        s: &'a FlowStrings,
+        wallet: &'a crate::wallet::WalletStrings,
+        speed: Option<&'a SpeedInputs>,
+    ) -> SendInputs<'a> {
+        SendInputs {
+            send,
+            fee,
+            s,
+            wallet,
+            locale: "en-US",
+            identity_name: "Speed",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed,
+        }
+    }
+
+    fn strings() -> (FlowStrings, crate::wallet::WalletStrings) {
+        let loc = crate::loc::Loc::from_env();
+        (
+            FlowStrings::resolve(&loc),
+            crate::wallet::WalletStrings::resolve(&loc),
+        )
+    }
+
+    /// Optimism-shaped: every tier the same fee, each its own gas bid.
+    fn floor_clamped() -> Vec<FeeEstimateView> {
+        vec![
+            quote(FeeTier::Fast, "10000", Some(("3244", "9000"))),
+            quote(FeeTier::Standard, "10000", Some(("2377", "6000"))),
+            quote(FeeTier::Slow, "10000", Some(("1937", "4500"))),
+        ]
+    }
+
+    /// Folded, the control names the tier in force — the stored default —
+    /// and nothing else: no options, no note.
+    #[test]
+    fn folded_it_names_the_tier_in_force() {
+        let (s, wallet) = strings();
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let speed = speed(FeeTier::Standard, false, false, None, &floor_clamped());
+        let model = send_speed(&inputs(&send, &fee, &s, &wallet, Some(&speed)))
+            .unwrap_or_else(|| unreachable!("a live control"));
+        assert!(!model.open);
+        assert_eq!(model.value, s.gas_tier_standard);
+        assert!(model.free_note.is_none());
+        let none = send_speed(&inputs(&send, &fee, &s, &wallet, None));
+        assert!(none.is_none(), "no sessions behind it, no control");
+    }
+
+    /// Open, three options fastest first, each its own fee, its gas bid from
+    /// the core, and the line on what it buys.
+    #[test]
+    fn open_every_option_shows_its_own_figures() {
+        let (s, wallet) = strings();
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let speed = speed(FeeTier::Fast, false, true, None, &floor_clamped());
+        let model = send_speed(&inputs(&send, &fee, &s, &wallet, Some(&speed)))
+            .unwrap_or_else(|| unreachable!("a live control"));
+        assert!(model.open);
+        assert_eq!(
+            model
+                .options
+                .iter()
+                .map(|o| o.label.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                s.gas_tier_fast.clone(),
+                s.gas_tier_standard.clone(),
+                s.gas_tier_slow.clone()
+            ]
+        );
+        assert_eq!(
+            model
+                .options
+                .iter()
+                .map(|o| o.gas_price.clone().map(|g| g.to_string()))
+                .collect::<Vec<_>>(),
+            vec![
+                Some("3,244 ~ 9,000 wei".to_owned()),
+                Some("2,377 ~ 6,000 wei".to_owned()),
+                Some("1,937 ~ 4,500 wei".to_owned()),
+            ]
+        );
+        assert_eq!(model.options[2].detail, s.gas_tier_hint_slow);
+        assert!(model.options[0].selected);
+        assert!(
+            model
+                .options
+                .iter()
+                .all(|o| o.value != "…" && o.value != "—")
+        );
+    }
+
+    /// A slower default goes Fast where Fast costs no more — the control
+    /// says why, and the confirm restates it with the reason.
+    #[test]
+    fn a_free_upgrade_is_said_on_the_form_and_the_confirm() {
+        let (s, wallet) = strings();
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let speed = speed(FeeTier::Slow, true, false, None, &floor_clamped());
+        let i = inputs(&send, &fee, &s, &wallet, Some(&speed));
+        let model = send_speed(&i).unwrap_or_else(|| unreachable!("a live control"));
+        assert_eq!(model.value, s.gas_tier_fast);
+        assert_eq!(model.free_note.as_ref(), Some(&s.fee_speed_free));
+        let confirm = send_confirm(&i);
+        let row = confirm
+            .facts
+            .iter()
+            .find(|fact| fact.label == s.fee_speed_label)
+            .unwrap_or_else(|| unreachable!("the confirm names the speed"));
+        assert_eq!(row.value, s.gas_tier_fast);
+        assert_eq!(row.note.as_ref(), Some(&s.fee_speed_free));
+    }
+
+    /// A pick is restated without a reason; a send at the default adds no row.
+    #[test]
+    fn the_confirm_restates_a_pick_and_only_a_decision() {
+        let (s, wallet) = strings();
+        let send = CoreHost::<SendMachine>::new().view();
+        let fee = CoreHost::<FeePolicy>::new().view();
+        let picked = speed(
+            FeeTier::Fast,
+            true,
+            false,
+            Some(FeeTier::Slow),
+            &floor_clamped(),
+        );
+        let confirm = send_confirm(&inputs(&send, &fee, &s, &wallet, Some(&picked)));
+        let row = confirm
+            .facts
+            .iter()
+            .find(|fact| fact.label == s.fee_speed_label)
+            .unwrap_or_else(|| unreachable!("a pick is restated"));
+        assert_eq!(row.value, s.gas_tier_slow);
+        assert!(row.note.is_none());
+
+        let untouched = speed(FeeTier::Fast, false, false, None, &floor_clamped());
+        let confirm = send_confirm(&inputs(&send, &fee, &s, &wallet, Some(&untouched)));
+        assert!(
+            !confirm
+                .facts
+                .iter()
+                .any(|fact| fact.label == s.fee_speed_label)
+        );
+    }
+
+    /// Issue 681: the fee row never shows the speed just left under the new
+    /// one's name, and "from a while ago" is a fact about a figure.
+    #[test]
+    fn the_fee_row_never_wears_another_tiers_figure() {
+        let (s, wallet) = strings();
+        let mut send = CoreHost::<SendMachine>::new().view();
+        send.fee = Some(quote(FeeTier::Fast, "10000", None));
+        let mut fee = CoreHost::<FeePolicy>::new().view();
+        fee.stale = true;
+        let slow = speed(FeeTier::Slow, false, false, None, &[]);
+        let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, Some(&slow)));
+        assert_eq!(row.value, s.fee_pending);
+        assert!(row.stale_note.is_none());
+        assert_eq!(row.refresh.as_ref(), Some(&s.fee_refresh));
+
+        // Its own tier's figure, old: the calm line says so.
+        send.fee = Some(quote(FeeTier::Slow, "10000", None));
+        let row = send_fee_row(&inputs(&send, &fee, &s, &wallet, Some(&slow)));
+        assert_ne!(row.value, s.fee_pending);
+        assert_eq!(row.stale_note.as_ref(), Some(&s.fee_stale));
+    }
+}
+
 /// The web-parity pass (#196/#197/#203/#231/#265): each builder reads the
 /// core's own answer and words it, as `live-send.ts` / `live-batch.ts` do.
 #[cfg(test)]
@@ -4044,6 +4456,7 @@ mod parity_tests {
             locale: "en-US",
             identity_name: "MultiTest",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            speed: None,
         })
     }
 

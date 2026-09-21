@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
@@ -63,6 +64,7 @@ import app.getvela.wallet.feature.flows.components.AmountInput
 import app.getvela.wallet.feature.flows.components.ContactPickRow
 import app.getvela.wallet.feature.flows.components.FactRow
 import app.getvela.wallet.feature.flows.components.FeeRow
+import app.getvela.wallet.feature.flows.components.FeeSpeedControl
 import app.getvela.wallet.feature.flows.components.FeeTokenRow
 import app.getvela.wallet.feature.flows.components.FlowFilterChips
 import app.getvela.wallet.feature.flows.components.FlowMonoField
@@ -452,8 +454,12 @@ fun AssetsBody(
             }
         } else {
             shown.forEachIndexed { position, entry ->
-                if (position > 0) HairlineDivider()
-                AssetRow(model = entry.value, onClick = { onSelect(entry.index) })
+                // By holding, not position: a network filter re-lists these
+                // rows, and a slot must not carry another token's state (#267).
+                key(entry.value.id, entry.value.ticker, entry.value.chain) {
+                    if (position > 0) HairlineDivider()
+                    AssetRow(model = entry.value, onClick = { onSelect(entry.index) })
+                }
             }
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
                 // T1 sets this quiet and centred, not as a link: it is the way
@@ -801,13 +807,16 @@ fun SendPickBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         shown.forEachIndexed { position, entry ->
-            if (position > 0) HairlineDivider()
-            AssetRow(
-                model = entry.value,
-                selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
-                dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
-                onClick = { onSelect(entry.index) },
-            )
+            // By holding, not position (#267): see the wallet list.
+            key(entry.value.id, entry.value.ticker, entry.value.chain) {
+                if (position > 0) HairlineDivider()
+                AssetRow(
+                    model = entry.value,
+                    selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
+                    dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
+                    onClick = { onSelect(entry.index) },
+                )
+            }
         }
         // Issue 209: a list with nothing in it says so rather than showing a blank panel.
         if (shown.isEmpty()) {
@@ -872,6 +881,10 @@ fun SendFormBody(
     onRecipientAmount: ((Int, String) -> Unit)? = null,
     onRecipientAddress: ((Int, String) -> Unit)? = null,
     onRecipientPick: ((Int) -> Unit)? = null,
+    /** Spec 069: measure the fee again; fold or unfold the speed control; a one-shot pick. */
+    onRefreshFee: (() -> Unit)? = null,
+    onToggleSpeed: () -> Unit = {},
+    onPickSpeed: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -987,7 +1000,10 @@ fun SendFormBody(
             SummaryLine(summary = it)
             Spacer(modifier = Modifier.height(VelaSpacing.md))
         }
-        FeeRow(fee = model.fee, onOpen = onFee)
+        FeeRow(fee = model.fee, onOpen = onFee, onRefresh = onRefreshFee)
+        model.speed?.let { speed ->
+            FeeSpeedControl(speed = speed, onToggle = onToggleSpeed, onPick = onPickSpeed)
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         // A split can be sixty rows long: the core's refusal (over the balance)
         // or, failing that, which row the dark Continue is waiting on, sits

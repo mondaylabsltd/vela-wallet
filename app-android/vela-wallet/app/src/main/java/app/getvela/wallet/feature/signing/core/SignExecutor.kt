@@ -160,7 +160,7 @@ class SignExecutor(
                 account = op.address,
                 calls = calls,
                 gasFeeToken = op.gas_fee_token,
-                quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient) },
+                quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
             )
             ports.opSubmitted(op.id, hash)
@@ -169,8 +169,9 @@ class SignExecutor(
             withTimeoutOrNull(5_000) { persisted.first { hash.lowercase() in it } }
             // The desktop's `await_receipt`: a dApp's `eth_sendTransaction`
             // resolves to a TX hash; the op hash only when the receipt is late
-            // (the tracker patches the row when it lands).
-            SignSubmitOutcome.Succeeded(awaitReceipt(op.chain_id, hash) ?: hash)
+            // — reported as `ReceiptPending` so the core answers the page but
+            // leaves the record pending for the tracker (issue 262).
+            afterReceiptWait(hash, awaitReceipt(op.chain_id, hash))
         } catch (refused: UserOpSpine.Refused) {
             VelaLog.event("sign.submit", "refused", "why" to refused.failure.toString().take(120))
             when (val failure = refused.failure) {
@@ -209,6 +210,14 @@ class SignExecutor(
     }
 
     companion object {
+        /**
+         * What the receipt wait means for the core: in time, `Succeeded` with
+         * the TX hash; late, `ReceiptPending` with the op hash — never a
+         * confirmation of something that may not have landed (issue 262).
+         */
+        fun afterReceiptWait(userOpHash: String, receipt: String?): SignSubmitOutcome =
+            if (receipt != null) SignSubmitOutcome.Succeeded(receipt) else SignSubmitOutcome.ReceiptPending(userOpHash)
+
         /**
          * What the page's verifier will hash: `personal_sign` is the
          * EIP-191 prefix over the bytes (hex or text, the web's rule); typed

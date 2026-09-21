@@ -28,6 +28,8 @@ struct SigningSheet: View {
     /// and a coin picked from that list.
     var onFee: () -> Void = {}
     var onFeePick: (String) -> Void = { _ in }
+    /// The speed control (spec 069): `nil` folds or unfolds it; an id picks.
+    var onSpeed: (String?) -> Void = { _ in }
 
     @State private var techOverride: Bool?
 
@@ -49,7 +51,8 @@ struct SigningSheet: View {
                 Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
 
                 TechDetailsView(tech: model.tech, open: techOpen)
-                SigningFeeView(fee: model.fee, onToggle: onFee, onPick: onFeePick)
+                SigningFeeView(fee: model.fee, onToggle: onFee, onPick: onFeePick,
+                               speed: model.feeSpeed, onSpeed: onSpeed)
                 SigningSignerRow(label: model.signer.label, name: model.signer.name,
                                  seed: model.signer.seed)
                 if let signWith = model.signWith {

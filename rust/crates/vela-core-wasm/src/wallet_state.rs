@@ -42,6 +42,13 @@ bridge_class!(
 );
 
 bridge_class!(
+    /// The speed control of one send surface (spec 069): the tier in force,
+    /// the free upgrade, the one-speed statement and each tier's gas bid.
+    FeeSpeedCore,
+    vela_core::app::fee_speed::FeeSpeed
+);
+
+bridge_class!(
     /// Never-unlimited approval guard and allowance editor.
     ApprovalGuardCore,
     vela_core::app::approval_guard::ApprovalGuard

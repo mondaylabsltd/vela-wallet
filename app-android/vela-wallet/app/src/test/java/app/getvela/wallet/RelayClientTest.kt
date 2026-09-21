@@ -111,6 +111,54 @@ class RelayClientTest {
         assertNull(quote.relayer_fee_per_gas)
     }
 
+    /** Spec 069: the tip this tier is signed with — one half of the gas bid the core publishes. */
+    @Test
+    fun `the bundler quote carries the tier's signed tip`() = runBlocking {
+        port.answer(
+            "pimlico_getUserOperationGasPrice",
+            body(JSONObject().put("slow", JSONObject().put("maxFeePerGas", "0x20").put("maxPriorityFeePerGas", "0x3"))),
+        )
+        val quote = relay.bundlerQuote(100, FeeTier.Slow)!!
+        assertEquals("3", quote.max_priority_fee_per_gas)
+    }
+
+    /**
+     * Spec 069: the speed the displayed fee was priced at is the third
+     * parameter, by name; no speed is the pre-068 two-element wire; the dead
+     * `rapid` is never sent.
+     */
+    @Test
+    fun `a submission names its speed as the third parameter`() = runBlocking {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<List<Any?>>()
+        port.always("eth_sendUserOperation") { params -> sent += params; body("0xhash") }
+        relay.sendUserOp(100, "{\"sender\":\"0x1\"}", FeeTier.Slow)
+        relay.sendUserOp(100, "{\"sender\":\"0x1\"}")
+        relay.sendUserOp(100, "{\"sender\":\"0x1\"}", FeeTier.Rapid)
+        assertEquals(listOf(3, 2, 2), sent.map { it.size })
+        assertEquals("slow", sent[0][2])
+    }
+
+    /**
+     * Issue 212 on Android: a complete gas reading is held 15 s per chain, so
+     * a recipient edit does not re-roll the price; a refresh drops it first.
+     */
+    @Test
+    fun `gas signals hold still for fifteen seconds and a refresh measures again`() = runBlocking {
+        port.always("eth_gasPrice") { body("0x64") }
+        port.always("eth_getBlockByNumber") { body(JSONObject().put("baseFeePerGas", "0x32")) }
+        port.always("eth_maxPriorityFeePerGas") { body("0x1") }
+        val first = relay.gasSignals(100, wantTip = true)
+        assertEquals("100", first.ethGasPrice)
+        relay.gasSignals(100, wantTip = true)
+        assertEquals(1, port.calls.count { it.endsWith("eth_gasPrice") })
+        relay.invalidateFeeSignals(100)
+        relay.gasSignals(100, wantTip = true)
+        assertEquals(2, port.calls.count { it.endsWith("eth_gasPrice") })
+        clock += 15_001L
+        relay.gasSignals(100, wantTip = true)
+        assertEquals(3, port.calls.count { it.endsWith("eth_gasPrice") })
+    }
+
     @Test
     fun `a busy relay is retried and a refusing one is not`() = runBlocking {
         port.answer("eth_sendUserOperation", error("Bundler is currently processing; Retry later"), body("0xhash"))

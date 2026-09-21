@@ -122,6 +122,10 @@ struct FlowHost: View {
     /// navigates — pushing a screen the machine has not moved to renders the
     /// one it is still on, which looks exactly like a dead button.
     var onContinueSend: (() -> Void)?
+    /// Spec 069: the fee's refresh control, and the speed control under it.
+    var onRefreshFee: (() -> Void)?
+    var onToggleSpeed: (() -> Void)?
+    var onPickSpeed: ((String) -> Void)?
     /// The two sheets the send flow raises. Both bodies have always had an
     /// `onSelect`; the host simply never passed one, which is the same shape
     /// as the token picker before phase 3 — a list nobody can pick from.
@@ -351,7 +355,10 @@ struct FlowHost: View {
                     recipientText: sendRecipient,
                     rowText: sendRow,
                     warning: sendWarning,
-                    ctaDisabled: sendCtaDisabled
+                    ctaDisabled: sendCtaDisabled,
+                    onRefreshFee: onRefreshFee,
+                    onToggleSpeed: { onToggleSpeed?() },
+                    onPickSpeed: { tier in onPickSpeed?(tier) }
                 )
             }
         case .sendConfirm(let m):

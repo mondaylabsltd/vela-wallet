@@ -10,7 +10,7 @@
 mod support;
 
 use support::DomainDriver;
-use vela_core::app::fee_policy::{tempo_reimbursement, TEMPO_FEE_TOKEN_DECIMALS};
+use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
     extract_request_chain_id, is_signing_method, method_kind, required_capabilities,
     sign_account_index, Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
@@ -583,6 +583,161 @@ fn tx_pending_record_persists_at_submission_then_flips_confirmed_in_place() {
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
 
+/// Issue 262: the receipt wait timed out. The page still gets the op hash,
+/// but the record stays PENDING — no confirming patch — and the tracker (which
+/// already holds the op) is the only one who may close it.
+#[test]
+fn receipt_timeout_answers_the_op_hash_and_leaves_the_record_pending() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-7t", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.dispatch(Event::OpSubmitted {
+        id: "req-7t".to_owned(),
+        user_op_hash: "0xophash".to_owned(),
+        now_ms: 5_000.0,
+    });
+    sut.resolve(Res::RecordPersisted);
+
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: "0xophash".to_owned(),
+        },
+        now_ms: 125_000.0,
+    });
+    assert_eq!(ops.len(), 1, "only the answer — no record patch: {ops:?}");
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some("0xophash".to_owned())))
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "a late receipt never confirms the record: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Hidden);
+    let handoff = view
+        .tracker_handoff
+        .expect("the tracker still holds the op");
+    assert_eq!(handoff.user_op_hash, "0xophash");
+    assert_eq!(handoff.record_ids, vec!["dapp-5000-tx".to_owned()]);
+    assert!(
+        sut.resolve(Res::Responded).is_empty(),
+        "the answer's ack closes nothing"
+    );
+    assert!(sut.outstanding().is_empty(), "nothing left to close");
+}
+
+/// Without an `OpSubmitted` the late-receipt answer still lands a durable
+/// record first — PENDING under the op hash, handed to the tracker.
+#[test]
+fn receipt_timeout_without_op_submitted_persists_pending_then_answers() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-7u", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: "0xophash".to_owned(),
+        },
+        now_ms: 9_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.record_id == "dapp-9000-tx"
+                && record.status == SignRecordStatus::Pending
+                && record.user_op_hash == "0xophash"
+                && record.result.is_empty()),
+        "pending record before the answer: {ops:?}"
+    );
+    let handoff = sut.view().tracker_handoff.expect("handoff");
+    assert_eq!(handoff.record_ids, vec!["dapp-9000-tx".to_owned()]);
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some("0xophash".to_owned())))
+    );
+    assert!(!ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })));
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+}
+
+/// End to end across the two machines: the record the sign machine left
+/// pending is closed by the tracker when the receipt finally lands — with
+/// the REAL tx hash, on the same record id.
+#[test]
+fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
+    use vela_core::app::tx_tracker::{
+        Event as TrackEvent, TrackOperation as TOp, TrackRecordPatch, TrackRecordStatus,
+        TrackShellResult as TRes, TxTracker, WAIT_WINDOW_MS,
+    };
+    let op_hash = "0xabababababababababababababababababababababababababababababababab";
+    let tx_hash = "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
+
+    let mut sign = boot();
+    sign.dispatch(Arrive::global("req-7v", "eth_sendTransaction", &plain_send_params()).event());
+    sign.dispatch(approve(SignApproveOpts::default()));
+    sign.resolve(Res::PreCheck { funding: None });
+    sign.dispatch(Event::OpSubmitted {
+        id: "req-7v".to_owned(),
+        user_op_hash: op_hash.to_owned(),
+        now_ms: NOW,
+    });
+    sign.resolve(Res::RecordPersisted);
+    let handoff = sign.view().tracker_handoff.expect("handoff");
+
+    // The shell feeds the handoff to the tracker.
+    let mut tracker = support::DomainDriver::<TxTracker>::new();
+    tracker.dispatch(TrackEvent::Submitted {
+        user_op_hash: handoff.user_op_hash.clone(),
+        record_ids: handoff.record_ids.clone(),
+        chain_id: handoff.chain_id,
+    });
+    tracker.resolve(TRes::Clock { now_ms: NOW });
+    tracker.resolve(TRes::ReceiptPending {
+        user_op_hash: op_hash.to_owned(),
+        now_ms: NOW + 300.0,
+    });
+
+    // The sign executor's own wait runs out: the page gets the op hash, and
+    // the record is left alone.
+    let ops = sign.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: op_hash.to_owned(),
+        },
+        now_ms: NOW + WAIT_WINDOW_MS,
+    });
+    assert!(!ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })));
+
+    // Minutes later the tracker's reconcile-paced poll finds the receipt.
+    let ops = tracker.dispatch(TrackEvent::Tick);
+    assert_eq!(ops, vec![TOp::Now]);
+    let ops = tracker.resolve(TRes::Clock {
+        now_ms: NOW + WAIT_WINDOW_MS + 60_000.0,
+    });
+    assert!(
+        ops.iter().any(|op| matches!(op, TOp::PollReceipt { .. })),
+        "{ops:?}"
+    );
+    let ops = tracker.resolve_matching(
+        |op| matches!(op, TOp::PollReceipt { .. }),
+        TRes::Receipt {
+            user_op_hash: op_hash.to_owned(),
+            tx_hash: tx_hash.to_owned(),
+            now_ms: NOW + WAIT_WINDOW_MS + 61_000.0,
+        },
+    );
+    assert!(
+        ops.contains(&TOp::UpdateTxRecords {
+            ids: handoff.record_ids.clone(),
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Confirmed,
+                tx_hash: Some(tx_hash.to_owned()),
+            },
+        }),
+        "the tracker closes the SAME record with the real tx hash: {ops:?}"
+    );
+}
+
 #[test]
 fn failed_submit_patches_the_pending_record_failed() {
     let mut sut = boot();
@@ -1093,6 +1248,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: "1".to_owned(), // below the $0.01 floor
             recipient: collector.to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1116,6 +1272,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: floor.clone(),
             recipient: "0x6666666666666666666666666666666666666666".to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1127,6 +1284,7 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         quoted_fee: Some(SignQuotedFee {
             amount: floor,
             recipient: collector.to_owned(),
+            tier: None,
         }),
         fee_collector: Some(collector.to_owned()),
         ..SignApproveOpts::default()
@@ -1142,6 +1300,53 @@ fn stale_tempo_quote_is_rereviewed_never_silently_repriced() {
         ),
         "{ops:?}"
     );
+}
+
+/// Spec 069: the speed the displayed fee was priced at travels to the
+/// submission beside it, and the dead `rapid` never does.
+#[test]
+fn the_displayed_fee_names_its_tier_on_the_submission() {
+    for (shown, named) in [
+        (Some(FeeTier::Slow), Some(FeeTier::Slow)),
+        (Some(FeeTier::Fast), Some(FeeTier::Fast)),
+        (Some(FeeTier::Rapid), None),
+        (None, None),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(
+            Arrive::extension(
+                "rid-tier",
+                "eth_sendTransaction",
+                &plain_send_params(),
+                4_217,
+            )
+            .event(),
+        );
+        let collector = "0x5555555555555555555555555555555555555555";
+        let floor = tempo_reimbursement(0, 0, TEMPO_FEE_TOKEN_DECIMALS).to_string();
+        let ops = sut.dispatch(approve(SignApproveOpts {
+            quoted_fee: Some(SignQuotedFee {
+                amount: floor,
+                recipient: collector.to_owned(),
+                tier: shown,
+            }),
+            fee_collector: Some(collector.to_owned()),
+            ..SignApproveOpts::default()
+        }));
+        assert!(
+            matches!(ops.as_slice(), [Op::CheckBundlerFunding { .. }]),
+            "{ops:?}"
+        );
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        let submit = ops
+            .iter()
+            .find_map(|op| match op {
+                Op::SignAndSubmit { quoted_fee, .. } => Some(quoted_fee.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("a submission: {ops:?}"));
+        assert_eq!(submit.expect("quoted").tier, named, "{shown:?}");
+    }
 }
 
 // ===========================================================================

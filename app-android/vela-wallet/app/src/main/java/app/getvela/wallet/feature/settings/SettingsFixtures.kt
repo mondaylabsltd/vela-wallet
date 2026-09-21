@@ -226,6 +226,15 @@ object SettingsFixtures {
                     icon = SettingsIcon.Zap,
                     subtitle = s.t(I18nKeys.SettingsUi.ENDPOINTS_SUBTITLE),
                 ),
+                // Spec 069: the default transaction speed — between the
+                // endpoints and the storage, as the web places it.
+                SettingsRowModel(
+                    id = FEE_SPEED_ROW,
+                    title = s.t(I18nKeys.SettingsUi.FEE_SPEED_TITLE),
+                    icon = SettingsIcon.Clock,
+                    subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SUBTITLE),
+                    value = s.t(I18nKeys.Flows.GAS_TIER_FAST),
+                ),
                 SettingsRowModel(
                     id = "storage",
                     title = s.t(I18nKeys.SettingsUi.STORAGE_TITLE),
@@ -661,6 +670,25 @@ object SettingsFixtures {
         )
     }
 
+    /** The Settings row id of the default speed (spec 069). */
+    const val FEE_SPEED_ROW = "fee-speed"
+
+    /**
+     * The default speed's sheet: the three speeds, fastest first, each with
+     * the line on what it buys — never `rapid`, which nothing offers.
+     */
+    fun feeSpeedSheet(s: VelaStrings, selected: String) = SelectSheetModel(
+        title = s.t(I18nKeys.SettingsUi.FEE_SPEED_SHEET_TITLE),
+        subtitle = s.t(I18nKeys.SettingsUi.FEE_SPEED_SHEET_SUBTITLE),
+        rows = listOf(
+            Triple("fast", I18nKeys.Flows.GAS_TIER_FAST, I18nKeys.Flows.GAS_TIER_HINT_FAST),
+            Triple("standard", I18nKeys.Flows.GAS_TIER_STANDARD, I18nKeys.Flows.GAS_TIER_HINT_STANDARD),
+            Triple("slow", I18nKeys.Flows.GAS_TIER_SLOW, I18nKeys.Flows.GAS_TIER_HINT_SLOW),
+        ).map { (id, name, hint) ->
+            SelectRowModel(id = id, label = s.t(name), detail = s.t(hint), selected = id == selected)
+        },
+    )
+
     private fun currencySheet(s: VelaStrings) = SelectSheetModel(
         title = s.t(I18nKeys.SettingsUi.CURRENCY_SHEET_TITLE),
         searchPlaceholder = s.t(I18nKeys.SettingsUi.CURRENCY_SEARCH),
@@ -941,6 +969,7 @@ object SettingsFixtures {
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),
             currencySheet = currencySheet(s),
+            feeSpeedSheet = feeSpeedSheet(s, "fast"),
             numberSheet = formatSheet(
                 s,
                 s.t(I18nKeys.SettingsUi.NUMBER_TITLE),

@@ -85,6 +85,12 @@ data class FactRowModel(
     val copy: String? = null,
     /** Spec 048: what the copy affordance puts on the clipboard when `value` is a shortened form. */
     val copyValue: String? = null,
+    /**
+     * One calm sentence under the row saying why its value is what it is — the
+     * confirm's speed row uses it for a speed taken because it was free (issue
+     * 686), so the tier and its reason reach the last screen together.
+     */
+    val note: String? = null,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -388,6 +394,53 @@ data class FeeRowModel(
     val mark: TokenMarkModel,
     val value: String,
     val openLabel: String,
+    /**
+     * The refresh control's accessible name (spec 068; Android's since 069) —
+     * `null` draws none. The fee is the one figure on the form that moves on
+     * its own, and a person could neither re-read it nor be told it went old.
+     */
+    val refreshLabel: String? = null,
+    /** A measurement is out, whoever started it: the control says so. */
+    val refreshing: Boolean = false,
+    /** The quote's 30 s TTL ran out — calm, never a fault. Its line is kept either way. */
+    val staleNote: String? = null,
+)
+
+/** One option of the speed control (spec 068). */
+@Immutable
+data class FeeSpeedOptionModel(
+    /** The wire tier — `fast` / `standard` / `slow`. */
+    val id: String,
+    /** The SPEED — 超快 / 标准 / 较慢 — never a number. */
+    val label: String,
+    /** What that speed buys, one line under the name. */
+    val detail: String,
+    /** This option's OWN fee, or the "…" / "—" standing in for it. */
+    val value: String,
+    /** Its gas bid as a range, already formatted by the core over the set. */
+    val gasPrice: String? = null,
+    val selected: Boolean = false,
+)
+
+/**
+ * The speed control under the fee row, folded until opened (spec 068). Every
+ * decision in it is the `fee_speed` core's (spec 069); this is only words.
+ */
+@Immutable
+data class FeeSpeedModel(
+    val label: String,
+    /** The folded summary: the tier in force for THIS send. */
+    val value: String,
+    val open: Boolean,
+    val onceNote: String,
+    /** Why the tier in force is the fastest when the default is slower. */
+    val freeNote: String? = null,
+    /** This network has one speed: the options give way to it. */
+    val singleNote: String? = null,
+    val gasPriceLabel: String,
+    /** Whether the options carry a gas-bid line at all. */
+    val gasPriceLine: Boolean,
+    val options: List<FeeSpeedOptionModel>,
 )
 
 @Immutable
@@ -454,6 +507,8 @@ data class SendFormModel(
     val recipientActions: List<RecipientActionModel> = emptyList(),
     val summary: SummaryLineModel? = null,
     val fee: FeeRowModel,
+    /** The speed control (spec 068). `null` draws none. */
+    val speed: FeeSpeedModel? = null,
     val cta: String,
     /** Spec 043: the core's `can_continue`; a drawn form is always enabled. */
     val ctaEnabled: Boolean = true,

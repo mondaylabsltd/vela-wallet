@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.feature.send.core.FeeTier
+import app.getvela.wallet.feature.settings.core.FeeTierPrefView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.browser.ExploreLive
@@ -50,6 +52,34 @@ object SettingsLive {
      * "¥1,234.56" against a rate nobody could fetch would be inventing an
      * exchange rate on the settings screen.
      */
+    /**
+     * The default transaction speed (spec 069): the row's value and which
+     * speed the sheet ticks, both from the `fee_tier_pref` core — so the
+     * Settings row and the send screen's folded control say the same thing.
+     */
+    fun withFeeTier(model: SettingsScreenModel, view: FeeTierPrefView, s: VelaStrings): SettingsScreenModel {
+        val id = when (view.tier) {
+            FeeTier.Standard -> "standard"
+            FeeTier.Slow -> "slow"
+            else -> "fast"
+        }
+        val sheet = SettingsFixtures.feeSpeedSheet(s, id)
+        return model.copy(
+            sections = model.sections.map { section ->
+                section.copy(
+                    rows = section.rows.map { row ->
+                        if (row.id == SettingsFixtures.FEE_SPEED_ROW) {
+                            row.copy(value = sheet.rows.firstOrNull { it.selected }?.label ?: row.value)
+                        } else {
+                            row
+                        }
+                    },
+                )
+            },
+            feeSpeedSheet = sheet,
+        )
+    }
+
     fun withCurrency(model: SettingsScreenModel, view: CurrencyView): SettingsScreenModel {
         val code = view.code
         return model.copy(

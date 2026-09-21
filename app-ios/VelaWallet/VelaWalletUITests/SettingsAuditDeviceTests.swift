@@ -303,6 +303,29 @@ final class SettingsAuditDeviceTests: XCTestCase {
         second.terminate()
     }
 
+    /// Spec 047 on iOS: a network row wears its chain's own logo, the letter
+    /// only until the logo lands — as Android's and the web's always have.
+    func testTheNetworkListWearsChainLogos() {
+        let app = launch()
+        XCTAssertTrue(app.staticTexts["高级"].waitForExistence(timeout: 30),
+                      "the settings page never opened")
+        if !app.staticTexts["网络"].exists {
+            app.staticTexts["高级"].tap()
+            settle(1)
+        }
+        if !app.staticTexts["网络"].isHittable {
+            app.swipeUp()
+            settle(1)
+        }
+        open(row: "网络", in: app)
+        XCTAssertTrue(app.staticTexts["Ethereum"].waitForExistence(timeout: 10),
+                      "the network list never opened")
+        // The logos' own round trips.
+        settle(6)
+        attach(app.screenshot(), named: "audit-network-logos")
+        app.terminate()
+    }
+
     private func launch(
         page: String = "settings-live",
         theme: String? = "dark",

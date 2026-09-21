@@ -202,7 +202,9 @@ final class SignExecutor {
         let quoted = (operation["quoted_fee"] as? [String: Any]).map {
             UserOpSpine.Quoted(
                 amount: $0["amount"] as? String ?? "0",
-                recipient: $0["recipient"] as? String ?? ""
+                recipient: $0["recipient"] as? String ?? "",
+                // The speed the displayed fee was priced at (spec 069).
+                tier: $0["tier"] as? String
             )
         }
 
@@ -219,7 +221,9 @@ final class SignExecutor {
             // The durable record precedes anything the dApp could poll: the
             // core persists it on `op_submitted`, and the answer waits for it.
             await waitForRecord(of: hash)
-            return ["type": "succeeded", "result": await awaitReceipt(chainId: chainId, userOpHash: hash) ?? hash]
+            return Self.afterReceiptWait(
+                userOpHash: hash, receipt: await awaitReceipt(chainId: chainId, userOpHash: hash)
+            )
         } catch let refused as UserOpSpine.Refused {
             switch refused.failure {
             case .passkeyCancelled:
@@ -291,6 +295,18 @@ final class SignExecutor {
     }
 
     // MARK: - The pure parts
+
+    /// What the receipt wait means for the core.
+    ///
+    /// In time: `succeeded` with the TX hash — a dApp's `eth_sendTransaction`
+    /// resolves to a tx hash. Late: `receipt_pending` with the op hash — the
+    /// core still answers the page with it, but leaves the record PENDING for
+    /// the tracker to settle. A late receipt is not a confirmation (issue 262:
+    /// an op that never landed was recorded "confirmed").
+    static func afterReceiptWait(userOpHash: String, receipt: String?) -> [String: Any] {
+        if let txHash = receipt { return ["type": "succeeded", "result": txHash] }
+        return ["type": "receipt_pending", "user_op_hash": userOpHash]
+    }
 
     /// What the page's verifier will hash.
     ///

@@ -32,10 +32,9 @@ use vela_core::app::approval_guard::{
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigning, ClearSigningView, Event as ClearEvent,
 };
-use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeAssetView, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier,
-    FeeView,
-};
+use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
+use vela_core::app::fee_speed::FeeSpeedView;
+use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::sign_request::{
     Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignQuotedFee, SignRequest,
     SignShellResult, SignView,
@@ -47,6 +46,14 @@ use crate::executor::now_ms;
 use crate::executor::passkey::WindowHandle;
 use crate::executor::sign_request::{self as sign_executor, SignAnswer, SignContext};
 use crate::resident::{Answer, Machine, Sink};
+
+use super::speed_control::{self, SpeedControl, SpeedHost};
+
+impl SpeedHost for SigningHost {
+    fn speed_control(&mut self) -> &mut SpeedControl {
+        &mut self.speed
+    }
+}
 
 /// The transport id of a request the WALLET made of itself. Its answer has no
 /// page to go to; the column closing is the whole acknowledgement.
@@ -79,16 +86,14 @@ pub struct SigningHost {
     pub clear_view: ClearSigningView,
     guard: CoreHost<ApprovalGuard>,
     pub guard_view: GuardView,
-    /// The fourth machine. ONE session for the whole request — the sheet
-    /// renders this view and the approve hands back the quote FROM it, so the
-    /// figure somebody agreed to and the figure that gets signed cannot be
-    /// two different numbers (this cut's second lesson, which the web
-    /// recorded four failed integrations of).
-    fee: CoreHost<FeePolicy>,
-    pub fee_view: FeeView,
-    /// Guards the deployment read: a slower one must not quote for a request
-    /// that has been superseded.
-    fee_seq: u64,
+    /// The fourth machine, and the speed control over it (spec 069) — the
+    /// very one the send column runs. ONE session in force for the whole
+    /// request: the sheet renders its view and the approve hands back the
+    /// quote FROM it, so the figure somebody agreed to and the figure that
+    /// gets signed cannot be two different numbers (this cut's second lesson,
+    /// which the web recorded four failed integrations of). The other speeds'
+    /// previews sit beside it, and a tapped one is promoted, not re-asked.
+    speed: SpeedControl,
     /// WHO is asking and on WHAT chain, kept from the request that opened
     /// this host. The sheet's header is drawn from these — a signing screen
     /// naming the wrong site is the worst thing it can get wrong, and until
@@ -148,8 +153,6 @@ impl SigningHost {
         // The cores' own pristine views rather than a `Default` they do not
         // have: the shell must never invent a starting shape for a machine.
         let (view, clear_view, guard_view) = (sign.view(), clear.view(), guard.view());
-        let fee = CoreHost::<FeePolicy>::new();
-        let fee_view = fee.view();
         let mut host = Self {
             sim: Vec::new(),
             sim_unavailable: false,
@@ -166,14 +169,20 @@ impl SigningHost {
             clear_view,
             guard,
             guard_view,
-            fee,
-            fee_view,
-            fee_seq: 0,
+            speed: SpeedControl::new(),
             ctx,
             channel,
             closed: false,
             handed_off: None,
         };
+        // The stored default speed (spec 069), read now and followed while
+        // the sheet is up: the column sits beside Settings, which may change it.
+        let preference = crate::resident::resident::<FeeTierPref>(cx);
+        cx.observe(&preference, |host, _, cx| {
+            speed_control::configure(host, cx)
+        })
+        .detach();
+        speed_control::reset(&mut host, cx);
         host.begin(&request, &account.address, cx);
         host
     }
@@ -290,44 +299,26 @@ impl SigningHost {
         if calls.is_empty() {
             return;
         }
-        self.fee_seq += 1;
-        let seq = self.fee_seq;
         let public_key_available = !self.ctx.keys.is_empty();
-        cx.spawn(async move |host, cx| {
-            let probe = account.clone();
-            let deployed = cx
-                .background_executor()
-                .spawn(async move { crate::executor::chain::is_deployed(&probe, chain_id) })
-                .await;
-            host.update(cx, |host, cx| {
-                if seq != host.fee_seq {
-                    return;
-                }
-                // An indeterminate read never reaches the core: guessing
-                // "deployed" ships an operation without initCode, and guessing
-                // "undeployed" attaches one to a live account. Either way the
-                // fee is for a different operation than the one that would be
-                // sent, so no quote is better than a wrong one — the slide
-                // stays shut, which is what `confirm_fee_ready: false` means.
-                let Ok(deployed) = deployed else {
-                    return;
-                };
-                host.dispatch_fee(
-                    FeeEvent::QuoteRequested {
-                        chain_id,
-                        account,
-                        deployed,
-                        public_key_available,
-                        tier: FeeTier::Fast,
-                        calls,
-                        fee_token: None,
-                    },
-                    cx,
-                );
-            })
-            .ok();
-        })
-        .detach();
+        // HOW FAST is the speed control's to say (spec 069): the person's
+        // stored default — `fast` for everybody who never chose — until the
+        // sheet's own control picks another. The quoted fee carries it to the
+        // relay beside the amount.
+        //
+        // An indeterminate deployment read never reaches the core: guessing
+        // "deployed" ships an operation without initCode, and guessing
+        // "undeployed" attaches one to a live account. No quote is better
+        // than a wrong one — the slide stays shut, which is what
+        // `confirm_fee_ready: false` means.
+        speed_control::ask(
+            self,
+            chain_id,
+            account,
+            public_key_available,
+            calls,
+            None,
+            cx,
+        );
     }
 
     /// Approve, carrying the fee THIS sheet displayed.
@@ -382,63 +373,55 @@ impl SigningHost {
     /// coin to pay in, the list opens (or closes) here in the sheet — the
     /// web's `onfee`. One coin and a quote: nothing to choose.
     pub fn fee_tapped(&mut self, cx: &mut Context<Self>) {
-        if self.fee_view.failed.is_some() {
-            self.dispatch_fee(FeeEvent::Requote, cx);
-        } else if self.fee_view.options.len() > 1 {
+        let fee = self.speed.fee_view();
+        if fee.failed.is_some() {
+            // Measured again for real — the held readings dropped first.
+            speed_control::refresh(self, cx);
+        } else if fee.options.len() > 1 {
             self.fee_open = !self.fee_open;
             cx.notify();
         }
     }
 
     /// A coin picked from the list (`None` = the native coin). The pick is a
-    /// quote PARAMETER: the core re-prices the operation in that coin, and
+    /// quote PARAMETER: the operation is re-priced in that coin — every speed
+    /// of it, so a speed picked next is still paid in the coin chosen — and
     /// the approve carries `fee_token` from the same view.
     pub fn pick_fee(&mut self, token: Option<String>, cx: &mut Context<Self>) {
         self.fee_open = false;
-        self.dispatch_fee(FeeEvent::SelectFeeAsset { token }, cx);
+        speed_control::choose_fee_token(self, token, cx);
     }
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
-        let opts = approve_opts(&self.fee_view, &self.clear_view, &self.guard_view);
+        let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
     }
 
-    pub fn dispatch_fee(&mut self, event: FeeEvent, cx: &mut Context<Self>) {
-        let pending = self.fee.dispatch(event);
-        self.pump_fee(pending, cx);
+    // -- the speed control (spec 069) ----------------------------------------
+
+    /// The fee in force, as the sheet's fee row reads it.
+    pub fn fee_view(&self) -> &FeeView {
+        self.speed.fee_view()
     }
 
-    fn resolve_fee(&mut self, id: u64, result: FeeShellResult, cx: &mut Context<Self>) {
-        let pending = self.fee.resolve(id, result);
-        self.pump_fee(pending, cx);
+    /// The speed control, as the core decided it.
+    pub fn speed_view(&self) -> &FeeSpeedView {
+        self.speed.view()
     }
 
-    fn pump_fee(&mut self, pending: Vec<Pending<FeeOperation>>, cx: &mut Context<Self>) {
-        for effect in pending {
-            let id = effect.id;
-            match FeePolicy::perform(&effect.operation) {
-                Answer::Now(result) => self.resolve_fee(id, result, cx),
-                Answer::Blocking(work) => {
-                    cx.spawn(async move |host, cx| {
-                        let result = cx.background_executor().spawn(async move { work() }).await;
-                        host.update(cx, |host, cx| host.resolve_fee(id, result, cx))
-                            .ok();
-                    })
-                    .detach();
-                }
-                Answer::After(delay, result) => {
-                    cx.spawn(async move |host, cx| {
-                        cx.background_executor().timer(delay).await;
-                        host.update(cx, |host, cx| host.resolve_fee(id, result, cx))
-                            .ok();
-                    })
-                    .detach();
-                }
-                Answer::Streaming(_) => unreachable!("fee_policy reports nothing mid-flight"),
-            }
-        }
-        self.fee_view = self.fee.view();
-        cx.notify();
+    /// Every (tier, view) the options can format a fee with.
+    pub fn speed_tier_views(&self) -> Vec<(FeeTier, FeeView)> {
+        self.speed.tier_views()
+    }
+
+    /// Fold or unfold the control.
+    pub fn toggle_speed(&mut self, cx: &mut Context<Self>) {
+        speed_control::toggle(self, cx);
+    }
+
+    /// A tap on an option — one-shot, never the stored preference.
+    pub fn pick_speed(&mut self, tier: FeeTier, cx: &mut Context<Self>) {
+        speed_control::pick(self, tier, cx);
     }
 
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
@@ -507,6 +490,12 @@ impl SigningHost {
             }
         }
         self.view = self.sign.view();
+        // A free upgrade is decided only while the person can still choose —
+        // never under a slide that has already gone.
+        let on_form = self.view.surface == vela_core::app::sign_request::SignSurface::Sheet
+            && !self.view.is_signing
+            && !self.view.is_submitting;
+        speed_control::stage(self, on_form, cx);
         // The tracker, the moment the core has something to hand it.
         //
         // Its own words: "the shell feeds this to `tx_tracker::Event::Submitted`
@@ -662,6 +651,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
                 FeeAssetView::Native => estimate.total_wei.clone(),
             },
             recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+            // The speed this very estimate was priced at — named on the wire
+            // beside the amount (spec 069); the core drops a `rapid`.
+            tier: Some(estimate.tier),
         }),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
@@ -787,6 +779,7 @@ fn typed_data_of(params_json: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::app::fee_policy::FeePolicy;
 
     /// Invariant ⑨: the capped params are the ones that get signed.
     ///
@@ -946,6 +939,7 @@ mod kickoff_tests {
 #[cfg(test)]
 mod approve_tests {
     use super::*;
+    use vela_core::app::fee_policy::FeePolicy;
 
     /// The approve carries the fee the sheet DISPLAYED.
     ///
@@ -970,7 +964,7 @@ mod approve_tests {
             max_gas_price: None,
             total_gas: "21000".to_owned(),
             deployed: true,
-            tier: FeeTier::Fast,
+            tier: vela_core::app::fee_policy::FeeTier::Fast,
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
@@ -980,6 +974,7 @@ mod approve_tests {
         let quoted = Some(SignQuotedFee {
             amount: shown.total_wei.clone(),
             recipient: shown.fee_recipient.clone().unwrap_or_default(),
+            tier: Some(shown.tier),
         });
         let opts = SignApproveOpts {
             max_fee_per_gas: Some(shown.max_fee_per_gas.clone()),
@@ -997,6 +992,8 @@ mod approve_tests {
             .unwrap_or_else(|| unreachable!("a priced sheet approves with its price"));
         assert_eq!(signed.amount, shown.total_wei, "the figure on the screen");
         assert_eq!(signed.recipient, "0xee2c");
+        // …and the speed it was priced at, named beside it (spec 069).
+        assert_eq!(signed.tier, Some(shown.tier));
         assert_eq!(opts.max_fee_per_gas.as_deref(), Some("1500000000"));
     }
 
@@ -1067,6 +1064,7 @@ mod approve_tests {
         let quoted = none.map(|estimate| SignQuotedFee {
             amount: estimate.total_wei.clone(),
             recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+            tier: Some(estimate.tier),
         });
         assert!(quoted.is_none());
     }

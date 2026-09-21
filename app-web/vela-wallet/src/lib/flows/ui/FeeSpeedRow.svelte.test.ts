@@ -11,7 +11,6 @@ import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
-import { gasPriceRangeTexts } from '../gas-price';
 import type { FeeSpeedModel } from '../model';
 import FeeSpeedRow from './FeeSpeedRow.svelte';
 
@@ -360,12 +359,14 @@ describe('FeeSpeedRow', () => {
 	 */
 	it('fits the widest range on one line at 320px and 272px without reflowing the description', async () => {
 		const names = ['Быстро', 'Стандартно', 'Медленно'];
-		const ranges = gasPriceRangeTexts([
-			{ low: 999_990n, high: 2_999_870n },
-			{ low: 999_950n, high: 1_999_810n },
-			{ low: 999_910n, high: 1_499_780n }
-		]) as string[];
-		expect(ranges[0]).toBe('0.00099999 ~ 0.0029999 gwei');
+		// The core's own strings for the widest set it can draw — five digits on
+		// both ends of every row (pinned in `app_fee_speed.rs`,
+		// `the_widest_ranges_read_at_five_digits`).
+		const ranges = [
+			'0.00099999 ~ 0.0029999 gwei',
+			'0.00099995 ~ 0.0019998 gwei',
+			'0.00099991 ~ 0.0014998 gwei'
+		];
 		const { options } = await drawn({
 			open: true,
 			gasPriceLabel: 'Offerta del gas',

@@ -41,6 +41,9 @@ enum SettingsOverlay: Equatable, Identifiable {
     /// ruling): "联系人与分组 · 清除" removed the whole address book on a
     /// single tap, with nothing in between.
     case clearStorageItem
+    /// The default transaction speed (spec 069): three speeds, each with what
+    /// it buys.
+    case feeSpeed
 
     var id: String { String(describing: self) }
 }
@@ -134,6 +137,10 @@ struct SelectRowModel: Identifiable {
     var selected: Bool = false
     /// Mono face — every number/date/time sample wants it.
     var mono: Bool = false
+    /// A line UNDER the label — the speed sheet's "Lowest fee, if you can
+    /// wait" (spec 068's ruling: the name is the speed, what it buys goes
+    /// under it, never squeezed beside it).
+    var detail: String?
 }
 
 struct SelectSheetModel {
@@ -176,10 +183,13 @@ struct ConfirmSheetModel {
     var callout: CalloutModel?
 }
 
-/// A chain's circular avatar: a letter over a fixture-supplied brand colour.
+/// A chain's circular avatar: a letter over a fixture-supplied brand colour,
+/// under the chain's own logo when the chain-data endpoint has one.
 struct ChainMarkModel {
     let letter: String
     let color: Color
+    /// The chain's logo (spec 047) — `nil` on a fixture, which draws the letter.
+    var logoUrl: String? = nil
 }
 
 struct SettingsNetworkRowModel: Identifiable {
@@ -498,6 +508,8 @@ struct SettingsScreenModel {
     let signOutSheet: ConfirmSheetModel
     var languageSheet: SelectSheetModel
     var currencySheet: SelectSheetModel
+    /// Spec 069: the default transaction speed's sheet.
+    var feeSpeedSheet = SelectSheetModel(title: "", rows: [])
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

@@ -3,7 +3,10 @@
  * and `FeeView`, and nothing else. Every assertion here is "the core said so".
  */
 import { describe, expect, it } from 'vitest';
+import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
+import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import { FeeSpeedCore } from '$lib/core/client';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
 import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
@@ -20,7 +23,6 @@ import {
 	liveSendReceipt,
 	sendTokenClass,
 	sendTokenId,
-	speedSetVerdict,
 	visibleSendTokens,
 	type SendLiveInputs
 } from './live-send';
@@ -1305,14 +1307,80 @@ describe('the folded speed control (spec 068)', () => {
 		...IDLE_FEE,
 		fee: { ...QUOTE, tier, total_wei: totalWei }
 	});
+	/**
+	 * The control's inputs as the route builds them: the REAL `fee_speed` core
+	 * (spec 069), driven the way the route drives it, over these rows.
+	 *
+	 * `tier` is the tier the test wants in force. With no flag it is simply the
+	 * stored default, with the send off its form so no free upgrade is asked
+	 * about; `picked` makes it a one-shot pick over another default; `free`
+	 * makes the default Slow on the form, so the core takes Fast itself if the
+	 * numbers say it is free; `oneSpeedKnown` first shows the core a settled
+	 * one-speed set on this chain. The shell's promotion is modelled by
+	 * re-reporting the rows until the tier in force settles.
+	 */
 	const speedInputs = (
 		open: boolean,
 		tier: 'fast' | 'standard' | 'slow',
-		rows: { tier: 'fast' | 'standard' | 'slow'; view: FeeView; busy?: boolean }[]
+		rows: { tier: 'fast' | 'standard' | 'slow'; view: FeeView; busy?: boolean }[],
+		how: { picked?: boolean; free?: boolean; oneSpeedKnown?: boolean } = {}
 	): SendLiveInputs => ({
 		...inputs({ selected_token: ETH, fee: QUOTE }),
-		speed: { open, tier, rows }
+		speed: {
+			view: driveSpeed(open, tier, rows, how),
+			feeOptions: (t) => rows.find((row) => row.tier === t)?.view.options ?? []
+		}
 	});
+	function driveSpeed(
+		open: boolean,
+		tier: 'fast' | 'standard' | 'slow',
+		rows: { tier: 'fast' | 'standard' | 'slow'; view: FeeView; busy?: boolean }[],
+		how: { picked?: boolean; free?: boolean; oneSpeedKnown?: boolean }
+	): FeeSpeedView {
+		const core = new FeeSpeedCore();
+		let view = JSON.parse(core.view()) as FeeSpeedView;
+		const send = (event: FeeSpeedEvent) => {
+			view = (JSON.parse(core.dispatch(JSON.stringify(event))) as { view: FeeSpeedView }).view;
+		};
+		const report = (set: typeof rows) => {
+			for (let round = 0; round < 3; round += 1) {
+				const before = view.tier;
+				const mine = set.find((row) => row.tier === view.tier);
+				send({
+					type: 'quotes_changed',
+					chain_id: QUOTE.chain_id,
+					in_force: {
+						busy: (mine?.busy ?? false) || (mine?.view.busy ?? false),
+						fee: mine?.view.fee ?? null
+					},
+					previews: set
+						.filter((row) => row.tier !== view.tier)
+						.map((row) => ({
+							tier: row.tier,
+							busy: (row.busy ?? false) || row.view.busy,
+							fee: row.view.fee
+						}))
+				});
+				if (view.tier === before) break;
+			}
+		};
+		const preferred = how.free ? 'slow' : how.picked ? (tier === 'fast' ? 'slow' : 'fast') : tier;
+		send({ type: 'configure', preferred, number: 'comma_dot' });
+		if (how.oneSpeedKnown) {
+			const flat = (t: 'fast' | 'standard' | 'slow') => ({
+				tier: t,
+				view: { ...IDLE_FEE, fee: { ...QUOTE, tier: t, total_wei: '10000000000000' } }
+			});
+			report([flat('fast'), flat('standard'), flat('slow')]);
+			send({ type: 'reset' });
+		}
+		send({ type: 'stage_changed', on_form: how.free === true });
+		if (how.picked) send({ type: 'pick', tier });
+		if (open) send({ type: 'toggle' });
+		report(rows);
+		core.free();
+		return view;
+	}
 
 	const THREE = [
 		{ tier: 'fast' as const, view: quoteAt('fast', '2100000000000000') },
@@ -1731,10 +1799,7 @@ describe('the folded speed control (spec 068)', () => {
 	// while a send at the stored default adds no row, because most sends need
 	// no decision about speed and a permanent line would ask for one.
 	it('restates a chosen speed on the confirm, and only a chosen one', () => {
-		const chosen = liveSendConfirm(confirmModel(), {
-			...speedInputs(false, 'slow', THREE),
-			speed: { open: false, tier: 'slow', picked: true, rows: THREE }
-		});
+		const chosen = liveSendConfirm(confirmModel(), speedInputs(false, 'slow', THREE, { picked: true }));
 		expect(new Map(chosen.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
 			m['send.gasTier.slow']
 		);
@@ -1818,10 +1883,7 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('says why a slower default is running at the fastest speed', () => {
-			const model = liveSendForm(formModel(), {
-				...speedInputs(false, 'fast', FLOOR_CLAMPED),
-				speed: { open: false, tier: 'fast', free: true, rows: FLOOR_CLAMPED }
-			});
+			const model = liveSendForm(formModel(), speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true }));
 			// The summary names the tier actually in force…
 			expect(model.speed?.value).toBe(m['send.gasTier.fast']);
 			// …and says why, in the corpus's words.
@@ -1833,19 +1895,13 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('never calls a speed free over a network with one speed (B before A)', () => {
-			const model = liveSendForm(formModel(), {
-				...speedInputs(true, 'fast', TEMPO),
-				speed: { open: true, tier: 'fast', free: true, rows: TEMPO }
-			});
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', TEMPO, { free: true }));
 			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
 			expect(model.speed?.freeNote).toBeUndefined();
 		});
 
 		it('restates a free upgrade on the confirm, as it restates a pick', () => {
-			const model = liveSendConfirm(confirmModel(), {
-				...speedInputs(false, 'fast', FLOOR_CLAMPED),
-				speed: { open: false, tier: 'fast', free: true, rows: FLOOR_CLAMPED }
-			});
+			const model = liveSendConfirm(confirmModel(), speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true }));
 			expect(new Map(model.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
 				m['send.gasTier.fast']
 			);
@@ -1866,10 +1922,7 @@ describe('the folded speed control (spec 068)', () => {
 		];
 
 		it('says a network it already knows has one speed at once, while the rest re-measure', () => {
-			const model = liveSendForm(formModel(), {
-				...speedInputs(true, 'fast', measuring),
-				speed: { open: true, tier: 'fast', oneSpeedKnown: true, rows: measuring }
-			});
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', measuring, { oneSpeedKnown: true }));
 			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
 			// Unknown, the same frame is three rows still measuring — never a guess.
 			const unknown = liveSendForm(formModel(), speedInputs(true, 'fast', measuring));
@@ -1877,22 +1930,10 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('lets settled numbers overrule what it remembered', () => {
-			const model = liveSendForm(formModel(), {
-				...speedInputs(true, 'fast', FLOOR_CLAMPED),
-				speed: { open: true, tier: 'fast', oneSpeedKnown: true, rows: FLOOR_CLAMPED }
-			});
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', FLOOR_CLAMPED, { oneSpeedKnown: true }));
 			expect(model.speed?.singleNote).toBeUndefined();
 			expect(model.speed?.options).toHaveLength(3);
 		});
 
-		it('gives a verdict only on a set where every speed has settled', () => {
-			expect(speedSetVerdict(TEMPO)).toBe('one');
-			expect(speedSetVerdict(FLOOR_CLAMPED)).toBe('several');
-			expect(speedSetVerdict(measuring)).toBeNull();
-			// A failed row is no evidence either: it neither teaches nor unlearns.
-			expect(
-				speedSetVerdict([TEMPO[0], TEMPO[1], { tier: 'slow' as const, view: IDLE_FEE }])
-			).toBeNull();
-		});
 	});
 });

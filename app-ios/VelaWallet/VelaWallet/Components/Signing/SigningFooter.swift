@@ -18,6 +18,10 @@ struct SigningFeeView: View {
     var onToggle: () -> Void = {}
     /// A coin from the list, by id (`SigningLive.nativeFeeId` for the chain's own).
     var onPick: (String) -> Void = { _ in }
+    /// The speed control under the fee (spec 069), inside the same card.
+    var speed: FeeSpeedModel?
+    /// `nil` folds or unfolds it; an id picks that speed.
+    var onSpeed: (String?) -> Void = { _ in }
 
     var body: some View {
         switch fee {
@@ -95,27 +99,41 @@ struct SigningFeeView: View {
             .padding(.horizontal, Tokens.Space.s16)
             .padding(.vertical, Tokens.Space.s8)
             .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+        } else if let speed {
+            VStack(alignment: .leading, spacing: 0) {
+                feeRow(label: label, value: value)
+                // The control pads its rows by 12; the row above by 16.
+                FeeSpeedControlView(speed: speed, onToggle: { onSpeed(nil) },
+                                    onPick: { onSpeed($0) })
+                    .padding(.horizontal, Tokens.Space.s4)
+                    .padding(.bottom, Tokens.Space.s4)
+            }
+            .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
         } else {
-            Button(action: onToggle) {
-                HStack(spacing: Tokens.Space.s8) {
-                    Text(verbatim: label)
-                        .typeRole(Typography.rowSub.scaled(textScale))
-                        .foregroundStyle(theme.fgMuted)
-                    Spacer()
-                    Text(verbatim: value)
-                        .typeRole(Typography.label.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
-                    LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                        .foregroundStyle(theme.fgMuted)
-                }
-                .padding(.horizontal, Tokens.Space.s16)
-                .padding(.vertical, Tokens.Space.s12)
+            feeRow(label: label, value: value)
                 .background(theme.bgSunken,
                             in: RoundedRectangle(cornerRadius: Tokens.Radius.r12))
-                .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
-            }
-            .buttonStyle(.plain)
         }
+    }
+
+    private func feeRow(label: String, value: String) -> some View {
+        Button(action: onToggle) {
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: label)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                Spacer()
+                Text(verbatim: value)
+                    .typeRole(Typography.label.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                    .foregroundStyle(theme.fgMuted)
+            }
+            .padding(.horizontal, Tokens.Space.s16)
+            .padding(.vertical, Tokens.Space.s12)
+            .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -53,7 +53,13 @@ fn to_fixed(abs: f64, digits: usize) -> String {
 ///
 /// `auto` is resolved by the host before it reaches the core — detecting it needs
 /// `Intl.NumberFormat.formatToParts`, which FR-006 forbids the core from consulting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// On the wire (spec 069, where a machine first takes one) it is the shells'
+/// own preference key without `auto`: `comma_dot`, `dot_comma`, `space_comma`,
+/// `indian` — the names every shell already stores, so none needs a table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
 pub enum NumberPreset {
     /// `1,234,567.89`
     #[default]

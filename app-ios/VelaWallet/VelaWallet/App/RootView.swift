@@ -867,6 +867,16 @@ struct RootView: View {
                 .onChange(of: fees.view?.busy) { _, busy in
                     if let busy { send.feeBusyChanged(busy) }
                 }
+                // Spec 069: a free upgrade is only decided while the person is
+                // still on the form, and a send already open follows a default
+                // Settings just changed. One modifier, not two `.onChange`s:
+                // this chain is already at the type checker's limit.
+                .modifier(SpeedBridge(
+                    onForm: send.view.map { $0.stage == .enterDetails },
+                    preferred: settings.feeTier?.tier,
+                    stageChanged: { onForm in fees.speedStage(onForm: onForm) },
+                    preferenceChanged: { configureSpeed() }
+                ))
                 .onChange(of: fees.view?.fee) { _, estimate in
                     if let estimate { send.feeUpdated(estimate) }
                 }
@@ -1037,6 +1047,9 @@ struct RootView: View {
                         // figure it matters most on, and it must not wait for a
                         // visit to 设置 to learn the person chose CNY.
                         settings.openCurrency()
+                        // …and so is the default speed (spec 069): the send
+                        // form's folded control shows it from the first open.
+                        settings.openFeeTier()
                         // So is the NETWORK list, and for a sharper reason: the
                         // send machine resolves every holding against it, so a
                         // `network_admin` that had not been opened yet made the
@@ -1097,6 +1110,7 @@ struct RootView: View {
                         onSignWith: { id in signing?.signWith(id) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
+                        onSpeed: { id in signing?.speed(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         camera: camera,
@@ -1228,6 +1242,8 @@ struct RootView: View {
             spine: userOpSpine,
             store: shelf,
             pool: pool,
+            preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
+            numberPreset: { Formats.resolve(Formats.current.number).rawValue },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -1863,7 +1879,10 @@ struct RootView: View {
             }
             if case .sendForm(let form) = model.base {
                 model.base = .sendForm(SendLive.form(
-                    view, fee: fees.view, display: display, on: form, loc: loc
+                    view, fee: fees.view, display: display, on: form, loc: loc,
+                    speed: fees.speed.map { speed in
+                        SendLive.SpeedInputs(view: speed, feeView: { [fees] tier in fees.view(of: tier) })
+                    }
                 ))
             }
             if case .sendReceipt(let receipt) = model.base {
@@ -1874,7 +1893,7 @@ struct RootView: View {
             if case .sendConfirm(let confirm) = model.base {
                 model.base = .sendConfirm(SendLive.confirm(
                     view, from: (session.view.address, session.view.activeName),
-                    display: display, on: confirm, loc: loc, fee: fees.view
+                    display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed
                 ))
             }
             if case .feeToken(let sheet)? = model.sheet, let fee = fees.view {
@@ -2063,6 +2082,10 @@ struct RootView: View {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
         let display = WalletLive.Display.from(settings.currency)
+        // A new send starts at the stored default: the one-shot pick, a free
+        // upgrade and the fold all die with the send before it (spec 068).
+        fees.resetSpeed()
+        configureSpeed()
         send.open(
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
@@ -2070,6 +2093,15 @@ struct RootView: View {
             displayCode: display.code,
             displayRate: display.rate,
             fiatDecimals: 2
+        )
+    }
+
+    /// The stored default speed and the resolved number preset, into the speed
+    /// core (spec 069). Repeating it is free.
+    private func configureSpeed() {
+        fees.configureSpeed(
+            preferred: settings.feeTier?.tier ?? "fast",
+            number: Formats.resolve(Formats.current.number).rawValue
         )
     }
 
@@ -2111,7 +2143,8 @@ struct RootView: View {
             clear: live.clear,
             guard: live.guardView,
             fee: live.fee,
-            context: context
+            context: context,
+            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) }
         )
     }
 
@@ -2206,6 +2239,9 @@ struct RootView: View {
                         }
                     },
                     onContinueSend: { send.advance() },
+                    onRefreshFee: { fees.refresh() },
+                    onToggleSpeed: { fees.toggleSpeed() },
+                    onPickSpeed: { tier in fees.pickSpeed(tier) },
                     onNoticeAction: {
                         // Whatever the notice is about, tried again. The CORE
                         // decides which — a funded relayer re-runs the
@@ -2554,7 +2590,8 @@ struct RootView: View {
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
                     onSignWith: { id in signing.signWith(id) },
                     onFee: { signing.feeTapped() },
-                    onFeePick: { id in signing.pickFee(id) }
+                    onFeePick: { id in signing.pickFee(id) },
+                    onSpeed: { id in signing.speed(id) }
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])
@@ -2597,6 +2634,9 @@ struct RootView: View {
         }
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
+        }
+        if let view = settings.feeTier {
+            model = SettingsLive.withFeeTier(view, on: model, loc: loc)
         }
         // The switcher's rows are the SESSION's, with the balance core's
         // cached totals — after the currency, because the figures it writes
@@ -2780,6 +2820,10 @@ struct RootView: View {
             // a shell that wrote the code itself would show a figure converted
             // at the previous one.
             settings.chooseCurrency(id)
+        case .feeSpeed:
+            // The core validates and persists; a pick here is the ONE place
+            // the stored default changes (the send screen's is one-shot).
+            if ["fast", "standard", "slow"].contains(id) { settings.chooseFeeTier(id) }
         case .language:
             // `system` is the drawn id; `auto` is what every client STORES.
             let tag = id == "system" ? "auto" : id
@@ -2982,4 +3026,19 @@ enum ThemeOverride {
         default: nil
         }
     }()
+}
+
+/// The two facts the speed core hears from outside the send flow (spec 069):
+/// whether the send is still on its form, and the stored default speed.
+private struct SpeedBridge: ViewModifier {
+    let onForm: Bool?
+    let preferred: String?
+    let stageChanged: (Bool) -> Void
+    let preferenceChanged: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: onForm) { _, onForm in stageChanged(onForm ?? false) }
+            .onChange(of: preferred) { _, _ in preferenceChanged() }
+    }
 }

@@ -366,6 +366,30 @@ enum SettingsLive {
         return copy
     }
 
+    /// The default transaction speed (spec 069): the row's value and which
+    /// speed the sheet ticks, both from the `fee_tier_pref` core — so the
+    /// Settings row and the send screen's folded control say the same thing.
+    static func withFeeTier(
+        _ view: FeeTierPrefViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        let sheet = SettingsFixtures.feeSpeedSheet(loc, selected: view.tier)
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                guard row.id == SettingsFixtures.feeSpeedRow else { return row }
+                var changed = row
+                changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
+                return changed
+            }
+            return updated
+        }
+        copy.feeSpeedSheet = sheet
+        return copy
+    }
+
     static func withCurrency(
         _ view: CurrencyViewWire,
         on model: SettingsScreenModel,
@@ -917,7 +941,10 @@ enum SettingsLive {
     static func mark(chainId: Int, name: String) -> ChainMarkModel {
         let letter = name.trimmingCharacters(in: .whitespaces).first
             .map { String($0).uppercased() } ?? "?"
-        return ChainMarkModel(letter: letter, color: chainColor(chainId))
+        // The chain's own logo over the letter, as every other surface that
+        // names a chain draws it (Android's `VelaChainMark`, the web's).
+        return ChainMarkModel(letter: letter, color: chainColor(chainId),
+                              logoUrl: Marks.chainLogoURL(chainId))
     }
 
     /// One chain, one colour, for every surface that draws a dot. Internal

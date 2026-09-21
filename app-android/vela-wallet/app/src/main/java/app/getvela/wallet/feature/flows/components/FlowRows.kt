@@ -174,10 +174,11 @@ fun FactRow(
     onCopy: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
+    Column(modifier = modifier.fillMaxWidth()) {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = VelaSpacing.lg),
+            .padding(top = VelaSpacing.lg, bottom = if (fact.note != null) VelaSpacing.xs else VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -230,6 +231,18 @@ fun FactRow(
                     .clickable(onClick = onCopy),
             )
         }
+    }
+    // The reason under its row, in the row's own quiet voice (issue 686): a
+    // fact about the value, not a warning about it.
+    fact.note?.let { note ->
+        Text(
+            text = note,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier.padding(bottom = VelaSpacing.lg),
+        )
+    }
     }
 }
 
