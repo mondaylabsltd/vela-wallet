@@ -170,6 +170,26 @@ class FlowLiveTest {
         }
     }
 
+    /**
+     * Issue #263: a network's code ("receive assets on Base") carries the
+     * NETWORK's mark. It carried the native coin's — ETH's logo on Base — which
+     * reads as "this code only takes ETH".
+     */
+    @Test
+    fun `a network code carries the network's mark, not its coin's`() {
+        Marks.base = "https://data.example/"
+        try {
+            val base = FlowLive.receiveQr(
+                qrFixture(), mine, "Me",
+                PaymentRequestView(asset = ReceiveAsset(chain_id = 8453, symbol = "ETH", network_name = "Base")),
+            )
+            assertEquals(listOf("https://data.example/chainlogos/eip155-8453.png"), base.centre.logoUrls)
+            assertTrue(base.centre.badgeHidden)
+        } finally {
+            Marks.base = ""
+        }
+    }
+
     /** No chain-data endpoint: the lettered disc is the whole mark, not a blank circle. */
     @Test
     fun `without an endpoint the centre mark falls back to its letters`() {
@@ -412,6 +432,41 @@ class FlowLiveTest {
         )
 
         assertEquals(emptyList<Any>(), live.rows)
+    }
+
+    /** Issue #269: POL's sheet said "1 USDT = $1.00", USDT's contract, 6 decimals, Ethereum. */
+    @Test
+    fun `a token detail's facts are that token's own`() {
+        val view = BalanceView(tokens = listOf(token("POL", "19.194439", 137, price = 0.25)))
+
+        val detail = detailFor(view, FeedView(), id = WalletLive.holdingId(137, null))!!
+
+        val facts = detail.facts.associate { it.label to it }
+        val price = facts.getValue(strings.t(I18nKeys.Flows.TOKEN_PRICE)).value
+        assertTrue(price, price.contains("POL") && price.contains("0.25"))
+        assertTrue(!price.contains("USDT"))
+        val contract = facts.getValue(strings.t(I18nKeys.Flows.TOKEN_CONTRACT))
+        assertEquals(strings.t(I18nKeys.Flows.ADD_NATIVE_TOKEN), contract.value)
+        assertNull("a native coin has no address to copy", contract.copy)
+        assertEquals("18", facts.getValue(strings.t(I18nKeys.Flows.TOKEN_DECIMALS)).value)
+        assertEquals("Polygon", facts.getValue(strings.t(I18nKeys.Flows.ADD_LABEL_NETWORK)).value)
+    }
+
+    @Test
+    fun `a contract token's facts carry its address, and an unpriced one says so`() {
+        val usdc = BalanceToken(
+            chain_id = 42161, symbol = "USDC", name = "USD Coin", balance = "3", decimals = 6,
+            token_address = "0xaf88d065e77c8cc2239327c5edb3a432268e5831", price_usd = null,
+        )
+        val detail = detailFor(BalanceView(tokens = listOf(usdc)), FeedView(), id = WalletLive.holdingId(42161, usdc.token_address))!!
+
+        val facts = detail.facts.associate { it.label to it }
+        assertEquals(strings.t(I18nKeys.Wallet.NO_PRICE), facts.getValue(strings.t(I18nKeys.Flows.TOKEN_PRICE)).value)
+        val contract = facts.getValue(strings.t(I18nKeys.Flows.TOKEN_CONTRACT))
+        assertEquals(usdc.token_address, contract.copyValue)
+        assertTrue(contract.mono)
+        assertEquals("6", facts.getValue(strings.t(I18nKeys.Flows.TOKEN_DECIMALS)).value)
+        assertEquals("Arbitrum", facts.getValue(strings.t(I18nKeys.Flows.ADD_LABEL_NETWORK)).value)
     }
 
     @Test
