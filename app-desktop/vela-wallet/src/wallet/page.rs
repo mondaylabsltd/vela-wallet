@@ -9,6 +9,8 @@
 //! the sidebar, third column, Esc handling and gallery chrome already exist,
 //! so contacts is a `Section` switch on the content column (research.md D1).
 
+use std::sync::Arc;
+
 use gpui::AnimationExt as _;
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder as _;
@@ -63,6 +65,7 @@ use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, l
 use crate::settings::live as settings_live;
 use crate::settings::model::NetworkRowModel;
 use crate::signing::SigningStrings;
+use crate::signing::clear_signer as signing_clear_signer;
 use crate::signing::components as signing_components;
 use crate::signing::fixtures as signing_fixtures;
 use crate::signing::live as signing_live;
@@ -3647,6 +3650,57 @@ impl WalletPage {
         })
     }
 
+    /// The Clear Signer's wait and its last word (spec 071), over whichever
+    /// flow started the ceremony — the signing column or the send. The
+    /// buttons speak to the ceremony through its channel; the host redraws
+    /// when the channel answers.
+    fn clear_signer_prompt(
+        &mut self,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        let mut channels = Vec::new();
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.as_ref() {
+            channels.push(host.read(cx).clear_signer());
+        }
+        if let Some(host) = self.send_host.as_ref() {
+            channels.push(host.read(cx).clear_signer());
+        }
+        let channel = channels
+            .into_iter()
+            .find(|channel| channel.waiting() || channel.ended().is_some())?;
+        let card = if channel.waiting() {
+            let (reopen, cancel) = (Arc::clone(&channel), channel);
+            signing_clear_signer::waiting_card(
+                theme,
+                &self.loc,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
+            )
+        } else {
+            let refusal = channel.ended()?;
+            signing_clear_signer::ended_card(
+                theme,
+                &self.loc,
+                refusal,
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| channel.forget(),
+            )
+        };
+        Some(
+            div()
+                .id("clear-signer-scrim")
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.backdrop)
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
     /// The cable's dialogs and the core's alert, over the send flow.
     fn send_prompts(
         &mut self,
@@ -6193,7 +6247,7 @@ impl WalletPage {
                 cx,
             );
             if let Some(host) = self.signing_host.clone() {
-                host.update(cx, |host, _| host.sign_with(None));
+                host.update(cx, |host, cx| host.sign_with(None, cx));
             }
         }
         self.backup_for = Some(account.address.clone());
@@ -10460,9 +10514,11 @@ impl WalletPage {
 
     /// "Sign with · Automatic ⌄" — WHERE the passkey that signs this request
     /// is (founder, 2026-09-19: creating and signing in let a person choose;
-    /// signing took the first key's stored route). Per request — the host lives
-    /// for one. Which key the choice pins is the core's (`sign_route`). Opens in
-    /// place: a dialog over the signing column is a modal under a modal.
+    /// signing took the first key's stored route), or the Clear Signer's page
+    /// (spec 071). Per request — the host lives for one, and starts at the
+    /// default Settings keeps. Which key the choice pins is the core's
+    /// (`sign_route`). Opens in place: a dialog over the signing column is a
+    /// modal under a modal.
     #[cfg(not(target_os = "linux"))]
     fn sign_with_row(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let (method, open) = {
@@ -10481,7 +10537,7 @@ impl WalletPage {
             cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
                 if let Some(host) = page.signing_host.clone() {
                     host.update(cx, |host, cx| {
-                        host.sign_with(id);
+                        host.sign_with(id, cx);
                         cx.notify();
                     });
                 }
@@ -10530,6 +10586,26 @@ impl WalletPage {
                 .bg(theme.bg_sunken);
             for (index, (id, title)) in options.into_iter().enumerate() {
                 let selected = id == method;
+                let mut words = div().flex_1().flex().flex_col().gap(px(2.)).child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(if selected {
+                            theme.fg_base
+                        } else {
+                            theme.fg_muted
+                        })
+                        .child(title),
+                );
+                // The one choice that is not a place a passkey is says what
+                // it is — the create flow's lines only describe making a key.
+                if id == vela_core::clear_signer::METHOD {
+                    words = words.child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_subtle)
+                            .child(self.signing.clear_signer_body.clone()),
+                    );
+                }
                 let mut option = div()
                     .id(("signing-sign-with-option", index))
                     .flex()
@@ -10540,17 +10616,7 @@ impl WalletPage {
                     .cursor_pointer()
                     .hover(|el| el.bg(theme.bg_raised))
                     .on_click(pick(Some(id), cx))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(theme::text_row_sub())
-                            .text_color(if selected {
-                                theme.fg_base
-                            } else {
-                                theme.fg_muted
-                            })
-                            .child(title),
-                    );
+                    .child(words);
                 if selected {
                     option = option.child(icon_img(
                         &mut self.icons,
@@ -11929,6 +11995,7 @@ impl Render for WalletPage {
         let scan = self.scan_overlay(&theme, window, cx);
         let toast = self.receipt_toast(&theme, window, cx);
         let send_prompt = self.send_prompts(&theme, window, cx);
+        let clear_signer_prompt = self.clear_signer_prompt(&theme, cx);
         let menu = self.menu_overlay(&theme, cx);
         let sign_out = self.sign_out_dialog(&theme, cx);
         let network_remove = self.network_remove_dialog(&theme, cx);
@@ -11954,6 +12021,10 @@ impl Render for WalletPage {
         }
         // The cable's dialogs and the core's alert, over the send flow.
         if let Some(prompt) = send_prompt {
+            root = root.child(prompt);
+        }
+        // The Clear Signer's, over the flow that is waiting on its page.
+        if let Some(prompt) = clear_signer_prompt {
             root = root.child(prompt);
         }
         if let Some(menu) = menu {

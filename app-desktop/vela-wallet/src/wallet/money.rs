@@ -41,6 +41,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use futures::StreamExt as _;
 use gpui::{Context, Entity, FocusHandle};
 
 use vela_core::app::Account;
@@ -57,11 +58,13 @@ use vela_core::app::send::{
     SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
     SendRecipientDraft, SendShellResult, SendView,
 };
+use vela_core::app::sign_pref::SignPref;
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
 use crate::ctap::usb::TouchRequest;
+use crate::executor::clear_signer;
 use crate::executor::passkey::{CredentialChoice, PinRequest, WindowHandle};
 use crate::executor::send::{self as send_executor, SendAnswer, SendContext};
 use crate::executor::{batch, storage, tracker};
@@ -161,7 +164,13 @@ impl SendHost {
         cx: &mut Context<Self>,
     ) -> Self {
         let channel = CeremonyChannel::new();
-        let ctx = SendContext::new(&account, channel.ceremony(window_handle));
+        let mut ctx = SendContext::new(&account, channel.ceremony(window_handle));
+        // The send has no "Sign with" of its own: it signs the way Settings
+        // says every signature starts (spec 071), read once as it opens.
+        let (clear_signer, changed) = clear_signer::Channel::new();
+        ctx.clear_signer = clear_signer;
+        let preference = resident::resident::<SignPref>(cx).read(cx).view();
+        ctx.sign_with(&preference.method, &preference.signer_url);
         let send = CoreHost::<Send>::new();
         let view = send.view();
         let display_code = display.code.clone();
@@ -189,6 +198,21 @@ impl SendHost {
             tracked_hash: None,
             last_track_status: None,
         };
+
+        // The Clear Signer's channel speaks up whenever a ceremony waits,
+        // ends, or wants the page opened. The stream ends with the host.
+        cx.spawn(async move |host, cx| {
+            let mut changed = changed;
+            while changed.next().await.is_some() {
+                if host
+                    .update(cx, |host, cx| host.clear_signer_changed(cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
 
         // Receipts arrive through the app-resident tracker, which outlives
         // this host; observing it is what turns a confirmation into the
@@ -690,6 +714,8 @@ impl SendHost {
     // -- the ceremony ---------------------------------------------------------
 
     fn cancel_ceremony(&mut self) {
+        // A Clear Signer waiting on its page is a ceremony too.
+        self.ctx.clear_signer.cancel();
         self.channel.close();
         self.channel = CeremonyChannel::new();
         self.ctx.ceremony = self.channel.ceremony(self.window_handle);
@@ -728,7 +754,9 @@ impl SendHost {
 
     /// One poll. Returns whether to keep polling.
     fn tick(&mut self, cx: &mut Context<Self>) -> bool {
-        if !self.signing_reported && self.ctx.signing_started.load(Ordering::SeqCst) {
+        let signing =
+            self.ctx.signing_started.load(Ordering::SeqCst) || self.ctx.clear_signer.waiting();
+        if !self.signing_reported && signing {
             self.signing_reported = true;
             self.dispatch(SendEvent::SigningStarted, cx);
         }
@@ -774,6 +802,20 @@ impl SendHost {
         self.channel.touch_waiting()
     }
 
+    /// The Clear Signer's waiting sheet and its last word (spec 071).
+    pub fn clear_signer(&self) -> Arc<clear_signer::Channel> {
+        Arc::clone(&self.ctx.clear_signer)
+    }
+
+    /// Something on the Clear Signer's channel changed: hand the browser the
+    /// page if a ceremony asked for it, and redraw.
+    fn clear_signer_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.ctx.clear_signer.take_page() {
+            cx.open_url(&url);
+        }
+        cx.notify();
+    }
+
     /// The caBLE QR to show, if a hybrid ceremony waits for a scan.
     pub fn qr_showing(&self) -> Option<String> {
         self.channel.qr_showing()
@@ -807,6 +849,14 @@ impl SendHost {
     pub fn acknowledge_alert(&mut self, cx: &mut Context<Self>) {
         self.alert = None;
         cx.notify();
+    }
+}
+
+impl Drop for SendHost {
+    /// The flow is gone: a Clear Signer still waiting stops now rather than
+    /// holding a port for five minutes nobody can see.
+    fn drop(&mut self) {
+        self.ctx.clear_signer.close();
     }
 }
 

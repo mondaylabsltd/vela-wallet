@@ -32,7 +32,10 @@ use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::theme::{self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Theme};
 use crate::ui::{ButtonVariant, NameFieldStrings, text_field, vela_button, vela_button_opts};
 
-fn card(theme: &Theme) -> Div {
+/// The dialog card every ceremony prompt sits on — shared with the Clear
+/// Signer's two (`signing::clear_signer`), so a person waiting on a page and
+/// a person waiting on a key see one kind of card.
+pub(crate) fn card(theme: &Theme) -> Div {
     div()
         .w(px(SHEET_W))
         .flex()
@@ -45,7 +48,7 @@ fn card(theme: &Theme) -> Div {
         .border_color(theme.border_card)
 }
 
-fn title(theme: &Theme, text: SharedString) -> Div {
+pub(crate) fn title(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_flow_headline())
         .font_weight(FontWeight::BOLD)
@@ -53,7 +56,7 @@ fn title(theme: &Theme, text: SharedString) -> Div {
         .child(text)
 }
 
-fn body(theme: &Theme, text: SharedString) -> Div {
+pub(crate) fn body(theme: &Theme, text: SharedString) -> Div {
     div()
         .text_size(theme::text_body())
         .line_height(theme::line_height_body())

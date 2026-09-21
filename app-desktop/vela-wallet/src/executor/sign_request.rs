@@ -39,7 +39,9 @@ use vela_core::app::sign_request::{
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
 
+use crate::executor::clear_signer::{self, Ask};
 use crate::executor::passkey::{self, Ceremony};
+use crate::executor::user_op::Signer;
 use crate::executor::{now_ms, relay, storage, user_op};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -81,6 +83,15 @@ pub struct SignContext {
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
+    /// Who asked, as the transport says — `None` for the wallet's own
+    /// requests, which the Clear Signer's page is told as the wallet's own
+    /// send rather than as a site's.
+    pub site: Option<String>,
+    /// The account's name, for the Clear Signer's page.
+    pub account_name: Option<String>,
+    /// The Clear Signer (spec 071): whether THIS request goes to it, and its
+    /// waiting sheet. Shared like `route_override`, and for the same reason.
+    pub clear_signer: Arc<clear_signer::Channel>,
 }
 
 impl SignContext {
@@ -99,25 +110,34 @@ impl SignContext {
         }
     }
 
-    /// "Sign with": `auto` clears the choice; anything else asks the core which
-    /// key that pins (`wallet_keys::sign_route`). An answer of "none" — an
-    /// unknown method, a wallet with no usable credential — leaves the stored
-    /// route in force rather than guessing.
-    pub fn choose_method(&self, method: &str) {
-        let route =
-            vela_core::wallet_keys::sign_route(&self.device_keys, method).and_then(|route| {
-                let method = match route.method.as_str() {
-                    "platform" => KeyMethod::Platform,
-                    "hybrid" => KeyMethod::Hybrid,
-                    "security_key" => KeyMethod::SecurityKey,
-                    _ => return None,
-                };
-                Some((route.credential_id, method))
-            });
+    /// "Sign with": `auto` clears the choice; a place a passkey is asks the
+    /// core which key that pins (`wallet_keys::sign_route`); the Clear Signer
+    /// routes the request to `page`. An answer of "none" — an unknown method,
+    /// a wallet with no usable credential — leaves the stored route in force
+    /// rather than guessing.
+    pub fn choose_method(&self, method: &str, page: &str) {
+        let route = crate::executor::send::passkey_route(&self.device_keys, method);
         *self
             .route_override
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = route;
+        self.clear_signer
+            .choose((method == vela_core::clear_signer::METHOD).then(|| page.to_owned()));
+    }
+
+    /// This request as the Clear Signer's page is told it (contract §1): a
+    /// site's own method, params and origin — the FINAL params, invariant ⑨
+    /// — or, for the wallet's own transaction, just its calls.
+    fn ask(&self, method: &str, params_json: &str) -> Ask {
+        match &self.site {
+            None => Ask::own(self.account_name.clone()),
+            Some(origin) => Ask {
+                method: method.to_owned(),
+                params: serde_json::from_str(params_json).unwrap_or_default(),
+                origin: origin.clone(),
+                account_name: self.account_name.clone(),
+            },
+        }
     }
 
     #[must_use]
@@ -131,19 +151,13 @@ impl SignContext {
             keys: send.keys,
             key_method: send.key_method,
             pinned_credential: send.pinned_credential,
-            device_keys: account
-                .keys
-                .iter()
-                .map(|key| vela_core::wallet_keys::DeviceKey {
-                    credential_id: key.credential_id.clone(),
-                    public_key_hex: key.public_key_hex.clone(),
-                    name: key.name.clone(),
-                    transports: key.transports.clone(),
-                })
-                .collect(),
+            device_keys: send.device_keys,
             route_override: Arc::new(std::sync::Mutex::new(None)),
             ceremony: send.ceremony,
             signing_started: send.signing_started,
+            site: None,
+            account_name: send.account_name,
+            clear_signer: send.clear_signer,
         }
     }
 }
@@ -287,13 +301,23 @@ fn sign_and_submit(
         let (credential, method) = ctx.route();
         passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
     };
+    let ask = ctx.ask(method, params_json);
+    let page = ctx.clear_signer.chosen();
+    let signer = match &page {
+        Some(page) => Signer::ClearSigner {
+            ask: &ask,
+            page,
+            channel: &ctx.clear_signer,
+        },
+        None => Signer::Passkey(&mut sign),
+    };
     let submitted = user_op::submit(
         chain_id,
         address,
         &calls,
         gas_fee_token,
         &ctx.keys,
-        &mut sign,
+        signer,
         quoted,
     );
     let user_op_hash = match submitted {
@@ -618,6 +642,66 @@ mod tests {
             dapp_origin: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
         }
+    }
+
+    fn context(site: Option<&str>) -> SignContext {
+        let account = Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+            }],
+        };
+        let mut ctx = SignContext::new(
+            &account,
+            crate::ceremony::CeremonyChannel::new().ceremony(0),
+        );
+        ctx.site = site.map(str::to_owned);
+        ctx
+    }
+
+    /// "Sign with" on the sheet (spec 071): the Clear Signer routes THIS
+    /// request to the page and pins no key; a place a passkey is does the
+    /// opposite; `auto` clears both.
+    #[test]
+    fn the_sheets_choice_routes_this_request() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        ctx.choose_method("clear_signer", "https://sign.getvela.app/");
+        assert_eq!(
+            ctx.clear_signer.chosen().as_deref(),
+            Some("https://sign.getvela.app/")
+        );
+        assert_eq!(ctx.route(), (Some("cred0".to_owned()), KeyMethod::Platform));
+
+        ctx.choose_method("hybrid", "https://sign.getvela.app/");
+        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.route().1, KeyMethod::Hybrid);
+
+        ctx.choose_method("auto", "https://sign.getvela.app/");
+        assert_eq!(ctx.clear_signer.chosen(), None);
+        assert_eq!(ctx.route().1, KeyMethod::Platform);
+    }
+
+    /// A site's request reaches the page as the site's — its method, its
+    /// FINAL params, its origin; the wallet's own is the wallet's own send.
+    #[test]
+    fn the_page_is_told_whose_request_it_is() {
+        let params = r#"[{"to":"0xbbb","value":"0x1"}]"#;
+        let site = context(Some("https://app.uniswap.org")).ask("eth_sendTransaction", params);
+        assert_eq!(site.method, "eth_sendTransaction");
+        assert_eq!(site.origin, "https://app.uniswap.org");
+        assert_eq!(site.params[0]["to"], "0xbbb");
+        assert_eq!(site.account_name.as_deref(), Some("savings"));
+
+        let own = context(None).ask("eth_sendTransaction", params);
+        assert_eq!(own.method, "", "the core builds the wallet's own intent");
+        assert_eq!(own.origin, "");
     }
 
     /// Issue 262: a receipt that is late is not a confirmation. The core hears

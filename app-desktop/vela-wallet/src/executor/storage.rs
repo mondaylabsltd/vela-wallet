@@ -46,6 +46,12 @@ pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
 /// The default transaction speed (spec 068, on the desktop since 069). A bare
 /// tier name — `fast` / `standard` / `slow` — judged by the core, never here.
 pub const KEY_FEE_TIER: &str = "vela.feeTier";
+/// The default "Sign with" (spec 071): `auto` or a method name, judged by the
+/// core's `sign_pref`, never here.
+pub const KEY_SIGN_METHOD: &str = "vela.signMethod";
+/// The Clear Signer's page, when the person chose one; absent is the
+/// official page.
+pub const KEY_CLEAR_SIGNER_URL: &str = "vela.clearSignerUrl";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
