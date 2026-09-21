@@ -167,8 +167,10 @@ struct RootView: View {
     @State private var sendClassFilter = "all"
     @State private var sendAlert: (title: String, body: String)?
     @State private var flows: FlowNav
-    /// Which section of the signed-in shell is showing (spec 050).
-    @State private var section: WalletSection = .wallet
+    /// Which section of the signed-in shell is showing (spec 050). A debug
+    /// launch that names a page (`VELA_URL`) starts where that page opens, so
+    /// a device pass can reach it through Web Inspector without a tap.
+    @State private var section: WalletSection = PageOverride.browserURL == nil ? .wallet : .explore
     /// Where the contacts section is, inside itself.
     @State private var contactsRoute: ContactsRoute?
     /// The add/edit form, while it is open. `nil` means no form — the presence
@@ -801,6 +803,11 @@ struct RootView: View {
                 await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
                 parallelSpace = ParallelSpaceHook.isActive
                 session.boot()
+                // The endpoint pool too: the wallet is not the only screen that
+                // reads a chain. A launch that opens on 探索 (a link, a restored
+                // tab) and booted the pool with the wallet screen answered every
+                // page read "No endpoint answered" — device-found (spec 070).
+                pool.boot()
                 // At LAUNCH, not with a screen: what the tracker follows
                 // outlives every screen. The pending set is derived from the
                 // transaction store, so a force-quit mid-send loses nothing —
@@ -1052,7 +1059,6 @@ struct RootView: View {
                         activity.privacyChanged(hidden: hidden)
                     }
                     .task {
-                        pool.boot()
                         activity.open(address: session.view.address,
                                       hidden: wallet.balance?.hidden ?? false)
                         // The display currency is app-wide: the hero is the

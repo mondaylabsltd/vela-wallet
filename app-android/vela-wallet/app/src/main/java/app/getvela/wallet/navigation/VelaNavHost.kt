@@ -1089,7 +1089,9 @@ fun VelaNavHost(
                             app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity)
                         }
                         val consentCard = dapp.consent?.let { c ->
-                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())))
+                            // Secure is the core's word (a loopback test page is), not a prefix check.
+                            val secure = dapp.tabs.firstOrNull { it.tab == c.tab }?.secure ?: c.origin.startsWith("https://")
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, strings, identity.copy(chainName = chainNames[c.chain_id] ?: c.chain_id.toString(), chainDot = WalletLive.badge(c.chain_id.toLong())), secure)
                         }
                         // One-line notices the browser raises (a WalletConnect link, say).
                         LaunchedEffect(browser) {

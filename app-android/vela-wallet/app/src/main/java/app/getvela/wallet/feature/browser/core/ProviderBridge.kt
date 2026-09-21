@@ -51,8 +51,19 @@ object ProviderBridge {
         return true
     }
 
-    /** A string for the page's `__velaDeliver`, which drops it unless it names the page's own document. */
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * A string for the page's `__velaDeliver`, which drops it unless it names
+     * the page's own document.
+     *
+     * Through the main looper, NOT `webView.post`: a view that is not attached
+     * to a window QUEUES what it is posted until it is attached again, so every
+     * answer to a tab in the background waited for the person to bring that tab
+     * back (device-found, spec 070 — a background page's `eth_chainId` never
+     * came back).
+     */
     fun deliver(webView: WebView, json: String) {
-        webView.post { webView.evaluateJavascript("window.__velaDeliver && window.__velaDeliver(${JSONObject.quote(json)})", null) }
+        main.post { webView.evaluateJavascript("window.__velaDeliver && window.__velaDeliver(${JSONObject.quote(json)})", null) }
     }
 }

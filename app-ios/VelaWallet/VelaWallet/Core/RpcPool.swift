@@ -136,8 +136,10 @@ final class RpcPool {
     /// can explain.
     private(set) var booted = false
 
-    /// Read the persisted ban map and hand it to the core. Called once.
+    /// Read the persisted ban map and hand it to the core. Once: a second
+    /// call would hand the core a stale copy of bans it has since changed.
     func boot() {
+        guard !booted else { return }
         booted = true
         core.boot(CoreJSON.string([
             "type": "bans_loaded",

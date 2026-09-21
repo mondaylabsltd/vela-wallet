@@ -30,6 +30,7 @@
 
 import Foundation
 import WebKit
+import UIKit
 import Observation
 import VelaCore
 
@@ -444,5 +445,75 @@ extension BrowserEngine: WKUIDelegate {
             }
         }
         return nil
+    }
+
+    // MARK: JavaScript dialogs (spec 070)
+    //
+    // Without these WebKit answers every `alert()` at once and every
+    // `confirm()` with false, so a page asking "Leave without saving?" never
+    // asked. A page that is not on screen gets the same instant answer: it
+    // cannot put a dialog over the wallet. The buttons are UIKit's own
+    // localized "OK"/"Cancel" — the words Safari's dialogs use.
+
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        MainActor.assumeIsolated {
+            guard let host = Self.presenter(for: webView) else { return completionHandler() }
+            let alert = UIAlertController(title: frame.securityOrigin.host, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: Self.systemWord("OK"), style: .default) { _ in completionHandler() })
+            host.present(alert, animated: true)
+        }
+    }
+
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        MainActor.assumeIsolated {
+            guard let host = Self.presenter(for: webView) else { return completionHandler(false) }
+            let alert = UIAlertController(title: frame.securityOrigin.host, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: Self.systemWord("Cancel"), style: .cancel) { _ in completionHandler(false) })
+            alert.addAction(UIAlertAction(title: Self.systemWord("OK"), style: .default) { _ in completionHandler(true) })
+            host.present(alert, animated: true)
+        }
+    }
+
+    nonisolated func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        MainActor.assumeIsolated {
+            guard let host = Self.presenter(for: webView) else { return completionHandler(nil) }
+            let alert = UIAlertController(title: frame.securityOrigin.host, message: prompt, preferredStyle: .alert)
+            alert.addTextField { field in field.text = defaultText }
+            alert.addAction(UIAlertAction(title: Self.systemWord("Cancel"), style: .cancel) { _ in completionHandler(nil) })
+            alert.addAction(UIAlertAction(title: Self.systemWord("OK"), style: .default) { [weak alert] _ in
+                completionHandler(alert?.textFields?.first?.text ?? "")
+            })
+            host.present(alert, animated: true)
+        }
+    }
+
+    /// The controller a dialog may be shown from: the topmost one, and only
+    /// when it is the one showing the page. `nil` when the page is off screen
+    /// or covered — a page's dialog never lands on a wallet sheet.
+    @MainActor
+    private static func presenter(for webView: WKWebView) -> UIViewController? {
+        guard let window = webView.window, var top = window.rootViewController else { return nil }
+        while let presented = top.presentedViewController { top = presented }
+        return webView.isDescendant(of: top.view) ? top : nil
+    }
+
+    private nonisolated static func systemWord(_ key: String) -> String {
+        Bundle(for: UIApplication.self).localizedString(forKey: key, value: key, table: nil)
     }
 }

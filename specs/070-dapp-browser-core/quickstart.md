@@ -42,3 +42,21 @@ UI-test `LocalDappServer`.
 
 Same rows as A, with `webViewWebContentProcessDidTerminate` for A11 (debug
 seam) and the iPhone's Back swipe for A13.
+
+The tap rows run as `BrowserAcceptanceTests` (skipped by name in the shared
+scheme; run them through an `.xctestrun` with the skip list removed). Stop any
+server on 8137 first — the suite's `LocalDappServer` binds that port, and a
+page cached from another server there fails every connect.
+
+Without UI automation on the phone (Settings → Developer → UI Automation, a
+switch only a person can flip), the non-tap rows still run over Web Inspector:
+
+```sh
+xcrun devicectl device process launch --device <id> --terminate-existing \
+  --environment-variables '{"VELA_PARALLEL_SPACE":"1","VELA_URL":"http://<mac-ip>:8137/"}' \
+  app.getvela.VelaWallet            # a debug launch with VELA_URL opens on Explore
+ios_webkit_debug_proxy -c <udid>:9230 &   # pages at http://127.0.0.1:9231/json
+```
+
+then `Target.sendMessageToTarget` → `Runtime.evaluate` in the page: the
+announcement, reads, and the 4200 / 4100 / 4902 / -32602 refusals of A1–A7.
