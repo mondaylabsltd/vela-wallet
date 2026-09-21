@@ -61,7 +61,16 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
  */
 interface ClearSigner {
     suspend fun sign(requestJson: String, digest: ByteArray, keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>): Assertion
+
+    /**
+     * What the page is told beside the request: the chain's name and coin
+     * (the page prefers its own for chains it knows) and the account's name,
+     * which points the person at a passkey.
+     */
+    fun describe(chainId: Int, account: String): ClearSignerLabels = ClearSignerLabels()
 }
+
+data class ClearSignerLabels(val chainName: String? = null, val nativeSymbol: String? = null, val accountName: String? = null)
 
 /**
  * What a site asked for, as the Clear Signer shows it: the request's own

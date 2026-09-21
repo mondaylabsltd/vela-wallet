@@ -5,6 +5,7 @@ import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import app.getvela.wallet.feature.send.core.ClearSigner
+import app.getvela.wallet.feature.send.core.ClearSignerLabels
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
@@ -49,6 +50,8 @@ class ClearSignerChannel(
     /** Put the app back over the tab. */
     private val bringBack: () -> Unit,
     private val words: () -> Words,
+    /** The chain's name and coin, the account's name — from the wallet's own lists. */
+    private val labels: (chainId: Int, account: String) -> ClearSignerLabels = { _, _ -> ClearSignerLabels() },
     private val timeoutMs: Long = 5 * 60_000L,
     private val random: SecureRandom = SecureRandom(),
 ) : ClearSigner {
@@ -79,6 +82,8 @@ class ClearSignerChannel(
         data object Cancelled : Verdict
         data object TimedOut : Verdict
     }
+
+    override fun describe(chainId: Int, account: String): ClearSignerLabels = labels(chainId, account)
 
     /** The waiting sheet's Cancel: the same as closing the page. */
     fun cancel() {
@@ -189,9 +194,15 @@ class ClearSignerChannel(
         }
     }
 
-    private fun refuse(kind: FailureKind, sentence: String): Nothing {
+    /**
+     * Nothing was signed, whatever the reason: to the signing paths that is a
+     * cancelled ceremony, so the request stays open to be signed another way
+     * (contract §5) — a site is never answered with an error for a page's
+     * refusal or a timeout. The sentence rides on [notice].
+     */
+    private fun refuse(@Suppress("UNUSED_PARAMETER") kind: FailureKind, sentence: String): Nothing {
         notice.value = sentence
-        throw PasskeyFailure(kind, sentence)
+        throw PasskeyFailure(FailureKind.Cancelled, sentence)
     }
 
     private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }

@@ -21,6 +21,7 @@ import app.getvela.wallet.feature.send.core.SendReceiptOutcome
 import app.getvela.wallet.feature.send.core.TrackStatus
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
+import app.getvela.wallet.feature.send.core.ClearSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerTab
@@ -307,6 +308,15 @@ class AppContainer(private val app: Application) {
                     refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
                     mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
+                )
+            },
+            labels = { chainId, account ->
+                val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
+                ClearSignerLabels(
+                    chainName = network?.display_name,
+                    nativeSymbol = network?.native_symbol,
+                    accountName = session.view.value.accounts
+                        .firstOrNull { it.address.equals(account, ignoreCase = true) }?.name,
                 )
             },
         )

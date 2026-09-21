@@ -24,8 +24,22 @@ class ClearSignerTab(activity: Activity) {
         val host = activity.get() ?: return false
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
             putExtras(Bundle().apply { putBinder(EXTRA_SESSION, null) })
+            // A browser, named — never the chooser, where apps that merely
+            // claim https links sit beside the browsers (device-found).
+            browser(host)?.let(::setPackage)
         }
         return runCatching { host.startActivity(intent) }.isSuccess
+    }
+
+    /** The person's default browser if it hosts Custom Tabs, else Chrome, else any that does. */
+    private fun browser(host: Activity): String? {
+        val pm = host.packageManager
+        val tabs = pm.queryIntentServices(Intent(ACTION_TABS_SERVICE), 0).map { it.serviceInfo.packageName }
+        val default = pm.resolveActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://")).addCategory(Intent.CATEGORY_BROWSABLE),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName
+        return default?.takeIf { it in tabs } ?: tabs.firstOrNull { it == CHROME } ?: tabs.firstOrNull()
     }
 
     fun bringBack() {
@@ -41,5 +55,7 @@ class ClearSignerTab(activity: Activity) {
 
     private companion object {
         const val EXTRA_SESSION = "android.support.customtabs.extra.SESSION"
+        const val ACTION_TABS_SERVICE = "android.support.customtabs.action.CustomTabsService"
+        const val CHROME = "com.android.chrome"
     }
 }

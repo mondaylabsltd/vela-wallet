@@ -26,7 +26,6 @@ window.VelaCS = window.VelaCS || {};
   // 22-digit number, which is exactly the kind of number nobody reads.
   var UNLIMITED_FLOOR = 1n << 128n;
 
-  var PRICES = { ETH: 3400, WETH: 3400, USDC: 1, USDT: 1, DAI: 1, sDAI: 1.09, APE: 1.2 };
 
   var UNREADABLE = new RegExp('[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\ufffd]');
 
@@ -47,12 +46,16 @@ window.VelaCS = window.VelaCS || {};
     return (negative ? '-' : '') + group(whole) + (frac ? '.' + frac : '');
   }
 
-  function fiat(symbol, value, decimals) {
-    var price = PRICES[symbol];
-    if (price === undefined) return null;
-    var usd = (Number(value) / Math.pow(10, decimals)) * price;
-    if (!isFinite(usd)) return null;
-    return '≈ $' + (usd >= 1000 ? group(Math.round(usd).toString()) : usd.toFixed(2));
+  // Fiat only at a rate the REQUESTER gave (`context.rates`), in its
+  // currency — the fee's rule (lib/fee.js). A price this page carried itself
+  // would be a guess shown as a fact, and wrong for every coin it forgot.
+  function fiat(ctx, symbol, value, decimals) {
+    var rate = ctx && ctx.rates && ctx.rates[symbol];
+    if (typeof rate !== 'number' || !isFinite(rate)) return null;
+    var amount = (Number(value) / Math.pow(10, decimals)) * rate;
+    if (!isFinite(amount)) return null;
+    return '≈ ' + ((ctx && ctx.currency) || '$') +
+      (amount >= 1000 ? group(Math.round(amount).toString()) : amount.toFixed(2));
   }
 
   function shortAddress(address) {
@@ -131,7 +134,7 @@ window.VelaCS = window.VelaCS || {};
       text: unlimited ? null : formatUnits(value, token.decimals),
       textKey: unlimited ? 'value.unlimited' : null,
       symbol: token.symbol,
-      fiat: unlimited ? null : fiat(token.symbol, value, token.decimals),
+      fiat: unlimited ? null : fiat(ctx, token.symbol, value, token.decimals),
       unverifiedDecimals: !known,
       // Decoration only — see lib/logos.js.
       logos: ctx ? ns.logos.token(ctx, ctx.chainId, tokenAddress) : [],
@@ -139,13 +142,15 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function nativeAmount(value, ctx) {
-    var symbol = ctx.nativeSymbol || 'ETH';
+    // The chain's own coin, from the chain id we sign for — the requester's
+    // word only for a chain this page does not know (as with its name).
+    var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
     return {
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
       text: formatUnits(value, 18),
-      fiat: fiat(symbol, value, 18),
+      fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
     };
   }
@@ -167,7 +172,8 @@ window.VelaCS = window.VelaCS || {};
         name: (known && known.name) || null,
         nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
         origin: host || null,
-        letter: ((known && known.name) || host || '?').charAt(0).toUpperCase(),
+        // The wallet asking itself has no host: its initial is the word's.
+        letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
         tone: (known && known.tone) || '#8a93a5',
         // Display-only, and it never touches the digest: a logo cannot change
         // what gets signed, so an https URL from the request is allowed here.
@@ -592,8 +598,10 @@ window.VelaCS = window.VelaCS || {};
     });
     view.risk = view.legs.reduce(function (worst, leg) {
       return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
-    }, 'caution');
-    view.refuse = view.legs.some(function (leg) { return leg.view.refuse; });
+    }, rank(view.risk) > rank('caution') ? view.risk : 'caution');
+    // OR, never overwrite: a refusal decided before the legs were read (the
+    // operation does not hold what was asked) must survive them.
+    view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
     view.sentence = descriptor.nested === 'multiSend'
       ? text('sentence.multiSend', { count: inner.length })
       : text('sentence.safeExec');
@@ -867,8 +875,12 @@ window.VelaCS = window.VelaCS || {};
       view.sentence = text('sentence.batch', { count: payload.calls.length });
       view.risk = view.legs.reduce(function (worst, leg) {
         return rank(leg.view.risk) > rank(worst) ? leg.view.risk : worst;
-      }, 'normal');
-      view.refuse = view.legs.some(function (leg) { return leg.view.refuse; });
+      }, rank(view.risk) > rank('normal') ? view.risk : 'normal');
+      // OR, never overwrite: `operationSubject` may already have refused (the
+      // operation does not contain the site's call). Every Vela operation has
+      // at least two legs — the call and the fee — so an overwrite here would
+      // offer the slide for exactly the tampered operation it exists to stop.
+      view.refuse = view.refuse || view.legs.some(function (leg) { return leg.view.refuse; });
       view.legs.forEach(function (leg) {
         leg.view.warnings.forEach(function (w) {
           if (w.tone === 'danger') view.warnings.push(w);

@@ -354,6 +354,51 @@ try {
       /0x9A8b|0x9a8b/.test(String(await page.ev("document.body.textContent"))));
   }
 
+  // === 3d. the same tamper, in a real Vela operation: the call AND the fee ==
+  //
+  // Every operation the wallet builds is a MultiSend of the calls plus the
+  // fee leg, so the refusal above must survive a batch — it once did not:
+  // reading the legs overwrote it and the slide came back (desktop e2e).
+  {
+    const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+    const ALICE = '0xaF5e8917831Ef08A64e18b2Cde9f8f5d32c7b3e1';
+    const ATTACKER = '0x9A8b7C6d5E4F3a2B1c0D9e8F7a6B5c4D3e2F1a09';
+    const RELAYER = '0xee2cca98ecbff34663591a925968fa4db5a1f0dd';
+    const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
+    const asked = lib.encode.call('transfer(address,uint256)', [ALICE, 1000000000n]);
+    const swapped = lib.encode.call('transfer(address,uint256)', [ATTACKER, 1000000000n]);
+    const leg = (to, value, data) => {
+      const body = data.replace(/^0x/, '');
+      return '00' + to.replace(/^0x/, '').toLowerCase() +
+        value.toString(16).padStart(64, '0') + (body.length / 2).toString(16).padStart(64, '0') + body;
+    };
+    const packed = '0x' + leg(USDC, 0n, swapped) + leg(RELAYER, 10n ** 16n, '0x');
+    const batch = lib.encode.call('multiSend(bytes)', [packed]);
+    const context = {
+      chainName: 'Ethereum', chainId: 1, account: SAFE,
+      operation: {
+        feeLegIndex: 1,
+        userOp: {
+          sender: SAFE, nonce: '0x7', initCode: '0x',
+          callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [lib.safeop ? lib.safeop.MULTI_SEND : '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526', 0n, batch, 1]),
+          verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
+          maxFeePerGas: '1', maxPriorityFeePerGas: '1', paymasterAndData: '0x',
+        },
+      },
+    };
+    const intent = {
+      method: 'wallet_sendCalls', origin: 'https://app.uniswap.org',
+      params: [{ version: '1.0', chainId: '0x1', from: SAFE, calls: [{ to: USDC, value: '0x0', data: asked }] }],
+    };
+    const page = await Page.open('https://getvela.app/sign.html?ch=url&lang=en#i=' +
+      b64url(JSON.stringify({ intent, context })));
+    await sleep(1400);
+    const refused = await page.ev("document.querySelector('.slide').classList.contains('slide-off')");
+    const warnings = String(await page.ev("[...document.querySelectorAll('.warning-text')].map(n => n.textContent).join(' | ')"));
+    check('tamper: caught in a two-leg operation (the call and the fee) too', refused && /altered during assembly/.test(warnings),
+      warnings.slice(0, 80));
+  }
+
   // === 5. the phones' channel: a WebSocket on the app's loopback ==========
   //
   // The app's side is vela-core's own connection (the one Android and iOS

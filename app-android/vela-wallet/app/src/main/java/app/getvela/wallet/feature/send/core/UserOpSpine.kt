@@ -93,14 +93,15 @@ class UserOpSpine(
      */
     private suspend fun ceremony(
         challenge: ByteArray,
+        chainId: Int,
         account: String,
         pinned: WalletKeyRecord,
         keys: List<WalletKeyRecord>,
-        request: () -> String,
+        request: (ClearSignerLabels) -> String,
     ): Assertion = try {
         if (signMethod() == CLEAR_SIGNER) {
             val channel = clearSigner() ?: other("The Clear Signer cannot be opened here")
-            val requestJson = runCatching(request).getOrElse { error ->
+            val requestJson = runCatching { request(channel.describe(chainId, account)) }.getOrElse { error ->
                 if (error is Refused) throw error
                 other(error.message ?: "The Clear Signer's request could not be built")
             }
@@ -183,13 +184,13 @@ class UserOpSpine(
         val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
             .getOrElse { other(it.message ?: "The message could not be hashed") }
         signingStarted()
-        val assertion = ceremony(challenge, account, pinned, keys) {
+        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels ->
             val asked = intent ?: other("The Clear Signer needs the page's own request")
             clearSignerRequest(
                 ClearSignerInput(
                     method = asked.method, paramsJson = asked.paramsJson, origin = asked.origin,
-                    chainId = chainId.toUInt(), chainName = null, nativeSymbol = null,
-                    account = account, accountName = null,
+                    chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
+                    account = account, accountName = labels.accountName,
                     credentialIdsHex = keys.map { it.credentialId }, calls = emptyList(),
                 ),
                 null,
@@ -287,12 +288,12 @@ class UserOpSpine(
         val challenge = userOpSafeOpHash(draft, chainId.toUInt())
         signingStarted()
         val assembled = draft
-        val assertion = ceremony(challenge, account, pinned, keys) {
+        val assertion = ceremony(challenge, chainId, account, pinned, keys) { labels ->
             clearSignerRequest(
                 ClearSignerInput(
                     method = intent?.method.orEmpty(), paramsJson = intent?.paramsJson ?: "[]", origin = intent?.origin.orEmpty(),
-                    chainId = chainId.toUInt(), chainName = null, nativeSymbol = null,
-                    account = account, accountName = null,
+                    chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
+                    account = account, accountName = labels.accountName,
                     credentialIdsHex = keys.map { it.credentialId }, calls = calls,
                 ),
                 assembled,

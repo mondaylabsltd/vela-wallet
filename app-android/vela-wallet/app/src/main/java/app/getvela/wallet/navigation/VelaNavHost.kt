@@ -655,6 +655,15 @@ fun VelaNavHost(
                         }
                     }
                 }
+                // …and no sheet to say why nothing was signed: the sentence
+                // goes up as a toast (the dApp sheet shows it in place).
+                val toastContext = LocalContext.current
+                LaunchedEffect(clearSignerNotice) {
+                    val notice = clearSignerNotice
+                    if (notice != null && application.container.signing.value == null) {
+                        android.widget.Toast.makeText(toastContext, notice, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
                 // A send the person started has no signing sheet: the Clear
                 // Signer's waiting card stands on its own while the page is open.
                 if (clearSignerWaiting && signingController == null) {

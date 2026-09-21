@@ -136,8 +136,9 @@ class ClearSignerChannelTest {
             }
         }
         val failure = failureOf { channel.sign(request, digest, keys) }
-        assertEquals(FailureKind.Other, failure.kind)
-        assertEquals("mismatch", failure.message)
+        // The request stays open (contract §5): a cancelled ceremony, the reason on the notice.
+        assertEquals(FailureKind.Cancelled, failure.kind)
+        assertEquals("mismatch", channel.notice.value)
     }
 
     @Test

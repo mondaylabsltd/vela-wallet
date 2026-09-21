@@ -70,6 +70,24 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!--
+        Spec 071: the Clear Signer opens its page in a Custom Tab. Which
+        browsers can host one is a package query, and Android 11+ answers it
+        only for what the manifest declares — without this the list is empty
+        and the page falls to the system chooser, where apps that merely claim
+        https links (a chat app, another wallet) sit beside the browsers.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:name=".VelaWalletApplication"
         android:allowBackup="false"

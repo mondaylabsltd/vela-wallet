@@ -34,6 +34,13 @@ window.VelaCS = window.VelaCS || {};
     59144: 'Linea', 534352: 'Scroll', 4217: 'Tempo',
   };
 
+  // Each chain's own coin. Tempo has none (fees are paid in a stablecoin), so
+  // it is absent rather than guessed.
+  var NATIVE = {
+    1: 'ETH', 10: 'ETH', 56: 'BNB', 100: 'xDAI', 137: 'POL', 8453: 'ETH',
+    42161: 'ETH', 43114: 'AVAX', 59144: 'ETH', 534352: 'ETH',
+  };
+
   var CONTACTS = {
     '0x88cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894': { name: 'Account 1', kind: 'own' },
     '0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1': { name: 'Alice Chen', kind: 'contact' },
@@ -179,6 +186,7 @@ window.VelaCS = window.VelaCS || {};
   ns.registry = {
     chains: CHAINS,
     chainName: function (chainId) { return CHAINS[chainId] || null; },
+    nativeSymbol: function (chainId) { return NATIVE[chainId] || null; },
     tokens: TOKENS,
     contracts: CONTRACTS,
     contacts: CONTACTS,
