@@ -1110,8 +1110,10 @@ fun VelaNavHost(
                             onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
                             onStatusClick = {
                                 // Spec 048: the status line's rescue — the RPC fix when a network failed, the per-chain detail otherwise.
+                                // The core's `banner_chain_ids` (failed MINUS rate-limited), the chains the line
+                                // just named: a rate limit heals on its own and never earns the fix sheet.
                                 application.container.pendingSettingsOverlay.value =
-                                    if (application.container.pool.view.value.failed_chains.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
+                                    if (balances.banner_chain_ids.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
                                 navController.push(VelaDestinations.SETTINGS)
                             },
                         )
@@ -1499,6 +1501,14 @@ fun VelaNavHost(
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                // The RPC fix the home asked for (the web's `openRpcFix`): which chain,
+                // the URL being typed until it is saved, and whether a save went out
+                // from the sheet (its probe then decides "restored").
+                var rescueChainId by remember { mutableStateOf<Long?>(null) }
+                var rpcDraft by remember { mutableStateOf<String?>(null) }
+                var rpcSaved by remember { mutableStateOf(false) }
+                // The row's override fields are loaded on expand, as the network page does.
+                LaunchedEffect(rescueChainId) { rescueChainId?.let { settings.expandOverride(it) } }
                 val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
                 LaunchedEffect(Unit) {
                     settings.refreshCurrency()
@@ -1563,7 +1573,17 @@ fun VelaNavHost(
                     // Spec 048: the home's status line asked for a rescue sheet.
                     application.container.pendingSettingsOverlay.value?.let { requested ->
                         application.container.pendingSettingsOverlay.value = null
+                        if (requested == SettingsOverlay.RpcFix) {
+                            rescueChainId = application.container.wallet.balances.value.banner_chain_ids.firstOrNull()?.toLong()
+                            rpcDraft = null
+                            rpcSaved = false
+                        }
                         m = m.copy(overlay = requested)
+                    }
+                    rescueChainId?.let { id ->
+                        networks.networks.firstOrNull { it.chain_id == id }?.let { row ->
+                            m = m.copy(rpcFix = SettingsLive.rpcFix(m.rpcFix, row, rpcDraft, rpcSaved, strings))
+                        }
                     }
                     // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
@@ -1681,6 +1701,25 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { settings.resetEndpoints() },
+                        onRpcFixField = { value -> rpcDraft = value },
+                        onRpcFixPrimary = {
+                            rescueChainId?.let { chainId ->
+                                val row = networks.networks.firstOrNull { it.chain_id == chainId }
+                                if (row != null && SettingsLive.rpcFixRestored(row, rpcDraft, rpcSaved)) {
+                                    // The chain answers again: clear its failure in the balance
+                                    // core and read now — its own retry is throttled like any
+                                    // other fetch, and the person just watched the probe succeed.
+                                    application.container.wallet.fixChainResolved(chainId.toInt())
+                                    application.container.wallet.refresh(force = true)
+                                    rescueChainId = null
+                                } else {
+                                    rpcDraft?.let { settings.editOverride(chainId, NetOverrideField.Rpc, it) }
+                                    settings.commitOverride(chainId)
+                                    rpcDraft = null
+                                    rpcSaved = true
+                                }
+                            }
+                        },
                     ),
                 )
             }

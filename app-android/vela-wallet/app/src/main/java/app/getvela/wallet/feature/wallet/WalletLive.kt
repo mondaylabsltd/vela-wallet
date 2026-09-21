@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.wallet.core.BalanceNotice
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
@@ -70,7 +71,7 @@ object WalletLive {
         val rows = assetRows(view, chainNames, currency)
         val groups = activity(feed, strings, now)
         return fallback.copy(
-            balance = balance(fallback.balance, view, strings, money),
+            balance = balance(fallback.balance, view, strings, money, chainNames),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
             ),
@@ -231,8 +232,9 @@ object WalletLive {
         view: BalanceView,
         strings: VelaStrings,
         money: Money,
+        chainNames: Map<Int, String>,
     ): BalanceModel {
-        val live = balanceVisible(fallback, view, strings, money)
+        val live = balanceVisible(fallback, view, strings, money, chainNames)
         // Spec 048 (device-found): hidden used to return the FIXTURE with a hidden
         // state — "$1,383 · USD" under the eye. Hidden is the live label with
         // the figures masked.
@@ -246,9 +248,15 @@ object WalletLive {
         view: BalanceView,
         strings: VelaStrings,
         money: Money,
+        chainNames: Map<Int, String>,
     ): BalanceModel {
 
-        val total = view.display_total_usd
+        // The core withholds the display total while a fetch is out; the
+        // last-known cached total paints first and live replaces it
+        // (max(live, cached) is the core's rule — this only chooses what to
+        // show meanwhile, as the web's `liveBalance` does). A skeleton over a
+        // figure the device already knows was a hero that blinked on every open.
+        val total = view.display_total_usd ?: view.cached_total_usd
 
         // **Unreachable is not zero.** A first launch that could read nothing,
         // with nothing cached: the core's figure here is 0.0 — `total` is not
@@ -307,18 +315,55 @@ object WalletLive {
             )
         }
 
-        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.DOWN)
+        // `valueOf`, not the constructor: `BigDecimal(12.34)` is the binary
+        // double's exact expansion, 12.3399…, and cutting THAT printed $12.33.
+        val rounded = BigDecimal.valueOf(money.convert(total)).setScale(2, RoundingMode.DOWN)
         val whole = rounded.toBigInteger()
         val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
+        // A zero is "live" only once EVERY chain has answered: a zero with a
+        // chain unread (partial) or unknown is not a listening wallet, it is an
+        // unknown one — and a cached zero is not live at all.
+        val zeroLive = rounded.signum() == 0 && view.display_total_usd != null &&
+            !view.balance_unknown && !view.balance_partial && view.tokens.isEmpty()
         return fallback.copy(
-            state = if (rounded.signum() == 0) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
+            state = if (zeroLive) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
             integer = money.symbol + Formats.current.groupDigits(whole.toString()),
             decimals = cents.toString().padStart(2, '0'),
             decimalMark = Formats.current.decimalMark(),
             // The label beside the figure names the currency it is in.
             currency = money.code,
-            status = fallback.status?.takeIf { view.refreshing || view.balance_partial },
+            liveText = if (zeroLive) strings.t(I18nKeys.Wallet.LIVE_INDICATOR) else null,
+            status = balanceStatus(view, strings, chainNames),
         )
+    }
+
+    /**
+     * The one line under the hero, most actionable first (the web's
+     * `liveBalance`). `banner_chain_ids` is already failed MINUS rate-limited —
+     * the core's exclusion: a rate limit heals on its own, so the balance
+     * quietly stays on cache with no "fix your RPC" nag — so a chain named here
+     * really is unreachable and the person can fix its RPC. Then the refresh
+     * (or the cached figure standing in for the live one), then the core's
+     * notice.
+     */
+    internal fun balanceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
+        val banner = view.banner_chain_ids
+        val onCache = view.display_total_usd == null && view.cached_total_usd != null
+        return when {
+            banner.size == 1 -> BalanceStatusModel(
+                BalanceStatusKind.Warning,
+                strings.t(I18nKeys.Wallet.RPC_UNAVAILABLE_SINGLE, mapOf("name" to (chainNames[banner[0]] ?: banner[0].toString()))),
+            )
+            banner.size > 1 -> BalanceStatusModel(
+                BalanceStatusKind.Warning,
+                strings.t(I18nKeys.SettingsUi.RPC_UNAVAILABLE_MULTIPLE, mapOf("count" to banner.size.toString())),
+            )
+            view.refreshing || onCache || view.notice == BalanceNotice.StillUpdating ->
+                BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
+            view.notice == BalanceNotice.Unpriced ->
+                BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
+            else -> null
+        }
     }
 
     /**

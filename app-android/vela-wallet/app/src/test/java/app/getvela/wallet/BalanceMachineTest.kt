@@ -561,6 +561,47 @@ class BalanceMachineTest {
         assertNull(view.tokens.first { it.symbol == "NEWC" }.price_usd)
     }
 
+    /**
+     * The hero names the chain that is really down — and only that one.
+     *
+     * A dead RPC and a rate-limited one both leave a chain unread, but only
+     * the first is the person's to fix: the core's `banner_chain_ids` is failed
+     * MINUS rate-limited, and the hero's line is worded from it. Then the fix:
+     * `FixChainResolved` drops the chain and reads again, so the repaired
+     * chain stops being named without waiting for the next throttled refresh
+     * (the Android rescue never sent it).
+     */
+    @Test
+    fun aDeadChainIsNamedARateLimitedOneIsNotAndTheFixClearsIt() {
+        val gnosisDown = java.util.concurrent.atomic.AtomicBoolean(true)
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis"), row(137, "POL", "Polygon")),
+        ) { url, _ ->
+            when {
+                url.contains("chain-100") && gnosisDown.get() -> FakeRpcTransport.network()
+                url.contains("chain-137") -> FakeRpcTransport.httpError(429)
+                else -> FakeRpcTransport.body("0x14d1120d7b160000")
+            }
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val failing = h.host.settle { it.failed_chain_ids.containsAll(listOf(100, 137)) && it.rate_limited_chain_ids.contains(137) }
+        assertEquals("the rate-limited chain never reaches the banner", listOf(100), failing.banner_chain_ids)
+        val strings = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
+            java.io.File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes()
+        }.apply { initialize("en") }
+        val line = app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(failing, strings, mapOf(100 to "Gnosis", 137 to "Polygon"))
+        assertEquals("Gnosis RPC unavailable", line?.text)
+
+        gnosisDown.set(false)
+        h.host.dispatch(BalanceEvent.FixChainResolved(100), BalanceEvent.serializer())
+        // The drop is the core's immediate answer; whether the re-read then
+        // lands is the pool's cooldown, which this test does not pin.
+        val fixed = h.host.settle { !it.failed_chain_ids.contains(100) }
+        assertFalse(fixed.banner_chain_ids.contains(100))
+        assertEquals(null, app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(fixed, strings, emptyMap())?.takeIf { it.text.contains("Gnosis") })
+    }
+
     private companion object {
         const val ADDRESS = "0x1111111111111111111111111111111111111111"
         const val TIMEOUT = 20_000L

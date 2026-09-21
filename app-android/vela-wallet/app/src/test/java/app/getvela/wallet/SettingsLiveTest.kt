@@ -408,4 +408,39 @@ class SettingsLiveTest {
             Formats.current = saved
         }
     }
+
+    /**
+     * SR2 is THIS chain's fix: the fixture drew Polygon whichever chain the
+     * home named. Save & Retry until the saved URL's probe says ok; only then
+     * Done — the press that tells the balance core the chain is fixed.
+     */
+    @Test
+    fun `the rpc fix names the failing chain and says restored only after its own save answers`() {
+        val fallback = base().rpcFix
+        val gnosis = row(100, "Gnosis", custom = false).copy(rpc_url = "https://rpc.gnosis.example", native_symbol = "XDAI")
+
+        val failing = SettingsLive.rpcFix(fallback, gnosis, draft = null, saved = false, strings = strings)
+        assertEquals("Gnosis", failing.name)
+        assertTrue(failing.meta, failing.meta.contains("100") && failing.meta.endsWith("XDAI"))
+        assertEquals("https://rpc.gnosis.example", failing.field.value)
+        assertEquals(SettingsTone.Error, failing.badge.tone)
+        assertEquals(false, failing.restored)
+
+        // Typing shows the draft; a probe that was already ok before any save is not a repair.
+        val healthy = gnosis.copy(rpc_health = NetProbeHealth.Ok(120))
+        assertEquals("https://new.example", SettingsLive.rpcFix(fallback, healthy, "https://new.example", saved = false, strings = strings).field.value)
+        assertEquals(false, SettingsLive.rpcFix(fallback, healthy, null, saved = false, strings = strings).restored)
+
+        // Saved and still probing: neither offline nor restored.
+        val checking = SettingsLive.rpcFix(fallback, gnosis.copy(rpc_health = NetProbeHealth.Checking), null, saved = true, strings = strings)
+        assertEquals(SettingsTone.Neutral, checking.badge.tone)
+        assertEquals(false, checking.restored)
+
+        val restored = SettingsLive.rpcFix(fallback, healthy, null, saved = true, strings = strings)
+        assertTrue(restored.restored)
+        assertEquals(SettingsTone.Ok, restored.badge.tone)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.COMMON_DONE), restored.primary)
+        assertTrue(restored.providers.isEmpty())
+        assertNull(restored.report)
+    }
 }
