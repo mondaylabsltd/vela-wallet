@@ -767,6 +767,8 @@ object I18nKeys {
         const val NETWORK_ONLINE = "settings.networks.online"
         const val NETWORK_SLOW = "settings.networks.slow"
         const val NETWORK_OFFLINE = "settingsModals.health.offline"
+        const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
+        const val HEALTH_INVALID = "settingsModals.health.invalid"
 
         /** The Ethereum backup row (spec 062). */
         const val BACKUP_TITLE = "settingsModals.backup.title"
