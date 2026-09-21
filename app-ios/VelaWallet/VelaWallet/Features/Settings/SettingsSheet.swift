@@ -20,9 +20,11 @@ struct SettingsSheet: View {
     /// A row picked in one of the five select sheets. Absent in the gallery,
     /// where the sheets are pictures of a choice already made.
     var onPick: ((SettingsOverlay, String) -> Void)?
-    /// 全部清除, and the erase this app will not run without a person.
+    /// 全部清除, and the erase this app will not run without a person. The
+    /// erase answers whether it happened: `false` keeps this sheet up, its
+    /// callout saying what did not go (spec 072).
     var onClearCaches: (() -> Void)?
-    var onErase: (() -> Void)?
+    var onErase: (() -> Bool)?
     /// An account row tapped in the switcher.
     var onSelectAccount: ((String) -> Void)?
     var onAccountCreate: (() -> Void)?
@@ -33,13 +35,20 @@ struct SettingsSheet: View {
     var onCommitRpc: (() -> Void)?
     /// SR3's 立即重试, per chain id.
     var onRetryChain: ((String) -> Void)?
-    /// The storage row waiting on an answer, and what 清除 does to it.
-    var storageConfirm: ConfirmSheetModel?
-    var onConfirmStorage: (() -> Void)?
+    /// The destructive action waiting on an answer — a storage row's 清除, a
+    /// network's bin, "reset to defaults" — and its "yes".
+    var pendingConfirm: ConfirmSheetModel?
+    var onConfirmPending: (() -> Void)?
     /// The Clear Signer page's Save (spec 071): `true` when the core took the
     /// address, which is what closes the sheet. Absent in the gallery.
     var onSaveSignerUrl: ((String) -> Bool)?
     var onResetSignerUrl: (() -> Void)?
+    /// The language sheet's "suggest a fix". Absent in the gallery.
+    var onOpenLink: ((String) -> Void)?
+
+    /// Where "suggest a fix" goes — the issue tracker the web links (its
+    /// `SelectSheetBody`), since the corpus lives in that repository.
+    static let contributeUrl = "https://github.com/mondaylabsltd/vela-wallet/issues"
 
     var body: some View {
         // The ✕ sits in the host, not in each body: every sheet opens with a
@@ -63,7 +72,8 @@ struct SettingsSheet: View {
                 case .language:
                     SelectSheetBody(
                         sheet: model.languageSheet,
-                        onPick: { id in onPick?(.language, id) }
+                        onPick: { id in onPick?(.language, id) },
+                        onFooterLink: onOpenLink.map { open in { open(Self.contributeUrl) } }
                     )
                 case .currency:
                     SelectSheetBody(
@@ -110,14 +120,15 @@ struct SettingsSheet: View {
                         sheet: model.timeSheet,
                         onPick: { id in onPick?(.timeFormat, id) }
                     )
-                case .clearStorageItem:
-                    // Built from what the row already says — its own label, its
-                    // group's warning, its own action word. No new sentence is
-                    // invented for a question the page can already ask.
-                    if let confirm = storageConfirm {
+                case .clearStorageItem, .removeNetwork, .resetEndpoints:
+                    // Built from what the page already says — a row's own
+                    // label and action word, the network's name, the fields
+                    // "reset" replaces. The screen holds the question and what
+                    // "yes" does; this only asks it.
+                    if let confirm = pendingConfirm {
                         ConfirmSheetBody(
                             sheet: confirm,
-                            onConfirm: { onConfirmStorage?(); onDismiss() },
+                            onConfirm: { onConfirmPending?(); onDismiss() },
                             onCancel: onDismiss
                         )
                     }
@@ -132,9 +143,11 @@ struct SettingsSheet: View {
                         sheet: model.eraseSheet,
                         // Wired, and **never run on the founder's phone**. The
                         // confirm is drawn and the action exists; verifying it
-                        // means reading the code, not erasing a device with a
-                        // real wallet on it.
-                        onConfirm: { onErase?(); onDismiss() },
+                        // means reading the code and the simulator, not erasing
+                        // a device with a real wallet on it. An erase that
+                        // left something behind keeps the sheet up — its
+                        // callout says so and the button is still there.
+                        onConfirm: { if onErase?() != false { onDismiss() } },
                         onCancel: onDismiss
                     )
                 case .feedback:
@@ -204,6 +217,8 @@ private struct SelectSheetBody: View {
     @Environment(\.theme) private var theme
     let sheet: SelectSheetModel
     var onPick: ((String) -> Void)?
+    /// The footer link's destination. `nil` draws it as the label it was.
+    var onFooterLink: (() -> Void)?
 
     var body: some View {
         SheetTitle(title: sheet.title, subtitle: sheet.subtitle)
@@ -226,7 +241,17 @@ private struct SelectSheetBody: View {
                 .foregroundStyle(theme.fgSubtle)
                 .padding(.top, Tokens.Space.s16)
         }
-        if let link = sheet.footerLink {
+        if let link = sheet.footerLink, let onFooterLink {
+            Button(action: onFooterLink) {
+                Text(link)
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.infoBase)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isLink)
+            .padding(.top, Tokens.Space.s8)
+        } else if let link = sheet.footerLink {
             Text(link)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.infoBase)

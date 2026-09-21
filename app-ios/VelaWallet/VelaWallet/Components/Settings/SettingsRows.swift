@@ -200,8 +200,13 @@ private struct RowTap: ViewModifier {
 struct SettingsNetworkRow: View {
     @Environment(\.theme) private var theme
     let row: SettingsNetworkRowModel
+    /// The bin's accessible name. It was handed "Add network" (spec 072):
+    /// VoiceOver read the one destructive control on the row as its opposite.
     var deleteLabel: String?
     var onTap: (String) -> Void = { _ in }
+    /// The bin, as a button — the host asks before anything goes. `nil` keeps
+    /// the drawn glyph, which is what every gallery board shows.
+    var onRemove: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -229,7 +234,16 @@ struct SettingsNetworkRow: View {
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if let badge = row.badge { StatusPill(pill: badge) }
-                if row.removable, let deleteLabel {
+                if row.removable, let deleteLabel, let onRemove {
+                    Button { onRemove(row.id) } label: {
+                        LucideIcon(.trash2, size: LucideIconSize.action)
+                            .foregroundStyle(theme.fgSubtle)
+                            .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(deleteLabel)
+                } else if row.removable, let deleteLabel {
                     LucideIcon(.trash2, size: LucideIconSize.action)
                         .foregroundStyle(theme.fgSubtle)
                         .accessibilityLabel(deleteLabel)
@@ -383,8 +397,21 @@ struct StorageGroupView: View {
 struct KeyValueRow: View {
     @Environment(\.theme) private var theme
     let row: KeyValueRowModel
+    /// An external row's destination opens here. `nil` — the gallery — keeps
+    /// the row a picture of a link.
+    var onOpen: ((String) -> Void)?
 
     var body: some View {
+        if row.external, let onOpen {
+            Button { onOpen(row.value) } label: { content.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isLink)
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tokens.Space.s12) {
                 Text(row.label)

@@ -48,6 +48,12 @@ enum SettingsOverlay: Equatable, Identifiable {
     case signWith
     /// The Clear Signer page (spec 071): an address, saved or refused.
     case signerPage
+    /// A custom network's bin, asked before it happens (spec 072 FR-010): the
+    /// tap used to be a drawing of a bin, and the other shells removed on it.
+    case removeNetwork
+    /// "Reset to defaults" on the endpoints page, asked first — it replaces
+    /// every address somebody typed there.
+    case resetEndpoints
 
     var id: String { String(describing: self) }
 }
@@ -272,6 +278,9 @@ struct AddNetworkModel {
     var primary: String?
     var secondary: String?
     var recheck: String?
+    /// "Retry" — a primary that checks again rather than adds, for a chain
+    /// the probes could not reach (never worded "incompatible").
+    var retry: String?
 }
 
 struct ProviderCardModel: Identifiable {
@@ -281,9 +290,9 @@ struct ProviderCardModel: Identifiable {
     let field: UrlFieldModel
     var support: String?
     var link: String?
-    /// 测试 — the core asks the provider whether the key works. Absent in the
-    /// gallery, where nothing can be asked.
-    var test: String?
+    /// Where "Get a key" goes — the provider's own page. Set only while no key
+    /// is saved; with one, the field's own action ("Check key") is the test.
+    var linkUrl: String?
 }
 
 struct RpcProvidersModel {
@@ -519,7 +528,8 @@ struct SettingsScreenModel {
     var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
     var rpcProviders: RpcProvidersModel
-    let endpoints: EndpointsModel
+    /// `var` since 072: the four fields are the core's view, not the drawing.
+    var endpoints: EndpointsModel
     /// `var` since 058: both are MEASURED now — the storage page from the
     /// store's own keys, the about page from the running build.
     var storage: StorageModel
@@ -537,7 +547,8 @@ struct SettingsScreenModel {
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel
     let clearCachesSheet: ConfirmSheetModel
-    let eraseSheet: ConfirmSheetModel
+    /// `var` since 072: an erase that left something behind says so here.
+    var eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
     /// `var` since 058: the hero's status line opens these, and what they show

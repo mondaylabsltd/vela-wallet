@@ -110,6 +110,9 @@ struct VelaStore {
         static let localePrefs = "vela.localePrefs"
         static let avatarStyle = "vela.avatarStyle"
         static let textScale = "vela.textScale"
+        /// The desktop's old spelling of `localePrefs` (`{number,date,time}`).
+        /// Read once, by the core's migration, and removed (spec 072).
+        static let legacyFormats = "vela.formats"
     }
 
     private let defaults: UserDefaults
@@ -183,6 +186,15 @@ struct VelaStore {
         defaults.dictionaryRepresentation().keys
             .filter { $0.hasPrefix("vela.") }
             .sorted()
+    }
+
+    /// Every key the store holds, ours or not — for the scans that ask the
+    /// core what each key IS (the storage page's rows, "clear all caches",
+    /// the erase). Unfiltered on purpose: `recipient_id:` is ours and outside
+    /// the `vela.` namespace, and deciding that is the catalog's job, not a
+    /// second prefix rule here.
+    func everyKey() -> [String] {
+        Array(defaults.dictionaryRepresentation().keys)
     }
 
     /// The raw stored text, whatever its shape — what the storage page weighs.

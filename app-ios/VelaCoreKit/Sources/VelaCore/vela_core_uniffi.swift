@@ -6776,6 +6776,60 @@ public func FfiConverterTypeAbiValue_lower(_ value: AbiValue) -> RustBuffer {
 }
 
 
+public struct BytesDisplay: Equatable, Hashable {
+    public var value: Double
+    public var unit: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(value: Double, unit: String) {
+        self.value = value
+        self.unit = unit
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BytesDisplay: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBytesDisplay: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BytesDisplay {
+        return
+            try BytesDisplay(
+                value: FfiConverterDouble.read(from: &buf), 
+                unit: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BytesDisplay, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.value, into: &buf)
+        FfiConverterString.write(value.unit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesDisplay_lift(_ buf: RustBuffer) throws -> BytesDisplay {
+    return try FfiConverterTypeBytesDisplay.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBytesDisplay_lower(_ value: BytesDisplay) -> RustBuffer {
+    return FfiConverterTypeBytesDisplay.lower(value)
+}
+
+
 /**
  * The parsed BLE proximity advert that named this QR's phone.
  */
@@ -7498,6 +7552,63 @@ public func FfiConverterTypeIdenticonParams_lower(_ value: IdenticonParams) -> R
 
 
 /**
+ * One store write: `value: None` removes the key.
+ */
+public struct KeyWrite: Equatable, Hashable {
+    public var key: String
+    public var value: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: String, value: String?) {
+        self.key = key
+        self.value = value
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension KeyWrite: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyWrite: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyWrite {
+        return
+            try KeyWrite(
+                key: FfiConverterString.read(from: &buf), 
+                value: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyWrite, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterOptionString.write(value.value, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyWrite_lift(_ buf: RustBuffer) throws -> KeyWrite {
+    return try FfiConverterTypeKeyWrite.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyWrite_lower(_ value: KeyWrite) -> RustBuffer {
+    return FfiConverterTypeKeyWrite.lower(value)
+}
+
+
+/**
  * The resolve state after a language change.
  */
 public struct LanguageState: Equatable, Hashable {
@@ -7950,6 +8061,111 @@ public func FfiConverterTypePasskeyDirectoryEntry_lower(_ value: PasskeyDirector
 
 
 /**
+ * The five display preferences, read from the store whatever its spelling.
+ */
+public struct PrefsRecord: Equatable, Hashable {
+    /**
+     * `system` | `light` | `dark`.
+     */
+    public var theme: String
+    /**
+     * `auto`, or a locale tag.
+     */
+    public var language: String
+    /**
+     * `initials` | `identicon`.
+     */
+    public var avatarStyle: String
+    /**
+     * `compact` … `xlarge`.
+     */
+    public var textScale: String
+    public var textScaleFactor: Double
+    public var numberFormat: String
+    public var dateFormat: String
+    public var timeFormat: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `system` | `light` | `dark`.
+         */theme: String, 
+        /**
+         * `auto`, or a locale tag.
+         */language: String, 
+        /**
+         * `initials` | `identicon`.
+         */avatarStyle: String, 
+        /**
+         * `compact` … `xlarge`.
+         */textScale: String, textScaleFactor: Double, numberFormat: String, dateFormat: String, timeFormat: String) {
+        self.theme = theme
+        self.language = language
+        self.avatarStyle = avatarStyle
+        self.textScale = textScale
+        self.textScaleFactor = textScaleFactor
+        self.numberFormat = numberFormat
+        self.dateFormat = dateFormat
+        self.timeFormat = timeFormat
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PrefsRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrefsRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrefsRecord {
+        return
+            try PrefsRecord(
+                theme: FfiConverterString.read(from: &buf), 
+                language: FfiConverterString.read(from: &buf), 
+                avatarStyle: FfiConverterString.read(from: &buf), 
+                textScale: FfiConverterString.read(from: &buf), 
+                textScaleFactor: FfiConverterDouble.read(from: &buf), 
+                numberFormat: FfiConverterString.read(from: &buf), 
+                dateFormat: FfiConverterString.read(from: &buf), 
+                timeFormat: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrefsRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.theme, into: &buf)
+        FfiConverterString.write(value.language, into: &buf)
+        FfiConverterString.write(value.avatarStyle, into: &buf)
+        FfiConverterString.write(value.textScale, into: &buf)
+        FfiConverterDouble.write(value.textScaleFactor, into: &buf)
+        FfiConverterString.write(value.numberFormat, into: &buf)
+        FfiConverterString.write(value.dateFormat, into: &buf)
+        FfiConverterString.write(value.timeFormat, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrefsRecord_lift(_ buf: RustBuffer) throws -> PrefsRecord {
+    return try FfiConverterTypePrefsRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrefsRecord_lower(_ value: PrefsRecord) -> RustBuffer {
+    return FfiConverterTypePrefsRecord.lower(value)
+}
+
+
+/**
  * A QR code as a square module matrix, row-major, `true` = dark. The same
  * encoder the desktop draws with, so every platform renders the same code for
  * the same payload; the shells own only pixels.
@@ -8079,6 +8295,69 @@ public func FfiConverterTypeSafeAddressInfo_lift(_ buf: RustBuffer) throws -> Sa
 #endif
 public func FfiConverterTypeSafeAddressInfo_lower(_ value: SafeAddressInfo) -> RustBuffer {
     return FfiConverterTypeSafeAddressInfo.lower(value)
+}
+
+
+/**
+ * One drawn row of the storage page.
+ */
+public struct StorageItemRecord: Equatable, Hashable {
+    public var id: String
+    /**
+     * `user` | `cache` | `sessions`.
+     */
+    public var group: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, 
+        /**
+         * `user` | `cache` | `sessions`.
+         */group: String) {
+        self.id = id
+        self.group = group
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StorageItemRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStorageItemRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StorageItemRecord {
+        return
+            try StorageItemRecord(
+                id: FfiConverterString.read(from: &buf), 
+                group: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StorageItemRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.group, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageItemRecord_lift(_ buf: RustBuffer) throws -> StorageItemRecord {
+    return try FfiConverterTypeStorageItemRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStorageItemRecord_lower(_ value: StorageItemRecord) -> RustBuffer {
+    return FfiConverterTypeStorageItemRecord.lower(value)
 }
 
 
@@ -8247,6 +8526,60 @@ public func FfiConverterTypeTVar_lift(_ buf: RustBuffer) throws -> TVar {
 #endif
 public func FfiConverterTypeTVar_lower(_ value: TVar) -> RustBuffer {
     return FfiConverterTypeTVar.lower(value)
+}
+
+
+public struct TextScaleLevel: Equatable, Hashable {
+    public var name: String
+    public var factor: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, factor: Double) {
+        self.name = name
+        self.factor = factor
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TextScaleLevel: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTextScaleLevel: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextScaleLevel {
+        return
+            try TextScaleLevel(
+                name: FfiConverterString.read(from: &buf), 
+                factor: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TextScaleLevel, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterDouble.write(value.factor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextScaleLevel_lift(_ buf: RustBuffer) throws -> TextScaleLevel {
+    return try FfiConverterTypeTextScaleLevel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTextScaleLevel_lower(_ value: TextScaleLevel) -> RustBuffer {
+    return FfiConverterTypeTextScaleLevel.lower(value)
 }
 
 
@@ -10024,6 +10357,31 @@ fileprivate struct FfiConverterSequenceTypeCtapCredentialChoice: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeKeyWrite: FfiConverterRustBuffer {
+    typealias SwiftType = [KeyWrite]
+
+    public static func write(_ value: [KeyWrite], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKeyWrite.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KeyWrite] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KeyWrite]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKeyWrite.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeMulticall3Call: FfiConverterRustBuffer {
     typealias SwiftType = [Multicall3Call]
 
@@ -10124,6 +10482,31 @@ fileprivate struct FfiConverterSequenceTypeP256PublicKey: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeStorageItemRecord: FfiConverterRustBuffer {
+    typealias SwiftType = [StorageItemRecord]
+
+    public static func write(_ value: [StorageItemRecord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStorageItemRecord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StorageItemRecord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StorageItemRecord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStorageItemRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTVar: FfiConverterRustBuffer {
     typealias SwiftType = [TVar]
 
@@ -10141,6 +10524,31 @@ fileprivate struct FfiConverterSequenceTypeTVar: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeTVar.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeTextScaleLevel: FfiConverterRustBuffer {
+    typealias SwiftType = [TextScaleLevel]
+
+    public static func write(_ value: [TextScaleLevel], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeTextScaleLevel.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [TextScaleLevel] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [TextScaleLevel]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeTextScaleLevel.read(from: &buf))
         }
         return seq
     }
@@ -10193,6 +10601,32 @@ fileprivate struct FfiConverterSequenceTypeWalletKeyRecord: FfiConverterRustBuff
             seq.append(try FfiConverterTypeWalletKeyRecord.read(from: &buf))
         }
         return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDictionaryStringString: FfiConverterRustBuffer {
+    public static func write(_ value: [String: String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for (key, value) in value {
+            FfiConverterString.write(key, into: &buf)
+            FfiConverterString.write(value, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String: String] {
+        let len: Int32 = try readInt(&buf)
+        var dict = [String: String]()
+        dict.reserveCapacity(Int(len))
+        for _ in 0..<len {
+            let key = try FfiConverterString.read(from: &buf)
+            let value = try FfiConverterString.read(from: &buf)
+            dict[key] = value
+        }
+        return dict
     }
 }
 public func abiEncodeAddress(addressHex: String)throws  -> Data  {
@@ -11629,6 +12063,118 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
     )
 })
 }
+/**
+ * The `vela.localePrefs` record for three formats.
+ */
+public func prefsLocaleJson(numberFormat: String, dateFormat: String, timeFormat: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_locale_json(
+        FfiConverterString.lower(numberFormat),
+        FfiConverterString.lower(dateFormat),
+        FfiConverterString.lower(timeFormat),uniffiCallStatus
+    )
+})
+}
+/**
+ * The writes that bring an older shell's spellings to the shared record.
+ * Empty when the store already agrees — safe at every launch.
+ */
+public func prefsMigrations(entries: [String: String]) -> [KeyWrite]  {
+    return try!  FfiConverterSequenceTypeKeyWrite.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_migrations(
+        FfiConverterDictionaryStringString.lower(entries),uniffiCallStatus
+    )
+})
+}
+/**
+ * Read the preferences from the store's `vela.*` entries.
+ */
+public func prefsRead(entries: [String: String]) -> PrefsRecord  {
+    return try!  FfiConverterTypePrefsRecord_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_read(
+        FfiConverterDictionaryStringString.lower(entries),uniffiCallStatus
+    )
+})
+}
+/**
+ * The text-size slider's stops, in order.
+ */
+public func prefsTextScaleLevels() -> [TextScaleLevel]  {
+    return try!  FfiConverterSequenceTypeTextScaleLevel.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_text_scale_levels(uniffiCallStatus
+    )
+})
+}
+/**
+ * A byte count in 1024s, for the shell to format in the person's numbers.
+ */
+public func storageBytesDisplay(bytes: UInt64) -> BytesDisplay  {
+    return try!  FfiConverterTypeBytesDisplay_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_bytes_display(
+        FfiConverterUInt64.lower(bytes),uniffiCallStatus
+    )
+})
+}
+/**
+ * Would "clear all caches" remove this key?
+ */
+public func storageIsCacheKey(key: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_is_cache_key(
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+})
+}
+/**
+ * Would "erase this device" delete this key? Scan the namespace, keep the
+ * keep-list.
+ */
+public func storageIsErasableKey(key: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_is_erasable_key(
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+})
+}
+/**
+ * The row a key belongs to; `None` for the accounts and preferences.
+ */
+public func storageItemOfKey(key: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_item_of_key(
+        FfiConverterString.lower(key),uniffiCallStatus
+    )
+})
+}
+/**
+ * The rows, in the order the page draws them.
+ */
+public func storageItems() -> [StorageItemRecord]  {
+    return try!  FfiConverterSequenceTypeStorageItemRecord.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_items(uniffiCallStatus
+    )
+})
+}
+/**
+ * Records in a stored list value; `None` when it is not a list.
+ */
+public func storageRecordsIn(value: String) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_storage_records_in(
+        FfiConverterString.lower(value),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -11991,6 +12537,36 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_locale_json() != 53778) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_migrations() != 56839) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_read() != 11427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_text_scale_levels() != 49940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_bytes_display() != 9654) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_is_cache_key() != 23594) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_is_erasable_key() != 56136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_item_of_key() != 39080) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_items() != 33737) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_storage_records_in() != 32407) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_change_language() != 36683) {
