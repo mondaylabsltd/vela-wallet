@@ -47,6 +47,7 @@
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
+	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
 	import {
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -57,6 +58,8 @@
 		withLiveFeeSpeedDesktop,
 		withLiveNetworks,
 		withLiveNetworksDesktop,
+		withLiveSigning,
+		withLiveSigningDesktop,
 		withLiveStorage
 	} from '$lib/settings/live';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
@@ -155,6 +158,7 @@
 		void networkAdmin.boot();
 		void currency.boot();
 		void feeTierPreference.boot();
+		void signPreference.boot();
 		void balance.boot();
 		preferences.boot();
 		void refreshGrants();
@@ -304,6 +308,18 @@
 					feeTierPreference.choose(event.id);
 				}
 				return;
+			// Spec 071: how every signature starts, and the Clear Signer's page.
+			// The core refuses a method it does not offer and an address it would
+			// not open (saying why in its view); nothing is judged here.
+			case 'sign-with':
+				signPreference.chooseMethod(event.id);
+				return;
+			case 'signer-page':
+				signPreference.submitSignerUrl(event.text);
+				return;
+			case 'signer-page-reset':
+				signPreference.resetSignerUrl();
+				return;
 			case 'erase':
 				void erase();
 				return;
@@ -420,6 +436,7 @@
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
+		model = withLiveSigning(model, signPreference.view, m);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
@@ -454,6 +471,7 @@
 		// The desktop page reuses the phone sheet's rows — one list of tiers,
 		// one set of words, whichever layout is showing.
 		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
+		model = withLiveSigningDesktop(model, signPreference.view, liveHome.signWithSheet, m);
 		model = {
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }

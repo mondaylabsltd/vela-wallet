@@ -36,6 +36,7 @@
 	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
+	import SignerPageBody from './ui/SignerPageBody.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -107,6 +108,8 @@
 				return { title: model.localization.title, description: model.localization.description };
 			case 'fee-speed':
 				return { title: model.feeSpeed.title, description: model.feeSpeed.description };
+			case 'signing':
+				return { title: model.signing.title, description: model.signing.description };
 			case 'networks':
 				return { title: model.networks.title, description: model.networks.subtitle };
 			case 'rpc-providers':
@@ -282,6 +285,34 @@
 						/>
 					</FormRow>
 				{/each}
+			{:else if page === 'signing'}
+				<!-- Spec 071. The default "Sign with" is the desktop's usual
+				     dropdown row; the Clear Signer's page under it is the phone
+				     sheet's own body, so both layouts say the same about it. -->
+				{#each model.signing.rows as row (row.id)}
+					<FormRow label={row.label}>
+						<Dropdown
+							value={row.value ?? ''}
+							label={row.label}
+							open={openDropdown === row.id}
+							rows={row.options}
+							ontoggle={() => toggleDropdown(row.id)}
+							onselect={(id) => {
+								onprefevent?.({ kind: 'sign-with', id });
+								openDropdown = undefined;
+							}}
+						/>
+					</FormRow>
+				{/each}
+				<section class="signer-page" aria-label={model.signing.page.title}>
+					<h2>{model.signing.page.title}</h2>
+					<p>{model.signing.page.subtitle}</p>
+					<SignerPageBody
+						page={model.signing.page}
+						onsave={(text) => onprefevent?.({ kind: 'signer-page', text })}
+						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
+					/>
+				</section>
 			{:else if page === 'networks'}
 				<NetworksPanel
 					rows={model.networks.rows}
@@ -464,6 +495,24 @@
 
 	.banner {
 		margin-bottom: var(--space-3xl);
+	}
+
+	.signer-page {
+		padding-top: var(--space-2xl);
+	}
+
+	.signer-page h2 {
+		margin: 0;
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+	}
+
+	.signer-page p {
+		margin: var(--space-md) 0 var(--space-lg);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
 	}
 
 	hr {

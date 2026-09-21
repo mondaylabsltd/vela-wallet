@@ -41,11 +41,14 @@ import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
+import type { SignMethod } from '$lib/onboarding/core/passkey';
+import type { ClearSignerNotice } from './clear-signer';
 import type { SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
 	Block,
+	ClearSignerModel,
 	FeeModel,
 	KeyValueRow,
 	SigningModel,
@@ -542,4 +545,80 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		},
 		panelTitle: m.panelTitle
 	};
+}
+
+/**
+ * "Sign with" on the sheet (spec 071): every method the `sign_pref` core
+ * offers, in its order, named as the create flow and Settings name them; the
+ * Clear Signer with its one line. The request starts at Settings' default
+ * and shows this request's own pick once there is one — the pick never goes
+ * back to the preference (contract §6). A name this build has no words for
+ * is not drawn, and is never in force: the default falls back to `auto`.
+ */
+export function signWithModel(input: {
+	offered: readonly string[];
+	defaultMethod: string;
+	picked: string | null;
+	open: boolean;
+	m: SigningMessages;
+}): { method: SignMethod; row: NonNullable<SigningModel['signWith']> } {
+	const { m } = input;
+	const titles: Record<SignMethod, string> = {
+		auto: m.signWithAuto,
+		platform: m.signWithPlatform,
+		hybrid: m.signWithHybrid,
+		security_key: m.signWithSecurityKey,
+		clear_signer: m.signWithClearSigner
+	};
+	const offered = input.offered.filter((id): id is SignMethod => id in titles);
+	const inForce = (id: string | null): id is SignMethod =>
+		id !== null && offered.includes(id as SignMethod);
+	const method: SignMethod = inForce(input.picked)
+		? input.picked
+		: inForce(input.defaultMethod)
+			? input.defaultMethod
+			: 'auto';
+	return {
+		method,
+		row: {
+			label: m.signWithLabel,
+			value: titles[method],
+			open: input.open,
+			options: offered.map((id) => ({
+				id,
+				title: titles[id],
+				detail: id === 'clear_signer' ? m.signWithClearSignerBody : undefined,
+				selected: id === method
+			}))
+		}
+	};
+}
+
+/**
+ * The Clear Signer's sheet (spec 071): waiting on its page — the hint, open
+ * it again, cancel — or the one sentence its ending gets (contract §5), until
+ * the person closes it. `null` when there is nothing to say: no page open, or
+ * the person cancelled and already knows.
+ */
+export function clearSignerModel(
+	state: { waiting: boolean; notice: ClearSignerNotice | null },
+	m: SigningMessages
+): ClearSignerModel | null {
+	if (state.waiting) {
+		return {
+			waiting: true,
+			title: m.clearSignerWaiting,
+			hint: m.clearSignerWaitingHint,
+			reopen: m.clearSignerReopen,
+			dismiss: m.clearSignerCancel
+		};
+	}
+	if (state.notice === null) return null;
+	const endings: Record<ClearSignerNotice, string> = {
+		closed: m.clearSignerClosed,
+		refused: m.clearSignerRefused,
+		mismatch: m.clearSignerMismatch,
+		timeout: m.clearSignerTimeout
+	};
+	return { waiting: false, title: endings[state.notice], dismiss: m.close };
 }

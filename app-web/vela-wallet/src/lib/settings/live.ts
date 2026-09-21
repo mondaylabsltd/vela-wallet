@@ -37,6 +37,7 @@ import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
+import type { SignPrefView } from '$lib/core/generated/SignPrefView';
 import {
 	dateFormatOptions,
 	formatDate,
@@ -65,6 +66,7 @@ import type {
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsHomeModel,
+	SignerPageModel,
 	StatusPillModel,
 	UrlFieldModel,
 	AccountsSheetModel
@@ -522,6 +524,87 @@ export function withLiveFeeSpeedDesktop(
 			...model.feeSpeed,
 			rows: model.feeSpeed.rows.map((row) => ({ ...row, value: label, options: rows }))
 		}
+	};
+}
+
+/**
+ * The default "Sign with" and the Clear Signer's page, live (spec 071).
+ *
+ * The rows are the core's: `offered` in its order (a method this build has
+ * no words for is not drawn), `method` ticked — always an offered name, the
+ * factory `auto` when nothing was chosen. The page row names the HOST of the
+ * page in force, or "Official"; the sheet says why the last address was
+ * refused and whether a page there can use this wallet's passkeys — both the
+ * core's findings, worded here.
+ */
+export function withLiveSigning(
+	model: SettingsHomeModel,
+	view: SignPrefView,
+	m: SettingsMessages
+): SettingsHomeModel {
+	const rows = liveSignWithRows(model.signWithSheet.rows, view);
+	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
+	const page = view.signer_url_is_default ? m.signing.pageOfficial : hostOf(view.signer_url);
+	return {
+		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) =>
+				row.id === 'sign-with'
+					? { ...row, value: method }
+					: row.id === 'clear-signer-page'
+						? { ...row, value: page }
+						: row
+			)
+		})),
+		signWithSheet: { ...model.signWithSheet, rows },
+		signerPage: liveSignerPage(model.signerPage, view, m)
+	};
+}
+
+/** DST's "Sign with" row and the Clear Signer's page, from the phone sheet's own rows. */
+export function withLiveSigningDesktop(
+	model: SettingsDesktopModel,
+	view: SignPrefView,
+	sheet: SelectSheetModel,
+	m: SettingsMessages
+): SettingsDesktopModel {
+	const rows = liveSignWithRows(sheet.rows, view);
+	const label = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
+	return {
+		...model,
+		signing: {
+			...model.signing,
+			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows })),
+			page: liveSignerPage(model.signing.page, view, m)
+		}
+	};
+}
+
+function liveSignWithRows(rows: SelectRowModel[], view: SignPrefView): SelectRowModel[] {
+	return view.offered.flatMap((id) => {
+		const row = rows.find((candidate) => candidate.id === id);
+		return row ? [{ ...row, selected: id === view.method }] : [];
+	});
+}
+
+export function liveSignerPage(
+	page: SignerPageModel,
+	view: SignPrefView,
+	m: SettingsMessages
+): SignerPageModel {
+	const error =
+		view.signer_url_error === 'invalid'
+			? m.signing.pageInvalid
+			: view.signer_url_error === 'insecure'
+				? m.signing.pageInsecure
+				: undefined;
+	return {
+		...page,
+		field: { ...page.field, value: view.signer_url, tone: error ? 'error' : 'default' },
+		reset: view.signer_url_is_default ? undefined : m.signing.pageReset,
+		error,
+		foreign: view.signer_uses_wallet_passkeys ? undefined : m.signing.pageForeign
 	};
 }
 

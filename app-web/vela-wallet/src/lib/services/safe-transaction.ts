@@ -121,7 +121,21 @@ interface GasEstimate {
 	preVerificationGas: bigint;
 }
 
-type SignFn = (challenge: Uint8Array) => Promise<{
+/**
+ * The operation a SafeOp digest covers, as its signer may need to see it —
+ * the Clear Signer's page decodes and re-derives it (spec 071): the ASSEMBLED
+ * op in the page's field names (bytes `0x` hex, gas figures decimal), and the
+ * legs before the fee leg, values in base units (decimal).
+ */
+export interface OperationToSign {
+	userOp: Record<string, string>;
+	calls: { to: string; value: string; data: string }[];
+}
+
+type SignFn = (
+	challenge: Uint8Array,
+	operation?: OperationToSign
+) => Promise<{
 	signature: Uint8Array;
 	authenticatorData: Uint8Array;
 	clientDataJSON: Uint8Array;
@@ -129,6 +143,31 @@ type SignFn = (challenge: Uint8Array) => Promise<{
 	 *  identity. Absent ⇒ the wallet's first (shared-signer) key. */
 	credentialId?: string;
 }>;
+
+/** `userOp` and the legs before its fee leg, as {@link OperationToSign} carries them. */
+function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): OperationToSign {
+	const hex = (bytes: Uint8Array) => (bytes.length === 0 ? '0x' : '0x' + toHex(bytes));
+	return {
+		userOp: {
+			sender: userOp.sender,
+			nonce: userOp.nonce,
+			initCode: hex(userOp.initCode),
+			callData: hex(userOp.callData),
+			verificationGasLimit: userOp.verificationGasLimit.toString(),
+			callGasLimit: userOp.callGasLimit.toString(),
+			preVerificationGas: userOp.preVerificationGas.toString(),
+			maxFeePerGas: userOp.maxFeePerGas.toString(),
+			maxPriorityFeePerGas: userOp.maxPriorityFeePerGas.toString(),
+			paymasterAndData: hex(userOp.paymasterAndData)
+		},
+		calls: innerCalls.map((call) => ({
+			to: call.to,
+			// MultiSendCall's value is hex, with or without `0x`.
+			value: BigInt('0x' + (stripHexPrefix(call.value) || '0')).toString(),
+			data: hex(call.data)
+		}))
+	};
+}
 
 // ---------------------------------------------------------------------------
 // Wallet key set (multi-passkey)
@@ -1897,7 +1936,7 @@ async function sendUserOpTempo(
 		},
 		calculateSafeOpHash(userOp, chainId)
 	);
-	const assertion = await signFn(safeOpHash);
+	const assertion = await signFn(safeOpHash, operationToSign(userOp, innerCalls));
 	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
 	const rawSig = derSignatureToRaw(assertion.signature);
 	if (!rawSig) {
@@ -2171,7 +2210,7 @@ async function sendUserOpInBand(
 		},
 		calculateSafeOpHash(userOp, chainId)
 	);
-	const assertion = await signFn(safeOpHash);
+	const assertion = await signFn(safeOpHash, operationToSign(userOp, innerCalls));
 	assertChallengeSigned(assertion.clientDataJSON, safeOpHash);
 	const rawSig = derSignatureToRaw(assertion.signature);
 	if (!rawSig) {

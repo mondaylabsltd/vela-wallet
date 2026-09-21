@@ -70,6 +70,7 @@ import init, {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
+	SignPrefCore,
 	SignRequestCore,
 	toHex,
 	TokenTrustCore,
@@ -102,6 +103,7 @@ export {
 	RpcPoolCore,
 	SendCore,
 	SessionCore,
+	SignPrefCore,
 	SignRequestCore,
 	TokenTrustCore,
 	TxTrackerCore

@@ -47,6 +47,7 @@
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
+	import SignerPageBody from './ui/SignerPageBody.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -140,6 +141,8 @@
 		'date-format': 'date-format',
 		'time-format': 'time-format',
 		'fee-speed': 'fee-speed',
+		'sign-with': 'sign-with',
+		'clear-signer-page': 'signer-page',
 		feedback: 'feedback'
 	};
 
@@ -213,6 +216,10 @@
 				return model.timeSheet.title;
 			case 'fee-speed':
 				return model.feeSpeedSheet.title;
+			case 'sign-with':
+				return model.signWithSheet.title;
+			case 'signer-page':
+				return model.signerPage.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			// The row being cleared names it: "localhost:8814", "Contacts and
@@ -246,6 +253,10 @@
 				return model.timeSheet.subtitle;
 			case 'fee-speed':
 				return model.feeSpeedSheet.subtitle;
+			case 'sign-with':
+				return model.signWithSheet.subtitle;
+			case 'signer-page':
+				return model.signerPage.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -497,6 +508,24 @@
 							onprefevent?.({ kind: 'fee-speed', id });
 							close();
 						}}
+					/>
+				{:else if overlay === 'sign-with'}
+					<!-- Spec 071: the DEFAULT "Sign with", stored. A signing sheet's
+					     own pick signs that one request and never comes through here. -->
+					<SelectSheetBody
+						sheet={model.signWithSheet}
+						onselect={(id) => {
+							onprefevent?.({ kind: 'sign-with', id });
+							close();
+						}}
+					/>
+				{:else if overlay === 'signer-page'}
+					<!-- Stays open on Save: a refused address is answered under the
+					     field, and an accepted one shows here as the page in force. -->
+					<SignerPageBody
+						page={model.signerPage}
+						onsave={(text) => onprefevent?.({ kind: 'signer-page', text })}
+						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
 					/>
 				{:else if overlay === 'clear-storage-item' && pendingStorage}
 					<ConfirmSheet

@@ -10,6 +10,9 @@
 	 *
 	 * Opens in place, like the fee selector: a sheet over the signing sheet is a
 	 * modal under a modal.
+	 *
+	 * The Clear Signer (spec 071) is the one choice that is not a place a
+	 * passkey is, so it carries a line saying what it does instead.
 	 */
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -43,7 +46,12 @@
 					class:selected={option.selected}
 					onclick={() => onselect?.(option.id)}
 				>
-					<span>{option.title}</span>
+					<span class="text">
+						<span>{option.title}</span>
+						{#if option.detail !== undefined}
+							<span class="detail">{option.detail}</span>
+						{/if}
+					</span>
 					{#if option.selected}
 						<span class="check"><Icon icon={UTILITY_ICONS.check} size="sm" /></span>
 					{/if}
@@ -123,6 +131,20 @@
 	.option:hover,
 	.option.selected {
 		color: var(--color-fg-base);
+	}
+
+	.text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		min-width: 0;
+	}
+
+	/* Quieter than the name: the name is the choice, this says what it does. */
+	.detail {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
 	}
 
 	.check {

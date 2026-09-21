@@ -19,7 +19,7 @@
 	 * defeated at the last step.
 	 */
 	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { buildSigningModel } from '$lib/signing/live';
+	import { buildSigningModel, clearSignerModel, signWithModel } from '$lib/signing/live';
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -31,7 +31,10 @@
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { onMount } from 'svelte';
-	import { setSignMethod, type SignMethod } from '$lib/onboarding/core/passkey';
+	import { setSignMethod } from '$lib/onboarding/core/passkey';
+	import { signPreference } from '$lib/settings/core/sign-pref.svelte';
+	import { clearSignerSession } from '$lib/signing/core/clear-signer.svelte';
+	import ClearSignerSheet from '$lib/signing/ui/ClearSignerSheet.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -110,6 +113,9 @@
 	);
 	onMount(() => {
 		void speedControl.boot();
+		// Where every request's "Sign with" starts, and the page the Clear
+		// Signer opens (spec 071).
+		void signPreference.boot();
 		return () => speedControl.dispose();
 	});
 
@@ -149,41 +155,50 @@
 		});
 	});
 
-	// WHERE the signing passkey is — this request's, and only this request's. The
-	// passkey module reads it at the ceremony; it goes back to `auto` the moment
-	// the sheet is gone, so a choice made for one request never signs another.
-	let signMethod = $state<SignMethod>('auto');
+	// WHERE the signing passkey is — or whether the Clear Signer signs (spec
+	// 071) — this request's, and only this request's. Every request starts at
+	// Settings' default (`sign_pref`); a pick here lies over it for this request
+	// alone and never reaches the preference. The passkey module reads it at the
+	// ceremony, and hears `null` the moment the sheet is gone, so a choice made
+	// for one request never signs another.
+	let picked = $state<{ id: string; method: string } | null>(null);
 	let signWithOpen = $state(false);
 	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
 	let feeOpen = $state(false);
+	const signWith = $derived(
+		signWithModel({
+			offered: signPreference.view.offered,
+			defaultMethod: signPreference.view.method,
+			picked: picked !== null && picked.id === signView.request?.id ? picked.method : null,
+			open: signWithOpen,
+			m: messages
+		})
+	);
 	$effect(() => {
-		setSignMethod(signMethod);
+		setSignMethod(signView.request && signView.surface !== 'hidden' ? signWith.method : null);
 	});
 	$effect(() => {
 		if (signView.request && signView.surface !== 'hidden') return;
-		signMethod = 'auto';
+		picked = null;
 		signWithOpen = false;
 		feeOpen = false;
 	});
+
 	function onSignWith(id: string | null): void {
 		if (id === null) {
 			signWithOpen = !signWithOpen;
 			return;
 		}
-		if (id === 'auto' || id === 'platform' || id === 'hybrid' || id === 'security_key') {
-			signMethod = id;
-		}
+		const request = signView.request;
+		if (request) picked = { id: request.id, method: id };
 		signWithOpen = false;
 	}
 
+	/** The Clear Signer's sheet: waiting on its page, or the sentence it ended with. */
+	const clearSigner = $derived(clearSignerModel(clearSignerSession.view, messages));
+
 	const model = $derived.by(() => {
 		if (!identity) return null;
-		const titles: Record<SignMethod, string> = {
-			auto: messages.signWithAuto,
-			platform: messages.signWithPlatform,
-			hybrid: messages.signWithHybrid,
-			security_key: messages.signWithSecurityKey
-		};
 		const built = buildSigningModel({
 			sign: signView,
 			clear: signingSheet.clear,
@@ -202,16 +217,7 @@
 		if (!built) return built;
 		return {
 			...built,
-			signWith: {
-				label: messages.signWithLabel,
-				value: titles[signMethod],
-				open: signWithOpen,
-				options: (Object.keys(titles) as SignMethod[]).map((id) => ({
-					id,
-					title: titles[id],
-					selected: id === signMethod
-				}))
-			}
+			signWith: signWith.row
 		};
 	});
 
@@ -301,5 +307,19 @@
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);
 		}}
+	/>
+{/if}
+
+<!--
+	Whichever surface the signature started from — this sheet, the send screen,
+	the key backup — the Clear Signer's waiting and its ending are drawn here,
+	over it, and that surface stays as it was underneath.
+-->
+{#if clearSigner}
+	<ClearSignerSheet
+		model={clearSigner}
+		onreopen={() => clearSignerSession.reopen()}
+		ondismiss={() =>
+			clearSigner?.waiting ? clearSignerSession.cancel() : clearSignerSession.dismiss()}
 	/>
 {/if}

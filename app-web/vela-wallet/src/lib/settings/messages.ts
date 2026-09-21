@@ -90,6 +90,34 @@ export interface SettingsMessages {
 		standardHint: string;
 		slowHint: string;
 	};
+	/**
+	 * Spec 071: the default "Sign with" and the Clear Signer's page, beside
+	 * the speed. The method names are the signing sheet's own (the create
+	 * flow's for where a passkey is, `common.automatic`, the Clear Signer's
+	 * title) — one set of words, so Settings and the sheet cannot call the
+	 * same choice two different things.
+	 */
+	signing: {
+		title: string;
+		subtitle: string;
+		methods: {
+			auto: string;
+			platform: string;
+			hybrid: string;
+			security_key: string;
+			clear_signer: string;
+		};
+		/** The Clear Signer's one line, under its name. */
+		clearSignerBody: string;
+		pageTitle: string;
+		pageSubtitle: string;
+		pageOfficial: string;
+		pageInvalid: string;
+		pageInsecure: string;
+		pageForeign: string;
+		pageReset: string;
+		pageSave: string;
+	};
 	networks: {
 		/** Template with `{{count}}`. */
 		count: string;
@@ -427,6 +455,21 @@ export const SETTINGS_KEYS = [
 	'send.gasTierHintFast',
 	'send.gasTierHintStandard',
 	'send.gasTierHintSlow',
+	'settings.signing.title',
+	'settings.signing.subtitle',
+	'onboarding.create.methodPlatformTitle',
+	'onboarding.create.methodHybridTitle',
+	'onboarding.create.methodSecurityKeyTitle',
+	'componentsUi.signing.clearSignerTitle',
+	'componentsUi.signing.clearSignerBody',
+	'settings.signing.pageTitle',
+	'settings.signing.pageSubtitle',
+	'settings.signing.pageOfficial',
+	'settings.signing.pageInvalid',
+	'settings.signing.pageInsecure',
+	'settings.signing.pageForeign',
+	'settings.signing.pageReset',
+	'settings.signing.pageSave',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

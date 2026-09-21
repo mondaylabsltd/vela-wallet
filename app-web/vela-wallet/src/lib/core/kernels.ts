@@ -609,6 +609,90 @@ export function attestSafeMessageHash(
 }
 
 // ---------------------------------------------------------------------------
+// The Clear Signer (spec 071) — what its page receives, and the verdict on
+// what it answers. The web builds and judges nothing itself.
+// ---------------------------------------------------------------------------
+
+/** One leg of an operation as the request takes it: `value` in base units, decimal. */
+export interface ClearSignerCall {
+	to: string;
+	value: string;
+	data: string;
+}
+
+/**
+ * What the shell already holds when it would sign (contract §1). A dApp's
+ * own `method` / `params` / `origin`; the wallet's own send says `''` for
+ * both and the core makes `calls` the intent. `userOp` is the ASSEMBLED
+ * operation in the page's field names, for a transaction only; `calls` are
+ * its legs before the fee leg.
+ */
+export interface ClearSignerInput {
+	method: string;
+	params: unknown;
+	origin: string;
+	chainId: number;
+	chainName?: string;
+	nativeSymbol?: string;
+	account: string;
+	accountName?: string;
+	credentialIdsHex: string[];
+	userOp?: Record<string, string>;
+	calls?: ClearSignerCall[];
+}
+
+/** The page's `{intent, context}`, as the core built it. */
+export interface ClearSignerRequest {
+	intent: unknown;
+	context: unknown;
+}
+
+/** One of the account's keys, as the verdict checks the answer against them. */
+export interface ClearSignerKey {
+	credentialId: string;
+	publicKeyHex: string;
+}
+
+/** The core's verdict: hex fields with `0x`, the credential id bare. */
+export type ClearSignerVerdict =
+	| {
+			accepted: {
+				credentialIdHex: string;
+				signatureDer: string;
+				authenticatorData: string;
+				clientDataJSON: string;
+			};
+	  }
+	| { refused: { code: string; detail: string } };
+
+export function clearSignerRequest(input: ClearSignerInput): ClearSignerRequest {
+	return JSON.parse(translated(() => wasm.clearSignerRequest(JSON.stringify(input))));
+}
+
+/** `result` is the page's answer as it arrived; anything unreadable is refused, never thrown. */
+export function clearSignerVerify(
+	result: unknown,
+	digest: Uint8Array,
+	keys: ClearSignerKey[]
+): ClearSignerVerdict {
+	return JSON.parse(
+		translated(() =>
+			wasm.clearSignerVerify(JSON.stringify(result ?? null), digest, JSON.stringify(keys))
+		)
+	);
+}
+
+/** The official page, `https://sign.getvela.app/`. */
+export function clearSignerDefaultUrl(): string {
+	return wasm.clearSignerDefaultUrl();
+}
+
+/** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
+export function clearSignerUsesWalletPasskeys(url: string): boolean {
+	return wasm.clearSignerUsesWalletPasskeys(url);
+}
+
+// ---------------------------------------------------------------------------
 // Chain gas floor (spec 060)
 // ---------------------------------------------------------------------------
 

@@ -31,6 +31,16 @@ export type SettingsPrefEvent =
 	 * rewrites the stored default.
 	 */
 	| { kind: 'fee-speed'; id: string }
+	/**
+	 * The default "Sign with" (spec 071) — one of `SignPrefView.offered`. Like
+	 * the speed, a pick on a signing sheet is NOT this event: it signs that one
+	 * request and never rewrites the default.
+	 */
+	| { kind: 'sign-with'; id: string }
+	/** The Clear Signer's page, as typed and saved — the `sign_pref` core validates it. */
+	| { kind: 'signer-page'; text: string }
+	/** Back to the official page. */
+	| { kind: 'signer-page-reset' }
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }
