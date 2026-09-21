@@ -1,60 +1,79 @@
 ---
 title: 常見問題
-description: 關於 Vela 嘅常見問題——保管、通行密鑰、智能帳戶、復原、支援嘅網絡、費用同私隱。
+description: "關於託管、鑰匙、復原、網絡、費用、Vela 能看到甚麼、開源，以及 Vela 不再營運時會怎樣的簡短解答。"
+source: 0762e55bf54d
 ---
 
 # 常見問題
 
-## Vela 係自我保管嘅咩？
+## Vela 是自我託管的嗎？
 
-係。你個錢包係一個智能帳戶，由一把淨係你先用得到嘅鎖匙控制；呢把鎖匙由你部機嘅
-作業系統保管，Vela 從來睇唔到。Vela 冇辦法轉走、凍結或者幫你攞返啲錢。
+是。你的錢包是一個只由你的鑰匙控制的 Safe 智能帳戶，而鑰匙留在你的裝置、你的密碼管理工具或你的安全密鑰
+中。Vela 不持有任何鑰匙，在錢包上也沒有任何角色，所以它無法自行轉移、凍結或取回你的資金。但請你的鑰匙
+簽署的軟件是它寫的——見[威脅模型](/zh-HK/docs/whitepaper)。
 
-## 我個錢包係普通帳戶定合約？
+## 真的沒有助記詞嗎？
 
-佢係一個 **Safe 智能帳戶**（一份智能合約），用 ERC-4337 帳戶抽象嚟操作。正正係
-呢一點令你可以用通行密鑰簽名、喺批准前睇得明每一筆交易，並且喺每條網絡上面用
-同一個地址。架構睇[白皮書](/zh-HK/docs/whitepaper)。
+真的沒有。你的鑰匙是通行密鑰，而通行密鑰沒有可以抄寫或輸入的秘密。見[通行密鑰如何運作](/zh-HK/docs/passkeys)。
 
-## 真係冇助記詞？
+## 建立錢包需要甚麼？
 
-真係冇。你把簽名鎖匙係一把由部機作業系統保管嘅通行密鑰，Vela 永遠睇唔到佢。
-冇嗰十二個要抄低、會唔見、會俾人釣走嘅字。點解咁樣係安全嘅，睇
-[通行密鑰點運作](/zh-HK/docs/passkeys)。
+一部支援通行密鑰的裝置（有 Face ID、指紋或 Windows Hello 的較新手機或電腦），或兩把硬件安全密鑰。不需要
+電郵、不需要註冊帳戶，也不需要預先有餘額。建立錢包時最多可以設定七把鑰匙；之後不能再加。見
+[建立錢包](/zh-HK/docs/create-wallet)。
 
-## 部電話唔見咗點算？
+## 手機遺失了怎麼辦？
 
-如果你把通行密鑰經 iCloud 鑰匙串或者 Google 密碼管理工具同步，咁就喺新機用同一個
-帳戶登入，個錢包就返嚟喇。完整模型同佢嘅邊界，睇[復原同登入](/zh-HK/docs/recovery)。
+在新裝置上用任何另一把鑰匙登入：透過 iCloud 鑰匙圈或 Google 密碼管理工具同步的同一把通行密鑰、另一部
+手機，或你的安全密鑰。如果那部手機存放着你唯一的鑰匙，而那把鑰匙沒有同步，錢包就無法復原。見
+[復原與登入](/zh-HK/docs/recovery)。
 
-## 支援邊啲網絡同代幣？
+## 支援哪些網絡和代幣？
 
-Vela 內置 **12 條 EVM 網絡**——以太坊、BNB Chain、Polygon、Arbitrum、Optimism、
-Base、Avalanche、Gnosis、Unichain、Tempo、Monad 同 World Chain——再加埋你自己加
-嘅網絡，可以持有原生代幣同 ERC-20。你個地址喺所有網絡上面都一樣。睇
-[網絡同費用](/zh-HK/docs/networks-and-fees)。
+24 條內置 EVM 網絡，包括 Ethereum、Base、Arbitrum、Optimism、Polygon、BNB Chain、Gnosis 和 Avalanche，
+另外還可以加入任何符合要求的 EVM 網絡。支援原生幣和 ERC-20 代幣。每條網絡上都是同一個地址。見
+[網絡與費用](/zh-HK/docs/networks-and-fees)。
 
-## 用起上嚟要幾多錢？
+## 要花多少錢？
 
-錢包本身免費，Vela **冇代幣**。你由自己個錢包餘額度畀網絡 **gas**，再加一筆中繼費。
-價錢由中繼報出，並且喺**你簽名之前**以「網絡費 / 中繼費 / 合計」嘅形式顯示——
-每一筆交易嘅確切成本都喺確認頁上面，而且報出嘅金額係你所簽內容嘅一部分，簽完就唔會
-再變。好平嘅交易可能會撞到一個好細嘅最低收費。喺冇原生幣嘅 Tempo 上面，gas 用美元
-穩定幣結算。另外每條網絡都需要一筆好細、**唔退還嘅按金去啟用佢個 gas 中繼帳戶**
-（Vela 可能會幫新用戶墊住）；由於嗰個帳戶會慢慢用完，之後你可能仲要再補一次——
-佢唔係嚴格意義上嘅一次性支出。細節睇[網絡同費用](/zh-HK/docs/networks-and-fees)。
+- **App：**網頁版錢包、瀏覽器擴充功能和桌面版都是免費的。iOS 和 Android App 將在應用程式商店以一次性購買
+  的方式發售；你也可以免費從原始碼編譯任何一個 App。
+- **每筆交易：**從你的錢包支付給提交交易的中繼的一筆手續費。它涵蓋 gas 和中繼的利潤，往往是這筆交易鏈上
+  成本的十倍或以上，最低約 0.01 美元。確切金額顯示在確認畫面上，並且是你所簽署內容的一部分。沒有按金，
+  也沒有訂閱費。[手續費如何計算](/zh-HK/docs/networks-and-fees)。
+- **沒有代幣。**Vela 沒有代幣，也不打算發行。
 
-## Vela（呢間公司）睇到啲乜、做得到啲乜？
+## 可以用 Vela 連接 dApp 嗎？
 
-Vela 保存你通行密鑰嘅**公鑰**同你改嘅**名**，用嚟做跨裝置登入。佢睇唔到你個私鑰，
-你嘅餘額係喺公開鏈上讀返嚟，亦冇任何電郵註冊。以[私隱政策](/privacy)為準。
+可以，透過 Vela 瀏覽器擴充功能（Chrome、Edge、Brave），以及桌面版（macOS、Windows）、iOS 和 Android App
+的內置瀏覽器。wallet.getvela.app 上的網頁版錢包不會連接 dApp。見[安裝](/zh-HK/docs/install#dapps)。
 
-## Vela 係開源嘅咩？
+## Vela 能看到甚麼、能做甚麼？
 
-係——錢包同佢四項後端服務（鏈上資料、通行密鑰索引、中繼、匯率）都以 MIT 授權
-[公開喺 GitHub](https://github.com/mondaylabsltd/vela-wallet)，你亦可以自己部署。
+Vela 無法讀取你的鑰匙，也無法自行轉移你的資金。它的服務會看到你的 IP 地址，以及 App 向它們查詢的內容：
+索引在登記新錢包時會看到你的公鑰和錢包名稱，也會看到你查詢的地址；中繼會看到你的地址、你提交的操作，以及
+你的 App 使用的 RPC 端點；鏈數據服務會看到你的 App 查詢了哪些代幣和合約。哪些內容會在鏈上公開，列在
+[建立錢包](/zh-HK/docs/create-wallet#what-is-public)中。完整而權威的說明以[私隱政策](/privacy)為準。
 
-## 我有條問題呢度冇。
+## Vela 是開源的嗎？
 
-去 [GitHub](https://github.com/mondaylabsltd/vela-wallet) 開一個 issue，或者喺
-[X](https://x.com/realvelawallet) 或 [Telegram](https://t.me/velawallet) 搵我哋。
+錢包 App、中繼和匯率服務都以 MIT 授權發佈在 [GitHub](https://github.com/orgs/mondaylabsltd/repositories)
+上；鏈數據目錄也採用 MIT 授權。公鑰索引的程式碼是公開的，但暫時還沒有授權條款檔案。每一項服務你都可以
+自行運行——見[自行架設指南](/zh-HK/docs/self-hosting)。
+
+## Vela 經過審計嗎？
+
+存放你資金的合約——Safe 及其模組，以及 ERC-4337 EntryPoint——都經過審計。Vela 自己的程式碼沒有，目前也
+沒有安排任何審計。見[審計與已知問題](/zh-HK/docs/security-audits)。
+
+## 如果 Vela 結業呢？
+
+你的資金留在鏈上你自己的 Safe 裏。對於現有的錢包，Vela 瀏覽器擴充功能和你自行編譯的 App 在沒有
+getvela.app 的情況下仍然可以繼續使用，而每一項服務都是開源的，其他人也可以運行（中繼需要修改程式碼，才能
+不再從 Vela 的伺服器讀取鏈數據）。[自行架設指南](/zh-HK/docs/self-hosting#if-getvela-app-disappears)列出了
+各條途徑及其限制。
+
+## 我的問題不在這裏。
+
+請在 [GitHub](https://github.com/mondaylabsltd/vela-wallet/issues) 上開一個 issue，或透過
+[X](https://x.com/realvelawallet) 或 [Telegram](https://t.me/velawallet) 聯絡我們。

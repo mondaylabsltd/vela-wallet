@@ -1,6 +1,7 @@
 ---
 title: 安装 Vela
 description: "运行 Vela 的每一种方式——网页、浏览器扩展、桌面版和手机——各自多少钱、能做什么，以及你的设备需要什么。"
+source: f88fdfac1001
 ---
 
 <script>

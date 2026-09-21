@@ -1,58 +1,53 @@
 ---
 title: Introdução
-description: O que é a Vela, para quem ela é e as ideias por trás de uma carteira inteligente autocustodiada sem frase-semente.
+description: "O que é a Vela em seis linhas, e uma lista das perguntas com que as pessoas chegam — cada uma com um link direto para a resposta."
+source: 5aa87a77142a
 ---
 
-# Introdução
+# Documentação da Vela
 
-A Vela é uma **carteira inteligente autocustodiada** para redes EVM. As chaves são
-suas, mas não existe frase-semente para anotar: você assina com uma passkey, usando
-o rosto ou a digital.
+A Vela é uma **carteira de autocustódia para Ethereum e outras redes EVM**, sem
+frase de recuperação. Sua carteira é uma conta inteligente
+[Safe](/pt-BR/docs/account-contract) sem modificações, e você assina com
+**passkeys** — no seu celular ou computador, em outro celular ou numa chave de
+segurança física.
 
-Esta documentação cobre como começar, criar uma carteira, movimentar tokens e
-entender o modelo de segurança por trás disso.
+- **Suas chaves, até sete.** Escolhidas quando você cria a carteira; qualquer uma
+  delas pode assinar. A Vela nunca tem acesso a elas e não tem nenhum papel na sua
+  carteira.
+- **24 redes, um endereço.** Além de qualquer rede EVM que você adicionar e que
+  atenda aos requisitos.
+- **Você lê antes de assinar.** As transações são decodificadas em linguagem
+  clara; o que não dá para decodificar vem sinalizado.
+- **Funciona sem nós.** Os apps e os serviços são de código aberto e substituíveis
+  — com os limites explicados no [guia de auto-hospedagem](/pt-BR/docs/self-hosting).
+- **Alfa.** Funciona e guarda dinheiro de verdade, mas ainda é jovem: comece com
+  valores pequenos. [O que alfa significa aqui](/blog/vela-is-in-alpha).
 
-## A versão curta
+## Encontre uma resposta
 
-- **Autocustódia.** Seus fundos são controlados por uma chave que só você consegue
-  usar. A Vela (a empresa) não pode mover, congelar nem recuperar o seu dinheiro.
-- **Sem frase-semente.** Sua chave de assinatura é uma passkey guardada no hardware
-  seguro do seu aparelho. Não existem doze palavras para perder ou para alguém
-  roubar por phishing.
-- **Uma conta inteligente Safe.** Cada carteira é um contrato
-  [Safe](https://github.com/safe-fndn/safe-smart-account), operado com abstração de
-  contas ERC-4337 — é exatamente isso que deixa você assinar com uma passkey e ler
-  cada transação antes de aprovar.
-- **12 redes, um endereço só.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-  Base, Avalanche, Gnosis, Unichain, Tempo, Monad e World Chain — mais as redes que
-  você adicionar — todas no mesmo endereço.
-- **Assinatura legível.** Onde existe um descritor, a transação é traduzida em uma
-  intenção legível (ERC-7730); onde não existe, a Vela cai numa decodificação de
-  melhor esforço e avisa. As chamadas que ela não consegue ler são sinalizadas, não
-  escondidas.
-- **Código aberto.** A carteira e todos os seus serviços estão
-  [públicos no GitHub](https://github.com/mondaylabsltd/vela-wallet), para qualquer
-  um conferir o que eles fazem.
-- **Software em alfa.** A Vela funciona e já guarda dinheiro de verdade, mas não
-  tem anos de produção nas costas. Comece com valores pequenos. O
-  [post sobre a alfa](/blog/vela-is-in-alpha) explica o que isso significa.
+| Quero saber… | Vá para |
+| --- | --- |
+| Qual app instalar, e quanto custa | [Instalar a Vela](/pt-BR/docs/install) · [Obter a Vela](/pt-BR/get-started) |
+| Como criar uma carteira, e quais chaves usar | [Criar sua carteira](/pt-BR/docs/create-wallet) · [Signatários e chaves de segurança](/pt-BR/docs/signers) |
+| O que fazer se eu perder o celular ou apagar uma passkey | [Recuperação e login](/pt-BR/docs/recovery) |
+| Se dá para adicionar ou trocar chaves depois | [Signatários e chaves de segurança](/pt-BR/docs/signers) |
+| Por que uma transação custa o que custa | [Redes e taxas](/pt-BR/docs/networks-and-fees) |
+| Se a minha rede é compatível, ou como adicionar uma | [Redes e taxas](/pt-BR/docs/networks-and-fees) · [Configuração de rede](/pt-BR/chain-setup) |
+| Como usar a Vela com um dApp | [Instalar a Vela → dApps](/pt-BR/docs/install#dapps) |
+| Como conferir o que eu estou assinando de verdade | [Assinatura legível](/pt-BR/docs/clear-signing) · [O ataque à Bybit](/pt-BR/docs/bybit-attack) |
+| O que acontece se o getvela.app sair do ar | [Guia de auto-hospedagem → sem o getvela.app](/pt-BR/docs/self-hosting#if-getvela-app-disappears) |
+| Como rodar tudo por conta própria | [Guia de auto-hospedagem](/pt-BR/docs/self-hosting) |
+| Se a Vela é auditada | [Auditorias e problemas conhecidos](/pt-BR/docs/security-audits) |
+| O que é público sobre a minha carteira | [Criar sua carteira → o que é público](/pt-BR/docs/create-wallet#what-is-public) · [Política de privacidade](/privacy) |
 
-## Para quem é
+## Para ler com calma
 
-A Vela é para quem quer autocustódia de verdade sem a armadilha de administrar uma
-frase-semente — e para quem já se queimou com isso. Se você sabe desbloquear seu
-celular, sabe usar a Vela.
+- [Por que criamos a Vela](/pt-BR/docs/why-vela) — a história e a contrapartida que
+  escolhemos.
+- [Whitepaper](/pt-BR/docs/whitepaper) — a arquitetura e exatamente em que você
+  está confiando.
+- [O contrato da conta](/pt-BR/docs/account-contract) — quais contratos guardam o
+  seu dinheiro.
 
-## Para onde ir depois
-
-- [Instalar a Vela](/pt-BR/docs/install) — roda no navegador, não há nada para
-  baixar.
-- [Crie sua carteira](/pt-BR/docs/create-wallet) — sua primeira carteira em cerca
-  de um minuto.
-- [Como as passkeys funcionam](/pt-BR/docs/passkeys) — o modelo de segurança,
-  explicado direto.
-- [Whitepaper](/pt-BR/docs/whitepaper) — a arquitetura completa e o modelo de
-  confiança.
-
-Se o *porquê* te interessa mais que o *como*, o [blog](/blog) conta como a Vela
-está sendo construída.
+O [blog](/blog) acompanha como a Vela está sendo construída.

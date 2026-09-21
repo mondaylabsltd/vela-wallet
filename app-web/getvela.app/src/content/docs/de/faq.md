@@ -1,77 +1,106 @@
 ---
 title: Häufige Fragen
-description: Häufige Fragen zu Vela — Verwahrung, Passkeys, Smart Accounts, Wiederherstellung, unterstützte Netzwerke, Gebühren und Privatsphäre.
+description: "Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt."
+source: 0762e55bf54d
 ---
 
 # Häufige Fragen
 
-## Ist Vela selbstverwahrt?
+## Ist Vela eine Wallet zur Selbstverwahrung?
 
-Ja. Deine Wallet ist ein Smart Account, gesteuert von einem Schlüssel, den nur du
-benutzen kannst. Das Betriebssystem deines Geräts hält ihn, Vela sieht ihn nie.
-Vela kann dein Geld weder bewegen noch einfrieren noch zurückholen.
-
-## Ist meine Wallet ein normales Konto oder ein Vertrag?
-
-Sie ist ein **Safe Smart Account** (ein Smart Contract), betrieben mit ERC-4337
-Account Abstraction. Genau das erlaubt dir, mit einem Passkey zu signieren, jede
-Transaktion vor der Freigabe zu lesen und in jedem Netzwerk dieselbe Adresse zu
-nutzen. Die Architektur steht im [Whitepaper](/de/docs/whitepaper).
+Ja. Deine Wallet ist ein Safe Smart Account, der nur von deinen Schlüsseln gesteuert
+wird, und die bleiben auf deinen Geräten, in deinem Passwortmanager oder auf deinen
+Sicherheitsschlüsseln. Vela hat keinen Schlüssel und keine Rolle darin und kann dein
+Guthaben deshalb nicht von sich aus bewegen, einfrieren oder wiederherstellen. Die
+Software, die deine Schlüssel um eine Signatur bittet, schreibt allerdings Vela – siehe
+das [Bedrohungsmodell](/de/docs/whitepaper).
 
 ## Gibt es wirklich keine Seed-Phrase?
 
-Wirklich nicht. Dein Signaturschlüssel ist ein Passkey, den das Betriebssystem
-deines Geräts hält und den Vela nie sieht. Es gibt keine zwölf Wörter zum
-Aufschreiben, Verlieren oder Abfischen. Warum das sicher ist, steht in
+Wirklich nicht. Deine Schlüssel sind Passkeys, und ein Passkey hat kein Geheimnis, das
+du aufschreiben oder eintippen könntest. Siehe
 [So funktionieren Passkeys](/de/docs/passkeys).
 
-## Was, wenn ich mein Handy verliere?
+## Was brauche ich, um eine Wallet zu erstellen?
 
-Wird dein Passkey über iCloud-Schlüsselbund oder Google Passwortmanager
-synchronisiert, meldest du dich auf einem neuen Gerät mit demselben Konto an und
-deine Wallet ist wieder da. Das vollständige Modell samt Grenzen steht in
+Ein Gerät, das Passkeys unterstützt (ein aktuelles Handy oder einen aktuellen Computer
+mit Face ID, Fingerabdruck oder Windows Hello), oder zwei
+Hardware-Sicherheitsschlüssel. Keine E-Mail, kein Konto, kein Startguthaben. Du kannst
+die Wallet mit bis zu sieben Schlüsseln erstellen; später lassen sich keine hinzufügen.
+Siehe [Wallet erstellen](/de/docs/create-wallet).
+
+## Was passiert, wenn ich mein Handy verliere?
+
+Melde dich auf einem neuen Gerät mit einem anderen Schlüssel an: mit demselben Passkey,
+synchronisiert über iCloud-Schlüsselbund oder Google Passwortmanager, mit einem anderen
+Handy oder mit deinem Sicherheitsschlüssel. Lag auf dem Handy dein einziger Schlüssel
+und wurde er nicht synchronisiert, lässt sich die Wallet nicht wiederherstellen. Siehe
 [Wiederherstellung und Anmeldung](/de/docs/recovery).
 
 ## Welche Netzwerke und Token werden unterstützt?
 
-Vela bringt **12 EVM-Netzwerke** mit — Ethereum, BNB Chain, Polygon, Arbitrum,
-Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad und World Chain — dazu
-eigene Netzwerke, mit nativen Token und ERC-20. Deine Adresse ist überall
+24 eingebaute EVM-Netzwerke, darunter Ethereum, Base, Arbitrum, Optimism, Polygon, BNB
+Chain, Gnosis und Avalanche, dazu jedes EVM-Netzwerk, das du hinzufügst und das die
+Anforderungen erfüllt. Native Coins und ERC-20-Token. Die Adresse ist in jedem Netzwerk
 dieselbe. Siehe [Netzwerke und Gebühren](/de/docs/networks-and-fees).
 
-## Was kostet die Nutzung?
+## Was kostet das?
 
-Die Wallet ist kostenlos und Vela hat **keinen Token**. Du zahlst das
-Netzwerk-**Gas** aus deinem eigenen Guthaben, dazu eine Relay-Gebühr. Den Preis
-stellt das Relay, und er erscheint **vor dem Signieren** aufgeschlüsselt als
-_Netzwerkgebühr / Relay-Gebühr / Summe_ — die exakten Kosten jeder Transaktion
-stehen auf dem Bestätigungsbildschirm, und der genannte Betrag ist Teil dessen,
-was du signierst, kann sich also nicht nachträglich ändern. Sehr günstige
-Transaktionen können eine kleine Mindestgebühr treffen. Auf Tempo, das keine
-native Coin hat, wird Gas in USD-Stablecoins abgerechnet. Jedes Netzwerk braucht
-außerdem eine kleine, **nicht erstattungsfähige Einzahlung, um sein
-Gas-Relay-Konto zu aktivieren** (für neue Nutzer übernimmt Vela das mitunter);
-weil dieses Konto sich leeren kann, kann es später erneut nötig werden — es ist
-also nicht streng genommen einmalig. Details in
-[Netzwerke und Gebühren](/de/docs/networks-and-fees).
+- **Die Apps:** Die Web-Wallet, die Browser-Erweiterung und die Desktop-Apps sind
+  kostenlos. Die iOS- und Android-Apps werden als Einmalkauf in den Stores angeboten;
+  du kannst außerdem jede App kostenlos aus dem Quellcode bauen.
+- **Jede Transaktion:** eine Gebühr, die aus deiner Wallet an das Relay geht, das sie
+  einreicht. Sie deckt das Gas plus die Marge des Relays und beträgt oft das Zehnfache
+  der On-Chain-Kosten der Transaktion oder mehr, mindestens etwa 0,01 US-Dollar. Der
+  genaue Betrag steht auf dem Bestätigungsbildschirm und ist Teil dessen, was du
+  signierst. Es gibt keine Einzahlung und kein Abo.
+  [Wie die Gebühr berechnet wird](/de/docs/networks-and-fees).
+- **Kein Token.** Vela hat keinen und plant keinen.
 
-## Was kann Vela (die Firma) sehen oder tun?
+## Kann ich Vela mit dApps nutzen?
 
-Vela speichert den **öffentlichen** Schlüssel deines Passkeys und den **Namen**,
-den du gewählt hast, um die geräteübergreifende Anmeldung zu ermöglichen. Deinen
-privaten Schlüssel sieht Vela nicht, Guthaben werden von öffentlichen Chains
-gelesen, und eine E-Mail-Anmeldung gibt es nicht. Maßgeblich ist die
-[Datenschutzerklärung](/privacy).
+Ja, über die Vela-Browser-Erweiterung (Chrome, Edge, Brave) und über den eingebauten
+Browser der Desktop-App (macOS, Windows) sowie der iOS- und der Android-App. Die
+Web-Wallet unter wallet.getvela.app verbindet sich nicht mit dApps. Siehe
+[Vela installieren](/de/docs/install#dapps).
+
+## Was kann Vela sehen oder tun?
+
+Vela kann deine Schlüssel nicht lesen und dein Guthaben nicht von sich aus bewegen.
+Velas Dienste sehen deine IP-Adresse und das, was die App sie fragt: Der Index sieht
+deine öffentlichen Schlüssel und den Wallet-Namen, wenn er eine neue Wallet
+registriert, sowie die Adressen, die du nachschlägst; das Relay sieht deine Adresse,
+die Operationen, die du einreichst, und den RPC-Endpunkt, den deine App nutzt; der
+Chain-Daten-Dienst sieht, nach welchen Token und Verträgen deine App fragt. Was
+on-chain öffentlich wird, steht unter
+[Wallet erstellen](/de/docs/create-wallet#what-is-public). Die
+[Datenschutzerklärung](/privacy) ist die vollständige, maßgebliche Fassung.
 
 ## Ist Vela Open Source?
 
-Ja — die Wallet und ihre vier Backend-Dienste (Chain-Daten, Passkey-Index, Relay,
-Wechselkurse) sind unter der MIT-Lizenz
-[öffentlich auf GitHub](https://github.com/mondaylabsltd/vela-wallet), und du
-kannst sie selbst hosten.
+Die Wallet-Apps, das Relay und der Wechselkursdienst stehen unter der MIT-Lizenz auf
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories); das
+Chain-Daten-Verzeichnis ebenfalls. Der Public-Key-Index ist öffentlich, hat aber noch
+keine Lizenzdatei. Jeden Dienst kannst du selbst betreiben – siehe die
+[Anleitung zum Selbsthosten](/de/docs/self-hosting).
+
+## Ist Vela auditiert?
+
+Die Verträge, in denen dein Geld liegt – Safe und seine Module sowie der
+ERC-4337-EntryPoint –, sind auditiert. Velas eigener Code nicht, und ein Audit ist
+derzeit nicht angesetzt. Siehe [Audits und bekannte Probleme](/de/docs/security-audits).
+
+## Was, wenn Vela dichtmacht?
+
+Dein Guthaben bleibt on-chain in deinem Safe. Für eine bestehende Wallet funktionieren
+die Vela-Browser-Erweiterung und selbst gebaute Apps auch ohne getvela.app weiter, und
+jeder Dienst ist Open Source und kann von anderen betrieben werden (das Relay braucht
+eine Code-Änderung, damit es keine Chain-Daten mehr von Velas Server liest). Die
+[Anleitung zum Selbsthosten](/de/docs/self-hosting#if-getvela-app-disappears) listet
+die Wege und ihre Grenzen auf.
 
 ## Meine Frage steht hier nicht.
 
-Öffne ein Issue auf [GitHub](https://github.com/mondaylabsltd/vela-wallet) oder
+Öffne ein Issue auf [GitHub](https://github.com/mondaylabsltd/vela-wallet/issues) oder
 schreib uns auf [X](https://x.com/realvelawallet) oder
 [Telegram](https://t.me/velawallet).

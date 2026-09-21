@@ -1,93 +1,104 @@
 ---
 title: O contrato da conta
-description: Sua carteira Vela é um Safe v1.4.1 sem modificações. Nada no caminho dos contratos foi escrito por nós — aqui está o que isso te dá e o que custa.
+description: "A sua carteira Vela é um Safe v1.4.1 sem modificações. Nenhum contrato no caminho até o seu dinheiro foi escrito pela Vela — aqui estão exatamente quais contratos são, o que isso garante e quanto custa."
+source: 588a6ba6e672
 ---
 
 # O contrato da conta
 
-Sua carteira não é a estrutura de dados privada de um app. É uma conta inteligente
-**Safe v1.4.1** — o mesmo contrato usado para guardar tesourarias muito maiores do
-que qualquer coisa que a Vela vá ver — implantada exatamente como a Safe publica,
-sem nenhuma modificação.
+A sua carteira não é uma estrutura de dados privada de um app. Ela é uma conta
+inteligente **Safe v1.4.1** — o contrato que muitas grandes tesourarias on-chain
+usam —, implantada exatamente como a Safe publica, sem nenhuma modificação.
 
-A frase é curta e as consequências não são, então esta página detalha.
+## Nada no caminho é nosso
 
-## Nada nesse caminho é nosso
+Todo contrato que pode tocar no seu dinheiro foi escrito pela Safe ou pelos autores
+do ERC-4337:
 
-Entre você e o seu dinheiro estão quatro contratos. A Vela não escreveu nenhum:
+| Contrato | Papel na sua carteira | Escrito por |
+| --- | --- | --- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, por meio de um proxy) | A própria conta; proprietários, limite, execução | Safe |
+| [Módulo 4337 da Safe v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Permite que o EntryPoint opere o Safe; também é o fallback handler dele | Safe |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Verifica as assinaturas P-256 da primeira chave | Safe |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) e os signatários que ela cria | Um pequeno contrato signatário para cada chave adicional | Safe |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Executa a sua operação assinada | Autores do ERC-4337 |
 
-| Contrato | Quem escreveu |
-| --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) (a própria conta, um proxy) | Safe |
-| [Safe 4337 Module](https://github.com/safe-global/safe-modules/tree/main/modules/4337) | Safe |
-| [SafeWebAuthnSharedSigner](https://github.com/safe-global/safe-modules/tree/main/modules/passkey) (verifica sua chave P-256) | Safe |
-| [ERC-4337 EntryPoint v0.7](https://eips.ethereum.org/EIPS/eip-4337) | Os autores do ERC-4337 |
+Os contratos da própria Vela não estão nesta lista: o **registro de chaves
+públicas**, que grava as chaves de cada carteira para que um aparelho novo consiga
+encontrá-la ([recuperação](/pt-BR/docs/recovery)), o registro de domínios que o
+acompanha e o índice anterior que eles substituíram. Eles não guardam fundos e não
+têm nenhum papel no seu Safe.
 
-Não existe um contrato da Vela. O repositório não contém nada de Solidity — dá para
-conferir com um comando:
+O repositório da carteira não contém nenhuma linha de Solidity — dá para conferir
+com um comando:
 
 ```bash
 git clone https://github.com/mondaylabsltd/vela-wallet
 find vela-wallet -name '*.sol'   # não imprime nada
 ```
 
-Quando a Vela adiciona uma rede, ela implanta **aqueles** contratos, nos endereços
-canônicos deles. Não implanta um contrato de desenho próprio e não tem nenhum papel
-privilegiado no seu: sem chave de administrador, sem caminho de upgrade, sem módulo
-que a gente possa acrescentar.
+A Vela não tem nenhum papel privilegiado na sua conta: nenhuma chave de
+administrador, nenhum caminho de atualização, nenhum módulo que ela possa
+adicionar. Só as suas chaves podem alterar o seu Safe.
 
-## Por que «sem modificações» é a palavra que importa
+## Por que “sem modificações” é a expressão que importa
 
-Muitas carteiras dizem ser construídas sobre «um Safe», «um fork do Safe» ou «uma
-conta inspirada no Safe». Um fork é um contrato novo com reputação velha. Na
-prática, as diferenças:
+Muitas carteiras são construídas sobre “um Safe”, um fork do Safe ou uma conta
+inspirada no Safe. A diferença importa de três formas.
 
-**As auditorias valem para o que você está usando de fato.** Os relatórios da Safe
-cobrem o bytecode exatamente destas versões. As auditorias de um fork cobrem o
-código anterior ao fork. Se uma carteira modificou o contrato da conta, toda
-auditoria que ela cita é auditoria de outra coisa — e a modificação é justamente a
-parte que ninguém olhou.
+**As auditorias valem para o que você está usando de fato.** As auditorias da Safe
+cobrem essas versões, ou versões anteriores das quais elas diferem só por pequenas
+mudanças documentadas (a [página de auditorias](/pt-BR/docs/security-audits) traz
+os detalhes). As auditorias de um fork cobrem o código antes do fork; a modificação
+é a parte que ninguém auditou.
 
-**O ecossistema trata sua conta como um Safe, porque ela é um.** Exploradores de
-blocos a decodificam. As próprias ferramentas de transação da Safe a entendem. Se a
-Vela sumir amanhã, sua carteira não vira um formato órfão: é a conta inteligente com
-mais ferramentas em volta no Ethereum, e qualquer interface compatível com Safe
-consegue operá-la. É isso que faz de
-[«se a Vela sumir, sua carteira não»](/pt-BR/docs/why-vela) uma afirmação sobre
-contratos, e não sobre nossas intenções.
+**O ecossistema trata a sua conta como um Safe, porque ela é um.** Exploradores de
+blocos a decodificam, e as ferramentas da Safe conseguem lê-la e montar transações
+para ela. Para *assinar* essas transações, porém, um programa precisa conseguir
+pedir à sua chave uma assinatura para `getvela.app`, o domínio ao qual as suas
+passkeys pertencem — então o próprio app web da Safe, servido de outro domínio, não
+consegue assinar por você. O
+[guia de auto-hospedagem](/pt-BR/docs/self-hosting#if-getvela-app-disappears) lista
+o que consegue.
 
-**A superfície de ataque é uma que todo mundo também está vigiando.** Um contrato de
-conta feito sob medida é vigiado só por quem o escreveu. Este aqui é vigiado por
-todo mundo que guarda dinheiro em um Safe.
+**A superfície de ataque é uma que muitos outros também estão vigiando.** Um
+contrato de conta feito sob medida é vigiado quase só pelo autor. Os contratos
+principais do Safe são vigiados por todo mundo que guarda dinheiro num Safe; os
+módulos 4337 e de passkey têm um público menor, mas real.
 
-## O que custa
+## Quanto custa
 
-Ser padrão não sai de graça, e os trade-offs são reais:
+Ser padrão tem um preço:
 
-- **Gas.** Uma conta inteligente verifica uma assinatura on-chain. Conte com algo em
-  torno de 1,5 a 3 vezes o gas de uma transferência EOA simples, dependendo da
-  chain. Veja [redes e taxas](/pt-BR/docs/networks-and-fees).
-- **A conta precisa ser implantada.** Seu endereço é calculado com `CREATE2` antes
-  de existir qualquer coisa on-chain, então você recebe na hora, mas a primeira
-  transação de saída paga a implantação do contrato.
-- **Nem toda chain se qualifica.** O assinante WebAuthn verifica uma assinatura
-  P-256 on-chain, o que exige o precompilado **RIP-7212**. A Vela se recusa a
-  habilitar uma rede sem ele em vez de cair para um verificador mais fraco.
-- **O risco da Safe agora é seu risco.** Confiar num contrato amplamente usado
-  continua sendo confiar num contrato. O que a Vela pode dizer é que não acrescentou
-  por cima uma segunda coisa em que confiar.
+- **Gas.** A sua assinatura é verificada on-chain e a transação passa pelo
+  EntryPoint. Um envio simples de uma carteira Vela já implantada usou cerca de
+  140.000–170.000 unidades de gas on-chain nas nossas medições na Gnosis (setembro de 2026);
+  uma transferência simples de ETH de uma conta comum usa 21.000. Além do gas, o
+  relay cobra a taxa dele — veja [redes e taxas](/pt-BR/docs/networks-and-fees).
+- **A conta precisa ser implantada.** O seu endereço é calculado com `CREATE2`
+  antes de existir qualquer coisa on-chain, então você pode receber nele na hora; a
+  sua primeira transação de saída em cada rede paga a implantação do contrato.
+- **Nem toda rede se qualifica.** As assinaturas de passkey são verificadas com o
+  pré-compilado **RIP-7212**, e o endereço dele faz parte dos dados de configuração
+  de toda carteira, então uma rede sem ele simplesmente não consegue rodar a Vela.
+- **O risco da Safe passa a ser o seu risco.** Confiar num contrato amplamente usado
+  continua sendo confiar num contrato. A Vela não acrescentou um segundo contrato
+  próprio no caminho até o seu dinheiro para você ter que confiar.
 
-## O que é auditado e o que não é
+## O que é e o que não é auditado
 
-Os contratos da Safe e o módulo assinante WebAuthn são auditados por terceiros, e
-esses relatórios são públicos. **O código do app da Vela não passou por auditoria
-independente**, e não há nenhuma agendada — é uma meta para quando o projeto puder
-bancar uma, não um compromisso com data. Cada contrato de que a Vela depende, seu
-relatório de auditoria e os problemas que acompanhamos estão em
+Os contratos da Safe, os módulos 4337 e de passkey dela e o EntryPoint v0.7 têm
+auditorias de terceiros publicadas. **O código da própria Vela — os apps, os
+serviços de backend e o contrato de registro — não passou por auditoria de
+terceiros, e nenhuma está agendada**; é um objetivo para quando o projeto puder
+pagar por uma, não um compromisso com data. Cada contrato, o relatório de auditoria
+dele e os problemas que acompanhamos estão em
 [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).
 
 ## Confira você mesmo
 
-Sua conta está on-chain. Abra em um explorador de blocos e leia o endereço da
-implementação: será o deployment canônico da Safe na v1.4.1, byte a byte, em todas
-as redes que a Vela suporta.
+A sua conta está on-chain. Abra o seu endereço num explorador de blocos depois que
+ela for implantada: é um proxy Safe cuja implementação é a implantação canônica do
+SafeL2 v1.4.1 da Safe, em todas as redes.
+
+A seguir: [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).

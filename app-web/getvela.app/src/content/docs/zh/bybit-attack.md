@@ -1,6 +1,7 @@
 ---
 title: Bybit 被攻击那次，以及它走的那条路
 description: 2025 年 2 月，Bybit 损失约 15 亿美元。被攻破的不是 Safe 合约，而是界面。这一页讲清楚那条路径，以及 Vela 的设计里有什么把它堵上了。
+source: ac56b16b531f
 ---
 
 # Bybit 被攻击那次，以及它走的那条路

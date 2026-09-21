@@ -1,6 +1,7 @@
 ---
 title: Firma legible
-description: Vela decodifica las transacciones a lenguaje claro antes de que las apruebes —intención, montos, direcciones y riesgo— en vez de hexadecimal opaco. Cuando no puede decodificar una llamada, te avisa en lugar de fingir.
+description: "Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir."
+source: 858d8631b7e5
 ---
 
 <script>
@@ -9,80 +10,101 @@ description: Vela decodifica las transacciones a lenguaje claro antes de que las
 
 # Firma legible
 
-La mayoría de las wallets te pide aprobar un muro de hexadecimal y esperar lo
-mejor. La «firma a ciegas» —aprobar llamadas que en realidad no puedes leer— está
-detrás de buena parte de las wallets vaciadas. La respuesta de Vela es la **firma
-legible**: antes de que firmes, la transacción se traduce a algo que puedas
-entender.
+Muchas wallets todavía muestran datos crudos para cualquier contrato que no
+reconocen, y la «firma a ciegas» (aprobar llamadas que en realidad no puedes leer)
+es una de las formas en que vacían wallets. La respuesta de Vela es la **firma
+legible**: antes de que firmes, la transacción se decodifica en algo que puedas
+entender, hasta donde se pueda.
 
 ## Qué ves
 
-En vez de calldata en crudo, Vela muestra:
+En lugar de calldata crudo, Vela te muestra:
 
-- **Intención** — qué hace la transacción: *Enviar*, *Aprobar*, *Intercambiar*,
-  etcétera.
-- **Lo sustancial** — los montos y direcciones involucrados, con los montos de
-  tokens en unidades reales y los destinatarios resueltos a un nombre cuando
-  existe.
-- **Los detalles** — nonce, fechas límite y la calldata en crudo, disponibles
-  cuando los pidas en vez de encajados en la cara.
-- **Una indicación de riesgo**, por colores, para que lo que da miedo lo parezca.
+- **La intención**: qué hace la transacción, como *Enviar*, *Aprobar*,
+  *Intercambiar*, etcétera.
+- **Lo esencial**: los montos y las direcciones involucradas, con los montos de
+  tokens en unidades reales y los destinatarios con su nombre cuando lo tienen.
+- **Los detalles**: nonce, fechas límite y el calldata crudo, disponibles cuando los
+  pidas en lugar de ponértelos enfrente a la fuerza.
+- **Una indicación de riesgo**, con colores para que las acciones peligrosas
+  resalten.
 
 ## Cómo funciona (ERC-7730)
 
-Vela decodifica tanto **llamadas a contratos** como **datos tipados EIP-712** con
-descriptores
+Vela decodifica tanto las **llamadas a contratos** como los **datos tipados
+EIP-712** con descriptores
 [ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry): definiciones
-pequeñas y compartibles de qué significan las funciones de un contrato.
+pequeñas y compartibles de lo que significan las funciones de un contrato.
 
-- Cuando existe un **descriptor específico del contrato**, la transacción se marca
-  como **verificada** y se etiqueta con el nombre del contrato.
-- Cuando no, Vela cae a **descriptores estándar** para las formas comunes —tokens
-  ERC-20, NFT ERC-721, bóvedas ERC-4626 y permits ERC-2612— así que la mayoría de
-  las acciones cotidianas igual se decodifican.
+Vela busca un descriptor en este orden:
+
+1. **Integrado en la app**: descriptores para contratos muy usados, como los routers
+   de Uniswap, PancakeSwap y SushiSwap, WETH, el pool de Aave v3, 1inch, Lido y
+   wstETH, y Seaport.
+2. **Obtenido del servidor de datos de cadena de Vela**, que vuelve a publicar el
+   registro público de ERC-7730.
+3. **Formas estándar**: tokens ERC-20, NFT ERC-721 y ERC-1155, bóvedas ERC-4626 y
+   permisos ERC-2612, para que la mayoría de las acciones cotidianas se sigan
+   decodificando.
+
+Cuando coincide un descriptor escrito para ese contrato en específico, la
+transacción se etiqueta como **verificada**, con el nombre del contrato.
+«Verificada» significa *que se encontró un descriptor para este contrato*, no que
+se haya comprobado criptográficamente: los descriptores que se obtienen del servidor
+de datos de cadena no están firmados, así que son tan confiables como ese servidor.
+Esa es una de las razones por las que puedes
+[operar el tuyo](/es-MX/docs/self-hosting#chain-data).
 
 Los montos de tokens se formatean con los **decimales reales on-chain** del token.
-Vela nunca asume 18; si no puede confirmar los decimales, muestra el valor pero
-**lo marca como no verificado** en lugar de adivinar.
+Si Vela no puede confirmar los decimales de un token, muestra el monto como si el
+token tuviera 18 y lo **marca como no verificado**, para que un número equivocado
+nunca parezca uno comprobado.
 
 ## Niveles de riesgo
 
 Cada transacción decodificada recibe un nivel de riesgo para que los patrones
-peligrosos salten a la vista:
+peligrosos resalten:
 
-- **Precaución** para aprobaciones y permits: estás dando poder de gasto.
-- **Peligro** para lo genuinamente riesgoso, como una **aprobación de token
+- **Precaución** para aprobaciones y permisos: estás otorgando poder de gasto.
+- **Peligro** para lo que de verdad es riesgoso, como una **aprobación de tokens
   ilimitada**.
-- Menor riesgo para acciones rutinarias como hacer staking o depositar.
+- Un riesgo menor para acciones de rutina, como hacer staking o depositar.
 
-<Callout type="warning" title="Las aprobaciones ilimitadas se bloquean">
-Un «approve» que otorga una asignación ilimitada es una de las formas más comunes
-de que los fondos se vacíen más adelante. Vela hace más que marcarlas: reescribe la
-solicitud a un monto finito que tú eliges, y una revisión final antes del envío se
-niega a mandar cualquier aprobación que siguiera siendo ilimitada. Esa barrera lee
-la calldata en crudo directamente, así que funciona incluso cuando no existe
-descriptor para el contrato.
+<Callout type="warning" title="Las aprobaciones on-chain «ilimitadas» no se pueden enviar">
+Una aprobación on-chain por un monto ilimitado es una de las formas más comunes en
+que después vacían fondos. Cuando una dApp pide una (<code>approve</code>,
+<code>increaseAllowance</code> o el <code>approve</code> de Permit2) en el nivel
+«ilimitado» (2^200 o más, o 2^152 para Permit2, que es lo que usan las dApps para
+decir «ilimitado»), Vela no la envía hasta que la cambies por un monto específico,
+tu saldo o una revocación; una última revisión antes del envío lee el calldata
+crudo, así que funciona con o sin descriptor. Lo que no detiene: una
+<strong>aprobación finita grande</strong> (aunque esté muy por encima de tu saldo),
+los <strong>permisos firmados</strong> (firmas EIP-2612 y Permit2) y el
+<code>setApprovalForAll</code> de NFT; cada uno se muestra con una advertencia, y la
+decisión es tuya.
 </Callout>
 
 ## Cuando Vela no puede decodificar una llamada
 
-La honestidad importa más que una pantalla limpia. Cuando no hay descriptor
-ERC-7730 pero la función aparece en una base pública de selectores, Vela decodifica
-la llamada de forma genérica y la etiqueta como **mejor esfuerzo** —decodificada,
-pero no verificada— bajo un aviso de precaución. Si ni eso funciona, o si Vela solo
-puede decodificar parte de una transacción, **no** finge entenderla.
+Cuando no existe un descriptor ERC-7730 pero la función aparece en una base de datos
+pública de selectores, Vela decodifica la llamada de forma genérica y la etiqueta
+como **mejor esfuerzo** (decodificada, pero no verificada), bajo un aviso de
+precaución. Si ni eso funciona, o si Vela solo puede decodificar una parte de la
+transacción, **no** finge entenderla.
 
 <Callout type="danger" title="Advertencia explícita de firma a ciegas">
 Si una llamada no se puede decodificar, Vela muestra una advertencia clara de firma
-a ciegas en vez de un resumen falsamente amable. Si solo puede resolver algunos
-campos, te dice que la vista es parcial y mantiene alto el nivel de riesgo. Siempre
-sabes cuánto de lo que estás firmando alcanzó a leer Vela.
+a ciegas en lugar de un resumen falsamente amigable. Si solo puede resolver algunos
+de los campos, te dice que la vista es parcial y mantiene elevado el nivel de
+riesgo. Siempre sabes qué tanto de lo que firmas pudo leer Vela en realidad.
 </Callout>
 
 ## Por qué importa
 
-Autocustodia significa que nadie puede revertir una transacción mala por ti. La
-defensa no es una mesa de ayuda: es entender qué apruebas **antes** de aprobarlo.
-La firma legible convierte «confía en este bloque opaco» en «esto es exactamente lo
-que hace». Dónde encaja en el modelo de seguridad general está en el
-[whitepaper](/es-MX/docs/whitepaper).
+Autocustodia significa que nadie puede revertir por ti una mala transacción. La
+defensa no es una mesa de ayuda: es entender lo que apruebas **antes** de
+aprobarlo. La firma legible es la forma en que Vela intenta mostrártelo, y tiene
+límites: solo puede ser tan honesta como la app que la muestra, y por eso importa
+una [revisión independiente](/es-MX/docs/clear-signing-self-host). Consulta el
+[whitepaper](/es-MX/docs/whitepaper) para ver dónde encaja en el modelo de seguridad
+de Vela.

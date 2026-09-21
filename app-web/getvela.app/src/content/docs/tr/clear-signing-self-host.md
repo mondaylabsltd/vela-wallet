@@ -1,105 +1,119 @@
 ---
-title: İmza sayfasını kendin barındır
-description: İşlemi kendisi çözen ve geçiş anahtarınızla imzalayan, hiçbir bağımlılığı olmayan sayfa ve Chrome uzantısı — kendi kopyanızı nasıl çalıştıracağınız ve hangi kopyanın cüzdanınız için imzalayabileceği.
+title: İmza sayfasını kendiniz barındırın
+description: "Bir işlemi kendisi çözen ve geçiş anahtarınızla imzalayan, hiçbir bağımlılığı olmayan sayfa ve Chrome uzantısı — kendi kopyanızı nasıl çalıştıracağınız ve hangi kopyanın cüzdanınız için imzalayabileceği."
+source: c81389ef7aa2
 ---
 
-# İmza sayfasını kendin barındır
+# İmza sayfasını kendiniz barındırın
 
 Vela her işlemi siz onaylamadan önce çözer ve bu çözümleme dürüst bir iştir — ama
-işlemi oluşturan uygulamanın yaptığı bir iştir. Uygulamaya ya da size ulaşma
-yoluna müdahale edilmişse, size bir şey gösterip başka bir şey imzalatabilir.
-[Bybit'te](/tr/docs/bybit-attack) olan tam olarak buydu.
+işlemi oluşturan uygulamanın kendisinin yaptığı bir iştir. Uygulamaya ya da size
+ulaşma yoluna müdahale edilmişse, size bir şey gösterip başka bir şey imzalatabilir.
+[Bybit'te](/tr/docs/bybit-attack) tam olarak bu oldu.
 
-İmza sayfası, bunu ikiye bölmek için var: işlem bir yerden gelir, kontrol ile imza
-ise sizin denetlediğiniz başka bir yerde olur.
+İmza sayfası, bunu ikiye bölmek için var: işlem bir yerden gelir, kontrol ve imza ise
+sizin denetiminizdeki başka bir yerde gerçekleşir.
+
+**Durum:** hazır ve yerelde test edildi; **yayımlanmadı** ve **henüz hiçbir Vela
+uygulaması ona istek göndermiyor**. Bugün okunacak, çalıştırılacak ve `samples/`
+klasöründeki örnek isteyicilerle denenecek bir şey. Onu gerçek imzalar için kullanmak,
+uygulamaların isteklerini ona yönlendirmesini gerektiriyor; bu kısım henüz yapılmadı.
 
 ## Nedir
 
 Tek bir klasör — depodaki `app-web/clearsigning` — ve bu klasör hem bir web sayfası
-hem bir Chrome uzantısı. Saf HTML, CSS ve JavaScript: framework yok, bundler yok,
-derleme adımı yok, bağımlılık yok ve kendi başına hiçbir ağ isteği yok.
+hem de bir Chrome uzantısı. Saf HTML, CSS ve JavaScript: framework yok, paketleyici
+(bundler) yok, derleme adımı yok, bağımlılık yok ve bir sunucudan veri çekmiyor —
+yaptığı tek istek, süs amaçlı token logoları için.
 
-Bir imza isteği geldiğinde, yanında gelen özete güvenmez. Ham calldata'yı kendisi
-çözer, kendi özetini hesaplar, imzanın gerçekte neye yetki vereceğini gösterir ve
-ancak ondan sonra geçiş anahtarınızı ister.
+Bir imza isteği aldığında, onunla birlikte gelen özete güvenmez. Ham calldata'yı
+kendisi çözer, kendi özet değerini (digest) hesaplar, imzanın gerçekte neye yetki
+vereceğini size gösterir ve ancak ondan sonra geçiş anahtarınızı ister.
 
-Derleme adımı olmadığı için okuduğunuz dosyalar, çalışan dosyalardır. Klasörü
-depoyla karşılaştırıp neyi sunduğunuzu bilebilirsiniz.
+Derleme adımı olmadığı için okuduğunuz dosyalar, çalışan dosyalardır. Klasörü depoyla
+karşılaştırıp neyi sunduğunuzu kesin olarak bilebilirsiniz.
 
 ## Hangi kopya cüzdanınız için imzalayabilir
 
-Geçiş anahtarı, oluşturulduğu alan adına bağlıdır. Vela anahtarlarınız
-`getvela.app` altında kayıtlı ve tarayıcı bunları yalnızca ilgili tarafı
-`getvela.app` olan bir sayfaya sunar. Kendi kopyanızı çalıştırmanın hangi yolunun
-işinize yarayacağını belirleyen tek kural bu.
+Bir geçiş anahtarı, oluşturulduğu alan adına bağlıdır. Vela anahtarlarınız
+`getvela.app` altında kayıtlıdır ve tarayıcı onları yalnızca bağlı olan tarafı
+(relying party) `getvela.app` olan bir sayfaya sunar. Kendi kopyanızı çalıştırmanın
+hangi yolunun işinize yarayacağını bu tek kural belirler.
 
-**Chrome uzantısı olarak — mevcut cüzdanınızla kullanacağınız yol budur.**
-Uzantının ilgili tarafı, klasör nereden gelmiş olursa olsun `getvela.app`'tir; yani
-mevcut anahtarlarınız onda imzalayabilir, çalışan kod ise yüklediğiniz ve
+**Chrome uzantısı olarak — mevcut anahtarlarınızla kullanmanın yolu budur.**
+Uzantının bağlı olan tarafı, klasör nereden gelmiş olursa olsun `getvela.app`'tir; yani
+mevcut anahtarlarınız onda imzalayabilir, çalışan kod ise sizin yüklediğiniz ve
 incelediğiniz klasördür.
 
-1. `chrome://extensions` adresini açıp **Geliştirici modu**'nu açın.
-2. **Paketlenmemiş öğe yükle** deyip `app-web/clearsigning` klasörünü seçin.
-3. Araç çubuğundaki simge sayfayı bir sekmede açar.
+1. Klasörü edinin: `git clone https://github.com/mondaylabsltd/vela-wallet`
+   (içindeki `app-web/clearsigning`).
+2. `chrome://extensions` adresini açın ve **Geliştirici modu**'nu etkinleştirin.
+3. **Paketlenmemiş öğe yükle**'ye tıklayın ve `app-web/clearsigning` klasörünü seçin.
+4. Araç çubuğundaki simge, sayfayı bir sekmede açar.
 
-**Kendi alan adınızda ya da localhost'ta bir sayfa olarak.** HTTP(S) üzerinden
-sunulduğunda sayfanın ilgili tarafı kendi alan adıdır — yani `getvela.app` altında
-değil, _o_ alan adı altında kayıtlı anahtarlarla imzalayabilir. Bu da onu bütün
-töreni baştan sona denemenin, masaüstü akışını çalıştırmanın ve anahtarı kendi
-alan adınızda oluşturulmuş bir cüzdan için imzalamanın doğru yolu yapar. Mevcut bir
-`getvela.app` cüzdanı için imzalamanın yolu değildir.
+**Kendi alan adınızda ya da localhost'ta bir sayfa olarak.** HTTPS üzerinden (ya da
+localhost'tan) sunulduğunda sayfanın bağlı olan tarafı kendi ana makine adıdır
+(hostname) — yani `getvela.app` altında kayıtlı anahtarlarla değil, _o_ ana makine adı
+altında kayıtlı anahtarlarla imzalayabilir. Bu da onu bütün süreci uçtan uca denemenin,
+masaüstü akışını çalıştırmanın ve anahtarı kendi alan adınızda oluşturulmuş bir cüzdan
+için imzalamanın doğru yolu yapar. Mevcut bir `getvela.app` cüzdanı için imzalamanın
+yolu değildir.
 
 ```sh
 cd app-web/clearsigning
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
-Uygulamadaki bütün yollar göreli, yani var olan bir sunucudaki bir alt dizin de
-çalışır; `index.html`'i doğrudan diskten açmak (`file://`) da etrafa bakmak için
-yeterlidir — kaynak olmadığı için ilgili taraf da yoktur ve hiçbir şey imzalanamaz.
+Uygulamadaki bütün yollar göreli olduğundan, mevcut bir sunucudaki bir alt dizin de
+çalışır; `index.html` dosyasını doğrudan diskten (`file://`) açmak da etrafa bakmak
+için yeterlidir — kaynak (origin) olmadığı için bağlı olan taraf da yoktur ve hiçbir
+şey imzalanamaz.
 
-## İmzalamadan önce ne yapıyor
+## İmzalamadan önce ne yapar
 
-- **İşlemi kendisi çözüyor.** Çağrının ne yaptığını, kime ve ne kadar olduğunu
-  calldata'dan okur — bir toplu işlemin içine gömülmüş çağrılar dahil.
-- **Yalnızca kendi hesapladığı bir özeti imzalıyor.** EIP-191, EIP-712, SafeOp ve
-  SafeMessage özetleri sayfanın içinde hesaplanır ve cüzdanın kullandığı kodun
-  aynısıyla, `vela-core` ile karşılıklı kontrol edilir. Hesaplayamadığı bir özet,
-  imza değil rettir.
-- **İşlemin istenen işlem olduğunu kontrol ediyor.** Sitenin istediği çağrının,
+- **İşlemi kendisi çözer.** Çağrının ne yaptığını, kime ve ne kadar olduğunu
+  calldata'dan okur — bir toplu işlemin içine yerleştirilmiş çağrılar dahil.
+- **Yalnızca kendi hesapladığı bir özeti imzalar.** EIP-191, EIP-712, SafeOp ve
+  SafeMessage özetleri sayfanın içinde hesaplanır ve cüzdanın kullandığı kodun aynısı
+  olan `vela-core` ile çapraz kontrol edilir. Hesaplayamadığı bir özet, imza değil
+  rettir.
+- **İşlemin istenen işlem olduğunu kontrol eder.** Sitenin istediği çağrının,
   imzalanan işlemin içinde gerçekten bulunması gerekir.
-- **Sınırsız onayı reddediyor.** Uyarı değil — ret; üstelik bunun yerine ne
-  yapılacağını da söyleyerek.
-- **Bir şeyi okuyamadığında bunu söylüyor;** arkasında duramayacağı dost görünümlü
-  bir özet göstermiyor.
-- **Hesabın adresini ve identicon'unu gösteriyor** ve imzayı isteyenin verdiği bir
-  alıcı adını göstermiyor. İsteyenin kontrol ettiği her şey ya atılır ya da ona ait
-  olarak etiketlenir.
+- **"Sınırsız" düzeydeki bir onayı reddeder.** Uyarı değil — ret; bunun yerine ne
+  yapılacağına dair bir yönlendirmeyle.
+- **Bir şeyi okuyamadığında bunu söyler;** arkasında duramayacağı dost görünümlü bir
+  özet göstermez.
+- **Hesabın adresini ve identicon'unu gösterir** ve imzayı isteyenin verdiği bir alıcı
+  adını göstermez. İsteyenin kontrol ettiği her şey ya çıkarılır ya da ona ait olarak
+  etiketlenir.
 
 ## Bilerek sahip olmadığı şeyler
 
-- **Düzenleyici yok.** İstek geldiği anda sabittir: ya imzalarsınız ya
-  imzalamazsınız. Bir ücret seçici ya da yetki düzenleyici calldata'yı yeniden
-  yazardı; bu sayfanın var olma nedeni de tam olarak o hastalığı önlemek.
-- **Anahtar oluşturma yok.** İmza sayfası geçiş anahtarı oluşturamaz. Oluşturmak,
-  başka bir hesap oluşturmak olurdu.
-- **Ağ isteği yok.** Getirilecek bir şey yoksa, araya girilecek bir şey de yoktur.
+- **Düzenleyici yok.** İstek geldiği anda sabittir: ya imzalarsınız ya imzalamazsınız.
+  Bir ücret seçici ya da harcama izni düzenleyicisi calldata'yı yeniden yazardı; bu
+  sayfanın önlemek için var olduğu hastalık da tam olarak bu.
+- **Anahtar oluşturma yok.** İmza sayfası geçiş anahtarı oluşturamaz. Bir tane
+  oluşturmak, başka bir hesap oluşturmak olurdu.
+- **Ağdan veri yok.** Gösterdiği ya da imzaladığı hiçbir şey ağdan çekilmez. Yüklediği
+  tek şey, Vela'nın zincir verisi sunucusundan görsel olarak alınan token logolarıdır;
+  yüklenemezlerse yerlerini bir harf alır.
 
-## Bir istek ona nasıl ulaşıyor
+## Bir istek ona nasıl ulaşır
 
-| İsteyen | Kanal |
+| İsteyen                                      | Kanal                                                                      |
 | -------------------------------------------- | -------------------------------------------------------------------------- |
-| Aynı tarayıcıdaki bir sayfa | `postMessage` |
-| Aynı tarayıcıdaki bir sayfadan uzantıya | Uzantı portu |
-| Aynı makinedeki bir masaüstü uygulaması | URL parçası + loopback geri çağrısı |
-| Bir telefon ya da başka bir bilgisayar | Bluetooth LE (protokol yazıldı; radyo gerçek donanımda henüz denenmedi) |
+| Aynı tarayıcıdaki bir sayfa                  | `postMessage`                                                              |
+| Aynı tarayıcıdaki bir sayfadan uzantıya      | Uzantı portu                                                               |
+| Aynı makinedeki bir masaüstü uygulaması      | URL parçası + loopback geri çağrısı (`samples/` içinde örnek var; Vela masaüstü uygulaması henüz kullanmıyor) |
+| Bir telefon ya da başka bir bilgisayar       | Bluetooth LE (protokol uygulandı; radyo kısmı gerçek donanımda henüz denenmedi) |
 
-Tel biçimi, özetler ve ekrandaki her öğenin nereden geldiğini gösteren tablo,
+Aktarım biçimi, özetler ve ekrandaki her öğenin nereden geldiğini gösteren bir tablo,
 kodun yanındaki `PROTOCOL.md` dosyasında.
 
-## Ne zaman kullanmalı
+## Nereye oturuyor
 
-Hesap, kaybetmeye üzüleceğiniz bir parayı tuttuğu gün — ve o günden sonra her imza
-için. Yalnızca büyük tutarlar için değil: küçük bir onay bile hesabı boşaltmaya
-yetecek yetkiyi devredebilir. Özel günlere saklanan bir imzalama alışkanlığı,
-gerektiği gün yerinde olmaz.
+Uygulamalar isteklerini ona iletebildiğinde amaçlanan kullanım basit: hesabınız
+kaybetmeyi göze alamayacağınız bir parayı tuttuğu günden itibaren her imza, kodunu
+kendiniz yüklediğiniz bir sayfadan geçer. Yalnızca büyük tutarlar için değil — küçük
+bir onay bile bir hesabı boşaltmaya yetecek yetkiyi devredebilir. O zamana kadar bu
+sayfa, o ikinci görüşün tam olarak nasıl çalışacağını okumanın ve denemenin bir yolu.

@@ -1,6 +1,7 @@
 ---
 title: Recupero e accesso
-description: Come Vela ti fa recuperare il wallet su un nuovo dispositivo senza frase seed — e i limiti onesti di questo modello.
+description: "Come rientri nel tuo wallet su un nuovo dispositivo con una qualsiasi delle tue chiavi, dove viene cercato il wallet e i limiti onesti del recupero senza seed phrase."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,71 +10,79 @@ description: Come Vela ti fa recuperare il wallet su un nuovo dispositivo senza 
 
 # Recupero e accesso
 
-La parte più difficile di un wallet senza frase seed è proprio il recupero: se non
-ci sono dodici parole, come torni dentro da un telefono nuovo? Ecco esattamente
-come lo gestisce Vela.
+Senza seed phrase, il recupero si basa su due cose: **una chiave che hai ancora**
+e **un record pubblico di quali chiavi appartengono al tuo wallet**.
 
-## Come funziona
+## Cosa viene registrato quando crei un wallet
 
-Quando crei un wallet, due cose vengono pubblicate nell'**indice passkey** di Vela:
+L'indirizzo del tuo wallet è calcolato da tutte le chiavi con cui lo crei.
+Perché una qualsiasi di quelle chiavi possa ritrovare il wallet in seguito, la
+creazione scrive un record in un **contratto di registro** pubblico su Gnosis
+Chain: la chiave pubblica di ogni chiave, l'indirizzo del wallet, il suo nome e i
+dati di registrazione firmati. Il registro non ha un proprietario e non si può
+modificare né cancellare. (L'elenco completo di ciò che è pubblico è in
+[crea il tuo wallet](/it/docs/create-wallet#what-is-public).)
 
-- La **chiave pubblica** della tua passkey (mai quella privata).
-- Il **nome** che hai scelto per il wallet.
+Il servizio di indice delle chiavi pubbliche di Vela invia quel record e ne paga
+il gas; il record in sé vive on-chain, e qualsiasi app può leggerlo direttamente.
 
-La chiave pubblica è memorizzata sulla blockchain Gnosis tramite un contratto, ed è
-quindi leggibile pubblicamente e non dipende dal fatto che i server di Vela restino
-online.
+## Accedere da un nuovo dispositivo
 
-La tua chiave **privata**, intanto, è una passkey sincronizzata dal portachiavi
-della tua piattaforma: **Portachiavi iCloud** sui dispositivi Apple, **Gestore
-delle password di Google** su Android.
+1. Apri Vela e scegli di accedere.
+2. Usa **una qualsiasi** delle tue chiavi: una passkey sincronizzata su questo
+   dispositivo, un telefono vicino (scansiona il codice QR) o la tua chiave di
+   sicurezza.
+3. Vela ricava dalla firma la chiave pubblica di quella chiave, la cerca — prima
+   nell'indice di Vela, poi, se l'indice non risponde, nel contratto di registro su
+   Gnosis e quindi su Ethereum — e ricostruisce il wallet. Prima di mostrartelo,
+   controlla che le chiavi trovate producano davvero l'indirizzo registrato.
 
-Per accedere da un nuovo dispositivo:
+L'elenco degli account non viene sincronizzato tra dispositivi; accedendo lo
+ricostruisci.
 
-1. Accedi allo stesso account iCloud o Google, con la sincronizzazione del
-   portachiavi attiva.
-2. Apri Vela e scegli di accedere.
-3. Autenticati con la passkey. La piattaforma fornisce la passkey sincronizzata;
-   l'indice fornisce l'account corrispondente. Il tuo wallet è tornato.
-
-L'indice è una cache, non un punto singolo di rottura. Se dovesse risultare
-irraggiungibile e il tuo account non fosse nella memoria locale, Vela può
-ricostruire la tua chiave pubblica sul dispositivo a partire da due firme passkey e
-riderivarne l'indirizzo del wallet — senza alcun server.
-
-<Callout type="info" title="Perché dividerlo così">
-La chiave pubblica nell'indice on-chain permette a chiunque (anche a
-un'installazione appena fatta) di trovare il tuo account. La chiave privata,
-sincronizzata dal portachiavi della piattaforma di cui ti fidi, è ciò che autorizza
-davvero le transazioni. Tutto ciò che sta nell'indice è dato pubblico, e niente lì
-dentro può spostare i tuoi fondi: possono farlo solo le firme della tua passkey.
+<Callout type="info" title="Se nessun indice o registro risponde">
+Un wallet con una <strong>sola chiave</strong> si può ricostruire sul dispositivo
+senza alcun server: due firme di quella chiave bastano per ricavarne la chiave
+pubblica e ricalcolare l'indirizzo. Un wallet con più chiavi ha bisogno del record
+nel registro, perché una chiave non può dire all'app quali erano le altre.
 </Callout>
+
+## Copie del record
+
+Il registro su Gnosis è quello che le app leggono per primo. Dalle
+**Impostazioni** puoi anche copiare il record del tuo wallet nello stesso contratto
+di registro su **Ethereum**, pagando tu il gas, così il record esiste su una
+seconda chain. Chiunque può fare una copia del genere; non contiene nulla che
+possa spostare fondi.
 
 ## I limiti, detti onestamente
 
-Auto-custodia significa che la responsabilità è davvero tua. Ecco cosa capire.
-
-<Callout type="warning" title="Il tuo recupero dipende dal portachiavi della piattaforma">
-L'accesso multi-dispositivo di Vela si appoggia alla sincronizzazione della passkey
-tramite Portachiavi iCloud o Gestore delle password di Google. Tieni quell'account
-sicuro e le sue opzioni di recupero aggiornate. Se perdi <strong>sia</strong> i tuoi
-dispositivi <strong>sia</strong> il portachiavi dell'account della piattaforma, Vela
-non può rigenerare la tua chiave privata: per come è progettato, non l'abbiamo mai
-avuta.
+<Callout type="warning" title="Una chiave persa è persa">
+Se tutte le chiavi con cui hai creato il wallet non ci sono più — le passkey
+sincronizzate, i telefoni, le chiavi di sicurezza — nessuno può recuperare il
+wallet: né Vela, né Apple o Google, né chiunque altro. Non c'è seed phrase, né
+reset da parte dell'assistenza, né porta sul retro.
 </Callout>
 
-Consigli pratici:
+Quello che lo rende improbabile è avere più di una via d'accesso:
 
-- **Tieni attiva la sincronizzazione del portachiavi.** È ciò che porta la passkey
-  da un dispositivo all'altro.
-- **Metti in sicurezza l'account Apple / Google** con una password forte e i suoi
-  metodi di recupero. Quell'account fa ormai parte della sicurezza del tuo wallet.
-- **Tieni più di un dispositivo collegato** dove puoi, così un telefono perso resta
-  una scocciatura e non una crisi.
+- **Tieni attiva la sincronizzazione delle passkey** se usi la passkey di questo
+  dispositivo. È ciò che porta la chiave su un nuovo telefono o computer.
+- **Proteggi l'account che c'è dietro.** Chi controlla il tuo account Apple o
+  Google potrebbe riuscire a usare una passkey sincronizzata; dagli una password
+  robusta e metodi di recupero propri.
+- **Crea il wallet con più di una chiave**, per esempio la passkey del telefono e
+  una chiave di sicurezza hardware tenuta in un posto sicuro. Le chiavi si possono
+  aggiungere solo quando crei il wallet ([perché](/it/docs/signers)). Ricorda che
+  una qualsiasi chiave può firmare da sola — e non si può rimuovere, quindi se una
+  viene compromessa sposta i fondi in un nuovo wallet
+  ([cosa fare](/it/docs/signers)).
 
 ## Cosa può e cosa non può fare Vela
 
-- **Può:** aiutarti a ritrovare il tuo account tramite l'indice pubblico.
-- **Non può:** spostare i tuoi fondi, congelare il wallet o recuperare una chiave
-  privata. Vela non l'ha mai avuta. È tutto il senso dell'auto-custodia — e lo
-  scambio che accetti in cambio.
+- **Può:** tenere attivo l'indice, così il tuo wallet viene trovato rapidamente su
+  un nuovo dispositivo.
+- **Non può:** spostare i tuoi fondi, congelare il wallet, aggiungere o rimuovere
+  chiavi, o recuperare una chiave che hai perso. Vela non ha mai le tue chiavi.
+
+Poi: [firma leggibile](/it/docs/clear-signing).

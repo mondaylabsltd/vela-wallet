@@ -1,6 +1,7 @@
 ---
 title: Gönderme ve alma
-description: Vela'da token alma ve gönderme — ağlar arasında tek adres, açıkça imzalanan işlemler ve hesap soyutlamasının paranızı gerçekte nasıl taşıdığı.
+description: "Vela ile nasıl para alınır ve gönderilir — her ağda tek adres, bir ya da birçok kişiye gönderim, alıcıların adlarının nereden geldiği, neyi onayladığınız ve relay'in paranızı nasıl taşıdığı."
+source: c23b205bcd8b
 ---
 
 <script>
@@ -11,69 +12,90 @@ description: Vela'da token alma ve gönderme — ağlar arasında tek adres, aç
 
 ## Alma
 
-1. Cüzdanınızı açıp **Al**'a dokunun.
-2. Adresinizi paylaşın — kopyalayın ya da gönderen QR kodu okutsun.
-3. Transfer zincirde onaylandığında bakiye cüzdanınızda görünür.
+1. Cüzdanınızı açın ve **Al**'a dokunun.
+2. Adresinizi paylaşın — kopyalayın ya da QR kodunu gösterin. Web cüzdanı, tutar
+   içeren bir ödeme isteği de oluşturabilir.
+3. Transfer zincirde onaylandığında bakiyenizde görünür.
 
-Bilmeye değer iki şey:
-
-- Adresiniz **desteklenen her ağda aynı**, yani her yerde tek bir adres
-  paylaşırsınız — yalnızca gönderenin doğru ağı kullandığından emin olun.
-- **Cüzdanınız kurulmadan önce de para alabilirsiniz.** Vela hesapları
-  karşıolgusal akıllı hesaplardır; bu yüzden bir zincirde sözleşme var olmadan
-  önce adresinize para gelebilir, sözleşme ise oradaki ilk gönderiminizde kendini
-  kurar.
+- Adresiniz **her ağda aynıdır**, yani tek bir adres verirsiniz — ama gönderenin
+  yine de Vela'nın desteklediği ya da sizin eklediğiniz bir ağı kullanması gerekir.
+- Bir ağda **cüzdanınız dağıtılmadan önce de para alabilirsiniz**. Cüzdan, o ağdaki
+  ilk gönderiminizde kendiliğinden dağıtılır.
 
 ## Gönderme
 
-1. **Gönder**'e dokunup **token**'ı seçin.
-2. **Tutarı** (token ile görüntüleme para biriminiz arasında geçiş yapabilirsiniz)
-   ve **alıcıyı** girin. Vela, tanıdığı alıcıları mümkün olduğunda bir ada
-   çözer — bir Vela hesabı, bir ENS adı, bir Basename vb.
-3. **Gözden geçirin ve onaylayın.** Vela transferi gösterir, ardından geçiş
-   anahtarınızı ister (Face ID / Touch ID / parmak izi).
+1. **Gönder**'e dokunun ve **tokenı** seçin.
+2. **Tutarı** (token cinsinden ya da görüntüleme para biriminizde) ve **alıcının
+   adresini** girin: yapıştırarak, QR kod okutarak ya da kişilerinizden seçerek.
+3. **Gözden geçirin.** Vela ne olacağını, ücreti ve varsa alıcı için bulduğu adı
+   gösterir.
+4. Anahtarlarınızdan biriyle **onaylayın** — Face ID, parmak izi, PIN ya da güvenlik
+   anahtarınıza dokunup PIN'ini girerek.
 
-### Onayladığınızda ne oluyor
+### Birçok kişiye gönderme ya da toplama
 
-Vela bir işlemi öylece "yayınlamıyor". Perde arkasında:
+- **Bölüştürme** — tek bir işlemde bir tokenı birkaç kişiye gönderin. Bir liste
+  yapıştırabilir ya da tablo içe aktarabilir, tutarları kendi para biriminizde
+  girebilirsiniz.
+- **Toplama** — tek bir işlemde birkaç tokenı tek bir adrese gönderin.
 
-1. Safe hesabınız için bir ERC-4337 **UserOperation** oluşturuyor.
-2. Biyometrik kontrolünüzden sonra cihazınız bunu bir **WebAuthn (P-256)**
-   onayıyla imzalıyor.
-3. İmzalı işlem **relay**'e gidiyor; relay onu EntryPoint'e iletiyor, Safe'iniz
-   P-256 imzasını **zincir üstünde** doğrulayıp işlemi yürütüyor.
+İkisinde de bir kez imzalarsınız ve işlem tek bir ücret öder.
 
-<Callout type="info" title="Relay işleminizi kurcalayamaz">
-Relay, <strong>zaten imzalanmış</strong> bir UserOperation alır. İletmeyi
-geciktirebilir ya da reddedebilir; ama alıcıyı, tutarı veya başka bir alanı
-değiştiremez — her değişiklik imzanızı geçersiz kılar. O bir saklayıcı değil,
-çalışırlık yardımcısıdır; üstelik açık kaynak olduğu için kendinizinkini
-çalıştırabilirsiniz.
+### Adresler için adlar
+
+Bir adres girdiğinizde Vela onun için bir ad arar: önce kendi kayıt defterinde
+(başka bir Vela cüzdanının adı), sonra `.bnb`, `.arb`, `.g`, Basename ve ENS ters
+kayıtlarında; hepsini doğrudan ilgili zincirden okur. Bu tek yönlüdür — girdiğiniz
+bir adrese ad verir. `alice.eth` gibi bir ad yazmak, adres araması yapmaz.
+Kaydettiğiniz **kişiler** de adlarıyla görünür. Bir adı kanıt değil, ipucu olarak
+görün: ters kayıt ya da Vela cüzdan adı, o adresi kontrol eden kişi tarafından
+seçilir.
+
+### Ücret coini ve hız
+
+Onay ekranı ücreti hem ücret coininde hem de kendi para biriminizde gösterir.
+Ağın yerel coiniyle ya da relay'in kabul ettiği yerlerde bir USD stabilcoiniyle
+ödeyebilir ve bir hız seçebilirsiniz (varsayılan: hızlı). Bir yerel coinin
+**azami** tutarını gönderdiğinizde Vela ücret için yetecek kadarını ayırır.
+[Ücret nasıl hesaplanır](/tr/docs/networks-and-fees).
+
+### Onayladığınızda ne olur
+
+1. Vela, Safe hesabınız için relay'e yapılacak ücret ödemesini de içeren bir
+   ERC-4337 **UserOperation** oluşturur.
+2. Anahtarınız, kimliğinizi doğruladıktan sonra onu bir **WebAuthn (P-256)**
+   onayıyla (assertion) imzalar.
+3. İmzalı işlem **relay**'e gider; relay onu EntryPoint'e gönderir, Safe'iniz de
+   P-256 imzasını zincir üstünde doğrulayıp işlemi yürütür.
+
+<Callout type="info" title="Relay işleminizi değiştiremez">
+Relay, zaten imzalanmış bir işlem alır. Alıcıyı, tutarı ya da ücreti değiştiremez
+— her değişiklik imzanızı geçersiz kılar. İşlemi geciktirebilir ya da
+reddedebilir ve zincire ne zaman gireceğine o karar verir. Açık kaynaktır ve
+[kendi relay'inizi çalıştırabilirsiniz](/tr/docs/self-hosting#relay).
 </Callout>
 
-### Açık imzalama — kör onay yok
+Siz imzalamadan önce Vela işlemin ne yaptığını çözer ve çözemediği kısımlar için
+sizi uyarır; bkz. [açık imzalama](/tr/docs/clear-signing).
 
-Siz imzalamadan önce Vela, işlemi **ERC-7730** tanımlayıcılarıyla çözer ve
-**niyeti** (Gönder, Onayla, Takas…), **tutarları ve adresleri** ve bir risk
-göstergesini gösterir — anlaşılmaz hex'i değil. Bir çağrıyı tam olarak
-çözemediğindeyse anladığını varsaymak yerine açık bir **kör imza uyarısı**
-gösterir. Sınırsız token onayı yalnızca işaretlenmez: Vela onu sonlu bir tutara
-yeniden yazar ve hâlâ sınırsız kalacak bir onayı göndermeyi reddeder.
+## Gönder'e basmadan önce
 
-## Göndere basmadan önce
+- **Adresin başını ve sonunu kontrol edin.** Adres değiştiren zararlı yazılımlar
+  gerçek bir tehdit; geçmişinize bilerek yerleştirilen benzer görünümlü adresler de.
+- **Ağı doğrulayın.** Yanlış ağda göndermek yaygın ve pahalı bir hatadır.
+- **Yeni bir alıcıya küçük bir tutarla başlayın.** Minik bir deneme transferi ucuz
+  bir sigortadır.
 
-- **Adresin ilk ve son karakterlerini kontrol edin.** Adres değiştiren zararlı
-  yazılım gerçek bir tehdit.
-- **Ağı doğrulayın.** Yanlış ağda göndermek, en yaygın pahalı hata. Bkz.
-  [ağlar ve ücretler](/tr/docs/networks-and-fees).
-- **Yeni alıcılarla küçük başlayın.** Önce minik bir deneme transferi, ucuz bir
-  sigorta.
+İşlemler geri alınamaz. Yanlış adrese yapılan bir gönderimi kimse geri çekemez —
+kendi saklamanın doğası bu.
 
-İşlemler geri alınamaz. Yanlış adrese yapılan bir gönderimi geri çekebilecek bir
-destek masası yok — kendi saklamanın doğası bu.
+## Geçmişiniz
 
-## Geçmişinizi okumak
+Geçmişiniz, bu cihazdan gönderdiklerinizi ve her zincirin loglarından okunan token
+transferlerini birleştirir. Başka bir sözleşme üzerinden size gelen düz bir yerel
+coin transferi (örneğin bazı borsa çekimleri) bazı ağlarda log üretmeyebilir; bu
+yüzden bakiyenizde görünüp geçmişte görünmeyebilir. Bakiyeler, otomatik yük
+devretmeli bir RPC uç noktası havuzu üzerinden canlı okunur; dönen simge "para
+gitti" değil, "hâlâ getiriliyor" demektir.
 
-Bakiyeler ve geçmiş, otomatik yük devretmeli bir genel RPC uç noktası havuzundan
-canlı okunur. Ağ yavaşsa geçmiş biraz gecikebilir — dönen simge "hâlâ getiriyor"
-demektir, "para gitti" değil.
+Sırada: [ağlar ve ücretler](/tr/docs/networks-and-fees).

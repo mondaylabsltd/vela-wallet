@@ -1,104 +1,113 @@
 ---
-title: Tự chạy trang ký
-description: Trang web và tiện ích Chrome không phụ thuộc thư viện nào, tự giải mã giao dịch và ký bằng passkey của bạn — cách chạy bản sao của riêng bạn, và bản nào ký được cho ví của bạn.
+title: Tự triển khai trang ký
+description: "Trang web và tiện ích Chrome không phụ thuộc thư viện nào, tự giải mã giao dịch và ký bằng passkey của bạn — cách chạy bản sao của riêng bạn, và bản sao nào ký được cho ví của bạn."
+source: c81389ef7aa2
 ---
 
-# Tự chạy trang ký
+# Tự triển khai trang ký
 
-Vela giải mã mọi giao dịch trước khi bạn duyệt, và việc giải mã đó là việc làm tử tế —
-nhưng nó do chính ứng dụng đã dựng nên giao dịch thực hiện. Nếu ứng dụng, hoặc đường
-nó đến tay bạn, bị can thiệp thì nó có thể cho bạn xem một đằng và ký một nẻo. Đó đúng
-là chuyện đã xảy ra với [Bybit](/vi/docs/bybit-attack).
+Vela giải mã mọi giao dịch trước khi bạn duyệt, và việc giải mã đó được làm một cách trung
+thực — nhưng nó do chính ứng dụng đã dựng giao dịch thực hiện. Nếu ứng dụng, hoặc con đường
+nó đến tay bạn, bị can thiệp, nó có thể cho bạn xem một thứ và ký một thứ khác. Đó chính xác
+là điều đã xảy ra với [Bybit](/vi/docs/bybit-attack).
 
-Trang ký tồn tại để tách đôi việc đó: giao dịch đến từ một nơi, còn việc kiểm tra và
-chữ ký diễn ra ở nơi bạn kiểm soát.
+Trang ký tồn tại để tách việc đó làm hai: giao dịch đến từ một nơi, còn việc kiểm tra và ký
+diễn ra ở một nơi khác do bạn kiểm soát.
+
+**Tình trạng:** đã làm xong và thử nghiệm trên máy cục bộ; **chưa phát hành**, và **chưa có
+ứng dụng Vela nào gửi yêu cầu tới nó**. Hiện tại, nó là thứ để đọc, chạy và thử với các bên
+yêu cầu mẫu trong thư mục `samples/`. Muốn dùng nó cho chữ ký thật thì các ứng dụng phải
+chuyển yêu cầu của chúng sang đó, phần này vẫn chưa được xây.
 
 ## Nó là gì
 
-Một thư mục duy nhất — `app-web/clearsigning` trong kho mã — vừa là một trang web vừa
-là một tiện ích Chrome. HTML, CSS và JavaScript thuần: không framework, không bundler,
-không bước build, không phụ thuộc, và không tự phát yêu cầu mạng nào.
+Một thư mục — `app-web/clearsigning` trong kho mã — vừa là một trang web vừa là một tiện ích
+Chrome. Thuần HTML, CSS và JavaScript: không framework, không bundler, không bước build,
+không thư viện phụ thuộc, và không lấy dữ liệu gì từ máy chủ — yêu cầu duy nhất của nó là
+tải logo token để trang trí.
 
-Nhận một yêu cầu ký, nó không tin bản tóm tắt đi kèm. Nó tự giải mã calldata thô, tự
-tính digest của mình, cho bạn xem chữ ký sẽ thật sự cho phép điều gì, rồi mới hỏi
-passkey của bạn.
-
-Vì không có bước build, những tệp bạn đọc chính là những tệp đang chạy. Bạn có thể so
-thư mục đó với kho mã và biết chắc mình đang phục vụ cái gì.
-
-## Bản nào ký được cho ví của bạn
-
-Passkey bị ràng buộc vào tên miền nơi nó được tạo ra. Khóa Vela của bạn đăng ký dưới
-`getvela.app`, và trình duyệt chỉ đưa chúng cho trang nào có bên tin cậy là
-`getvela.app`. Đúng một quy tắc ấy quyết định cách chạy bản sao nào là hữu ích cho
+Khi nhận một yêu cầu ký, nó không tin bản tóm tắt đi kèm. Nó tự giải mã calldata thô, tự tính
+digest của riêng nó, cho bạn thấy chữ ký thực sự sẽ cho phép điều gì, rồi mới hỏi passkey của
 bạn.
 
-**Dạng tiện ích Chrome — đây là cách dùng với chiếc ví hiện có của bạn.** Bên tin cậy
-của tiện ích luôn là `getvela.app` bất kể thư mục đến từ đâu, nên khóa hiện tại của bạn
-ký được trong đó, còn mã chạy là thư mục bạn đã nạp và đã xem.
+Vì không có bước build, các tệp bạn đọc chính là các tệp đang chạy. Bạn có thể so sánh thư mục
+với kho mã và biết chính xác mình đang phục vụ cái gì.
 
-1. Mở `chrome://extensions` và bật **Chế độ nhà phát triển**.
-2. **Tải tiện ích đã giải nén**, rồi chọn thư mục `app-web/clearsigning`.
-3. Biểu tượng trên thanh công cụ mở trang trong một tab.
+## Bản sao nào ký được cho ví của bạn
 
-**Dạng một trang trên tên miền của bạn, hoặc trên localhost.** Khi phục vụ qua
-HTTP(S), bên tin cậy của trang chính là tên máy chủ của nó — nên nó ký được bằng khóa
-đăng ký dưới _tên miền đó_, không phải khóa đăng ký dưới `getvela.app`. Đó là cách
-đúng để thử trọn vẹn toàn bộ nghi thức, để chạy luồng máy bàn, và để ký cho một chiếc
-ví mà khóa được tạo trên chính tên miền của bạn. Nó không phải cách ký cho một ví
-`getvela.app` đã có.
+Một passkey gắn với tên miền mà nó được tạo ra. Các khóa Vela của bạn được đăng ký dưới
+`getvela.app`, và trình duyệt chỉ đưa chúng cho một trang có bên phụ thuộc (relying party)
+là `getvela.app`. Chỉ riêng quy tắc đó quyết định cách tự chạy nào thực sự hữu ích với bạn.
+
+**Dưới dạng tiện ích Chrome — cách dùng nó với các khóa bạn đang có.** Bên phụ thuộc của tiện
+ích là `getvela.app` bất kể thư mục đến từ đâu, nên các khóa hiện có của bạn ký được trong đó,
+còn mã chạy chính là thư mục bạn đã nạp và kiểm tra.
+
+1. Lấy thư mục: `git clone https://github.com/mondaylabsltd/vela-wallet`
+   (nó nằm ở `app-web/clearsigning` bên trong).
+2. Mở `chrome://extensions` và bật **Chế độ dành cho nhà phát triển**.
+3. Chọn **Tải tiện ích đã giải nén**, rồi chọn thư mục `app-web/clearsigning`.
+4. Biểu tượng trên thanh công cụ sẽ mở trang trong một thẻ.
+
+**Dưới dạng một trang trên tên miền của bạn, hoặc trên localhost.** Khi được phục vụ qua HTTPS
+(hoặc từ localhost), bên phụ thuộc của trang là chính tên máy chủ của nó — nên nó ký được bằng
+các khóa được đăng ký dưới _tên máy chủ đó_, không phải các khóa được đăng ký dưới
+`getvela.app`. Điều đó khiến đây là cách phù hợp để thử toàn bộ quy trình từ đầu đến cuối, để
+chạy luồng máy tính, và để ký cho một ví có khóa được tạo trên tên miền của riêng bạn. Đây
+không phải là cách ký cho một ví `getvela.app` đã có.
 
 ```sh
 cd app-web/clearsigning
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
-Mọi đường dẫn trong ứng dụng đều là tương đối, nên một thư mục con trên máy chủ sẵn có
-cũng chạy được; mở thẳng `index.html` từ đĩa (`file://`) thì đủ để xem cho biết — không
-có origin thì không có bên tin cậy, và không ký được gì.
+Mọi đường dẫn trong ứng dụng đều là đường dẫn tương đối, nên một thư mục con trên một máy chủ
+có sẵn cũng chạy được, và mở thẳng `index.html` từ ổ đĩa (`file://`) thì xem thử được — khi
+không có origin, sẽ không có bên phụ thuộc và không ký được gì.
 
 ## Nó làm gì trước khi ký
 
-- **Nó tự giải mã giao dịch.** Lệnh gọi làm gì, cho ai, bao nhiêu — đọc từ calldata,
-  kể cả những lệnh gọi lồng bên trong một lô.
-- **Nó chỉ ký cái digest do chính nó tính.** Các digest EIP-191, EIP-712, SafeOp và
-  SafeMessage được tính ngay trong trang và đối chiếu chéo với `vela-core`, đúng đoạn
-  mã mà ví đang dùng. Một digest nó không tính được là một lời từ chối, không phải một
-  chữ ký.
-- **Nó kiểm tra giao dịch đúng là giao dịch đã được yêu cầu.** Lệnh gọi mà trang web
-  hỏi phải thật sự nằm trong thao tác đang được ký.
-- **Nó từ chối một lệnh duyệt không giới hạn.** Không phải cảnh báo — là từ chối, kèm
-  chỉ dẫn nên làm gì thay thế.
-- **Nó nói ra khi có thứ nó không đọc được,** thay vì đưa ra một bản tóm tắt thân thiện
-  mà nó không đứng sau được.
-- **Nó hiện địa chỉ và identicon của tài khoản,** và không hiện tên người nhận do bên
-  yêu cầu chữ ký cung cấp. Mọi thứ bên yêu cầu kiểm soát đều bị bỏ đi hoặc gắn nhãn là
-  của họ.
+- **Nó tự giải mã giao dịch.** Lệnh gọi làm gì, cho ai, bao nhiêu, đọc ra từ calldata — kể cả
+  những lệnh gọi lồng bên trong một giao dịch gộp.
+- **Nó chỉ ký digest do chính nó tính.** Các digest EIP-191, EIP-712, SafeOp và SafeMessage
+  được tính ngay trong trang và đối chiếu chéo với `vela-core`, chính đoạn mã mà ví dùng. Một
+  digest nó không tính được thì là từ chối, không phải một chữ ký.
+- **Nó kiểm tra giao dịch đúng là giao dịch đã được yêu cầu.** Lệnh gọi mà trang web yêu cầu
+  phải thực sự nằm bên trong thao tác đang được ký.
+- **Nó từ chối lệnh cấp quyền ở mức "không giới hạn".** Không phải cảnh báo — mà là từ chối,
+  kèm chỉ dẫn nên làm gì thay thế.
+- **Nó nói rõ khi không đọc được thứ gì đó,** thay vì hiện một bản tóm tắt thân thiện mà nó
+  không thể đứng ra bảo đảm.
+- **Nó hiện địa chỉ và identicon của tài khoản,** và không hiện tên người nhận do bên xin chữ
+  ký cung cấp. Bất cứ thứ gì bên yêu cầu kiểm soát đều bị bỏ đi hoặc được ghi rõ là của họ.
 
-## Những thứ nó cố tình không có
+## Những gì nó cố ý không có
 
-- **Không có ô chỉnh sửa.** Yêu cầu được cố định ngay khi đến: bạn ký hoặc không ký.
-  Một bộ chọn phí hay một ô sửa hạn mức sẽ viết lại calldata, mà đó đúng là căn bệnh
-  trang này sinh ra để ngăn.
-- **Không tạo khóa.** Trang ký không tạo được passkey. Tạo một cái mới tức là tạo một
-  tài khoản khác.
-- **Không có yêu cầu mạng.** Không có gì để tải thì không có gì để chặn giữa đường.
+- **Không có trình chỉnh sửa.** Yêu cầu đã cố định khi đến nơi: bạn ký hoặc không ký. Một bộ
+  chọn phí hay một trình chỉnh sửa hạn mức sẽ viết lại calldata, chính là căn bệnh mà trang này
+  sinh ra để ngăn.
+- **Không tạo khóa.** Trang ký không thể tạo passkey. Tạo một passkey mới đồng nghĩa với tạo
+  một tài khoản khác.
+- **Không lấy dữ liệu từ mạng.** Không thứ gì nó hiển thị hay ký là được tải về. Thứ duy nhất
+  nó tải là logo token, dưới dạng hình ảnh, từ máy chủ dữ liệu chuỗi của Vela; nếu tải lỗi, một
+  chữ cái sẽ thế chỗ.
 
-## Một yêu cầu đến với nó bằng cách nào
+## Một yêu cầu đến được nó bằng cách nào
 
-| Bên yêu cầu | Kênh |
+| Bên yêu cầu                                  | Kênh                                                                       |
 | -------------------------------------------- | -------------------------------------------------------------------------- |
-| Một trang trong cùng trình duyệt | `postMessage` |
-| Một trang trong cùng trình duyệt, gửi tới tiện ích | Cổng của tiện ích |
-| Một ứng dụng máy bàn trên cùng máy | Fragment URL + callback loopback |
-| Một điện thoại hoặc máy tính khác | Bluetooth LE (đã cài đặt giao thức; phần sóng chưa thử trên phần cứng thật) |
+| Một trang trong cùng trình duyệt             | `postMessage`                                                              |
+| Một trang trong cùng trình duyệt, gửi tới tiện ích | Cổng kết nối của tiện ích (extension port)                           |
+| Một ứng dụng máy tính trên cùng máy          | Phân đoạn URL + callback qua loopback (có bản demo trong `samples/`; ứng dụng máy tính Vela chưa dùng) |
+| Một điện thoại hoặc máy tính khác            | Bluetooth LE (giao thức đã cài đặt; phần sóng radio chưa được thử trên phần cứng thật) |
 
-Định dạng truyền, các digest và bảng liệt kê từng thứ trên màn hình đến từ đâu nằm
-trong `PROTOCOL.md` ngay cạnh mã nguồn.
+Định dạng truyền tin, cách tính digest, và một bảng cho biết từng mục trên màn hình đến từ đâu
+đều nằm trong `PROTOCOL.md` cạnh mã nguồn.
 
-## Khi nào nên dùng
+## Nó nằm ở đâu trong bức tranh chung
 
-Kể từ ngày tài khoản giữ số tiền mà mất đi bạn sẽ tiếc — và từ đó trở đi, cho mọi chữ
-ký. Không chỉ cho số lớn: một lệnh duyệt nhỏ cũng có thể trao đủ quyền để vét sạch tài
-khoản. Một thói quen ký chỉ dành cho dịp đặc biệt thì đúng ngày cần đến lại không có
-sẵn.
+Khi các ứng dụng đã chuyển được yêu cầu sang cho nó, cách dùng dự kiến rất đơn giản: kể từ ngày
+tài khoản giữ số tiền mà bạn không muốn mất, mọi chữ ký đều đi qua một trang có mã do chính bạn
+nạp. Không chỉ với số tiền lớn — một lệnh cấp quyền nhỏ cũng có thể trao đủ quyền để rút sạch
+một tài khoản. Cho đến lúc đó, trang này là cách để đọc và thử nghiệm chính xác cách "ý kiến thứ
+hai" ấy sẽ hoạt động.

@@ -1,6 +1,7 @@
 ---
 title: Recuperação e login
-description: Como a Vela permite recuperar sua carteira em um aparelho novo sem frase-semente — e os limites honestos desse modelo.
+description: "Como voltar à sua carteira num aparelho novo com qualquer uma das suas chaves, onde a carteira é procurada e os limites honestos da recuperação sem frase de recuperação."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,70 +10,80 @@ description: Como a Vela permite recuperar sua carteira em um aparelho novo sem 
 
 # Recuperação e login
 
-A parte mais difícil de uma carteira sem frase-semente é a recuperação: se não há
-doze palavras, como você volta em um celular novo? Aqui está exatamente como a Vela
-resolve isso.
+Sem frase de recuperação, a recuperação depende de duas coisas: **uma chave que você
+ainda tem** e **um registro público de quais chaves pertencem à sua carteira**.
 
-## Como funciona
+## O que fica registrado quando você cria uma carteira
 
-Quando você cria uma carteira, duas coisas são publicadas no **índice de passkeys**
-da Vela:
+O endereço da sua carteira é calculado a partir de todas as chaves com que você a
+cria. Para que qualquer uma dessas chaves consiga encontrar a carteira de novo mais
+tarde, criar uma carteira grava um registro num **contrato de registro** público na
+Gnosis Chain: a chave pública de cada chave, o endereço da carteira, o nome dela e
+os dados de registro assinados. O contrato de registro não tem dono, e o registro
+não pode ser editado nem apagado. (A lista completa do que é público está em
+[criar sua carteira](/pt-BR/docs/create-wallet#what-is-public).)
 
-- A **chave pública** da sua passkey (nunca a privada).
-- O **nome** que você escolheu para a carteira.
+O serviço de índice de chaves públicas da Vela envia esse registro e paga o gas; o
+registro em si fica on-chain, e qualquer app pode lê-lo diretamente.
 
-A chave pública fica armazenada na blockchain Gnosis por meio de um contrato, então
-é publicamente legível e não depende de os servidores da Vela continuarem no ar.
+## Fazer login num aparelho novo
 
-Sua chave **privada**, por sua vez, é uma passkey sincronizada pelo chaveiro da sua
-plataforma: **Chaveiro do iCloud** em aparelhos Apple, **Gerenciador de senhas do
-Google** no Android.
+1. Abra a Vela e escolha entrar.
+2. Use **qualquer uma** das suas chaves: uma passkey sincronizada com este
+   aparelho, um celular por perto (escaneie o QR code) ou a sua chave de segurança.
+3. A Vela descobre a chave pública dessa chave a partir da assinatura e a procura —
+   primeiro no índice da Vela e, se o índice não responder, no contrato de registro
+   na Gnosis e depois no Ethereum — e reconstrói a carteira. Antes de mostrá-la a
+   você, ela confere se as chaves encontradas realmente resultam no endereço
+   registrado.
 
-Para entrar em um aparelho novo:
+As listas de contas não são sincronizadas entre aparelhos; fazer login as
+reconstrói.
 
-1. Entre na mesma conta iCloud ou Google, com a sincronização do chaveiro ativada.
-2. Abra a Vela e escolha entrar.
-3. Autentique-se com sua passkey. A plataforma fornece a passkey sincronizada; o
-   índice fornece a conta correspondente. Sua carteira está de volta.
-
-O índice é um cache, não um ponto único de falha. Se um dia ele ficar inacessível e
-sua conta não estiver no armazenamento local, a Vela consegue reconstruir sua chave
-pública no próprio aparelho a partir de duas assinaturas de passkey e derivar de
-novo o endereço da carteira — sem servidor nenhum envolvido.
-
-<Callout type="info" title="Por que separar assim">
-A chave pública no índice on-chain deixa qualquer pessoa (inclusive uma instalação
-recém-feita) encontrar sua conta. A chave privada, sincronizada pelo chaveiro da
-plataforma em que você confia, é o que de fato autoriza transações. Tudo o que está
-no índice é dado público, e nada ali dentro pode mover seus fundos — só assinaturas
-da sua passkey podem.
+<Callout type="info" title="Se nenhum índice nem registro responder">
+Uma carteira com <strong>uma única chave</strong> pode ser reconstruída no
+aparelho sem envolver nenhum servidor: duas assinaturas dessa chave bastam para
+recuperar a chave pública dela e recalcular o endereço. Uma carteira com várias
+chaves precisa do registro, porque uma chave não consegue dizer ao app quais eram as
+outras.
 </Callout>
 
-## Os limites, sem enfeite
+## Cópias do registro
 
-Autocustódia significa que a responsabilidade é sua de verdade. É isto que você
-precisa entender.
+O registro na Gnosis é o primeiro que os apps leem. Em **Configurações**, você
+também pode copiar o registro da sua carteira para o mesmo contrato de registro no
+**Ethereum**, pagando o gas você mesmo, para que o registro exista numa segunda
+rede. Qualquer pessoa pode fazer essa cópia; ela não contém nada que permita mover
+fundos.
 
-<Callout type="warning" title="Sua recuperação depende do chaveiro da plataforma">
-O login entre aparelhos da Vela depende de a sua passkey ser sincronizada pelo
-Chaveiro do iCloud ou pelo Gerenciador de senhas do Google. Mantenha essa conta
-segura e as opções de recuperação dela em dia. Se você perder <strong>tanto</strong>
-seus aparelhos <strong>quanto</strong> o chaveiro da conta da plataforma, a Vela não
-tem como regerar sua chave privada — por projeto, nunca a tivemos.
+## Os limites honestos
+
+<Callout type="warning" title="Uma chave perdida está perdida">
+Se todas as chaves com que você criou a carteira sumiram — as passkeys
+sincronizadas, os celulares, as chaves de segurança —, ninguém consegue recuperar a
+carteira: nem a Vela, nem a Apple ou o Google, nem ninguém. Não há frase de
+recuperação, nem redefinição pelo suporte, nem porta dos fundos.
 </Callout>
 
-Orientação prática:
+O que torna isso improvável é ter mais de um jeito de entrar:
 
-- **Deixe a sincronização do chaveiro ligada.** É ela que leva sua passkey de um
-  aparelho para outro.
-- **Proteja sua conta Apple / Google** com uma senha forte e métodos de recuperação
-  próprios. Essa conta agora faz parte da segurança da sua carteira.
-- **Mantenha mais de um aparelho logado** onde der, para que perder um celular seja
-  um transtorno e não uma crise.
+- **Mantenha a sincronização de passkeys ativada**, se você usa a passkey deste
+  aparelho. É ela que leva a chave para um celular ou computador novo.
+- **Proteja a conta por trás dela.** Quem controla a sua conta Apple ou Google
+  talvez consiga usar uma passkey sincronizada; dê a essa conta uma senha forte e
+  opções de recuperação próprias.
+- **Crie a carteira com mais de uma chave**, por exemplo a passkey do seu celular e
+  uma chave de segurança física guardada num lugar seguro. As chaves só podem ser
+  adicionadas quando você cria a carteira ([por quê](/pt-BR/docs/signers)).
+  Lembre-se de que qualquer chave sozinha pode assinar — e não pode ser removida;
+  então, se uma delas for comprometida, transfira seus fundos para uma carteira nova
+  ([o que fazer](/pt-BR/docs/signers)).
 
-## O que a Vela pode e o que não pode
+## O que a Vela pode e não pode fazer
 
-- **Pode:** ajudar você a achar sua conta de novo pelo índice público.
-- **Não pode:** mover seus fundos, congelar sua carteira ou recuperar uma chave
-  privada. A Vela nunca a teve. É esse o sentido inteiro da autocustódia — e a troca
-  que você aceita por ela.
+- **Pode:** manter o índice funcionando, para que a sua carteira seja encontrada
+  rapidamente num aparelho novo.
+- **Não pode:** mover seus fundos, congelar sua carteira, adicionar ou remover
+  chaves, nem recuperar uma chave que você perdeu. A Vela nunca guarda suas chaves.
+
+A seguir: [assinatura legível](/pt-BR/docs/clear-signing).

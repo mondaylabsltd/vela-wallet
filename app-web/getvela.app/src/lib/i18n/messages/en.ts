@@ -309,7 +309,7 @@ export const en = {
 					body: 'You choose up to seven keys when you create the wallet, and they can’t be changed afterwards.\n\nVela is 1-of-n: any one of those keys can spend from the wallet on its own. Each extra key is another way back in if you lose one — and another key you have to protect.'
 				},
 				{
-					title: 'The contracts are audited. Vela’s own code is not.',
+					title: 'The contracts are audited; Vela’s own code is not',
 					body: 'Your wallet runs on Safe v1.4.1 and Safe’s passkey and ERC-4337 modules, unmodified, and all of them have published third-party audits — which find problems but can’t prove there are none left.\n\nVela’s own apps and services have not had a third-party audit, and none is scheduled. The code is public for anyone to read.'
 				}
 			],

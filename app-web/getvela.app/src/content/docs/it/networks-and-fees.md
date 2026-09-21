@@ -1,6 +1,7 @@
 ---
 title: Reti e commissioni
-description: Le 12 reti supportate da Vela, come funzionano le commissioni di gas con l'astrazione dell'account, chi gestisce il relay e incassa le commissioni, quando paghi tu l'attivazione dell'account di gas e come Vela sceglie gli endpoint RPC.
+description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
+source: 84328d162a3a
 ---
 
 <script>
@@ -9,137 +10,155 @@ description: Le 12 reti supportate da Vela, come funzionano le commissioni di ga
 
 # Reti e commissioni
 
-## Reti supportate
+## Reti integrate
 
-Vela include **12 reti EVM**:
+Vela integra **24 reti**, tutte mainnet:
 
-| Rete | Token nativo delle commissioni |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Rete | Gas pagato in | Rete | Gas pagato in |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (la moneta nativa) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (la moneta nativa) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (nessuna moneta nativa) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Il tuo wallet ha **lo stesso indirizzo su tutte**, quindi c'è un solo indirizzo da
-condividere ovunque.
+Sulla maggior parte di queste puoi pagare la commissione anche in una stablecoin
+in dollari che il relay accetta su quella rete (vedi sotto).
 
-Puoi anche **aggiungere reti personalizzate** (Impostazioni → Reti). Poiché Vela è
-un wallet ad account intelligente, una rete deve fornire i contratti su cui Vela si
-appoggia: l'EntryPoint ERC-4337, i contratti Safe e il precompilato di firma
-**P-256 (RIP-7212)** che verifica la tua passkey on-chain. Vela lo controlla
-automaticamente prima di lasciarti aggiungere una rete.
+Il tuo wallet ha **lo stesso indirizzo su ogni rete**, perché l'indirizzo è
+calcolato dalle tue chiavi, non dalla chain.
 
-<Callout type="info" title="Perché Gnosis compare così spesso">
-Oltre a essere una delle 12 reti, Gnosis Chain ospita l'**indice passkey** di Vela:
-il contratto che conserva la tua chiave pubblica e il nome dell'account per il
-recupero multi-dispositivo. È una cosa distinta dalla rete su cui fai le
-transazioni.
+## Aggiungere un'altra rete
+
+Puoi aggiungere qualsiasi rete EVM in **Impostazioni → Reti**, purché abbia ciò
+che serve a un wallet Vela: undici contratti standard (l'EntryPoint ERC-4337 v0.7,
+i contratti Safe v1.4.1, i moduli 4337 e passkey di Safe, MultiSend, Multicall3 e
+due deployer deterministici) e il precompilato **RIP-7212** che verifica le firme
+delle passkey all'indirizzo `0x100`. Il wallet li controlla tutti, compresa una
+vera verifica di firma sul precompilato, prima di lasciarti aggiungere la rete.
+
+Il precompilato è un requisito rigido. Il suo indirizzo fa parte del calcolo di
+ogni indirizzo Vela, quindi non c'è un verificatore di riserva e non c'è modo di
+deployarne uno in seguito. Se una chain ha il precompilato ma le manca qualche
+contratto, la [configurazione della chain](/it/chain-setup) mostra cosa manca e fa
+il deploy di ciò che chiunque può deployare. Una lacuna nel controllo: un wallet
+con più di una chiave ha bisogno anche della factory dei firmatari passkey di Safe
+su quella rete, che per ora non viene controllata; senza di essa, lì può firmare
+solo la prima chiave.
+
+## Come si paga una transazione
+
+Vela è un wallet ERC-4337: la transazione non la trasmetti tu. L'app costruisce una
+**UserOperation**, tu la firmi con una delle tue chiavi e un **relay** la invia
+on-chain anticipando il gas. (ERC-4337 chiama questo ruolo bundler.) Il relay
+viene rimborsato **dentro la tua operazione**: il pagamento è un trasferimento dal
+tuo wallet al relay che sta nello stesso batch della tua transazione, quindi è
+coperto dalla tua firma. Non c'è alcun paymaster: nessuno sponsorizza il tuo gas,
+e nessuno può rifiutare la tua transazione in base a una politica di
+sponsorizzazione.
+
+### A quanto ammonta la commissione
+
+La schermata di conferma mostra un solo importo, nella moneta della commissione e
+nella tua valuta di visualizzazione. Si calcola così:
+
+- **Gas riservato dal wallet.** Il wallet simula la transazione e riserva più gas
+  di quanto preveda di usarne: le stime di verifica e di esecuzione vengono
+  aumentate ciascuna della metà, con dei minimi (per esempio, la verifica è di
+  almeno 300.000 gas una volta che il wallet è deployato, e 2.000.000 per la
+  transazione che lo deploya).
+- **Prezzo del gas.** Il più alto tra la lettura del prezzo del gas della rete
+  fatta dal wallet e il prezzo del relay per la velocità che hai scelto. La
+  velocità predefinita è *rapida*, che il relay prezza a circa 1,8 volte la base
+  fee più il doppio della priority fee.
+- **Commissione = 3 × gas riservato × prezzo del gas**, con un minimo di circa
+  0,01 dollari. Su Tempo il moltiplicatore è 2 e la commissione si paga in pathUSD.
+
+Poiché la riserva è maggiorata ben oltre ciò che la transazione userà e il prezzo
+include un margine, **la commissione è spesso dieci volte o più ciò che la
+transazione costa davvero on-chain**, e di più per la prima transazione su una
+rete. Il relay paga il costo reale e tiene il resto; non viene rimborsato nulla.
+Sulle reti economiche sono centesimi; sulla mainnet di Ethereum può essere una
+cifra significativa. L'importo esatto è nella schermata di conferma prima che tu
+firmi.
+
+<Callout type="info" title="Paghi quello che vedi">
+L'importo della commissione e l'indirizzo a cui va fanno parte dell'operazione che
+firmi. Un relay che cambiasse uno dei due invaliderebbe la tua firma, quindi paghi
+esattamente l'importo mostrato — non di più, anche se il gas sale prima
+dell'inclusione. Una quotazione del prezzo del gas da parte del relay superiore al
+triplo della lettura del wallet viene rifiutata.
 </Callout>
 
-## Come funzionano le commissioni (astrazione dell'account)
+### Con cosa puoi pagare
 
-Vela usa l'**astrazione dell'account ERC-4337**: una transazione non la trasmetti
-tu direttamente, è una **UserOperation** consegnata a un **relay**, che la sottopone
-on-chain e viene rimborsato del gas. (La specifica ERC-4337 chiama questo ruolo
-*bundler*. Quello di Vela si chiama relay perché fa più che impacchettare: quota le
-commissioni in banda e gestisce il protocollo dell'account di gas descritto sotto,
-nessuno dei due parte dello standard.) Ne discendono alcune cose:
+- La **moneta nativa** della rete, sempre.
+- Una **stablecoin in dollari** dall'elenco del relay per quella rete, quando il
+  relay riesce a prezzare la moneta nativa. Le stablecoin che non possiedi sono
+  nascoste.
+- Su **Tempo**, che non ha una moneta nativa, solo **pathUSD**.
 
-- **Il gas si paga dal saldo del tuo wallet** — nel token nativo della rete (ETH,
-  BNB, xDAI…) per impostazione predefinita, o in una stablecoin supportata dove il
-  relay ne offre una; l'asset con cui paghi le commissioni lo scegli nella schermata
-  di conferma. Tempo non ha moneta nativa, quindi lì il gas è sempre regolato in
-  stablecoin USD. Non c'è alcun **paymaster** ERC-4337 che sponsorizzi — o
-  condizioni — ogni transazione. (Vela può farsi carico dell'unica _attivazione
-  dell'account di gas_ per i nuovi utenti: è un'altra cosa, spiegata sotto.)
-- **È il relay a quotare il prezzo del gas** — è l'unica fonte di verità, e il
-  wallet mostra quella quotazione e firma esattamente ciò che mostra. Non c'è un
-  selettore di velocità: ogni transazione viene inviata ad alta priorità.
-- Il totale è il **costo di rete più la commissione di servizio del relay**, con un
-  piccolo minimo sulle transazioni molto economiche. La quotazione del relay è il
-  prezzo: non c'è un listino separato da consultare. Una parte va ai validatori
-  della chain; il resto paga il relay che anticipa il gas e gestisce
-  l'infrastruttura.
-- La schermata di conferma mostra la **commissione stimata** nell'asset delle
-  commissioni e nella tua valuta di visualizzazione prima che tu firmi. L'importo
-  quotato e il suo destinatario fanno parte di ciò che firmi, quindi il relay riceve
-  esattamente quanto mostrato: un numero cambiato invaliderebbe la tua firma.
+La moneta della commissione e la velocità (*lenta*, *standard* o *rapida*) le
+scegli nella schermata di conferma e nelle Impostazioni.
 
-## Chi gestisce il relay — e a chi vanno le commissioni
+### La tua prima transazione su una rete
 
-Ogni rete punta a un relay. Per impostazione predefinita è **il relay di Vela**, e
-puoi sostituire l'endpoint in _Impostazioni → Avanzate → Endpoint dei servizi_. Un
-endpoint vale per tutte le reti integrate; una rete personalizzata mantiene l'URL
-del relay che le hai dato quando l'hai aggiunta.
+Puoi ricevere su qualsiasi rete prima che il tuo wallet esista lì. La prima volta
+che invii da una rete, quella transazione deploya anche il contratto del tuo
+wallet (e un piccolo contratto firmatario per ogni chiave in più). Il gas del
+deploy è compreso nella commissione di quella transazione, quindi il primo invio
+su ogni rete costa più di quelli successivi.
 
-Un'avvertenza onesta sulla compatibilità: l'app quota le commissioni con un metodo
-RPC specifico di Vela (`vela_getInBandGasQuote`), e senza quello il flusso di invio
-si blocca. L'endpoint a cui punti deve quindi far girare
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) — l'istanza di Vela o una
-che ospiti tu. Un bundler ERC-4337 generico come **Pimlico** o **Alchemy** non
-implementa quel metodo, quindi nella release attuale non funzionerà da capo a fondo.
+Quando invii il **massimo** di una moneta nativa, Vela tiene da parte quanto basta
+per la commissione.
 
-Chi gestisce il relay per una rete **incassa le commissioni di quella rete**: il
-ricarico del relay su ogni transazione e il deposito di attivazione dell'account di
-gas. Fai girare il tuo vela-relay e quelle commissioni finanziano la tua
-infrastruttura invece di quella di Vela; sul traffico che indirizzi altrove Vela non
-prende nulla.
+## Chi gestisce il relay — e a chi va la commissione
 
-<Callout type="warning" title="L'account di gas fa parte del protocollo vela-relay">
-Il passaggio di **attivazione dell'account di gas** finanzia un account di relay
-dedicato al tuo wallet su ogni rete. Se punti l'endpoint a un vela-relay ospitato da
-te, il deposito finanzia l'account del tuo relay, non quello di Vela.
-</Callout>
+Per impostazione predefinita ogni rete usa il **relay di Vela**, e la commissione
+va a Vela. Puoi indirizzare il wallet verso un altro relay in **Impostazioni →
+Avanzate → Endpoint dei servizi**; un solo indirizzo vale per tutte le reti
+integrate, mentre una rete personalizzata mantiene l'indirizzo del relay con cui è
+stata aggiunta. Il relay deve essere
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) — quello di Vela o uno
+gestito da te — perché il wallet chiede la quotazione della commissione con un
+metodo specifico di Vela che i bundler generici come Pimlico o Alchemy non
+implementano. La commissione la riceve chi gestisce il relay che usi; la
+[guida al self-hosting](/it/docs/self-hosting#relay) spiega come gestirne uno.
 
-### Attivare l'account di gas (Vela Relay)
+Il relay riceve un'operazione già firmata. Non può cambiare il destinatario,
+l'importo, la commissione o qualsiasi altra cosa. Può ritardarla o rifiutarla, e
+sceglie quando finisce on-chain — quindi, per uno swap, in linea di principio
+potrebbe anticiparti con una propria operazione entro il tuo slippage.
 
-Sul relay di Vela, la tua prima transazione su ogni rete **attiva un account di gas
-dedicato**. L'app chiede prima alla tesoreria del relay di finanziarlo per te:
-succede in silenzio dentro il flusso di invio, e un wallet sponsorizzato non vede
-mai una schermata di finanziamento. Solo quando la sponsorizzazione viene rifiutata
-l'app mostra una richiesta di ricarica: invii un piccolo importo del token nativo
-all'indirizzo dell'account di gas che ti mostra, e ti dice perché la
-sponsorizzazione non era disponibile.
+### Quando un relay resta senza gas
 
-**La commissione di attivazione la paghi tu** ogni volta che non viene offerta una
-sponsorizzazione gratuita, cioè quando:
+Un relay paga il gas dalla propria **tesoreria** su ogni rete. Se quella tesoreria
+è vuota, la schermata di invio te lo dice prima che tu firmi:
 
-- **La tesoreria di Vela per quella rete è vuota o scarsa** — il fondo gratuito su
-  quella chain è temporaneamente esaurito.
-- **Hai esaurito la quota gratuita** — la sponsorizzazione ha un tetto per wallet,
-  oltre le prime volte è a carico tuo.
-- **Il relay di Vela non finanzia affatto quella rete** — per esempio **reti
-  personalizzate o di test aggiunte da te**, per le quali Vela non tiene alcuna
-  tesoreria. (Indirizzale al tuo relay se preferisci saltare del tutto
-  l'attivazione.)
+- Su una rete servita dal relay di Vela, deve ricaricarla il gestore del relay
+  (Vela); puoi segnalarlo. Se non puoi aspettare, puoi **facoltativamente**
+  inviare tu stesso alla tesoreria un piccolo importo della moneta nativa. Quel
+  contributo **non è rimborsabile** e **non** paga la tua transazione.
+- Su una rete personalizzata, finanziare il relay spetta a chi lo gestisce — che
+  potresti essere tu.
 
-Il deposito di attivazione è **non rimborsabile**: è il saldo iniziale dell'account
-del relay e si ricarica nel tempo con i rimborsi del gas, ma può comunque esaurirsi
-e richiedere una **riattivazione** più avanti. Anche un aggiornamento del servizio
-può cambiare l'indirizzo del relay, e in quel caso serve una nuova attivazione.
+Non esiste un account di gas per wallet né un deposito di attivazione: una
+versione precedente di Vela ne aveva uno, e non esiste più.
 
-La commissione esce dal tuo saldo nell'**asset delle commissioni** che hai scelto —
-il token nativo per impostazione predefinita. Se un invio è bloccato per il gas
-significa che il saldo in quell'asset non copre la commissione; dove il relay offre
-gas in stablecoin, cambiare asset nella schermata di conferma può sbloccarlo.
+## Come Vela legge ogni rete
 
-Quando invii l'importo **massimo** di un token nativo, Vela mette
-automaticamente da parte abbastanza per il gas, così la transazione non fallisce.
-
-## Come Vela parla con ogni rete
-
-Vela legge i saldi e invia le transazioni attraverso un **pool di endpoint RPC**,
-non un singolo fornitore. Raccoglie endpoint da più fonti, li valuta per latenza e
-affidabilità e **fa failover automatico** quando uno è lento o giù — mettendo in
-panchina temporaneamente quelli scadenti — così un singolo nodo ballerino non manda
-mai offline l'app.
+Vela legge i saldi e simula le transazioni tramite un **pool di endpoint RPC** per
+ogni rete — quelli integrati, alternative pubbliche e qualsiasi chiave di un
+provider o endpoint che aggiungi tu — e passa al successivo quando uno è lento o
+non risponde. Puoi impostare un tuo endpoint per ogni rete in **Impostazioni →
+Reti**. (L'app Android per ora usa un solo endpoint per rete, senza failover, e
+l'app iPhone non permette ancora di cambiarlo.)
 
 Poi: [come funzionano le passkey](/it/docs/passkeys).

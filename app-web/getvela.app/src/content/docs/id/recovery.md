@@ -1,6 +1,7 @@
 ---
 title: Pemulihan & masuk
-description: Bagaimana Vela memungkinkan Anda memulihkan dompet di perangkat baru tanpa frasa pemulihan — dan batas-batas jujur dari model itu.
+description: "Bagaimana Anda kembali ke dompet di perangkat baru dengan salah satu kunci Anda, di mana dompet itu dicari, dan batas nyata pemulihan tanpa frasa pemulihan."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,68 +10,76 @@ description: Bagaimana Vela memungkinkan Anda memulihkan dompet di perangkat bar
 
 # Pemulihan & masuk
 
-Bagian tersulit dari dompet tanpa frasa pemulihan justru pemulihannya: kalau tidak ada
-dua belas kata, bagaimana Anda masuk lagi di ponsel baru? Begini persisnya cara Vela
-menanganinya.
+Tanpa frasa pemulihan, pemulihan bertumpu pada dua hal: **kunci yang masih Anda
+pegang**, dan **catatan publik tentang kunci mana saja yang menjadi milik dompet Anda**.
 
-## Cara kerjanya
+## Apa yang dicatat saat Anda membuat dompet
 
-Saat Anda membuat dompet, dua hal dikirim ke **indeks passkey** milik Vela:
+Alamat dompet Anda dihitung dari semua kunci yang Anda pakai saat membuatnya. Supaya
+salah satu kunci itu bisa menemukan dompetnya lagi nanti, pembuatan dompet menulis
+catatan ke **kontrak registri** publik di Gnosis Chain: kunci publik tiap kunci, alamat
+dompet, namanya, dan data pendaftaran yang ditandatangani. Registri itu tidak punya
+pemilik, dan catatannya tidak bisa diubah atau dihapus. (Daftar lengkap apa saja yang
+publik ada di [membuat dompet Anda](/id/docs/create-wallet#what-is-public).)
 
-- **Kunci publik** passkey Anda (tidak pernah kunci privatnya).
-- **Nama** yang Anda pilih untuk dompet itu.
+Layanan indeks kunci publik milik Vela yang mengirim catatan itu dan membayar gasnya;
+catatannya sendiri tersimpan on-chain, dan aplikasi mana pun bisa membacanya langsung.
 
-Kunci publiknya disimpan di blockchain Gnosis lewat sebuah kontrak pintar, jadi bisa
-dibaca siapa pun dan tidak bergantung pada server Vela tetap hidup.
+## Masuk di perangkat baru
 
-Sementara itu, kunci **privat** Anda adalah passkey yang disinkronkan oleh keychain
-platform Anda — **iCloud Keychain** di perangkat Apple, **Google Password Manager** di
-Android.
+1. Buka Vela dan pilih masuk.
+2. Pakai **salah satu** kunci Anda: passkey yang sudah tersinkron ke perangkat ini,
+   ponsel di dekat Anda (pindai kode QR), atau kunci keamanan Anda.
+3. Vela mengetahui kunci publik dari kunci itu lewat tanda tangannya, lalu mencarinya —
+   pertama di indeks Vela, lalu, kalau indeks tidak menjawab, di kontrak registri di
+   Gnosis, kemudian di Ethereum — dan membangun ulang dompetnya. Sebelum menampilkannya
+   kepada Anda, Vela memeriksa bahwa kunci-kunci yang ditemukannya memang menghasilkan
+   alamat yang tercatat.
 
-Untuk masuk di perangkat baru:
+Daftar akun tidak disinkronkan antarperangkat; masuk akan membangunnya ulang.
 
-1. Masuk ke akun iCloud atau Google yang sama, dengan sinkronisasi keychain menyala.
-2. Buka Vela dan pilih untuk masuk.
-3. Verifikasi dengan passkey Anda. Platform menyediakan passkey yang tersinkron;
-   indeks menyediakan akun yang cocok. Dompet Anda kembali.
-
-Indeks itu cache, bukan titik kegagalan tunggal. Kalau suatu saat ia tidak terjangkau
-dan akun Anda tidak ada di penyimpanan lokal, Vela bisa menyusun ulang kunci publik
-Anda di perangkat dari dua tanda tangan passkey, lalu menurunkan kembali alamat dompet
-Anda darinya — tanpa server mana pun.
-
-<Callout type="info" title="Kenapa dipisah begini">
-Kunci publik di indeks on-chain memungkinkan siapa pun (termasuk instalasi yang baru
-sama sekali) menemukan akun Anda. Kunci privat, yang disinkronkan keychain platform
-yang Anda percayai, adalah yang benar-benar memberi izin transaksi. Semua isi indeks
-adalah data publik; tidak ada isinya yang bisa memindahkan dana Anda — hanya tanda
-tangan dari passkey Anda yang bisa.
+<Callout type="info" title="Kalau tidak ada indeks atau registri yang menjawab">
+Dompet dengan <strong>satu kunci</strong> bisa dibangun ulang di perangkat tanpa
+melibatkan server sama sekali: dua tanda tangan dari kunci itu sudah cukup untuk
+memulihkan kunci publiknya dan menghitung ulang alamatnya. Dompet dengan beberapa kunci
+membutuhkan catatan registri, karena satu kunci tidak bisa memberi tahu aplikasi kunci
+apa saja yang lainnya.
 </Callout>
 
-## Batas-batas jujurnya
+## Salinan catatannya
 
-Swakelola berarti tanggung jawabnya nyata. Ini yang perlu dipahami.
+Registri di Gnosis adalah yang pertama dibaca aplikasi. Dari **Pengaturan**, Anda juga
+bisa menyalin catatan dompet Anda ke kontrak registri yang sama di **Ethereum**, dengan
+membayar gasnya sendiri, supaya catatan itu ada di chain kedua. Siapa pun bisa membuat
+salinan seperti itu; isinya tidak ada yang bisa memindahkan dana.
 
-<Callout type="warning" title="Pemulihan Anda bergantung pada keychain platform">
-Masuk lintas perangkat di Vela bersandar pada passkey Anda yang tersinkron lewat
-iCloud Keychain atau Google Password Manager. Jaga akun itu tetap aman dan opsi
-pemulihannya tetap mutakhir. Kalau Anda kehilangan akses ke <strong>keduanya</strong>
-— perangkat Anda <strong>dan</strong> keychain akun platform Anda — Vela tidak bisa
-membuat ulang kunci privat Anda; secara desain, kami memang tidak pernah memilikinya.
+## Batas yang jujur
+
+<Callout type="warning" title="Kunci yang hilang, hilang">
+Kalau setiap kunci yang Anda pakai saat membuat dompet sudah tidak ada — passkey yang
+tersinkron, ponsel, kunci keamanan — tidak ada yang bisa memulihkan dompet itu, baik
+Vela, Apple, Google, maupun siapa pun. Tidak ada frasa pemulihan, tidak ada
+reset dari layanan pelanggan, dan tidak ada pintu belakang.
 </Callout>
 
-Saran praktis:
+Yang membuat hal itu kecil kemungkinannya adalah punya lebih dari satu jalan masuk:
 
-- **Biarkan sinkronisasi keychain menyala.** Itulah yang membawa passkey Anda antar
-  perangkat.
-- **Amankan akun Apple / Google Anda** dengan kata sandi kuat dan metode pemulihannya
-  sendiri. Akun itu kini bagian dari keamanan dompet Anda.
-- **Masuklah di lebih dari satu perangkat** bila memungkinkan, agar satu ponsel yang
-  hilang jadi kerepotan, bukan krisis.
+- **Biarkan sinkronisasi passkey tetap aktif** kalau Anda memakai passkey perangkat ini.
+  Sinkronisasi itulah yang membawa kunci ke ponsel atau komputer baru.
+- **Amankan akun di baliknya.** Siapa pun yang menguasai akun Apple atau Google Anda
+  mungkin bisa memakai passkey yang tersinkron; beri akun itu kata sandi yang kuat dan
+  opsi pemulihannya sendiri.
+- **Buat dompet dengan lebih dari satu kunci**, misalnya passkey di ponsel Anda dan kunci
+  keamanan fisik yang disimpan di tempat aman. Kunci hanya bisa ditambahkan saat Anda
+  membuat dompet ([alasannya](/id/docs/signers)). Ingat bahwa satu kunci mana pun bisa
+  menandatangani sendirian — dan tidak bisa dihapus, jadi kalau suatu saat ada kunci yang
+  bocor, pindahkan dana Anda ke dompet baru ([caranya](/id/docs/signers)).
 
-## Yang bisa dan tidak bisa dilakukan Vela
+## Apa yang bisa dan tidak bisa dilakukan Vela
 
-- **Bisa:** membantu Anda menemukan akun Anda lagi lewat indeks publik.
-- **Tidak bisa:** memindahkan dana Anda, membekukan dompet Anda, atau memulihkan kunci
-  privat. Vela tidak pernah memegangnya. Itulah inti swakelola — dan itulah pertukaran
-  yang Anda ambil untuk mendapatkannya.
+- **Bisa:** menjaga indeks tetap berjalan, supaya dompet Anda cepat ditemukan di
+  perangkat baru.
+- **Tidak bisa:** memindahkan dana Anda, membekukan dompet Anda, menambah atau menghapus
+  kunci, atau memulihkan kunci yang sudah hilang. Vela tidak pernah memegang kunci Anda.
+
+Berikutnya: [clear signing](/id/docs/clear-signing).

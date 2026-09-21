@@ -32,7 +32,7 @@ funding an address on a chain. Nothing here is needed to use Vela day to day.
 | --- | --- | --- | --- | --- |
 | **Relay** | Receives your signed operation, pays the gas, submits it, collects the fee you signed | `vela-relay-cf.getvela.app` | Yes — run [vela-relay](#relay) and point the wallet at it | You can't send |
 | **Public-key index** | Registers a new wallet's keys on-chain; answers "which wallet is this key part of?" | `p256-index-v2.getvela.app` | Yes — run [p256-index](#index) | New wallets can't be created; sign-in falls back to reading the chain |
-| **Registry contract** | The permanent public record of each wallet's keys | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` on Gnosis | Not needed — nobody owns it; the wallet reads it directly | — |
+| **Registry contract** | The permanent public record of each wallet's keys | `0x94fD…1EA9` on Gnosis | Not needed — nobody owns it; the wallet reads it directly | — |
 | **Chain data** | Network details, token lists, logos, clear-signing descriptors | `ethereum-data.getvela.app` | Yes — run [ethereum-data](#chain-data) | No token lists or logos; fewer transactions decoded; adding networks fails |
 | **Exchange rates** | Fiat values in your display currency | `vela-currency.getvela.app` | Yes — run [vela-currency](#exchange-rates) or any Frankfurter-compatible source | The apps fall back to on-chain Chainlink rates where they can (desktop shows USD) |
 | **RPC nodes** | Reading balances, simulating transactions | Public endpoints per network | Yes — per network, in Settings → Networks | Vela fails over between endpoints |

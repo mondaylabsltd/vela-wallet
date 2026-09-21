@@ -59,7 +59,7 @@
 				"passkeys": "Passkey hoạt động thế nào",
 				"signers": "Khóa ký & khóa bảo mật",
 				"clear-signing": "Ký minh bạch",
-				"clear-signing-self-host": "Tự chạy trang ký",
+				"clear-signing-self-host": "Tự triển khai trang ký",
 				"self-hosting": "Hướng dẫn tự triển khai",
 				"bybit-attack": "Vụ tấn công Bybit",
 				"recovery": "Khôi phục & đăng nhập",
@@ -69,14 +69,14 @@
 				"faq": "Câu hỏi thường gặp"
 			},
 			"ui": {
-				"browse": "Xem tài liệu",
-				"hide": "Ẩn tài liệu",
+				"browse": "Xem danh mục tài liệu",
+				"hide": "Ẩn danh mục tài liệu",
 				"navLabel": "Tài liệu",
 				"onThisPage": "Trong trang này",
-				"edit": "Sửa trang này trên GitHub",
+				"edit": "Chỉnh sửa trang này trên GitHub",
 				"pagerLabel": "Chuyển trang tài liệu",
-				"previous": "← Trước",
-				"next": "Tiếp →"
+				"previous": "← Trang trước",
+				"next": "Trang sau →"
 			}
 		},
 		"englishOnly": {
@@ -95,10 +95,10 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Ví Ethereum thực sự là của bạn",
-			"description": "Ví Ethereum mã nguồn mở, tự vận hành được, dành cho ETH và ERC-20. Ký bằng passkey — không cụm từ khôi phục, không cần ví cứng, không bị trói vào ai. Bạn trả tiền cho sự tiện lợi, không phải cho quyền sử dụng.",
+			"description": "Ví Ethereum mã nguồn mở mà bạn có thể tự vận hành, không cần đến chúng tôi. Ký bằng passkey hoặc khóa bảo mật — không có cụm từ khôi phục. Tài khoản của bạn là một Safe nguyên bản, và mọi dịch vụ phía sau đều là mã nguồn mở.",
 			"ogTitle": "Vela Wallet — Ví Ethereum thực sự là của bạn",
-			"ogDescription": "Ví mã nguồn mở, tự vận hành được cho ETH và ERC-20. Ký bằng passkey, không cụm từ khôi phục, không bị trói. Muốn thì bạn tự biên dịch lấy.",
-			"organization": "Ví Ethereum mã nguồn mở, tự vận hành được, dành cho ETH và token ERC-20. Ký bằng passkey — không cụm từ khôi phục, không cần ví cứng, không bị trói vào ai."
+			"ogDescription": "Ví Ethereum mã nguồn mở dựng trên một Safe nguyên bản. Ký bằng passkey hoặc khóa bảo mật, không cụm từ khôi phục, cùng các dịch vụ mã nguồn mở mà bạn có thể tự vận hành.",
+			"organization": "Ví Ethereum mã nguồn mở, tự lưu ký, dựng trên một Safe nguyên bản, ký bằng passkey hoặc khóa bảo mật, không cần cụm từ khôi phục."
 		},
 		"hero": {
 			"headline": "Ví Ethereum thực sự là của bạn",
@@ -116,11 +116,11 @@
 				},
 				{
 					"term": "Thứ bạn thấy trên màn hình chưa chắc là thứ được ký.",
-					"link": "Bybit mất 1,5 tỷ USD như thế nào, và lối đó chúng tôi chặn ra sao"
+					"link": "Bybit mất 1,5 tỷ USD như thế nào, và Vela làm gì trước rủi ro đó"
 				},
 				{
-					"term": "Dù Vela ngừng hoạt động, bạn vẫn truy cập được ví của mình.",
-					"link": "Tự vận hành ứng dụng, relay và mọi dịch vụ phía sau"
+					"term": "Mọi thứ Vela vận hành cho ví của bạn đều là mã nguồn mở, và bạn có thể tự vận hành chúng.",
+					"link": "Cần chạy những gì, thứ gì vẫn hoạt động khi không có getvela.app, và thứ gì vẫn phụ thuộc vào chúng tôi"
 				}
 			]
 		},
@@ -128,13 +128,13 @@
 			"lede": "Trước khi nạp tài sản vào Vela"
 		},
 		"seal": {
-			"label": "ví đã được tạo on-chain",
+			"label": "ví đã đăng ký trên chuỗi",
 			"loading": "Đang đọc số lượng ví",
-			"verify": "Mọi chiếc ví đều nằm trên chuỗi — xem sổ đăng ký"
+			"verify": "Mọi ví đều được đăng ký trên chuỗi — xem sổ đăng ký"
 		},
 		"why": {
 			"heading": "Vì sao chúng tôi làm nó",
-			"p1": "Chúng tôi dùng <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> mỗi ngày và thấy thích. Rồi chúng tôi vấp phải những giới hạn: một khóa khôi phục được tạo ra ngay trong trình duyệt mà bạn chỉ còn cách tin, không thêm được mạng tùy chọn, không phần nào tự vận hành được — và nếu dịch vụ đóng cửa thì chiếc ví đi theo.",
+			"p1": "Chúng tôi dùng <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (nay thuộc Coinbase Wallet) mỗi ngày và thấy thích. Rồi chúng tôi vấp phải những giới hạn: một cụm từ khôi phục được tạo trên một trang web mà bạn chỉ còn cách tin, không thêm được mạng tùy chỉnh, không có gì để bạn tự triển khai, và một dịch vụ ký có mã nguồn không công khai — nếu dịch vụ đó biến mất, không còn cách nào được công bố để passkey của bạn truy cập được tài khoản.",
 			"p2": "Vela là phiên bản mà chính chúng tôi sẵn sàng để tiền vào. Chúng tôi giữ lại cách ký bằng passkey, nhưng bảo đảm chiếc ví không phụ thuộc vào chúng tôi.",
 			"more": "Bản dài hơn — mười hai từ đó thì bạn cất ở đâu?"
 		},
@@ -143,16 +143,16 @@
 			"lede": "Ba lý do đừng dùng Vela — khi tiền của bạn còn đang ở chỗ khác.",
 			"items": [
 				{
-					"title": "Mỗi giao dịch phải trả thêm phí dịch vụ relay",
-					"body": "Giao dịch Vela xác minh chữ ký passkey ngay trên chuỗi và chạy qua ERC-4337, nên thường tốn nhiều gas hơn các lệnh chuyển thông thường.\n\nMặc định, relayer trả gas và gửi giao dịch. Phí gồm chi phí trên chuỗi và phí dịch vụ relay, và được chốt ngay khi bạn ký.\n\nBạn có thể đổi relayer trong phần cài đặt, hoặc <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">tự chạy một cái</a>."
+					"title": "Mỗi giao dịch trả thêm phí relay ngoài tiền gas",
+					"body": "Giao dịch Vela xác minh chữ ký passkey của bạn ngay trên chuỗi và chạy qua ERC-4337, nên tốn lượng gas gấp nhiều lần một lệnh chuyển thông thường.\n\nVí dự trù nhiều gas hơn mức giao dịch cần và tính phí gấp ba lượng đó, theo mức cao hơn giữa giá gas ví tự đọc được và giá relay báo cho tốc độ bạn chọn — thường gấp mười lần chi phí thực trên chuỗi trở lên, còn cao hơn ở lần gửi đầu tiên trên một mạng, tối thiểu 0,01 USD. Số tiền chính xác hiện ra trước khi bạn ký và không thể thay đổi sau đó.\n\nBạn có thể trỏ ví sang một relay khác hoặc <a href=\"/docs/self-hosting#relay\">tự chạy relay của mình</a> — khi đó phí thuộc về người vận hành relay ấy."
 				},
 				{
 					"title": "Mỗi khóa là một lối vào ví của bạn",
-					"body": "Bạn có thể đặt nhiều khóa ngay khi tạo ví\n\nVela là 1-of-n: bất kỳ khóa nào được ủy quyền cũng tiêu được tiền trong ví một mình. Thêm một khóa là thêm một đường lấy lại quyền truy cập — và thêm một cửa bạn phải giữ."
+					"body": "Bạn chọn tối đa bảy khóa khi tạo ví, và sau đó không thể thay đổi.\n\nVela là 1-of-n: bất kỳ khóa nào trong số đó cũng tự mình tiêu được tiền trong ví. Mỗi khóa thêm vào là thêm một đường quay lại nếu bạn mất một khóa — và thêm một khóa bạn phải bảo vệ."
 				},
 				{
-					"title": "Bạn đang dựa vào hợp đồng Safe đã được kiểm toán — và kiểm toán không phải là bảo đảm",
-					"body": "Safe v1.4.1 và mô-đun WebAuthn đều đã qua kiểm toán của bên thứ ba. Chúng tôi dùng đúng bản đã công bố, không sửa mã hợp đồng.\n\nKiểm toán giúp phát hiện vấn đề bảo mật, nhưng không phải là bảo đảm an toàn và cũng không có nghĩa là mọi lỗ hổng đều đã được tìm ra."
+					"title": "Các hợp đồng đã được kiểm toán. Mã của chính Vela thì chưa.",
+					"body": "Ví của bạn chạy trên Safe v1.4.1 cùng các mô-đun passkey và ERC-4337 của Safe, không sửa đổi gì, và tất cả đều có báo cáo kiểm toán công khai của bên thứ ba — kiểm toán tìm ra vấn đề, nhưng không chứng minh được rằng không còn vấn đề nào.\n\nCác ứng dụng và dịch vụ của chính Vela chưa được bên thứ ba kiểm toán, và cũng chưa có lịch kiểm toán nào. Mã nguồn công khai để bất kỳ ai cũng đọc được."
 				}
 			],
 			"close": "Nếu một trong ba điều đó bạn không chấp nhận được, thì Vela chưa dành cho bạn."
@@ -163,32 +163,32 @@
 				{
 					"feature": "Kiểu tài khoản",
 					"vela": "<a href=\"/docs/account-contract\">Tài khoản thông minh Safe v1.4.1</a>",
-					"metamask": "EOA",
+					"metamask": "EOA; mặc định được nâng cấp thành tài khoản thông minh (EIP-7702) cho người dùng mới",
 					"base": "Tài khoản thông minh của Coinbase"
 				},
 				{
 					"feature": "Khóa ký",
-					"vela": "Passkey",
+					"vela": "Passkey hoặc khóa bảo mật, tối đa bảy khóa",
 					"metamask": "Khóa riêng tư đứng sau cụm từ khôi phục; hỗ trợ ví cứng",
-					"base": "Passkey"
+					"base": "Passkey hoặc cụm từ khôi phục"
 				},
 				{
 					"feature": "Gas mỗi giao dịch",
-					"vela": "Chi phí ERC-4337, cộng phí dịch vụ của relay",
-					"metamask": "Gas của một giao dịch EOA thường",
-					"base": "Chi phí ERC-4337"
+					"vela": "Gas phụ trội của ERC-4337, cộng phí relay tính theo bội số của gas",
+					"metamask": "Gas của một giao dịch thông thường",
+					"base": "Gas phụ trội của ERC-4337"
 				},
 				{
 					"feature": "Gas được tài trợ",
 					"vela": "Không có",
-					"metamask": "Không có",
-					"base": "Có, ở những nơi được hỗ trợ"
+					"metamask": "Trên một số mạng",
+					"base": "Khi ứng dụng tài trợ"
 				},
 				{
-					"feature": "Mạng tùy chọn",
-					"vela": "Mọi mạng EVM đáp ứng yêu cầu của Vela; bạn có thể tự triển khai hợp đồng",
-					"metamask": "Mạng EVM và RPC tùy chọn",
-					"base": "Phạm vi mạng hẹp hơn"
+					"feature": "Mạng tùy chỉnh",
+					"vela": "Mọi mạng EVM đáp ứng yêu cầu của Vela; phần lớn hợp đồng còn thiếu bạn có thể tự triển khai",
+					"metamask": "Mạng EVM và RPC tùy chỉnh",
+					"base": "Danh sách mạng cố định"
 				},
 				{
 					"feature": "Mất một khóa",
@@ -197,9 +197,15 @@
 					"base": "Ký bằng một khóa khác bạn đã thêm hoặc đã đồng bộ"
 				},
 				{
+					"feature": "Thêm khóa về sau",
+					"vela": "Không được — khóa cố định từ lúc tạo ví",
+					"metamask": "Không được — mỗi tài khoản một khóa",
+					"base": "Có"
+				},
+				{
 					"feature": "Giao dịch gộp",
 					"vela": "Có",
-					"metamask": "Tùy khả năng của tài khoản — EIP-7702 và tương tự",
+					"metamask": "Có, qua tài khoản thông minh EIP-7702",
 					"base": "Có"
 				},
 				{
@@ -210,24 +216,24 @@
 				},
 				{
 					"feature": "Một lớp kiểm tra nữa",
-					"vela": "Một trang hoặc tiện ích độc lập, do bạn tự vận hành",
-					"metamask": "Dịch vụ dò rủi ro của bên thứ ba",
+					"vela": "Một trang ký độc lập, đã làm xong nhưng chưa kết nối với các ứng dụng",
+					"metamask": "Cảnh báo rủi ro của bên thứ ba",
 					"base": "—"
 				},
 				{
-					"feature": "Tự vận hành trọn vẹn",
-					"vela": "Ứng dụng, relay và các dịch vụ phía sau, bạn chạy được tất cả",
-					"metamask": "Client và RPC là thứ bạn chọn hoặc tự chạy",
+					"feature": "Tự triển khai trọn vẹn",
+					"vela": "Ứng dụng và dịch vụ phía sau, còn vài thiếu sót được liệt kê trong hướng dẫn tự triển khai; passkey vẫn gắn với getvela.app",
+					"metamask": "Client và RPC do bạn chọn hoặc tự chạy",
 					"base": "Không có"
 				},
 				{
-					"feature": "Mã nguồn mở",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Ứng dụng, relay và các dịch vụ phía sau</a>",
-					"metamask": "Phần client của ví",
-					"base": "SDK; một số dịch vụ tài khoản không mở"
+					"feature": "Mã nguồn",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Ứng dụng và dịch vụ đều công khai</a>; giấy phép MIT, trừ chỉ mục (chưa có giấy phép)",
+					"metamask": "Công khai, theo giấy phép chỉ cho phép dùng phi thương mại",
+					"base": "Hợp đồng và SDK mở; dịch vụ ký thì không"
 				},
 				{
-					"feature": "Độ chín",
+					"feature": "Độ trưởng thành",
 					"vela": "Mới, ít người dùng",
 					"metamask": "Nhiều năm trên thị trường, lượng người dùng lớn",
 					"base": "Do Coinbase duy trì"
@@ -239,22 +245,22 @@
 			"intro": "Bạn trả tiền cho sự tiện lợi, không phải cho quyền sử dụng.",
 			"cards": [
 				{
-					"title": "Ví web và tiện ích Chrome",
+					"title": "Web, tiện ích trình duyệt và máy tính",
 					"price": "Miễn phí"
 				},
 				{
-					"title": "Ứng dụng máy tính và di động",
-					"price": "Miễn phí nếu tự biên dịch"
+					"title": "iPhone và Android, tự biên dịch",
+					"price": "Miễn phí"
 				},
 				{
-					"title": "Tải từ các cửa hàng ứng dụng",
-					"price": "Mua một lần"
+					"title": "iPhone và Android, tải từ cửa hàng",
+					"price": "Mua một lần · sắp ra mắt"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 mạng dựng sẵn. Tự thêm mạng khác",
-			"body": "Ví của bạn dùng chung một địa chỉ trên mọi mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có đủ hỗ trợ RIP-7212, Safe và ERC-4337 hay không. Nếu thiếu hợp đồng, bạn có thể triển khai bằng <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">công cụ Chain Setup</a>.",
+			"heading": "24 mạng tích hợp sẵn. Thêm mạng của riêng bạn",
+			"body": "Ví của bạn có cùng một địa chỉ trên mọi mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có precompile RIP-7212 cùng các hợp đồng Safe và ERC-4337 cần thiết hay không. Nếu thiếu một số hợp đồng, trang <a href=\"/chain-setup\">thiết lập chuỗi</a> cho biết thiếu những gì, và triển khai những hợp đồng mà ai cũng triển khai được.",
 			"link": "Mạng và phí, chi tiết"
 		},
 		"faq": {
@@ -262,15 +268,15 @@
 			"items": [
 				{
 					"q": "Tôi cần gì để tạo ví?",
-					"a": "Một thiết bị mở khóa bằng Face ID hoặc vân tay, hoặc một khóa bảo mật USB/NFC. Không cần cụm từ khôi phục, cũng không cần số dư ban đầu.\n\nHãy thêm tất cả các khóa bạn muốn ngay khi tạo ví. Sau đó không thêm được nữa."
+					"a": "Một điện thoại hoặc máy tính hỗ trợ passkey, hoặc khóa bảo mật phần cứng — cần hai chiếc nếu bạn chỉ dùng khóa bảo mật. Không cần cụm từ khôi phục, email hay số dư ban đầu.\n\nHãy chọn tất cả các khóa của bạn, tối đa bảy, ngay khi tạo ví. Sau đó không thêm được nữa."
 				},
 				{
 					"q": "Tôi dùng Vela với dApp được không?",
-					"a": "Được. Vela đưa ví thẳng vào dApp, giống như các ví trình duyệt khác.\n\nCách này chạy trong ứng dụng iOS, Android, máy tính và trong tiện ích trình duyệt của Vela."
+					"a": "Được. dApp nhìn thấy Vela giống như mọi ví trình duyệt khác.\n\nCách này hoạt động trong tiện ích trình duyệt Vela và trong trình duyệt tích hợp của ứng dụng máy tính (macOS, Windows), iPhone và Android. Ví web không kết nối với dApp."
 				},
 				{
 					"q": "Mất điện thoại thì sao?",
-					"a": "Nếu passkey của bạn đã đồng bộ với iCloud Keychain hoặc Google Password Manager, bạn lấy lại nó trên máy mới và dùng tiếp đúng chiếc ví đó.\n\nNếu chưa đồng bộ, bạn sẽ cần một khóa khác — khóa đã thêm lúc tạo ví."
+					"a": "Nếu passkey của bạn đã đồng bộ qua Chuỗi khóa iCloud hoặc Trình quản lý mật khẩu của Google, bạn có thể lấy lại nó trên thiết bị mới và tiếp tục dùng đúng chiếc ví đó.\n\nNếu chưa đồng bộ, bạn sẽ cần một khóa khác mà bạn đã thêm khi tạo ví."
 				},
 				{
 					"q": "Nếu tôi xóa passkey thì sao?",
@@ -278,15 +284,15 @@
 				},
 				{
 					"q": "Nếu tài khoản Apple hoặc Google của tôi bị chiếm thì sao?",
-					"a": "Ai chạm được vào passkey đã đồng bộ của bạn thì cũng có thể chạm được vào ví.\n\nNếu không muốn phụ thuộc vào Apple hay Google, hãy dùng khóa bảo mật USB/NFC thay cho nó."
+					"a": "Người đang kiểm soát tài khoản đó có thể dùng được passkey đồng bộ qua nó và tiêu tiền trong ví của bạn — mà khóa thì không gỡ bỏ được. Hãy chuyển tiền sang một ví mới, tạo bằng những khóa không phụ thuộc vào tài khoản đó.\n\nĐể không phụ thuộc vào Apple hay Google ngay từ đầu, hãy tạo ví bằng khóa bảo mật phần cứng."
 				},
 				{
 					"q": "Vela làm được gì với tiền của tôi, và biết gì về tôi?",
-					"a": "Vela không thể chuyển hay đóng băng tiền của bạn. Chỉ khóa của bạn mới điều khiển được ví.\n\nKhông cần email, cũng không cần tài khoản Vela. Khóa công khai, địa chỉ ví và tên ví của bạn là công khai trên chuỗi. Bên phát hành token thì vẫn có thể đưa một địa chỉ vào danh sách chặn."
+					"a": "Vela không giữ khóa nào và không có vai trò gì trên ví của bạn, nên tự mình không thể chuyển hay đóng băng tiền của bạn. Nhưng phần mềm yêu cầu các khóa của bạn ký là do Vela viết.\n\nKhông cần email hay tài khoản. Khóa công khai của bạn, loại trình xác thực đứng sau mỗi khóa, tên các khóa, tên ví và địa chỉ đều công khai trên chuỗi; các dịch vụ của Vela thấy địa chỉ IP của bạn và những giao dịch bạn gửi qua chúng. Bên phát hành token vẫn có thể đưa địa chỉ vào danh sách chặn."
 				},
 				{
 					"q": "Nếu Vela đóng cửa, hoặc getvela.app ngừng hoạt động thì sao?",
-					"a": "Ví của bạn vẫn nằm trên chuỗi và không phụ thuộc vào máy chủ của Vela. Ứng dụng và các dịch vụ phía sau đều là mã nguồn mở và có thể chạy độc lập.\n\nNếu getvela.app không vào được, hãy ký từ trình duyệt: tiện ích Vela, hoặc tiện ích ký minh bạch không phụ thuộc gì. Những khóa bạn đang có đều dùng được ở cả hai — passkey trên máy này, khóa bảo mật USB, hoặc một chiếc điện thoại kết nối bằng mã QR."
+					"a": "Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Mọi dịch vụ Vela vận hành đều là mã nguồn mở để bất kỳ ai cũng chạy được — riêng relay cần sửa mã để thôi đọc dữ liệu chuỗi từ máy chủ của Vela.\n\nNếu getvela.app ngừng hoạt động, tiện ích trình duyệt Vela vẫn ký được bằng các khóa bạn đang có — passkey trên thiết bị này, khóa bảo mật, hoặc điện thoại quét mã QR — và các ứng dụng bạn tự biên dịch cũng vậy, với điện thoại hoặc khóa bảo mật."
 				}
 			]
 		}
@@ -294,29 +300,29 @@
 	"about": {
 		"meta": {
 			"title": "Giới thiệu",
-			"description": "Đội ngũ và mục tiêu đứng sau Vela Wallet — một chiếc ví tự quản, mã nguồn mở, không cụm từ khôi phục, được làm công khai.",
+			"description": "Ai làm ra Vela Wallet: một công ty nhỏ ở Vương quốc Anh cùng nhà sáng lập, phát triển công khai một chiếc ví mã nguồn mở, tự lưu ký, không cần cụm từ khôi phục.",
 			"pageName": "Về Vela Wallet"
 		},
 		"eyebrow": "Giới thiệu",
 		"heading": "Ai làm ra Vela.",
-		"lede": "Vela được làm công khai — chiếc ví, các hợp đồng thông minh, và chính trang này. Không có công ty vô danh nào đứng sau: chỉ có mã thật để bạn đọc, và một con người thật để bạn liên hệ.",
+		"lede": "Vela do MONDAY LABS LTD, một công ty nhỏ ở Vương quốc Anh, làm ra và được phát triển công khai: các ứng dụng, dịch vụ phía sau và chính trang web này đều nằm trên GitHub, và người viết ra chúng trả lời issue ở đó.",
 		"team": {
 			"role": "Nhà sáng lập & Kỹ sư",
-			"bio": "Làm Vela từ đầu đến cuối — chiếc ví, các hợp đồng và trang này. Vừa làm vừa viết lại quá trình."
+			"bio": "Làm Vela từ đầu đến cuối — các ứng dụng, dịch vụ và trang web này — và viết về quá trình đó trên blog trong lúc làm."
 		},
 		"valuesHeading": "Chúng tôi tin điều gì",
 		"values": [
 			{
-				"title": "Tự quản, theo đúng nghĩa",
-				"body": "Khóa của bạn, coin của bạn — không phải khẩu hiệu mà là kiến trúc. Chúng tôi không thể chuyển, đóng băng hay khôi phục tiền của bạn, và đó là chủ đích."
+				"title": "Tự lưu ký, theo đúng nghĩa",
+				"body": "Chúng tôi không giữ khóa nào và không có vai trò gì trên ví của bạn, nên không thể chuyển, đóng băng hay khôi phục tiền của bạn. Thứ chúng tôi thực sự kiểm soát là phần mềm bạn dùng để ký, và vì thế mã nguồn của nó được công khai."
 			},
 			{
 				"title": "Không cụm từ khôi phục",
-				"body": "Nguyên nhân mất crypto lớn nhất là một chuỗi từ mà người ta được dặn phải giữ hoàn hảo. Chúng tôi thay nó bằng passkey: khuôn mặt hoặc vân tay của bạn."
+				"body": "Cụm từ khôi phục là một bí mật mà người ta bị đòi hỏi phải giữ hoàn hảo suốt nhiều năm. Chúng tôi thay nó bằng passkey: những khóa do thiết bị của bạn hoặc một khóa bảo mật nắm giữ, chỉ được dùng sau khi bạn xác nhận bằng khuôn mặt, vân tay hoặc mã PIN."
 			},
 			{
 				"title": "Mã nguồn mở",
-				"body": "Ví nằm công khai trên GitHub. Niềm tin nên kiểm chứng được, chứ không phải đi xin. Đọc mã, hoặc theo dõi khi chúng tôi làm công khai."
+				"body": "Các ứng dụng và dịch vụ đều công khai trên GitHub, để bạn tự kiểm tra xem chúng làm gì thay vì chỉ tin lời chúng tôi."
 			},
 			{
 				"title": "Thành thật về đánh đổi",
@@ -340,79 +346,91 @@
 		},
 		"upcoming": [
 			{
+				"title": "iPhone và Android trên cửa hàng ứng dụng",
+				"body": "Các ứng dụng gốc đã chạy được và đang được thử trên máy thật. Bước tiếp theo là phát hành trên App Store và Google Play, theo hình thức mua một lần."
+			},
+			{
+				"title": "Mọi ứng dụng đều dùng đúng dịch vụ của bạn",
+				"body": "Hiện nay một số ứng dụng bỏ qua một phần của Cài đặt → Điểm cuối dịch vụ — ứng dụng iPhone bỏ qua hoàn toàn, ứng dụng web khi tạo ví hoặc đăng nhập, còn Android khi tra tên. Tất cả đều phải tuân theo thiết lập này, và relay cũng phải đọc được dữ liệu chuỗi từ máy chủ của riêng bạn."
+			},
+			{
+				"title": "Kết nối trang ký độc lập",
+				"body": "Trang ký tự giải mã và tự ký một yêu cầu đã làm xong. Tiếp theo: để các ứng dụng chuyển yêu cầu sang đó, nhờ vậy mọi chữ ký đều được kiểm tra bởi một chương trình do chính bạn nạp."
+			},
+			{
+				"title": "Ký minh bạch phủ rộng hơn",
+				"body": "Thêm hợp đồng và chuỗi được hiển thị thành ý định con người đọc được, để ít giao dịch phải lùi về ký mù hơn."
+			},
+			{
 				"title": "Thấy mọi khoản coin bạn nhận",
-				"body": "Một khoản coin gốc gửi thẳng vào — hoặc coin đến qua một lệnh gọi nội bộ (rút từ sàn, qua router, qua ví đa chữ ký) — không phát ra log nào trên chuỗi, nên hôm nay trên phần lớn mạng nó không hiện trong hoạt động của bạn. Chúng tôi đang làm một dịch vụ truy vết khối để lôi những khoản đó ra, để mọi khoản nhận đều hiện, trên mọi chuỗi."
-			},
-			{
-				"title": "Clear signing phủ rộng hơn",
-				"body": "Thêm hợp đồng và thêm chuỗi được hiển thị bằng ý định đọc được, để ít giao dịch phải lùi về ký mù hơn."
-			},
-			{
-				"title": "Ứng dụng iOS & Android gốc",
-				"body": "Hôm nay Vela chạy trên web; các bản di động dùng chung mã nguồn và đang được thử trên máy thật trước khi lên App Store và Google Play."
-			},
-			{
-				"title": "Đồng bộ trên mọi thiết bị của bạn",
-				"body": "Trên iOS và Android, tài khoản và mạng của bạn đã đi theo bản sao lưu của nền tảng; trên web chúng nằm lại trong trình duyệt. Tiếp theo: ngôn ngữ, tiền tệ và định dạng của bạn, cộng với một chạm để khôi phục toàn bộ thiết lập trên máy mới — và một sổ địa chỉ để bạn thôi phải dán lại địa chỉ."
-			},
-			{
-				"title": "Vươn xa hơn",
-				"body": "Kết nối dApp từ máy tính mà không cần điện thoại, thêm nhiều mạng EVM (kể cả một đường ký cho các chuỗi không có precompile P-256), và một cuộc kiểm toán bảo mật độc lập cho phần tích hợp Safe + WebAuthn của Vela."
+				"body": "Một khoản coin gốc đến qua một hợp đồng khác (rút từ sàn, qua router, qua ví đa chữ ký) không để lại log trên nhiều mạng, nên có thể không xuất hiện trong phần hoạt động của bạn. Chúng tôi muốn truy vết những khoản đó để mọi khoản nạp đều hiện ra."
 			}
 		],
 		"shipped": [
 			{
-				"title": "Bản địa hóa và những chăm chút hằng ngày",
-				"body": "Hỗ trợ đa ngôn ngữ, đổi tức thì (thêm tiếng Nga và tiếng Ý; hôm nay là 15 ngôn ngữ), tiền tệ địa phương và định dạng theo vùng, hiển thị số tiền linh động, kéo-để-làm-mới mang bản sắc riêng, lệnh gửi ở trạng thái chờ cho tới khi xác nhận, và phản hồi ngay trong ứng dụng chỉ bằng một chạm."
+				"title": "Khóa của bạn trên chuỗi, có bản sao lưu trên Ethereum",
+				"body": "Đăng nhập thẳng từ sổ đăng ký trên chuỗi khi chỉ mục không hoạt động, xem mọi khóa mà ví được tạo cùng, và sao chép bản ghi sang Ethereum."
 			},
 			{
-				"title": "Màn hình chính đặt việc thanh toán lên trước",
-				"body": "Màn hình chính được dựng lại quanh hoạt động và số dư của bạn."
+				"title": "Bản tải về cho mọi máy tính",
+				"body": "Ứng dụng máy tính cho macOS, Windows và Linux, cùng tiện ích trình duyệt, đều tải thẳng từ trang này."
 			},
 			{
-				"title": "Clear Signing (ERC-7730)",
-				"body": "Giao dịch hiển thị đúng thứ nó làm — số tiền, người nhận, ý định — bằng ngôn ngữ dễ hiểu thay vì hex thô, kèm bộ xem trước và các bài kiểm thử."
+				"title": "24 mạng",
+				"body": "Thêm mười hai mạng tích hợp sẵn — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — cùng một trang thiết lập chuỗi để đưa Vela lên chuỗi khác."
 			},
 			{
-				"title": "Kết nối dApp trong trình duyệt",
-				"body": "Ví xuất hiện trong trang như mọi ví trình duyệt khác — qua tiện ích Vela, và qua trình duyệt tích hợp trong ứng dụng máy tính, iOS và Android."
+				"title": "Một lõi, các ứng dụng gốc",
+				"body": "Chiếc ví được dựng lại quanh một lõi Rust duy nhất chứa mọi quy tắc, với các ứng dụng gốc ở phía trên: SwiftUI trên iPhone, Compose trên Android, ứng dụng máy tính viết bằng Rust và bản web. Ứng dụng React Native ban đầu đã ngừng sử dụng."
 			},
 			{
-				"title": "Luồng ký cho dApp",
-				"body": "Hạ tầng kết nối và trải nghiệm yêu cầu ký."
+				"title": "dApp ở mọi nơi ví chạy",
+				"body": "Tiện ích trình duyệt, cùng trình duyệt tích hợp trong ứng dụng máy tính, iPhone và Android, kết nối với dApp như mọi ví trình duyệt khác."
 			},
 			{
-				"title": "Trải nghiệm ví cốt lõi",
-				"body": "Một hệ thống thiết kế thực thụ, chọn mức gas và màn hình xác nhận thiết kế lại, máy quét QR toàn màn hình, cùng các màn hình nhận, token, thêm token và nạp tiền được dựng lại."
+				"title": "Tối đa bảy khóa, kể cả khóa bảo mật",
+				"body": "Tạo ví với nhiều passkey, điện thoại hoặc khóa bảo mật kiểu YubiKey, bất kỳ khóa nào trong số đó cũng ký được."
+			},
+			{
+				"title": "Gửi cho nhiều người cùng lúc",
+				"body": "Chia một token cho nhiều người, gom nhiều token về một địa chỉ, hoặc nhập danh sách thanh toán từ bảng tính — mỗi việc chỉ là một giao dịch. Có cả danh bạ và nhóm."
+			},
+			{
+				"title": "Mười lăm ngôn ngữ",
+				"body": "Ví có mười lăm ngôn ngữ, cùng tiền tệ và định dạng số theo địa phương."
+			},
+			{
+				"title": "Ký minh bạch (ERC-7730)",
+				"body": "Giao dịch hiện rõ việc nó làm — số tiền, người nhận, ý định — thay vì hex thô, và một lệnh cấp quyền ở mức “không giới hạn” không thể gửi đi cho đến khi bạn giảm nó xuống."
 			},
 			{
 				"title": "Vela ra đời",
-				"body": "Ví lên sóng trên web, từ một mã nguồn duy nhất cũng build được cho iOS và Android — tài khoản thông minh Safe (ERC-4337), đăng nhập bằng passkey, và không cụm từ khôi phục, ngay từ ngày đầu."
+				"body": "Lần commit đầu tiên: tài khoản thông minh Safe, ERC-4337, đăng nhập bằng passkey và không cụm từ khôi phục, ngay từ ngày đầu."
 			}
 		]
 	},
 	"getStarted": {
 		"meta": {
 			"title": "Tải Vela",
-			"description": "Hôm nay Vela chạy trong trình duyệt của bạn, còn bản máy tính, di động và tiện ích trình duyệt đều dựng từ cùng một mã nguồn. Chọn cái bạn muốn."
+			"description": "Vela chạy ngay trong trình duyệt của bạn, có tiện ích trình duyệt và ứng dụng máy tính tải về được ngay, còn ứng dụng điện thoại đang trên đường tới. Chọn bản bạn muốn."
 		},
 		"heading": "Tải Vela",
-		"lede": "Một chiếc ví, một địa chỉ, dựng từ một mã nguồn. Bắt đầu ngay trong trình duyệt — không phải cài gì — hoặc mang đúng chiếc ví đó sang máy tính, điện thoại, hay thanh công cụ trình duyệt của bạn.",
+		"lede": "Một chiếc ví, một địa chỉ, dù bạn mở ở đâu. Bắt đầu ngay trong trình duyệt — không phải cài gì — hoặc mang đúng chiếc ví đó lên thanh công cụ trình duyệt hay máy tính của bạn, và sắp tới là điện thoại.",
 		"recommended": "Khuyên dùng",
 		"availableNow": "Dùng được ngay",
 		"comingSoon": "Sắp có",
-		"sourceCta": "Tự build từ mã nguồn",
+		"sourceCta": "Tự biên dịch từ mã nguồn",
 		"platforms": {
 			"web": {
 				"title": "Web",
-				"blurb": "Không phải cài, cũng không phải cập nhật. Mở lên, xác thực bằng passkey, và ví của bạn ở đó — trên bất kỳ thiết bị nào có trình duyệt đời mới.",
+				"blurb": "Không phải cài gì: mỗi lần mở là chạy phiên bản mới nhất. Xác nhận bằng một trong các khóa của bạn là ví đã ở đó — trên bất kỳ thiết bị nào có trình duyệt đời mới. Để kết nối với dApp, hãy dùng tiện ích trình duyệt.",
 				"action": "Mở ví web"
 			},
 			"desktop": {
 				"title": "Máy tính",
 				"systems": "macOS · Windows · Linux",
 				"blurb": "Một ứng dụng gốc, cho những lúc chiếc ví là thứ bạn để mở suốt. Cùng địa chỉ, cùng passkey, cùng các mạng.",
-				"stores": "Mac App Store · Microsoft Store"
+				"stores": "Microsoft Store"
 			},
 			"mobile": {
 				"title": "Di động",
@@ -427,7 +445,7 @@
 				"stores": "Chrome Web Store"
 			}
 		},
-		"fundingNote": "Tải từ cửa hàng là có trả tiền, và đó là cách một nhóm nhỏ độc lập có kinh phí để làm Vela một cách công khai. Mọi thứ đều mã nguồn mở, nên bạn luôn có thể tự build lấy — cùng một ứng dụng, không mất phí.",
+		"fundingNote": "Tải từ cửa hàng là có trả phí, và đó là cách một nhóm nhỏ độc lập có kinh phí để làm Vela một cách công khai. Mã nguồn công khai, nên bạn luôn có thể tự biên dịch thay vì mua, miễn phí — ứng dụng điện thoại tự biên dịch sẽ ký bằng một điện thoại khác hoặc khóa bảo mật, chứ không dùng passkey của chính điện thoại đó.",
 		"storeNote": "Chưa có trên các cửa hàng ứng dụng. Cho đến lúc đó, ứng dụng máy tính và tiện ích mở rộng được tải về ngay từ trang này, sẵn sàng để cài đặt. Ứng dụng điện thoại thì không: chúng đến từ các cửa hàng, hoặc từ mã nguồn.",
 		"downloads": {
 			"yourSystem": "Hệ thống của bạn",
@@ -468,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "978189838858",
-		"about": "669db59e91a0",
-		"roadmap": "1f9b064b5fbb",
-		"getStarted": "7096649e0f32"
+		"home": "09e59832402d",
+		"about": "44b20f016140",
+		"roadmap": "cc826c697f61",
+		"getStarted": "f7262f86ca9e"
 	}
 }

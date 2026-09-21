@@ -1,6 +1,7 @@
 ---
 title: Redes e taxas
-description: As 12 redes que a Vela suporta, como funcionam as taxas de gas com abstração de contas, quem opera o relay e fica com as taxas, quando você paga a ativação da conta de gas, e como a Vela escolhe endpoints RPC.
+description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
+source: 84328d162a3a
 ---
 
 <script>
@@ -9,132 +10,154 @@ description: As 12 redes que a Vela suporta, como funcionam as taxas de gas com 
 
 # Redes e taxas
 
-## Redes suportadas
+## Redes integradas
 
-A Vela vem com **12 redes EVM**:
+A Vela tem **24 redes** integradas, todas mainnets:
 
-| Rede | Token nativo das taxas |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Rede | Gas pago em | Rede | Gas pago em |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (a moeda nativa) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (a moeda nativa) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (sem moeda nativa) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Sua carteira tem **o mesmo endereço em todas elas**, então é um endereço só para
-compartilhar em qualquer lugar.
+Na maioria delas, você também pode pagar a taxa numa stablecoin em dólar que o
+relay aceite naquela rede (veja abaixo).
 
-Você também pode **adicionar redes personalizadas** (Configurações → Redes). Como a
-Vela é uma carteira de conta inteligente, a rede precisa oferecer os contratos de
-que a Vela depende: o EntryPoint ERC-4337, os contratos Safe e o precompilado de
-assinatura **P-256 (RIP-7212)** que verifica sua passkey on-chain. A Vela confere
-isso automaticamente antes de deixar você adicionar uma rede.
+A sua carteira tem o **mesmo endereço em todas as redes**, porque o endereço é
+calculado a partir das suas chaves, não da rede.
 
-<Callout type="info" title="Por que a Gnosis aparece tanto">
-Além de ser uma das 12 redes, a Gnosis Chain hospeda o **índice de passkeys** da
-Vela — o contrato que guarda sua chave pública e o nome da conta para a recuperação
-entre aparelhos. Isso é separado de em qual rede você transaciona.
+## Adicionar outra rede
+
+Você pode adicionar qualquer rede EVM em **Configurações → Redes**, desde que ela
+tenha o que uma carteira Vela precisa: onze contratos padrão (o EntryPoint v0.7 do
+ERC-4337, os contratos do Safe v1.4.1, os módulos 4337 e de passkey da Safe,
+MultiSend, Multicall3 e dois implantadores determinísticos) e o pré-compilado
+**RIP-7212**, que verifica assinaturas de passkey no endereço `0x100`. A carteira
+confere todos eles, inclusive com uma verificação de assinatura real no
+pré-compilado, antes de deixar você adicionar a rede.
+
+O pré-compilado é indispensável. O endereço dele faz parte de como todo
+endereço da Vela é calculado, então não existe verificador alternativo nem como
+implantar um depois. Se uma rede tem o pré-compilado, mas faltam alguns dos
+contratos, a [configuração de rede](/pt-BR/chain-setup) mostra o que falta e
+implanta o que qualquer pessoa pode implantar. Uma lacuna na verificação: uma
+carteira com mais de uma chave também precisa da fábrica de signatários de passkey
+da Safe na rede, e isso ainda não é verificado; sem ela, só a primeira chave
+consegue assinar ali.
+
+## Como uma transação é paga
+
+A Vela é uma carteira ERC-4337: você não transmite a transação por conta própria. O
+app monta uma **UserOperation**, você a assina com uma das suas chaves, e um
+**relay** a envia on-chain e adianta o gas. (O ERC-4337 chama esse papel de
+bundler.) O relay é reembolsado **dentro da sua operação**: o pagamento é uma
+transferência da sua carteira para o relay que fica no mesmo lote da sua transação,
+então está coberto pela sua assinatura. Não há paymaster, ninguém patrocina o seu
+gas e ninguém pode recusar a sua transação por causa de uma política de
+patrocínio.
+
+### Qual é a taxa
+
+A tela de confirmação mostra um único valor, na moeda da taxa e na sua moeda de
+exibição. Ele é calculado assim:
+
+- **Gas que a carteira reserva.** A carteira simula a transação e reserva mais gas
+  do que espera usar: as estimativas de verificação e de execução são aumentadas
+  em metade cada uma, com mínimos (por exemplo, a verificação é de pelo menos
+  300.000 unidades de gas quando a carteira já está implantada, e 2.000.000 na transação que
+  a implanta).
+- **Preço do gas.** O maior entre a leitura que a própria carteira faz do preço de
+  gas da rede e o preço do relay para a velocidade que você escolheu. A velocidade
+  padrão é *Rápido*, que o relay precifica em cerca de 1,8 × a taxa base mais o
+  dobro da taxa de prioridade.
+- **Taxa = 3 × gas reservado × preço do gas**, com mínimo de cerca de US$ 0,01. Na
+  Tempo, o multiplicador é 2 e a taxa é paga em pathUSD.
+
+Como a reserva fica bem acima do que a transação vai usar e o preço tem folga,
+**a taxa muitas vezes é dez vezes ou mais o custo real da transação on-chain**, e
+ainda maior na primeira transação numa rede. O relay paga o custo real e fica com
+o restante; nada é devolvido. Em redes baratas, isso dá centavos; na mainnet do
+Ethereum, pode ser um valor considerável. O valor exato aparece na tela de
+confirmação antes de você assinar.
+
+<Callout type="info" title="O que você vê é o que você paga">
+O valor da taxa e o endereço para onde ela vai fazem parte da operação que você
+assina. Um relay que mudasse qualquer um dos dois invalidaria a sua assinatura,
+então você paga exatamente o valor mostrado — nada a mais, mesmo que o
+gas suba antes da inclusão. Uma cotação de preço de gas do relay acima do triplo da
+leitura da própria carteira é recusada.
 </Callout>
 
-## Como funcionam as taxas (abstração de contas)
+### Com o que você pode pagar
 
-A Vela usa **abstração de contas ERC-4337**, então a transação não é transmitida por
-você diretamente: ela é uma **UserOperation** entregue a um **relay**, que a submete
-on-chain e é reembolsado pelo gas. (A especificação ERC-4337 chama esse papel de
-*bundler*. O da Vela se chama relay porque faz mais do que agrupar: cota taxas em
-banda e opera o protocolo de conta de gas descrito abaixo, e nenhuma das duas coisas
-faz parte do padrão.) Disso decorrem algumas coisas:
+- A **moeda nativa** da rede, sempre.
+- Uma **stablecoin em dólar** da lista do relay para aquela rede, quando o relay
+  consegue precificar a moeda nativa. Stablecoins que você não tem ficam ocultas.
+- Na **Tempo**, que não tem moeda nativa, só **pathUSD**.
 
-- **O gas sai do saldo da sua própria carteira** — no token nativo da rede (ETH,
-  BNB, xDAI…) por padrão, ou numa stablecoin suportada onde o relay oferecer uma;
-  você escolhe o ativo da taxa na tela de confirmação. A Tempo não tem moeda nativa,
-  então lá o gas é sempre liquidado em stablecoins em dólar. Não há **paymaster**
-  ERC-4337 patrocinando — nem barrando — cada transação. (A Vela pode bancar a
-  *ativação da conta de gas*, que é uma vez só, para usuários novos; isso é outra
-  coisa e está logo abaixo.)
-- **É o relay que cota o preço do gas** — ele é a única fonte de verdade, e a
-  carteira mostra essa cotação e assina exatamente o que mostra. Não há seletor de
-  velocidade: toda transação é enviada com prioridade alta.
-- O total é o **custo de rede mais a taxa de serviço do relay**, com uma taxa mínima
-  pequena em transações muito baratas. A cotação do relay é o preço — não existe
-  outra tabela para consultar. Uma parte vai para os validadores da chain; o resto
-  paga o relay que adianta o gas e mantém a infraestrutura.
-- A tela de confirmação mostra a **taxa estimada** no ativo da taxa e na sua moeda
-  de exibição antes de você assinar. O valor cotado e o destinatário dele fazem
-  parte do que você assina, então o relay recebe exatamente o que foi mostrado — um
-  número alterado invalidaria sua assinatura.
+Você escolhe a moeda da taxa e a velocidade (*Lento*, *Padrão* ou *Rápido*) na tela
+de confirmação e nas Configurações.
 
-## Quem opera o relay — e quem fica com as taxas
+### A sua primeira transação numa rede
 
-Cada rede aponta para um relay. Por padrão é **o relay da própria Vela**, e você
-pode trocar o endpoint em _Configurações → Avançado → Endpoints de serviço_. Um
-endpoint vale para todas as redes integradas; uma rede personalizada mantém a URL de
-relay que você deu ao adicioná-la.
+Você pode receber em qualquer rede antes de a sua carteira existir nela. Na
+primeira vez que você envia algo numa rede, essa transação também implanta o
+contrato da sua carteira (e um pequeno contrato signatário para cada chave extra).
+O gas da implantação entra na taxa dessa transação, então o primeiro envio em cada
+rede custa mais do que os seguintes.
 
-Uma ressalva honesta sobre compatibilidade: o app cota taxas por um método RPC
-específico da Vela (`vela_getInBandGasQuote`), e sem ele o fluxo de envio falha.
-Então o endpoint para onde você apontar precisa rodar
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) — a instância da Vela ou
-uma que você hospede. Um bundler ERC-4337 genérico como **Pimlico** ou **Alchemy**
-não implementa esse método, então não funciona de ponta a ponta na versão atual.
+Quando você envia o **máximo** de uma moeda nativa, a Vela reserva o suficiente
+para a taxa.
 
-Quem operar o relay de uma rede **fica com as taxas daquela rede**: a margem do
-relay em cada transação e o depósito de ativação da conta de gas. Rode o seu próprio
-vela-relay e essas taxas financiam a sua infraestrutura em vez da da Vela; do tráfego
-que você mandar para outro lugar, a Vela não tira nada.
+## Quem opera o relay — e quem fica com a taxa
 
-<Callout type="warning" title="A conta de gas faz parte do protocolo vela-relay">
-A etapa de **ativação da conta de gas** financia uma conta de relay dedicada à sua
-carteira em cada rede. Se você apontar o endpoint para um vela-relay auto-hospedado,
-o depósito financia a conta do seu próprio relay, não a da Vela.
-</Callout>
+Por padrão, todas as redes usam o **relay da Vela**, e a taxa vai para a Vela. Você
+pode apontar a carteira para outro relay em **Configurações → Avançado → Endpoints
+de serviço**; um único endereço atende todas as redes integradas, e uma rede
+personalizada mantém o endereço de relay com que foi adicionada. O relay precisa
+ser o [vela-relay](https://github.com/mondaylabsltd/vela-relay) — o da Vela ou um
+que você rode —, porque a carteira pede a cotação da taxa com um método específico
+da Vela que bundlers genéricos, como Pimlico ou Alchemy, não implementam. Quem opera
+o relay que você usa recebe a taxa; o
+[guia de auto-hospedagem](/pt-BR/docs/self-hosting#relay) explica como rodar um.
 
-### Ativando a conta de gas (Vela Relay)
+O relay recebe uma operação que já está assinada. Ele não consegue mudar o
+destinatário, o valor, a taxa nem nada mais. Ele pode atrasá-la ou recusá-la, e
+escolhe quando ela entra na rede — então, num swap, ele poderia, em tese, negociar
+na sua frente dentro da sua tolerância de slippage.
 
-No relay da Vela, sua primeira transação em cada rede **ativa uma conta de gas
-dedicada**. O app primeiro pede ao caixa do relay que financie isso por você — o que
-acontece em silêncio dentro do fluxo de envio, e uma carteira patrocinada nunca vê
-tela de financiamento. Só quando o patrocínio é recusado é que o app mostra um
-pedido de recarga: você manda uma quantia pequena do token nativo para o endereço da
-conta de gas que aparece, e ele explica por que não houve patrocínio.
+### Quando um relay fica sem gas
 
-**Você paga a taxa de ativação** sempre que não houver patrocínio gratuito, ou seja,
-quando:
+Um relay paga o gas com a própria **tesouraria** em cada rede. Se essa tesouraria
+estiver vazia, a tela de envio avisa você antes de assinar:
 
-- **O caixa da Vela para aquela rede está vazio ou baixo** — o fundo gratuito
-  naquela chain está temporariamente esgotado.
-- **Você usou toda a cota gratuita** — o patrocínio tem teto por carteira, e depois
-  das primeiras vezes o custo é seu.
-- **O relay da Vela não financia aquela rede** — por exemplo **redes personalizadas
-  ou de teste que você mesmo adicionou**, para as quais a Vela não mantém caixa.
-  (Mande-as para o seu próprio relay se preferir pular a ativação de vez.)
+- Numa rede atendida pelo relay da Vela, quem opera o relay (a Vela) precisa
+  reabastecê-la; você pode relatar o problema. Se não puder esperar, você pode,
+  **se quiser**, enviar você mesmo uma pequena quantia da moeda nativa para a
+  tesouraria. Essa contribuição **não é reembolsável** e **não** paga a sua própria
+  transação.
+- Numa rede personalizada, abastecer o relay é responsabilidade de quem o opera — que
+  pode ser você.
 
-O depósito de ativação é **não reembolsável**: é o saldo inicial da conta de relay e
-se recompõe com o tempo a partir dos reembolsos de gas, mas ainda assim pode se
-esgotar e precisar de **nova ativação** depois. O endereço do relay também pode
-mudar numa atualização do serviço, o que exige ativar de novo.
+Não existe conta de gas por carteira nem depósito de ativação: uma versão anterior
+da Vela tinha isso, e não existe mais.
 
-A taxa sai do seu saldo no **ativo da taxa** que você escolheu — o token nativo, por
-padrão. Se um envio trava por gas, é porque o seu saldo naquele ativo não cobre a
-taxa; onde o relay oferece gas em stablecoin, trocar o ativo na tela de confirmação
-pode destravar.
+## Como a Vela lê cada rede
 
-Quando você envia o valor **máximo** de um token nativo, a Vela reserva
-automaticamente o suficiente para o gas, para a transação não falhar.
-
-## Como a Vela conversa com cada rede
-
-A Vela lê saldos e envia transações por um **conjunto de endpoints RPC**, não por um
-provedor só. Ela reúne endpoints de várias fontes, pontua por latência e
-confiabilidade e **troca automaticamente** quando um está lento ou fora do ar —
-deixando os ruins temporariamente no banco — para que um nó instável nunca derrube o
-app.
+A Vela lê saldos e simula transações por meio de um **conjunto de endpoints RPC**
+em cada rede — os integrados, alternativas públicas e quaisquer chaves de provedor
+ou endpoints que você adicionar — e passa para o próximo quando um endpoint está
+lento ou fora do ar. Você pode definir seu próprio endpoint para cada rede em
+**Configurações → Redes**. (O app de Android hoje usa um único endpoint por rede,
+sem troca automática, e o app de iPhone ainda não deixa você mudá-lo.)
 
 A seguir: [como as passkeys funcionam](/pt-BR/docs/passkeys).

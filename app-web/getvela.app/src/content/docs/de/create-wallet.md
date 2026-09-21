@@ -1,6 +1,7 @@
 ---
 title: Wallet erstellen
-description: Erstelle in etwa einer Minute eine selbstverwahrte Vela-Wallet mit einem Passkey — ohne Seed-Phrase. Deine Wallet ist ein Safe Smart Account mit derselben Adresse in jedem Netzwerk.
+description: "Eine Vela-Wallet mit einem bis sieben Schlüsseln erstellen – was jeder Schritt tut, warum die Schlüssel beim Erstellen feststehen, was öffentlich wird und was deine Wallet eigentlich ist."
+source: a2edda21a075
 ---
 
 <script>
@@ -9,61 +10,81 @@ description: Erstelle in etwa einer Minute eine selbstverwahrte Vela-Wallet mit 
 
 # Wallet erstellen
 
-Eine Wallet zu erstellen dauert etwa eine Minute und eine biometrische Abfrage.
-Öffne die Web-Wallet unter [wallet.getvela.app](https://wallet.getvela.app/) und
-wähle **Wallet erstellen**.
+Eine Wallet zu erstellen dauert ein, zwei Minuten. Öffne die Web-Wallet unter
+[wallet.getvela.app](https://wallet.getvela.app/) – oder die Erweiterung, die
+Desktop- oder die Handy-App – und wähle **Wallet erstellen**.
 
 ## Schritte
 
-1. **Gib deiner Wallet einen Namen.** Wähle einen Namen, an dem du den Account
-   später wiedererkennst — auch beim Anmelden auf einem anderen Gerät. Er wird
-   neben deinem öffentlichen Schlüssel gespeichert, behandle ihn also als
-   öffentlich und schreib nichts Privates hinein.
-2. **Bestätige die Grundlagen.** Eine kurze Checkliste hält fest, dass du
-   verstehst: Vela ist selbstverwahrt und noch Alpha-Software. Mit Links zur
-   [Datenschutzerklärung](/privacy) und den [Nutzungsbedingungen](/terms).
-3. **Erstelle deinen Passkey.** Wenn die Abfrage kommt, authentifiziere dich mit
-   **Face ID, Touch ID oder Fingerabdruck**. Dabei entsteht ein WebAuthn-Passkey
-   (P-256), den dein Gerät hält und Vela nie sieht. Einen Schritt „Seed-Phrase
-   notieren“ gibt es nicht, weil es keine Seed-Phrase gibt.
-4. **Fertig.** Vela zeigt dir deine Wallet-Adresse, und du bist drin. Du kannst
-   sie prüfen und dich anmelden, um in deiner Wallet zu landen.
+1. **Gib deiner Wallet einen Namen.** Der Name hilft dir, sie wiederzuerkennen, und
+   er wird zusammen mit deinen Schlüsseln in ein öffentliches Register geschrieben –
+   betrachte ihn als öffentlich und schreib nichts Privates hinein.
+2. **Bestätige, was passiert.** Du hakst ab, dass deine öffentlichen Schlüssel und
+   der Wallet-Name on-chain geschrieben werden, dass deine privaten Schlüssel auf
+   deinen Geräten oder Sicherheitsschlüsseln bleiben und dass du den
+   [Nutzungsbedingungen](/terms) und der [Datenschutzerklärung](/privacy) zustimmst.
+3. **Erstelle deinen ersten Schlüssel.** Wähle, wie: **Dieses Gerät** (Face ID,
+   Touch ID, Fingerabdruck, Windows Hello), **Handy oder Tablet** (einen QR-Code
+   scannen und den Schlüssel dort erstellen – sofern die App das anbietet) oder
+   **USB-Sicherheitsschlüssel**. Dein Gerät erstellt den Passkey und signiert dann
+   einmal damit, damit die App weiß, dass der Schlüssel wirklich funktioniert, bevor
+   es weitergeht.
+4. **Füge weitere Schlüssel hinzu, wenn du willst.** Bis zu sieben insgesamt,
+   beliebig gemischt. Jeder einzelne wird allein signieren können. Wird dein einziger
+   Schlüssel nirgends synchronisiert – ein Sicherheitsschlüssel oder Windows Hello –,
+   verlangt die App einen zweiten, denn mit einem einzigen nicht synchronisierten
+   Schlüssel ist die Wallet weg, sobald ein Gerät verloren geht.
+5. **Erstellen.** Die App berechnet die Adresse deiner Wallet aus dem vollständigen
+   Schlüsselsatz und veröffentlicht den Satz im öffentlichen Register auf der Gnosis
+   Chain. Sobald dieser Eintrag on-chain ist, öffnet sich deine Wallet.
 
-## Was deine Wallet eigentlich ist
-
-Diesen Teil erklären die meisten Wallets nicht — und er entscheidet darüber, wie
-Vela funktioniert.
-
-Deine Vela-Wallet ist ein **Safe Smart Account** (ein Smart Contract), kein
-gewöhnliches „extern besessenes Konto“. Dein Passkey ist der Eigentümer dieses
-Accounts; eine ERC-4337-Konstruktion lässt dich ihn allein mit Gesicht oder
-Fingerabdruck bedienen.
-
-<Callout type="info" title="Deine Adresse ist in jedem Netzwerk dieselbe">
-Vela leitet deine Adresse aus dem öffentlichen Schlüssel deines Passkeys ab. Sie
-ist auf Ethereum, Base, Arbitrum, Gnosis und jedem anderen unterstützten Netzwerk
-identisch. Du gibst überall dieselbe Adresse heraus.
+<Callout type="warning" title="Wähle deine Schlüssel jetzt">
+Deine Adresse wird aus den Schlüsseln berechnet, mit denen du abschließt; Schlüssel
+lassen sich deshalb später weder hinzufügen noch entfernen noch ersetzen.
+[Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers) erklärt, warum, und
+wie du wählst.
 </Callout>
 
-Eine nützliche Folge: Die Adresse ist **kontrafaktisch**. Sie wird berechnet,
-bevor on-chain irgendetwas existiert — **du kannst also empfangen, bevor dein
-Wallet-Vertrag überhaupt da ist**. Der Vertrag setzt sich bei deiner ersten
-Transaktion in einem Netzwerk selbst auf, bezahlt aus seinem eigenen Guthaben.
+## Was deine Wallet ist
 
-## Was gerade mit deinen Schlüsseln passiert ist
+Deine Wallet ist ein **Safe Smart Account** – ein Vertrag, kein einfaches Konto mit
+einem einzigen privaten Schlüssel. Deine Schlüssel sind seine Eigentümer, und jeder
+einzelne davon kann eine Transaktion autorisieren.
+[Der Account-Vertrag](/de/docs/account-contract) listet jeden beteiligten Vertrag
+auf.
 
-- Dein Gerät hat ein **Passkey-Schlüsselpaar** erzeugt.
-- Der **private Schlüssel** liegt beim Passkey-Dienst deines Betriebssystems
-  (iCloud-Schlüsselbund oder Google Passwortmanager), Ende-zu-Ende verschlüsselt
-  und über deine Geräte synchronisiert — keine App, auch Vela nicht, sieht ihn je.
-- Der **öffentliche Schlüssel und dein gewählter Name** gehen an Velas
-  Passkey-Index, der den Schlüssel zusätzlich in einen öffentlich lesbaren
-  Eintrag auf der Gnosis Chain schreibt, damit dein Account auf einem neuen Gerät
-  wiedergefunden werden kann. Siehe
-  [Wiederherstellung und Anmeldung](/de/docs/recovery).
+Die Adresse ist **in jedem Netzwerk dieselbe**, und sie ist **kontrafaktisch**: Sie
+wird berechnet, bevor irgendetwas bereitgestellt ist, deshalb kannst du sofort in
+jedem Netzwerk Geld empfangen. Der Vertrag stellt sich selbst bereit, wenn du zum
+ersten Mal aus einem Netzwerk sendest, und die Gebühr dieser ersten Transaktion
+enthält die Bereitstellung. Das Erstellen der Wallet selbst kostet dich nichts.
+
+## Was öffentlich ist
+
+<span id="what-is-public"></span>
+
+Beim Erstellen einer Wallet wird ein dauerhafter Eintrag in einen öffentlichen
+Registervertrag auf der Gnosis Chain geschrieben – für alle lesbar und weder änderbar
+noch löschbar:
+
+- für jeden Schlüssel der **öffentliche Schlüssel** (nie der private) und die
+  **Credential-ID**;
+- für jeden Schlüssel das **Authentifikator-Modell** (welcher Passwortmanager oder
+  Sicherheitsschlüssel ihn erzeugt hat) und Flags dazu, ob du verifiziert wurdest und
+  ob der Schlüssel synchronisiert wird;
+- der **Wallet-Name** und eine **Bezeichnung für jeden Schlüssel**;
+- die **Wallet-Adresse** und wann sie erstellt wurde;
+- die **signierten Registrierungsdaten** selbst.
+
+Velas Public-Key-Index reicht den Eintrag ein und zahlt das Gas dafür, sieht ihn also
+als Erster. Nichts darin kann dein Guthaben bewegen; mit ihm findet jeder einzelne
+deiner Schlüssel die Wallet auf einem neuen Gerät wieder
+([Wiederherstellung](/de/docs/recovery)). Die [Datenschutzerklärung](/privacy)
+enthält die vollständige Liste, und die [Register-Seite](/registry) zeigt jeden
+Eintrag.
 
 ## Nächste Schritte
 
 - [Deine ersten Token empfangen](/de/docs/send-and-receive)
 - [Netzwerke und Gebühren verstehen](/de/docs/networks-and-fees)
-- [Nachlesen, warum Passkeys das sicher machen](/de/docs/passkeys)
+- [Was tun, wenn du ein Gerät verlierst](/de/docs/recovery)

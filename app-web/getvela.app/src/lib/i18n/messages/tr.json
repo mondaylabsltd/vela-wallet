@@ -10,7 +10,7 @@
 			"pricing": "Fiyatlandırma",
 			"faq": "SSS",
 			"createWallet": "Vela'yı edinin",
-			"signIn": "Giriş yap",
+			"signIn": "Giriş yapın",
 			"primary": "Ana gezinme",
 			"toggleMenu": "Menüyü aç"
 		},
@@ -31,7 +31,7 @@
 				"blog": "Blog",
 				"about": "Hakkında",
 				"chainSetup": "Zincir kurulumu",
-				"selfHosting": "Kendi kendine barındırma kılavuzu",
+				"selfHosting": "Kendi sunucunuzda barındırma kılavuzu",
 				"privacy": "Gizlilik",
 				"terms": "Koşullar"
 			}
@@ -59,8 +59,8 @@
 				"passkeys": "Geçiş anahtarları nasıl çalışır",
 				"signers": "İmzalayıcılar ve güvenlik anahtarları",
 				"clear-signing": "Açık imzalama",
-				"clear-signing-self-host": "İmza sayfasını kendin barındır",
-				"self-hosting": "Kendi kendine barındırma kılavuzu",
+				"clear-signing-self-host": "İmza sayfasını kendiniz barındırın",
+				"self-hosting": "Kendi sunucunuzda barındırma kılavuzu",
 				"bybit-attack": "Bybit saldırısı",
 				"recovery": "Kurtarma ve giriş",
 				"account-contract": "Hesap sözleşmesi",
@@ -70,10 +70,10 @@
 			},
 			"ui": {
 				"browse": "Belgelere göz atın",
-				"hide": "Belgeleri gizle",
+				"hide": "Belgeleri gizleyin",
 				"navLabel": "Belgeler",
 				"onThisPage": "Bu sayfada",
-				"edit": "Bu sayfayı GitHub’da düzenleyin",
+				"edit": "Bu sayfayı GitHub'da düzenleyin",
 				"pagerLabel": "Belge sayfaları",
 				"previous": "← Önceki",
 				"next": "Sonraki →"
@@ -88,17 +88,17 @@
 		"fallback": "Bu sayfa henüz çevrilmedi. Aşağıdaki metin İngilizcedir.",
 		"offer": {
 			"message": "Bu sayfa Türkçe olarak da mevcut.",
-			"accept": "Türkçe oku",
+			"accept": "Türkçe okuyun",
 			"dismiss": "Kapat"
 		}
 	},
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Gerçekten size ait bir Ethereum cüzdanı",
-			"description": "ETH ve ERC-20 için açık kaynaklı, kendiniz barındırabileceğiniz bir Ethereum cüzdanı. Geçiş anahtarıyla imzalayın — kurtarma ifadesi yok, donanım cüzdanı gerekmiyor, kimseye bağımlılık yok. Kolaylık için ödüyorsunuz, erişim için değil.",
+			"description": "Bize ihtiyaç duymadan çalıştırabileceğiniz, açık kaynaklı bir Ethereum cüzdanı. Geçiş anahtarları ya da güvenlik anahtarlarıyla imzalayın — kurtarma ifadesi yok. Hesabınız değiştirilmemiş bir Safe ve arkasındaki her servis açık kaynak.",
 			"ogTitle": "Vela Wallet — Gerçekten size ait bir Ethereum cüzdanı",
-			"ogDescription": "ETH ve ERC-20 için açık kaynaklı, kendiniz barındırabileceğiniz cüzdan. Geçiş anahtarıyla imza, kurtarma ifadesi yok, bağımlılık yok. İsterseniz kendiniz derleyin.",
-			"organization": "ETH ve ERC-20 token'ları için açık kaynaklı, kendiniz barındırabileceğiniz bir Ethereum cüzdanı. Geçiş anahtarıyla imzalayın — kurtarma ifadesi yok, donanım cüzdanı gerekmiyor, kimseye bağımlılık yok."
+			"ogDescription": "Değiştirilmemiş bir Safe üzerinde çalışan açık kaynaklı Ethereum cüzdanı. Geçiş anahtarı ya da güvenlik anahtarı, kurtarma ifadesi yok; servisleri açık kaynak ve kendiniz çalıştırabilirsiniz.",
+			"organization": "Değiştirilmemiş bir Safe üzerine kurulu, geçiş anahtarları ya da güvenlik anahtarlarıyla imzalanan, kurtarma ifadesi olmayan, açık kaynaklı ve kendi saklamanızda duran bir Ethereum cüzdanı."
 		},
 		"hero": {
 			"headline": "Gerçekten size ait bir Ethereum cüzdanı",
@@ -116,11 +116,11 @@
 				},
 				{
 					"term": "Ekranda gördüğünüz şey, imzalanan şeyle aynı olmayabilir.",
-					"link": "Bybit 1,5 milyar doları nasıl kaybetti ve biz o yolu nasıl kapatıyoruz"
+					"link": "Bybit 1,5 milyar doları nasıl kaybetti ve Vela buna karşı ne yapıyor"
 				},
 				{
-					"term": "Vela hizmeti durdursa bile cüzdanınıza yine de erişebilirsiniz.",
-					"link": "Uygulamayı, relay'i ve tüm arka uç servislerini kendiniz çalıştırın"
+					"term": "Vela'nın cüzdanınız için çalıştırdığı her şey açık kaynak ve hepsini kendiniz çalıştırabilirsiniz.",
+					"link": "Neyi çalıştırmanız gerekir, getvela.app olmadan neler çalışmaya devam eder, neler hâlâ bize bağlı"
 				}
 			]
 		},
@@ -128,13 +128,13 @@
 			"lede": "Varlıklarınızı Vela'ya koymadan önce"
 		},
 		"seal": {
-			"label": "zincir üstünde oluşturulmuş cüzdan",
+			"label": "zincir üstünde kayıtlı cüzdan",
 			"loading": "Cüzdan sayısı okunuyor",
-			"verify": "Her cüzdan zincir üstünde — kaydı görün"
+			"verify": "Her cüzdan zincir üstünde kayıtlı — kayıt defterine bakın"
 		},
 		"why": {
 			"heading": "Bunu neden yaptık",
-			"p1": "Her gün <a href=\"https://account.base.app\" target=\"_blank\" rel=\"noopener\">Base Account</a> kullanıyorduk ve seviyorduk da. Sonra duvara tosladık: tarayıcıda üretilen ve yalnızca güvenmek zorunda olduğunuz bir kurtarma anahtarı, özel ağ ekleyememe, hiçbir parçasını kendiniz barındıramama — ve servis kapanırsa cüzdan da onunla birlikte gidiyor.",
+			"p1": "Her gün <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (artık Coinbase Wallet bünyesinde) kullanıyorduk ve seviyorduk da. Sonra duvara tosladık: yalnızca güvenmek zorunda olduğunuz bir web sitesinde oluşturulan bir kurtarma ifadesi, özel ağ ekleyememe, kendiniz barındırabileceğiniz hiçbir parça olmaması ve kodu açık olmayan bir imzalama servisi — o servis ortadan kalkarsa geçiş anahtarınızın hesabınıza ulaşmasının yayımlanmış bir yolu yok.",
 			"p2": "Vela, kendi paramızı içinde tutmaya razı olduğumuz sürüm. Geçiş anahtarıyla imzalamayı koruduk ama cüzdanın bize bağımlı olmamasını sağladık.",
 			"more": "Uzun hâli — o on iki kelimeyi tam olarak nerede saklayacaksınız?"
 		},
@@ -143,52 +143,52 @@
 			"lede": "Vela'yı kullanmamak için üç neden — paranız hâlâ başka yerdeyken.",
 			"items": [
 				{
-					"title": "Her işlem ayrıca bir relay hizmet ücreti öder",
-					"body": "Vela işlemleri, geçiş anahtarı imzalarını zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan transferlere göre genellikle daha fazla gas harcar.\n\nVarsayılan olarak gas'i relayer öder ve işlemi o gönderir. Ücret, zincir üstündeki maliyeti ve relay hizmet bedelini kapsar; tutar siz imzaladığınız anda sabitlenir.\n\nRelayer'ı ayarlardan değiştirebilir ya da <a href=\"https://github.com/mondaylabsltd/vela-relay\" target=\"_blank\" rel=\"noopener\">kendiniz çalıştırabilirsiniz</a>."
+					"title": "Her işlem, gas ücretinin üstüne bir relay ücreti öder",
+					"body": "Bir Vela işlemi geçiş anahtarı imzanızı zincir üstünde doğrular ve ERC-4337 üzerinden yürür; bu yüzden sıradan bir transferin birkaç katı gas harcar.\n\nCüzdan, işlemin gerektirdiğinden fazla gas ayırır ve ücret olarak bunun üç katını alır; fiyat, cüzdanın kendi gas okuması ile relay'in seçtiğiniz hız için verdiği fiyattan hangisi yüksekse odur. Sonuç çoğu zaman gerçek zincir üstü maliyetin on katı ya da daha fazlasıdır; bir ağdaki ilk gönderiminizde daha da yüksektir ve asgari tutar 0,01 dolardır. Kesin tutar siz imzalamadan önce gösterilir ve sonradan değişemez.\n\nCüzdanı başka bir relay'e yönlendirebilir ya da <a href=\"/docs/self-hosting#relay\">kendi relay'inizi çalıştırabilirsiniz</a> — ücret o zaman onu çalıştırana gider."
 				},
 				{
 					"title": "Her anahtar, cüzdanınıza açılan bir kapıdır",
-					"body": "Cüzdanı oluştururken birden fazla anahtar tanımlayabilirsiniz\n\nVela 1-of-n çalışır: yetkili anahtarlardan herhangi biri tek başına cüzdandan harcama yapabilir. Her yeni anahtar, erişimi geri almanın bir yolu daha — ve korumanız gereken bir kapı daha."
+					"body": "Cüzdanı oluştururken en fazla yedi anahtar seçersiniz ve bunlar sonradan değiştirilemez.\n\nVela 1-of-n çalışır: bu anahtarlardan herhangi biri cüzdandan tek başına harcama yapabilir. Her ek anahtar, birini kaybederseniz geri dönmenin bir yolu daha — ve korumanız gereken bir anahtar daha."
 				},
 				{
-					"title": "Denetlenmiş Safe sözleşmelerine dayanıyorsunuz — ve denetim bir garanti değildir",
-					"body": "Safe v1.4.1 ve WebAuthn modülünün ikisi de üçüncü taraf denetimlerinden geçti. Yayımlanan sürümleri, sözleşme kodunu değiştirmeden kullanıyoruz.\n\nDenetim güvenlik sorunlarını bulmaya yardım eder; ama güvenlik garantisi değildir ve olası bütün açıkların bulunduğu anlamına gelmez."
+					"title": "Sözleşmeler denetlendi; Vela'nın kendi kodu denetlenmedi",
+					"body": "Cüzdanınız değiştirilmemiş Safe v1.4.1 ile Safe'in geçiş anahtarı ve ERC-4337 modülleri üzerinde çalışır; bunların hepsinin yayımlanmış üçüncü taraf denetimleri var — denetimler sorun bulur, ama geride hiç sorun kalmadığını kanıtlayamaz.\n\nVela'nın kendi uygulamaları ve servisleri üçüncü taraf denetiminden geçmedi ve takvime alınmış bir denetim de yok. Kod herkesin okuyabileceği şekilde açık."
 				}
 			],
 			"close": "Bu üçünden biri sizin için kabul edilemezse, Vela henüz size göre değil."
 		},
 		"compare": {
-			"heading": "Vela nasıl karşılaştırılır",
+			"heading": "Vela ve diğer cüzdanlar",
 			"rows": [
 				{
 					"feature": "Hesap türü",
 					"vela": "<a href=\"/docs/account-contract\">Safe v1.4.1 akıllı hesap</a>",
-					"metamask": "EOA",
+					"metamask": "EOA; yeni kullanıcılar için varsayılan olarak akıllı hesaba (EIP-7702) yükseltilir",
 					"base": "Coinbase akıllı hesabı"
 				},
 				{
 					"feature": "İmzalama anahtarı",
-					"vela": "Geçiş anahtarı",
+					"vela": "Geçiş anahtarları ya da güvenlik anahtarları, en fazla yedi",
 					"metamask": "Kurtarma ifadesinin arkasındaki özel anahtar; donanım cüzdanları desteklenir",
-					"base": "Geçiş anahtarı"
+					"base": "Geçiş anahtarı ya da kurtarma ifadesi"
 				},
 				{
-					"feature": "İşlem gas'i",
-					"vela": "ERC-4337 ek yükü, artı relay hizmet ücreti",
-					"metamask": "Sıradan bir EOA işleminin gas'i",
+					"feature": "İşlem gas ücreti",
+					"vela": "ERC-4337 ek yükü, artı gas bedelinin katı olan bir relay ücreti",
+					"metamask": "Sıradan bir işlemin gas ücreti",
 					"base": "ERC-4337 ek yükü"
 				},
 				{
 					"feature": "Sponsorlu gas",
 					"vela": "Sunulmuyor",
-					"metamask": "Sunulmuyor",
-					"base": "Desteklenen yerlerde sponsorlu"
+					"metamask": "Bazı ağlarda",
+					"base": "Uygulama sponsor olduğunda"
 				},
 				{
 					"feature": "Özel ağlar",
-					"vela": "Vela'nın gereksinimlerini karşılayan her EVM ağı; sözleşmeleri kendiniz de dağıtabilirsiniz",
+					"vela": "Vela'nın gereksinimlerini karşılayan her EVM ağı; eksik sözleşmelerin çoğunu kendiniz dağıtabilirsiniz",
 					"metamask": "Özel EVM ağları ve RPC'ler",
-					"base": "Daha dar bir ağ yelpazesi"
+					"base": "Sabit bir ağ listesi"
 				},
 				{
 					"feature": "Bir anahtarı kaybetmek",
@@ -197,9 +197,15 @@
 					"base": "Eklediğiniz ya da eşitlediğiniz başka bir anahtarla imzalayın"
 				},
 				{
+					"feature": "Sonradan anahtar eklemek",
+					"vela": "Mümkün değil — anahtarlar oluşturma anında sabitlenir",
+					"metamask": "Mümkün değil — hesap başına tek anahtar",
+					"base": "Destekleniyor"
+				},
+				{
 					"feature": "Toplu işlemler",
 					"vela": "Destekleniyor",
-					"metamask": "Hesabın yeteneklerine bağlı — EIP-7702 ve benzerleri",
+					"metamask": "EIP-7702 akıllı hesabıyla destekleniyor",
 					"base": "Destekleniyor"
 				},
 				{
@@ -210,21 +216,21 @@
 				},
 				{
 					"feature": "Ek bir kontrol",
-					"vela": "Bağımsız, kendi barındırdığınız bir sayfa ya da uzantı",
-					"metamask": "Üçüncü taraf risk tespiti",
+					"vela": "Bağımsız bir imza sayfası; hazır ama henüz uygulamalara bağlanmadı",
+					"metamask": "Üçüncü taraf risk uyarıları",
 					"base": "—"
 				},
 				{
-					"feature": "Uçtan uca kendi barındırma",
-					"vela": "Uygulama, relay ve arka uç servisleri; hepsini siz çalıştırabilirsiniz",
+					"feature": "Her şeyi kendiniz barındırma",
+					"vela": "Uygulamalar ve arka uç servisleri, kendi sunucunuzda barındırma kılavuzunun listelediği eksiklerle; geçiş anahtarları getvela.app'e bağlı kalır",
 					"metamask": "İstemci ve RPC sizin seçiminiz ya da kendi sunucunuz",
 					"base": "Mümkün değil"
 				},
 				{
-					"feature": "Açık kaynak",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Uygulama, relay ve arka uç servisleri</a>",
-					"metamask": "Cüzdan istemcisi",
-					"base": "SDK; bazı hesap servisleri açık değil"
+					"feature": "Kaynak kod",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Uygulamalar ve servisler herkese açık</a>; dizin dışında hepsi MIT, dizinin lisansı henüz eklenmedi",
+					"metamask": "Açık, ama yalnızca ticari olmayan kullanıma izin veren bir lisansla",
+					"base": "Sözleşmeler ve SDK açık; imzalama servisi değil"
 				},
 				{
 					"feature": "Olgunluk",
@@ -239,22 +245,22 @@
 			"intro": "Kolaylık için ödüyorsunuz, erişim için değil.",
 			"cards": [
 				{
-					"title": "Web cüzdanı ve Chrome uzantısı",
+					"title": "Web, tarayıcı uzantısı ve masaüstü",
 					"price": "Ücretsiz"
 				},
 				{
-					"title": "Masaüstü ve mobil uygulamalar",
-					"price": "Kendiniz derlerseniz ücretsiz"
+					"title": "iPhone ve Android, kendiniz derlerseniz",
+					"price": "Ücretsiz"
 				},
 				{
-					"title": "Uygulama mağazalarından",
-					"price": "Tek seferlik satın alma"
+					"title": "iPhone ve Android, mağazalardan",
+					"price": "Tek seferlik satın alma · yakında"
 				}
 			]
 		},
 		"networks": {
-			"heading": "12 ağ hazır gelir. Kendi ağınızı ekleyin",
-			"body": "Cüzdanınızın adresi her ağda aynıdır. Başka bir EVM zinciri eklediğinizde Vela, gereken RIP-7212, Safe ve ERC-4337 desteğinin olup olmadığını denetler. Gereken sözleşmeler yoksa bunları <a href=\"https://biubiu.tools/apps/vela-wallet-chain-setup\" target=\"_blank\" rel=\"noopener\">Chain Setup aracı</a> ile dağıtabilirsiniz.",
+			"heading": "24 ağ hazır geliyor. Kendi ağınızı ekleyin",
+			"body": "Cüzdanınızın adresi her ağda aynıdır. Başka bir EVM zinciri eklediğinizde Vela, zincirde RIP-7212 ön derlemesinin ve gereken Safe ile ERC-4337 sözleşmelerinin olup olmadığını kontrol eder. Bazı sözleşmeler eksikse <a href=\"/chain-setup\">zincir kurulumu</a> hangilerinin eksik olduğunu gösterir ve herkesin dağıtabileceği olanları dağıtır.",
 			"link": "Ağlar ve ücretler, ayrıntılı"
 		},
 		"faq": {
@@ -262,11 +268,11 @@
 			"items": [
 				{
 					"q": "Cüzdan oluşturmak için neye ihtiyacım var?",
-					"a": "Face ID veya parmak iziyle açılan bir cihaz ya da bir USB/NFC güvenlik anahtarı. Kurtarma ifadesi de gerekmiyor, başlangıç bakiyesi de.\n\nİstediğiniz bütün anahtarları cüzdanı oluştururken ekleyin. Sonradan yenisi eklenemiyor."
+					"a": "Geçiş anahtarlarını destekleyen bir telefon ya da bilgisayar veya donanım güvenlik anahtarları — yalnızca güvenlik anahtarı kullanacaksanız iki tane. Kurtarma ifadesi, e-posta ya da başlangıç bakiyesi gerekmez.\n\nAnahtarlarınızın hepsini — en fazla yedi tane — cüzdanı oluştururken seçin. Sonradan yenisini ekleyemezsiniz."
 				},
 				{
 					"q": "Vela'yı dApp'lerle kullanabilir miyim?",
-					"a": "Evet. Vela cüzdanı doğrudan dApp'in içine yerleştirir, tıpkı diğer tarayıcı cüzdanları gibi.\n\nBu; iOS, Android ve masaüstü uygulamalarında ve Vela tarayıcı uzantısında çalışır."
+					"a": "Evet. dApp'ler Vela'yı herhangi bir tarayıcı cüzdanı gibi görür.\n\nBu, Vela tarayıcı uzantısında ve masaüstü (macOS, Windows), iPhone ve Android uygulamalarının yerleşik tarayıcısında çalışır. Web cüzdanı dApp'lere bağlanmaz."
 				},
 				{
 					"q": "Telefonumu kaybedersem ne olur?",
@@ -274,19 +280,19 @@
 				},
 				{
 					"q": "Geçiş anahtarımı silersem ne olur?",
-					"a": "O anahtar kalıcı olarak kaybolur. Tek anahtarınız oysa cüzdana erişiminizi de kaybedersiniz."
+					"a": "O anahtar kalıcı olarak kaybolur. Tek anahtarınız o idiyse cüzdana erişiminizi de kaybedersiniz."
 				},
 				{
 					"q": "Apple ya da Google hesabım ele geçirilirse ne olur?",
-					"a": "Eşitlenmiş geçiş anahtarlarınıza ulaşan biri, cüzdanınıza da ulaşabilir.\n\nApple'a ya da Google'a bağlı kalmak istemiyorsanız, bunun yerine bir USB/NFC güvenlik anahtarı kullanın."
+					"a": "O hesabı kontrol eden kişi, hesap üzerinden eşitlenen bir geçiş anahtarını kullanıp cüzdanınızdan harcama yapabilir — ve bir anahtar kaldırılamaz. Paranızı, o hesaba bağlı olmayan anahtarlarla oluşturulmuş yeni bir cüzdana taşıyın.\n\nBaştan itibaren Apple'a ya da Google'a bağlı kalmamak için cüzdanınızı donanım güvenlik anahtarlarıyla oluşturun."
 				},
 				{
 					"q": "Vela paramla ne yapabilir, benim hakkımda ne biliyor?",
-					"a": "Vela paranızı ne taşıyabilir ne de dondurabilir. Cüzdanı yalnızca sizin anahtarlarınız yönetir.\n\nE-posta da Vela hesabı da gerekmez. Açık anahtarınız, cüzdan adresiniz ve cüzdana verdiğiniz ad zincir üstünde herkese açıktır. Token ihraççıları yine de bir adresi kara listeye alabilir."
+					"a": "Vela'nın cüzdanınızda ne bir anahtarı ne de bir rolü var; bu yüzden paranızı kendi başına taşıyamaz ya da donduramaz. Ancak anahtarlarınızdan imza isteyen yazılımı yazan Vela'dır.\n\nE-posta ya da hesap yok. Açık anahtarlarınız, her birinin arkasındaki kimlik doğrulayıcı türü, anahtar etiketleriniz, cüzdan adınız ve adresiniz zincir üstünde herkese açıktır; Vela'nın servisleri IP adresinizi ve onlar üzerinden gönderdiğiniz işlemleri görür. Token ihraççıları yine de adresleri kara listeye alabilir."
 				},
 				{
 					"q": "Vela kapanırsa ya da getvela.app erişilemez olursa ne olur?",
-					"a": "Cüzdanınız zincir üstünde kalır ve Vela'nın sunucularına bağlı değildir. Uygulamalar ve arka uç servisleri açık kaynaktır; bağımsız olarak çalıştırılabilir.\n\ngetvela.app erişilemez olursa tarayıcıdan imzalayın: Vela uzantısı ya da bağımlılıksız açık imzalama uzantısı. Elinizdeki anahtarlar ikisinde de çalışır — bu cihazdaki geçiş anahtarı, bir USB güvenlik anahtarı ya da QR kodla bağlanan bir telefon."
+					"a": "Paranız zincir üstünde, kendi Safe'inizde kalır. Vela'nın çalıştırdığı her servis açık kaynak ve herkes çalıştırabilir — yalnız relay'in zincir verisini Vela'nın sunucusundan okumayı bırakması için kodunda bir değişiklik gerekir.\n\ngetvela.app çevrimdışı olursa Vela tarayıcı uzantısı mevcut anahtarlarınızla imzalamayı sürdürür — bu cihazdaki geçiş anahtarı, bir güvenlik anahtarı ya da QR kodla bağlanan bir telefon; kendiniz derlediğiniz uygulamalar da bir telefon ya da güvenlik anahtarıyla aynısını yapar."
 				}
 			]
 		}
@@ -294,43 +300,43 @@
 	"about": {
 		"meta": {
 			"title": "Hakkında",
-			"description": "Vela Wallet'ın arkasındaki ekip ve amaç — kendi saklamanızda, açık kaynaklı, kurtarma ifadesi olmayan, açıkta geliştirilen bir cüzdan.",
+			"description": "Vela'yı kim yapıyor: kurtarma ifadesi olmayan, açık kaynaklı ve kendi saklamanızda duran bir cüzdanı herkese açık biçimde geliştiren küçük bir Birleşik Krallık şirketi ve kurucusu.",
 			"pageName": "Vela Wallet hakkında"
 		},
 		"eyebrow": "Hakkında",
 		"heading": "Vela'yı kim yapıyor.",
-		"lede": "Vela açıkta geliştiriliyor — cüzdanı, akıllı sözleşmeleri ve şu anda okuduğunuz bu site. Arkada yüzü olmayan bir şirket yok: okuyabileceğiniz gerçek bir kod ve ulaşabileceğiniz gerçek bir insan var.",
+		"lede": "Vela'yı Birleşik Krallık'taki küçük bir şirket olan MONDAY LABS LTD yapıyor ve herkese açık biçimde geliştiriyor: uygulamalar, arka uç servisleri ve bu site GitHub'da; onları yazan kişi de oradaki issue'lara yanıt veriyor.",
 		"team": {
 			"role": "Kurucu ve Mühendis",
-			"bio": "Vela'yı baştan sona kendi yapıyor — cüzdanı, sözleşmeleri ve bu siteyi. Süreci olurken yazıyor."
+			"bio": "Vela'yı baştan sona kendisi yapıyor — uygulamaları, servisleri ve bu siteyi — ve süreci olurken blogda yazıyor."
 		},
 		"valuesHeading": "Neye inanıyoruz",
 		"values": [
 			{
 				"title": "Gerçek anlamda kendi saklamanız",
-				"body": "Anahtarlar sizin, coin'ler sizin — bir slogan değil, mimarinin kendisi. Paranızı taşıyamayız, donduramayız, geri getiremeyiz; bunu bilerek böyle kurduk."
+				"body": "Cüzdanınızda ne bir anahtarımız ne de bir rolümüz var; bu yüzden paranızı taşıyamayız, donduramayız ya da kurtaramayız. Kontrol ettiğimiz şey, imzalarken kullandığınız yazılım; kodunun açık olmasının nedeni de bu."
 			},
 			{
 				"title": "Kurtarma ifadesi yok",
-				"body": "Kripto kayıplarının en büyük nedeni, insanlara kusursuzca saklamaları söylenen bir kelime dizisidir. Onun yerine geçiş anahtarı koyduk: yüzünüz ya da parmak iziniz."
+				"body": "Kurtarma ifadesi, insanlardan yıllarca kusursuzca korumaları istenen bir sırdır. Onun yerine geçiş anahtarlarını koyduk: cihazlarınızın ya da bir güvenlik anahtarının tuttuğu, yüzünüz, parmak iziniz ya da PIN'inizle onayladıktan sonra kullanılan anahtarlar."
 			},
 			{
 				"title": "Açık kaynak",
-				"body": "Cüzdan GitHub'da herkese açık. Güven, istenen değil doğrulanabilen bir şey olmalı. Kodu okuyun ya da açıkta geliştirirken bizi izleyin."
+				"body": "Uygulamalar ve servisler GitHub'da herkese açık; böylece sözümüze güvenmek yerine ne yaptıklarını kendiniz kontrol edebilirsiniz."
 			},
 			{
 				"title": "Bedeller konusunda dürüst",
-				"body": "Her tasarım kararı bir şeyden vazgeçer. Neyden ve neden vazgeçtiğimizi yazıyoruz — dokümanlarda ve blogda — bedeli yokmuş gibi davranmak yerine."
+				"body": "Her tasarım kararı bir şeyden vazgeçer. Neyden ve neden vazgeçtiğimizi yazıyoruz — belgelerde ve blogda — bedeli yokmuş gibi davranmak yerine."
 			}
 		]
 	},
 	"roadmap": {
 		"meta": {
 			"title": "Yol haritası — Vela Wallet",
-			"description": "Vela'nın Nisan 2026'dan bu yana yayımladıkları ve sırada olanlar — açıkta geliştiriliyor. Tarih değil, yön."
+			"description": "Vela'nın Nisan 2026'dan bu yana yayımladıkları ve sırada olanlar — herkese açık biçimde geliştiriliyor. Tarih değil, yön."
 		},
 		"heading": "Yol haritası",
-		"lede": "Vela, Nisan 2026'dan beri açıkta ve aralıksız yayımlıyor. Şimdiye kadarki iz ve gidiş yönü burada — tarih değil, yön. Listede bir şey görmek ister misiniz? <a href=\"https://github.com/mondaylabsltd/vela-wallet/issues\" target=\"_blank\" rel=\"noopener\">Bir issue açın</a>.",
+		"lede": "Vela, Nisan 2026'dan beri herkese açık biçimde ve aralıksız yayımlanıyor. Şimdiye kadar gelinen yol ve gidiş yönü burada — tarih değil, yön. Listede bir şey görmek ister misiniz? <a href=\"https://github.com/mondaylabsltd/vela-wallet/issues\" target=\"_blank\" rel=\"noopener\">Bir issue açın</a>.",
 		"upcomingHeading": "Sırada",
 		"shippedHeading": "Yayımlandı",
 		"statusLabels": {
@@ -340,64 +346,76 @@
 		},
 		"upcoming": [
 			{
+				"title": "iPhone ve Android mağazalarda",
+				"body": "Yerel uygulamalar çalışıyor ve gerçek cihazlarda test ediliyor. Sırada, tek seferlik satın alma olarak App Store ve Google Play'de yayımlanmaları var."
+			},
+			{
+				"title": "Her uygulama kendi servislerinize uysun",
+				"body": "Bugün bazı uygulamalar Ayarlar → Servis Uç Noktaları bölümünün bir kısmını yok sayıyor — iPhone uygulaması tamamen, web uygulaması cüzdan oluştururken ya da giriş yaparken, Android ise adresler için ad ararken. Hepsinin bu ayarlara uyması, relay'in de zincir verisini sizin sunucunuzdan okuyabilmesi gerekiyor."
+			},
+			{
+				"title": "Bağımsız imza sayfasını bağlamak",
+				"body": "Bir isteği kendi başına çözen ve imzalayan imza sayfası hazır. Sırada: uygulamaların isteklerini ona iletmesi; böylece her imzayı sizin kendi yüklediğiniz bir program kontrol eder."
+			},
+			{
+				"title": "Daha geniş açık imzalama kapsamı",
+				"body": "Daha çok sözleşme ve zincir, insanın okuyabileceği bir niyet olarak gösterilecek; böylece daha az işlem kör imzalamaya düşecek."
+			},
+			{
 				"title": "Aldığınız her coin'i görün",
-				"body": "Düz bir yerel coin yatırma — ya da bir iç çağrı üzerinden gelen coin'ler (borsadan çekim, bir router, bir çoklu imza) — zincir üstünde hiçbir kayıt bırakmaz; bu yüzden bugün çoğu ağda hareketlerinizde görünmez. Blokları tarayarak bunları yüzeye çıkaran bir transfer servisi geliştiriyoruz; böylece her yatırma, her zincirde görünür."
-			},
-			{
-				"title": "Daha geniş clear signing kapsamı",
-				"body": "Daha çok sözleşme ve zincir, insanın okuyabileceği niyet olarak gösterilecek; böylece daha az işlem kör imzaya düşecek."
-			},
-			{
-				"title": "Yerel iOS ve Android uygulamaları",
-				"body": "Vela bugün web'de çalışıyor; mobil derlemeler aynı kodu paylaşıyor ve App Store ile Google Play çıkışı öncesinde gerçek cihazlarda test ediliyor."
-			},
-			{
-				"title": "Tüm cihazlarınız arasında eşitleme",
-				"body": "iOS ve Android'de hesaplarınız ve ağlarınız zaten platformun yedeğiyle birlikte geliyor; web'de tarayıcıda kalıyor. Sırada: diliniz, para biriminiz ve biçimleriniz, ayrıca yeni bir cihazda tüm kurulumunuzu tek dokunuşla geri yükleme — ve adresleri tekrar tekrar yapıştırmayı bitiren kayıtlı bir adres defteri."
-			},
-			{
-				"title": "Daha uzağa",
-				"body": "Telefon olmadan masaüstünden dApp bağlantısı, daha çok EVM ağı (P-256 ön derlemesi olmayan zincirler için bir imzalama yolu dahil) ve Vela'nın Safe + WebAuthn bütünleşmesi için bağımsız bir güvenlik denetimi."
+				"body": "Başka bir sözleşme üzerinden gelen bir yerel coin yatırması (borsadan çekim, bir router, bir çoklu imza cüzdanı) birçok ağda log kaydı bırakmaz; bu yüzden geçmişinizde görünmeyebilir. Her yatırmanın görünmesi için bunları izlemek istiyoruz."
 			}
 		],
 		"shipped": [
 			{
-				"title": "Yerelleştirme ve günlük rötuşlar",
-				"body": "Anında değişen çok dilli destek (Rusça ve İtalyanca eklendi; bugün 15 dil), yerel para birimi ve bölgeye uygun biçimlendirme, dinamik tutar gösterimi, kendine özgü çek-yenile hareketi, onaylanana kadar beklemede kalan gönderiler ve uygulama içinden tek dokunuşla geri bildirim."
+				"title": "Anahtarlarınız zincir üstünde, yedeği Ethereum'da",
+				"body": "Dizin çalışmadığında doğrudan zincir üstündeki kayıt defterinden giriş yapın, cüzdanınızın hangi anahtarlarla oluşturulduğunu görün ve kaydı Ethereum'a kopyalayın."
 			},
 			{
-				"title": "Ödemeyi öne alan ana ekran",
-				"body": "Ana ekran, hareketleriniz ve bakiyeleriniz çevresinde yeniden kuruldu."
+				"title": "Her masaüstü için indirme",
+				"body": "macOS, Windows ve Linux için masaüstü uygulaması ve tarayıcı uzantısı doğrudan bu siteden indirilebilir."
 			},
 			{
-				"title": "Clear Signing (ERC-7730)",
-				"body": "İşlemler gerçekte ne yaptığını gösteriyor — tutar, alıcı, niyet — ham hex yerine sade dille; önizleme ortamı ve testleriyle birlikte."
+				"title": "24 ağ",
+				"body": "On iki yeni yerleşik ağ — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve Vela'yı başka bir zincire getirmek için bir zincir kurulumu sayfası."
 			},
 			{
-				"title": "Tarayıcıda dApp bağlantısı",
-				"body": "Cüzdan, diğer tarayıcı cüzdanları gibi sayfada belirir — Vela uzantısıyla ve masaüstü, iOS ve Android uygulamalarındaki yerleşik tarayıcıyla."
+				"title": "Tek çekirdek, yerel uygulamalar",
+				"body": "Cüzdan, bütün kuralları taşıyan tek bir Rust çekirdeği olarak yeniden yazıldı ve üstüne yerel uygulamalar kuruldu: iPhone'da SwiftUI, Android'de Compose, bir Rust masaüstü uygulaması ve web. İlk React Native uygulaması kullanımdan kaldırıldı."
 			},
 			{
-				"title": "dApp imzalama akışı",
-				"body": "Bağlantı altyapısı ve imza isteği deneyimi."
+				"title": "Cüzdan nerede çalışıyorsa dApp'ler orada",
+				"body": "Tarayıcı uzantısı ile masaüstü, iPhone ve Android uygulamalarındaki yerleşik tarayıcı, dApp'lere herhangi bir tarayıcı cüzdanı gibi bağlanır."
 			},
 			{
-				"title": "Cüzdanın çekirdek deneyimi",
-				"body": "Gerçek bir tasarım sistemi, gas kademesi seçimi ve yeniden tasarlanan onay ekranı, tam ekran karekod okuyucu; ayrıca yeniden yapılan alma, token, token ekleme ve para yatırma ekranları."
+				"title": "Yediye kadar anahtar, güvenlik anahtarları dahil",
+				"body": "Birkaç geçiş anahtarı, telefon ya da YubiKey sınıfı güvenlik anahtarıyla bir cüzdan oluşturun; bunlardan herhangi biri imzalayabilir."
+			},
+			{
+				"title": "Birçok kişiye tek seferde gönderin",
+				"body": "Bir tokenı birçok kişi arasında bölüştürün, birçok tokenı tek bir adrese toplayın ya da bir ödeme listesini tablodan içe aktarın — her biri tek bir işlem olarak. Kişiler ve gruplar da var."
+			},
+			{
+				"title": "On beş dil",
+				"body": "Cüzdan on beş dilde; yerel para birimi ve sayı biçimleriyle."
+			},
+			{
+				"title": "Açık imzalama (ERC-7730)",
+				"body": "İşlemler ham hex yerine ne yaptıklarını gösterir — tutar, alıcı, niyet — ve “sınırsız” düzeydeki bir onay, siz onu düşürene kadar gönderilemez."
 			},
 			{
 				"title": "Vela doğdu",
-				"body": "Cüzdan web'de yayına girdi; aynı kod tabanı iOS ve Android için de derleniyor — Safe akıllı hesapları (ERC-4337), geçiş anahtarıyla giriş ve ilk günden itibaren kurtarma ifadesi yok."
+				"body": "İlk commit: Safe akıllı hesapları, ERC-4337, geçiş anahtarıyla giriş ve kurtarma ifadesi yok — ilk günden."
 			}
 		]
 	},
 	"getStarted": {
 		"meta": {
 			"title": "Vela'yı edinin",
-			"description": "Vela bugün tarayıcınızda çalışıyor; masaüstü, mobil ve tarayıcı uzantısı aynı koddan derleniyor. İstediğinizi seçin."
+			"description": "Vela bugün tarayıcınızda çalışıyor; tarayıcı uzantısı ve masaüstü uygulamaları hemen indirilebilir, telefon uygulamaları da yolda. İstediğinizi seçin."
 		},
 		"heading": "Vela'yı edinin",
-		"lede": "Tek cüzdan, tek adres, tek kod tabanı. Tarayıcınızda başlayın — kurulacak bir şey yok — ya da aynı cüzdanı masaüstünüze, telefonunuza veya tarayıcı araç çubuğunuza taşıyın.",
+		"lede": "Nerede açarsanız açın tek cüzdan, tek adres. Tarayıcınızda başlayın — kurulacak bir şey yok — ya da aynı cüzdanı tarayıcınızın araç çubuğuna veya masaüstünüze taşıyın; yakında telefonunuza da.",
 		"recommended": "Önerilen",
 		"availableNow": "Şimdi kullanılabilir",
 		"comingSoon": "Yakında",
@@ -405,14 +423,14 @@
 		"platforms": {
 			"web": {
 				"title": "Web",
-				"blurb": "Kurulacak bir şey yok, güncellenecek bir şey de. Açın, geçiş anahtarınızla kimliğinizi doğrulayın; cüzdanınız orada — güncel bir tarayıcısı olan her cihazda.",
+				"blurb": "Kurulacak bir şey yok: her açtığınızda en son sürüm çalışır. Anahtarlarınızdan biriyle onaylayın, cüzdanınız orada — güncel bir tarayıcısı olan her cihazda. dApp'lere bağlanmak için uzantıyı kullanın.",
 				"action": "Web cüzdanını açın"
 			},
 			"desktop": {
 				"title": "Masaüstü",
 				"systems": "macOS · Windows · Linux",
 				"blurb": "Cüzdan sürekli açık tuttuğunuz bir şeyse, yerel uygulama tam size göre. Aynı adres, aynı geçiş anahtarı, aynı ağlar.",
-				"stores": "Mac App Store · Microsoft Store"
+				"stores": "Microsoft Store"
 			},
 			"mobile": {
 				"title": "Mobil",
@@ -424,10 +442,10 @@
 				"title": "Tarayıcı uzantısı",
 				"systems": "Chrome · Edge · Brave",
 				"blurb": "Cüzdanı araç çubuğunuza koyar ve dApp'lerin doğrudan onunla konuşmasını sağlar — eşleştirme adımı yok, ikinci cihaz yok.",
-				"stores": "Chrome Web Store"
+				"stores": "Chrome Web Mağazası"
 			}
 		},
-		"fundingNote": "Mağaza indirmeleri ücretlidir ve küçük, bağımsız bir ekip Vela'yı açıkta geliştirmeyi böyle finanse eder. Her şey açık kaynak olduğu için dilerseniz kendiniz de derleyebilirsiniz — aynı uygulama, ücretsiz.",
+		"fundingNote": "Mağaza indirmeleri ücretlidir ve küçük, bağımsız bir ekip Vela'yı herkese açık biçimde geliştirmeyi böyle finanse eder. Kod açık olduğu için dilerseniz her zaman kendiniz de ücretsiz derleyebilirsiniz — kendi derlediğiniz bir telefon uygulaması, telefonun kendi geçiş anahtarıyla değil, başka bir telefonla ya da bir güvenlik anahtarıyla imzalar.",
 		"storeNote": "Henüz mağazalarda değil. O zamana kadar masaüstü uygulamaları ve uzantı bu sayfadan, kuruluma hazır olarak indirilir. Telefon uygulamaları indirilmez: onlar mağazalardan ya da kaynak koddan gelir.",
 		"downloads": {
 			"yourSystem": "Sisteminiz",
@@ -457,7 +475,7 @@
 				"extension": "Tarayıcı uzantısı"
 			},
 			"extension": {
-				"action": "Uzantıyı indir",
+				"action": "Uzantıyı indirin",
 				"stepsTitle": "Ardından, Chrome Web Mağazası'na gelene kadar:",
 				"steps": [
 					"Saklayacağınız bir klasöre çıkarın; tarayıcı uzantıyı oradan çalıştırır.",
@@ -468,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "978189838858",
-		"about": "669db59e91a0",
-		"roadmap": "1f9b064b5fbb",
-		"getStarted": "7096649e0f32"
+		"home": "09e59832402d",
+		"about": "44b20f016140",
+		"roadmap": "cc826c697f61",
+		"getStarted": "f7262f86ca9e"
 	}
 }

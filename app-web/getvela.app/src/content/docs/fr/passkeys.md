@@ -1,6 +1,7 @@
 ---
 title: Comment fonctionnent les passkeys
-description: Le modèle de sécurité derrière Vela — ce qu'est une passkey, où vit votre clé, et pourquoi il n'y a rien à hameçonner.
+description: "Ce qu'est une passkey, où se trouve la clé privée selon le type de clé, pourquoi il n'y a aucun secret à hameçonner, et ce contre quoi une passkey ne vous protège pas."
+source: b23999b2ed69
 ---
 
 <script>
@@ -9,61 +10,76 @@ description: Le modèle de sécurité derrière Vela — ce qu'est une passkey, 
 
 # Comment fonctionnent les passkeys
 
-Tout le modèle de sécurité de Vela repose sur une idée : la clé qui contrôle votre
-portefeuille est une **passkey**, créée par votre appareil et gardée par votre
-système d'exploitation — aucune application, Vela compris, ne peut la lire — et
-utilisée uniquement avec votre visage ou votre empreinte.
+Les clés qui contrôlent un portefeuille Vela sont des **passkeys** : des
+identifiants WebAuthn sur la courbe P-256. Votre appareil ou votre clé de sécurité
+crée chacune d'elles, garde la clé privée, et ne l'utilise qu'après votre
+confirmation par Face ID, une empreinte, le code de votre appareil, ou un appui et
+un code PIN sur une clé de sécurité. Vela ne reçoit jamais la clé privée ; si un
+gestionnaire de mots de passe la synchronise, c'est lui qui la conserve, chiffrée,
+pour votre compte.
 
-## Ce qu'est réellement une passkey
+## Ce qu'est une passkey
 
-Une passkey est une paire de clés publique/privée créée par votre appareil. La
-**clé privée** est gardée par le service de passkeys de votre système — en général
-le trousseau iCloud chez Apple, le gestionnaire de mots de passe Google sur
-Android — chiffrée de bout en bout, de sorte qu'aucune application ne peut la lire
-ni la copier. Les applications n'obtiennent pas la clé ; elles obtiennent le droit
-de *demander à votre appareil de signer quelque chose* après votre
-authentification.
+Une passkey est une paire de clés publique/privée créée pour un seul site web —
+pour Vela, `getvela.app`. Une app ne reçoit jamais la clé privée ; elle peut
+seulement demander à l'authentificateur de signer quelque chose, et
+l'authentificateur vous demande d'abord votre accord.
 
-C'est la même technologie qui protège Apple Pay et votre déverrouillage
-biométrique.
+L'endroit où se trouve la clé privée dépend du type de clé :
 
-<Callout type="info" title="Le point essentiel">
-Une application — Vela comprise — peut demander une signature, mais ne voit jamais
-votre clé privée. Votre visage ou votre empreinte autorise votre appareil à
-signer ; la clé elle-même reste dans votre système, chiffrée de bout en bout.
+| Type de clé | Où se trouve la clé privée | Synchronisée sur d'autres appareils ? |
+| --- | --- | --- |
+| **Cet appareil** — Face ID, Touch ID, empreinte, Windows Hello | Le gestionnaire de mots de passe de votre plateforme (trousseau iCloud, gestionnaire de mots de passe de Google) ou un gestionnaire comme 1Password | En général oui, chiffrée de bout en bout, si la synchronisation est activée. Les clés Windows Hello restent sur le PC |
+| **Un autre téléphone**, utilisé en scannant un QR code | Le gestionnaire de mots de passe de ce téléphone | Comme ci-dessus |
+| **Une clé de sécurité matérielle** (YubiKey et autres clés FIDO2, en USB ou NFC) | Dans la clé de sécurité | Jamais |
+
+Un portefeuille Vela peut utiliser jusqu'à sept clés, dans n'importe quelle
+combinaison, choisies à sa création ;
+[signataires et clés de sécurité](/fr/docs/signers) traite de ce choix.
+
+## Aucun secret à hameçonner
+
+L'hameçonnage consiste à vous faire livrer un secret. Une phrase de récupération,
+ce sont douze mots que l'on peut vous convaincre de taper quelque part. Une passkey
+n'a **aucun secret que vous puissiez taper** : rien à révéler, rien à coller, et un
+faux site ne peut pas vous la demander. Et comme une passkey est créée pour un seul
+site web, votre navigateur ne propose une passkey `getvela.app` qu'aux pages de
+getvela.app et de ses sous-domaines.
+
+Cela élimine toute une catégorie de pertes — la phrase de récupération volée —,
+fréquente en auto-conservation.
+
+## Ce contre quoi une passkey ne vous protège pas
+
+<Callout type="warning" title="Une passkey signe tout ce que vous approuvez">
+L'invite de votre téléphone ou de votre navigateur indique <em>quelle</em> clé est
+utilisée, pas <em>ce qui</em> est signé. Une passkey signera une transaction
+malveillante aussi volontiers qu'une transaction légitime si vous l'approuvez.
+C'est pourquoi Vela décode chaque transaction avant que vous signiez
+(<a href="/fr/docs/clear-signing">signature lisible</a>), et pourquoi la page qui
+l'affiche compte (<a href="/fr/docs/bybit-attack">l'attaque de Bybit</a>).
 </Callout>
 
-## Pourquoi il n'y a rien à hameçonner
+Elle ne protège pas non plus contre quelqu'un qui a votre téléphone déverrouillé et
+peut passer sa vérification, ni contre quelqu'un qui contrôle le compte par lequel
+votre passkey se synchronise. Gardez un code de verrouillage sur votre appareil,
+sécurisez votre compte Apple ou Google, et envisagez une clé de sécurité matérielle
+qui ne se synchronise nulle part.
 
-L'hameçonnage fonctionne en vous faisant livrer un secret. Avec une phrase de
-récupération, ce secret est douze mots que vous pouvez taper sur une fausse page.
-Avec une passkey, **il n'y a aucun secret que l'on puisse taper**. Un site
-frauduleux ne peut pas vous demander de « saisir votre passkey », parce qu'une
-passkey ne se saisit pas — c'est une opération matérielle contrôlée par votre
-biométrie.
+## À quoi ressemble une signature
 
-Cela supprime la manière la plus courante de perdre des fonds auto-conservés.
+1. Vous confirmez une transaction dans Vela, après avoir lu ce qu'elle fait.
+2. Votre appareil ou votre clé de sécurité vous demande Face ID, une empreinte,
+   votre code PIN, ou un appui et un code PIN.
+3. Il signe, et seule la signature revient à l'app.
+4. L'app transmet l'opération signée au relais, qui la soumet ; le contrat de votre
+   portefeuille vérifie la signature de la passkey on-chain avant de faire quoi que
+   ce soit.
 
-## Ce que l'on ressent en signant
+## Où va la clé publique
 
-1. Vous confirmez une transaction dans Vela.
-2. Votre appareil demande Face ID / Touch ID.
-3. Votre appareil signe la transaction avec votre passkey.
-4. Vela diffuse la transaction signée sur le réseau.
+La partie **publique** de vos clés est enregistrée dans un registre public sur
+Gnosis Chain, pour qu'un nouvel appareil puisse retrouver votre portefeuille. C'est
+le sujet de [récupération et connexion](/fr/docs/recovery).
 
-Le même geste que pour déverrouiller votre téléphone — parce que c'est le même
-mécanisme de passkey que votre appareil utilise déjà partout ailleurs.
-
-<Callout type="warning" title="La sécurité de l'appareil compte toujours">
-Une passkey protège extrêmement bien contre les attaques à distance et
-l'hameçonnage. Elle ne protège pas contre quelqu'un qui tient votre appareil
-déverrouillé et qui passe votre contrôle biométrique. Gardez un code d'accès actif
-et ne confiez pas un téléphone déverrouillé à quelqu'un en qui vous n'avez pas
-confiance.
-</Callout>
-
-## Où vit le reste
-
-La clé **publique** de votre passkey est publiée dans un petit index on-chain,
-afin que votre portefeuille puisse être récupéré sur un nouvel appareil. C'est le
-sujet de la page suivante : [Récupération et connexion](/fr/docs/recovery).
+Ensuite : [signataires et clés de sécurité](/fr/docs/signers).

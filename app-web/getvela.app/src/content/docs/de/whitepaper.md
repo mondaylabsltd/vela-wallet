@@ -1,6 +1,7 @@
 ---
 title: Whitepaper
-description: Wie Vela funktioniert und was du — und was du nicht — vertrauen musst, um es zu benutzen. Architektur, Sicherheitsmodell, Wiederherstellung und wie du das alles selbst prüfst.
+description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
+source: d072d6710855
 ---
 
 <script>
@@ -9,281 +10,341 @@ description: Wie Vela funktioniert und was du — und was du nicht — vertrauen
 
 # Whitepaper
 
-<Callout type="info" title="Status: Alpha · v0.1">
-Diese Seite beschreibt, wie Vela heute funktioniert und was du vertrauen musst und
-was nicht. Sie bevorzugt Ehrlichkeit vor Marketing. Vela ist in der
-<a href="/blog/vela-is-in-alpha">Alpha</a> — fang mit kleinen Beträgen an. Vela
-hat keinen Token. Alles hier lässt sich am offenen Quellcode überprüfen.
+<Callout type="info" title="Stand: Alpha · zuletzt überarbeitet im September 2026">
+Diese Seite beschreibt, wie Vela heute funktioniert und worauf du vertrauen musst und
+worauf nicht, um es zu nutzen. Vela ist in der
+<a href="/blog/vela-is-in-alpha">Alpha-Phase</a> – fang mit kleinen Beträgen an. Vela
+hat keinen Token. Alles hier lässt sich am Open-Source-Code überprüfen; wo sich der
+Code und diese Seite widersprechen, hat der Code recht, und die Seite hat einen Bug.
 </Callout>
 
 ## Zusammenfassung
 
-Vela ist eine **selbstverwahrte Smart-Contract-Wallet** für EVM-Netzwerke. Jede
-Wallet ist ein [Safe](https://github.com/safe-fndn/safe-smart-account) Smart
-Account, kontrolliert von einem **Passkey** — einem WebAuthn-Credential (P-256),
-das das Betriebssystem deines Geräts Ende-zu-Ende verschlüsselt hält und das mit
-Face ID, Touch ID oder Fingerabdruck entsperrt wird. Es gibt keine Seed-Phrasen
-und keine privaten Schlüssel, die du kopieren, aufbewahren oder verlieren müsstest.
+Vela ist eine **Smart-Contract-Wallet zur Selbstverwahrung** für Ethereum und andere
+EVM-Netzwerke. Jede Wallet ist ein unverändertes **Safe-v1.4.1**-Konto, betrieben über
+**ERC-4337** und gesteuert von bis zu sieben **Passkeys** – WebAuthn-P-256-Schlüsseln,
+die deine Geräte, dein Passwortmanager oder Hardware-Sicherheitsschlüssel verwahren.
+Es gibt keine Seed-Phrase.
 
-Vela, die Firma, hält weder deine Schlüssel noch dein Geld und **kann es weder
-bewegen noch einfrieren noch beschlagnahmen**. Die App, das Transaktions-Relay und
-die begleitenden Dienste sind Open Source und selbst hostbar. Was du vertraust,
-reduziert sich auf auditierte Smart Contracts, den Passkey-Tresor deines
-Betriebssystems und — nur für die Erreichbarkeit — ein Relay, das du ersetzen oder
-selbst betreiben kannst.
+Vela, die Firma, hält nie deine Schlüssel und hat keine Rolle in deinem Safe. Sie kann
+dein Guthaben deshalb **nicht von sich aus bewegen, einfrieren oder beschlagnahmen**.
+Die Software, die deine Schlüssel um eine Signatur bittet, schreibt und liefert Vela
+allerdings – deshalb ist das Bedrohungsmodell unten wichtig. Die Apps, das Relay, das
+Transaktionen einreicht, und die unterstützenden Dienste sind Open Source, und du
+kannst von jedem eine eigene Kopie betreiben; heute liest das Relay allerdings noch
+Chain-Daten von Velas Server, sofern du seinen Code nicht änderst. Worauf du vertraust,
+kurz gesagt: auf die Verträge, auf die Authentifikatoren, die deine Schlüssel halten,
+auf den Code der App, mit der du signierst, auf die Domain, zu der deine Passkeys
+gehören, und auf die Dienste, auf die du die App einstellst.
 
 ## Warum es Vela gibt
 
-Die meisten Wallets erzwingen einen Kompromiss:
+- **Seed-Phrase-Wallets** stellen jedem Nutzer ein Geheimnis aus 12–24 Wörtern in den
+  Weg: ein einziger Punkt, an dem alles scheitern kann, und ein dauerhaftes Ziel für
+  Phishing.
+- **Verwahrende Wallets** schaffen die Seed-Phrase ab, indem sie das Geld selbst in
+  Verwahrung nehmen.
+- **Passkey-Wallets**, die von den Servern und dem geschlossenen Code einer einzigen
+  Firma abhängen, schaffen die Seed-Phrase ab, lassen dich aber im Stich, wenn die
+  Firma verschwindet.
+- **Blindsignieren** – undurchsichtige Daten freigeben, die du nicht lesen kannst – ist
+  immer noch verbreitet und einer der Wege, auf denen Wallets leergeräumt werden.
 
-- **Seed-Phrase-Wallets** stellen jedem Nutzer ein Geheimnis aus 12–24 Wörtern vor
-  die Nase. Es ist der Single Point of Failure und ein dauerhaftes Phishing-Ziel.
-- **Verwahrende Wallets** nehmen die Seed-Phrase weg, übernehmen aber die
-  Verwahrung deines Geldes — und holen damit das Gegenparteirisiko zurück, das
-  Krypto beseitigen sollte.
-- **Blindes Signieren** — undurchsichtige Hex-Zeichen freigeben, die du nicht
-  lesen kannst — ist im gesamten Ökosystem normal geworden und steckt hinter einem
-  großen Teil der leergeräumten Wallets.
+Vela will die Bequemlichkeit eines Passkeys ohne jede dieser Abhängigkeiten: ein
+Standardkonto, offenen Code, austauschbare Dienste und Transaktionen, die du lesen
+kannst, bevor du signierst.
 
-Vela will so einfach sein wie eine verwahrende App und dich dabei vollständig
-selbstverwahrt lassen: keine Seed-Phrase, keine Verwahrung und keine Transaktion,
-die du vor dem Signieren nicht lesen kannst.
+## Gestaltungsprinzipien
 
-## Designprinzipien
-
-1. **Selbstverwahrung, ohne Ausnahmen.** Schlüssel entstehen auf deinem Gerät und
-   liegen beim Passkey-Dienst deines Betriebssystems, Ende-zu-Ende verschlüsselt.
-   Velas Server sehen nur öffentliche Daten.
-2. **Prüfen, nicht vertrauen.** Der gesamte Stack — App und alle vier
-   Backend-Dienste — ist Open Source unter der MIT-Lizenz.
-3. **Kein blindes Signieren.** Transaktionen werden in lesbare Absicht übersetzt,
-   wo ein Deskriptor existiert; unbekannte Aufrufe werden markiert, nicht versteckt.
-4. **Weniger tun.** Die Wallet hält ETH und ERC-20 und verbindet sich mit dApps,
-   die du wählst. Weniger Code zum Vertrauen, kleinere Angriffsfläche.
+1. **Selbstverwahrung, ohne Ausnahme.** Schlüssel werden von deinen Authentifikatoren
+   erzeugt und gehalten. Velas Dienste sehen sie nie; was sie sehen, steht unter
+   „Datenschutz“.
+2. **Standardverträge, unverändert.** Kein Vertrag auf dem Weg zu deinem Geld wurde von
+   Vela geschrieben.
+3. **Prüfen statt vertrauen.** Die Apps und Dienste sind öffentlich; die Dienste lassen
+   sich selbst hosten.
+4. **Vor dem Signieren dekodieren.** Was sich nicht dekodieren lässt, trägt eine
+   ausdrückliche Blindsignatur-Warnung.
+5. **Weniger tun.** Die Wallet sendet, empfängt und signiert für dApps, die du
+   auswählst.
 
 ## Architektur
 
 ```text
-Vela-App (iOS / Android / Web, eine Codebasis)
-  • Passkey (WebAuthn P-256, Passkey-Dienst des Betriebssystems)
-  • UserOperation bauen und signieren
-  • Klartext-Signatur-Oberfläche (ERC-7730)
-        │  signierte UserOperation
+Vela-Apps – Web, Browser-Erweiterung, Desktop (macOS/Windows/Linux), iOS, Android
+  ein gemeinsamer Rust-Kern (Regeln, Krypto, ABI, Klartext-Signatur) + je eine native Hülle
+  • baut die UserOperation und zeigt, was sie tut
+  • bittet deinen Schlüssel um eine WebAuthn-Assertion
+        │  signierte UserOperation (Gebühr inklusive)
         ▼
-Vela-Relay (ERC-4337, selbst hostbar)
-  • reicht handleOps beim EntryPoint ein
-  • kann deine Transaktion weder ändern noch fälschen
+Relay (vela-relay, selbst hostbar)
+  • nennt die Gebühr, streckt das Gas vor, reicht handleOps ein
+  • kann die Operation nicht ändern
         ▼
 EVM-Chain
-  EntryPoint v0.7 → Safe Smart Account
-  WebAuthn-Signer prüft P-256 on-chain
+  EntryPoint v0.7 → dein Safe v1.4.1 → Safe-4337-Modul
+  Passkey-Modul von Safe prüft P-256 über das RIP-7212-Precompile
 ```
 
-### Account-Modell
+Unterstützende Dienste, alle Open Source: ein **Public-Key-Index**, der neue Wallets in
+einem On-Chain-Register einträgt und Abfragen beantwortet, ein
+**Chain-Daten**-Verzeichnis und ein **Wechselkurs**-Feed. Siehe die
+[Anleitung zum Selbsthosten](/de/docs/self-hosting).
 
-Deine Wallet ist ein **Safe v1.4.1** Smart Account (ein Proxy-Vertrag), betrieben
-über **ERC-4337** Account Abstraction (EntryPoint v0.7) mit dem **Safe
-4337 Module** und einem **WebAuthn-Signer** als Eigentümer des Accounts.
+### Konto
 
-Die Adresse ist **deterministisch** und **kontrafaktisch**: Sie wird per `CREATE2`
-aus dem öffentlichen Schlüssel deines Passkeys berechnet, bevor eine Transaktion
-gesendet wird — du kannst also empfangen, bevor sie je aufgesetzt wurde. Der
-Account setzt sich bei deiner ersten Transaktion selbst auf, bezahlt aus seinem
-eigenen Guthaben.
+Deine Wallet ist ein **Safe-v1.4.1**-Proxy (SafeL2-Singleton) mit dem **4337-Modul
+v0.3.0** von Safe als aktiviertem Modul und Fallback-Handler, betrieben über den
+**EntryPoint v0.7**. Seine Eigentümer sind Passkey-Signer aus dem **Passkey-Modul
+v0.2.1** von Safe: Der erste Schlüssel wird vom Shared Signer geprüft, jeder weitere
+Schlüssel von einem eigenen Signer-Vertrag, den die Factory von Safe erstellt. Der
+Schwellenwert ist **1**.
 
-### Schlüssel und Authentifizierung
+Die Adresse ist **deterministisch und kontrafaktisch**: Sie wird mit `CREATE2` aus den
+Setup-Daten des Safe berechnet, die jeden der ursprünglichen Schlüssel enthalten, bevor
+irgendetwas bereitgestellt ist. Sie ist in jedem Netzwerk dieselbe. Du kannst sofort
+daran empfangen; deine erste Transaktion in jedem Netzwerk stellt die Wallet bereit und
+bezahlt das mit der Gebühr dieser Transaktion.
 
-Die Authentifizierung nutzt **WebAuthn-Passkeys** auf der **P-256**-Kurve. Der
-private Schlüssel entsteht auf deinem Gerät und liegt Ende-zu-Ende verschlüsselt
-beim Passkey-Dienst deines Betriebssystems (iCloud-Schlüsselbund oder Google
-Passwortmanager), der ihn über deine Geräte synchronisiert. **Velas Server sehen
-immer nur deinen öffentlichen Schlüssel.** Jedes Signieren verlangt eine frische
-biometrische Prüfung — es gibt keinen langlebigen Session-Key. Alle Details in
-[So funktionieren Passkeys](/de/docs/passkeys).
+### Schlüssel
 
-### Signatur- und Transaktionsablauf
+Eine Wallet hat **einen bis sieben Schlüssel**, festgelegt beim Erstellen. Jeder
+einzelne kann allein signieren (1-of-n). Ein Schlüssel kann sein:
 
-1. Eine ERC-4337-`UserOperation` für deinen Safe **bauen** und Gas schätzen.
-2. Den Aufruf in lesbare Absicht **dekodieren** und zur Prüfung anzeigen.
-3. **Signieren** — dein Gerät erzeugt nach der biometrischen Prüfung eine
-   WebAuthn-Assertion über den Operationshash.
-4. Die Assertion als **EIP-1271**-Vertragssignatur **kodieren**.
-5. Die signierte Operation an das Relay **weiterreichen**, das sie beim EntryPoint
-   einreicht.
-6. **On-chain prüfen** — der Safe verifiziert die P-256-Signatur vor der
-   Ausführung über die RIP-7212-Precompile. Die Precompile ist harte
-   Voraussetzung: Es gibt keinen Fallback-Verifier, und Vela verweigert Netzwerke,
-   denen sie fehlt.
+- ein Passkey auf dem Gerät, das du nutzt – synchronisiert über iCloud-Schlüsselbund,
+  Google Passwortmanager oder einen anderen Passwortmanager, wenn du das erlaubst;
+- ein anderes Handy, verbunden per QR-Code (der Hybrid-Transport von WebAuthn);
+- ein Hardware-Sicherheitsschlüssel per USB oder NFC, der nirgends synchronisiert
+  wird.
 
-Das Relay bekommt eine **bereits signierte** Operation. Es kann Empfänger, Betrag
-oder irgendein anderes Feld nicht ändern, ohne die Signatur ungültig zu machen.
+Jede Signatur braucht die eigene Nutzerverifizierung des Authentifikators – Biometrie
+oder Geräte-PIN oder PIN und Berührung eines Sicherheitsschlüssels. Es gibt keinen
+Sitzungsschlüssel. Schlüssel lassen sich später weder hinzufügen noch entfernen noch
+ersetzen: Auf jeder Chain, auf der die Wallet noch nicht bereitgestellt ist, steht die
+Adresse weiterhin für den ursprünglichen Schlüsselsatz, und ein Eigentümerwechsel auf
+einer Chain würde das Konto von Chain zu Chain unterschiedlich machen.
 
-### Relay- und Gas-Modell
+Passkeys gehören zu einer Relying Party – die von Vela werden für **`getvela.app`**
+erstellt. Browser bieten sie nur Seiten auf getvela.app oder ihren Subdomains an, was
+sie resistent gegen Phishing macht; es ist aber auch eine Abhängigkeit, auf die dieses
+Papier weiter unten zurückkommt.
 
-- Gas wird **aus dem Guthaben deiner eigenen Wallet** bezahlt — standardmäßig im
-  nativen Token des Netzwerks, oder in einem unterstützten Stablecoin, wo das
-  Relay einen anbietet. Tempo, ohne native Coin, rechnet Gas immer in
-  USD-Stablecoins ab. Es gibt **keinen Paymaster** und keinen Dritten, der deine
-  Transaktionen sponsert — oder blockiert.
-- Das **Relay ist die einzige Quelle der Wahrheit für den Gaspreis.** Es leitet
-  ihn aus den aktuellen Chain-Bedingungen ab; die Wallet zeigt dieses Angebot und
-  signiert genau das, was sie zeigt.
-- Velas Relay-Gebühr ist bewusst schlicht: Die Summe sind die **Netzwerkkosten
-  plus die Servicegebühr des Relays**, mit einer kleinen Mindestgebühr bei sehr
-  günstigen Transaktionen. Ein Teil geht an die Validatoren der Chain, der Rest an
-  das Relay, das die Infrastruktur betreibt und dein Gas-Konto gefüllt hält.
-- Die Wallet **zeigt die geschätzte Gebühr vor dem Bestätigen** — im
-  Gebühren-Asset und in deiner Anzeigewährung — und der genannte Betrag samt
-  Empfänger ist Teil dessen, was du signierst, das Relay bekommt also genau das
-  Angezeigte. Kein versteckter Aufschlag.
-- Jeder Safe hat pro Chain ein **eigenes Relay-Konto** (Gas-Konto), aktiviert
-  durch eine **nicht erstattungsfähige** Einzahlung. Es kann sich mit der Zeit
-  leeren und später eine **erneute Aktivierung** brauchen — es ist also nicht
-  streng genommen eine einmalige Einzahlung.
+### Ablauf einer Signatur
 
-Das Relay ist eine Abhängigkeit für die **Erreichbarkeit**, nicht für die
-**Verwahrung**: Es kann verzögern oder ablehnen, aber niemals ändern, fälschen
-oder stehlen. Es ist Open Source und du kannst dein eigenes betreiben — und weil
-der Preis **genannt und angezeigt** statt versteckt wird, ist selbst die Gebühr
-eines selbst gehosteten oder fremden Relays vor dem Signieren immer sichtbar.
-Siehe [Netzwerke und Gebühren](/de/docs/networks-and-fees).
+1. **Bauen:** Die App baut eine UserOperation für dein Safe – einschließlich einer
+   Überweisung, die das Relay bezahlt – und simuliert sie.
+2. **Dekodieren:** Sie übersetzt die Operation in menschenlesbare Absicht und zeigt sie
+   dir.
+3. **Signieren:** Dein Authentifikator erzeugt über den Hash der Operation eine
+   WebAuthn-Assertion, nachdem er dich verifiziert hat.
+4. **Kodieren:** Die Assertion wird als die Safe-Signatur kodiert, die das
+   Passkey-Modul erwartet.
+5. **Einreichen:** Die signierte Operation geht an das Relay, das den EntryPoint
+   aufruft.
+6. **On-chain prüfen:** Das Passkey-Modul prüft die P-256-Signatur mit dem
+   RIP-7212-Precompile, bevor das Safe irgendetwas ausführt. Es gibt keinen
+   Ersatz-Verifizierer; ein Netzwerk ohne das Precompile lässt sich nicht hinzufügen.
 
-### Klartext-Signatur (ERC-7730)
+### Gebühren
 
-Vela dekodiert Calldata und EIP-712-Typdaten mit **ERC-7730**-Deskriptoren und
-zeigt die **Absicht** (Tauschen, Senden, Genehmigen …), die **Substanz** (Beträge,
-Adressen) und auf Abruf die **Details** (Nonce, Frist, rohe Calldata), farblich
-nach Risiko markiert. Passt kein Deskriptor, zeigt Vela eine ausdrückliche
-Blindsignatur-Warnung, statt so zu tun, als verstünde es den Aufruf.
+- Das Relay wird **in-band** bezahlt: Die Operation deklariert null EntryPoint-Gebühren
+  und enthält eine Überweisung von deinem Safe an die Adresse des Relays. Betrag und
+  Empfänger sind Teil dessen, was du signierst, du zahlst also genau, was der
+  Bestätigungsbildschirm angezeigt hat.
+- Die Gebühr beträgt **das Dreifache des Gases, das die Wallet für die Operation
+  reserviert** (die simulierten Schätzungen um die Hälfte erhöht, mit Mindestwerten),
+  **bewertet zum höheren Wert aus dem Gaspreis, den die Wallet selbst abliest, und dem
+  Preis des Relays für die gewählte Geschwindigkeit**, mindestens etwa 0,01 US-Dollar.
+  Auf Tempo ist der Faktor zwei. Wegen des Puffers und des Spielraums im Preis ist die
+  Gebühr oft zehnmal so hoch wie die tatsächlichen On-Chain-Kosten der Operation oder
+  höher, bei der ersten Transaktion in einem Netzwerk noch mehr; die Differenz behält
+  das Relay.
+- Die Gebühr wird im Coin des Netzwerks oder in einem USD-Stablecoin bezahlt, den das
+  Relay akzeptiert (pathUSD auf Tempo, das keinen nativen Coin hat). Es gibt **keinen
+  Paymaster**: Niemand sponsert Gas, und niemand kann Transaktionen über eine
+  Sponsoring-Richtlinie filtern.
+- Ist die eigene Gas-Treasury eines Relays in einem Netzwerk leer, sagt die Wallet das,
+  bevor du signierst. Es gibt keine Einzahlung pro Nutzer.
+
+Details: [Netzwerke und Gebühren](/de/docs/networks-and-fees).
+
+### Klartext-Signatur
+
+Aufrufe und EIP-712-Nachrichten werden mit **ERC-7730**-Deskriptoren dekodiert – für
+gängige Verträge in die App eingebaut, vom Chain-Daten-Dienst abgerufen oder
+Standardformen von Token zugeordnet –, dann, als letzter Ausweg, über eine öffentliche
+Selektor-Datenbank, gekennzeichnet als „ohne Gewähr“. Was übrig bleibt, bekommt eine
+ausdrückliche Blindsignatur-Warnung. Abgerufene Deskriptoren sind nicht kryptografisch
+authentifiziert. Eine On-Chain-Freigabe in „unbegrenzter“ Höhe (2^200 oder mehr) lässt
+sich erst absenden, wenn du sie verringerst; eine große, aber begrenzte Freigabe und
+signierte Permits werden mit einem Vorsichtshinweis angezeigt, aber nicht blockiert.
+Details: [Klartext-Signatur](/de/docs/clear-signing).
 
 ### Netzwerke
 
-Vela unterstützt 12 EVM-Netzwerke — Ethereum, BNB Chain, Polygon, Arbitrum,
-Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad und World Chain — plus
-eigene Netzwerke. Ein eigenes Netzwerk lässt sich nur hinzufügen, wenn es die
-Verträge, auf die Vela baut (EntryPoint, Safe-Verträge, WebAuthn-Signer), und die
-RIP-7212-P-256-Precompile bereits hostet; Vela prüft das vor der Aktivierung.
+Vela hat 24 eingebaute Netzwerke – Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
+Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
+Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume und XRPL EVM – und
+akzeptiert jedes EVM-Netzwerk, das die elf Verträge hat, auf die es prüft, sowie das
+RIP-7212-Precompile. (Die Schlüssel zwei bis sieben brauchen in diesem Netzwerk
+außerdem die Passkey-Signer-Factory von Safe, die die Prüfung noch nicht abdeckt.)
 
 ## Sicherheitsmodell
 
-**Was Vela nicht kann:**
+**Was Vela nicht kann**
 
-- Dein Geld bewegen, ausgeben oder überweisen — nur dein Passkey kann den Safe
-  autorisieren.
-- Deinen Account einfrieren oder beschlagnahmen — der Safe ist dein Vertrag
-  on-chain; Vela hat darauf keine privilegierte Rolle.
-- In deinem Namen signieren — jede Transaktion braucht eine frische biometrische
-  Assertion.
-- Deinen privaten Schlüssel sehen — er erreicht Vela nie; nur dein Gerät kann
-  damit signieren.
-- Eine Transaktion nach dem Signieren ändern — jede Änderung macht die Signatur
-  ungültig.
+- Dein Guthaben von sich aus bewegen, ausgeben oder einfrieren – nur deine Schlüssel
+  autorisieren dein Safe, und Vela hat darin keine Rolle. (Was Vela kann: Software
+  ausliefern, die dich um eine Signatur bittet; siehe die Bedrohungen unten.)
+- Eine Transaktion ändern, nachdem du sie signiert hast – jede Änderung macht die
+  Signatur ungültig.
+- Deine privaten Schlüssel lesen – sie bleiben in deinen Authentifikatoren.
+- Deiner Wallet einen Schlüssel hinzufügen oder einen entfernen.
 
-**Was „kann nicht einfrieren“ nicht abdeckt: den *Token*.** Ein Stablecoin mit
-Berechtigungen — USDC, USDT und die meisten fiat-gedeckten Token — trägt eine
-Blacklist-Funktion, die sein Emittent gegen jede Adresse aufrufen kann, auch
-deine. Diese Macht gehört dem Emittenten und existiert unabhängig davon, in
-welcher Wallet du den Token hältst; keine selbstverwahrte Wallet, Vela
-eingeschlossen, kann sie wegnehmen. Was Selbstverwahrung dir gibt, ist, dass
-**wir** nicht die zweite Partei sind, die es könnte.
+**Was „kann nicht einfrieren“ nicht abdeckt: den Token.** USDC, USDT und die meisten
+fiatgedeckten Token erlauben ihrem Emittenten, jede Adresse zu sperren, auch deine.
+Diese Macht gehört dem Emittenten und besteht unabhängig davon, welche Wallet du nutzt.
+Was dir Selbstverwahrung gibt: Vela ist keine zweite Partei, die das kann.
 
-**Was du vertraust:**
+**Worauf du vertraust**
 
-- Den **Safe-Verträgen** (auditiert, weit verbreitet) und dem WebAuthn-Signer, der
-  deinen P-256-Schlüssel prüft.
-- Deinem **Passkey-Dienst** (Apple / Google), dass er dein Credential schützt und
-  synchronisiert.
-- Den **RPC-Anbietern**, die du abfragst (Vela nutzt einen Pool aus mehreren
-  Quellen mit Failover; du kannst eigene setzen).
-- Dem **Relay**, nur für die Erreichbarkeit — und du kannst es selbst hosten.
+- Die **Verträge**: Safe, sein 4337- und sein Passkey-Modul, EntryPoint v0.7 und das
+  RIP-7212-Precompile der Chain.
+- Die **Domain**: Jede Seite, die von getvela.app oder einer ihrer Subdomains
+  ausgeliefert wird, kann deine Schlüssel um eine Signatur bitten.
+- Die **Authentifikatoren**, die deine Schlüssel halten, und – bei synchronisierten
+  Passkeys – das Apple-, Google- oder Passwortmanager-Konto dahinter.
+- **Den Code der App, mit der du signierst.** Er baut die Transaktion und zeigt dir,
+  was sie tut. Eine kompromittierte App kann dir das eine zeigen und dich das andere
+  signieren lassen; die Abfrage des Authentifikators verrät dir den Unterschied nicht.
+- Die **RPC-Endpunkte**, von denen du liest: Ein lügender Knoten kann falsche Guthaben
+  oder eine falsche Simulationsvorschau zeigen. Du kannst eigene festlegen.
+- Die **Chain-Daten- und Wechselkursdienste**: Sie liefern Token-Listen, Deskriptoren,
+  die Liste der Gebühren-Token und die Kurse, mit denen ein Fiat-Betrag in einen
+  Token-Betrag umgerechnet wird.
+- Das **Relay**: Es kann nicht ändern, was du signiert hast, aber es kann die Operation
+  verzögern oder ablehnen, entscheiden, wann sie on-chain landet (und dir so bei einem
+  Swap innerhalb deiner Slippage zuvorkommen), und den Gaspreis festlegen, auf dem
+  deine Gebühr beruht – bis zum Dreifachen dessen, was die Wallet selbst abliest.
 
-**Betrachtete Bedrohungen:**
+**Berücksichtigte Bedrohungen**
 
-- **Verlorenes oder gestohlenes Gerät** — ein Dieb braucht trotzdem deine
-  Biometrie oder deine PIN, um zu signieren.
-- **Phishing / bösartige dApp** — dagegen steht die Klartext-Signatur.
-- **Kompromittierter Vela-Server** — bringt keine Signaturfähigkeit; der
-  Schadensradius ist eingeschränkter Dienst, nicht Geldverlust.
-- **Lieferkettenrisiko** — abgefedert durch Open Source und Selbst-Hosting.
+- **Verlorenes oder gestohlenes Gerät** – ein Dieb muss trotzdem die Prüfung des
+  Authentifikators bestehen; ein anderer Schlüssel stellt den Zugang wieder her. Aber
+  ein Schlüssel lässt sich nicht entfernen: Könnte einer in fremden Händen sein, zieh
+  dein Guthaben in eine neue Wallet um, denn über die alte Adresse kann dieser
+  Schlüssel in jedem Netzwerk weiter verfügen.
+- **Phishing** – ein Passkey lässt sich nicht auf einer gefälschten Seite eintippen,
+  und Browser bieten ihn nur Seiten auf getvela.app und ihren Subdomains an.
+- **Bösartige dApp** – abgedeckt durch Klartext-Signatur und Freigabesperre, mit einer
+  ernsten Lücke: Eine dApp kann einen Aufruf von deinem Safe an sich selbst anfordern –
+  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` –, und
+  jeder davon übergibt, einmal signiert, das Konto so vollständig wie die
+  Bybit-Payload. Vela dekodiert diese Aufrufe, blockiert sie aber noch nicht. Lehne
+  jede Anfrage ab, deren Ziel deine eigene Wallet-Adresse ist.
+- **Kompromittierter Backend-Dienst** (Relay, Index, Chain-Daten, Wechselkurse) – keine
+  Macht zu signieren, aber echter Einfluss: Dienstverweigerung, irreführende
+  Deskriptoren oder Token-Listen, falsche Wechselkurse, die ändern, wie viel ein
+  Fiat-Betrag tatsächlich sendet, und (beim Relay) Zeitpunkt und Gaspreis wie oben.
+  Abgerufene Deskriptoren werden nicht als authentifiziert behandelt, und jeder Dienst
+  lässt sich ersetzen.
+- **Kompromittierte App-Auslieferung** – eine manipulierte Web-Bereitstellung, ein
+  manipuliertes Erweiterungs-Update oder ein manipulierter App-Build könnte dir eine
+  bösartige Transaktion zum Signieren vorlegen. Das ist die Angriffsklasse von
+  [Bybit](/de/docs/bybit-attack). Die Gegenmaßnahmen sind heute begrenzt: die
+  Dekodierung und die Freigabesperre in der App selbst, notarisierte macOS-Builds und
+  das eigene Bauen der Erweiterung oder der Apps aus dem Quellcode (Release-Pakete
+  haben SHA-256-Prüfsummen, keine Signaturen). Eine unabhängige Signaturseite, die den
+  Code der App nicht teilt, ist gebaut, aber noch nicht angebunden.
+- **Alles, was von der Domain ausgeliefert wird** – jede Seite auf getvela.app oder
+  ihren Subdomains, einschließlich eines Skripts, das sie lädt, könnte Signaturen von
+  Vela-Passkeys anfordern, und die Abfrage zeigt nur „getvela.app“. Die Website
+  verbietet ihren eigenen Seiten deshalb, Passkeys zu nutzen, und hält ihr
+  Analyse-Skript von der Seite fern, auf der ein Schlüssel liegt. Wechselte die Domain
+  den Besitzer, würde der neue Eigentümer auch kontrollieren, welche Apps die Passkeys
+  nutzen dürfen. Die Erweiterung und selbst gebaute Apps bringen ihren eigenen Code
+  mit, rufen standardmäßig aber trotzdem Deskriptoren ab und nutzen Dienste unter
+  getvela.app.
 
 ## Wiederherstellung
 
-Dein Passkey wird vom Dienst deines Betriebssystems gesichert; auf einem neuen
-Gerät stellst du ihn mit der Anmeldung im selben Apple- oder Google-Konto wieder
-her, und deine Wallet ist wieder da.
+Beim Erstellen einer Wallet werden ihre öffentlichen Schlüssel und ihre Adresse in
+einem öffentlichen **Registervertrag** auf Gnosis veröffentlicht (auf Ethereum
+kopierbar). Auf einem neuen Gerät meldest du dich mit **einem beliebigen** Schlüssel
+an; die App findet die Wallet über den Index oder, falls das nicht klappt, direkt über
+das Register und prüft, dass die Schlüssel die eingetragene Adresse ergeben. Eine
+Wallet mit einem einzigen Schlüssel lässt sich außerdem ganz ohne Register aus zwei
+Signaturen neu aufbauen.
 
-<Callout type="warning" title="Das Passkey-Backup deiner Plattform ist deine Wiederherstellung">
-Velas Wiederherstellung ist dein Passkey, synchronisiert über iCloud-Schlüsselbund
-oder Google Passwortmanager. By design gibt es keine Seed-Phrase, keine Social
-Recovery und keine Guardians — nichts, was Vela verlieren, leaken oder zu dessen
-Nutzung man uns zwingen könnte. Die Kehrseite ist real: Verlierst du
-<strong>sowohl</strong> dein Gerät <strong>als auch</strong> den
-cloud-synchronisierten Passkey und hast keine weitere Kopie, ist der Account nicht
-wiederherstellbar. Lass das Passkey-Backup deiner Plattform aktiv und sichere
-dieses Konto.
+<Callout type="warning" title="Deine Schlüssel sind deine Wiederherstellung">
+Es gibt keine Seed-Phrase, keine soziale Wiederherstellung und keine Vertrauenspersonen
+(Guardians) – nichts, was Vela verlieren, preisgeben oder unter Zwang benutzen könnte.
+Gehen alle ursprünglichen Schlüssel verloren, lässt sich die Wallet nicht
+wiederherstellen. Erstelle die Wallet mit mehr als einem Schlüssel, lass die
+Passkey-Synchronisierung an, wenn du dich darauf verlässt, und sichere das Konto
+dahinter.
 </Callout>
 
-Das vollständige Wiederherstellungsmodell samt ehrlicher Grenzen steht in
-[Wiederherstellung und Anmeldung](/de/docs/recovery).
+Details: [Wiederherstellung und Anmeldung](/de/docs/recovery).
 
 ## Wenn Vela verschwindet
 
-Selbstverwahrung heißt, dass deine Schlüssel und dein Geld nicht davon abhängen,
-dass Vela online ist. Das Geld liegt in **deinem Safe-Vertrag on-chain**, und das
-Relay ist Open Source und ersetzbar.
+Dein Guthaben bleibt on-chain in deinem Safe. Die Verträge hängen nicht von Vela ab,
+und jeder Dienst, den Vela betreibt, ist Open Source und kann von anderen betrieben
+werden – nur das Relay braucht eine Code-Änderung, damit es keine Chain-Daten mehr von
+Velas Server liest. Das Einzige, was sich nicht verlegen lässt, ist die Relying Party
+der Passkeys, `getvela.app`: Eine Kopie der Web-Wallet auf einer anderen Domain erstellt
+eine andere Wallet. Für bestehende Wallets funktionieren die Vela-Browser-Erweiterung
+(die `getvela.app`-Passkeys mit einer Berechtigung nutzen kann) und selbst gebaute Apps
+(mit einem Handy oder Sicherheitsschlüssel) auch ohne getvela.app weiter. Die
+[Anleitung zum Selbsthosten](/de/docs/self-hosting#if-getvela-app-disappears)
+beschreibt jeden Weg und seine Grenzen. Unabhängiger Zugang auf einer Chain setzt
+außerdem voraus, dass diese Chain RIP-7212 unterstützt.
 
-Eine ehrliche Einschränkung: WebAuthn bindet einen Passkey an eine
-Relying-Party-Domain (`getvela.app`). Ginge diese Domain dauerhaft verloren,
-bräuchten daran gebundene Passkeys Hilfe, um anderswo zu funktionieren — ein
-Werkzeug, das dem Authenticator die ursprüngliche Relying Party präsentieren kann.
-Vela hat dafür früher eine Browser-Erweiterung auf Entwicklerniveau ausgeliefert
-und sie im September 2026 zurückgezogen; ein verbrauchertauglicher
-Wiederherstellungspfad für den Domainverlust ist weiterhin offene Arbeit, und wir
-sagen das, statt zu suggerieren, es gäbe ihn. Unabhängiger On-Chain-Zugriff hängt
-außerdem an der P-256-Unterstützung (RIP-7212) der Ziel-Chain, die sich über die
-Chains hinweg verbessert.
+## Datenschutz
 
-## Privatsphäre
+Kein Konto, keine E-Mail, kein KYC. Öffentlich wird, was beim Erstellen einer Wallet ins
+Register geschrieben wird: für jeden Schlüssel der öffentliche Schlüssel und die
+Credential-ID, das Authentifikator-Modell, dein Wallet-Name und deine
+Schlüsselbezeichnungen, die Adresse und die signierten Registrierungsdaten. Velas
+Index sieht diesen Eintrag, bevor er ihn einreicht, und die Adressen, für die du Namen
+nachschlägst; Velas Relay sieht deine Adresse, die Operationen, die du einreichst, und
+den RPC-Endpunkt, den deine App nutzt (einschließlich eines API-Schlüssels in dessen
+URL), und bewahrt Operationen für begrenzte Zeit auf, um sie erneut zu versuchen und
+Fehler zu analysieren. Jeder Dienst sieht deine IP-Adresse. Die Website nutzt eine
+Analyse ohne Cookies. Maßgeblich ist die [Datenschutzerklärung](/privacy).
 
-Keine Konten, keine E-Mail, kein KYC, keine Seed-Phrase zum Einsammeln. Server
-speichern nur deinen **öffentlichen Schlüssel** und einen gewählten Account-Namen
-(für die geräteübergreifende Wiederherstellung), by design on-chain
-veröffentlicht. Transaktionsinhalte werden nicht protokolliert. Die Website nutzt
-cookiefreie, selbst gehostete Analytik. Siehe die
-[Datenschutzerklärung](/privacy).
+## Open Source
 
-## Überprüfbarkeit und Open Source
-
-Alles ist **MIT-lizenziert und Open Source** — die App und alle vier
-Backend-Dienste (Chain-Daten, Passkey-Index, Relay, Wechselkurse), die du
-**selbst hosten** kannst (Einstellungen → Erweitert → Service-Endpunkte). Der Code
-liegt auf
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+Die Wallet (alle Apps und der Kern), das Relay und der Wechselkursdienst stehen unter
+der MIT-Lizenz; das Chain-Daten-Verzeichnis ebenfalls. Der Public-Key-Index ist
+öffentlich, hat aber noch keine Lizenzdatei. Code:
+[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Kein Token
 
-Vela hat **keinen Token** und plant auch keinen. Es gibt nichts zu kaufen, zu
-farmen oder zu spekulieren. Gas wird im nativen Asset des jeweiligen Netzwerks
-bezahlt.
+Vela hat keinen Token und plant auch keinen. Es gibt nichts, was man kaufen, farmen
+oder womit man spekulieren könnte. Gebühren werden im Coin des jeweiligen Netzwerks
+oder in einem Stablecoin bezahlt.
 
 ## Audit-Status und Grenzen
 
-Die **Safe-Verträge** im Kern jedes Vela-Accounts sind unabhängig auditiert und
-im Feld erprobt. Velas **eigene Integration** darum herum hatte **kein
-unabhängiges Audit durch Dritte**, und derzeit ist keines terminiert — ein
-professionelles Audit ist ein Ziel für den Zeitpunkt, an dem das Projekt eines
-finanzieren kann, keine Zusage mit Datum. Bis dahin ist die Prüfung informell: Der
-Code ist Open Source, und es hängt daran, dass fähige, interessierte Leute aus der
-Community ihn lesen, sowie an KI-gestützter Durchsicht. Das hilft, ist aber einem
-professionellen Audit nicht gleichwertig. Behandle Vela als Alpha-Software und
-benutze Beträge, die du in etwas so Junges zu stecken bereit bist.
+Die Verträge von Safe, das 4337- und das Passkey-Modul sowie EntryPoint v0.7 sind
+unabhängig auditiert und weit verbreitet. **Velas eigener Code – die Apps, die
+Backend-Dienste und der Registervertrag – hatte kein unabhängiges Audit durch Dritte,
+und derzeit ist auch keines angesetzt**; ein professionelles Audit ist ein Ziel für den
+Zeitpunkt, an dem das Projekt eines finanzieren kann, keine Zusage mit Datum. Bis dahin
+ist die Prüfung informell: Der Code ist offen, fähige Mitglieder der Community lesen
+ihn, und er wird mit KI-Werkzeugen geprüft. Das hilft; einem professionellen Audit ist
+es nicht gleichwertig. Behandle Vela als Alpha-Software. Details:
+[Audits und bekannte Probleme](/de/docs/security-audits).
 
 ## Referenzen
 
-- ERC-4337 — Account Abstraction über den EntryPoint
-- EIP-1271 — Standard für die Signaturprüfung durch Verträge
-- ERC-7730 — Klartext-Signatur / Deskriptoren für strukturierte Daten
-- EIP-5792 — Batching von Wallet-Aufrufen
-- RIP-7212 — Precompile für die secp256r1-Signaturprüfung (P-256)
-- WebAuthn / FIDO2 — Passkey-Authentifizierung
-- [Safe Smart Account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- ERC-4337 – Account Abstraction über den EntryPoint
+- EIP-1271 – Signaturprüfung für Verträge
+- ERC-7730 – Deskriptoren für die Klartext-Signatur
+- EIP-5792 – Bündeln von Wallet-Aufrufen (`wallet_sendCalls`)
+- RIP-7212 / EIP-7951 – Precompile zur Prüfung von P-256-Signaturen
+- WebAuthn / FIDO2 – Passkeys
+- [Safe Smart Account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

@@ -1,6 +1,7 @@
 ---
 title: Inviare e ricevere
-description: Come ricevere e inviare token in Vela — un solo indirizzo su tutte le reti, transazioni firmate in modo leggibile, e come l'astrazione dell'account sposta davvero i tuoi fondi.
+description: "Come ricevere e inviare con Vela — un solo indirizzo su ogni rete, invii a una o a più persone, come vengono trovati i nomi dei destinatari, cosa confermi e come il relay sposta i tuoi fondi."
+source: c23b205bcd8b
 ---
 
 <script>
@@ -12,70 +13,95 @@ description: Come ricevere e inviare token in Vela — un solo indirizzo su tutt
 ## Ricevere
 
 1. Apri il wallet e tocca **Ricevi**.
-2. Condividi il tuo indirizzo: copialo, oppure fai scansionare il QR code a chi
-   invia.
-3. Quando il trasferimento è confermato on-chain, il saldo compare nel wallet.
+2. Condividi il tuo indirizzo: copialo o mostra il codice QR. Il wallet web può
+   anche creare una richiesta di pagamento che include un importo.
+3. Quando il trasferimento è confermato on-chain, compare nel tuo saldo.
 
-Due cose che vale la pena sapere:
-
-- Il tuo indirizzo è **lo stesso su ogni rete supportata**, quindi condividi un
-  solo indirizzo ovunque: assicurati soltanto che chi invia usi la rete giusta.
-- Puoi **ricevere prima che il wallet sia distribuito**. Gli account Vela sono
-  account intelligenti controfattuali: i fondi possono arrivare al tuo indirizzo
-  prima che il contratto esista su una data chain; si distribuisce da solo al tuo
-  primo invio lì.
+- Il tuo indirizzo è **lo stesso su ogni rete**, quindi ne dai uno solo — ma chi
+  invia deve comunque usare una rete supportata da Vela, o una che hai aggiunto tu.
+- Puoi **ricevere prima che il wallet sia deployato** su una rete. Il deploy
+  avviene da solo al tuo primo invio da lì.
 
 ## Inviare
 
 1. Tocca **Invia** e scegli il **token**.
-2. Inserisci l'**importo** (puoi passare tra token e valuta di visualizzazione) e
-   il **destinatario**. Dove può, Vela risolve i destinatari noti in un nome: un
-   account Vela, un nome ENS, un Basename e così via.
-3. **Controlla e conferma.** Vela mostra il trasferimento, poi chiede la passkey
-   (Face ID / Touch ID / impronta).
+2. Inserisci l'**importo** (nel token o nella tua valuta di visualizzazione) e
+   l'**indirizzo del destinatario**, incollandolo, scansionando un codice QR o
+   scegliendo un contatto.
+3. **Controlla.** Vela mostra cosa succederà, la commissione e il nome che ha
+   trovato per il destinatario, se c'è.
+4. **Conferma** con una delle tue chiavi — Face ID, impronta, PIN, oppure un tocco
+   e il PIN sulla tua chiave di sicurezza.
+
+### Inviare a più persone, o raccogliere
+
+- **Dividi** — invia un token a più persone con un'unica transazione. Puoi
+  incollare un elenco o importare un foglio di calcolo, e inserire gli importi
+  nella tua valuta.
+- **Raccogli** — invia più token a un solo indirizzo con un'unica transazione.
+
+In entrambi i casi firmi una volta sola, e la transazione paga una sola
+commissione.
+
+### Nomi per gli indirizzi
+
+Quando inserisci un indirizzo, Vela cerca un nome da associargli: prima nel
+proprio registro (il nome di un altro wallet Vela), poi nei record inversi `.bnb`,
+`.arb`, `.g`, Basename ed ENS, letti direttamente da ciascuna chain. Funziona in
+una sola direzione: dà un nome a un indirizzo che hai inserito. Se scrivi un nome
+come `alice.eth`, Vela non cerca l'indirizzo corrispondente. Anche i tuoi
+**contatti** salvati mostrano il loro nome. Considera un nome un indizio, non una
+prova: un record inverso o il nome di un wallet Vela lo sceglie chi controlla
+quell'indirizzo.
+
+### Moneta della commissione e velocità
+
+La schermata di conferma mostra la commissione nella moneta con cui la paghi e
+nella tua valuta. Puoi pagare nella moneta della rete oppure, dove il relay lo
+accetta, in una stablecoin in dollari, e scegliere una velocità (predefinita:
+rapida). Quando invii il **massimo** di una moneta nativa, Vela tiene da parte
+quanto basta per la commissione.
+[Come si calcola la commissione](/it/docs/networks-and-fees).
 
 ### Cosa succede quando confermi
 
-Vela non si limita a «trasmettere» una transazione. Sotto il cofano:
+1. Vela costruisce una **UserOperation** ERC-4337 per il tuo Safe, che include il
+   pagamento della commissione al relay.
+2. La tua chiave, dopo averti verificato, la firma con un'asserzione **WebAuthn
+   (P-256)**.
+3. L'operazione firmata va al **relay**, che la invia all'EntryPoint; il tuo Safe
+   controlla on-chain la firma P-256 ed esegue.
 
-1. Costruisce una **UserOperation** ERC-4337 per il tuo account Safe.
-2. Il dispositivo la firma con un'asserzione **WebAuthn (P-256)** dopo il controllo
-   biometrico.
-3. L'operazione firmata va al **relay**, che la sottopone all'EntryPoint; il tuo
-   Safe verifica la firma P-256 **on-chain** ed esegue.
-
-<Callout type="info" title="Il relay non può manomettere la tua transazione">
-Il relay riceve una UserOperation <strong>già firmata</strong>. Può ritardare o
-rifiutare di inoltrarla, ma non può cambiare destinatario, importo o qualsiasi
-altro campo: ogni modifica invalida la tua firma. È un aiuto alla disponibilità,
-non un custode, ed è open source, quindi puoi farne girare uno tuo.
+<Callout type="info" title="Il relay non può cambiare la tua transazione">
+Il relay riceve un'operazione già firmata. Non può cambiare il destinatario,
+l'importo o la commissione: qualsiasi modifica invalida la tua firma. Può
+ritardarla o rifiutarla, e decide quando finisce on-chain. È open source, e puoi
+[gestirne uno tuo](/it/docs/self-hosting#relay).
 </Callout>
 
-### Firma leggibile — niente approvazioni al buio
+Prima che tu firmi, Vela decodifica cosa fa la transazione e ti avvisa di ciò che
+non riesce a decodificare; vedi [firma leggibile](/it/docs/clear-signing).
 
-Prima che tu firmi, Vela decodifica la transazione con i descrittori **ERC-7730** e
-mostra l'**intenzione** (Invia, Approva, Scambia…), gli **importi e gli
-indirizzi** e un'indicazione di rischio — non esadecimale opaco. Quando non riesce
-a decodificare del tutto una chiamata, mostra un **avviso esplicito di firma al
-buio** invece di fingere di capirla. Un'approvazione di token illimitata non viene
-solo segnalata: Vela la riscrive su un importo finito e rifiuta di inviare
-un'approvazione che resterebbe illimitata.
+## Prima di premere Invia
 
-## Prima di premere invia
+- **Controlla l'inizio e la fine dell'indirizzo.** I malware che sostituiscono gli
+  indirizzi esistono davvero, e lo stesso vale per gli indirizzi somiglianti
+  infilati nella tua cronologia.
+- **Conferma la rete.** Inviare sulla rete sbagliata è un errore comune, e costoso.
+- **Con un destinatario nuovo, parti in piccolo.** Un trasferimento di prova
+  minuscolo è un'assicurazione che costa poco.
 
-- **Controlla i primi e gli ultimi caratteri dell'indirizzo.** I malware che
-  sostituiscono gli indirizzi esistono davvero.
-- **Conferma la rete.** Inviare sulla rete sbagliata è l'errore costoso più comune.
-  Vedi [reti e commissioni](/it/docs/networks-and-fees).
-- **Con un destinatario nuovo, parti piccolo.** Un trasferimento di prova minuscolo
-  è un'assicurazione a basso costo.
+Le transazioni sono irreversibili. Nessuno può recuperare un invio all'indirizzo
+sbagliato: è la natura dell'autocustodia.
 
-Le transazioni sono irreversibili. Non c'è nessun servizio clienti che possa
-recuperare un invio all'indirizzo sbagliato: è la natura dell'auto-custodia.
+## La tua attività
 
-## Leggere la cronologia
+La tua attività unisce ciò che hai inviato da questo dispositivo ai trasferimenti
+di token letti dai log di ciascuna chain. Un semplice trasferimento di moneta
+nativa che ti arriva tramite un altro contratto (per esempio alcuni prelievi da
+exchange) su alcune reti può non generare un log, quindi può comparire nel saldo
+senza comparire nell'attività. I saldi vengono letti in tempo reale tramite un
+pool di endpoint RPC con failover automatico; una rotellina significa «sto ancora
+leggendo», non «i fondi sono spariti».
 
-Saldi e cronologia vengono letti in tempo reale da un pool di endpoint RPC
-pubblici, con failover automatico. Se la rete è lenta, la cronologia può metterci
-un momento: una rotellina significa «sto ancora scaricando», non «i fondi sono
-spariti».
+Poi: [reti e commissioni](/it/docs/networks-and-fees).

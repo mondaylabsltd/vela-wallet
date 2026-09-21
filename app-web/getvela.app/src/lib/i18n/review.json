@@ -5,46 +5,72 @@
 	},
 	"zh": {
 		"state": "reviewed",
-		"date": "2026-09-15",
-		"findings": "specs/059-getvela-site-i18n/reviews/zh.md"
+		"date": "2026-09-22",
+		"findings": "specs/080-site-content-accuracy/reviews/zh.md"
 	},
 	"zh-TW": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/zh-TW.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"zh-HK": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/zh-HK.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"ja": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/ja.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"ko": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/ko.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"vi": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/vi.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"id": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/id.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"tr": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/tr.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"es-MX": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/es-MX.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"pt-BR": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/pt-BR.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"fr": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/fr.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"de": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/de.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"ru": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/ru.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	},
 	"it": {
-		"state": "drafted"
+		"state": "drafted",
+		"aiReview": "specs/080-site-content-accuracy/reviews/it.md",
+		"note": "Re-aligned to the spec 080 en+zh and reviewed by the single-string method (AI, 2026-09-22); no open High/Medium. A native reading is still owed before this may say reviewed."
 	}
 }

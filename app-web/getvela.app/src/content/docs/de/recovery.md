@@ -1,6 +1,7 @@
 ---
 title: Wiederherstellung und Anmeldung
-description: Wie du deine Wallet auf einem neuen Gerät ohne Seed-Phrase zurückbekommst — und wo dieses Modell ehrlicherweise an seine Grenzen stößt.
+description: "Wie du mit einem beliebigen deiner Schlüssel auf einem neuen Gerät zurück in deine Wallet kommst, wo die Wallet nachgeschlagen wird und wo die ehrlichen Grenzen einer Wiederherstellung ohne Seed-Phrase liegen."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,74 +10,84 @@ description: Wie du deine Wallet auf einem neuen Gerät ohne Seed-Phrase zurück
 
 # Wiederherstellung und Anmeldung
 
-Der schwierigste Teil einer Wallet ohne Seed-Phrase ist die Wiederherstellung:
-Wenn es keine zwölf Wörter gibt, wie kommst du auf einem neuen Handy wieder
-hinein? Hier steht genau, wie Vela das löst.
+Ohne Seed-Phrase beruht die Wiederherstellung auf zwei Dingen: **einem Schlüssel, den
+du noch hast**, und **einem öffentlichen Eintrag darüber, welche Schlüssel zu deiner
+Wallet gehören**.
 
-## Wie es funktioniert
+## Was beim Erstellen einer Wallet festgehalten wird
 
-Beim Erstellen einer Wallet werden zwei Dinge in Velas **Passkey-Index**
-veröffentlicht:
+Die Adresse deiner Wallet wird aus allen Schlüsseln berechnet, mit denen du sie
+erstellst. Damit jeder einzelne dieser Schlüssel die Wallet später wiederfinden kann,
+schreibt das Erstellen einer Wallet einen Eintrag in einen öffentlichen
+**Registervertrag** auf der Gnosis Chain: zu jedem Schlüssel den öffentlichen
+Schlüssel, die Adresse der Wallet, ihren Namen und die signierten
+Registrierungsdaten. Das Register hat keinen Eigentümer, und seine Einträge lassen
+sich weder ändern noch löschen. (Die vollständige Liste dessen, was öffentlich ist,
+steht unter [Wallet erstellen](/de/docs/create-wallet#what-is-public).)
 
-- Der **öffentliche Schlüssel** deines Passkeys (nie der private).
-- Der **Name**, den du der Wallet gegeben hast.
+Velas Public-Key-Index-Dienst reicht diesen Eintrag ein und zahlt das Gas dafür; der
+Eintrag selbst liegt on-chain, und jede App kann ihn direkt lesen.
 
-Der öffentliche Schlüssel liegt über einen Smart Contract auf der
-Gnosis-Blockchain, ist also öffentlich lesbar und hängt nicht daran, dass Velas
-Server online bleiben.
+## Auf einem neuen Gerät anmelden
 
-Dein **privater** Schlüssel ist derweil ein Passkey, den der Schlüsselbund deiner
-Plattform synchronisiert — **iCloud-Schlüsselbund** auf Apple-Geräten, **Google
-Passwortmanager** auf Android.
+1. Öffne Vela und wähle die Anmeldung.
+2. Nutze **einen beliebigen** deiner Schlüssel: einen Passkey, der auf dieses Gerät
+   synchronisiert wurde, ein Handy in der Nähe (QR-Code scannen) oder deinen
+   Sicherheitsschlüssel.
+3. Vela ermittelt aus der Signatur den öffentlichen Schlüssel dieses Schlüssels und
+   schlägt ihn nach – zuerst in Velas Index, dann, wenn der Index nicht antwortet, im
+   Registervertrag auf Gnosis und danach auf Ethereum – und baut die Wallet neu auf.
+   Bevor es sie dir zeigt, prüft es, dass die gefundenen Schlüssel tatsächlich die
+   eingetragene Adresse ergeben.
 
-So meldest du dich auf einem neuen Gerät an:
+Kontenlisten werden nicht zwischen Geräten synchronisiert; die Anmeldung baut sie neu
+auf.
 
-1. Melde dich mit demselben iCloud- oder Google-Konto an, mit aktivierter
-   Schlüsselbund-Synchronisation.
-2. Öffne Vela und wähle „Anmelden“.
-3. Authentifiziere dich mit deinem Passkey. Deine Plattform liefert den
-   synchronisierten Passkey, der Index den passenden Account. Deine Wallet ist
-   zurück.
-
-Der Index ist ein Cache, kein Single Point of Failure. Ist er einmal nicht
-erreichbar und dein Account nicht im lokalen Speicher, kann Vela deinen
-öffentlichen Schlüssel auf dem Gerät aus zwei Passkey-Signaturen rekonstruieren
-und daraus deine Wallet-Adresse neu ableiten — ganz ohne Server.
-
-<Callout type="info" title="Warum diese Aufteilung">
-Der öffentliche Schlüssel im On-Chain-Index lässt jeden — auch eine frische
-Installation — deinen Account finden. Der private Schlüssel, synchronisiert vom
-Schlüsselbund deiner Plattform, ist das, was Transaktionen tatsächlich
-autorisiert. Alles im Index sind öffentliche Daten, und nichts davon kann dein
-Geld bewegen — das können nur Signaturen deines Passkeys.
+<Callout type="info" title="Wenn weder Index noch Register antworten">
+Eine Wallet mit <strong>einem einzigen Schlüssel</strong> lässt sich auf dem Gerät
+ganz ohne Server wiederherstellen: Zwei Signaturen dieses Schlüssels reichen, um
+seinen öffentlichen Schlüssel zu rekonstruieren und die Adresse neu zu berechnen. Eine
+Wallet mit mehreren Schlüsseln braucht den Registereintrag, weil ein Schlüssel der App
+nicht sagen kann, welche die anderen waren.
 </Callout>
+
+## Kopien des Eintrags
+
+Das Register auf Gnosis ist das, das die Apps zuerst lesen. In den **Einstellungen**
+kannst du den Eintrag deiner Wallet außerdem in denselben Registervertrag auf
+**Ethereum** kopieren – das Gas zahlst du selbst –, damit der Eintrag auf einer zweiten
+Chain existiert. Jeder kann eine solche Kopie anlegen; sie enthält nichts, womit sich
+Geld bewegen ließe.
 
 ## Die ehrlichen Grenzen
 
-Selbstverwahrung heißt, dass die Verantwortung wirklich bei dir liegt. Das
-solltest du wissen.
-
-<Callout type="warning" title="Deine Wiederherstellung hängt am Schlüsselbund deiner Plattform">
-Velas geräteübergreifende Anmeldung beruht darauf, dass dein Passkey über
-iCloud-Schlüsselbund oder Google Passwortmanager synchronisiert wird. Halte
-dieses Konto sicher und seine Wiederherstellungsoptionen aktuell. Verlierst du
-<strong>sowohl</strong> deine Geräte <strong>als auch</strong> den Schlüsselbund
-deines Plattformkontos, kann Vela deinen privaten Schlüssel nicht neu erzeugen —
-by design: wir hatten ihn nie.
+<Callout type="warning" title="Ein verlorener Schlüssel ist verloren">
+Sind alle Schlüssel weg, mit denen du die Wallet erstellt hast – die synchronisierten
+Passkeys, die Handys, die Sicherheitsschlüssel –, kann niemand die Wallet
+wiederherstellen: nicht Vela, nicht Apple oder Google, niemand. Es gibt keine
+Seed-Phrase, kein Zurücksetzen durch den Support und keine Hintertür.
 </Callout>
 
-Praktischer Rat:
+Unwahrscheinlich wird das, wenn du mehr als einen Weg hinein hast:
 
-- **Lass die Schlüsselbund-Synchronisation an.** Sie trägt deinen Passkey von
-  Gerät zu Gerät.
-- **Sichere dein Apple-/Google-Konto** mit einem starken Passwort und eigenen
-  Wiederherstellungswegen. Dieses Konto gehört jetzt zur Sicherheit deiner Wallet.
-- **Halte nach Möglichkeit mehr als ein Gerät angemeldet**, damit ein verlorenes
-  Handy eine Unannehmlichkeit bleibt und keine Krise wird.
+- **Lass die Passkey-Synchronisierung an**, wenn du den Passkey dieses Geräts nutzt.
+  Sie bringt den Schlüssel auf ein neues Handy oder einen neuen Computer.
+- **Sichere das Konto dahinter.** Wer dein Apple- oder Google-Konto kontrolliert, kann
+  womöglich einen synchronisierten Passkey nutzen; gib ihm ein starkes Passwort und
+  eigene Wiederherstellungsoptionen.
+- **Erstelle die Wallet mit mehr als einem Schlüssel**, zum Beispiel mit dem Passkey
+  deines Handys und einem Hardware-Sicherheitsschlüssel an einem sicheren Ort.
+  Schlüssel lassen sich nur beim Erstellen der Wallet hinzufügen
+  ([warum](/de/docs/signers)). Denk daran: Jeder einzelne Schlüssel kann allein
+  signieren – und lässt sich nicht entfernen. Wird einer kompromittiert, zieh dein
+  Guthaben in eine neue Wallet um ([was zu tun ist](/de/docs/signers)).
 
 ## Was Vela kann und was nicht
 
-- **Kann:** dir helfen, deinen Account über den öffentlichen Index wiederzufinden.
-- **Kann nicht:** dein Geld bewegen, deine Wallet einfrieren oder einen privaten
-  Schlüssel wiederherstellen. Vela hat ihn nie besessen. Genau das ist der Sinn
-  von Selbstverwahrung — und der Handel, den du dafür eingehst.
+- **Kann:** den Index am Laufen halten, damit deine Wallet auf einem neuen Gerät
+  schnell gefunden wird.
+- **Kann nicht:** dein Guthaben bewegen, deine Wallet einfrieren, Schlüssel hinzufügen
+  oder entfernen oder einen verlorenen Schlüssel wiederherstellen. Vela hält deine
+  Schlüssel nie.
+
+Weiter: [Klartext-Signatur](/de/docs/clear-signing).

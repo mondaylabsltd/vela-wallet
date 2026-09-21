@@ -308,7 +308,7 @@
 		"lede": "Vela 由英国的一家小公司 MONDAY LABS LTD 制作，全程公开开发：App、后端服务和这个网站都在 GitHub 上，写下这些代码的人也会在那里回复 issue。",
 		"team": {
 			"role": "创始人 & 工程师",
-			"bio": "从头到尾一个人做 Vela——App、服务和这个网站——并在博客上边做边写。"
+			"bio": "负责 Vela 的整体开发——App、服务和这个网站——并在博客上边做边写。"
 		},
 		"valuesHeading": "我们相信什么",
 		"values": [
@@ -486,9 +486,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "978189838858",
-		"about": "669db59e91a0",
-		"roadmap": "1f9b064b5fbb",
-		"getStarted": "7096649e0f32"
+		"home": "09e59832402d",
+		"about": "44b20f016140",
+		"roadmap": "cc826c697f61",
+		"getStarted": "f7262f86ca9e"
 	}
 }
