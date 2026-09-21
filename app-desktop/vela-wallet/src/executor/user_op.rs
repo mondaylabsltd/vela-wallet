@@ -21,6 +21,16 @@
 //! real contract call whose gas could not be estimated, both stop HERE — a
 //! passkey prompt on an operation the relay must reject is a prompt wasted
 //! and, worse, a person told they signed something that then vanished.
+//!
+//! ## Who signs
+//!
+//! A passkey over the SafeOp hash — or the Clear Signer (spec 071), which is
+//! handed the ASSEMBLED operation as well: its page derives the same hash
+//! from the operation's own bytes and refuses what it cannot derive, and the
+//! answer is accepted only as a signature over the hash computed HERE.
+//! Either way the assertion that comes back goes into the same envelope. A
+//! message ([`sign_message`]) is the same choice over the Safe's
+//! `SafeMessage` hash, with nothing submitted.
 
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
@@ -31,17 +41,18 @@ use vela_core::app::fee_policy::{
 };
 use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
-use vela_core::primitives::from_hex;
+use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
     CALL_GAS_LIMIT, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation, VERIFICATION_GAS_DEPLOYED,
     VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature, build_in_band_fee_leg,
     build_init_code_for_keys, build_multi_send_execute_call_data, build_user_op_signature,
-    calculate_safe_op_hash, encode_erc20_transfer, extract_client_data_fields,
-    inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash,
-    signer_address_for,
+    calculate_safe_op_hash, compute_safe_message_hash, eip1271_envelope_signature,
+    encode_erc20_transfer, extract_client_data_fields, inner_calls_gas_floor,
+    is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash, signer_address_for,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
+use crate::executor::clear_signer::{self, Ask, Channel};
 use crate::executor::passkey::PasskeyFailure;
 use crate::executor::{chain, pool, relay};
 
@@ -96,6 +107,49 @@ pub struct QuotedFee {
 /// screen's ceremony channel bound; the parallel space's signer answers the
 /// same shape.
 pub type SignFn<'a> = &'a mut dyn FnMut(&[u8]) -> Result<Assertion, PasskeyFailure>;
+
+/// Who signs this request (spec 071).
+pub enum Signer<'a> {
+    /// A passkey, over the digest alone.
+    Passkey(SignFn<'a>),
+    /// The Clear Signer: the request as the page is told it, the page, and
+    /// the screen's channel to its waiting sheet.
+    ClearSigner {
+        ask: &'a Ask,
+        page: &'a str,
+        channel: &'a Channel,
+    },
+}
+
+impl Signer<'_> {
+    /// One signature over `digest`. `operation` is what the Clear Signer
+    /// shows and derives the digest from — the assembled operation and the
+    /// calls before its fee leg; `None` for a message.
+    fn sign(
+        &mut self,
+        digest: &[u8],
+        chain_id: u32,
+        safe: &str,
+        keys: &[WalletKey],
+        operation: Option<(&UserOperation, &[MultiSendCall])>,
+    ) -> Result<Assertion, SubmitFailure> {
+        match self {
+            Self::Passkey(sign) => sign(digest),
+            Self::ClearSigner { ask, page, channel } => {
+                let request = ask.request(chain_id, safe, keys, operation);
+                clear_signer::sign(&request, page, digest, keys, channel)
+            }
+        }
+        .map_err(|failure| match failure.kind {
+            FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
+            _ => other(
+                failure
+                    .message
+                    .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
+            ),
+        })
+    }
+}
 
 // ---------------------------------------------------------------------------
 // The key set and the call codec
@@ -227,10 +281,18 @@ pub fn submit(
     calls: &[FeeCall],
     gas_fee_token: Option<&str>,
     keys: &[WalletKey],
-    sign: SignFn<'_>,
+    signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
 ) -> Result<String, SubmitFailure> {
-    let outcome = submit_inner(chain_id, safe, calls, gas_fee_token, keys, sign, quoted_fee);
+    let outcome = submit_inner(
+        chain_id,
+        safe,
+        calls,
+        gas_fee_token,
+        keys,
+        signer,
+        quoted_fee,
+    );
     // The SCREEN gets the core's sentence — SC-305: no relay text reaches a
     // person. The OPERATOR gets the detail, because a submit that failed
     // before the relay leaves no other trace at all: the log showed the quote
@@ -254,7 +316,7 @@ fn submit_inner(
     calls: &[FeeCall],
     gas_fee_token: Option<&str>,
     keys: &[WalletKey],
-    sign: SignFn<'_>,
+    signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
 ) -> Result<String, SubmitFailure> {
     let inner: Vec<MultiSendCall> = calls
@@ -264,7 +326,7 @@ fn submit_inner(
         .map_err(other)?;
     if is_tempo_chain(chain_id) {
         let fee_token = gas_fee_token.unwrap_or(TEMPO_DEFAULT_FEE_TOKEN);
-        return submit_tempo(chain_id, safe, &inner, fee_token, keys, sign, quoted_fee);
+        return submit_tempo(chain_id, safe, &inner, fee_token, keys, signer, quoted_fee);
     }
     submit_in_band(
         chain_id,
@@ -272,7 +334,7 @@ fn submit_inner(
         &inner,
         gas_fee_token,
         keys,
-        sign,
+        signer,
         quoted_fee,
     )
 }
@@ -410,7 +472,7 @@ fn submit_in_band(
     inner: &[MultiSendCall],
     gas_fee_token: Option<&str>,
     keys: &[WalletKey],
-    sign: SignFn<'_>,
+    signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
 ) -> Result<String, SubmitFailure> {
     let (deployed, nonce, init_code) = account_context(chain_id, safe, keys)?;
@@ -486,7 +548,7 @@ fn submit_in_band(
     op.call_data = batch(fee.amount, &fee.recipient)?;
 
     // The displayed quote's speed, or none for the fallback nobody saw.
-    sign_and_submit(op, chain_id, safe, keys, sign, &[], fee.tier)
+    sign_and_submit(op, chain_id, safe, inner, keys, signer, &[], fee.tier)
 }
 
 fn submit_tempo(
@@ -495,7 +557,7 @@ fn submit_tempo(
     inner: &[MultiSendCall],
     fee_token: &str,
     keys: &[WalletKey],
-    sign: SignFn<'_>,
+    signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
 ) -> Result<String, SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
@@ -593,38 +655,34 @@ fn submit_tempo(
         op,
         chain_id,
         safe,
+        inner,
         keys,
-        sign,
+        signer,
         &[("feeToken", fee_token)],
         tier,
     )
 }
 
 /// The shared tail: hash, sign, envelope, submit (with the AA20 guard and
-/// the in-flight-hash recovery), bump the nonce.
+/// the in-flight-hash recovery), bump the nonce. `inner` is the person's
+/// calls — the operation carries them and then its fee leg.
 #[allow(
     clippy::too_many_arguments,
-    reason = "the operation, its signer, and the two things the wire names beside it"
+    reason = "the operation, its calls, its signer, and the two things the wire names beside it"
 )]
 fn sign_and_submit(
     mut op: UserOperation,
     chain_id: u32,
     safe: &str,
+    inner: &[MultiSendCall],
     keys: &[WalletKey],
-    sign: SignFn<'_>,
+    mut signer: Signer<'_>,
     extra: &[(&str, &str)],
     tier: Option<FeeTier>,
 ) -> Result<String, SubmitFailure> {
     let safe_op_hash =
         calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
-    let assertion = sign(&safe_op_hash).map_err(|failure| match failure.kind {
-        FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
-        _ => other(
-            failure
-                .message
-                .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
-        ),
-    })?;
+    let assertion = signer.sign(&safe_op_hash, chain_id, safe, keys, Some((&op, inner)))?;
     op.signature = envelope(&assertion, keys)?;
 
     // The AA20 guard: an undeployed sender with no initCode is a guaranteed
@@ -654,6 +712,32 @@ fn sign_and_submit(
     };
     chain::bump_nonce(safe, chain_id);
     Ok(hash)
+}
+
+/// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
+/// own `SafeMessage` hash over `original_hash` — a Safe verifies nothing
+/// else — and the envelope carries no validity window. One ceremony,
+/// nothing submitted. Answers the signature hex.
+pub fn sign_message(
+    chain_id: u32,
+    safe: &str,
+    original_hash: &[u8],
+    keys: &[WalletKey],
+    mut signer: Signer<'_>,
+) -> Result<String, SubmitFailure> {
+    let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
+        .map_err(|e| other(e.to_string()))?;
+    let assertion = signer.sign(&challenge, chain_id, safe, keys, None)?;
+    let hex = |text: &str| from_hex(text).map_err(|e| other(e.to_string()));
+    let signature = eip1271_envelope_signature(
+        &hex(&assertion.authenticator_data_hex)?,
+        &hex(&assertion.client_data_json_hex)?,
+        &hex(&assertion.signature_der_hex)?,
+        &assertion.credential_id,
+        keys,
+    )
+    .map_err(|e| other(e.to_string()))?;
+    Ok(to_hex(&signature, true))
 }
 
 /// The relay's sentence, classified the way `classifySubmit` does.
@@ -765,11 +849,6 @@ fn raise_to_measured_floor(
 mod tests {
     use super::*;
     use vela_core::app::AccountKey;
-    // Only the fixture-signing test needs it, and that test is behind the
-    // feature — an import that is unused with the feature off is a warning
-    // sitting in front of the next real one.
-    #[cfg(feature = "dev-fixtures")]
-    use vela_core::primitives::to_hex;
 
     fn account(keys: usize) -> Account {
         Account {
@@ -961,6 +1040,160 @@ mod tests {
             ..assertion
         };
         assert!(envelope(&foreign, &keys).is_err());
+    }
+
+    /// The Clear Signer's answer goes into the envelope exactly as a
+    /// passkey's does (spec 071). The page is handed the ASSEMBLED operation
+    /// with the fee leg after the person's calls, the answer is accepted only
+    /// over the digest computed here, and the contract signature names the
+    /// verifier of the key that actually signed.
+    #[test]
+    fn the_clear_signers_answer_becomes_the_same_envelope() {
+        use crate::executor::clear_signer::tests::{
+            callback_of, http, page_of, page_result, result_query, signing_key, wallet_key,
+        };
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![
+            wallet_key(&signing_key(9), &[0x99]),
+            wallet_key(&signing_key(7), &credential),
+        ];
+        let op = UserOperation {
+            sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            nonce: "0x7".to_owned(),
+            init_code: vec![],
+            call_data: vec![0x7b, 0xb3, 0x74, 0x28],
+            verification_gas_limit: 300_000,
+            call_gas_limit: 200_000,
+            pre_verification_gas: 110_000,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: vec![],
+            signature: vec![],
+        };
+        let inner = vec![MultiSendCall {
+            to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
+            value_hex: "0x1".to_owned(),
+            data: vec![],
+        }];
+        let digest = calculate_safe_op_hash(&op, 100).unwrap_or_else(|e| unreachable!("{e}"));
+        let (channel, _changed) = Channel::new();
+        let ask = Ask::own(None);
+        let signed = std::thread::scope(|scope| {
+            let ceremony = scope.spawn(|| {
+                let mut signer = Signer::ClearSigner {
+                    ask: &ask,
+                    page: "https://sign.getvela.app/",
+                    channel: &channel,
+                };
+                signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            });
+            let (port, token) = callback_of(&page_of(&channel));
+            let result = page_result(&signing_key(7), &credential, &digest);
+            http(port, "GET", &result_query(&token, &result));
+            ceremony
+                .join()
+                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        });
+        let assertion = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
+        let signature = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
+        // The second key signed, so its own proxy verifies — not the shared
+        // signer the first key uses.
+        let key = vela_core::safe::parse_public_key(&keys[1].public_key_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let proxy = vela_core::safe::compute_webauthn_signer_address(&key.x, &key.y)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(
+            vela_core::primitives::to_hex(&signature[24..44], true).to_lowercase(),
+            proxy.to_lowercase()
+        );
+
+        // Closed without signing: the request stays open, as for a
+        // dismissed passkey sheet — and the sheet has its sentence.
+        let declined = std::thread::scope(|scope| {
+            let ceremony = scope.spawn(|| {
+                let mut signer = Signer::ClearSigner {
+                    ask: &ask,
+                    page: "https://sign.getvela.app/",
+                    channel: &channel,
+                };
+                signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            });
+            let (port, token) = callback_of(&page_of(&channel));
+            http(
+                port,
+                "POST",
+                &format!("/vela?t={token}&error=user_rejected"),
+            );
+            ceremony
+                .join()
+                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        });
+        assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(
+            channel.ended(),
+            Some(crate::executor::clear_signer::Refusal::Closed)
+        );
+    }
+
+    /// A message through the Clear Signer (spec 071): the page is told the
+    /// site's own request and no operation, the answer is accepted only over
+    /// the Safe's `SafeMessage` hash of the original computed here, and it
+    /// comes back as the EIP-1271 envelope a passkey's would.
+    #[test]
+    fn a_message_through_the_clear_signer_is_the_same_1271_signature() {
+        use crate::executor::clear_signer::tests::{
+            callback_of, http, page_of, page_result, result_query, signing_key, wallet_key,
+        };
+        const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![wallet_key(&signing_key(7), &credential)];
+        let original = [0x42_u8; 32];
+        let challenge =
+            compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
+        let (channel, _changed) = Channel::new();
+        let ask = Ask {
+            method: "personal_sign".to_owned(),
+            params: serde_json::json!(["0x68656c6c6f", SAFE]),
+            origin: "https://app.example".to_owned(),
+            account_name: None,
+        };
+        // The request the page would get: the site's, and no operation.
+        let request = ask.request(100, SAFE, &keys, None);
+        assert_eq!(request["intent"]["method"], "personal_sign");
+        assert!(request["context"].get("operation").is_none());
+
+        let signed = std::thread::scope(|scope| {
+            let ceremony = scope.spawn(|| {
+                sign_message(
+                    100,
+                    SAFE,
+                    &original,
+                    &keys,
+                    Signer::ClearSigner {
+                        ask: &ask,
+                        page: "https://sign.getvela.app/",
+                        channel: &channel,
+                    },
+                )
+            });
+            let (port, token) = callback_of(&page_of(&channel));
+            let result = page_result(&signing_key(7), &credential, &challenge);
+            http(port, "GET", &result_query(&token, &result));
+            ceremony
+                .join()
+                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        });
+        let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
+        assert!(signature.starts_with("0x"));
+        // A one-key wallet signs through the shared WebAuthn signer.
+        assert!(
+            signature.to_lowercase().contains(
+                &vela_core::safe::WEBAUTHN_SIGNER
+                    .trim_start_matches("0x")
+                    .to_lowercase()
+            ),
+            "{signature}"
+        );
     }
 
     // -- live (`cargo test executor::user_op -- --ignored --test-threads=1`) --

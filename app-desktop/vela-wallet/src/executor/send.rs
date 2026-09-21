@@ -40,9 +40,11 @@ use vela_core::app::send::{
 };
 use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
+use vela_core::wallet_keys::DeviceKey;
 
+use crate::executor::clear_signer::{self, Ask};
 use crate::executor::passkey::{self, Ceremony};
-use crate::executor::user_op::{self, QuotedFee};
+use crate::executor::user_op::{self, QuotedFee, Signer};
 use crate::executor::{abi, balances, identity, pool, relay, storage};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -74,6 +76,32 @@ pub struct SendContext {
     /// Raised by the sign closure the instant the prompt opens; the host
     /// polls it and dispatches `SigningStarted` once.
     pub signing_started: Arc<AtomicBool>,
+    /// Every founding key's credential id and stored transports — what the
+    /// core's `sign_route` reads to pin the key of a chosen kind.
+    pub device_keys: Vec<DeviceKey>,
+    /// The account's name: the Clear Signer's page points the person at a
+    /// passkey with it.
+    pub account_name: Option<String>,
+    /// The Clear Signer (spec 071): whether this send goes to it, and its
+    /// waiting sheet. The host swaps in the channel it listens to; the one
+    /// made here routes nothing.
+    pub clear_signer: Arc<clear_signer::Channel>,
+}
+
+/// Which key a "Sign with" pins, and how it is reached — the core's
+/// `sign_route`, in this shell's vocabulary. `None` for `auto`, for the
+/// Clear Signer (a page, not a key) and for a wallet with no usable
+/// credential: the stored route stands rather than a guess.
+#[must_use]
+pub fn passkey_route(device: &[DeviceKey], method: &str) -> Option<(String, KeyMethod)> {
+    let route = vela_core::wallet_keys::sign_route(device, method)?;
+    let method = match route.method.as_str() {
+        "platform" => KeyMethod::Platform,
+        "hybrid" => KeyMethod::Hybrid,
+        "security_key" => KeyMethod::SecurityKey,
+        _ => return None,
+    };
+    Some((route.credential_id, method))
 }
 
 impl SendContext {
@@ -106,7 +134,33 @@ impl SendContext {
             pinned_credential,
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
+            device_keys: account
+                .keys
+                .iter()
+                .map(|key| DeviceKey {
+                    credential_id: key.credential_id.clone(),
+                    public_key_hex: key.public_key_hex.clone(),
+                    name: key.name.clone(),
+                    transports: key.transports.clone(),
+                })
+                .collect(),
+            account_name: (!account.name.is_empty()).then(|| account.name.clone()),
+            clear_signer: clear_signer::Channel::new().0,
         }
+    }
+
+    /// The default "Sign with" from Settings (spec 071 — "every signature you
+    /// start in Vela begins here"). The send has no picker of its own, so the
+    /// default IS its choice: a place a passkey is re-pins the key the core
+    /// picks for it, the Clear Signer routes the send to `page`, and `auto`
+    /// keeps the route derived from the first key.
+    pub fn sign_with(&mut self, method: &str, page: &str) {
+        if let Some((credential, key_method)) = passkey_route(&self.device_keys, method) {
+            self.pinned_credential = Some(credential);
+            self.key_method = key_method;
+        }
+        self.clear_signer
+            .choose((method == vela_core::clear_signer::METHOD).then(|| page.to_owned()));
     }
 }
 
@@ -423,13 +477,25 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                         &ctx.ceremony,
                     )
                 };
+                // The person's own send: no site asked, so the page is told
+                // the operation's calls (contract §1).
+                let ask = Ask::own(ctx.account_name.clone());
+                let page = ctx.clear_signer.chosen();
+                let signer = match &page {
+                    Some(page) => Signer::ClearSigner {
+                        ask: &ask,
+                        page,
+                        channel: &ctx.clear_signer,
+                    },
+                    None => Signer::Passkey(&mut sign),
+                };
                 match user_op::submit(
                     chain_id,
                     &account,
                     &calls,
                     gas_fee_token.as_deref(),
                     &keys,
-                    &mut sign,
+                    signer,
                     quoted,
                 ) {
                     Ok(user_op_hash) => SendShellResult::Submitted {
@@ -544,6 +610,29 @@ mod tests {
         let legacy = SendContext::new(&account("", 0), ceremony());
         assert_eq!(legacy.keys.len(), 1);
         assert_eq!(legacy.key_method, KeyMethod::SecurityKey);
+    }
+
+    /// The default "Sign with" is the send's own (spec 071): a place a
+    /// passkey is re-pins the key of that kind, the Clear Signer routes the
+    /// send to the page Settings names, and `auto` changes nothing.
+    #[test]
+    fn the_default_sign_with_routes_the_send() {
+        let mut ctx = SendContext::new(&account("internal", 2), ceremony());
+        ctx.sign_with("auto", "https://sign.getvela.app/");
+        assert_eq!(ctx.key_method, KeyMethod::Platform);
+        assert_eq!(ctx.pinned_credential.as_deref(), Some("cred0"));
+        assert_eq!(ctx.clear_signer.chosen(), None);
+
+        ctx.sign_with("security_key", "https://sign.getvela.app/");
+        assert_eq!(ctx.key_method, KeyMethod::SecurityKey);
+        assert_eq!(ctx.clear_signer.chosen(), None);
+
+        ctx.sign_with("clear_signer", "http://localhost:8140/");
+        assert_eq!(
+            ctx.clear_signer.chosen().as_deref(),
+            Some("http://localhost:8140/")
+        );
+        assert_eq!(ctx.account_name.as_deref(), Some("Wallet"));
     }
 
     #[test]

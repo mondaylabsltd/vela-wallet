@@ -31,6 +31,9 @@ pub enum SettingsPage {
     /// The default transaction speed (spec 069) — between the endpoints and
     /// the storage, as the web's desktop layout places it.
     FeeSpeed,
+    /// How this device signs by default, and the Clear Signer's page (spec
+    /// 071) — beside the speed, where every shell puts the two.
+    Signing,
     Storage,
     About,
 }
@@ -38,7 +41,7 @@ pub enum SettingsPage {
 impl SettingsPage {
     /// The nav column, in order. One array so the rail and the tests can never
     /// disagree about what the section contains.
-    pub const ALL: [SettingsPage; 9] = [
+    pub const ALL: [SettingsPage; 10] = [
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
@@ -46,6 +49,7 @@ impl SettingsPage {
         SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
         SettingsPage::FeeSpeed,
+        SettingsPage::Signing,
         SettingsPage::Storage,
         SettingsPage::About,
     ];
@@ -59,6 +63,7 @@ impl SettingsPage {
             SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::FeeSpeed => Icon::Clock,
+            SettingsPage::Signing => Icon::Lock,
             SettingsPage::Storage => Icon::HardDrive,
             SettingsPage::About => Icon::Info,
         }
@@ -73,6 +78,7 @@ impl SettingsPage {
             SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
+            SettingsPage::Signing => s.nav_signing.clone(),
             SettingsPage::Storage => s.nav_storage.clone(),
             SettingsPage::About => s.nav_about.clone(),
         }

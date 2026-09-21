@@ -37,6 +37,7 @@ use vela_core::app::clear_signing::{
 use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
+use vela_core::app::sign_pref::{self, SignPref};
 use vela_core::app::sign_request::{
     Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignQuotedFee, SignRequest,
     SignShellResult, SignView,
@@ -44,6 +45,7 @@ use vela_core::app::sign_request::{
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
+use crate::executor::clear_signer;
 use crate::executor::now_ms;
 use crate::executor::passkey::WindowHandle;
 use crate::executor::sign_request::{self as sign_executor, SignAnswer, SignContext};
@@ -104,7 +106,9 @@ pub struct SigningHost {
     pub responded: bool,
     /// Answers for a site, drained by the page.
     answers: Vec<TransportAnswer>,
-    /// "Sign with": this request's choice, and whether its list is open.
+    /// "Sign with": this request's choice, and whether its list is open. It
+    /// starts at the default Settings keeps (`sign_pref`) and never writes
+    /// back to it — a choice here is about this one request.
     pub sign_method: String,
     pub sign_with_open: bool,
     /// The fee coin list, open in the sheet (the web's `feeOpen`).
@@ -155,17 +159,37 @@ pub struct SigningHost {
 }
 
 impl SigningHost {
-    /// `None` toggles the list; an id picks a method and closes it.
-    pub fn sign_with(&mut self, id: Option<&str>) {
+    /// `None` toggles the list; an id picks a method and closes it. Only a
+    /// name this build offers is taken (`sign_pref::parse_method`); the Clear
+    /// Signer is routed to the page Settings names right now.
+    pub fn sign_with(&mut self, id: Option<&str>, cx: &mut Context<Self>) {
         let Some(id) = id else {
             self.sign_with_open = !self.sign_with_open;
             return;
         };
-        if matches!(id, "auto" | "platform" | "hybrid" | "security_key") {
-            self.ctx.choose_method(id);
-            id.clone_into(&mut self.sign_method);
+        if let Some(method) = sign_pref::parse_method(id) {
+            let page = crate::resident::resident::<SignPref>(cx)
+                .read(cx)
+                .view()
+                .signer_url;
+            self.ctx.choose_method(method, &page);
+            method.clone_into(&mut self.sign_method);
         }
         self.sign_with_open = false;
+    }
+
+    /// The Clear Signer's waiting sheet and its last word (spec 071).
+    pub fn clear_signer(&self) -> Arc<clear_signer::Channel> {
+        Arc::clone(&self.ctx.clear_signer)
+    }
+
+    /// Something on the Clear Signer's channel changed: hand the browser the
+    /// page if a ceremony asked for it, and redraw.
+    fn clear_signer_changed(&mut self, cx: &mut Context<Self>) {
+        if let Some(url) = self.ctx.clear_signer.take_page() {
+            cx.open_url(&url);
+        }
+        cx.notify();
     }
 
     pub fn open(
@@ -175,7 +199,12 @@ impl SigningHost {
         cx: &mut Context<Self>,
     ) -> Self {
         let channel = CeremonyChannel::new();
-        let ctx = SignContext::new(account, channel.ceremony(window_handle));
+        let mut ctx = SignContext::new(account, channel.ceremony(window_handle));
+        // A site's request is told to the Clear Signer as the site's; the
+        // wallet's own (the key backup) as the wallet's own send.
+        ctx.site = (request.transport_id != WALLET_TRANSPORT).then(|| request.origin.clone());
+        let (clear_signer, changed) = clear_signer::Channel::new();
+        ctx.clear_signer = clear_signer;
         let sign = CoreHost::<SignRequest>::new();
         let clear = CoreHost::<ClearSigning>::new();
         let guard = CoreHost::<ApprovalGuard>::new();
@@ -215,6 +244,27 @@ impl SigningHost {
         })
         .detach();
         speed_control::reset(&mut host, cx);
+        // Every request starts at the default "Sign with" (spec 071). Read
+        // once: the sheet's own picker is the person's say from here on.
+        let method = crate::resident::resident::<SignPref>(cx)
+            .read(cx)
+            .view()
+            .method;
+        host.sign_with(Some(&method), cx);
+        // The Clear Signer's channel speaks up whenever a ceremony waits,
+        // ends, or wants the page opened. The stream ends with the host.
+        cx.spawn(async move |host, cx| {
+            let mut changed = changed;
+            while changed.next().await.is_some() {
+                if host
+                    .update(cx, |host, cx| host.clear_signer_changed(cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
         host.begin(&request, &account.address, cx);
         host
     }
@@ -664,6 +714,14 @@ impl SigningHost {
         }
         self.guard_view = self.guard.view();
         cx.notify();
+    }
+}
+
+impl Drop for SigningHost {
+    /// The column is gone: a Clear Signer still waiting stops now rather
+    /// than holding a port for five minutes nobody can see.
+    fn drop(&mut self) {
+        self.ctx.clear_signer.close();
     }
 }
 

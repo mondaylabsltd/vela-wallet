@@ -38,6 +38,10 @@ pub mod camera;
 pub mod chain;
 pub mod chain_tokens;
 pub mod chainlink;
+pub mod clear_signer;
+/// The Clear Signer against the real page in a real browser — local only.
+#[cfg(test)]
+mod clear_signer_e2e;
 pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;
@@ -63,6 +67,7 @@ pub mod receive_watch;
 pub mod registry;
 pub mod relay;
 pub mod send;
+pub mod sign_pref;
 /// The signing panel's seven operations.
 ///
 pub mod sign_request;

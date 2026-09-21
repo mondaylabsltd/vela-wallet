@@ -6,6 +6,7 @@
 //! what "a swap" is, which is what makes the six-rung ERC-7730 degradation
 //! ladder structural rather than a fork per case.
 
+pub mod clear_signer;
 pub mod components;
 pub mod fixtures;
 pub mod live;
@@ -35,9 +36,12 @@ pub struct SigningStrings {
     pub panel_title: SharedString,
     pub signing_account: SharedString,
     pub advanced_toggle: SharedString,
-    /// "Sign with" and its four choices — the create flow's own words.
+    /// "Sign with" and its choices, in the core's order (`SIGN_METHODS`):
+    /// the create flow's own words for where a passkey is, and the Clear
+    /// Signer's name with the line under it (spec 071).
     pub sign_with: SharedString,
-    pub sign_with_options: [(&'static str, SharedString); 4],
+    pub sign_with_options: Vec<(&'static str, SharedString)>,
+    pub clear_signer_body: SharedString,
     /// The wallet's own key backup, in the person's language.
     pub backup_intent: SharedString,
     pub backup_labels: [SharedString; 3],
@@ -217,15 +221,11 @@ impl SigningStrings {
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
             sign_with: s("signWith"),
-            sign_with_options: [
-                ("auto", loc.t("common.automatic")),
-                ("platform", loc.t("onboarding.create.methodPlatformTitle")),
-                ("hybrid", loc.t("onboarding.create.methodHybridTitle")),
-                (
-                    "security_key",
-                    loc.t("onboarding.create.methodSecurityKeyTitle"),
-                ),
-            ],
+            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
+                .iter()
+                .map(|method| (*method, loc.t(sign_method_key(method))))
+                .collect(),
+            clear_signer_body: s("clearSignerBody"),
             backup_intent: loc.t("settingsModals.backup.intent"),
             backup_labels: [
                 loc.t("settingsModals.backup.registeredAs"),
@@ -395,9 +395,44 @@ pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
     out
 }
 
+/// The words for one "Sign with" value (contract §5) — shared by the sheet's
+/// picker and Settings, so the two never name one way of signing twice.
+#[must_use]
+pub fn sign_method_key(method: &str) -> &'static str {
+    match method {
+        "platform" => "onboarding.create.methodPlatformTitle",
+        "hybrid" => "onboarding.create.methodHybridTitle",
+        "security_key" => "onboarding.create.methodSecurityKeyTitle",
+        "clear_signer" => "componentsUi.signing.clearSignerTitle",
+        _ => "common.automatic",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every way to sign the core offers has its own words, and none of them
+    /// is the fallback's — a fifth method titled "Automatic" would be a
+    /// picker offering one thing twice.
+    #[test]
+    fn every_offered_method_has_its_own_words() {
+        let loc = Loc::from_env();
+        let s = SigningStrings::resolve(&loc);
+        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
+        let mut keys: Vec<&str> = ids.iter().map(|id| sign_method_key(id)).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), ids.len(), "two methods share a title");
+        for (id, title) in &s.sign_with_options {
+            assert_ne!(title.as_ref(), sign_method_key(id), "`{id}` echoed its key");
+        }
+        assert_ne!(
+            s.clear_signer_body.as_ref(),
+            "componentsUi.signing.clearSignerBody"
+        );
+    }
 
     #[test]
     fn signing_strings_resolve_without_echo() {
