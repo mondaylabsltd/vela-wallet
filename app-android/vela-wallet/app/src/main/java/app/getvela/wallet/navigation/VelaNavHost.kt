@@ -916,6 +916,13 @@ fun VelaNavHost(
                         currency,
                         flows.selected,
                         manageTokens,
+                        // Issue #266: every input the builder reads is a key. Without the
+                        // filter, picking a network changed nothing until some OTHER key
+                        // happened to move — Polygon "worked" because its feed differed,
+                        // Base and every chain after it kept the previous list.
+                        chainFilter,
+                        chainNames,
+                        explorers,
                         // Spec 049: a figure baked into this model follows the presets.
                         Formats.current,
                     ) {
@@ -1951,7 +1958,7 @@ private fun liveFlow(
         is FlowBase.History ->
             FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings)))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {

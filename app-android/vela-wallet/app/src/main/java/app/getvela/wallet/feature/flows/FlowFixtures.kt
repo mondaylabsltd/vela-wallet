@@ -378,17 +378,20 @@ object FlowFixtures {
         searchPlaceholder = s.t(I18nKeys.Flows.ASSETS_SEARCH),
         rows = if (empty) emptyList() else ASSETS.map { it.row() },
         addByAddress = s.t(I18nKeys.Flows.ASSETS_ADD_BY_ADDRESS),
-        empty = if (empty) {
-            AssetsEmptyModel(
-                title = s.t(I18nKeys.Flows.ASSETS_EMPTY_TITLE),
-                caption = s.t(I18nKeys.Flows.ASSETS_EMPTY_SUBTEXT),
-                cta = s.t(I18nKeys.Flows.ADD_TOKEN_TITLE),
-                hintTitle = s.t(I18nKeys.Flows.ASSETS_NOT_SHOWING_TITLE),
-                hintBody = s.t(I18nKeys.Flows.ASSETS_NOT_SHOWING_BODY),
-            )
-        } else {
-            null
-        },
+        empty = if (empty) assetsEmpty(s) else null,
+    )
+
+    /**
+     * T4's guided-empty body. Also what T1 shows when the chosen network holds
+     * nothing while others do (issue #266) — the web's `emptyCopy`, the same
+     * words in both places.
+     */
+    fun assetsEmpty(s: VelaStrings) = AssetsEmptyModel(
+        title = s.t(I18nKeys.Flows.ASSETS_EMPTY_TITLE),
+        caption = s.t(I18nKeys.Flows.ASSETS_EMPTY_SUBTEXT),
+        cta = s.t(I18nKeys.Flows.ADD_TOKEN_TITLE),
+        hintTitle = s.t(I18nKeys.Flows.ASSETS_NOT_SHOWING_TITLE),
+        hintBody = s.t(I18nKeys.Flows.ASSETS_NOT_SHOWING_BODY),
     )
 
     private fun tokenDetail(s: VelaStrings) = TokenDetailModel(
