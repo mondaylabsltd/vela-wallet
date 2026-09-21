@@ -48,6 +48,10 @@
 		{/each}
 	</ul>
 
+	{#if model.recipientTag !== undefined}
+		<p class="tag">{model.recipientTag}</p>
+	{/if}
+
 	{#if model.breakdown !== undefined}
 		<Breakdown rows={model.breakdown} />
 	{/if}
@@ -124,6 +128,15 @@
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-subtle);
+	}
+	/* The first-time tell, under the facts it is about, in the warning colour:
+	   a never-before-paid address is what a poisoned look-alike is. */
+	.tag {
+		margin: 0;
+		padding-inline: var(--space-lg);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
+		color: var(--color-warning-base);
 	}
 	.alert {
 		margin: 0;
