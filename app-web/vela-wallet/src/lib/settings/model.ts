@@ -143,6 +143,8 @@ export type SettingsOverlayId =
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
+	/** Spec 072: removing a custom network, asked before it happens. */
+	| 'remove-network'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -602,6 +604,8 @@ export interface SettingsHomeModel {
 		addLabel: string;
 		/** The custom row's delete control (spec 028 Phase 8) — it used to borrow `addLabel`. */
 		removeLabel: string;
+		/** The question the delete control asks first (spec 072); its title is the network's name. */
+		removeSheet: ConfirmSheetModel;
 	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
@@ -775,6 +779,7 @@ export interface SettingsDesktopModel {
 		subtitle: string;
 		addLabel: string;
 		removeLabel: string;
+		removeSheet: ConfirmSheetModel;
 		rows: NetworkRowModel[];
 		detail: NetworkDetailModel;
 	};
@@ -783,6 +788,8 @@ export interface SettingsDesktopModel {
 	storage: StorageModel;
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
 	clearCachesSheet: ConfirmSheetModel;
+	/** The phone's erase sheet, as a dialog (spec 072) — the same words, the same failure. */
+	eraseSheet: ConfirmSheetModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

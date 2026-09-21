@@ -842,6 +842,17 @@ function clearCachesSheet(m: SettingsMessages): ConfirmSheetModel {
 	};
 }
 
+/** What removing a custom network asks first; the sheet's title is the network's name. */
+function removeNetworkSheet(m: SettingsMessages): ConfirmSheetModel {
+	return {
+		title: m.networks.remove,
+		body: m.networks.removeBody,
+		confirm: m.networks.removeConfirm,
+		cancel: m.networks.removeCancel,
+		tone: 'danger'
+	};
+}
+
 function eraseSheet(m: SettingsMessages): ConfirmSheetModel {
 	return {
 		title: m.erase.title,
@@ -1100,7 +1111,8 @@ export function buildMobileState(
 			subtitle: m.advanced.networksSubtitle,
 			rows: networkRows(m),
 			addLabel: m.advanced.addNetworkTitle,
-			removeLabel: m.networks.remove
+			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m)
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
@@ -1301,6 +1313,7 @@ export function buildDesktopState(
 			subtitle: m.advanced.networksSubtitle,
 			addLabel: m.advanced.addNetworkTitle,
 			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m),
 			// DST4 expands Ethereum in place and drops the built-ins below Base
 			// into the custom tail, which is what the mock shows.
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),
@@ -1310,6 +1323,7 @@ export function buildDesktopState(
 		endpoints: endpoints(m, true),
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),
+		eraseSheet: eraseSheet(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

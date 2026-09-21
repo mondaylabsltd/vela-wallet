@@ -14,6 +14,7 @@ import {
 	liveNetworkRows,
 	liveRelayer,
 	liveRpcProviders,
+	withEraseFailure,
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop
 } from './live';
@@ -245,6 +246,16 @@ describe('liveRpcProviders', () => {
 		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
 		expect(all.find((p) => p.id === 'alchemy')?.linkUrl).toBe('https://dashboard.alchemy.com/');
 		expect(model.providers.find((p) => p.id === 'alchemy')?.linkUrl).toBeUndefined();
+	});
+});
+
+describe('withEraseFailure', () => {
+	it('says a failed erase in the sheet, on either layout', () => {
+		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, true);
+		expect(desktop.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failed });
+		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, false);
+		expect(home.eraseSheet.callout?.text).toBe(m.erase.loses);
 	});
 });
 

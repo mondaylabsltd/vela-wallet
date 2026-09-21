@@ -135,6 +135,10 @@ export interface SettingsMessages {
 		chainId: string;
 		/** The delete control on a custom row — "Remove Network" (spec 028 Phase 8). */
 		remove: string;
+		/** What removing one asks first (spec 072). */
+		removeBody: string;
+		removeConfirm: string;
+		removeCancel: string;
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
@@ -501,6 +505,9 @@ export const SETTINGS_KEYS = [
 	'onboarding.create.providerSecurityKey',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
+	'settingsModals.network.removeBody',
+	'settingsModals.network.removeConfirm',
+	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',

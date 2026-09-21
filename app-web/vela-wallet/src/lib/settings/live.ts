@@ -58,6 +58,7 @@ import type {
 	RpcFixModel,
 	SettingsDesktopModel,
 	CheckItemModel,
+	ConfirmSheetModel,
 	EndpointsModel,
 	NetworkDetailModel,
 	NetworkRowModel,
@@ -936,11 +937,11 @@ export function withLivePreferencesDesktop(
  * distinction it preserves is the whole reason `EraseIncompleteError` exists:
  * data is still here, and the person is still signed in.
  */
-export function withEraseFailure(
-	model: SettingsHomeModel,
+export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
+	model: M,
 	m: SettingsMessages,
 	failed: boolean
-): SettingsHomeModel {
+): M {
 	if (!failed) return model;
 	return {
 		...model,
@@ -1102,8 +1103,7 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 	};
 	// The report's rows are the catalog's, each with its group: a drawn row
 	// the catalog has no entry for keeps its drawn meta.
-	const measured = (id: string): StorageItemReport | undefined =>
-		report.items[id as StorageItemId];
+	const measured = (id: string): StorageItemReport | undefined => report.items[id as StorageItemId];
 	return {
 		...model,
 		storage: {

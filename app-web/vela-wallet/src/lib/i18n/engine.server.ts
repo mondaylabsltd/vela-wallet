@@ -404,6 +404,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			invalid: k('settingsModals.health.invalid'),
 			chainId: k('settingsModals.network.chainId'),
 			remove: k('settingsModals.network.removeTitle'),
+			removeBody: k('settingsModals.network.removeBody'),
+			removeConfirm: k('settingsModals.network.removeConfirm'),
+			removeCancel: k('settingsModals.network.removeCancel'),
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
 			mismatch: k('settingsModals.network.rpcChainMismatch')
