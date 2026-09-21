@@ -132,6 +132,27 @@ class FeedExecutor(
         }
     }
 
+    /**
+     * Has this device ever sent to [address] — an outgoing transfer or a dApp
+     * transaction? The send machine's recipient-risk probe asks it; a "no"
+     * is the "first time sending to this address" tag against address
+     * poisoning. The web's `hasPriorInteraction` rule, verbatim: the same
+     * persisted store, `to` compared lower-cased, and only `send`, `dapp_tx`
+     * or a record with no `type` (a legacy send) counts. An unreadable store
+     * answers `false` — the web's catch, so the tag shows rather than hides.
+     */
+    suspend fun hasSentTo(address: String): Boolean {
+        val lc = address.lowercase()
+        val raw = runCatching { store.read(KeyValueStore.Keys.TRANSACTIONS) }.getOrNull() ?: return false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return false
+        return (0 until array.length()).any { index ->
+            val row = array.optJSONObject(index) ?: return@any false
+            val to = if (row.has("to") && !row.isNull("to")) row.optString("to").lowercase() else null
+            val type = row.opt("type")
+            to == lc && (type == "send" || type == "dapp_tx" || !row.has("type"))
+        }
+    }
+
     private fun record(row: JSONObject): FeedTxRecord? {
         val id = row.optString("id").ifBlank { return null }
         val timestamp = row.numberOrNull("timestamp") ?: return null
