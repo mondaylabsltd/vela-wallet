@@ -2056,6 +2056,174 @@ public func FfiConverterTypeCcidPort_lower(_ value: CcidPort) -> UInt64 {
 
 
 /**
+ * One TCP connection on the app's loopback listener, spoken to byte for
+ * byte: the shell writes what [`ClearSignerStep::write`] holds, closes when
+ * told, and keeps listening until a step carries an outcome. The answer is
+ * verified here, so an outcome is already the verdict.
+ */
+public protocol ClearSignerConnectionProtocol: AnyObject, Sendable {
+    
+    /**
+     * The socket closed under the connection: `Declined` when a page that
+     * had the request went away, `None` when it never proved itself.
+     */
+    func closed()  -> ClearSignerRefusal?
+    
+    func feed(bytes: Data)  -> ClearSignerStep
+    
+}
+/**
+ * One TCP connection on the app's loopback listener, spoken to byte for
+ * byte: the shell writes what [`ClearSignerStep::write`] holds, closes when
+ * told, and keeps listening until a step carries an outcome. The answer is
+ * verified here, so an outcome is already the verdict.
+ */
+open class ClearSignerConnection: ClearSignerConnectionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_clearsignerconnection(self.handle, $0) }
+    }
+    /**
+     * `signer_url` is the page the app opened (its origin is the only one
+     * let in), `request_json` [`clear_signer_request`]'s, `digest` what the
+     * passkey must sign, `keys` the account's.
+     */
+public convenience init(signerUrl: String, token: String, id: String, requestJson: String, digest: Data, keys: [WalletKeyRecord])throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_clearsignerconnection_new(
+        FfiConverterString.lower(signerUrl),
+        FfiConverterString.lower(token),
+        FfiConverterString.lower(id),
+        FfiConverterString.lower(requestJson),
+        FfiConverterData.lower(digest),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_clearsignerconnection(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The socket closed under the connection: `Declined` when a page that
+     * had the request went away, `None` when it never proved itself.
+     */
+open func closed() -> ClearSignerRefusal?  {
+    return try!  FfiConverterOptionTypeClearSignerRefusal.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerconnection_closed(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+open func feed(bytes: Data) -> ClearSignerStep  {
+    return try!  FfiConverterTypeClearSignerStep_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerconnection_feed(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(bytes),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerConnection: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ClearSignerConnection
+
+    public static func lift(_ handle: UInt64) throws -> ClearSignerConnection {
+        return ClearSignerConnection(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ClearSignerConnection) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerConnection {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ClearSignerConnection, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerConnection_lift(_ handle: UInt64) throws -> ClearSignerConnection {
+    return try FfiConverterTypeClearSignerConnection.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerConnection_lower(_ value: ClearSignerConnection) -> UInt64 {
+    return FfiConverterTypeClearSignerConnection.lower(value)
+}
+
+
+
+
+
+
+/**
  * Clear signing: what a transaction or message DOES, and how
  * dangerous it is — the never-blind ladder.
  */
@@ -5594,6 +5762,164 @@ public func FfiConverterTypeSessionCore_lower(_ value: SessionCore) -> UInt64 {
 
 
 /**
+ * How this device signs by default (spec 071): the "Sign with" every
+ * signing sheet starts at, and which Clear Signer page it opens.
+ */
+public protocol SignPrefCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * How this device signs by default (spec 071): the "Sign with" every
+ * signing sheet starts at, and which Clear Signer page it opens.
+ */
+open class SignPrefCore: SignPrefCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_signprefcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_signprefcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_signprefcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signprefcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signprefcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signprefcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignPrefCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = SignPrefCore
+
+    public static func lift(_ handle: UInt64) throws -> SignPrefCore {
+        return SignPrefCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: SignPrefCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SignPrefCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: SignPrefCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignPrefCore_lift(_ handle: UInt64) throws -> SignPrefCore {
+    return try FfiConverterTypeSignPrefCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignPrefCore_lower(_ value: SignPrefCore) -> UInt64 {
+    return FfiConverterTypeSignPrefCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * A dApp signing request's lifecycle: arrival, review, the gas
  * pre-check, the ceremony, the response, the record.
  */
@@ -6544,6 +6870,194 @@ public func FfiConverterTypeCableAdvert_lift(_ buf: RustBuffer) throws -> CableA
 #endif
 public func FfiConverterTypeCableAdvert_lower(_ value: CableAdvert) -> RustBuffer {
     return FfiConverterTypeCableAdvert.lower(value)
+}
+
+
+/**
+ * What the shell holds when it would sign.
+ */
+public struct ClearSignerInput: Equatable, Hashable {
+    /**
+     * The request's own method (`eth_sendTransaction`, `personal_sign`, …);
+     * EMPTY for the wallet's own send, whose intent is built from `calls`.
+     */
+    public var method: String
+    /**
+     * Its JSON-RPC params, verbatim (ignored when `method` is empty).
+     */
+    public var paramsJson: String
+    /**
+     * The requesting site's origin; empty for the wallet's own send.
+     */
+    public var origin: String
+    public var chainId: UInt32
+    public var chainName: String?
+    public var nativeSymbol: String?
+    public var account: String
+    public var accountName: String?
+    /**
+     * The account's credential ids, hex.
+     */
+    public var credentialIdsHex: [String]
+    /**
+     * For a transaction: the calls the operation carries BEFORE its fee leg
+     * (the wallet appends the fee last, so its index is `calls.len()`). With
+     * an empty `method` — the wallet's own send, which no site asked for —
+     * they are also the intent (`wallet_sendCalls`). Empty for a message.
+     */
+    public var calls: [UserOpCall]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The request's own method (`eth_sendTransaction`, `personal_sign`, …);
+         * EMPTY for the wallet's own send, whose intent is built from `calls`.
+         */method: String, 
+        /**
+         * Its JSON-RPC params, verbatim (ignored when `method` is empty).
+         */paramsJson: String, 
+        /**
+         * The requesting site's origin; empty for the wallet's own send.
+         */origin: String, chainId: UInt32, chainName: String?, nativeSymbol: String?, account: String, accountName: String?, 
+        /**
+         * The account's credential ids, hex.
+         */credentialIdsHex: [String], 
+        /**
+         * For a transaction: the calls the operation carries BEFORE its fee leg
+         * (the wallet appends the fee last, so its index is `calls.len()`). With
+         * an empty `method` — the wallet's own send, which no site asked for —
+         * they are also the intent (`wallet_sendCalls`). Empty for a message.
+         */calls: [UserOpCall]) {
+        self.method = method
+        self.paramsJson = paramsJson
+        self.origin = origin
+        self.chainId = chainId
+        self.chainName = chainName
+        self.nativeSymbol = nativeSymbol
+        self.account = account
+        self.accountName = accountName
+        self.credentialIdsHex = credentialIdsHex
+        self.calls = calls
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ClearSignerInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerInput {
+        return
+            try ClearSignerInput(
+                method: FfiConverterString.read(from: &buf), 
+                paramsJson: FfiConverterString.read(from: &buf), 
+                origin: FfiConverterString.read(from: &buf), 
+                chainId: FfiConverterUInt32.read(from: &buf), 
+                chainName: FfiConverterOptionString.read(from: &buf), 
+                nativeSymbol: FfiConverterOptionString.read(from: &buf), 
+                account: FfiConverterString.read(from: &buf), 
+                accountName: FfiConverterOptionString.read(from: &buf), 
+                credentialIdsHex: FfiConverterSequenceString.read(from: &buf), 
+                calls: FfiConverterSequenceTypeUserOpCall.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClearSignerInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.method, into: &buf)
+        FfiConverterString.write(value.paramsJson, into: &buf)
+        FfiConverterString.write(value.origin, into: &buf)
+        FfiConverterUInt32.write(value.chainId, into: &buf)
+        FfiConverterOptionString.write(value.chainName, into: &buf)
+        FfiConverterOptionString.write(value.nativeSymbol, into: &buf)
+        FfiConverterString.write(value.account, into: &buf)
+        FfiConverterOptionString.write(value.accountName, into: &buf)
+        FfiConverterSequenceString.write(value.credentialIdsHex, into: &buf)
+        FfiConverterSequenceTypeUserOpCall.write(value.calls, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerInput_lift(_ buf: RustBuffer) throws -> ClearSignerInput {
+    return try FfiConverterTypeClearSignerInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerInput_lower(_ value: ClearSignerInput) -> RustBuffer {
+    return FfiConverterTypeClearSignerInput.lower(value)
+}
+
+
+/**
+ * What to do after bytes arrived.
+ */
+public struct ClearSignerStep: Equatable, Hashable {
+    public var write: Data
+    public var close: Bool
+    public var outcome: ClearSignerOutcome?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(write: Data, close: Bool, outcome: ClearSignerOutcome?) {
+        self.write = write
+        self.close = close
+        self.outcome = outcome
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ClearSignerStep: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerStep: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerStep {
+        return
+            try ClearSignerStep(
+                write: FfiConverterData.read(from: &buf), 
+                close: FfiConverterBool.read(from: &buf), 
+                outcome: FfiConverterOptionTypeClearSignerOutcome.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClearSignerStep, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.write, into: &buf)
+        FfiConverterBool.write(value.close, into: &buf)
+        FfiConverterOptionTypeClearSignerOutcome.write(value.outcome, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerStep_lift(_ buf: RustBuffer) throws -> ClearSignerStep {
+    return try FfiConverterTypeClearSignerStep.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerStep_lower(_ value: ClearSignerStep) -> RustBuffer {
+    return FfiConverterTypeClearSignerStep.lower(value)
 }
 
 
@@ -8188,6 +8702,227 @@ public func FfiConverterTypeCableFrameOutcome_lower(_ value: CableFrameOutcome) 
 
 
 
+/**
+ * The page's answer, judged.
+ */
+
+public enum ClearSignerOutcome: Equatable, Hashable {
+    
+    /**
+     * Over this digest, by this wallet's key, user-verified: sign with it
+     * (`user_op_sign` / `eip1271_signature`) exactly as with any passkey.
+     */
+    case accepted(credentialIdHex: String, assertion: WebAuthnAssertion
+    )
+    case refused(refusal: ClearSignerRefusal
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ClearSignerOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = ClearSignerOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .accepted(credentialIdHex: try FfiConverterString.read(from: &buf), assertion: try FfiConverterTypeWebAuthnAssertion.read(from: &buf)
+        )
+        
+        case 2: return .refused(refusal: try FfiConverterTypeClearSignerRefusal.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClearSignerOutcome, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .accepted(credentialIdHex,assertion):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(credentialIdHex, into: &buf)
+            FfiConverterTypeWebAuthnAssertion.write(assertion, into: &buf)
+            
+        
+        case let .refused(refusal):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeClearSignerRefusal.write(refusal, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerOutcome_lift(_ buf: RustBuffer) throws -> ClearSignerOutcome {
+    return try FfiConverterTypeClearSignerOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerOutcome_lower(_ value: ClearSignerOutcome) -> RustBuffer {
+    return FfiConverterTypeClearSignerOutcome.lower(value)
+}
+
+
+
+/**
+ * Why a Clear Signer answer was not accepted — or what the page said.
+ */
+
+public enum ClearSignerRefusal: Equatable, Hashable {
+    
+    /**
+     * The person closed the page or declined.
+     */
+    case declined
+    /**
+     * The page's own rules refused the request (`code` is the page's).
+     */
+    case pageRefused(code: String
+    )
+    /**
+     * Signed something other than this request's digest — never submitted.
+     */
+    case wrongChallenge
+    /**
+     * The key that answered is not one of this wallet's.
+     */
+    case foreignKey
+    /**
+     * The signature does not verify under the wallet's key.
+     */
+    case badSignature
+    /**
+     * The passkey did not verify the person.
+     */
+    case notVerified
+    /**
+     * An answer for another request.
+     */
+    case wrongToken
+    /**
+     * Not the protocol's shape.
+     */
+    case malformed(detail: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension ClearSignerRefusal: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerRefusal: FfiConverterRustBuffer {
+    typealias SwiftType = ClearSignerRefusal
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerRefusal {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .declined
+        
+        case 2: return .pageRefused(code: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .wrongChallenge
+        
+        case 4: return .foreignKey
+        
+        case 5: return .badSignature
+        
+        case 6: return .notVerified
+        
+        case 7: return .wrongToken
+        
+        case 8: return .malformed(detail: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ClearSignerRefusal, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .declined:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .pageRefused(code):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(code, into: &buf)
+            
+        
+        case .wrongChallenge:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .foreignKey:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .badSignature:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .notVerified:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .wrongToken:
+            writeInt(&buf, Int32(7))
+        
+        
+        case let .malformed(detail):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(detail, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerRefusal_lift(_ buf: RustBuffer) throws -> ClearSignerRefusal {
+    return try FfiConverterTypeClearSignerRefusal.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerRefusal_lower(_ value: ClearSignerRefusal) -> RustBuffer {
+    return FfiConverterTypeClearSignerRefusal.lower(value)
+}
+
+
+
 
 public enum ClientDataKind: Equatable, Hashable {
     
@@ -9084,6 +9819,78 @@ fileprivate struct FfiConverterOptionTypeQrMatrix: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeQrMatrix.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeUserOpDraft: FfiConverterRustBuffer {
+    typealias SwiftType = UserOpDraft?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeUserOpDraft.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeUserOpDraft.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeClearSignerOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = ClearSignerOutcome?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeClearSignerOutcome.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeClearSignerOutcome.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeClearSignerRefusal: FfiConverterRustBuffer {
+    typealias SwiftType = ClearSignerRefusal?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeClearSignerRefusal.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeClearSignerRefusal.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -10532,6 +11339,56 @@ public func wrappedNativeIsTheNative(chainId: UInt32, address: String) -> Bool  
 })
 }
 /**
+ * The official page, the setting's default.
+ */
+public func clearSignerDefaultUrl() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_default_url(uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's `{intent, context}` as JSON. `draft` is the ASSEMBLED
+ * operation for a transaction (the digest covers it), `None` for a message.
+ */
+public func clearSignerRequest(input: ClearSignerInput, draft: UserOpDraft?)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_request(
+        FfiConverterTypeClearSignerInput_lower(input),
+        FfiConverterOptionTypeUserOpDraft.lower(draft),uniffiCallStatus
+    )
+})
+}
+/**
+ * Accept `result_json` only if it signs `digest` with one of `keys` — the
+ * URL and postMessage channels' answer.
+ */
+public func clearSignerVerify(resultJson: String, digest: Data, keys: [WalletKeyRecord]) -> ClearSignerOutcome  {
+    return try!  FfiConverterTypeClearSignerOutcome_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_verify(
+        FfiConverterString.lower(resultJson),
+        FfiConverterData.lower(digest),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page, told to connect to this app's loopback WebSocket.
+ */
+public func clearSignerWsLaunch(base: String, port: UInt16, token: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_ws_launch(
+        FfiConverterString.lower(base),
+        FfiConverterUInt16.lower(port),
+        FfiConverterString.lower(token),uniffiCallStatus
+    )
+})
+}
+/**
  * The WebSocket tunnel URL to open, from the decrypted advert plaintext. `None`
  * if the secrets or the advert are malformed, or the advert names an unknown
  * tunnel domain.
@@ -11060,6 +11917,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_wrapped_native_is_the_native() != 56849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_default_url() != 36170) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_request() != 61569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_verify() != 26706) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ws_launch() != 27606) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_cable_connect_url() != 43371) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11133,6 +12002,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_t_first() != 10021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerconnection_closed() != 23199) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerconnection_feed() != 30929) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_cableframeport_write_frame() != 33387) {
@@ -11390,6 +12265,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_view() != 24600) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_signprefcore_dispatch() != 58387) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signprefcore_resolve_effect() != 57157) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signprefcore_view() != 48412) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_dispatch() != 39265) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11421,6 +12305,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_i18n_new_with_legacy_plurals() != 58560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_clearsignerconnection_new() != 16768) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
@@ -11490,6 +12377,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_sessioncore_new() != 17728) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_signprefcore_new() != 42789) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_signrequestcore_new() != 30487) {
