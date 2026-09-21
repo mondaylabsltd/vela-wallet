@@ -883,6 +883,9 @@ enum SendLive {
                 ? loc.t("componentsUi.funding.cancel")
                 : nil,
             repeatNote: confirmRepeatNote(view, loc: loc),
+            // The core's own verdict, resolved on this page only (single recipient).
+            recipientTag: !view.splitMode && view.recipientRisk?.firstTime == true
+                ? loc.t("componentsUi.signing.firstTimeTag") : nil,
             cta: live.cta
         )
     }

@@ -636,6 +636,11 @@ pub struct SendConfirm {
     pub subline: SharedString,
     pub facts: Vec<FactRow>,
     pub breakdown: Vec<BreakdownRow>,
+    /// "First time sending here" — the anti-poisoning tell, on the page that
+    /// signs. The core resolves it only while this page is up
+    /// (`confirm_probes`), so the form never has it to show. Live only;
+    /// `None` on a split.
+    pub recipient_tag: Option<SharedString>,
     /// Live only: why the slide is disarmed, when something disarmed it.
     pub notice: Option<SendNotice>,
     pub cta: SharedString,
@@ -1340,6 +1345,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),
         ],
         breakdown: Vec::new(),
+        recipient_tag: None,
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,

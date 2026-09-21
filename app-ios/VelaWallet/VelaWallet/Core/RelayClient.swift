@@ -585,6 +585,24 @@ final class RelayClient {
         return code.count > 2
     }
 
+    /// The recipient-risk answer's `is_contract` — NOT `isDeployed`, which asks
+    /// whether the SENDER's Safe exists. The web's `isContractAddress` (and
+    /// Android's `RelayClient.isContract`): an EIP-7702-delegated EOA carries
+    /// `0xef0100 ++ implAddr` and is a person's WALLET, never badged a contract;
+    /// any other code is a contract; `nil` when the chain could not be asked.
+    func isContract(chainId: Int, address: String) async -> Bool? {
+        guard let code = await chainCall(
+            chainId: chainId, method: "eth_getCode", params: [address, "latest"]
+        ) as? String, code.hasPrefix("0x") else { return nil }
+        return Self.codeIsContract(code)
+    }
+
+    /// The rule alone, for tests: 7702 designator = wallet, other code = contract.
+    static func codeIsContract(_ code: String) -> Bool {
+        if code.range(of: "^0x[eE][fF]0100[0-9a-fA-F]{40}$", options: .regularExpression) != nil { return false }
+        return code.count > 2
+    }
+
     /// The bundler base this chain's REST calls would use. Test seam: the
     /// live suite prints it, because "which relay did it ask" is the first
     /// question when a quote does not come back.

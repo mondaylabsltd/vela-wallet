@@ -1178,6 +1178,14 @@ struct SendConfirmBody: View {
             .padding(.horizontal, Tokens.Space.s12)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
 
+            if let tag = model.recipientTag {
+                Text(verbatim: tag)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.warningBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Tokens.Space.s12)
+            }
+
             if let notice = model.notice {
                 VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                     NoticeBannerView(text: notice)

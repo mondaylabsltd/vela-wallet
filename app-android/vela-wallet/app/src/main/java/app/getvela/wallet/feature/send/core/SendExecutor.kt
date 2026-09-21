@@ -173,7 +173,7 @@ class SendExecutor(
         // "first time" tag, the poisoning defence. Not an address → `false`.
         is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(
             SendRecipientRisk(
-                is_contract = relay.isDeployed(operation.chain_id, operation.address),
+                is_contract = relay.isContract(operation.chain_id, operation.address),
                 first_time = firstTime(operation.address),
             ),
         )

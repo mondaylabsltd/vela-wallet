@@ -470,6 +470,39 @@ describe('the confirm screen', () => {
 		);
 		expect(model.facts.find((f) => f.label === m['send.toLabel'])?.value).toBe('alice.eth');
 	});
+
+	// Device-found: the core resolves `first_time` only while the confirm page
+	// is up (`confirm_probes`), so the form's note never had it. The page that
+	// signs says it.
+	it('says it is the first time sending to this address', () => {
+		const single = {
+			selected_token: ETH,
+			recipient: '0x' + 'ab'.repeat(20),
+			confirm_amount: '0.5'
+		};
+		expect(liveSendConfirm(confirmModel(), inputs(single)).recipientTag).toBeUndefined();
+		const first = liveSendConfirm(
+			confirmModel(),
+			inputs({ ...single, recipient_risk: { is_contract: false, first_time: true } })
+		);
+		expect(first.recipientTag).toBe(m['componentsUi.signing.firstTimeTag']);
+		const known = liveSendConfirm(
+			confirmModel(),
+			inputs({ ...single, recipient_risk: { is_contract: false, first_time: false } })
+		);
+		expect(known.recipientTag).toBeUndefined();
+		// A split has no single recipient for the verdict to be about.
+		const split = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				...single,
+				split_mode: true,
+				recipients: [{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.5', name: null }],
+				recipient_risk: { is_contract: false, first_time: true }
+			})
+		);
+		expect(split.recipientTag).toBeUndefined();
+	});
 });
 
 describe('the core’s refusals reach the screen (spec 038 #D4)', () => {

@@ -420,6 +420,22 @@ class RelayClient(
         return code.length > 2
     }
 
+    /**
+     * The recipient-risk answer's `is_contract` — NOT [isDeployed], which asks
+     * whether the SENDER's Safe exists. The web's `isContractAddress`,
+     * verbatim: an EIP-7702 delegated EOA carries code `0xef0100 ++ implAddr`
+     * (exactly 23 bytes) and is a WALLET with smart-account features — a
+     * person's account, never badged "contract". Any other code is a
+     * contract; `null` when the chain could not be asked.
+     */
+    suspend fun isContract(chainId: Int, address: String): Boolean? {
+        val code = chainCall(chainId, "eth_getCode", listOf(address, "latest"))
+            ?.takeUnless { it.has("error") }
+            ?.opt("result") as? String ?: return null
+        if (EIP7702_DESIGNATOR.matches(code)) return false
+        return code != "0x" && code.length > 2
+    }
+
     /** The settings machine's `clear_bundler_cache`, on this client. */
     fun clearCaches() {
         synchronized(quoteCache) { quoteCache.clear() }
@@ -434,6 +450,7 @@ class RelayClient(
     }
 
     private companion object {
+        val EIP7702_DESIGNATOR = Regex("^0xef0100[0-9a-f]{40}$", RegexOption.IGNORE_CASE)
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
 

@@ -931,6 +931,13 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	const usd =
 		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
 	const chainId = token?.chain_id ?? 1;
+	// The core's own verdict, resolved on this page only (`confirm_probes`) —
+	// the form's note never sees it. One recipient only: a split's rows have
+	// no per-row verdict.
+	const recipientTag =
+		!send.split_mode && send.recipient_risk?.first_time === true
+			? m['componentsUi.signing.firstTimeTag']
+			: undefined;
 
 	// A sweep moves several coins; one mark would name the wrong one.
 	const heroMark =
@@ -1018,6 +1025,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			}),
 			facts,
 			breakdown,
+			recipientTag,
 			alert: alertWords(inputs.alert, m),
 			cta: m['send.confirmSendBtn']
 		};
@@ -1064,6 +1072,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
 		breakdown: undefined,
+		recipientTag,
 		alert: alertWords(inputs.alert, m),
 		cta: m['send.confirmSendBtn']
 	};

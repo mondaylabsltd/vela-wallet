@@ -261,8 +261,15 @@ fn has_prior_interaction(address: &str) -> bool {
 pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
     SendRecipientRisk {
         is_contract: is_contract(chain_id, address),
-        first_time: Some(!has_prior_interaction(address)),
+        first_time: Some(first_time(address)),
     }
+}
+
+/// `true` = never sent to this address from this device. A non-address is
+/// never "first" (the web's `resolveRecipientRisk`).
+fn first_time(address: &str) -> bool {
+    let hex = address.strip_prefix("0x").unwrap_or_default();
+    hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()) && !has_prior_interaction(address)
 }
 
 // ---------------------------------------------------------------------------
@@ -596,6 +603,23 @@ mod tests {
             // The address book's first-time tell reads the same rows.
             assert!(has_prior_interaction("0xYOU"));
             assert!(!has_prior_interaction("0xnobody"));
+        });
+    }
+
+    /// The web's `resolveRecipientRisk`: an address never sent to is
+    /// "first"; one in the history is not; a non-address never is.
+    #[test]
+    fn first_time_is_the_wallets_own_sends_and_only_for_an_address() {
+        crate::executor::storage::tests::with_temp_state("send-first-time", || {
+            let paid = format!("0x{}", "ab".repeat(20));
+            let _ = storage::write_value(
+                TX_KEY,
+                json!([{ "to": paid.to_uppercase().replace("0X", "0x"), "type": "send" }]),
+            );
+            assert!(!first_time(&paid));
+            assert!(first_time(&format!("0x{}", "cd".repeat(20))));
+            assert!(!first_time("alice.eth"));
+            assert!(!first_time("0xYOU"));
         });
     }
 

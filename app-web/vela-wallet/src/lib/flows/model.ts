@@ -839,6 +839,12 @@ export interface SendConfirmModel {
 	facts: FactRowModel[];
 	/** SD3b's recipient list / SD3c's asset list, as a second card. */
 	breakdown?: BreakdownRowModel[];
+	/**
+	 * "First time sending here" — the anti-poisoning tell, on the page that
+	 * signs. The core resolves it only while this page is up (`confirm_probes`),
+	 * so the form never has it to show. Absent on a split.
+	 */
+	recipientTag?: string;
 	/** The core's last refusal, worded — see `SendFormModel.alert`. */
 	alert?: string;
 	cta: string;

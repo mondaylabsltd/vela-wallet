@@ -338,33 +338,47 @@ final class SendExecutor {
     /// asked for in `contacts`** — there, `classify_recipient` hands the core
     /// the raw `eth_getCode` bytes and `contacts.rs` decides, because an
     /// EIP-7702 delegated EOA has code and is still a wallet (its invariant
-    /// ⑦). This operation's wire is a `bool`, so every client answers the
-    /// simple question and a delegated wallet reads as a contract.
-    ///
-    /// Answered the same way web, desktop and Android answer it, deliberately:
-    /// a client that were uniquely clever here would disagree with the other
-    /// three about the same address. The right fix is the core's predicate
-    /// exported once — a bridge change this cut promised not to make — and it
-    /// is recorded in results.md rather than quietly diverged.
+    /// ⑦). This operation's wire is a `bool`, so the shell answers it with the
+    /// web's `isContractAddress` rule (`RelayClient.isContract`): the 7702
+    /// designator is a wallet, any other code a contract — the same answer
+    /// web, desktop and Android give for the same address.
     ///
     /// Nothing on the iOS send screen draws this today; it is answered because
     /// the core asks, not because a pixel depends on it.
     private func resolveRisk(_ operation: [String: Any]) async -> String {
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let address = operation["address"] as? String ?? ""
-        let deployed = await relay.isDeployed(chainId: chainId, address: address)
+        // A 7702-delegated EOA is a wallet (the web's `isContractAddress`).
+        let deployed = await relay.isContract(chainId: chainId, address: address)
         // Has this device ever paid them? The local store is the only honest
         // source, and it is the same one `contacts::load_send_history` reads.
-        let paid = TxRecords.load(store: store).contains { record in
-            (record["to"] as? String)?.lowercased() == address.lowercased()
-        }
+        let first = Self.firstTime(address, records: TxRecords.load(store: store))
         return CoreJSON.string([
             "type": "risk_resolved",
             "risk": [
                 "is_contract": deployed.map { $0 as Any } ?? NSNull(),
-                "first_time": !paid,
+                "first_time": first,
             ] as [String: Any],
         ])
+    }
+
+    /// `true` = this device never sent to `address`: the "first time sending
+    /// here" tag, the poisoning defence. The web's `resolveRecipientRisk` /
+    /// `hasPriorInteraction`, verbatim (Android's `FeedExecutor.hasSentTo`):
+    /// `to` compared lower-cased, and only a `send`, a `dapp_tx` or a legacy
+    /// row with no `type` counts — a receive or a signature is not a send.
+    /// An unreadable store reads as no history (so the tag shows rather than
+    /// hides); a non-address is never "first".
+    static func firstTime(_ address: String, records: [[String: Any]]) -> Bool {
+        guard address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
+        else { return false }
+        let lc = address.lowercased()
+        let sent = records.contains { record in
+            guard (record["to"] as? String)?.lowercased() == lc else { return false }
+            guard let type = record["type"] else { return true }
+            return (type as? String) == "send" || (type as? String) == "dapp_tx"
+        }
+        return !sent
     }
 
     // MARK: - Wire helpers

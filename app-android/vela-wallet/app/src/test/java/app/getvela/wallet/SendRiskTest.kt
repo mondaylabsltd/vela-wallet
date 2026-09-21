@@ -45,6 +45,7 @@ class SendRiskTest {
     fun tearDown() = scope.cancel()
 
     private val store = FakeStore()
+    private val port = FakeRelayPort()
 
     private fun executor(): SendExecutor {
         val pool = RpcPool(
@@ -57,7 +58,7 @@ class SendRiskTest {
             transport = FakeRpcTransport { _, _ -> RpcPostResult(RpcTransportOutcome.HttpError(503)) },
         )
         return SendExecutor(
-            relay = RelayClient(FakeRelayPort(), builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
+            relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
             pool = pool,
             feed = FeedExecutor(store = store, ownAccounts = { emptyList() }),
             accounts = object : SendExecutor.AccountPort {
@@ -116,5 +117,28 @@ class SendRiskTest {
     fun `an empty history makes every address a first time, and a non-address none`() {
         assertEquals(true, firstTime("0x2222222222222222222222222222222222222222"))
         assertEquals("not an address: no verdict to tag", false, firstTime("vitalik.eth"))
+    }
+
+    /**
+     * Device-found: an EIP-7702 delegated account (code `0xef0100 ++ impl`)
+     * was answered `is_contract = true`. The web's rule: it is a wallet.
+     */
+    @Test
+    fun `a 7702-delegated recipient is a wallet and real code is a contract`() {
+        val to = "0x2222222222222222222222222222222222222222"
+        port.answer(
+            "eth_getCode",
+            FakeRelayPort.body("0xef0100" + "63c0c19a282a1b52b07dd5a65b58948a07dae32b"),
+            FakeRelayPort.body("0x6080604052"),
+            FakeRelayPort.body("0x"),
+        )
+        val contract = { runBlocking {
+            (executor().perform(SendOperation.ResolveRisk(chain_id = 100, address = to)) as SendShellResult.RiskResolved)
+                .risk?.is_contract
+        } }
+        assertEquals(false, contract())
+        assertEquals(true, contract())
+        assertEquals(false, contract())
+        assertEquals("the chain could not be asked: no verdict", null, contract())
     }
 }

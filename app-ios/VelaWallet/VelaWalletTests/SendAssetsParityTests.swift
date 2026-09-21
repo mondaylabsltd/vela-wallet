@@ -286,4 +286,54 @@ struct SendAssetsParityTests {
                                        on: drawnAssets(), loc: loc)
         #expect(unknown.empty == nil)
     }
+
+    // MARK: - 6. The first-time tag, on the page that signs
+
+    /// Device-found: the core resolves `first_time` only while the confirm
+    /// page is up (`confirm_probes`), so the form never had it to show.
+    @Test func theConfirmSaysItIsTheFirstTimeSendingHere() {
+        let base: [String: Any] = [
+            "stage": "confirm", "selected_token": xdai, "recipient": Self.alice,
+            "confirm_amount": "1",
+        ]
+        #expect(confirm(sendView(base), on: .sd3).recipientTag == nil)
+        var first = base
+        first["recipient_risk"] = ["is_contract": false, "first_time": true]
+        #expect(confirm(sendView(first), on: .sd3).recipientTag
+            == loc.t("componentsUi.signing.firstTimeTag"))
+        var known = base
+        known["recipient_risk"] = ["is_contract": false, "first_time": false]
+        #expect(confirm(sendView(known), on: .sd3).recipientTag == nil)
+        // A split has no one recipient for the verdict to be about.
+        var split = first
+        split["split_mode"] = true
+        split["recipients"] = [["id": "r1", "address": Self.alice, "amount": "1", "name": NSNull()]]
+        #expect(confirm(sendView(split), on: .sd3b).recipientTag == nil)
+    }
+
+    /// The web's `hasPriorInteraction`: only a send, a dApp transaction or a
+    /// legacy row with no type is a prior send; case does not matter.
+    /// An EIP-7702-delegated EOA (`0xef0100 ++ impl`) is a person's wallet, not
+    /// a contract — the web's `isContractAddress`, as Android and desktop answer.
+    @Test func aDelegatedWalletIsNotAContract() {
+        #expect(!RelayClient.codeIsContract("0xef0100" + String(repeating: "ab", count: 20)))
+        #expect(!RelayClient.codeIsContract("0xEF0100" + String(repeating: "AB", count: 20)))
+        #expect(RelayClient.codeIsContract("0x6080604052"))
+        #expect(!RelayClient.codeIsContract("0x"))
+        // 24 bytes is not the designator: a contract.
+        #expect(RelayClient.codeIsContract("0xef0100" + String(repeating: "ab", count: 21)))
+    }
+
+    @Test func firstTimeIsAnsweredFromTheWalletsOwnSends() {
+        let to = "0xAbCdEf0000000000000000000000000000000001"
+        #expect(SendExecutor.firstTime(to, records: []))
+        #expect(SendExecutor.firstTime(to, records: [
+            ["to": to, "type": "receive"], ["to": to, "type": "sign_message"],
+        ]), "a receive or a signature is not a send")
+        #expect(!SendExecutor.firstTime(to, records: [["to": to.lowercased(), "type": "send"]]))
+        #expect(!SendExecutor.firstTime(to, records: [["to": to, "type": "dapp_tx"]]))
+        #expect(!SendExecutor.firstTime(to, records: [["to": to]]), "a legacy row with no type")
+        #expect(SendExecutor.firstTime(to, records: [["to": Self.bob, "type": "send"]]))
+        #expect(!SendExecutor.firstTime("alice.eth", records: []), "a non-address is never first")
+    }
 }
