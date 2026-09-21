@@ -1508,9 +1508,28 @@ pub fn split_amount_edited(
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
     if let Some(row) = next.get_mut(index) {
-        row.amount = amount;
+        if let Some(clean) = amount_edited(&amount, &row.amount) {
+            row.amount = clean;
+        }
     }
     next
+}
+
+/// An amount field's edit as the core reads it (spec 073;
+/// `vela_core::l10n::amount_text` says why): a decimal-comma keyboard's
+/// "4,5" is 4.5 — raw, the send machine read 4 in fiat mode, and a custom
+/// allowance's parser dropped the comma and allowed 45. `previous` is the
+/// field's text before the edit; `None` is an edit with no reading as one
+/// figure, and the field keeps what it had.
+#[must_use]
+pub fn amount_edited(next: &str, previous: &str) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(
+        next,
+        crate::executor::format_prefs::current().number,
+        amount_text::Entry::Unknown,
+        Some(previous),
+    )
 }
 
 #[must_use]
@@ -1609,6 +1628,26 @@ mod split_tests {
     /// come from — so a rebuild that regenerated ids would point the picker at
     /// a row that no longer exists, and one that dropped names would quietly
     /// turn "Alice" back into an address.
+    /// Spec 073: a split row's share and every other amount field run the
+    /// core's rule. The cases read the same under every number preset (the
+    /// preset is the machine's here), so none is set.
+    #[test]
+    fn a_share_and_an_amount_run_the_core_amount_rule() {
+        let rows = vec![row("rcpt_1", "0xAAA", "2", None)];
+        // One typed comma into a figure with no point is the decimal mark.
+        assert_eq!(
+            split_amount_edited(&rows, 0, "2,".to_owned())[0].amount,
+            "2."
+        );
+        // An edit with no reading as one figure changes nothing: 1.57 is not
+        // what "1.5e-7" meant.
+        assert_eq!(split_amount_edited(&rows, 0, "1.5e-7".to_owned()), rows);
+
+        assert_eq!(amount_edited("4,", "4").as_deref(), Some("4."));
+        assert_eq!(amount_edited("4.5", "4.").as_deref(), Some("4.5"));
+        assert_eq!(amount_edited("0x10", ""), None);
+    }
+
     #[test]
     fn editing_one_split_row_leaves_the_others_alone() {
         let rows = vec![

@@ -4864,6 +4864,7 @@ impl WalletPage {
                             },
                         ) as panels::Click);
                     }
+                    let previous = send.amount.clone();
                     actions.amount_field = Some(panels::AddressField {
                         focus: send.amount_focus,
                         value: send.amount,
@@ -4871,6 +4872,11 @@ impl WalletPage {
                         on_change: Box::new({
                             let host = host.clone();
                             move |amount: String, _: &mut Window, cx: &mut gpui::App| {
+                                // Spec 073: the core's amount rule first.
+                                let Some(amount) = flows_live::amount_edited(&amount, &previous)
+                                else {
+                                    return;
+                                };
                                 host.update(cx, |host, cx| {
                                     host.dispatch(SendEvent::SetAmount { amount }, cx);
                                 });
@@ -11214,12 +11220,18 @@ impl WalletPage {
                 )
                 .then(|| {
                     let host = self.signing_host.clone();
+                    let previous = cap_text.clone();
                     panels::AddressField {
                         focus: self.cap_focus.clone(),
                         value: cap_text.clone(),
                         placeholder: SharedString::from("0"),
                         on_change: Box::new(
                             move |text: String, _: &mut Window, cx: &mut gpui::App| {
+                                // Spec 073: the cap's parser drops every
+                                // comma, so a raw "4,5" allowed 45.
+                                let Some(text) = flows_live::amount_edited(&text, &previous) else {
+                                    return;
+                                };
                                 if let Some(host) = host.as_ref() {
                                     host.update(cx, |host, cx| {
                                         host.dispatch_guard(
