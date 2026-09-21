@@ -253,13 +253,17 @@ enum SendLive {
         // unit. When the figure is already fiat the other unit is the token's,
         // which is `token_amount` — the very number the signed batch is built
         // from, so the two can never disagree.
+        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol)
         live.amount = model.amount.map { drawn in
             AmountFieldModel(
                 value: view.amount.isEmpty ? "0" : view.amount,
                 fiat: view.amountFiatCode != nil
                     ? "\(trim(view.tokenAmount)) \(symbol)"
                     : fiatLine(view, token: token, display: display),
-                denomLabel: view.amountFiatCode ?? display.code,
+                // What the figure is typed IN: its own code, or the token's
+                // symbol — never the display currency, which is not the unit
+                // of a figure typed in token units at all.
+                denomLabel: view.amountFiatCode ?? symbol,
                 // The core's three judgements about the ⇄ control, all of
                 // which this client was dropping (spec 056's dropped-judgement
                 // ruler). Absent, refused-with-a-reason and offered are three
@@ -273,7 +277,9 @@ enum SendLive {
                     ])
                 },
                 // A scanned or linked amount is not the person's to change.
-                locked: view.amountLocked
+                locked: view.amountLocked,
+                unitPrefix: unit.prefix,
+                unitSuffix: unit.suffix
             )
         }
 
@@ -338,13 +344,17 @@ enum SendLive {
         }
 
         // The split's rows, each with the core's verdict on it.
+        let issues = view.splitMode ? view.splitRowIssues ?? [] : []
         live.recipients = view.splitMode ? view.recipients.enumerated().map { index, row in
-            RecipientCardModel(
+            let issue = issues.first { $0.id == row.id }
+            return RecipientCardModel(
                 ordinal: loc.t("send.recipientN", vars: ["n": String(index + 1)]),
                 name: row.name ?? (row.address.isEmpty
                     ? loc.t("send.recipientPlaceholder")
                     : AddressText.short(row.address)),
-                identiconSeed: isAddress(row.address) ? row.address : "",
+                // Artwork is for an ADDRESS, and the core says when the field
+                // is not one yet — a half-typed "0x1234" draws nobody's face.
+                identiconSeed: !row.address.isEmpty && issue?.address != .invalid ? row.address : "",
                 amount: "\(trim(row.amount)) \(symbol)",
                 removeLabel: loc.t("send.removeRecipient"),
                 rowId: row.id,
@@ -366,7 +376,13 @@ enum SendLive {
                         : "send.recipientCount_other",
                     vars: ["count": String(view.recipients.count)]
                 ),
-                value: "\(trim(view.confirmAmount)) \(symbol)"
+                // A row that cannot be summed yet leaves the total blank — a
+                // dash, not a bare symbol with no figure in front of it.
+                value: view.confirmAmount.isEmpty ? "—" : "\(trim(view.confirmAmount)) \(symbol)",
+                over: view.splitOverBalance,
+                remaining: view.splitRemaining.map { left in
+                    loc.t("send.splitRemaining", vars: ["amount": "\(trim(left)) \(symbol)"])
+                }
             )
             : live.summary
 
@@ -395,29 +411,77 @@ enum SendLive {
             summary: live.summary,
             fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed),
             speed: speed.map { speedModel($0, view: view, display: display, loc: loc) },
-            cta: live.cta
+            cta: live.cta,
+            // While the pre-check is out the button is busy, not unfinished.
+            hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil
         )
     }
 
-    /// What is wrong with **this** row, in the core's vocabulary.
+    /// "Recipient 2 needs an amount." — the first unfinished row, and what it
+    /// still needs, from the core's list. The core says WHICH row; this only
+    /// picks the sentence.
+    static func splitHint(_ issues: [SendSplitRowIssueWire], loc: Loc) -> String? {
+        guard let first = issues.first else { return nil }
+        return loc.t(
+            first.address == .ok ? "send.splitNeedsAmount" : "send.splitNeedsAddress",
+            vars: ["n": String(first.ordinal)]
+        )
+    }
+
+    /// The unit drawn beside a figure being typed (issue 231, the web's
+    /// `unitAdornment`). `code` is the figure's OWN currency
+    /// (`amount_fiat_code`); `nil` means token units, and the unit is the
+    /// token's symbol. A currency with a symbol leads the figure, one the
+    /// catalog has no symbol for follows it as its code, a token always
+    /// follows. Nothing defaults to "$".
+    static func unitAdornment(code: String?, symbol: String) -> (prefix: String?, suffix: String?) {
+        guard let code else { return (nil, symbol.isEmpty ? nil : symbol) }
+        if let glyph = CurrencyCatalog.entry(code)?.glyph, !glyph.isEmpty {
+            return (glyph, nil)
+        }
+        return (nil, code)
+    }
+
+    /// What is wrong with **this** row, in the core's words.
     ///
     /// A list of six rows with one sentence underneath makes somebody count
-    /// rows to find the bad one. The core does not publish a per-row verdict
-    /// for the split, so the two facts it does publish are read here: an
-    /// address that is not one, and a row that repeats an earlier address.
-    /// Anything subtler stays the form's single warning.
+    /// rows to find the bad one. Every verdict here is the core's
+    /// (`split_row_issues`, `split_duplicates`) — the shell used to compare
+    /// addresses itself, a second rule to keep in step with the importer's,
+    /// and called a repeat "skipped" when the batch still pays it twice.
+    /// Only a field with something IN it can be wrong: an empty one is
+    /// unfinished, and the hint above Continue already says so.
     static func rowProblem(
         _ row: SendRecipientDraftWire, in view: SendViewWire, loc: Loc
     ) -> String? {
-        if !row.address.isEmpty, !isAddress(row.address) {
-            return loc.t("send.batchBadAddress")
+        let issue = view.splitRowIssues?.first { $0.id == row.id }
+        let notes = [
+            issue?.address == .invalid ? loc.t("send.batchBadAddress") : nil,
+            duplicateNote(view, id: row.id, loc: loc),
+            issue?.amount == .invalid ? loc.t("send.badAmount") : nil,
+        ].compactMap { $0 }
+        return notes.isEmpty ? nil : notes.joined(separator: " · ")
+    }
+
+    /// "Same address as recipient 2", for a row the core flagged as a repeat
+    /// of an earlier one. `nil` for every other row — including the FIRST
+    /// occurrence, which is not the mistake.
+    static func duplicateNote(_ view: SendViewWire, id: String, loc: Loc) -> String? {
+        (view.splitDuplicates ?? []).first { $0.id == id }.map { flagged in
+            loc.t("send.recipientDuplicate", vars: ["n": String(flagged.firstOrdinal)])
         }
-        let earlier = view.recipients.prefix { $0.id != row.id }
-        if !row.address.isEmpty,
-           earlier.contains(where: { $0.address.caseInsensitiveCompare(row.address) == .orderedSame }) {
-            return loc.t("send.batchDup")
+    }
+
+    /// The form's repeat warnings, said again on the page that signs: one line
+    /// per repeating row, "Recipient 3 · Same address as recipient 1".
+    static func confirmRepeatNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.splitMode else { return nil }
+        let lines = view.recipients.enumerated().compactMap { index, row in
+            duplicateNote(view, id: row.id, loc: loc).map { note in
+                "\(loc.t("send.recipientN", vars: ["n": String(index + 1)])) · \(note)"
+            }
         }
-        return nil
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// The ≈ line beside a token-denominated figure.
@@ -644,6 +708,13 @@ enum SendLive {
             ])
             return "\(body) \(most)"
         }
+        // A split has its own live verdict, `split_over_balance` — the same
+        // predicate Continue refuses on. It does not take `amount_warning`:
+        // that is derived from the single form's figure, which a split leaves
+        // behind, so it would judge a number no longer on the screen.
+        if view.splitMode {
+            return view.splitOverBalance ? loc.t("send.alertInsufficientBalanceBody") : nil
+        }
         return view.amountWarning.map { warningText($0, loc: loc) }
     }
 
@@ -696,8 +767,12 @@ enum SendLive {
             ),
             FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
-                value: view.fee.map { "~\(feeLine($0, view: view, fee: fee, display: display))" }
-                    ?? (model.facts.count > 3 ? model.facts[3].value : "—")
+                // With no estimate the row says so, as the form's row does —
+                // never the drawing's "~0.0021 ETH · ≈$0.55", a promise about
+                // somebody else's send (the web's `feeText`: `send.fee ?? fee.fee`).
+                value: (view.fee ?? fee?.fee).map { "~\(feeLine($0, view: view, fee: fee, display: display))" }
+                    ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
+                        ? loc.t("send.estimatingFee") : "—")
             ),
         ]
         // The speed, but only when it was CHOSEN for this send, or taken
@@ -711,6 +786,45 @@ enum SendLive {
                 note: speed.picked ? nil : loc.t("send.feeSpeedFree")
             ))
         }
+
+        // **The parts, from the core's own rows — never the drawing's.** The
+        // drawn SD3b/SD3c carry "Alice 50 USDT" and a three-coin sweep, and a
+        // confirm page is the one screen that must not show a payee nobody
+        // typed: it is what the person reads before they sign.
+        var amount = "\(trim(view.confirmAmount)) \(symbol)"
+        var subline = view.confirmAmountIssue.map { issue in
+            loc.t("send.warnCannotConvert", vars: ["code": issue.code, "symbol": issue.symbol])
+        } ?? fiatLine(view, token: token, display: display)
+        var breakdown: [BreakdownRowModel] = []
+        if view.multiSelectMode {
+            // A sweep: N assets on one network. Each row is the amount the
+            // signature will move (`multi_specs`), and the total is those rows
+            // priced — never the picker's balances.
+            let sweep = sweepBreakdown(view, display: display)
+            breakdown = sweep.rows
+            amount = loc.t("componentsTx.receipt.assetsCount", vars: ["n": String(sweep.rows.count)])
+            subline = loc.t("send.confirmTotalLine", vars: [
+                "fiat": money(sweep.totalUsd, display: display),
+                "network": view.multiChainId
+                    .flatMap { ChainCatalog.meta($0)?.displayName } ?? chain,
+            ])
+        } else if view.splitMode, !view.recipients.isEmpty {
+            // A split: every payee by name and face, and how many there are.
+            // The single "To" row has no one address to name, so it goes —
+            // the count and the list below say who instead (web 038 #D2).
+            breakdown = splitBreakdown(view)
+            facts.remove(at: 1)
+            let count = loc.t(
+                view.recipients.count == 1 ? "send.recipientCount_one" : "send.recipientCount_other",
+                vars: ["count": String(view.recipients.count)]
+            )
+            let fiat = token?.priceUsd.flatMap { price in
+                Double(view.confirmAmount).map { $0 * price }
+            }
+            subline = [count, chain].filter { !$0.isEmpty }.joined(separator: " · ")
+                + (fiat.map { " · ≈ \(money($0, display: display))" } ?? "")
+        }
+
         return SendConfirmModel(
             header: live.header,
             // A sweep moves several coins; one mark would name the wrong one.
@@ -725,12 +839,10 @@ enum SendLive {
             // gates measured and the batch is built from — a shell that
             // re-derived it would put a number on the signing page nothing
             // else in the flow had agreed to.
-            amount: "\(trim(view.confirmAmount)) \(symbol)",
-            subline: view.confirmAmountIssue.map { issue in
-                loc.t("send.warnCannotConvert", vars: ["code": issue.code, "symbol": issue.symbol])
-            } ?? fiatLine(view, token: token, display: display),
+            amount: amount,
+            subline: subline,
             facts: facts,
-            breakdown: live.breakdown,
+            breakdown: breakdown,
             notice: confirmNotice(view, loc: loc),
             // The treasury pause has TWO exits (spec 054 US4): the core's
             // retry, and 暂不 — which keeps the facts on screen rather than
@@ -751,8 +863,63 @@ enum SendLive {
             noticeSecondary: view.treasuryBootstrap != nil
                 ? loc.t("componentsUi.funding.cancel")
                 : nil,
+            repeatNote: confirmRepeatNote(view, loc: loc),
             cta: live.cta
         )
+    }
+
+    /// A split's payees, one row each, from the core's drafts.
+    ///
+    /// A name never stands in for the address on the page that signs: a named
+    /// row reads "Alice · 0x12…34f0". Only a real address earns a face.
+    static func splitBreakdown(_ view: SendViewWire) -> [BreakdownRowModel] {
+        let symbol = view.selectedToken?.symbol ?? ""
+        return view.recipients.map { row in
+            let short = AddressText.short(row.address)
+            return BreakdownRowModel(
+                identiconSeed: isAddress(row.address) ? row.address : "",
+                label: row.name.map { short.isEmpty ? $0 : "\($0) · \(short)" } ?? short,
+                value: "\(trim(row.amount)) \(symbol)"
+            )
+        }
+    }
+
+    /// A sweep's assets, one row each, and what they come to in USD.
+    ///
+    /// The amount is the core's reserved spec (net of what the fee coin pays)
+    /// when it has one, else the balance that spec will become — the web's
+    /// `sweepAmount`. A row with no price adds nothing to the total rather
+    /// than a guess.
+    static func sweepBreakdown(
+        _ view: SendViewWire, display: WalletLive.Display
+    ) -> (rows: [BreakdownRowModel], totalUsd: Double) {
+        var total = 0.0
+        let ticked = view.tokens.filter { view.multiSelectedIds.contains($0.id) }
+        let rows = ticked.map { token in
+            let amount = view.multiSpecs.first {
+                ($0.tokenAddress ?? "") == (token.tokenAddress ?? "")
+            }?.amount ?? token.balance
+            let usd = token.priceUsd.flatMap { price in Double(amount).map { $0 * price } }
+            if let usd { total += usd }
+            let value = "\(trim(amount)) \(token.symbol)"
+            return BreakdownRowModel(
+                lead: TokenMarkModel.of(
+                    chainId: token.chainId, symbol: token.symbol,
+                    tokenAddress: token.tokenAddress, color: chainColor(token.chainId)
+                ),
+                label: token.symbol,
+                value: usd.map { "\(value) · ≈\(money($0, display: display))" } ?? value
+            )
+        }
+        return (rows, total)
+    }
+
+    /// A USD figure in the display currency, glyph first — the form's own
+    /// "≈" arithmetic, without the "≈".
+    private static func money(_ usd: Double, display: WalletLive.Display) -> String {
+        let converted = usd * display.rate
+        guard converted.isFinite else { return "" }
+        return "\(display.glyph)\(Formats.number(converted, minimumFractionDigits: 2, maximumFractionDigits: 2))"
     }
 
     /// What stopped the confirm page: the relay's treasury, or a submit the
@@ -838,6 +1005,8 @@ enum SendLive {
 
         let title: String
         var captions: [String]
+        var eta: ReceiptEtaModel?
+        let parts = receiptParts(view, symbol: symbol, loc: loc)
         switch stage {
         case .submitting:
             // Three states, three sentences — the Android receipt's own
@@ -861,16 +1030,31 @@ enum SendLive {
             }
             captions = [loc.t("send.txWaitingConfirm")]
             if let seconds = view.receipt?.typicalInclusionS {
-                captions.append(loc.t("send.txTypicalTime", vars: [
+                let typical = loc.t("send.txTypicalTime", vars: [
                     "chainName": chain, "estSecs": String(seconds),
-                ]))
+                ])
+                // When the core says WHEN it was handed over, the screen counts
+                // (web `live-send.ts`, #199); the typical line leads the clock.
+                if let at = view.receipt?.submittedAtMs {
+                    eta = ReceiptEtaModel(
+                        submittedAtMs: at, typicalS: seconds, typicalLine: typical,
+                        // Filled with its own placeholder: the screen fills the number.
+                        remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
+                        elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
+                        slowLine: loc.t("send.txSlowConfirm")
+                    )
+                } else {
+                    captions.append(typical)
+                }
             }
         case .confirmed:
             title = loc.t("send.txConfirmedTitle", vars: [
                 "amount": trim(view.receipt?.amount ?? view.confirmAmount),
                 "symbol": symbol,
             ])
-            let to = view.recipientIdentity?.name ?? AddressText.short(view.recipient)
+            // A split names its count here and its people below; "To " with
+            // nobody after it was what the single-recipient line read as.
+            let to = parts.title ?? view.recipientIdentity?.name ?? AddressText.short(view.recipient)
             captions = ["\(to) · \(chain)"]
         case .failed:
             title = loc.t("componentsTx.receipt.statusFailed")
@@ -927,8 +1111,44 @@ enum SendLive {
                     : loc.t("send.txCloseBackground")
             }(),
             ctaAccent: stage == .confirmed || stage == .failed,
-            ctaCancels: stage == .submitting && view.txStatus == "signing"
+            ctaCancels: stage == .submitting && view.txStatus == "signing",
+            eta: eta,
+            breakdownTitle: parts.title,
+            breakdown: parts.rows
         )
+    }
+
+    /// A split's parts on the receipt as on the confirm (web `receiptParts`,
+    /// #261): from the receipt's own frozen transfers once the core has them,
+    /// from the drafts before that. Nothing for a single send or a sweep — the
+    /// sweep's parts are assets, and its one recipient is already the caption.
+    static func receiptParts(
+        _ view: SendViewWire, symbol: String, loc: Loc
+    ) -> (title: String?, rows: [BreakdownRowModel]) {
+        let frozen = view.receipt?.kind == "split" ? view.receipt?.transfers ?? [] : []
+        let rows: [BreakdownRowModel]
+        if !frozen.isEmpty {
+            rows = frozen.map { transfer in
+                BreakdownRowModel(
+                    identiconSeed: transfer.to,
+                    label: transfer.toName ?? AddressText.short(transfer.to),
+                    value: "\(transfer.amount) \(transfer.symbol)".trimmingCharacters(in: .whitespaces)
+                )
+            }
+        } else if view.splitMode {
+            rows = view.recipients.map { draft in
+                BreakdownRowModel(
+                    identiconSeed: draft.address.isEmpty ? nil : draft.address,
+                    label: draft.name ?? AddressText.short(draft.address),
+                    value: "\(draft.amount) \(symbol)".trimmingCharacters(in: .whitespaces)
+                )
+            }
+        } else {
+            rows = []
+        }
+        guard !rows.isEmpty else { return (nil, []) }
+        let key = rows.count == 1 ? "send.recipientCount_one" : "send.recipientCount_other"
+        return (loc.t(key, vars: ["count": String(rows.count)]), rows)
     }
 
     // MARK: - SD2F, the fee-token sheet
@@ -943,7 +1163,11 @@ enum SendLive {
                 symbol: option.symbol,
                 balanceLabel: trim(fromBase(option.balance, decimals: option.decimals)),
                 fee: option.amount.map { "~\(trim(fromBase($0, decimals: option.decimals))) \(option.symbol)" } ?? "—",
-                selected: option.selected
+                selected: option.selected,
+                // The core's verdict, passed on: every published row is drawn,
+                // and the ones that cannot pay are drawn as that.
+                insufficient: option.insufficient,
+                insufficientNote: loc.t("send.warnInsufficientGas", vars: ["sym": option.symbol])
             )
         }
         return FeeTokenPickModel(
@@ -961,11 +1185,49 @@ enum SendLive {
     /// rather than reformatted, because a rate somebody pinned by hand and a
     /// rate the wallet fetched must read the same — and because reformatting
     /// what is in an open field steals characters as they type.
+    ///
+    /// `replaces` is the person's choice, made on this sheet: an import ADDS to
+    /// the rows already on the form unless they asked for it to replace them.
     static func batchImport(
-        _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc
+        _ batch: BatchViewWire, view: SendViewWire, on model: BatchImportModel, loc: Loc,
+        replaces: Bool = false
     ) -> BatchImportModel {
         let symbol = view.selectedToken?.symbol ?? ""
         let count = batch.recipientCount
+        // Whether there is anyone on the form for an import to meet — the
+        // core's own count, read back from the room it reports.
+        let formHasRows = view.splitImportRoom < BatchStore.maxRecipients
+        let total: BatchTotalModel? = count > 0
+            ? BatchTotalModel(
+                label: "\(loc.t("send.splitTotalLabel")) · " + loc.t(
+                    count == 1 ? "send.recipientCount_one" : "send.recipientCount_other",
+                    vars: ["count": String(count)]
+                ),
+                value: "\(trim(batch.totalToken)) \(symbol)",
+                detail: batch.totalFiat.map { "\($0) \(batch.fiatCode)" },
+                // Adding to people already typed, what is left to give out is
+                // the figure that matters; otherwise the balance itself.
+                balance: formHasRows && !replaces && view.splitRemaining != nil
+                    ? loc.t("send.splitRemaining", vars: [
+                        "amount": "\(trim(view.splitRemaining ?? "")) \(symbol)",
+                    ])
+                    : loc.t("send.balanceLabel", vars: [
+                        "amount": "\(trim(view.selectedToken?.balance ?? "")) \(symbol)",
+                    ]),
+                over: batch.overBalance
+            )
+            : nil
+        // Said once the import can happen, beside the button that does it —
+        // with the way to choose the other, because either can be what is meant.
+        let merge: BatchMergeModel? = formHasRows && batch.canApply
+            ? (replaces
+                ? BatchMergeModel(
+                    note: loc.t("send.batchReplacesRows"), action: loc.t("send.batchAddInstead")
+                )
+                : BatchMergeModel(
+                    note: loc.t("send.batchAddsToRows"), action: loc.t("send.batchReplaceInstead")
+                ))
+            : nil
         let rateValue = switch batch.rateStatus {
         case .ok: "\(batch.rateInput) \(batch.fiatCode)"
         case .loading: loc.t("send.batchRateLoading")
@@ -992,7 +1254,9 @@ enum SendLive {
             } else if batch.overBalance {
                 (loc.t("send.batchOverBalance", vars: ["sym": symbol]), true)
             } else if batch.overCap {
-                (loc.t("send.batchOverCap", vars: ["n": String(BatchStore.maxRecipients)]), false)
+                // The cap the sheet was opened with: the room the form has
+                // left, which is sixty only while the form is empty.
+                (loc.t("send.batchOverCap", vars: ["n": String(view.splitImportRoom)]), false)
             } else if batch.templateSaved {
                 (loc.t("send.batchTemplateSaved"), false)
             } else {
@@ -1036,6 +1300,8 @@ enum SendLive {
                 : nil,
             note: note?.text,
             noteIsError: note?.error ?? false,
+            total: total,
+            merge: merge,
             cta: cta,
             // The core's ONE gate. Never a conjunction assembled here:
             // `canApply` already knows about the busy fetch, the rejected rows
@@ -1055,23 +1321,56 @@ enum SendLive {
     static func contactSheet(
         _ book: ContactsViewWire, on model: ContactPickModel, loc: Loc
     ) -> ContactPickModel {
-        ContactPickModel(
+        // The person's own groups — the drawing's two were a picture that did
+        // nothing when tapped. A tap ADDS the group's members to the form
+        // (`append_split_recipients`), so the order here is the order the
+        // shell indexes into: `book.groups`.
+        let swatches = ChainCatalog.chains.map { chainColor($0.chainId) }
+        return ContactPickModel(
             title: model.title,
             closeLabel: model.closeLabel,
             searchPlaceholder: model.searchPlaceholder,
             scanRow: model.scanRow,
             groupsTitle: model.groupsTitle,
-            groups: model.groups,
+            groups: book.groups.enumerated().map { index, group in
+                ContactGroupModel(
+                    name: group.name,
+                    count: loc.t("contacts.groupMembers", vars: ["count": String(group.members.count)]),
+                    // Two discs from the chain palette — decoration, not
+                    // identity, and the web's same cycle.
+                    colors: swatches.isEmpty ? [] : [
+                        swatches[(2 * index) % swatches.count],
+                        swatches[(2 * index + 1) % swatches.count],
+                    ]
+                )
+            },
             contactsTitle: model.contactsTitle,
             contacts: book.contacts.map { contact in
                 ContactEntryModel(
                     name: contact.name ?? contact.resolvedName ?? AddressText.short(contact.address),
-                    group: nil,
+                    group: book.groups.first { group in
+                        group.members.contains { $0.address == contact.address }
+                    }?.name,
                     addressDisplay: AddressText.short(contact.address),
                     identiconSeed: contact.address
                 )
             }
         )
+    }
+
+    /// A whole group as split rows, amounts blank, each member by the name the
+    /// book shows for them. The core mints the ids; `nil` for an empty group,
+    /// which adds nobody.
+    static func groupRecipients(_ group: ContactGroupWire) -> [[String: Any]]? {
+        guard !group.members.isEmpty else { return nil }
+        return group.members.map { member in
+            [
+                "id": "",
+                "address": member.address,
+                "amount": "",
+                "name": (member.name ?? member.resolvedName).map { $0 as Any } ?? NSNull(),
+            ]
+        }
     }
 
     // MARK: - Formatting

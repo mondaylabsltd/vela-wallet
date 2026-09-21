@@ -380,6 +380,8 @@ export interface ProviderCardModel {
 	support?: string;
 	/** The "获取密钥 →" link under an unset provider. */
 	link?: string;
+	/** Where that link goes — the provider's own site (the label is not a URL). */
+	linkUrl?: string;
 }
 
 export interface RpcProvidersModel {

@@ -428,6 +428,28 @@ fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) 
     .detach();
 }
 
+/// A fee coin picked for the operation in force (`None` = the native coin).
+///
+/// The coin is a quote PARAMETER and part of the operation every preview
+/// replays, so the whole question is asked again with it and the other speeds
+/// follow in that coin. Telling the session in force alone
+/// (`SelectFeeAsset`) would leave the previews pricing the old coin — and a
+/// speed tapped next would promote one, switching the payment back to a coin
+/// the person just walked away from.
+pub fn choose_fee_token<H: SpeedHost>(
+    host: &mut H,
+    fee_token: Option<String>,
+    cx: &mut Context<H>,
+) {
+    let Some(ask) = host.speed_control().fee.ask.clone() else {
+        return;
+    };
+    if ask.fee_token == fee_token {
+        return;
+    }
+    ask_in_force(host, QuoteAsk { fee_token, ..ask }, cx);
+}
+
 // -- the speed core ------------------------------------------------------------
 
 fn speed_dispatch<H: SpeedHost>(host: &mut H, event: SpeedEvent, cx: &mut Context<H>) {

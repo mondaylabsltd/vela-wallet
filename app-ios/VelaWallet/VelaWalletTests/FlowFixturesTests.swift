@@ -134,6 +134,33 @@ struct FlowFixturesTests {
         }
     }
 
+    /// Issue #207: a key row's badge claims only what somebody verified, and
+    /// its caption says where the key LIVES (the authenticator's report), not
+    /// what was tapped — the web's `keyBadge` / `providerLineFor`.
+    @Test func aKeyRowBadgesOnlyWhatItCanVouchForAndNamesWhereItLives() throws {
+        func row(synced: Bool, known: Bool, method: String = "hybrid", kind: String = "security_key")
+            throws -> CreateKeyRow {
+            try CoreJSON.decode(CreateKeyRow.self, from: [
+                "name": "Key", "authenticator_attachment": "cross-platform", "transports": "usb",
+                "confirmed": true, "synced": synced, "synced_known": known, "aaguid": "",
+                "provider_name": "", "method": method, "kind": kind,
+            ])
+        }
+        // Unreadable attestation: `synced` fails open to true for the GATE, and
+        // no green "Cloud-synced" is drawn from that guess.
+        #expect(keyBadge(try row(synced: true, known: false)) == nil)
+        #expect(keyBadge(try row(synced: true, known: true))?.text == I18nKeys.Create.keySyncedBadge)
+        #expect(keyBadge(try row(synced: false, known: true))?.synced == false)
+        #expect(keyBadge(try row(synced: false, known: true))?.text == I18nKeys.Create.keyDeviceOnlyBadge)
+
+        // A "Phone or tablet" tap answered by a USB key is a security key.
+        let fob = try row(synced: false, known: true)
+        #expect(fob.method == .hybrid && fob.kind == .securityKey)
+        #expect(providerLineFor(fob.kind) == I18nKeys.Create.providerSecurityKey)
+        #expect(providerLineFor(.platform) == I18nKeys.Create.methodPlatformTitle)
+        #expect(providerLineFor(.hybrid) == I18nKeys.Create.methodHybridTitle)
+    }
+
     /// The cap fixture sits exactly at the core's `MAX_MULTI_KEYS`, not near it.
     @Test func theCapFixtureIsAtTheCap() {
         let view = flows.first { $0.0 == "keys · at the cap" }!.1

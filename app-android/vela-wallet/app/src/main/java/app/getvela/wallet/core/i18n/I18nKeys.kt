@@ -600,6 +600,10 @@ object I18nKeys {
         const val BATCH_RATE_RESET = "send.batchRateReset"
         const val BATCH_OVER_CAP = "send.batchOverCap"
         const val BATCH_OVER_BALANCE = "send.batchOverBalance"
+        const val BATCH_ADDS_TO_ROWS = "send.batchAddsToRows"
+        const val BATCH_REPLACES_ROWS = "send.batchReplacesRows"
+        const val BATCH_REPLACE_INSTEAD = "send.batchReplaceInstead"
+        const val BATCH_ADD_INSTEAD = "send.batchAddInstead"
         const val BATCH_TEMPLATE_SAVED = "send.batchTemplateSaved"
         const val FUNDING_CANCEL = "componentsUi.funding.cancel"
 
@@ -658,6 +662,12 @@ object I18nKeys {
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
         const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
         const val WARN_NEED_GAS = "send.warnNeedGas"
+        // Parity with the web's send form: ⇄'s refusal (issue 197), the empty
+        // picker's two sentences (issue 209), the first-time recipient tell.
+        const val DENOM_TOGGLE_NO_RATE = "send.denomToggleNoRate"
+        const val NO_TOKENS_WITH_BALANCE = "send.noTokensWithBalance"
+        const val NO_MATCHING_TOKENS = "send.noMatchingTokens"
+        const val FIRST_TIME_SEND = "componentsUi.signing.firstTimeTag"
         /** The notification when a verdict lands while the app is away (phase 4). */
         const val TX_CONFIRMED_NOTICE = "componentsTx.receipt.statusConfirmed"
         const val TX_CONFIRMED_NOTICE_BODY = "send.txSubmittedTitle"

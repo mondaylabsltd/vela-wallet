@@ -128,7 +128,7 @@ class DappSignMachineTest {
                     events += if (stored.contains("0xhash")) "persisted:with-hash" else "persisted"
                 }
                 override fun recordPersisted(recordId: String) { events += "record:$recordId" }
-                override suspend fun switchAccount(index: Int) = true
+                override suspend fun switchAccount(address: String) = true
                 override fun nativeSymbol(chainId: Int) = "XDAI"
                 override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
                     val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()

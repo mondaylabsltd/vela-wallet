@@ -32,7 +32,7 @@ use vela_core::app::approval_guard::{
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigning, ClearSigningView, Event as ClearEvent,
 };
-use vela_core::app::fee_policy::{FeeCall, FeeTier, FeeView};
+use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::sign_request::{
@@ -78,6 +78,8 @@ pub struct SigningHost {
     /// "Sign with": this request's choice, and whether its list is open.
     pub sign_method: String,
     pub sign_with_open: bool,
+    /// The fee coin list, open in the sheet (the web's `feeOpen`).
+    pub fee_open: bool,
     sign: CoreHost<SignRequest>,
     pub view: SignView,
     clear: CoreHost<ClearSigning>,
@@ -157,6 +159,7 @@ impl SigningHost {
             transport_id: request.transport_id.clone(),
             sign_method: "auto".to_owned(),
             sign_with_open: false,
+            fee_open: false,
             origin: request.origin.clone(),
             chain_id: request.chain_id,
             facts: facts_of(&request),
@@ -364,6 +367,29 @@ impl SigningHost {
             .ok();
         })
         .detach();
+    }
+
+    /// The fee row, tapped: a failed quote is asked again; with more than one
+    /// coin to pay in, the list opens (or closes) here in the sheet — the
+    /// web's `onfee`. One coin and a quote: nothing to choose.
+    pub fn fee_tapped(&mut self, cx: &mut Context<Self>) {
+        let fee = self.speed.fee_view();
+        if fee.failed.is_some() {
+            // Measured again for real — the held readings dropped first.
+            speed_control::refresh(self, cx);
+        } else if fee.options.len() > 1 {
+            self.fee_open = !self.fee_open;
+            cx.notify();
+        }
+    }
+
+    /// A coin picked from the list (`None` = the native coin). The pick is a
+    /// quote PARAMETER: the operation is re-priced in that coin — every speed
+    /// of it, so a speed picked next is still paid in the coin chosen — and
+    /// the approve carries `fee_token` from the same view.
+    pub fn pick_fee(&mut self, token: Option<String>, cx: &mut Context<Self>) {
+        self.fee_open = false;
+        speed_control::choose_fee_token(self, token, cx);
     }
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
@@ -612,9 +638,18 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
             .as_ref()
             .map(|estimate| estimate.max_fee_per_gas.clone()),
         bundler_cost_wei: None,
-        gas_fee_token: None,
+        // The coin the sheet quoted in, from the SAME view: an operation
+        // priced in USDC and submitted without its fee leg is a different
+        // operation from the one somebody agreed to.
+        gas_fee_token: fee.fee_token.clone(),
+        // In the paying coin's own units — the send core's rule
+        // (`submit_user_op`): an ERC-20 fee is its `amount`, never
+        // `total_wei`, which is 0 for one.
         quoted_fee: fee.fee.as_ref().map(|estimate| SignQuotedFee {
-            amount: estimate.total_wei.clone(),
+            amount: match &estimate.fee_asset {
+                FeeAssetView::Erc20 { amount, .. } => amount.clone(),
+                FeeAssetView::Native => estimate.total_wei.clone(),
+            },
             recipient: estimate.fee_recipient.clone().unwrap_or_default(),
             // The speed this very estimate was priced at — named on the wire
             // beside the amount (spec 069); the core drops a `rapid`.
@@ -904,6 +939,7 @@ mod kickoff_tests {
 #[cfg(test)]
 mod approve_tests {
     use super::*;
+    use vela_core::app::fee_policy::FeePolicy;
 
     /// The approve carries the fee the sheet DISPLAYED.
     ///
@@ -959,6 +995,63 @@ mod approve_tests {
         // …and the speed it was priced at, named beside it (spec 069).
         assert_eq!(signed.tier, Some(shown.tier));
         assert_eq!(opts.max_fee_per_gas.as_deref(), Some("1500000000"));
+    }
+
+    /// A fee paid in an ERC-20 is approved AS that coin: the fee token rides
+    /// along, and the quoted amount is the coin's own figure — `total_wei` is
+    /// 0 for an ERC-20 quote, and signing 0 would be a fee claim of nothing.
+    #[test]
+    fn an_erc20_fee_is_approved_in_its_own_coin() {
+        use vela_core::app::fee_policy::FeeEstimateView;
+
+        let usdc = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_owned();
+        let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        fee.fee_token = Some(usdc.clone());
+        fee.fee = Some(FeeEstimateView {
+            chain_id: 1,
+            total_wei: "0".to_owned(),
+            max_fee_per_gas: "2000000000".to_owned(),
+            network_fee_per_gas: "1".to_owned(),
+            relayer_fee_per_gas: "1".to_owned(),
+            bundler_gas_price: "1".to_owned(),
+            in_band_gas_basis: "21000".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
+            total_gas: "21000".to_owned(),
+            deployed: true,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Erc20 {
+                token: usdc.clone(),
+                decimals: 6,
+                amount: "1250000".to_owned(),
+                symbol: Some("USDC".to_owned()),
+            },
+            fee_recipient: Some("0xee2c".to_owned()),
+        });
+        let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+
+        let opts = approve_opts(&fee, &clear, &guard);
+        assert_eq!(opts.gas_fee_token.as_deref(), Some(usdc.as_str()));
+        let quoted = opts
+            .quoted_fee
+            .unwrap_or_else(|| unreachable!("a priced sheet approves with its price"));
+        assert_eq!(quoted.amount, "1250000", "the coin's figure, not total_wei");
+        assert_eq!(quoted.recipient, "0xee2c");
+
+        // The native coin: no fee token, and the quote is `total_wei`.
+        fee.fee_token = None;
+        if let Some(estimate) = fee.fee.as_mut() {
+            estimate.fee_asset = FeeAssetView::Native;
+            estimate.total_wei = "91000000000000".to_owned();
+        }
+        let opts = approve_opts(&fee, &clear, &guard);
+        assert_eq!(opts.gas_fee_token, None);
+        assert_eq!(
+            opts.quoted_fee.map(|quoted| quoted.amount).as_deref(),
+            Some("91000000000000")
+        );
     }
 
     /// An unpriced sheet approves with no quote rather than a zero.

@@ -164,6 +164,9 @@ pub struct SigningStrings {
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
+    /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
+    /// under the fee row when the coin it was quoted in cannot pay it.
+    pub warn_insufficient_gas: SharedString,
     pub tech_function: SharedString,
     pub tech_raw_data: SharedString,
     pub tech_sim_result: SharedString,
@@ -345,6 +348,7 @@ impl SigningStrings {
             fee_estimating: loc.t("componentsUi.gas.estimating"),
             fee_token_title: s("feeTokenTitle"),
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
+            warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
             tech_sim_result: s("simResultLabel"),

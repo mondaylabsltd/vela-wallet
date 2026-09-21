@@ -36,7 +36,12 @@ enum SigningLive {
         /// The person's "Sign with" choice for THIS request, and whether its list is open.
         var signMethod = "auto"
         var signWithOpen = false
+        /// Whether the fee row's coin list is open (issue #262).
+        var feeOpen = false
     }
+
+    /// The fee list's id for the chain's own coin (the web's `'native'`).
+    static let nativeFeeId = "native"
 
     private static func s(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
         vars.isEmpty ? loc.t("componentsUi.signing.\(key)")
@@ -681,7 +686,37 @@ enum SigningLive {
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
         }
-        return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value, selector: nil)
+        // The coins the relay takes the fee in — the Send screen's rows,
+        // amounts and "cannot pay" verdict (founder, 2026-09-19: a fee a person
+        // can switch when sending and not when signing is two products).
+        let options = fee?.options ?? []
+        let selector: (title: String, options: [FeeTokenOption])? =
+            context.feeOpen && options.count > 1
+            ? (title: s(context.loc, "feeTokenTitle"), options: options.map { option in
+                FeeTokenOption(
+                    id: option.contract ?? nativeFeeId,
+                    mark: TokenMark(letter: String(option.symbol.prefix(1)).uppercased(),
+                                    tint: context.chainDot),
+                    name: option.symbol,
+                    balance: "\(SendLive.trim(SendLive.fromBase(option.balance, decimals: option.decimals))) \(option.symbol)",
+                    fee: option.amount.map {
+                        "~\(SendLive.feeFromBase($0, decimals: option.decimals)) \(option.symbol)"
+                    } ?? "—",
+                    selected: option.selected,
+                    disabled: option.insufficient
+                )
+            })
+            : nil
+        // Issue #262: the core shut the gate because the selected coin cannot
+        // pay this fee — the send form's own sentence (#211), about the same
+        // shortfall. A dark slide with no reason is issue 204.
+        var warning: String?
+        if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
+           let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
+            warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+        }
+        return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
+                        selector: selector, warning: warning)
     }
 
     /// The slide's verb: the core's intent id, **in the corpus's words**.

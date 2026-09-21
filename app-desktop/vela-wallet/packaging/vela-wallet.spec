@@ -87,6 +87,12 @@ install -Dm0644 usr/lib/udev/rules.d/70-vela-fido.rules \
 %{_datadir}/metainfo/%{appid}.metainfo.xml
 
 %changelog
+* Mon Sep 21 2026 Monday Labs <hello@getvela.app> - 0.9.4-1
+- Pre-release: a passkey says where it lives (cloud-synced or on this device);
+  sign-in checks what an index tells it against the chain; the fee can be
+  refreshed and a speed chosen, with the amount's unit shown; and fixes to
+  sending, the receive code on Android, and the web layout.
+
 * Sat Sep 19 2026 Monday Labs <hello@getvela.app> - 0.9.3-1
 - Pre-release: a wallet's founding record can be backed up to Ethereum; signing in
   with a USB security key no longer crashes; every waiting dialog can be cancelled;

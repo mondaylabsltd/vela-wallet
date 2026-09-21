@@ -3172,6 +3172,11 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
 
 fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
     model.show_scanner = false;
+    // The picker's "scan to fill" row opened this scanner, and the scan IS the
+    // pick: leaving the picker up put it back over the address it had just
+    // filled (issue #270), on every shell. The targeted path below closes it
+    // through `apply_picked_address`; a re-lock reopens the flow either way.
+    model.show_contact_picker = false;
     // Per-row scan in split mode — just the address; a full-request re-lock
     // would blow away the other recipients (invariant ⑬).
     if model.picker_target.is_some() {

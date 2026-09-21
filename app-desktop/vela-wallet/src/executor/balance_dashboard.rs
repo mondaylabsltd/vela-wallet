@@ -14,6 +14,8 @@
 //! partial fetch is how a wallet remembers a number that was never true; the
 //! core refuses to ask for that write, and this file never writes uninvited.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -22,7 +24,7 @@ use serde_json::{Value, json};
 
 use vela_core::app::balance_dashboard::{
     AUTO_REFRESH_MS, BalanceCacheEntry, BalanceDashboard, BalanceOperation, BalanceShellResult,
-    Event,
+    BalanceToken, Event,
 };
 
 use crate::executor::{balances, storage};
@@ -53,6 +55,63 @@ fn write_cached_usd(address: &str, usd: f64, now_ms: f64) {
     };
     map.insert(address.to_owned(), json!({ "usd": usd, "at": now_ms }));
     let _ = storage::write_value(CACHE_KEY, Value::Object(map));
+}
+
+/// The last settled holdings per address (lower-cased) — what a chain that
+/// does not answer falls back to. The web's in-memory `tokenCache`.
+static LAST_SETTLED: Mutex<Option<HashMap<String, Vec<BalanceToken>>>> = Mutex::new(None);
+
+/// The previous snapshot's holdings on chains that did not answer, kept
+/// alongside the ones that did (issue #196, the web's
+/// `carryOverUnansweredChains`, commit 72dee30a).
+///
+/// The core's streaming merge already holds a chain's last value while it is
+/// in flight, but the settled list replaces everything — so one round in
+/// which Gnosis timed out removed its tokens from the Assets list and their
+/// value from the total. A chain that ANSWERED stays authoritative: tokens it
+/// no longer reports really have been spent. The failed chains are still
+/// reported to the core, which keeps treating the round as partial and never
+/// promotes a total carrying stale holdings to last-known-good.
+fn carry_over_unanswered(
+    previous: &[BalanceToken],
+    mut fresh: Vec<BalanceToken>,
+    failed_chain_ids: &[u32],
+) -> Vec<BalanceToken> {
+    let carried: Vec<BalanceToken> = previous
+        .iter()
+        .filter(|token| failed_chain_ids.contains(&token.chain_id))
+        .cloned()
+        .collect();
+    if carried.is_empty() {
+        return fresh;
+    }
+    fresh.extend(carried);
+    // The fetch's own deterministic order, so a carried row sits where it
+    // would have had its chain answered.
+    fresh.sort_by(|a, b| {
+        a.chain_id
+            .cmp(&b.chain_id)
+            .then_with(|| a.token_address.is_some().cmp(&b.token_address.is_some()))
+            .then_with(|| a.symbol.cmp(&b.symbol))
+    });
+    fresh
+}
+
+/// Settle one round against the last one for this address, and remember it.
+fn settle_with_carry_over(
+    address: &str,
+    fresh: Vec<BalanceToken>,
+    failed_chain_ids: &[u32],
+) -> Vec<BalanceToken> {
+    let key = address.to_lowercase();
+    let mut guard = LAST_SETTLED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let snapshots = guard.get_or_insert_with(HashMap::new);
+    let previous = snapshots.get(&key).map_or(&[][..], Vec::as_slice);
+    let tokens = carry_over_unanswered(previous, fresh, failed_chain_ids);
+    snapshots.insert(key, tokens.clone());
+    tokens
 }
 
 impl Machine for BalanceDashboard {
@@ -101,6 +160,9 @@ impl Machine for BalanceDashboard {
                             });
                         });
                     let (tokens, failed) = balances::fetch_all_streaming(&address, &arrived);
+                    // A chain that did not answer keeps what the last round
+                    // knew it held; it is still reported as failed below.
+                    let tokens = settle_with_carry_over(&address, tokens, &failed);
                     BalanceShellResult::FetchSettled {
                         address,
                         pull,
@@ -452,6 +514,64 @@ mod tests {
                 other => unreachable!("wrong variant: {other:?}"),
             }
         });
+    }
+
+    fn held(chain_id: u32, symbol: &str, contract: Option<&str>) -> BalanceToken {
+        BalanceToken {
+            chain_id,
+            symbol: symbol.to_owned(),
+            name: symbol.to_owned(),
+            balance: "1".to_owned(),
+            decimals: 18,
+            token_address: contract.map(str::to_owned),
+            price_usd: Some(1.0),
+            spam: false,
+        }
+    }
+
+    /// Issue #196: a chain that did not answer keeps the holdings the last
+    /// round saw; a chain that answered is authoritative, even with nothing.
+    #[test]
+    fn a_failing_chain_keeps_its_tokens_and_an_answering_one_is_believed() {
+        let previous = vec![
+            held(100, "xDAI", None),
+            held(100, "USDC", Some("0xusdc")),
+            held(8453, "ETH", None),
+            held(137, "POL", None),
+        ];
+        // Gnosis failed; Base answered with nothing (spent); Polygon answered.
+        let fresh = vec![held(137, "POL", None)];
+        let settled = carry_over_unanswered(&previous, fresh, &[100]);
+        let seen: Vec<(u32, &str)> = settled
+            .iter()
+            .map(|t| (t.chain_id, t.symbol.as_str()))
+            .collect();
+        assert_eq!(
+            seen,
+            vec![(100, "xDAI"), (100, "USDC"), (137, "POL")],
+            "Gnosis kept, Base's spent ETH gone, and the fetch's own order"
+        );
+
+        // Nothing failed: the fresh list, untouched.
+        let fresh = vec![held(137, "POL", None)];
+        assert_eq!(carry_over_unanswered(&previous, fresh.clone(), &[]), fresh);
+        // Nothing known before: nothing to carry.
+        assert!(carry_over_unanswered(&[], Vec::new(), &[100]).is_empty());
+    }
+
+    /// The snapshot a failing round falls back to is the last SETTLED one for
+    /// that address — including what an earlier failing round carried.
+    #[test]
+    fn a_second_failing_round_still_has_the_first_rounds_tokens() {
+        let address = "0xCarryOverTest";
+        let first = settle_with_carry_over(address, vec![held(100, "xDAI", None)], &[]);
+        assert_eq!(first.len(), 1);
+        let second = settle_with_carry_over(address, Vec::new(), &[100]);
+        assert_eq!(second.len(), 1, "Gnosis failed: its xDAI stays");
+        let third = settle_with_carry_over(&address.to_lowercase(), Vec::new(), &[100]);
+        assert_eq!(third.len(), 1, "the same account, however it is cased");
+        let answered = settle_with_carry_over(address, Vec::new(), &[]);
+        assert!(answered.is_empty(), "Gnosis answered with nothing: spent");
     }
 
     /// Privacy persists as the '1'/'0' string the other clients wrote.

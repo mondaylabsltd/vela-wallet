@@ -59,7 +59,7 @@ struct SigningFixturesTests {
             }
         }
         switch m.fee {
-        case .onchain(let label, let value, let selector):
+        case .onchain(let label, let value, let selector, _):
             out += [label, value]
             if let selector {
                 out.append(selector.title)
@@ -161,7 +161,7 @@ struct SigningFixturesTests {
                 Issue.record("\(state) shows no fee row at all")
             }
         }
-        if case .onchain(_, _, let selector) = model(.cs33).fee {
+        if case .onchain(_, _, let selector, _) = model(.cs33).fee {
             #expect(selector?.options.count == 2)
         } else {
             Issue.record("cs33 opens the fee-token selector")

@@ -79,6 +79,9 @@ class SigningController(
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
 ) {
+    /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
+    private val signers = listOf(wallet)
+
     private val persistedRecords = java.util.Collections.synchronizedSet(HashSet<String>())
     private var pendingHandoff: SignTrackerHandoff? = null
 
@@ -136,6 +139,12 @@ class SigningController(
                 // this controller may go.
                 markAnswered()
             }
+
+            // The rows the machine was given, and the request it is judging:
+            // what `SwitchActiveAccount` is checked against.
+            override fun signerAt(index: Int): String? = signers.getOrNull(index)?.address
+
+            override fun intendedSigner(): String? = signHost.view.value.request?.signer_address
         },
         now = now,
         receiptWaitMs = receiptWaitMs,
@@ -217,7 +226,7 @@ class SigningController(
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
-        dispatchSign(SignEvent.AccountsChanged(listOf(wallet), 0))
+        dispatchSign(SignEvent.AccountsChanged(signers, 0))
         dispatchSign(
             SignEvent.RequestArrived(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,

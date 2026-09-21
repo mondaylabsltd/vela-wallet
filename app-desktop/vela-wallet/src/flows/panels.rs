@@ -14,7 +14,9 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{activity_row, asset_row, empty_state, icon_img, token_icon_logos};
+use crate::wallet::components::{
+    activity_row, asset_row, empty_state, icon_img, skeleton_row, token_icon_logos,
+};
 
 use super::components::{
     accent_button, address_card, fact_row, fee_refresh_icon, fee_row, fee_speed_note,
@@ -24,7 +26,7 @@ use super::components::{
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
-    DepositEntry, FeeSpeedModel, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr,
+    DepositEntry, FeeSpeedModel, FeeTokenPick, FlowBody, HistoryPanel, ReceiveList, ReceiveQr,
     ScanModal, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
 };
 
@@ -101,6 +103,8 @@ pub struct PanelActions {
     pub recipient_field: Option<AddressField>,
     /// DSD2L, live: the Max chip.
     pub tap_max: Option<Click>,
+    /// DSD2L, live: ⇄ — type the amount in money, or back in the token (#197).
+    pub toggle_denom: Option<Click>,
     /// DSD2eL, live: one listener per contact row, in the book's order.
     pub pick_contact_rows: Vec<Click>,
     /// DSD2fL, live: one listener per fee-coin row, in the relay's order.
@@ -115,6 +119,9 @@ pub struct PanelActions {
     /// DSD2cL, live: the rate, editable — the shown string IS the applied rate.
     pub batch_rate_field: Option<AddressField>,
     pub batch_rate_reset: Option<Click>,
+    /// DSD2cL, live: the merge line's "Replace them instead" / "Add to them
+    /// instead".
+    pub batch_merge: Option<Click>,
     /// DSD2L / DSD3L, live: the way out the core's refusal offers — edit the
     /// amount, add the network, check the top-up again.
     pub notice_action: Option<Click>,
@@ -155,6 +162,20 @@ pub fn clickable(id: impl Into<ElementId>, action: Option<Click>, body: impl Int
         ),
         None => wrap.child(body),
     }
+}
+
+/// "View on Explorer", opening the page it names — or the plain drawn button
+/// where there is none (the mocks, a transaction with no hash).
+fn explorer_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    url: Option<&SharedString>,
+) -> Div {
+    let open = url.cloned().map(|url| -> Click {
+        Box::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| cx.open_url(&url))
+    });
+    clickable(id, open, ghost_button(theme, label))
 }
 
 /// A vertical stack with the panel's own rhythm.
@@ -245,8 +266,8 @@ pub fn render(
             actions.acknowledge,
             actions.save_image,
         ),
-        FlowBody::History(groups) => {
-            history(groups, theme, icons, actions.open_tx, actions.open_tx_rows)
+        FlowBody::History(model) => {
+            history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
         }
         FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons),
         FlowBody::Assets(model) => assets(model, theme, icons, actions.open_add_token),
@@ -366,7 +387,22 @@ fn receive_qr(
                         .text_color(theme.fg_base)
                         .child(value.clone()),
                 )
-                .child(icon_img(icons, Icon::Copy, false, theme.fg_subtle, 13.)),
+                // The copy beside it copies the WHOLE contract — the line is
+                // shortened. Drawn inert where there is nothing to copy.
+                .child({
+                    let copy = model.contract_copy.clone().map(|contract| -> Click {
+                        Box::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                contract.to_string(),
+                            ));
+                        })
+                    });
+                    clickable(
+                        "receive-contract-copy",
+                        copy,
+                        icon_img(icons, Icon::Copy, false, theme.fg_subtle, 13.),
+                    )
+                }),
         );
     }
 
@@ -424,7 +460,12 @@ fn receive_qr(
         save_image,
         ghost_button(theme, model.save_image.clone()),
     ))
-    .child(ghost_button(theme, model.view_on_explorer.clone()))
+    .child(explorer_button(
+        "receive-explorer",
+        theme,
+        model.view_on_explorer.clone(),
+        model.explorer_url.as_ref(),
+    ))
     .children(deposit_section(&model.deposits, theme))
 }
 
@@ -502,13 +543,32 @@ fn deposit_section(deposits: &[DepositEntry], theme: &Theme) -> Option<Div> {
 }
 
 fn history(
-    groups: &[HistoryGroup],
+    model: &HistoryPanel,
     theme: &Theme,
     icons: &mut IconCache,
     mut open_tx: Option<Click>,
     per_row: Vec<Click>,
 ) -> Div {
     let mut col = div().flex().flex_col();
+    if model.loading {
+        return col
+            .child(skeleton_row(theme))
+            .child(skeleton_row(theme))
+            .child(skeleton_row(theme));
+    }
+    // A history with nothing in it is a fact, not a problem: one quiet line
+    // rather than an illustrated empty state (the web's `.empty`).
+    if let Some(text) = &model.empty {
+        return col.child(
+            div()
+                .py(px(48.))
+                .text_center()
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_muted)
+                .child(text.clone()),
+        );
+    }
+    let groups = &model.groups;
     // Row order here IS the order the page bound its listeners in, because both
     // walk the same groups. A live panel binds one per row; the fixture binds
     // one and gives it to the first.
@@ -592,7 +652,12 @@ fn tx_detail(
             &model.breakdown,
         ));
     }
-    col.child(ghost_button(theme, model.view_on_explorer.clone()))
+    col.child(explorer_button(
+        "tx-explorer",
+        theme,
+        model.view_on_explorer.clone(),
+        model.explorer_url.as_ref(),
+    ))
 }
 
 fn assets(
@@ -1113,7 +1178,11 @@ fn send_form(
         // line under it and the Max chip beside it. The value is the CORE's
         // — it validates every keystroke — so the field holds no copy.
         let strings = crate::ui::NameFieldStrings {
-            label: model.token.1.clone(),
+            // The unit the figure is typed in — money or the token (#231).
+            label: model
+                .amount_unit
+                .clone()
+                .unwrap_or_else(|| model.token.1.clone()),
             placeholder: field.placeholder.clone(),
             helper: SharedString::from(""),
             too_long_hint: SharedString::from(""),
@@ -1131,12 +1200,26 @@ fn send_form(
         ));
         let mut under = div().flex().items_center().justify_between().gap(px(8.));
         if let Some((_, fiat)) = &model.amount {
-            under = under.child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
-                    .child(fiat.clone()),
-            );
+            let line = div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted);
+            under = under.child(match model.denom_toggle {
+                // ⇄ IS the other denomination's line (the web's `button.fiat`):
+                // pressing what it shows is how the figure comes across. Where
+                // the swap would change nothing it is drawn dimmed and answers
+                // to nothing — the notice below says why.
+                Some(enabled) => clickable(
+                    "send-denom-toggle",
+                    if enabled {
+                        actions.toggle_denom.take()
+                    } else {
+                        None
+                    },
+                    line.when(!enabled, |el| el.opacity(0.5))
+                        .child(SharedString::from(format!("⇄  {fiat}"))),
+                ),
+                None => line.child(fiat.clone()),
+            });
         }
         if let Some(max) = &model.token.3 {
             under = under.child(clickable(
@@ -1299,9 +1382,29 @@ fn send_form(
                 )
                 .child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(value.clone()),
+                        .flex()
+                        .flex_col()
+                        .items_end()
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                // Over the balance, the total says so in ink
+                                // before Continue has to refuse it.
+                                .text_color(if model.summary_over {
+                                    theme.error_base
+                                } else {
+                                    theme.fg_base
+                                })
+                                .child(value.clone()),
+                        )
+                        .when_some(model.remaining.clone(), |el, left| {
+                            el.child(
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_muted)
+                                    .child(left),
+                            )
+                        }),
                 ),
         );
     }
@@ -1819,11 +1922,32 @@ fn batch_import(
                 )
                 .child(
                     div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .child(row.conversion.clone()),
+                        .flex()
+                        .flex_col()
+                        .items_end()
+                        // A refused line has no figure; its reason alone.
+                        .when(!row.conversion.is_empty(), |el| {
+                            el.child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_muted)
+                                    .child(row.conversion.clone()),
+                            )
+                        })
+                        // Why this line will not be paid, beside the line.
+                        .when_some(row.note.clone(), |el, note| {
+                            el.child(
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.error_base)
+                                    .child(note),
+                            )
+                        }),
                 ),
         );
+    }
+    if let Some(total) = &model.total {
+        col = col.child(batch_total_line(total, theme));
     }
 
     col = col.child(
@@ -1835,6 +1959,29 @@ fn batch_import(
     if let Some(notice) = &model.notice {
         col = col.child(notice_card(notice, theme, None, None));
     }
+    // What the import does to the rows already on the form, beside the button
+    // that does it — and the way to choose the other, because either can be
+    // what is meant.
+    if let Some((note, action)) = &model.merge {
+        col = col.child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_x(px(8.))
+                .text_size(theme::text_row_sub())
+                .child(div().text_color(theme.fg_muted).child(note.clone()))
+                .child(clickable(
+                    "batch-merge",
+                    actions.batch_merge.take(),
+                    div()
+                        .cursor_pointer()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.accent)
+                        .child(action.clone()),
+                )),
+        );
+    }
     // Bad rows are marked and skipped, never silently dropped, and the CTA
     // counts only the good ones — a button that says "Import 3" and imports 2
     // is how someone underpays a contractor. A gate the core shut is drawn
@@ -1845,6 +1992,61 @@ fn batch_import(
     } else {
         col.child(cta.opacity(0.4))
     }
+}
+
+/// DSD2cL's total: the figure the import sends and, under it, what it draws
+/// from — or, in error ink, that it draws more than there is.
+fn batch_total_line(total: &super::fixtures::BatchTotal, theme: &Theme) -> Div {
+    let over = total.over.is_some();
+    div()
+        .flex()
+        .items_start()
+        .justify_between()
+        .gap(px(8.))
+        .pt(px(10.))
+        .border_t_1()
+        .border_color(theme.divider)
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(total.label.clone()),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .items_end()
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(if over {
+                            theme.error_base
+                        } else {
+                            theme.fg_base
+                        })
+                        .child(total.value.clone()),
+                )
+                .when_some(total.detail.clone(), |el, detail| {
+                    el.child(
+                        div()
+                            .text_size(theme::text_label())
+                            .text_color(theme.fg_muted)
+                            .child(detail),
+                    )
+                })
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(if over {
+                            theme.error_base
+                        } else {
+                            theme.fg_muted
+                        })
+                        .child(total.over.clone().unwrap_or_else(|| total.balance.clone())),
+                ),
+        )
 }
 
 fn send_confirm(

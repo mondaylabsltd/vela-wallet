@@ -138,6 +138,11 @@ struct RootView: View {
     /// round trip.
     @State private var batchPaste = ""
     @State private var batchRate = ""
+    /// The importer REPLACES the form's rows rather than adding to them — only
+    /// once the person has asked for that on the sheet (web #265). Adding is
+    /// the default: a list brought to a form with people on it is, nearly
+    /// always, more people.
+    @State private var importReplaces = false
     @State private var feeSheetOpen = false
     /// Whether the token picker is showing tick boxes.
     ///
@@ -292,6 +297,8 @@ struct RootView: View {
         // cache on this client, only a fetch.
         let wallet = WalletStore(store: shelf, pool: pool, held: held)
         _wallet = State(initialValue: wallet)
+        // An incoming transfer the feed just found: the hero follows (#188).
+        activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
         _tokens = State(initialValue: ManageTokensStore(
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
@@ -1090,6 +1097,8 @@ struct RootView: View {
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onSignWith: { id in signing?.signWith(id) },
+                        onFee: { signing?.feeTapped() },
+                        onFeePick: { id in signing?.pickFee(id) },
                         onSpeed: { id in signing?.speed(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
@@ -1814,7 +1823,8 @@ struct RootView: View {
         }
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
-                balance, currency: settings.currency, on: assets, loc: loc
+                balance, currency: settings.currency, selected: chainFilter,
+                on: assets, loc: loc
             ))
         }
         // The history screen the home's 全部 opens — the same feed, not a
@@ -1882,7 +1892,9 @@ struct RootView: View {
             }
             if case .batchImport(let sheet)? = model.sheet {
                 model.sheet = .batchImport(
-                    SendLive.batchImport(batch.view, view: view, on: sheet, loc: loc)
+                    SendLive.batchImport(
+                        batch.view, view: view, on: sheet, loc: loc, replaces: importReplaces
+                    )
                 )
             }
         }
@@ -1946,28 +1958,37 @@ struct RootView: View {
     /// the core's own rule, so a paste left from a previous file is never
     /// waiting for the next one — which is why the drafts are cleared here too.
     private func openBatch() {
-        guard let token = send.view?.selectedToken else { return }
+        guard let view = send.view, let token = view.selectedToken else { return }
         batchPaste = ""
         batchRate = ""
+        importReplaces = false
         send.openBatchImport()
         batch.open(
             symbol: token.symbol,
             decimals: token.decimals,
             balance: token.balance,
             priceUsd: token.priceUsd,
-            currencyCode: settings.currency?.code ?? "USD"
+            currencyCode: settings.currency?.code ?? "USD",
+            // What an import can actually ADD: the cap less the rows already
+            // started, the core's own count.
+            maxRecipients: view.splitImportRoom
         )
     }
 
-    /// 导入 N 位收款人 — the parsed rows become the split's rows.
+    /// 导入 N 位收款人 — the parsed rows join the split's rows.
     ///
     /// Nothing is recomputed on the way across: the addresses the preview
     /// showed as valid are the addresses that get paid, and the core mints the
-    /// row ids. `seed_split_recipients` also shuts the sheet, so there is no
-    /// second close here.
+    /// row ids. Appended to whoever is already typed, unless the person chose
+    /// to replace them; both events also shut the sheet, so there is no second
+    /// close here.
     private func batchApply() {
         guard let rows = batch.apply() else { return }
-        send.seedSplitRecipients(rows)
+        if importReplaces {
+            send.seedSplitRecipients(rows)
+        } else {
+            send.appendSplitRecipients(rows)
+        }
     }
 
     /// A fee asset was chosen.
@@ -1977,7 +1998,10 @@ struct RootView: View {
     /// calldata and one storage write apart), and the send machine records what
     /// was asked for so `submit_user_op` signs the same shape.
     private func pickFeeToken(_ index: Int) {
-        let contract = fees.view?.options[safe: index]?.contract
+        // A coin that cannot pay is not a choice — the row is disabled, and
+        // this holds the same rule for any path that reaches here without it.
+        guard let option = fees.view?.options[safe: index], !option.insufficient else { return }
+        let contract = option.contract
         fees.selectAsset(contract)
         send.chooseFeeToken(contract)
         feeSheetOpen = false
@@ -1989,6 +2013,38 @@ struct RootView: View {
         recipientDraft = contact.address
         send.pickedAddress(contact.address)
         send.closeContactPicker()
+    }
+
+    /// An assets row was tapped. The list may be narrowed to one chain, so its
+    /// position is translated back to the holding it shows — a tap that
+    /// indexed the whole list would open a different token.
+    private func selectAsset(_ index: Int) {
+        guard let balance = wallet.balance else {
+            assetRow = index
+            return
+        }
+        assetRow = FlowsLive.visibleAssetIndices(balance, selected: chainFilter)[safe: index] ?? index
+    }
+
+    /// The network picker behind the header pill. The assets list offers the
+    /// chains it HOLDS something on; the history, the chains it has transfers
+    /// on. One filter behind both, as on the web.
+    private func chainSheet(for state: FlowStateId) -> ChainSheetModel? {
+        let assetStates: Set<FlowStateId> = [.t1, .t2, .t3, .t3b, .t4, .t5, .t5b]
+        if assetStates.contains(state), let balance = wallet.balance {
+            return FlowsLive.assetChainSheet(balance, selected: chainFilter, loc: loc)
+        }
+        return activity.feed.map {
+            FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
+        }
+    }
+
+    /// A whole group from the picker: its members JOIN the form, amounts
+    /// blank. The core shuts the picker itself.
+    private func pickSendGroup(_ index: Int) {
+        guard let group = contacts.view?.groups[safe: index],
+              let rows = SendLive.groupRecipients(group) else { return }
+        send.appendSplitRecipients(rows)
     }
 
     /// The states the send machine owns. Anything else is still a drawing.
@@ -2065,7 +2121,8 @@ struct RootView: View {
             sim: trust.trust?.sim,
             simulation: live.simulation,
             signMethod: live.signMethod,
-            signWithOpen: live.signWithOpen
+            signWithOpen: live.signWithOpen,
+            feeOpen: live.feeOpen
         )
         return SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
@@ -2120,13 +2177,11 @@ struct RootView: View {
                         )
                     },
                     onSelectActivity: { activityRow = ($0, $1) },
-                    onSelectAsset: { assetRow = $0 },
+                    onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
                     onDeleteTx: { deleteOpenTransaction() },
-                    chainSheet: activity.feed.map {
-                        FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
-                    },
+                    chainSheet: chainSheet(for: state),
                     onPickChain: { chainId in
                         chainFilter = chainId
                         activity.chainFilter(chainId)
@@ -2192,6 +2247,7 @@ struct RootView: View {
                     onNoticeSecondary: { send.dismissTreasurySheet() },
                     onPickFeeToken: pickFeeToken,
                     onPickContact: pickSendContact,
+                    onPickGroup: pickSendGroup,
                     batchPaste: state == .sd2c ? $batchPaste : nil,
                     batchRate: state == .sd2c ? $batchRate : nil,
                     onBatchUnit: { batch.setUnit($0) },
@@ -2202,6 +2258,7 @@ struct RootView: View {
                         batchRate = batch.view.rateInput
                     },
                     onBatchApply: { batchApply() },
+                    onBatchMerge: { importReplaces.toggle() },
                     scan: scanInputs()
                 )
     }
@@ -2526,6 +2583,8 @@ struct RootView: View {
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
                     onSignWith: { id in signing.signWith(id) },
+                    onFee: { signing.feeTapped() },
+                    onFeePick: { id in signing.pickFee(id) },
                     onSpeed: { id in signing.speed(id) }
                 )
                     .presentationDragIndicator(.visible)

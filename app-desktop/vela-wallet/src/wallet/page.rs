@@ -577,6 +577,10 @@ pub struct WalletPage {
     /// must not be shown "Ethereum". Defaults to Gnosis, the chain this wallet
     /// is cheapest to be paid on.
     receive_chain: u32,
+    /// DR3L, live: the held token whose own code is open — kept as it was
+    /// when its detail's 收款 was pressed, because the holdings list can
+    /// re-order under an open panel and an index would then name another.
+    receive_token: Option<vela_core::app::balance_dashboard::BalanceToken>,
     /// The chain the in-app BROWSER is on: what a connected site was told by
     /// `eth_chainId`, what `wallet_switchEthereumChain` moves, and the chain a
     /// signature from that site is quoted, routed and submitted on.
@@ -659,8 +663,8 @@ struct SendBindings {
     /// DSD2cL: the rate string the core holds, and the field's focus.
     batch_rate: Option<String>,
     rate_focus: gpui::FocusHandle,
-    /// DSD2eL: each group's member addresses, in drawn order.
-    group_members: Vec<Vec<String>>,
+    /// DSD2eL: each group's members as split rows, in drawn order.
+    group_members: Vec<Vec<SendRecipientDraft>>,
     /// SD1b: the picker is choosing SEVERAL tokens. A shell flag — the core's
     /// `multi_select_mode` flips only once a selection is confirmed — and the
     /// chain each row is on, so the first pick can name the network.
@@ -861,6 +865,7 @@ impl WalletPage {
                 .unwrap_or_default(),
             flow_strings: FlowStrings::resolve(&loc),
             receive_chain: 100,
+            receive_token: None,
             browser_chain: 100,
             celebrating: false,
             chain_filter: None,
@@ -1013,7 +1018,16 @@ impl WalletPage {
                 &network,
             ),
             // "Vela Wallet", as the web's card signs itself.
-            network_ticker: network.chars().take(3).collect::<String>().to_uppercase(),
+            // A token's own code marks the card with the token (the web's
+            // `networkMark: balanceTokenMark(token)`); a network's, the network.
+            network_ticker: match (self.flows.last(), self.receive_token.as_ref()) {
+                (Some(FlowPanel::Dr3), Some(token)) => &token.symbol,
+                _ => &network,
+            }
+            .chars()
+            .take(3)
+            .collect::<String>()
+            .to_uppercase(),
             network_tint: flows_live::chain_tint(self.receive_chain),
             seed: identity.address.to_string(),
             wordmark: "Vela Wallet".to_owned(),
@@ -2154,6 +2168,25 @@ impl WalletPage {
                 ),
             );
         }
+        // Nothing to list, and the core has said so — or the sidebar's chain
+        // holds nothing while others do. The empty state rather than a blank
+        // strip, which reads as a list that failed to load (the web's
+        // `assetsSection.mode === 'empty'`).
+        if assets.is_empty()
+            && self.identity.is_some()
+            && wallet_live::assets_strip_empty(
+                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                self.chain_filter,
+            )
+        {
+            assets_col = assets_col.child(empty_state(
+                theme,
+                &mut self.icons,
+                Icon::WalletOutline,
+                self.strings.empty_assets_title.clone(),
+                self.strings.empty_assets_caption.clone(),
+            ));
+        }
 
         div()
             .flex_1()
@@ -2772,6 +2805,8 @@ impl WalletPage {
                 sub: SharedString::from(""),
                 facts: Vec::new(),
                 activity: Vec::new(),
+                activity_ids: Vec::new(),
+                explorer_url: None,
             })
     }
 
@@ -3405,6 +3440,17 @@ impl WalletPage {
 
     /// Open a flow from the wallet home (spec 021 SC-002).
     fn enter_flow(&mut self, entry: FlowEntry, cx: &mut Context<Self>) {
+        self.enter_flow_with(entry, SendOpenParams::default(), cx);
+    }
+
+    /// Open a flow, with what a send should open on — a token's own 转账
+    /// names that token (the web's `enter('send', { assetId })`).
+    fn enter_flow_with(
+        &mut self,
+        entry: FlowEntry,
+        params: SendOpenParams,
+        cx: &mut Context<Self>,
+    ) {
         self.flows = FlowPanel::entry(entry);
         self.panel = PanelId::Flow;
         self.send_host = None;
@@ -3413,7 +3459,7 @@ impl WalletPage {
             // A fresh journey starts on the one-token list, whatever the last
             // one ended in.
             self.send_sweeping = false;
-            self.open_send(SendOpenParams::default(), cx);
+            self.open_send(params, cx);
         }
         // A person looking at one network who presses 收款 means THAT network.
         // The web makes the same jump for the same reason; without it the
@@ -3764,6 +3810,35 @@ impl WalletPage {
         }
     }
 
+    /// DSD2cL's total line, which reads what the importer's own view does not
+    /// carry: the balance of the coin being split.
+    ///
+    /// The import SEEDS the form on this branch (it replaces the rows), so
+    /// the line is measured against the whole balance; an import that adds
+    /// to rows already there draws from `split_remaining` instead — the
+    /// second argument, the web's `formHasRows && !replaces`.
+    fn dress_batch_total(&self, body: &mut flow_fixtures::FlowBody, cx: &mut Context<Self>) {
+        let flow_fixtures::FlowBody::BatchImport(model) = body else {
+            return;
+        };
+        let Some(host) = self.send_host.as_ref() else {
+            return;
+        };
+        let host = host.read(cx);
+        let (Some(batch), Some(token)) =
+            (host.batch_view.as_ref(), host.view.selected_token.as_ref())
+        else {
+            return;
+        };
+        model.total = flows_live::batch_total(
+            batch,
+            &token.symbol,
+            &token.balance,
+            None,
+            &self.flow_strings,
+        );
+    }
+
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
     ///
     /// Not every panel has a live source yet — Send is 032's, and the scanner
@@ -3789,16 +3864,15 @@ impl WalletPage {
             FlowPanel::Da1 => {
                 // Privacy comes from the BALANCE view, not the feed's own flag:
                 // every money surface masks together.
-                let hidden = resident::resident::<BalanceDashboard>(cx)
-                    .read(cx)
-                    .view()
-                    .hidden;
+                let balance = resident::resident::<BalanceDashboard>(cx).read(cx).view();
                 let feed = resident::resident::<ActivityFeed>(cx).read(cx).view();
-                flow_fixtures::FlowBody::History(flows_live::history(
+                flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
+                    balance.balance_unknown,
+                    self.chain_filter,
                     &self.flow_strings,
                     &self.strings,
-                    hidden,
+                    balance.hidden,
                 ))
             }
             FlowPanel::Dr1 => flow_fixtures::FlowBody::Receive(flows_live::receive_list(
@@ -3845,7 +3919,13 @@ impl WalletPage {
                         // it — that would show somebody a stranger's
                         // transaction under their own history — so the panel
                         // draws nothing and the chevron leads back.
-                        || flow_fixtures::FlowBody::History(Vec::new()),
+                        || {
+                            flow_fixtures::FlowBody::History(flow_fixtures::HistoryPanel {
+                                groups: Vec::new(),
+                                loading: false,
+                                empty: None,
+                            })
+                        },
                         flow_fixtures::FlowBody::TxDetail,
                     )
             }
@@ -3910,18 +3990,43 @@ impl WalletPage {
                     let host = host.read(cx);
                     let symbol = host.view.selected_token.as_ref()?.symbol.clone();
                     let batch = host.batch_view.clone()?;
-                    Some((batch, symbol))
+                    Some((
+                        batch,
+                        symbol,
+                        host.view.split_import_room,
+                        host.batch_replaces,
+                    ))
                 });
                 match live {
-                    Some((batch, symbol)) => flow_fixtures::FlowBody::BatchImport(
-                        flows_live::batch_import(&batch, &symbol, &self.flow_strings),
-                    ),
+                    Some((batch, symbol, room, replaces)) => {
+                        let mut model =
+                            flows_live::batch_import(&batch, &symbol, &self.flow_strings);
+                        model.merge =
+                            flows_live::batch_merge(&batch, room, replaces, &self.flow_strings);
+                        flow_fixtures::FlowBody::BatchImport(model)
+                    }
                     None => flow_fixtures::body(panel, &self.flow_strings),
                 }
             }
-            FlowPanel::Dr3 | FlowPanel::Ds1 | FlowPanel::Dt3b => {
-                flow_fixtures::body(panel, &self.flow_strings)
-            }
+            // A token's own code, when its detail opened one; the mock
+            // otherwise (the gallery, `VELA_FLOW=DR3`).
+            FlowPanel::Dr3 => match self.receive_token.clone() {
+                Some(token) => {
+                    let watch = resident::resident::<ReceiveWatch>(cx).read(cx).view();
+                    let pay = resident::resident::<PaymentRequest>(cx).read(cx).view();
+                    flow_fixtures::FlowBody::ReceiveQr(flows_live::receive_token_qr(
+                        &identity.address,
+                        &identity.name,
+                        &token,
+                        &watch,
+                        &pay,
+                        &self.flow_strings,
+                        &self.locale,
+                    ))
+                }
+                None => flow_fixtures::body(panel, &self.flow_strings),
+            },
+            FlowPanel::Ds1 | FlowPanel::Dt3b => flow_fixtures::body(panel, &self.flow_strings),
         }
     }
 
@@ -4001,6 +4106,7 @@ impl WalletPage {
             amount_field: None,
             recipient_field: None,
             tap_max: None,
+            toggle_denom: None,
             pick_contact_rows: Vec::new(),
             fee_rows: Vec::new(),
             batch_unit: None,
@@ -4009,6 +4115,7 @@ impl WalletPage {
             batch_template: None,
             batch_rate_field: None,
             batch_rate_reset: None,
+            batch_merge: None,
             notice_action: None,
             notice_dismiss: None,
             pick_group_rows: Vec::new(),
@@ -4312,9 +4419,19 @@ impl WalletPage {
                         }),
                     });
                     actions.tap_max = Some(to_host(SendEvent::TapMax));
+                    // ⇄: the core owns the swap — whether it is possible, and
+                    // what becomes of the figure; the page only says it was
+                    // pressed (the web's `toggle_fiat_input`, #197).
+                    actions.toggle_denom = Some(to_host(SendEvent::ToggleFiatInput));
                     actions.open_contact_pick =
                         Some(to_host(SendEvent::OpenContactPicker { target: None }));
-                    actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
+                    // "+ add recipient" turns one payee into a split — but on
+                    // a split it is the blank-row append bound above, which
+                    // this used to overwrite: the core ignores
+                    // `EnterSplitMode` inside a split, so the pill was dead.
+                    if send.recipients.is_empty() {
+                        actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
+                    }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
                     actions.open_fee_token = Some(Box::new(cx.listener(
                         |this, _: &gpui::ClickEvent, _, cx| {
@@ -4358,9 +4475,11 @@ impl WalletPage {
                     // `PickedAddress`; spec 028's core closes it itself, after
                     // which the second event is a no-op — the pair is kept so
                     // either core makes the same screen.
-                    // A whole group seeds a split with everybody in it, at
-                    // amounts the person still has to type — the same hand-off
-                    // web calls 群发转账. The core assigns the row ids.
+                    // A whole group is ADDED to whoever is already on the
+                    // form, at amounts the person still has to type — the
+                    // same hand-off web calls 群发转账. It used to seed, which
+                    // replaces: picking a second group threw the first away.
+                    // The core assigns the row ids.
                     actions.pick_group_rows = send
                         .group_members
                         .into_iter()
@@ -4368,18 +4487,10 @@ impl WalletPage {
                             let host = host.clone();
                             Box::new(
                                 move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
-                                    let recipients = members
-                                        .iter()
-                                        .map(|address| SendRecipientDraft {
-                                            id: String::new(),
-                                            address: address.clone(),
-                                            amount: String::new(),
-                                            name: None,
-                                        })
-                                        .collect();
+                                    let recipients = members.clone();
                                     host.update(cx, |host, cx| {
                                         host.dispatch(
-                                            SendEvent::SeedSplitRecipients { recipients },
+                                            SendEvent::AppendSplitRecipients { recipients },
                                             cx,
                                         );
                                         host.dispatch(SendEvent::CloseContactPicker, cx);
@@ -4459,6 +4570,12 @@ impl WalletPage {
                     actions.batch_pick_file = Some(to_batch(BatchEvent::PickFileRequested));
                     actions.batch_template = Some(to_batch(BatchEvent::SaveTemplateRequested));
                     actions.batch_rate_reset = Some(to_batch(BatchEvent::ResetRateToAuto));
+                    actions.batch_merge = Some(Box::new({
+                        let host = host.clone();
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            host.update(cx, |host, cx| host.toggle_batch_merge(cx));
+                        }
+                    }));
                     actions.batch_rate_field = Some(panels::AddressField {
                         focus: send.rate_focus,
                         value: send.batch_rate.unwrap_or_default(),
@@ -4605,8 +4722,29 @@ impl WalletPage {
             .child(warning)
     }
 
-    fn asset_detail_body(&mut self, model: &fixtures::AssetDetailModel, theme: &Theme) -> Div {
+    fn asset_detail_body(
+        &mut self,
+        model: &fixtures::AssetDetailModel,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Div {
         let s = &self.strings;
+        // The holding this panel is about, as the core holds it NOW — the
+        // doors below act on it. `None` for the mock and for a holding a
+        // refresh took away, and then the doors do nothing rather than act
+        // on whichever row took its place.
+        let token = self
+            .asset_detail
+            .filter(|_| self.identity.is_some())
+            .and_then(|index| {
+                resident::resident::<BalanceDashboard>(cx)
+                    .read(cx)
+                    .view()
+                    .tokens
+                    .get(index)
+                    .filter(|token| token.symbol.as_str() == model.ticker.as_ref())
+                    .cloned()
+            });
 
         let head = div()
             .flex()
@@ -4641,20 +4779,51 @@ impl WalletPage {
         let buttons = div()
             .flex()
             .gap(px(12.))
-            .child(action_pill(
-                "detail-send",
-                theme,
-                &mut self.icons,
-                Icon::ArrowUpRight,
-                s.detail_send.clone(),
-            ))
-            .child(action_pill(
-                "detail-receive",
-                theme,
-                &mut self.icons,
-                Icon::ArrowDownLeft,
-                s.detail_receive.clone(),
-            ));
+            .child(
+                action_pill(
+                    "detail-send",
+                    theme,
+                    &mut self.icons,
+                    Icon::ArrowUpRight,
+                    s.detail_send.clone(),
+                )
+                .on_click({
+                    // 转账 from a token: the form with THAT token chosen.
+                    let token = token.clone();
+                    cx.listener(move |this, _, _, cx| {
+                        let Some(token) = token.as_ref() else { return };
+                        this.asset_detail = None;
+                        this.enter_flow_with(
+                            FlowEntry::Send,
+                            wallet_live::token_send_params(token),
+                            cx,
+                        );
+                        cx.notify();
+                    })
+                }),
+            )
+            .child(
+                action_pill(
+                    "detail-receive",
+                    theme,
+                    &mut self.icons,
+                    Icon::ArrowDownLeft,
+                    s.detail_receive.clone(),
+                )
+                .on_click({
+                    // 收款 from a token: its own code, no picker in between —
+                    // the token already names its chain.
+                    let token = token.clone();
+                    cx.listener(move |this, _, _, cx| {
+                        let Some(token) = token.clone() else { return };
+                        this.asset_detail = None;
+                        this.receive_chain = token.chain_id;
+                        this.receive_token = Some(token);
+                        this.enter_flow(FlowEntry::ReceiveToken, cx);
+                        cx.notify();
+                    })
+                }),
+            );
 
         let mut facts = div().flex().flex_col();
         for (i, (label, value)) in model.facts.iter().cloned().enumerate() {
@@ -4682,17 +4851,24 @@ impl WalletPage {
             facts = facts.child(row);
         }
 
-        let explorer = div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_muted)
-            .child(s.view_on_explorer.clone())
-            .child(crate::wallet::components::chevron_icon(
-                theme,
-                &mut self.icons,
-            ));
+        // No explorer for this chain: no link rather than a wrong one.
+        let explorer = model.explorer_url.clone().map(|url| {
+            div()
+                .id("detail-explorer")
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .cursor_pointer()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .hover(|el| el.text_color(theme.fg_base))
+                .child(s.view_on_explorer.clone())
+                .child(crate::wallet::components::chevron_icon(
+                    theme,
+                    &mut self.icons,
+                ))
+                .on_click(move |_, _, cx| cx.open_url(&url))
+        });
 
         let mut tx = div().flex().flex_col().child(
             div()
@@ -4702,8 +4878,23 @@ impl WalletPage {
                 .text_color(theme.fg_base)
                 .child(s.label_transactions.clone()),
         );
-        for row in &model.activity {
-            tx = tx.child(activity_row(theme, &mut self.icons, row));
+        for (i, row) in model.activity.iter().enumerate() {
+            // Each row opens its own detail — the id from the same walk that
+            // drew it. The mock's rows are nobody's and open nothing.
+            let id = model.activity_ids.get(i).cloned();
+            tx = tx.child(
+                div()
+                    .id(ElementId::from(("detail-activity", i)))
+                    .when(id.is_some(), |el| el.cursor_pointer())
+                    .child(activity_row(theme, &mut self.icons, row))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let Some(id) = id.clone() else { return };
+                        this.asset_detail = None;
+                        this.tx_detail = Some(id);
+                        this.enter_flow(FlowEntry::TxDetail, cx);
+                        cx.notify();
+                    })),
+            );
         }
 
         div()
@@ -4713,7 +4904,7 @@ impl WalletPage {
             .child(head)
             .child(buttons)
             .child(facts)
-            .child(explorer)
+            .children(explorer)
             .child(tx)
     }
 
@@ -9671,6 +9862,8 @@ impl WalletPage {
             model.fee = signing_live::fee_model(
                 &host.clear_view,
                 fee,
+                host.chain_id,
+                host.fee_open,
                 &self.signing,
                 &self.locale,
                 speed_tier,
@@ -9861,7 +10054,10 @@ impl WalletPage {
                             .child(self.signing.advanced_toggle.clone()),
                     ),
             );
-        if let Some(fee) = signing_components::fee(theme, &mut self.icons, &model.fee) {
+        let (on_fee, on_fee_pick) = self.fee_actions(cx);
+        if let Some(fee) =
+            signing_components::fee(theme, &mut self.icons, &model.fee, on_fee, on_fee_pick)
+        {
             let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
             if let Some(speed) = &signing_speed {
                 // The same control, the same clicks, as the send form's.
@@ -10031,6 +10227,49 @@ impl WalletPage {
         None
     }
 
+    /// The fee row's tap, and one listener per fee coin in the relay's order
+    /// (the web's `onfee` / `onfeepick`). `None` for a coin the core says
+    /// cannot pay — it is drawn, never picked. Nothing for the mocks.
+    #[cfg(not(target_os = "linux"))]
+    fn fee_actions(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
+        let Some(host) = self.signing_host.clone() else {
+            return (None, Vec::new());
+        };
+        let options = host.read(cx).fee_view().options.clone();
+        let on_row: panels::Click = Box::new({
+            let host = host.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                host.update(cx, |host, cx| host.fee_tapped(cx));
+            }
+        });
+        let on_pick = options
+            .into_iter()
+            .map(|option| {
+                (!option.insufficient).then(|| -> panels::Click {
+                    let host = host.clone();
+                    Box::new(
+                        move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                            let token = option.contract.clone();
+                            host.update(cx, |host, cx| host.pick_fee(token, cx));
+                        },
+                    )
+                })
+            })
+            .collect();
+        (Some(on_row), on_pick)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn fee_actions(
+        &mut self,
+        _cx: &mut Context<Self>,
+    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
+        (None, Vec::new())
+    }
+
     fn wallet_columns(
         &mut self,
         theme: &Theme,
@@ -10061,7 +10300,7 @@ impl WalletPage {
             PanelId::AssetDetail => {
                 let model = self.asset_detail_model(cx);
                 let title = model.ticker.clone();
-                let body = self.asset_detail_body(&model, theme);
+                let body = self.asset_detail_body(&model, theme, cx);
                 columns.child(self.panel_scaffold(theme, title, body, cx))
             }
             PanelId::ContactDetail => {
@@ -10085,7 +10324,8 @@ impl WalletPage {
                 None | Some(FlowPanel::Ds1) => columns,
                 Some(panel) => {
                     let send = self.send_bindings(panel, cx);
-                    let body = self.flow_body(panel, cx);
+                    let mut body = self.flow_body(panel, cx);
+                    self.dress_batch_total(&mut body, cx);
                     let tx_ids = if self.identity.is_some() && panel == FlowPanel::Da1 {
                         flows_live::history_ids(
                             &resident::resident::<ActivityFeed>(cx).read(cx).view(),

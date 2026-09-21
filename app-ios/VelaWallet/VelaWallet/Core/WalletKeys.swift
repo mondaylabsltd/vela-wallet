@@ -131,9 +131,12 @@ final class WalletKeys {
                     transports: text("transports"),
                     confirmed: true,
                     synced: synced ?? true,
+                    // `null` = nobody could read the attestation: no badge (#207).
+                    syncedKnown: synced != nil,
                     aaguid: text("aaguid"),
                     providerName: text("provider_name"),
-                    method: KeyMethod(rawValue: text("method")) ?? .platform
+                    method: KeyMethod(rawValue: text("method")) ?? .platform,
+                    kind: KeyMethod(rawValue: text("method")) ?? .platform
                 ),
                 synced: synced,
                 publicKeyHex: text("public_key_hex"),

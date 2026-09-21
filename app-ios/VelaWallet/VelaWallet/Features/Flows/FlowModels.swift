@@ -402,9 +402,10 @@ struct RecipientCardModel: Identifiable {
     /// The core's row id, so an edit can say which row it edited. Empty in
     /// the fixtures, which have no machine behind them.
     var rowId: String = ""
-    /// The core's verdict on this row, if it has one — an empty amount, an
-    /// address that is not one, a duplicate. A row's problem belongs on the
-    /// row, not in a sentence at the bottom of a list of six.
+    /// The core's verdict on this row, if it has one — an address that is
+    /// not one, an amount that cannot be sent, a repeat of an earlier payee.
+    /// A row's problem belongs on the row, not in a sentence at the bottom of
+    /// a list of six.
     var problem: String?
 }
 
@@ -482,6 +483,12 @@ struct AmountFieldModel {
     /// to change. The field goes read-only rather than silently ignoring
     /// typing.
     var locked = false
+    /// The unit, on the figure itself (issue 231): a currency symbol leads
+    /// ("$4.00"), a code or a ticker follows ("4.00 PLN", "0.00075 BNB").
+    /// Keyed on the FIGURE's own unit, never the display currency. `nil` on
+    /// both is no adornment — the drawing, or a unit nobody can name.
+    var unitPrefix: String?
+    var unitSuffix: String?
 }
 
 struct RecipientFieldModel {
@@ -508,6 +515,11 @@ struct RecipientActionModel: Identifiable {
 struct SummaryLineModel {
     let label: String
     let value: String
+    /// The split's total is over the balance — the core's
+    /// `split_over_balance`, the same predicate `Continue` refuses on.
+    var over = false
+    /// "1.5 XDAI left" — the core's `split_remaining`, worded.
+    var remaining: String?
 }
 
 enum SendFormMode {
@@ -532,6 +544,10 @@ struct SendFormModel {
     /// The speed control (spec 068). `nil` draws none.
     var speed: FeeSpeedModel? = nil
     let cta: String
+    /// Split only: why `Continue` is dark — the FIRST unfinished row and the
+    /// field it still needs, from the core's `split_row_issues`. Said only
+    /// while no refusal is (the warning wins).
+    var hint: String?
 }
 
 /// SD2e — the contact picker.
@@ -569,6 +585,14 @@ struct FeeTokenRowModel: Identifiable {
     let balanceLabel: String
     let fee: String
     let selected: Bool
+    /// The core's verdict that this coin cannot pay the fee. The row is still
+    /// drawn — it is context — but it answers to nothing: `select_fee_asset`
+    /// refuses it, and a row that looks like the others and silently does
+    /// nothing is how somebody believes they chose to pay gas in a coin they
+    /// do not hold (web issue 211).
+    var insufficient = false
+    /// What such a row says in place of its balance.
+    var insufficientNote: String?
 }
 
 struct FeeTokenPickModel {
@@ -630,8 +654,29 @@ struct BatchImportModel {
     /// facts this way: a file that could not be read and a total that cannot
     /// be paid are errors; a trimmed list and a saved template are not.
     var noteIsError = false
+    /// "Total · 3 recipients", in the token and the fiat, over the balance it
+    /// is paid from. `nil` until a row parses, and in the gallery.
+    var total: BatchTotalModel?
+    /// How an import meets rows already on the form, and the way to choose the
+    /// other. `nil` when the form is empty or the import cannot apply.
+    var merge: BatchMergeModel?
     let cta: String
     let ctaDisabled: Bool
+}
+
+struct BatchTotalModel {
+    let label: String
+    let value: String
+    var detail: String?
+    /// "Balance 12.5 xDAI", or — adding to rows already typed — "3 xDAI left".
+    let balance: String
+    /// The total cannot be paid; the note above says so, this colours it.
+    var over = false
+}
+
+struct BatchMergeModel {
+    let note: String
+    let action: String
 }
 
 /// SD3 — the confirmation.
@@ -667,6 +712,10 @@ struct SendConfirmModel {
     /// looking at the page (spec 054 US4).
     var noticeAction: String?
     var noticeSecondary: String?
+    /// A split's repeated payees, said again on the page that signs (issue
+    /// 203): two lines paying one address are hardest to spot exactly here,
+    /// where the avatars are identical and the sum looks right.
+    var repeatNote: String?
     let cta: String
 }
 
@@ -697,6 +746,48 @@ struct SendReceiptModel {
     /// and navigating away from it would abandon a prompt nobody can answer.
     /// Android has drawn this distinction since 043.
     var ctaCancels: Bool = false
+    /// While the relay has the op: when it was handed over and how long the
+    /// chain usually takes. The screen counts; the sentences come from here.
+    var eta: ReceiptEtaModel?
+    /// A split: "N recipients", then every one of them (web spec 038 #D2).
+    var breakdownTitle: String?
+    var breakdown: [BreakdownRowModel] = []
+}
+
+/// The submitted receipt's clock (web `SendReceipt.svelte`, spec 038 #D3).
+/// Only the number is the screen's; every sentence is filled here.
+struct ReceiptEtaModel: Equatable {
+    let submittedAtMs: Double
+    let typicalS: Int
+    /// "Gnosis typically confirms in ~15s" — already filled.
+    let typicalLine: String
+    /// "~{{remaining}}s remaining" — inside the typical time.
+    let remainingTemplate: String
+    /// "{{elapsed}}s elapsed — almost there" — past it, where "almost" is true.
+    let elapsedTemplate: String
+    /// Past twice the typical time.
+    let slowLine: String
+
+    func elapsedS(nowMs: Double) -> Int { max(0, Int((nowMs - submittedAtMs) / 1000)) }
+
+    /// Inside the typical time the line counts DOWN — "~9s remaining" is a
+    /// promise with an end, "6s elapsed" is a stopwatch.
+    func lines(nowMs: Double) -> [String] {
+        let elapsed = elapsedS(nowMs: nowMs)
+        let second = elapsed < typicalS
+            ? remainingTemplate.replacingOccurrences(of: "{{remaining}}", with: String(typicalS - elapsed))
+            : elapsed < typicalS * 2
+                ? elapsedTemplate.replacingOccurrences(of: "{{elapsed}}", with: String(elapsed))
+                : slowLine
+        return [typicalLine, second]
+    }
+
+    /// The ring round the disc eases toward full and never gets there: ~70%
+    /// at the typical time, ~86% at twice it, a ceiling of 92%. Only the
+    /// confirmation closes it.
+    func progress(nowMs: Double) -> Double {
+        0.92 * (1 - exp(-1.4 * Double(elapsedS(nowMs: nowMs)) / Double(max(1, typicalS))))
+    }
 }
 
 // MARK: - The screens

@@ -483,6 +483,8 @@ data class SendView(
     val split_mode: Boolean = false,
     val recipients: List<SendRecipientDraft> = emptyList(),
     val split_over_balance: Boolean = false,
+    /** How many more rows an import may add: the cap less the rows already started (the importer's own cap). */
+    val split_import_room: Int = BATCH_MAX_RECIPIENTS,
     val picker_target: String? = null,
     val multi_select_mode: Boolean = false,
     val multi_selected_ids: List<String> = emptyList(),
@@ -766,6 +768,11 @@ sealed class SendEvent {
     @Serializable
     @SerialName("seed_split_recipients")
     data class SeedSplitRecipients(val recipients: List<SendRecipientDraft>) : SendEvent()
+
+    /** The same rows ADDED to the ones already typed (issue #271) — the web's default for an import or a group. */
+    @Serializable
+    @SerialName("append_split_recipients")
+    data class AppendSplitRecipients(val recipients: List<SendRecipientDraft>) : SendEvent()
 
     @Serializable
     @SerialName("recipients_changed")

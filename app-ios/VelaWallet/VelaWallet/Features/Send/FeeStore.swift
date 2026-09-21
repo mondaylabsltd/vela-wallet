@@ -270,6 +270,23 @@ final class FeeStore {
         settleSpeed()
     }
 
+    /// A fee coin picked for the operation in force (`nil` = the native coin),
+    /// by a surface nobody's machine is waiting on (the dApp sheet).
+    ///
+    /// The coin is part of the operation every preview replays, so the whole
+    /// question is asked again with it and the other speeds follow in that
+    /// coin. Telling the session in force alone would leave the previews
+    /// pricing the old coin — and a speed tapped next would promote one,
+    /// switching the payment back to a coin the person just walked away from.
+    func chooseFeeToken(_ token: String?) {
+        guard let ask = inForce.ask, ask.feeToken != token else { return }
+        askInForce(Ask(
+            chainId: ask.chainId, account: ask.account, deployed: ask.deployed,
+            publicKeyAvailable: ask.publicKeyAvailable, tier: speed?.tier ?? ask.tier,
+            calls: ask.calls, feeToken: token
+        ))
+    }
+
     /// A fee-asset chip tap. `nil` = the native coin.
     ///
     /// The token is a QUOTE PARAMETER, not a post-quote adjustment: the fee leg

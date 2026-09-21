@@ -7,7 +7,7 @@
 use gpui::SharedString;
 
 use vela_core::app::activity_feed::{FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedView};
-use vela_core::app::balance_dashboard::{BalanceNotice, BalanceView};
+use vela_core::app::balance_dashboard::{BalanceNotice, BalanceToken, BalanceView};
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
 
@@ -31,11 +31,17 @@ use crate::wallet::fixtures::{
 ///   their money is gone.
 #[must_use]
 pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceModel {
+    // The last-known total paints first while the core withholds the live
+    // one; live replaces it (max(live, cached) is the core's rule — this only
+    // chooses what to show meanwhile). The web's `liveBalance`.
+    let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
     let status = if view.unreachable {
         // A first launch with no network: say so, over the skeleton, rather
         // than show a settled-looking zero (spec 038 finding 15).
         Some((StatusKind::Warning, s.balance_unreachable.clone()))
-    } else if view.refreshing {
+    } else if view.refreshing || on_cache {
+        // A cached figure is a figure being brought up to date — said so, so
+        // yesterday's total never reads as today's.
         Some((StatusKind::Refreshing, s.balance_stale.clone()))
     } else {
         view.notice.map(|notice| {
@@ -62,7 +68,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
         };
     }
 
-    let Some(usd) = view.display_total_usd else {
+    let Some(usd) = view.display_total_usd.or(view.cached_total_usd) else {
         return BalanceModel {
             label: s.total_balance.clone(),
             state: BalanceState::Loading,
@@ -78,7 +84,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
     let (integer, decimals) = split_fiat(usd, locale);
     BalanceModel {
         label: s.total_balance.clone(),
-        state: if usd == 0.0 {
+        // A zero is "live" only once EVERY chain has answered: a partial zero
+        // (some chain unreachable), or a cached one, is an unknown wallet,
+        // not a listening one.
+        state: if usd == 0.0
+            && !view.balance_unknown
+            && !view.balance_partial
+            && view.tokens.is_empty()
+        {
             BalanceState::ZeroLive
         } else {
             BalanceState::Normal
@@ -489,6 +502,49 @@ mod tests {
         assert_eq!(model.integer, SharedString::from("$0"));
     }
 
+    /// The last-known total paints first — with the refreshing line, so it
+    /// never reads as today's figure — and live replaces it (the web's
+    /// `liveBalance`). A skeleton only when there is nothing known at all.
+    #[test]
+    fn a_cached_total_paints_first_and_says_it_is_refreshing() {
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(42.5);
+        let model = balance(&cached, &strings(), "en");
+        assert_eq!(model.state, BalanceState::Normal);
+        assert_eq!(model.integer, SharedString::from("$42"));
+        assert_eq!(model.decimals, Some(SharedString::from("50")));
+        assert!(
+            matches!(model.status, Some((StatusKind::Refreshing, _))),
+            "a cached figure must say it is being brought up to date"
+        );
+
+        // Live wins over the cache the moment it is there.
+        let mut live = view(Some(40.0));
+        live.cached_total_usd = Some(42.5);
+        let model = balance(&live, &strings(), "en");
+        assert_eq!(model.integer, SharedString::from("$40"));
+        assert!(model.status.is_none(), "{:?}", model.status.map(|s| s.1));
+    }
+
+    /// A zero is "live" only once every chain answered: a partial zero, or a
+    /// cached one, is an unknown wallet — not a listening one.
+    #[test]
+    fn a_partial_or_cached_zero_is_not_live() {
+        let mut partial = view(Some(0.0));
+        partial.balance_partial = true;
+        assert_eq!(
+            balance(&partial, &strings(), "en").state,
+            BalanceState::Normal
+        );
+
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(0.0);
+        assert_eq!(
+            balance(&cached, &strings(), "en").state,
+            BalanceState::Normal
+        );
+    }
+
     /// Invariant ⑧: the value is withheld by construction. The core already
     /// nulls `display_total_usd` when hidden, so there is nothing here that
     /// could leak — this asserts the shell does not reintroduce it.
@@ -606,6 +662,38 @@ mod tests {
                     .any(|(label, value)| *label == s.label_contract && *value == s.native_token)
             );
             assert_eq!(xdai.activity.len(), 1, "its own transaction");
+            // …and the id that row opens, from the same walk.
+            assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
+            assert!(mon.activity_ids.is_empty());
+
+            // View on explorer: the token page scoped to this account for an
+            // ERC-20, the account page for the chain's own coin.
+            let account = held.address.clone().unwrap_or_default();
+            assert!(!account.is_empty());
+            assert_eq!(
+                mon.explorer_url.as_deref(),
+                Some(
+                    format!(
+                        "https://monadscan.com/token/0xAbCdEf0000000000000000000000000000000009?a={account}"
+                    )
+                    .as_str()
+                )
+            );
+            assert_eq!(
+                xdai.explorer_url.as_deref(),
+                Some(format!("https://gnosisscan.io/address/{account}").as_str())
+            );
+
+            // 转账 from a token opens the form with THAT token chosen: its
+            // symbol, and its network spelled as the send executor spells
+            // `SendToken.network` — any other spelling lands on the picker.
+            let params = token_send_params(&held.tokens[1]);
+            assert_eq!(params.preselected_symbol.as_deref(), Some("MON"));
+            assert_eq!(
+                params.preselected_network,
+                Some(crate::executor::send::to_send_token(&held.tokens[1]).network)
+            );
+            assert!(params.prefilled_recipient.is_none() && !params.locked);
 
             // The list moved underneath: no panel rather than the wrong one.
             assert!(asset_detail(&held, &feed, 9, &s, "en-US").is_none());
@@ -1016,6 +1104,19 @@ pub fn chain_rows(
     rows
 }
 
+/// Whether the home's asset strip says "nothing here" — the web's
+/// `assetsMode(..) === 'empty'`: once the core has actually looked and there
+/// is nothing held, or when the sidebar's chain holds nothing while others do.
+/// A blank strip under a pill reads as a list that failed to load; while the
+/// core is still counting it stays blank, because the hero says "counting".
+#[must_use]
+pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
+    if view.tokens.is_empty() {
+        return !view.holdings_loading && !view.balance_unknown;
+    }
+    filter.is_some() && visible_token_indices(view, filter).is_empty()
+}
+
 /// Which holdings the network filter leaves on screen, as indices into the
 /// core's own `tokens` order.
 ///
@@ -1097,6 +1198,18 @@ pub fn asset_detail(
     locale: &str,
 ) -> Option<AssetDetailModel> {
     let token = view.tokens.get(index)?;
+    let own: Vec<&FeedItem> = feed
+        .rows
+        .iter()
+        .filter_map(|row| match row {
+            FeedRow::Item { item }
+                if item.symbol == token.symbol && item.chain_id == token.chain_id =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect();
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
     let figure = |value: f64| {
@@ -1168,19 +1281,44 @@ pub fn asset_detail(
         facts,
         // This asset's own transactions, from the same feed the home draws.
         // Matched on symbol AND chain: two chains' USDC are different money.
-        activity: feed
-            .rows
+        activity: own
             .iter()
-            .filter_map(|row| match row {
-                FeedRow::Item { item }
-                    if item.symbol == token.symbol && item.chain_id == token.chain_id =>
-                {
-                    Some(activity_row(feed, item, s, view.hidden))
-                }
-                _ => None,
-            })
+            .map(|item| activity_row(feed, item, s, view.hidden))
             .collect(),
+        // …and the id behind each, from the SAME walk, so row N opens
+        // record N.
+        activity_ids: own.iter().map(|item| item.id.clone()).collect(),
+        explorer_url: token_explorer_url(token, view.address.as_deref()).map(SharedString::from),
     })
+}
+
+/// Where "view on explorer" leads for a held token (the web's
+/// `tokenExplorerURL`): the token page, scoped to this account, for an
+/// ERC-20; the account page for the chain's own coin. `None` for a chain with
+/// no explorer — no link rather than a wrong one.
+#[must_use]
+pub fn token_explorer_url(token: &BalanceToken, account: Option<&str>) -> Option<String> {
+    let base = crate::executor::custom_tokens::explorer_base(token.chain_id)?;
+    match token.token_address.as_deref() {
+        None => account.map(|account| format!("{base}/address/{account}")),
+        Some(contract) => Some(match account {
+            Some(account) => format!("{base}/token/{contract}?a={account}"),
+            None => format!("{base}/token/{contract}"),
+        }),
+    }
+}
+
+/// The send a token's own 转账 opens: that token, on its network, already
+/// chosen (the web's `enter('send', { assetId })`). The network is spelled
+/// the way this shell's send executor spells `SendToken.network` — the core
+/// matches the two strings, and any other spelling lands on the picker.
+#[must_use]
+pub fn token_send_params(token: &BalanceToken) -> vela_core::app::send::SendOpenParams {
+    vela_core::app::send::SendOpenParams {
+        preselected_symbol: Some(token.symbol.clone()),
+        preselected_network: Some(crate::executor::send::network_id(token.chain_id)),
+        ..vela_core::app::send::SendOpenParams::default()
+    }
 }
 
 /// The chain tint for an activity badge.

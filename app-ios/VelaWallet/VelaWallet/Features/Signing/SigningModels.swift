@@ -156,10 +156,15 @@ struct FeeTokenOption: Identifiable {
     let balance: String
     let fee: String
     let selected: Bool
+    /// The core's `insufficient`: drawn for context, never pickable (issue 211).
+    var disabled = false
 }
 
 enum FeeModel {
-    case onchain(label: String, value: String, selector: (title: String, options: [FeeTokenOption])?)
+    /// `warning` says why the slide is shut when the coin that pays is not
+    /// there (issue #262); it sits under the row, where the other coins are.
+    case onchain(label: String, value: String, selector: (title: String, options: [FeeTokenOption])?,
+                 warning: String? = nil)
     /// Off-chain signature: the ✓ line, in place of a fee row.
     case offchain(note: String)
     /// Nothing at all — cs20–cs22, where there is no fee and no reassurance.

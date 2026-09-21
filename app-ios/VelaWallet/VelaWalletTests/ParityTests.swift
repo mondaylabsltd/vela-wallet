@@ -94,6 +94,80 @@ struct ParityTests {
         #expect(!failed.captions.contains(loc.t("send.txRejectedFees")))
     }
 
+    /// #199: the core says WHEN the op was handed over; the receipt counts
+    /// against the chain's usual time instead of sitting on a still clock.
+    @Test func aSubmittedReceiptCountsDownThenUpThenSaysItIsSlow() throws {
+        func view(submittedAt: Any) throws -> SendViewWire {
+            var object = try CoreJSON.object(SendCore().view())
+            object["tx_status"] = "submitted"
+            object["receipt"] = [
+                "status": "submitted", "hold_reason": NSNull(), "kind": NSNull(), "transfers": [],
+                "amount": "1", "usd_value": 0, "submitted_at_ms": submittedAt, "typical_inclusion_s": 10,
+            ] as [String: Any]
+            return try CoreJSON.decode(SendViewWire.self, from: object)
+        }
+        let model = receipt(try view(submittedAt: 1_000_000))
+        let eta = try #require(model.eta)
+        #expect(model.captions == [loc.t("send.txWaitingConfirm")], "the typical line moves into the clock")
+        #expect(eta.lines(nowMs: 1_004_000)[1] == loc.t("send.txRemaining", vars: ["remaining": "6"]))
+        #expect(eta.lines(nowMs: 1_013_000)[1] == loc.t("send.txElapsed", vars: ["elapsed": "13"]))
+        #expect(eta.lines(nowMs: 1_025_000)[1] == loc.t("send.txSlowConfirm"))
+        #expect(eta.lines(nowMs: 1_000_000)[0].contains("10"))
+        #expect(eta.progress(nowMs: 1_010_000) > 0.6 && eta.progress(nowMs: 9_000_000) <= 0.92)
+
+        // Without the moment, the typical line is still said, as before.
+        let untimed = receipt(try view(submittedAt: NSNull()))
+        #expect(untimed.eta == nil)
+        #expect(untimed.captions.count == 2)
+    }
+
+    /// #261: a split's receipt names its count and every person in it, from
+    /// the core's frozen transfers — not the first draft's address.
+    @Test func aSplitReceiptListsEveryRecipient() throws {
+        var object = try CoreJSON.object(SendCore().view())
+        object["tx_status"] = "confirmed"
+        func leg(_ to: String, _ name: Any, _ amount: String) -> [String: Any] {
+            ["to": to, "to_name": name, "amount": amount, "symbol": "USDC", "logo_urls": [], "usd_value": 0]
+        }
+        object["receipt"] = [
+            "status": "confirmed", "hold_reason": NSNull(), "kind": "split",
+            "transfers": [
+                leg("0x76875e38fc6bc2dedcaed807ce00782db5c0d141", "Alice", "2"),
+                leg("0x88cca0eedbf2c4426110bbfc998f048689266894", NSNull(), "3"),
+            ],
+            "amount": "5", "usd_value": 0, "submitted_at_ms": NSNull(), "typical_inclusion_s": NSNull(),
+        ] as [String: Any]
+        let model = receipt(try CoreJSON.decode(SendViewWire.self, from: object))
+        let title = loc.t("send.recipientCount_other", vars: ["count": "2"])
+        #expect(model.breakdownTitle == title)
+        #expect(model.breakdown.map(\.label) == ["Alice", "0x88cc…6894"])
+        #expect(model.breakdown.map(\.value) == ["2 USDC", "3 USDC"])
+        #expect(model.captions.first?.hasPrefix(title) == true)
+    }
+
+    /// With no estimate the confirm's fee fact says so, as the form's row does
+    /// — never the drawing's "~0.0021 ETH · ≈$0.55", which is somebody else's send.
+    @Test func theConfirmFeeFactNeverShowsTheDrawingsFigure() throws {
+        guard case .sendConfirm(let drawn) = WalletFlowFixtures.build(.sd3, loc: loc).base else {
+            Issue.record("sd3 is not the confirm page")
+            return
+        }
+        func built(busy: Bool) throws -> SendConfirmModel {
+            var object = try CoreJSON.object(SendCore().view())
+            object["fee"] = NSNull()
+            object["fee_busy"] = busy
+            object["estimating_gas"] = false
+            return SendLive.confirm(
+                try CoreJSON.decode(SendViewWire.self, from: object),
+                from: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", name: nil),
+                display: .usd, on: drawn, loc: loc
+            )
+        }
+        #expect(try built(busy: true).facts[3].value == loc.t("send.estimatingFee"))
+        #expect(try built(busy: false).facts[3].value == "—")
+        #expect(try built(busy: false).facts[3].value != drawn.facts[3].value)
+    }
+
     // MARK: - 收款: a code for one asset
 
     private func qr(asset: PaymentRequestAssetWire?) -> ReceiveQrModel {

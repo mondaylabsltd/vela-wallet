@@ -488,7 +488,17 @@ class AppContainer(private val app: Application) {
                     override fun signingStarted() = Unit
                     override fun recordsPersisted() = wallet.feedReconciled()
                     override fun recordPersisted(recordId: String) = Unit
-                    override suspend fun switchAccount(index: Int): Boolean { session.switchAccount(index); return true }
+                    // By address: the machine's row index is not the session's.
+                    // `true` only once the session's active address IS it.
+                    override suspend fun switchAccount(address: String): Boolean {
+                        val current = session.view.value
+                        if (current.address.equals(address, ignoreCase = true)) return true
+                        val row = current.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) } ?: return false
+                        session.switchAccount(row.index)
+                        return kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                            session.view.first { it.address.equals(address, ignoreCase = true) }
+                        } != null
+                    }
                     override fun nativeSymbol(chainId: Int): String =
                         settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
                     override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) = wallet.trackSubmitted(userOpHash, recordIds, chainId)

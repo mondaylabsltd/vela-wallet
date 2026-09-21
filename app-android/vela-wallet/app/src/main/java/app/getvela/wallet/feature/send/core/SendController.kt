@@ -341,6 +341,9 @@ class SendController(
     /** A whole list at once — a group, a batch; ids minted by the core. */
     fun seedSplit(recipients: List<SendRecipientDraft>) = dispatch(SendEvent.SeedSplitRecipients(recipients))
 
+    /** The rows ADDED after the ones already typed (issue #271); the core keeps the started rows and drops the blank ones. */
+    fun appendSplit(recipients: List<SendRecipientDraft>) = dispatch(SendEvent.AppendSplitRecipients(recipients))
+
     /** The picker for ONE split row: the picked address lands in that row. */
     fun openRowPicker(id: String) = dispatch(SendEvent.OpenContactPicker(id))
 
@@ -355,12 +358,16 @@ class SendController(
 
     fun openBatch() {
         val token = send.value.selected_token ?: return
+        _importReplaces.value = false
         dispatch(SendEvent.OpenBatchImport)
         batchHost.dispatch(
             BatchEvent.Open(
                 token = BatchToken(symbol = token.symbol, decimals = token.decimals, balance = token.balance, price_usd = token.price_usd),
                 currency_code = currencyCode(),
-                max_recipients = BATCH_MAX_RECIPIENTS,
+                // The room the form has left, not a flat 60: an import ADDS to the
+                // rows already started, so its "only the first N" must be true of
+                // what the append then keeps (the web's `split_import_room`).
+                max_recipients = send.value.split_import_room,
             ),
             BatchEvent.serializer(),
         )
@@ -383,15 +390,29 @@ class SendController(
     fun batchResetRate() = batchHost.dispatch(BatchEvent.ResetRateToAuto, BatchEvent.serializer())
 
     /**
-     * Apply: the core parsed and priced the rows; the send machine seeds its
-     * split from exactly those (ids minted there), and nothing is recomputed.
-     * `SeedSplitRecipients` also shuts the sheet.
+     * Whether this import REPLACES the recipients already on the form (the
+     * web's `importReplaces`). Adding is the default — issue #271: an import
+     * used to seed, which silently threw away a recipient typed by hand — and
+     * replacing is one tap away, said in words before anything is imported.
+     * A choice about one import, so every open resets it.
+     */
+    private val _importReplaces = MutableStateFlow(false)
+    val importReplaces: StateFlow<Boolean> = _importReplaces
+
+    fun toggleImportReplaces() { _importReplaces.value = !_importReplaces.value }
+
+    /**
+     * Apply: the core parsed and priced the rows; the send machine adds them
+     * (or, when chosen, seeds its split) from exactly those — ids minted
+     * there, nothing recomputed. Both events also shut the sheet.
      */
     fun batchApply() {
         val view = batch.value
         if (!view.can_apply || view.recipients.isEmpty()) return
         batchHost.dispatch(BatchEvent.Apply, BatchEvent.serializer())
-        seedSplit(view.recipients.map { SendRecipientDraft(id = "", address = it.address, amount = it.amount, name = it.name) })
+        val rows = view.recipients.map { SendRecipientDraft(id = "", address = it.address, amount = it.amount, name = it.name) }
+        if (_importReplaces.value) seedSplit(rows) else appendSplit(rows)
+        _importReplaces.value = false
     }
 
     // -- Sweep (spec 045 US2): several tokens to one address. Whether the tick

@@ -9,6 +9,7 @@ import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.AssetFiatModel
 import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedRow
@@ -56,7 +57,14 @@ object FlowLive {
                 st.t(I18nKeys.Flows.RECEIVE_QR_NETWORK, mapOf("network" to asset.network_name))
             }
         } ?: fallback.title,
-        centre = WalletLive.mark(request.asset.chain_id, request.asset.symbol, request.asset.token_address),
+        // Issue #263: a code for the NETWORK ("receive assets on Ethereum") carries
+        // the network's mark, as the web's does; the native coin's mark said "only
+        // ETH". A token's own code keeps that token's mark.
+        centre = if (request.asset.token_address == null) {
+            WalletLive.chainMark(request.asset.chain_id, request.asset.symbol)
+        } else {
+            WalletLive.mark(request.asset.chain_id, request.asset.symbol, request.asset.token_address)
+        },
         contract = request.asset.token_address?.let { contract ->
             ContractLineModel(
                 label = strings?.t(I18nKeys.Flows.RECEIVE_TOKEN_CONTRACT) ?: (fallback.contract?.label ?: ""),
@@ -331,16 +339,23 @@ object FlowLive {
         chainNames: Map<Int, String>,
         currency: CurrencyView,
         chainFilter: Int? = null,
+        emptyCopy: AssetsEmptyModel? = fallback.empty,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
         val rows = WalletLive.assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
+        // The web's rule (`liveAssets`): empty once the core has actually
+        // looked — never while the holdings are still loading — or when the
+        // chosen network holds nothing while others do (issue #266: that list
+        // used to be blank, with nothing saying why).
+        val settledEmpty = rows.isEmpty() && !view.balance_unknown && !view.holdings_loading
+        val filteredEmpty = rows.isEmpty() && view.tokens.isNotEmpty()
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             rows = rows,
             // The guided-empty body replaces the list; it must not sit under
             // one. A wallet that holds something is not an empty wallet.
-            empty = if (rows.isEmpty()) fallback.empty else null,
+            empty = if (settledEmpty || filteredEmpty) emptyCopy else null,
         )
     }
 
@@ -391,7 +406,40 @@ object FlowLive {
                 is AssetFiatModel.NoPrice -> fiat.text
                 else -> ""
             },
+            // Issue #269: the facts are this token's. They were the fixture's —
+            // USDT's price, its Ethereum contract, 6 decimals — under every
+            // token's header, POL on Polygon included. The web's
+            // `liveTokenDetail` facts, row for row.
+            facts = tokenFacts(token, chainNames, currency, strings),
             rows = WalletLive.activity(theirs, strings, now).flatMap { it.rows },
+        )
+    }
+
+    private fun tokenFacts(
+        token: BalanceToken,
+        chainNames: Map<Int, String>,
+        currency: CurrencyView,
+        strings: VelaStrings,
+    ): List<FactRowModel> {
+        val money = WalletLive.Money.of(currency)
+        val contract = token.token_address
+        return listOf(
+            FactRowModel(
+                label = strings.t(I18nKeys.Flows.TOKEN_PRICE),
+                // Unpriced is said, never a confident "$0.00".
+                value = token.price_usd?.let { price ->
+                    strings.t(I18nKeys.Flows.TOKEN_PRICE_VALUE, mapOf("symbol" to token.symbol, "value" to money.fiat(price)))
+                } ?: strings.t(I18nKeys.Wallet.NO_PRICE),
+            ),
+            FactRowModel(
+                label = strings.t(I18nKeys.Flows.TOKEN_CONTRACT),
+                value = contract?.let(::shortAddress) ?: strings.t(I18nKeys.Flows.ADD_NATIVE_TOKEN),
+                mono = contract != null,
+                copy = contract?.let { strings.t(I18nKeys.Flows.COPY_ADDRESS) },
+                copyValue = contract,
+            ),
+            FactRowModel(label = strings.t(I18nKeys.Flows.TOKEN_DECIMALS), value = token.decimals.toString()),
+            FactRowModel(label = strings.t(I18nKeys.Flows.ADD_LABEL_NETWORK), value = chainNames[token.chain_id] ?: token.name),
         )
     }
 

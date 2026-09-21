@@ -117,6 +117,27 @@ struct WalletLiveTests {
         }
     }
 
+    /// A balance reads at six places at most, as on the web and Android — the
+    /// core's full precision pushed the ticker and chain out of the row on the
+    /// iPhone 11 ("…" / "…" beside 0.00067035411363817).
+    @Test func anAssetRowsBalanceIsTrimmedToSixPlaces() {
+        let before = Formats.current
+        defer { Formats.current = before }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h24)
+        let rows = WalletLive.assetRows(view(total: 1, tokens: [
+            token("ETH", chainId: 8453, balance: "0.00067035411363817", price: 2700),
+            token("xDAI", balance: "0.48967", price: 1),
+            token("USDC", balance: "12.500000", price: 1),
+            token("DOGE", balance: "5", price: nil),
+        ]))
+        #expect(rows.map(\.balance) == ["0.00067", "0.48967", "12.5", "5"])
+
+        // The person's decimal mark, never grouping.
+        Formats.current = Formats.Current(number: .dotComma, date: .iso, time: .h24)
+        #expect(WalletLive.trimBalance("12345.678901234") == "12345,678901")
+        #expect(WalletLive.trimBalance("0.000000123") == "0")
+    }
+
     /// Hiding is by construction, not by masking downstream: a hidden balance
     /// has no digits to leak into an accessibility label.
     @Test func ahiddenBalanceCarriesNoFigureAtAll() {

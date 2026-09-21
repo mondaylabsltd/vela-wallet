@@ -163,24 +163,7 @@ struct AmountInputView: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
-            if let text, !amount.locked {
-                // `typeRole` is a `Text` extension (the sanctioned styling
-                // seam); a `TextField` takes the same role's font directly.
-                TextField("0", text: text)
-                    .font(Typography.amountHero.scaled(textScale).font)
-                    .foregroundStyle(theme.fgBase)
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.decimalPad)
-                    .minimumScaleFactor(WalletGeometry.heroMinScale)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("send.amount")
-            } else {
-                Text(verbatim: amount.value)
-                    .typeRole(Typography.amountHero.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .minimumScaleFactor(WalletGeometry.heroMinScale)
-                    .lineLimit(1)
-            }
+            figure
             if amount.denomShown {
                 Button(action: onDenom) {
                     HStack(spacing: Tokens.Space.s2) {
@@ -214,6 +197,65 @@ struct AmountInputView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Tokens.Space.s24)
+    }
+
+    /// The figure, wearing its unit (issue 231): "4.00" alone could be dollars
+    /// or coins. A currency symbol leads at the figure's own size; a ticker or
+    /// a code follows, smaller and quieter, so the number still reads first.
+    /// With no unit this is exactly the drawn figure.
+    @ViewBuilder private var figure: some View {
+        if amount.unitPrefix == nil && amount.unitSuffix == nil {
+            entry
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s0) {
+                if let prefix = amount.unitPrefix {
+                    // Set exactly as the digits beside it are: the live field
+                    // takes the role's font directly, the drawn figure the role.
+                    if text != nil && !amount.locked {
+                        Text(verbatim: prefix)
+                            .font(Typography.amountHero.scaled(textScale).font)
+                            .foregroundStyle(theme.fgMuted)
+                    } else {
+                        Text(verbatim: prefix)
+                            .typeRole(Typography.amountHero.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                }
+                // Hugging its digits, so the unit sits against them rather
+                // than at the far edge of a full-width field.
+                entry.fixedSize(horizontal: true, vertical: false)
+                if let suffix = amount.unitSuffix {
+                    Text(verbatim: suffix)
+                        .typeRole(Typography.amountHeroDecimals.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .lineLimit(1)
+                        .padding(.leading, Tokens.Space.s8)
+                }
+            }
+            // The unit is drawn for the eye; the field's label names it.
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    @ViewBuilder private var entry: some View {
+        if let text, !amount.locked {
+            // `typeRole` is a `Text` extension (the sanctioned styling
+            // seam); a `TextField` takes the same role's font directly.
+            TextField("0", text: text)
+                .font(Typography.amountHero.scaled(textScale).font)
+                .foregroundStyle(theme.fgBase)
+                .multilineTextAlignment(.center)
+                .keyboardType(.decimalPad)
+                .minimumScaleFactor(WalletGeometry.heroMinScale)
+                .lineLimit(1)
+                .accessibilityIdentifier("send.amount")
+        } else {
+            Text(verbatim: amount.value)
+                .typeRole(Typography.amountHero.scaled(textScale))
+                .foregroundStyle(theme.fgBase)
+                .minimumScaleFactor(WalletGeometry.heroMinScale)
+                .lineLimit(1)
+        }
     }
 }
 
@@ -264,10 +306,15 @@ struct StatusHeroView: View {
     let stage: ReceiptStage
     let title: String
     let captions: [String]
+    /// Issue 199: how far the chain's usual time has run, drawn as a ring
+    /// OUTSIDE the disc (the disc keeps its one size). `nil` draws none; the
+    /// confirmation closes it, green.
+    var progress: Double?
 
     var body: some View {
         VStack(spacing: Tokens.Space.s4) {
             disc
+                .overlay { ring }
                 .padding(.bottom, Tokens.Space.s16)
             Text(verbatim: title)
                 .typeRole(Typography.title.scaled(textScale))
@@ -296,6 +343,28 @@ struct StatusHeroView: View {
             .fill(discFill)
             .frame(width: WalletFlowGeometry.statusHero, height: WalletFlowGeometry.statusHero)
             .overlay { mark }
+    }
+
+    @ViewBuilder private var ring: some View {
+        if let progress {
+            ZStack {
+                if stage != .confirmed {
+                    Circle().stroke(theme.borderBase, lineWidth: WalletFlowGeometry.statusRingStroke)
+                }
+                Circle()
+                    .trim(from: 0, to: stage == .confirmed ? 1 : min(1, max(0, progress)))
+                    .stroke(
+                        stage == .confirmed ? theme.successBase : theme.accentBase,
+                        style: StrokeStyle(lineWidth: WalletFlowGeometry.statusRingStroke, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    // One second per step, linear: the screen ticks once a second.
+                    .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
+            }
+            // Clears the disc rather than outlining it (the web's --space-md gutter).
+            .padding(-Tokens.Space.s12)
+            .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder private var mark: some View {
@@ -548,14 +617,23 @@ struct SummaryLineView: View {
     let summary: SummaryLineModel
 
     var body: some View {
-        HStack(spacing: Tokens.Space.s8) {
-            Text(verbatim: summary.label)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgSubtle)
-            Spacer(minLength: Tokens.Space.s8)
-            Text(verbatim: summary.value)
-                .typeRole(Typography.fieldLabel.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
+        VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: summary.label)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                Spacer(minLength: Tokens.Space.s8)
+                Text(verbatim: summary.value)
+                    .typeRole(Typography.fieldLabel.scaled(textScale))
+                    // Over the balance, the figure itself says so; the
+                    // sentence under the total says why.
+                    .foregroundStyle(summary.over ? theme.errorBase : theme.fgBase)
+            }
+            if let remaining = summary.remaining {
+                Text(verbatim: remaining)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+            }
         }
         .padding(.vertical, Tokens.Space.s8)
     }

@@ -63,6 +63,29 @@ pub fn network_name(chain_id: u32) -> String {
     format!("Chain {chain_id}")
 }
 
+/// The chain's explorer, trailing slash stripped — the built-in's, or the one
+/// the person gave a network they added. `None` for a chain with no explorer:
+/// no link rather than a wrong one (the web's `explorerBaseURL`).
+#[must_use]
+pub fn explorer_base(chain_id: u32) -> Option<String> {
+    let url = if let Some(chain) = BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id) {
+        chain.explorer_url.to_owned()
+    } else {
+        let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_CUSTOM_NETWORKS)
+        else {
+            return None;
+        };
+        items
+            .iter()
+            .find(|item| item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id)))
+            .and_then(|item| item.get("explorerURL").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let url = url.trim_end_matches('/');
+    (!url.is_empty()).then(|| url.to_owned())
+}
+
 /// Every stored token, in the order it was written.
 #[must_use]
 pub fn read() -> Vec<StoredToken> {
@@ -201,6 +224,31 @@ mod tests {
             assert_eq!(as_mtok.decimals, 6);
             assert_eq!(as_mtok.network_name, "Gnosis");
             assert_eq!(stored[0].to_trust(), trust("100_0xaaa", 100));
+        });
+    }
+
+    /// The built-in explorer, the person's own for a network they added, and
+    /// no link at all for a chain nobody gave one.
+    #[test]
+    fn an_explorer_is_the_chains_own_or_none() {
+        storage::tests::with_temp_state("custom-tokens-explorer", || {
+            assert_eq!(explorer_base(100).as_deref(), Some("https://gnosisscan.io"));
+            assert_eq!(explorer_base(424_242), None);
+            assert!(
+                storage::write_value(
+                    storage::KEY_CUSTOM_NETWORKS,
+                    json!([
+                        { "chainId": 424_242, "explorerURL": "https://scan.example/" },
+                        { "chainId": 515_151, "explorerURL": "" }
+                    ]),
+                )
+                .is_ok()
+            );
+            assert_eq!(
+                explorer_base(424_242).as_deref(),
+                Some("https://scan.example")
+            );
+            assert_eq!(explorer_base(515_151), None, "an empty URL is no link");
         });
     }
 

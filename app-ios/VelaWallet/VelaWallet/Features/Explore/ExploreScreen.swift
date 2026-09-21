@@ -31,6 +31,9 @@ struct ExploreScreen: View {
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
     var onSignWith: (String?) -> Void = { _ in }
+    /// Issue #262: the fee row's tap and a coin picked from its list.
+    var onFee: () -> Void = {}
+    var onFeePick: (String) -> Void = { _ in }
     /// The live sheet's speed control (spec 069): `nil` folds, an id picks.
     var onSpeed: (String?) -> Void = { _ in }
     /// The sheet went away without a tap. The core routes what that means by
@@ -279,6 +282,8 @@ struct ExploreScreen: View {
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
                     onSignWith: onSignWith,
+                    onFee: onFee,
+                    onFeePick: onFeePick,
                     onSpeed: onSpeed
                 )
                     .presentationDragIndicator(.visible)

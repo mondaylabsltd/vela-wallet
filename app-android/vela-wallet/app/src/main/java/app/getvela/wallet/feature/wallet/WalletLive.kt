@@ -359,7 +359,7 @@ object WalletLive {
      * lives on the asset's own screen. Truncated rather than rounded, because a
      * rounded-up balance is a number the person does not have.
      */
-    private fun trimAmount(balance: String): String {
+    internal fun trimAmount(balance: String): String {
         val parsed = balance.toBigDecimalOrNull() ?: return balance
         // The decimal mark is the preset's; the grouping stays off (spec 049, the web's `trimBalance`).
         return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
@@ -423,6 +423,15 @@ object WalletLive {
     fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel {
         val m = Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls)
         return TokenMarkModel(symbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
+    }
+
+    /**
+     * A network by itself (the web's `chainMark`): the chain's own logo, no
+     * badge — the mark of "anything on this network", never of its coin.
+     */
+    fun chainMark(chainId: Int, nativeSymbol: String): TokenMarkModel {
+        val m = Marks.chainMark(chainId)
+        return TokenMarkModel(nativeSymbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
     }
 
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]

@@ -35,6 +35,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRecipientIdentity
+import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.send.core.SendMultiSpecView
@@ -223,6 +225,65 @@ class SendLiveTest {
         assertTrue(live.rows[0].selected)
         assertTrue(live.rows[1].fee.contains("0.0021") && live.rows[1].fee.contains("USDC"))
         assertTrue(live.rows[0].balanceLabel.contains("0.71697"))
+    }
+
+    /** Issue 211: a coin the core judged unable to pay is dimmed and says why, not drawn like the rest. */
+    @Test
+    fun `the fee sheet marks a coin that cannot pay`() {
+        val drawn = FlowFixtures.build(FlowState.SD2F, strings).sheet as FlowSheet.FeeToken
+        val fee = FeeView(
+            fee = fee(),
+            options = listOf(
+                FeeOptionView(symbol = "XDAI", contract = null, decimals = 18, balance = "716970000000000000", recipient = "0x2", usd_balance = "0.7", amount = "2100000000000000", selected = true),
+                FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "0", recipient = "0x2", usd_balance = "0", amount = "2100", insufficient = true),
+            ),
+        )
+        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        assertFalse(live.rows[0].insufficient)
+        assertTrue(live.rows[1].insufficient)
+        assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "USDC")), live.rows[1].insufficientNote)
+    }
+
+    /** The web's `recipientNote`: "name · source", else the first-time tell, else nothing. */
+    @Test
+    fun `the recipient note names the source of the name`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient)
+        fun note(view: SendView) = SendLive.form(drawn.model, view, FeeView(), ctx()).recipient!!.note
+        assertEquals("alice.eth · ENS", note(base.copy(recipient_identity = SendRecipientIdentity(name = "alice.eth", source = "ENS"))))
+        assertEquals("Alice", note(base.copy(recipient_identity = SendRecipientIdentity(name = "Alice"))))
+        assertEquals(strings.t(I18nKeys.Flows.FIRST_TIME_SEND), note(base.copy(recipient_risk = SendRecipientRisk(first_time = true))))
+        assertNull(note(base))
+    }
+
+    /** Issue 209: a filter that hid every row is a different sentence from an empty account. */
+    @Test
+    fun `an empty pick says why it is empty`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        assertEquals(strings.t(I18nKeys.Flows.NO_TOKENS_WITH_BALANCE), SendLive.pick(drawn.model, SendView(), ctx()).empty)
+        val hidden = SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx(), classFilter = "stable")
+        assertTrue(hidden.rows.isEmpty())
+        assertEquals(strings.t(I18nKeys.Flows.NO_MATCHING_TOKENS), hidden.empty)
+    }
+
+    /** Issue 231: the web's `unitAdornment` — a sign leads, a code or a ticker follows, nothing defaults to "$". */
+    @Test
+    fun `the amount's unit sits on the figure`() {
+        assertEquals(null to "BNB", SendLive.unitAdornment(null, "BNB"))
+        assertEquals(null to null, SendLive.unitAdornment(null, ""))
+        assertEquals("$" to null, SendLive.unitAdornment("USD", "BNB"))
+        assertEquals("€" to null, SendLive.unitAdornment("EUR", "BNB"))
+        assertEquals(null to "PLN", SendLive.unitAdornment("PLN", "BNB"))
+        assertEquals(null to "XYZ", SendLive.unitAdornment("XYZ", "BNB"))
+        // The ⇄ row obeys the core's two flags, and the typed unit is the figure's.
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient, amount = "1", token_amount = "1")
+        val hidden = SendLive.form(drawn.model, view, FeeView(), ctx()).amount!!
+        assertFalse(hidden.denomShown)
+        assertEquals("XDAI", hidden.denomLabel)
+        val dimmed = SendLive.form(drawn.model, view.copy(denom_toggle_shown = true), FeeView(), ctx()).amount!!
+        assertTrue(dimmed.denomShown)
+        assertFalse(dimmed.denomEnabled)
     }
 
     @Test
@@ -469,6 +530,41 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.BATCH_APPLY_ONE, mapOf("count" to "1")), priced.cta)
         assertFalse(priced.ctaDisabled)
         assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
+    }
+
+    /** Issue #272: the refusal that dims the button reads as a warning, not as helper text. */
+    @Test
+    fun `an over-balance total is a warning, a saved template is not`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, show_batch_import = true)
+
+        val over = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, over_balance = true, recipient_count = 3), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_OVER_BALANCE, mapOf("sym" to "XDAI")), over.note)
+        assertTrue(over.noteWarning)
+        assertTrue(over.ctaDisabled)
+
+        val saved = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, template_saved = true), view, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_TEMPLATE_SAVED), saved.note)
+        assertFalse(saved.noteWarning)
+    }
+
+    /** Issue #271: with someone already on the form, the sheet says the import ADDS — and offers the other. */
+    @Test
+    fun `the batch sheet says whether an import adds to or replaces the form's rows`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val ready = BatchView(opened = true, unit = WireBatchUnit.Token, recipient_count = 1, can_apply = true, recipients = listOf(BatchRecipient(recipient, "0.001", null)))
+
+        val empty = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_import_room = 60)
+        assertNull("nobody on the form: nothing to add to", SendLive.batchImport(drawn.model, ready, empty, ctx()).merge)
+
+        val typed = empty.copy(recipient = recipient, split_import_room = 59)
+        val adds = SendLive.batchImport(drawn.model, ready, typed, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_ADDS_TO_ROWS), adds.merge)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_REPLACE_INSTEAD), adds.mergeAction)
+
+        val replaces = SendLive.batchImport(drawn.model, ready, typed, ctx(), replaces = true)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_REPLACES_ROWS), replaces.merge)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_ADD_INSTEAD), replaces.mergeAction)
     }
 
     // -- Spec 045 US4: the treasury pause's second exit ---------------------

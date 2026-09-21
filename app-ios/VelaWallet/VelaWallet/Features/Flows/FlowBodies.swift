@@ -709,7 +709,8 @@ struct SendFormBody: View {
             }
             // The core's sentence, where the person is looking when it becomes
             // true — not in an alert they have to dismiss to get back to it.
-            if let warning {
+            // A split's is said at the foot instead, beside its total.
+            if let warning, model.mode != .split {
                 Text(verbatim: warning)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.warningBase)
@@ -745,6 +746,15 @@ struct SendFormBody: View {
                 if let speed = model.speed {
                     FeeSpeedControlView(speed: speed, onToggle: onToggleSpeed, onPick: onPickSpeed)
                 }
+            }
+            // A split's total, its refusal and Continue travel together: the
+            // refusal first, else which row is unfinished and why the button
+            // is dark.
+            if model.mode == .split, let line = warning ?? model.hint {
+                Text(verbatim: line)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(warning != nil ? theme.warningBase : theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VelaButton(title: model.cta, kind: .primary, action: onContinue)
                 .disabled(ctaDisabled)
@@ -903,6 +913,8 @@ struct BatchImportBody: View {
     var onFile: () -> Void = {}
     var onTemplate: () -> Void = {}
     var onApply: () -> Void = {}
+    /// Add to the rows on the form, or replace them — the other of the two.
+    var onMerge: () -> Void = {}
     /// The live fields. `nil` renders exactly as drawn, so the gallery and the
     /// screenshot sweep stay pixel-identical.
     var pasteText: Binding<String>?
@@ -1049,6 +1061,50 @@ struct BatchImportBody: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            if let total = model.total {
+                // What the import comes to, and what it is paid from — the
+                // number somebody checks before they press the button.
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: total.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: total.value)
+                            .typeRole(Typography.rowTitle.scaled(textScale))
+                            .foregroundStyle(total.over ? theme.errorBase : theme.fgBase)
+                    }
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: total.balance)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                        Spacer(minLength: Tokens.Space.s8)
+                        if let detail = total.detail {
+                            Text(verbatim: detail)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                        }
+                    }
+                    .foregroundStyle(theme.fgSubtle)
+                }
+                .padding(.top, Tokens.Space.s8)
+            }
+            if let merge = model.merge {
+                // Adding is the default; replacing is one tap away and says so.
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(verbatim: merge.note)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(action: onMerge) {
+                        Text(verbatim: merge.action)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.accentBase)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("send.batchMerge")
+                }
+            }
+
             VelaButton(
                 title: model.cta,
                 kind: .primary,
@@ -1132,6 +1188,13 @@ struct SendConfirmBody: View {
                 }
             }
 
+            if let note = model.repeatNote {
+                Text(verbatim: note)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.warningBase)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if !model.breakdown.isEmpty {
                 VStack(spacing: Tokens.Space.s0) {
                     ForEach(model.breakdown) { item in
@@ -1180,7 +1243,24 @@ struct SendReceiptBody: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s8) {
-            StatusHeroView(stage: model.stage, title: model.title, captions: model.captions)
+            // Spec 038 #D3 / issue 199: while the relay has the op, the screen
+            // counts — one second is the right grain. The sentences arrive in
+            // the model; only the number is this screen's.
+            if let eta = model.eta, model.stage == .submitted {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let nowMs = context.date.timeIntervalSince1970 * 1000
+                    StatusHeroView(stage: model.stage, title: model.title,
+                                   captions: model.captions + eta.lines(nowMs: nowMs),
+                                   progress: eta.progress(nowMs: nowMs))
+                }
+            } else {
+                StatusHeroView(stage: model.stage, title: model.title, captions: model.captions,
+                               progress: model.stage == .confirmed ? 1 : nil)
+            }
+            if !model.breakdown.isEmpty {
+                ReceiptBreakdownView(title: model.breakdownTitle, rows: model.breakdown)
+                    .padding(.bottom, Tokens.Space.s8)
+            }
             if let hash = model.hash {
                 HStack(spacing: Tokens.Space.s4) {
                     Text(verbatim: hash.label)
@@ -1202,6 +1282,47 @@ struct SendReceiptBody: View {
                 VelaButton(title: explorer, kind: .secondary, action: onExplorer)
             }
         }
+    }
+}
+
+/// A split's people on the receipt (#261): who got what, as the confirm
+/// listed them — from the core's frozen transfers.
+private struct ReceiptBreakdownView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let title: String?
+    let rows: [BreakdownRowModel]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            if let title {
+                Text(verbatim: title)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
+            VStack(spacing: Tokens.Space.s0) {
+                ForEach(rows) { row in
+                    HStack(spacing: Tokens.Space.s8) {
+                        if let seed = row.identiconSeed {
+                            IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark)
+                        }
+                        Text(verbatim: row.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: row.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                    }
+                    .padding(.vertical, Tokens.Space.s8)
+                }
+            }
+            .padding(.horizontal, Tokens.Space.s12)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

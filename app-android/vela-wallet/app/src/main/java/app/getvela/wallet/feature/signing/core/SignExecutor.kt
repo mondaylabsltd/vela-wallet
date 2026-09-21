@@ -4,6 +4,7 @@ import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.UserOpSpine
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,8 +59,22 @@ class SignExecutor(
         /** This record is on disk: the tracker may be handed its hash. */
         fun recordPersisted(recordId: String)
 
-        /** The session's active account switch, verified by the caller. `true` when it happened. */
-        suspend fun switchAccount(index: Int): Boolean
+        /**
+         * Make [address] the session's active account. `true` only when the
+         * session's active address IS [address] afterwards — the machine's
+         * row index is not the session's, so the switch is by address.
+         */
+        suspend fun switchAccount(address: String): Boolean
+
+        /**
+         * The machine's signer row at [index] (what `AccountsChanged` gave it);
+         * `null` = no such row. [SigningController] answers it — it owns the
+         * rows; the default refuses every switch.
+         */
+        fun signerAt(index: Int): String? = null
+
+        /** The open request's `signer_address`; `null` = the request names none. [SigningController] answers it. */
+        fun intendedSigner(): String? = null
 
         /** The chain's native symbol for the record row. */
         fun nativeSymbol(chainId: Int): String
@@ -95,11 +110,20 @@ class SignExecutor(
             ports.recordsPersisted()
             SignShellResult.RecordUpdated
         }
-        // Best effort, and the core is told either way: it sequences "switch
-        // first, then the approval surface may act" off this acknowledgement,
-        // so withholding it would strand the grant.
+        // The core sequences "switch first, then the approval surface may act"
+        // off this acknowledgement — so it is given only for the RIGHT
+        // account (the web's `sign-resident` rule). The target row must be
+        // the request's signer, checked BEFORE anything moves; a bad index or
+        // a different account leaves the person's active account alone and
+        // is never acknowledged: the approval surface stays shut, nothing is
+        // signed.
         is SignOperation.SwitchActiveAccount -> {
-            ports.switchAccount(operation.index)
+            val intended = ports.intendedSigner()
+            val target = ports.signerAt(operation.index)
+            if (target == null || (intended != null && !target.equals(intended, ignoreCase = true))) {
+                refuseSwitch(operation.index, intended, target)
+            }
+            if (!ports.switchAccount(target)) refuseSwitch(operation.index, intended, target)
             SignShellResult.AccountSwitched
         }
     }
@@ -112,6 +136,18 @@ class SignExecutor(
         is SignOperation.PersistRecord -> SignShellResult.RecordPersisted
         is SignOperation.UpdateRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
+    }
+
+    /** A switch that would sign as the wrong account: logged, and deliberately never answered. */
+    private suspend fun refuseSwitch(index: Int, intended: String?, target: String?): Nothing {
+        VelaLog.event(
+            "sign.switch",
+            "refused: the approval surface stays shut; nothing is signed",
+            "index" to index,
+            "intended" to (intended ?: "nothing"),
+            "found" to (target ?: "nothing"),
+        )
+        awaitCancellation()
     }
 
     private suspend fun signAndSubmit(op: SignOperation.SignAndSubmit): SignSubmitOutcome {

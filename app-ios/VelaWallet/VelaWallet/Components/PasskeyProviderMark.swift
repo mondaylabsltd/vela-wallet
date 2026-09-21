@@ -44,12 +44,12 @@ private enum PasskeyMarkCache {
         sizePx: UInt32,
         scale: CGFloat
     ) -> UIImage? {
-        let id = "f|\(key.authenticatorAttachment)|\(key.transports)|\(key.method.rawValue)"
+        let id = "f|\(key.authenticatorAttachment)|\(key.transports)|\(key.kind.rawValue)"
         return decoded(key: "\(id)|\(palette.strong)|\(sizePx)", scale: scale) {
             try? passkeyFallbackPng(
                 authenticatorAttachment: key.authenticatorAttachment,
                 transports: key.transports,
-                choseSecurityKey: key.method == .securityKey,
+                choseSecurityKey: key.kind == .securityKey,
                 strong: palette.strong,
                 soft: palette.soft,
                 hole: palette.hole,
@@ -104,7 +104,7 @@ struct PasskeyProviderMark: View {
                 .frame(width: size, height: size)
                 .accessibilityLabel(label)
         } else if glyphFallback {
-            Image(systemName: key.method == .securityKey ? "key.horizontal" : "person.badge.key")
+            Image(systemName: key.kind == .securityKey ? "key.horizontal" : "person.badge.key")
                 .foregroundStyle(theme.fgMuted)
                 .frame(width: size, height: size)
                 .background(theme.bgSunken, in: RoundedRectangle(cornerRadius: Tokens.Radius.r8))
