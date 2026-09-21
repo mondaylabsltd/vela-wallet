@@ -47,8 +47,12 @@ final class FeeStore {
     /// the core's own TTL is 30 s and a cold pool sweeps three passes.
     private static let settleDeadlineMs = 45_000
 
-    init(relay: RelayClient, accounts: UserOpSpine.AccountPort) {
-        let executor = FeeExecutor(relay: relay, accounts: accounts)
+    init(
+        relay: RelayClient,
+        accounts: UserOpSpine.AccountPort,
+        measureCall: @escaping FeeExecutor.MeasureCall = { _, _, _, _, _ in nil }
+    ) {
+        let executor = FeeExecutor(relay: relay, accounts: accounts, measureCall: measureCall)
         self.core = CoreStore(
             bridge: FeePolicyCore(),
             perform: { operation in await executor.perform(operation) },

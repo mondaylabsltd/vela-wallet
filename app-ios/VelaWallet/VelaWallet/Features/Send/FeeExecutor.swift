@@ -4,7 +4,7 @@
 //
 //  The only place the `fee_policy` core touches the outside world.
 //
-//  Six operations, every one of them a read. Ported from
+//  Seven operations, every one of them a read. Ported from
 //  `app-android/.../feature/send/core/FeeExecutor.kt` (spec 043), which is the
 //  desktop's `executor/fee.rs`.
 //
@@ -30,17 +30,44 @@ final class FeeExecutor {
         "fetch_in_band_quotes",
         "fetch_fee_recipient",
         "estimate_user_op_gas",
+        "measure_inner_calls",
         "start_ttl",
     ]
+
+    /// `eth_estimateGas({from, to, value, data})` for one call on one chain —
+    /// the gas hex, or `nil` when nobody answered. The same read the spine's
+    /// `measureCall` makes at submit.
+    typealias MeasureCall = (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
+
+    /// The pool's `eth_estimateGas`, as both the spine and this executor read it.
+    static func measuring(with pool: RpcPool) -> MeasureCall {
+        { chainId, from, to, valueHex, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_estimateGas",
+                params: [["from": from, "to": to, "value": valueHex, "data": data]]
+            )
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x") else { return nil }
+            return hex
+        }
+    }
 
     private let relay: RelayClient
     /// How a draft is assembled for the estimate. The spine owns the order;
     /// this only needs the JSON the bundler is asked about.
     private let accounts: UserOpSpine.AccountPort
+    /// The inner calls' own gas (issue #262 follow-up): the quote measures what
+    /// the submit measures, so the fee is priced on the `callGasLimit` the op
+    /// will carry. Unwired = nothing measured = the relay's figure.
+    private let measureCall: MeasureCall
 
-    init(relay: RelayClient, accounts: UserOpSpine.AccountPort) {
+    init(
+        relay: RelayClient,
+        accounts: UserOpSpine.AccountPort,
+        measureCall: @escaping MeasureCall = { _, _, _, _, _ in nil }
+    ) {
         self.relay = relay
         self.accounts = accounts
+        self.measureCall = measureCall
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -87,6 +114,9 @@ final class FeeExecutor {
 
         case "estimate_user_op_gas":
             return await estimate(operation, chainId: chainId)
+
+        case "measure_inner_calls":
+            return await measure(operation, chainId: chainId)
 
         case "start_ttl":
             let ms = (operation["ms"] as? NSNumber)?.doubleValue ?? 0
@@ -157,6 +187,29 @@ final class FeeExecutor {
         }
     }
 
+    /// Each call on its own, from the Safe's address — one entry per call, in
+    /// order, a decimal string or `null`. What an unmeasured call means (no
+    /// floor, the relay's figure) is the core's.
+    private func measure(_ operation: [String: Any], chainId: Int) async -> String {
+        let from = operation["from"] as? String ?? ""
+        let calls = operation["calls"] as? [[String: Any]] ?? []
+        var gas: [Any] = []
+        for call in calls {
+            let value = call["value"] as? String ?? "0"
+            let data = call["data"] as? String ?? "0x"
+            let to = call["to"] as? String ?? ""
+            guard let valueHex = UserOpSpine.decimalToHex(value).map({ "0x" + $0 }),
+                  let hex = await measureCall(chainId, from, to, valueHex, data),
+                  let measured = UInt64(hex.dropFirst(hex.hasPrefix("0x") ? 2 : 0), radix: 16)
+            else {
+                gas.append(NSNull())
+                continue
+            }
+            gas.append(String(measured))
+        }
+        return CoreJSON.string(["type": "inner_calls_measured", "gas": gas])
+    }
+
     /// What the core hears when an arm threw: nothing was done.
     static func neutralAnswer(_ operation: [String: Any]) -> String {
         switch operation["type"] as? String ?? "" {
@@ -171,6 +224,12 @@ final class FeeExecutor {
             return CoreJSON.string(["type": "in_band_quotes", "quotes": NSNull()])
         case "fetch_fee_recipient":
             return CoreJSON.string(["type": "fee_recipient", "recipient": NSNull()])
+        case "measure_inner_calls":
+            let count = (operation["calls"] as? [Any])?.count ?? 0
+            return CoreJSON.string([
+                "type": "inner_calls_measured",
+                "gas": Array(repeating: NSNull(), count: count) as [Any],
+            ])
         case "start_ttl":
             return CoreJSON.string(["type": "ttl_elapsed"])
         default:

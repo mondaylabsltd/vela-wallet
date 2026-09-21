@@ -1240,4 +1240,61 @@ struct InheritedArmTests {
     }
 }
 
+// MARK: - The fee quote's inner-call measurement (issue 262 follow-up)
+
+@MainActor
+struct FeeMeasureInnerCallsTests {
+    private let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private let target = "0x5555555555555555555555555555555555555555"
+
+    /// Each call measured on its own from the Safe, value as hex, answered
+    /// in order as decimal strings — `null` where nobody answered. What an
+    /// unmeasured call means is the core's.
+    @Test func measuresEachCallFromTheSafeInOrder() async throws {
+        let asked = AskedLog()
+        let executor = FeeExecutor(
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            accounts: ScriptedAccounts(),
+            measureCall: { chainId, from, to, value, data in
+                asked.lines.append("\(chainId)|\(from)|\(to)|\(value)|\(data)")
+                return data == "0x4e71d92d" ? "0x41bc9d" : nil
+            }
+        )
+        let answer = await executor.perform([
+            "type": "measure_inner_calls",
+            "chain_id": 8453,
+            "from": safe,
+            "calls": [
+                ["to": target, "value": "0", "data": "0x4e71d92d"] as [String: Any],
+                ["to": target, "value": "1000", "data": "0xdeadbeef"] as [String: Any],
+            ],
+        ])
+        let reply = try CoreJSON.object(answer)
+        #expect(reply["type"] as? String == "inner_calls_measured")
+        let gas = reply["gas"] as? [Any] ?? []
+        #expect(gas.count == 2)
+        #expect(gas.first as? String == "4308125")
+        #expect(gas.last is NSNull)
+        #expect(asked.lines == [
+            "8453|\(safe)|\(target)|0x0|0x4e71d92d",
+            "8453|\(safe)|\(target)|0x3e8|0xdeadbeef",
+        ])
+        #expect(FeeExecutor.operations.contains("measure_inner_calls"))
+    }
+
+    @Test func failsNeutralWithOneNullPerCall() throws {
+        let reply = try CoreJSON.object(FeeExecutor.neutralAnswer([
+            "type": "measure_inner_calls", "chain_id": 1, "from": safe,
+            "calls": [["to": target, "value": "0", "data": "0x01"] as [String: Any]],
+        ]))
+        #expect(reply["type"] as? String == "inner_calls_measured")
+        #expect((reply["gas"] as? [Any])?.count == 1)
+    }
+}
+
+@MainActor
+final class AskedLog {
+    var lines: [String] = []
+}
+
 }

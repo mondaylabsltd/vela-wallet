@@ -173,7 +173,9 @@ final class SigningController {
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
-        let feeExecutor = FeeExecutor(relay: relay, accounts: accounts)
+        let feeExecutor = FeeExecutor(
+            relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
+        )
 
         signCore = CoreStore(
             bridge: SignRequestCore(),

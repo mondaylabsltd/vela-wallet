@@ -261,17 +261,12 @@ struct RootView: View {
             relay: relay,
             accounts: port,
             signer: { ParallelSpaceHook.signer(passkey: PasskeyExecutor()) },
-            measureCall: { chainId, from, to, valueHex, data in
-                let outcome = await pool.call(
-                    chainId: chainId, method: "eth_estimateGas",
-                    params: [["from": from, "to": to, "value": valueHex, "data": data]]
-                )
-                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x") else { return nil }
-                return hex
-            }
+            measureCall: FeeExecutor.measuring(with: pool)
         )
         self.userOpSpine = spine
-        let feeStore = FeeStore(relay: relay, accounts: port)
+        // The quote measures the inner calls the way the spine does at submit,
+        // so the fee prices the `callGasLimit` the op will carry.
+        let feeStore = FeeStore(relay: relay, accounts: port, measureCall: FeeExecutor.measuring(with: pool))
         _fees = State(initialValue: feeStore)
         _contacts = State(initialValue: ContactsStore(
             store: shelf, identity: identity, pool: pool
