@@ -195,9 +195,8 @@ object ExploreLive {
      * not-yet-connected form. The origin is the CORE's (`DpermConsentView`);
      * the words are `connect.browser.*`; the site's own name is not asked.
      */
-    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity): ConnectionModel {
+    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity, secure: Boolean): ConnectionModel {
         val host = consent.origin.substringAfter("://").substringBefore('/')
-        val secure = consent.origin.startsWith("https://")
         return fallback.copy(
             title = strings.t("connect.browser.title", mapOf("host" to host)),
             site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host)),
