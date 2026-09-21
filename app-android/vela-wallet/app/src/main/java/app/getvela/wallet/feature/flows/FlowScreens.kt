@@ -808,6 +808,21 @@ fun SendPickBody(
                 onClick = { onSelect(entry.index) },
             )
         }
+        // Issue 209: a list with nothing in it says so rather than showing a blank panel.
+        if (shown.isEmpty()) {
+            model.empty?.let {
+                Text(
+                    text = it,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = VelaSpacing.lg),
+                )
+            }
+        }
         model.selection?.let {
             Text(
                 text = it.selectAll,

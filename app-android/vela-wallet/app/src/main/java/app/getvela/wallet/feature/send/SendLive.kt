@@ -151,6 +151,10 @@ object SendLive {
         // Spec 048: the chips and the pill say what narrowed the list.
         val filters = fallback.filters.map { it.copy(selected = it.id == classFilter) }
         val pill = fallback.header.pill?.let { p -> p.copy(label = chainFilter?.let { ctx.chainNames[it] } ?: p.label) }
+        // Issue 209 (the web's `liveSendPick`): an empty list says WHY. The
+        // core's own token list tells "holds nothing" from "a filter or the
+        // search hid everything".
+        val empty = s.t(if (view.tokens.isEmpty()) I18nKeys.Flows.NO_TOKENS_WITH_BALANCE else I18nKeys.Flows.NO_MATCHING_TOKENS)
         if (!sweepPicking) {
             return fallback.copy(
                 header = fallback.header.copy(pill = pill),
@@ -159,6 +163,7 @@ object SendLive {
                 selection = null,
                 rows = rows,
                 cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
+                empty = empty,
             )
         }
         // Spec 045 US2: the tick per row is `multi_selected_ids`, the greying
@@ -169,6 +174,7 @@ object SendLive {
         return fallback.copy(
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE), pill = pill),
             filters = filters,
+            empty = empty,
             notice = chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
@@ -346,12 +352,40 @@ object SendLive {
         )
     }
 
-    private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context) = AmountFieldModel(
-        value = view.amount.ifEmpty { "0" },
-        fiat = if (view.amount_fiat_code != null) "${Formats.current.plain(view.token_amount)} $symbol" else fiatLine,
-        denomLabel = view.amount_fiat_code ?: ctx.money.code,
-        raw = view.amount,
-    )
+    private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context): AmountFieldModel {
+        val (prefix, suffix) = unitAdornment(view.amount_fiat_code, symbol)
+        return AmountFieldModel(
+            value = view.amount.ifEmpty { "0" },
+            fiat = if (view.amount_fiat_code != null) "${Formats.current.plain(view.token_amount)} $symbol" else fiatLine,
+            // The unit being TYPED: the figure's own currency, or the token.
+            denomLabel = view.amount_fiat_code ?: symbol,
+            raw = view.amount,
+            // Issue 231: the unit on the figure, keyed on the FIGURE's own
+            // code (`amount_fiat_code`), never the display currency — which
+            // may already have moved on under digits typed in another.
+            unitPrefix = prefix,
+            unitSuffix = suffix,
+            // Issue 197: ⇄ exists only where the core offers it, and is live
+            // only where pressing it would change something.
+            denomShown = view.denom_toggle_shown,
+            denomEnabled = view.denom_toggle_enabled,
+        )
+    }
+
+    /**
+     * The web's `unitAdornment`: `code == null` means the figure is in token
+     * units and the symbol follows it ("0.00075 BNB"); a currency with a sign
+     * leads it ("$4.00"); one without follows as its code ("4.00 PLN").
+     * Nothing defaults to "$" — an unknown unit is no adornment at all.
+     */
+    internal fun unitAdornment(code: String?, tokenSymbol: String): Pair<String?, String?> {
+        if (code == null) return null to tokenSymbol.ifEmpty { null }
+        // The same ISO-4217 table `WalletLive.Money` writes the "≈" line with,
+        // so the figure and the line beneath it agree on what a currency looks like.
+        val sign = runCatching { java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US) }
+            .getOrNull()?.takeIf { it != code }
+        return if (sign == null) null to code else sign to null
+    }
 
     private fun recipientModel(view: SendView, ctx: Context) = RecipientFieldModel(
         label = ctx.strings.t(I18nKeys.Flows.RECIPIENT_LABEL),
@@ -360,9 +394,22 @@ object SendLive {
         name = view.recipient_identity?.name,
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
         scanLabel = null,
-        note = view.recipient_identity?.name,
+        note = recipientNote(view, ctx),
         raw = view.recipient,
     )
+
+    /**
+     * The trust line the core resolved (the web's `recipientNote`): "name ·
+     * source" when it knows one, else the first-time tell — the one that
+     * matters for a poisoned look-alike.
+     */
+    internal fun recipientNote(view: SendView, ctx: Context): String? {
+        val identity = view.recipient_identity
+        val name = identity?.name?.takeIf { it.isNotEmpty() }
+        if (name != null) return identity.source?.takeIf { it.isNotEmpty() }?.let { "$name · $it" } ?: name
+        if (view.recipient_risk?.first_time == true) return ctx.strings.t(I18nKeys.Flows.FIRST_TIME_SEND)
+        return null
+    }
 
     /** One of the split's rows as the card draws it: the core's draft, editable in place. */
     internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context): RecipientCardModel {
@@ -406,7 +453,14 @@ object SendLive {
                 mapOf("amount" to human(issue.transfer_amount), "fee" to human(issue.fee_amount), "total" to human(issue.total), "symbol" to issue.symbol, "balance" to human(issue.balance)),
             ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount), "symbol" to issue.symbol))
         }
-        return view.amount_warning?.let { warningText(it, s) }
+        view.amount_warning?.let { return warningText(it, s) }
+        // Last, ⇄'s own refusal (issue 197; `Some` exactly when the row is
+        // shown and dimmed): a dimmed toggle with no sentence is a refusal
+        // nobody can act on. Single mode only — the others have no ⇄.
+        if (view.split_mode || view.multi_select_mode) return null
+        return view.denom_toggle_reason?.let {
+            s.t(I18nKeys.Flows.DENOM_TOGGLE_NO_RATE, mapOf("code" to it.code, "symbol" to it.symbol))
+        }
     }
 
     /** One sentence per `SendAmountWarning`, the web's keys. */
@@ -538,6 +592,11 @@ object SendLive {
                 balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(fromBase(option.balance, option.decimals)))),
                 fee = option.amount?.let { "~${trim(fromBase(it, option.decimals))} ${option.symbol}" } ?: "—",
                 selected = option.selected,
+                // Issue 211: the core refuses to select a coin that cannot pay;
+                // a row that looks like the others and silently does nothing is
+                // how gas ends up "paid" in a coin the account does not hold.
+                insufficient = option.insufficient,
+                insufficientNote = ctx.strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to option.symbol)),
             )
         },
     )
