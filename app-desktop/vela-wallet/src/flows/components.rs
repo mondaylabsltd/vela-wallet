@@ -775,18 +775,22 @@ pub fn token_header_card(
                 ),
         );
     if let Some(max) = max {
-        card = card.child(
-            div()
-                .px(px(12.))
-                .py(px(4.))
-                .rounded(px(999.))
-                .bg(theme.bg_raised)
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(max),
-        );
+        card = card.child(max_chip(theme, max));
     }
     card
+}
+
+/// The token card's Max chip. A live form passes the card no label and hangs
+/// this, clickable, where the card would have drawn it — one Max, not two.
+pub fn max_chip(theme: &Theme, max: SharedString) -> Div {
+    div()
+        .px(px(12.))
+        .py(px(4.))
+        .rounded(px(999.))
+        .bg(theme.bg_raised)
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_base)
+        .child(max)
 }
 
 /// A full-width outline button — every CTA in the flows except the confirm.

@@ -20,8 +20,8 @@ use crate::wallet::components::{
 
 use super::components::{
     accent_button, address_card, fact_row, fee_row, filter_chips, flow_search, ghost_button,
-    inline_mark, mono_field, network_pill, network_row, qr_card, recipient_card, segmented_toggle,
-    status_chip, token_header_card,
+    inline_mark, max_chip, mono_field, network_pill, network_row, qr_card, recipient_card,
+    segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -71,6 +71,11 @@ pub struct PanelActions {
     pub open_batch_import: Option<Click>,
     /// DT1L's "add a token by address".
     pub open_add_token: Option<Click>,
+    /// DT4L, live: the empty state itself. Its caption says "tap here to see
+    /// your address", so it opens Receive (the web's `.empty-tap`).
+    pub open_receive: Option<Click>,
+    /// DA2L, live: removes this record from the feed (the chain keeps it).
+    pub delete_tx: Option<Click>,
     /// DSD2eL's scan row — the address that is on a screen, not in the book.
     pub open_scan: Option<Click>,
     /// The panel's own CTA — continue, confirm, done.
@@ -262,8 +267,14 @@ pub fn render(
         FlowBody::History(model) => {
             history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
         }
-        FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons),
-        FlowBody::Assets(model) => assets(model, theme, icons, actions.open_add_token),
+        FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons, actions.delete_tx),
+        FlowBody::Assets(model) => assets(
+            model,
+            theme,
+            icons,
+            actions.open_add_token,
+            actions.open_receive,
+        ),
         FlowBody::AddToken(model) => add_token(
             model,
             theme,
@@ -596,6 +607,7 @@ fn tx_detail(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    delete_tx: Option<Click>,
 ) -> Div {
     let mut col = column()
         .child(
@@ -645,12 +657,22 @@ fn tx_detail(
             &model.breakdown,
         ));
     }
-    col.child(explorer_button(
+    col = col.child(explorer_button(
         "tx-explorer",
         theme,
         model.view_on_explorer.clone(),
         model.explorer_url.as_ref(),
-    ))
+    ));
+    // Under the explorer, in the danger colour (the web's `variant="danger"`).
+    // It removes the local record only; the chain keeps the transaction.
+    if let Some(label) = &model.delete_label {
+        col = col.child(clickable(
+            "tx-delete",
+            delete_tx,
+            ghost_button(theme, label.clone()).text_color(theme.error_base),
+        ));
+    }
+    col
 }
 
 fn assets(
@@ -658,6 +680,7 @@ fn assets(
     theme: &Theme,
     icons: &mut IconCache,
     open_add_token: Option<Click>,
+    open_receive: Option<Click>,
 ) -> Div {
     let mut col = column();
     if let Some((dots, label, add)) = &model.filter {
@@ -679,12 +702,16 @@ fn assets(
 
     if let Some(empty) = &model.empty {
         return col
-            .child(empty_state(
-                theme,
-                icons,
-                Icon::WalletOutline,
-                empty.title.clone(),
-                empty.caption.clone(),
+            .child(clickable(
+                "assets-empty-receive",
+                open_receive,
+                empty_state(
+                    theme,
+                    icons,
+                    Icon::WalletOutline,
+                    empty.title.clone(),
+                    empty.caption.clone(),
+                ),
             ))
             .child(
                 div()
@@ -1154,13 +1181,25 @@ fn send_form(
     mut actions: PanelActions,
 ) -> Div {
     let (mark, symbol, detail, max) = &model.token;
-    let mut col = column().child(token_header_card(
+    // Max lives on the token card, as the web's `TokenHeaderCard` draws it. A
+    // live form makes that one chip the button rather than drawing a second,
+    // working one under the field (#288).
+    let live = actions.amount_field.is_some();
+    let mut card = token_header_card(
         theme,
         mark,
         symbol.clone(),
         detail.clone(),
-        max.clone(),
-    ));
+        max.clone().filter(|_| !live),
+    );
+    if live && let Some(max) = max {
+        card = card.child(clickable(
+            "send-max",
+            actions.tap_max.take(),
+            max_chip(theme, max.clone()),
+        ));
+    }
+    let mut col = column().child(card);
 
     if let Some(field) = actions.amount_field.take() {
         // Live: a real field, labelled with the coin it counts in, the fiat
@@ -1209,13 +1248,6 @@ fn send_form(
                 ),
                 None => line.child(fiat.clone()),
             });
-        }
-        if let Some(max) = &model.token.3 {
-            under = under.child(clickable(
-                "send-max",
-                actions.tap_max.take(),
-                pill(theme, max.clone()),
-            ));
         }
         col = col.child(block.child(under));
     } else if let Some((value, fiat)) = &model.amount {
