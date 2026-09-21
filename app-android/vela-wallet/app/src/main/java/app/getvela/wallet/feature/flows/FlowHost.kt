@@ -226,6 +226,7 @@ private fun FlowHostContent(
                     onRecipientAmount = send?.let { it.onRecipientAmount },
                     onRecipientAddress = send?.let { it.onRecipientAddress },
                     onRecipientPick = send?.onRecipientPick,
+                    onFillEmpty = send?.onFillEmpty,
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
                     onMax = { if (send != null) send.onMax() },
                     onDenom = { if (send != null) send.onDenom() },
@@ -448,6 +449,8 @@ class SendCallbacks(
     val onRemoveRecipient: (Int) -> Unit = {},
     val onRecipientAmount: (Int, String) -> Unit = { _, _ -> },
     val onRecipientAddress: (Int, String) -> Unit = { _, _ -> },
+    /** The split's "Use X for the empty rows": the figure goes into every row that has none. */
+    val onFillEmpty: ((String) -> Unit)? = null,
     // Spec 046 US3 — the scanner: the form's scan icon, and the live surface's needs.
     val onScanOpen: (() -> Unit)? = null,
     /** Spec 048: the SD1 class chips — 全部 / 稳定币 / Gas 币 / 其他. */

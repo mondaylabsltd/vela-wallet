@@ -872,8 +872,10 @@ fun SendFormBody(
     onRecipientAmount: ((Int, String) -> Unit)? = null,
     onRecipientAddress: ((Int, String) -> Unit)? = null,
     onRecipientPick: ((Int) -> Unit)? = null,
+    onFillEmpty: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
+    val haptic = rememberVelaHaptic()
     Column(modifier = modifier.fillMaxWidth()) {
         model.token?.let {
             TokenHeaderCard(token = it, onMax = { onMax(0) })
@@ -977,6 +979,32 @@ fun SendFormBody(
                 onPick = onRecipientPick?.let { pick -> { pick(index) } },
             )
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
+        }
+        // One amount into every row that has none (the web's `.fill`): a quiet
+        // underlined line under the rows, not a button competing with Continue.
+        if (onFillEmpty != null) model.fillEmpty?.let { fill ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clickable { haptic(VelaHaptic.Select); onFillEmpty(fill.amount) }
+                    .padding(vertical = VelaSpacing.sm),
+            ) {
+                Icon(
+                    imageVector = VelaIcons.Copy,
+                    contentDescription = null,
+                    tint = colors.fgBase,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Text(
+                    text = fill.label,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.medium,
+                    fontSize = VelaTextSize.sm,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                )
+            }
         }
         if (model.recipientActions.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.md))

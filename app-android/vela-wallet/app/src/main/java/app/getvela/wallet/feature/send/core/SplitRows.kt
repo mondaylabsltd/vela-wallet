@@ -16,6 +16,13 @@ object SplitRows {
     fun removed(rows: List<SendRecipientDraft>, id: String): List<SendRecipientDraft> =
         rows.filterNot { it.id == id }
 
+    /**
+     * One amount into every row that has none (the web's `fillEmptyAmounts`):
+     * a bulk edit of the drafts, like adding a row. Rows with a figure keep it.
+     */
+    fun emptyFilled(rows: List<SendRecipientDraft>, amount: String): List<SendRecipientDraft> =
+        rows.map { row -> if (row.amount.isBlank()) row.copy(amount = amount) else row }
+
     fun appended(rows: List<SendRecipientDraft>): List<SendRecipientDraft> =
         rows + SendRecipientDraft(id = "", address = "", amount = "")
 }
