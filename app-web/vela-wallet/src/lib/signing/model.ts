@@ -186,6 +186,11 @@ export type FeeModel =
 			value: string;
 			/** Present only while the selector is open (cs33). */
 			selector?: { title: string; options: FeeTokenOption[] };
+			/**
+			 * Why the slide is shut: the coin that pays is not there (issue 262 —
+			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled).
+			 */
+			warning?: string;
 	  }
 	/** Off-chain signature: the ✓ line, in place of a fee row. */
 	| { kind: 'offchain'; note: string }

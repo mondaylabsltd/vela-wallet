@@ -57,9 +57,21 @@
 			<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 		</button>
 	{/if}
+	{#if fee.warning}
+		<!-- Issue 262: the reason the slide is shut, under the row that fixes it. -->
+		<p class="warning" role="alert">{fee.warning}</p>
+	{/if}
 {/if}
 
 <style>
+	.warning {
+		margin: var(--space-sm) var(--space-xl) 0;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: 500;
+		color: var(--color-error-base);
+	}
+
 	.row {
 		display: flex;
 		align-items: center;

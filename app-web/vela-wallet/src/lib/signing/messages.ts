@@ -137,6 +137,8 @@ export interface SigningMessages {
 	/** The fee row after the quote failed; tapping it asks again. */
 	feeRetry: string;
 	feeTokenTitle: string;
+	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
+	feeShort: string;
 	feeEstimated: string;
 	feeBalance: string;
 	techFunction: string;

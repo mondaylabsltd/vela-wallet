@@ -1653,7 +1653,15 @@ impl App for FeePolicy {
             .as_ref()
             .filter(|estimate| Some(estimate.chain_id) == model.form_chain_id)
             .map(estimate_view);
-        let confirm_fee_ready = !busy && failed.is_none() && fee.is_some();
+        // Issue #262: the coin that pays must be able to. The native row is
+        // never refused at selection (it is the caller's last option), so a
+        // native fee the account does not hold — 0 ETH on mainnet — was ready
+        // to confirm, signed, accepted by the relay and never bundled: an op
+        // whose fee leg moves a coin that is not there. Only a PROVABLE
+        // shortfall refuses — an amount known and the balance under it — so
+        // an unpriceable row (Tempo's native) is not mistaken for an empty one.
+        let confirm_fee_ready =
+            !busy && failed.is_none() && fee.is_some() && !selected_fee_is_short(model);
         FeeView {
             busy,
             failed,
@@ -2554,6 +2562,15 @@ fn estimate_view(estimate: &FeeEstimate) -> FeeEstimateView {
         },
         fee_recipient: estimate.fee_recipient.clone(),
     }
+}
+
+/// The selected fee coin's balance is provably under this transaction's fee
+/// in it (issue #262). The same row the selector draws `insufficient`, minus
+/// the "cannot be priced" half of that flag.
+fn selected_fee_is_short(model: &Model) -> bool {
+    find_option(model, model.fee_token.as_deref()).is_some_and(|row| {
+        fee_amount_for_option(model, row).is_some_and(|amount| row.balance < amount)
+    })
 }
 
 fn option_views(model: &Model) -> Vec<FeeOptionView> {
