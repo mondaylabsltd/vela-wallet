@@ -55,6 +55,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.identicon.IdenticonImage
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.feature.flows.components.AddressCard
 import app.getvela.wallet.feature.flows.components.AmountHero
 import app.getvela.wallet.feature.flows.components.AmountInput
@@ -222,6 +223,10 @@ fun ReceiveQrBody(
                 )
             }
         }
+        // The gap web (`gap: --space-md`) and iOS (the VStack's `s8`) both put
+        // between the heading — or the contract line — and the account card.
+        // Without it the title sat directly on the card's first line.
+        Spacer(modifier = Modifier.height(VelaSpacing.md))
         AddressCard(
             account = model.account,
             copied = copied == 0,
@@ -237,20 +242,28 @@ fun ReceiveQrBody(
                 payload = (model.account.lines.first + model.account.lines.second)
                     .takeIf { it.isNotEmpty() },
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(VelaIconSize.xl3)
-                        .background(model.centre.badgeColor, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = model.centre.ticker,
-                        color = app.getvela.wallet.core.designsystem.tokens.VelaOnAccent,
-                        fontFamily = VelaFontFamily,
-                        fontWeight = VelaFontWeight.bold,
-                        fontSize = VelaTextSize.xs,
-                        maxLines = 1,
-                    )
+                // The network's (R2) or the token's (R3) own logo, the same
+                // mark the asset rows draw. This screen drew ONLY the lettered
+                // disc, so a BNB code showed a coloured circle reading "BNB"
+                // where web and iOS both showed the coin. The candidates are
+                // tried in order and the disc stands until one answers, which
+                // is why the middle of the code is never empty or broken.
+                RemoteLogo(urls = model.centre.logoUrls, size = VelaIconSize.xl3) {
+                    Box(
+                        modifier = Modifier
+                            .size(VelaIconSize.xl3)
+                            .background(model.centre.badgeColor, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = model.centre.ticker,
+                            color = app.getvela.wallet.core.designsystem.tokens.VelaOnAccent,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = VelaFontWeight.bold,
+                            fontSize = VelaTextSize.xs,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }
