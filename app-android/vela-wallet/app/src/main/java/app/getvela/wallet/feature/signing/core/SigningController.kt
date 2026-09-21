@@ -86,13 +86,22 @@ class SigningController(
     private val persistedRecords = java.util.Collections.synchronizedSet(HashSet<String>())
     private var pendingHandoff: SignTrackerHandoff? = null
 
+    /**
+     * Guards [pendingHandoff]: the view collector sets it and the executor's
+     * persist callback races it, so without the lock the tracker could be
+     * handed the op twice, or never (a write the other thread doesn't see).
+     */
+    private val handoffLock = Any()
+
     /** The tracker is handed the hash only once every record it names is on disk (043's ordering invariant). */
     private fun tryHandoff() {
-        val handoff = pendingHandoff ?: return
-        if (handoff.record_ids.all { it in persistedRecords }) {
+        val handoff = synchronized(handoffLock) {
+            val handoff = pendingHandoff ?: return
+            if (!handoff.record_ids.all { it in persistedRecords }) return
             pendingHandoff = null
-            ports.trackSubmitted(handoff.user_op_hash, handoff.record_ids, handoff.chain_id)
+            handoff
         }
+        ports.trackSubmitted(handoff.user_op_hash, handoff.record_ids, handoff.chain_id)
     }
 
     interface Ports : SignExecutor.Ports {
@@ -303,7 +312,7 @@ class SigningController(
                 speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
                 view.tracker_handoff?.takeIf { !handedOff }?.let { handoff ->
                     handedOff = true
-                    pendingHandoff = handoff
+                    synchronized(handoffLock) { pendingHandoff = handoff }
                     tryHandoff()
                 }
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
