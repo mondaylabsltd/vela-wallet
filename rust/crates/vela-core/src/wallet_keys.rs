@@ -76,8 +76,9 @@ pub struct WalletKeyRow {
     pub transports: String,
     /// Always `true`: a key that is in the founding set confirmed its membership.
     pub confirmed: bool,
-    /// Backed up to a sync fabric. `None` when only the device answered — a
-    /// badge nobody can vouch for is not drawn.
+    /// Backed up to a sync fabric. `None` when nobody can vouch for an answer —
+    /// only the device answered, or its attestation blob is unreadable — and a
+    /// badge nobody can vouch for is not drawn (issue #207).
     pub synced: Option<bool>,
     pub aaguid: String,
     /// "Apple Passwords", "1Password" … empty when the catalog cannot name it.
@@ -111,17 +112,15 @@ pub enum KeysStep {
     },
 }
 
-/// What kind of authenticator the hints describe. A removable transport wins:
-/// a security key may also report `hybrid`, a phone never reports `usb`.
+/// What kind of authenticator the hints describe.
+///
+/// The rules moved to [`passkey::reported_method_name`] (issue #207) so that the
+/// row's icon, its caption and this field cannot disagree about the same key.
+/// A report of nothing still reads as `platform` here: this view's rows always
+/// carry a method, and "a passkey on this device" is what every client drew
+/// before any of these fields existed.
 fn method_of(attachment: &str, transports: &str) -> &'static str {
-    let has = |hint: &str| transports.split(',').any(|t| t.trim() == hint);
-    if has("usb") || has("nfc") || has("ble") {
-        "security_key"
-    } else if has("hybrid") && (attachment == "cross-platform" || !has("internal")) {
-        "hybrid"
-    } else {
-        "platform"
-    }
+    passkey::reported_method_name(attachment, transports).unwrap_or("platform")
 }
 
 fn normal_key(public_key_hex: &str) -> Option<String> {
@@ -188,7 +187,16 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
         let attachment = item["authenticatorAttachment"].as_str().unwrap_or_default();
         let transports = item["transports"].as_str().unwrap_or_default();
         let attestation = item["attestation"].as_str().unwrap_or_default();
-        let (aaguid, synced) = passkey::attestation_signals(attestation);
+        let (aaguid, _) = passkey::attestation_signals(attestation);
+        // "Backed up?" as a question that CAN go unanswered (issue #207). The
+        // badge this feeds is a display, not a gate: `attestation_signals`
+        // answers the same question with `true` for a blob it cannot read,
+        // because the second-key gate must fail open rather than dead-end an
+        // honest provider — but a row that cannot tell "synced" from "nobody
+        // said" would show a green tick nobody verified. `user_verified` below
+        // has always asked this way; `synced` now matches it, and the shells
+        // already draw nothing for `None`.
+        let synced = passkey::attestation_backed_up(attestation);
         let credential_id = item["credentialId"]
             .as_str()
             .and_then(|hex| primitives::from_hex(hex).ok())
@@ -211,7 +219,7 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
             authenticator_attachment: attachment.to_owned(),
             transports: transports.to_owned(),
             confirmed: true,
-            synced: Some(synced),
+            synced,
             provider_name: passkey::provider_name(&aaguid)
                 .unwrap_or_default()
                 .to_owned(),
@@ -639,6 +647,44 @@ mod tests {
             "security_key"
         )
         .is_some_and(|json| json.contains(r#""credential_id":"aa""#)));
+    }
+
+    /// A blob this build cannot read is not a "Cloud-synced" badge (issue #207).
+    ///
+    /// The GATE — "does this wallet need a second key?" — reads
+    /// `attestation_signals`, which says `true` there so an honest provider
+    /// that omits attested-credential data is never dead-ended. The VIEW asks
+    /// the question that can go unanswered, so the row draws no badge at all
+    /// rather than a green tick nobody verified.
+    #[test]
+    fn a_registry_attestation_nobody_can_read_badges_nothing() {
+        let public_key = recorded()["publicKey"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let attested = |flags: &str| format!("0x01{}{flags}0000", "00".repeat(16));
+        let synced_of = |attestation: &str| {
+            let body = serde_json::json!({
+                "members": { "items": [{
+                    "publicKey": public_key,
+                    "authenticatorAttachment": "platform",
+                    "transports": "internal",
+                    "attestation": attestation,
+                    "credentialId": "0xaabb",
+                }]}
+            })
+            .to_string();
+            registry_rows(&body, &[]).unwrap_or_else(|| unreachable!())[0].synced
+        };
+        // BS (bit 4) set, then clear: a readable blob still answers.
+        assert_eq!(synced_of(&attested("10")), Some(true));
+        assert_eq!(synced_of(&attested("00")), Some(false));
+        // Absent, and the wrong length: nobody said.
+        assert_eq!(synced_of(""), None);
+        assert_eq!(synced_of("0xdead"), None);
+        // …while the gate's own reading of those two keeps failing open.
+        assert!(passkey::attestation_signals("").1);
+        assert!(passkey::attestation_signals("0xdead").1);
     }
 
     #[test]

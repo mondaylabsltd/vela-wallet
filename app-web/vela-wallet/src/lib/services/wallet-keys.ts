@@ -16,8 +16,14 @@ import type { Account } from '$lib/core/generated/Account';
 import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 import { runWalk } from './core-walk';
 
-/** `wallet_keys::WalletKeyRow` — `CreateKeyRow`'s fields, plus the key itself. */
-export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced'> {
+/**
+ * `wallet_keys::WalletKeyRow` — `CreateKeyRow`'s fields, plus the key itself.
+ *
+ * Minus the two the create flow alone carries: `kind` (this view's `method` is
+ * already the authenticator's report, not a tap — `wallet_keys::method_of`) and
+ * `synced_known`, which here is simply `synced !== null`.
+ */
+export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'synced_known'> {
 	/** `null` when only the device answered: nobody can vouch for a badge. */
 	synced: boolean | null;
 	public_key_hex: string;

@@ -117,30 +117,59 @@ export function methodCopy(method: KeyMethod): { title: string; body: string } {
 }
 
 /**
- * The provider line under a key's name.
+ * The provider line under a key's name, when the AAGUID catalog cannot name the
+ * vault: WHERE THIS KEY LIVES, in the same three words the method picker used.
  *
- * Keyed off the METHOD the person chose, deliberately — the alternative is
- * `transports`, which is a comma-joined machine list ("internal,hybrid") that
- * the first pass rendered straight into the row. What an authenticator reports
- * about its wire protocols is not a sentence, and a person reading their own
- * key list is owed one.
+ * Takes `key.kind` — what the AUTHENTICATOR reported — never `key.method`, the
+ * tap in the picker (issue 207). The tap does not reach the web ceremony at
+ * all: `navigator.credentials` shows its own sheet, so somebody who taps
+ * "Phone or tablet" and then touches the YubiKey in the port was being told
+ * they had a phone. The report is the only signal that knows.
+ *
+ * "This device" is true HERE — this key was minted seconds ago on the machine
+ * in front of the person. It would not be true in settings, whose list can hold
+ * a key that lives on a computer the person is not sitting at; that surface
+ * keeps its own location-neutral wording (`settings/live.ts`).
  *
  * The design draws a richer line still («macOS · 密码 App», «YubiKey 5C · USB»),
- * which needs the AAGUID resolved to a provider name and model. That lookup is
- * a network call the flow does not make; until it does, this is the honest
- * version of the same fact.
+ * which needs the AAGUID resolved to a provider name and model — when the
+ * catalog or the directory CAN name it, the row shows that instead.
  */
-export function providerLineFor(method: KeyMethod): string {
-	switch (method) {
+export function providerLineFor(kind: KeyMethod): string {
+	switch (kind) {
 		case 'platform':
-			return 'onboarding.create.providerPlatform';
+			return 'onboarding.create.methodPlatformTitle';
 		case 'hybrid':
-			return 'onboarding.create.providerGeneric';
+			return 'onboarding.create.methodHybridTitle';
 		case 'security_key':
 			return 'onboarding.create.providerSecurityKey';
 		default:
-			return unreachable(method);
+			return unreachable(kind);
 	}
+}
+
+/**
+ * The one badge a key row wears, in the one place that decides it (issue 207).
+ *
+ * It answers EXACTLY ONE question — is this passkey cloud-synced or
+ * device-bound? — a KIND of key, not a to-do, and never again
+ * says anything about where the key lives. That was the contradiction the
+ * reporter saw: a YubiKey badged "This device only", which a security key is by
+ * definition not.
+ *
+ * `undefined` when nobody can vouch for the answer: an attestation this build
+ * cannot read makes `synced` fail open to `true` for the second-key GATE, and a
+ * gate is not a badge. Drawing a green "Cloud-synced" from that would be telling
+ * somebody their wallet is backed up on the strength of a guess.
+ */
+export function keyBadge(
+	key: { synced: boolean; synced_known: boolean },
+	t: Translate
+): { text: string; tone: 'synced' | 'local' } | undefined {
+	if (!key.synced_known) return undefined;
+	return key.synced
+		? { text: t('onboarding.create.keySyncedBadge'), tone: 'synced' }
+		: { text: t('onboarding.create.keyDeviceOnlyBadge'), tone: 'local' };
 }
 
 export type PromptCopy = {

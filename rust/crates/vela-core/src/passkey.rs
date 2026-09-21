@@ -92,12 +92,89 @@ pub fn allowlist_transports(reported: &str) -> String {
         .join(",")
 }
 
+/// What the authenticator REPORTED this key to be, as the wire spells it:
+/// `platform` | `hybrid` | `security_key`. `None` means it said nothing at all,
+/// and the caller is left with whatever it knew before it asked.
+///
+/// The three-way question is answered ONCE, here, because a row's icon, its
+/// caption and its badge used to answer it separately and could contradict each
+/// other (issue #207: a phone reached by QR drawn as a hardware fob, captioned
+/// "Passkey", badged "This device only").
+///
+/// The rules, in order, and why:
+/// - A removable transport wins: a security key may also report `hybrid`, and a
+///   phone never reports `usb`.
+/// - `hybrid` from a cross-platform authenticator (or without `internal`) is
+///   the QR-linked phone or tablet.
+/// - `internal`, or a platform attachment, is the device in front of the person.
+///   Every real platform authenticator reports the attachment (Windows Hello
+///   `platform`/`internal`, iCloud Keychain `platform`/`internal,hybrid`), so
+///   the bare-`internal` half of this rule is for a client that named no
+///   attachment at all. `cross-platform` + `internal` and nothing else is a
+///   report that contradicts itself — no authenticator we have seen sends it —
+///   and it lands here, on "this device". If one ever turns up, the honest
+///   answer is probably `hybrid` (a phone whose transport list forgot to say
+///   so), NOT the security-key arm below: a phone drawn as a fob is the very
+///   thing issue #207 was about.
+/// - Cross-platform with NO transports at all is still a security key: Safari
+///   and Firefox may not implement `getTransports()`, and that silence must not
+///   turn a key on the end of a cable into "this device".
+///
+/// Spelled as a string rather than [`crate::app::KeyMethod`] because the enum
+/// lives behind the `crux` feature while this answer is needed with or without
+/// the state machines ([`fallback_mark`], [`crate::wallet_keys`]). The typed
+/// twin is [`reported_method`].
+pub(crate) fn reported_method_name(
+    authenticator_attachment: &str,
+    transports: &str,
+) -> Option<&'static str> {
+    let transport = |name: &str| transports.split(',').any(|t| t.trim() == name);
+    if transport("usb") || transport("nfc") || transport("ble") {
+        return Some("security_key");
+    }
+    if transport("hybrid")
+        && (authenticator_attachment == "cross-platform" || !transport("internal"))
+    {
+        return Some("hybrid");
+    }
+    if transport("internal") || authenticator_attachment == "platform" {
+        return Some("platform");
+    }
+    if authenticator_attachment == "cross-platform" {
+        return Some("security_key");
+    }
+    None
+}
+
+/// [`reported_method_name`] as the typed [`crate::app::KeyMethod`] the view
+/// models carry — what the key IS, next to the person's choice of how to mint
+/// it.
+#[cfg(feature = "crux")]
+#[must_use]
+pub fn reported_method(
+    authenticator_attachment: &str,
+    transports: &str,
+) -> Option<crate::app::KeyMethod> {
+    use crate::app::KeyMethod;
+    match reported_method_name(authenticator_attachment, transports)? {
+        "security_key" => Some(KeyMethod::SecurityKey),
+        "hybrid" => Some(KeyMethod::Hybrid),
+        _ => Some(KeyMethod::Platform),
+    }
+}
+
 /// Which fallback mark, if any, a key row should draw when the catalog has no
 /// entry for its AAGUID.
 ///
 /// `None` means "nothing better than what you already draw" — a platform
 /// authenticator, whose only honest description is the one the client already
-/// shows.
+/// shows, and (since issue #207) a phone reached by QR, which was being drawn
+/// as a hardware fob because "cross-platform" alone decided it. A phone is not
+/// a fob, and the report says so: `hybrid`.
+///
+/// The person's own choice (`chose_security_key`) only speaks when the
+/// authenticator reported NOTHING. A report outranks a choice — the first key
+/// is minted before the method picker exists and carries the core's default.
 #[must_use]
 pub fn fallback_mark(
     authenticator_attachment: &str,
@@ -105,14 +182,16 @@ pub fn fallback_mark(
     chose_security_key: bool,
 ) -> Option<FallbackMark> {
     let transport = |name: &str| transports.split(',').any(|t| t.trim() == name);
-    let cross_platform = authenticator_attachment == "cross-platform";
-    if !cross_platform && !chose_security_key && !transport("usb") && !transport("nfc") {
-        return None;
+    match reported_method_name(authenticator_attachment, transports) {
+        Some("security_key") => Some(if transport("usb") {
+            FallbackMark::UsbKey
+        } else {
+            FallbackMark::SecurityKey
+        }),
+        // A phone or this very device: whatever the client already draws.
+        Some(_) => None,
+        None => chose_security_key.then_some(FallbackMark::SecurityKey),
     }
-    if transport("usb") {
-        return Some(FallbackMark::UsbKey);
-    }
-    Some(FallbackMark::SecurityKey)
 }
 
 /// A fallback mark as SVG markup, wearing the caller's palette.
@@ -338,6 +417,19 @@ pub fn attestation_signals(attestation_hex: &str) -> (String, bool) {
     (aaguid, backed_up)
 }
 
+/// Is this credential backed up (BS, bit 4), as a question that can go
+/// UNANSWERED? `None` for an attestation this build cannot read.
+///
+/// [`attestation_signals`] answers the same question with `true` there, because
+/// the second-key gate must fail open. A badge is not a gate: a display that
+/// cannot tell "synced" from "nobody said" shows a green tick nobody verified
+/// (issue #207), so it asks with this instead and draws nothing on `None`.
+#[must_use]
+pub fn attestation_backed_up(attestation_hex: &str) -> Option<bool> {
+    let bytes = crate::primitives::from_hex(attestation_hex).ok()?;
+    (bytes.len() == 20).then(|| bytes[17] & 0x10 != 0)
+}
+
 /// Did the authenticator verify the person (UV, bit 2 of the flags byte) when
 /// this credential was registered? `None` for an attestation this build cannot
 /// read — unlike "synced", nothing gates on this, so it does not fail open: a
@@ -503,6 +595,73 @@ mod tests {
         // client already draws in its own vocabulary.
         assert_eq!(fallback_mark("platform", "internal,hybrid", false), None);
         assert_eq!(fallback_mark("", "", false), None);
+    }
+
+    /// Issue #207: the reporter's first row was a phone reached by QR, drawn as
+    /// a hardware fob because "cross-platform" alone decided the artwork.
+    #[test]
+    fn a_phone_reached_by_a_code_is_never_drawn_as_a_hardware_key() {
+        assert_eq!(
+            fallback_mark("cross-platform", "hybrid,internal", false),
+            None
+        );
+        assert_eq!(fallback_mark("cross-platform", "hybrid", false), None);
+        // Even having tapped "security key": the device said what it is.
+        assert_eq!(fallback_mark("cross-platform", "hybrid", true), None);
+        // But silence from a cross-platform authenticator still means a key:
+        // Safari and Firefox may not implement getTransports().
+        assert_eq!(
+            fallback_mark("cross-platform", "", false),
+            Some(FallbackMark::SecurityKey),
+            "no transports reported is not evidence of a phone"
+        );
+    }
+
+    #[test]
+    fn the_report_names_the_three_places_a_key_can_live() {
+        // A removable transport wins: a YubiKey also reports hybrid.
+        assert_eq!(
+            reported_method_name("cross-platform", "usb,nfc"),
+            Some("security_key")
+        );
+        assert_eq!(reported_method_name("", "ble"), Some("security_key"));
+        // The QR-linked phone, and this very device.
+        assert_eq!(
+            reported_method_name("cross-platform", "hybrid,internal"),
+            Some("hybrid")
+        );
+        assert_eq!(reported_method_name("", "hybrid"), Some("hybrid"));
+        assert_eq!(
+            reported_method_name("platform", "hybrid,internal"),
+            Some("platform")
+        );
+        assert_eq!(reported_method_name("platform", ""), Some("platform"));
+        // Cross-platform and silent: a key, not a phone.
+        assert_eq!(
+            reported_method_name("cross-platform", ""),
+            Some("security_key")
+        );
+        // Nothing reported at all — the caller keeps what it already knew.
+        assert_eq!(reported_method_name("", ""), None);
+    }
+
+    #[cfg(feature = "crux")]
+    #[test]
+    fn the_typed_report_mirrors_the_wire_spelling() {
+        use crate::app::KeyMethod;
+        assert_eq!(
+            reported_method("cross-platform", "usb,nfc"),
+            Some(KeyMethod::SecurityKey)
+        );
+        assert_eq!(
+            reported_method("cross-platform", "hybrid,internal"),
+            Some(KeyMethod::Hybrid)
+        );
+        assert_eq!(
+            reported_method("platform", "internal"),
+            Some(KeyMethod::Platform)
+        );
+        assert_eq!(reported_method("", ""), None);
     }
 
     #[test]

@@ -349,6 +349,28 @@ pub struct FeeAssetQuote {
     pub usd_balance: String,
     /// `None` when this network has no price source. Native gas still works.
     pub usd_price: Option<String>,
+    /// The native coin's USD price from the SHELL's own price source (the
+    /// balances feed / `native-price.ts`), for the `$0.01` native MINIMUM only
+    /// — issue 682.
+    ///
+    /// A network the user ADDED is almost never in the relay's price feed, so
+    /// `usd_price` comes back `None` and the minimum used to fall to a flat
+    /// 0.001 of the coin: on XLayer's OKB (~$120) that is $0.12, twelve times
+    /// the cent it is meant to approximate, on every send. The wallet already
+    /// knew the price — the send screen rendered "≈$0.12" from it — so the
+    /// shell hands it over here.
+    ///
+    /// Deliberately NOT folded into `usd_price`: that field is also the
+    /// STABLECOIN conversion's rate, and its absence is a refusal we keep
+    /// ("a zero/absent USD price is 'cannot quote', never rate 1"). This one
+    /// is read by `calculate_in_band_fee_amount` for the native minimum and
+    /// NOWHERE else, so a shell-derived price can never become a conversion
+    /// rate. Meaningful only on the native row; ignored on a stablecoin row.
+    ///
+    /// `#[serde(default)]`: a shell with no price to offer simply omits it and
+    /// gets exactly the answer it got before issue 682.
+    #[serde(default)]
+    pub native_usd_floor_price: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -365,6 +387,21 @@ pub enum FeeAssetKind {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeeBundlerQuote {
     pub max_fee_per_gas: String,
+    /// The tip the relay will SIGN this tier with (`vela-relay/docs/fees.md`
+    /// §2b) — `1.00 / 1.25 / 2.00 ×` the market tip for slow / standard / fast.
+    ///
+    /// It is the only per-tier number that buys priority: a block builder
+    /// orders by `min(maxPriorityFeePerGas, maxFeePerGas − base_fee)`, so the
+    /// cap above leaves that ordering untouched. Every shell read this row and
+    /// threw the field away until issue 684, which is why none of them could
+    /// say what a speed actually buys.
+    ///
+    /// `None` when the row omits it — a generic bundler, or a relay older than
+    /// the per-tier tip. `#[serde(default)]` so a shell that does not yet send
+    /// it keeps working unchanged; the price is then simply not published.
+    /// Never 0 as a stand-in: "not reported" and "no tip" are different facts.
+    #[serde(default)]
+    pub max_priority_fee_per_gas: Option<String>,
     /// `None` when a generic bundler omits the Vela extension fields.
     pub network_fee_per_gas: Option<String>,
     pub relayer_fee_per_gas: Option<String>,
@@ -559,6 +596,10 @@ pub struct AssetPricing {
     pub is_native: bool,
     pub decimals: u32,
     pub usd_price: Option<String>,
+    /// Shell-supplied native price used for the `$0.01` minimum ONLY (issue
+    /// 682) — see `FeeAssetQuote::native_usd_floor_price`. Read only when
+    /// this asset is the native one, and never by the stablecoin conversion.
+    pub native_usd_floor_price: Option<String>,
 }
 
 /// Decimal string → USD 8-dp fixed point (`safe-transaction.ts:346-357`).
@@ -605,11 +646,14 @@ pub fn usd_price_scaled(value: Option<&str>, round_up: bool) -> Option<u128> {
 /// Exact in-band reimbursement from the transaction's gas basis
 /// (`safe-transaction.ts:359-390`). `requiredAmount` from the RPC is
 /// intentionally not used. The native minimum is value-consistent — $0.01 worth
-/// of native (never below the 0.00001-coin admission floor), or a flat 0.001-coin
-/// fallback when the coin is unpriced — so a native reimbursement can still be
-/// computed without a price. The STABLECOIN path, however, returns `None` when it
-/// cannot price safely: a zero/absent USD price is "cannot quote", never rate 1
-/// (invariant ④'s sibling: 0 is not a price).
+/// of native (never below the 0.00001-coin admission floor), valued at the
+/// relay's price, else at the shell's own `native_usd_floor_price` (issue 682 —
+/// which may only lower the floor, never raise it above the blind fallback),
+/// and only with neither at a flat 0.001-coin fallback — so a native
+/// reimbursement can still be computed without a price. The STABLECOIN path,
+/// however, returns `None` when it cannot price safely: a zero/absent USD price
+/// is "cannot quote", never rate 1 (invariant ④'s sibling: 0 is not a price).
+/// It reads `usd_price` alone: the floor price is not a conversion rate.
 ///
 /// Every step runs in `U256`, because the numerator here is where the port's
 /// worst bug lived: for an 18-decimal fee asset the exact numerator is ~1.26e46
@@ -644,11 +688,52 @@ pub fn calculate_in_band_fee_amount(
     // it, so a flat 0.001-coin blind floor applies (below 3 decimals, one base
     // unit). `!nativeUsdPrice` is falsy for 0 too — a zero price is unpriceable.
     let native_usd = usd_price_scaled(native_asset.usd_price.as_deref(), true).filter(|v| *v != 0);
-    let native_minimum = match native_usd {
-        Some(price) => ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(native_unit)?, w(price))?
-            .max(admission_floor),
-        None if native_asset.decimals >= 3 => pow10_wide(native_asset.decimals - 3)?,
-        None => U256::from(1u64),
+    // Issue 682. The blind 0.001-coin floor is only honest on a coin nobody
+    // can value; measured against XLayer it charged 0.001 OKB ≈ $0.12, twelve
+    // times the cent it stands in for, and a network the user ADDED is almost
+    // never in the relay's price feed — so that was every custom network. When
+    // the relay could not price the coin but the SHELL can (its balances feed
+    // prices any chain the token registry describes), value the minimum at the
+    // shell's price instead — downward only, and `.max(admission_floor)` all
+    // the same. Priced by the relay stays first and unchanged, so nothing about
+    // a priced send moves.
+    //
+    // FLOOR ONLY. The stablecoin conversion below reads `native_usd` — this
+    // value is deliberately not merged into it, because its absence there is a
+    // refusal we mean to keep, and a shell-derived price must never quietly
+    // become a conversion rate.
+    let shell_usd =
+        usd_price_scaled(native_asset.native_usd_floor_price.as_deref(), true).filter(|v| *v != 0);
+    let blind_minimum = if native_asset.decimals >= 3 {
+        pow10_wide(native_asset.decimals - 3)?
+    } else {
+        U256::from(1u64)
+    };
+    // $0.01 worth of the coin, ceiled — the value the floor stands for.
+    let cent_worth = |price: u128| -> Option<U256> {
+        ceil_div_wide(w(STABLE_MIN_USD_SCALED).checked_mul(native_unit)?, w(price))
+    };
+    let native_minimum = match (native_usd, shell_usd) {
+        // The relay priced it: unchanged, and this arm is the only one a priced
+        // send ever reaches.
+        (Some(price), _) => cent_worth(price)?.max(admission_floor),
+        // Issue 682, and note the `.min`: the SHELL's price may only ever LOWER
+        // this floor, never raise it. The floor is $0.01 ÷ price, so an
+        // UNDER-estimated price RAISES what the user pays — and this arm fires
+        // exactly where the price is least checked: with no Chainlink feed for
+        // the coin (the normal case for one the relay cannot price either),
+        // `choose_native_price` returns the raw DEX quote, and a near-empty
+        // pool can quote wildly off (`wallet-api.ts` records X Layer's
+        // WOKB/USDC quoting OKB at ~$5 against a true ~$120). At $5 the
+        // uncapped floor would be 0.002 OKB — twice the blind floor this issue
+        // is about, and the screens would print "≈ $0.01" beside it because
+        // they value it with the same wrong price. Capped, the worst case is
+        // exactly what today already charges, and the win (0.001 → 0.000083
+        // OKB) is untouched because a cent is worth less than 0.001 of any coin
+        // dearer than $10.
+        (None, Some(price)) => cent_worth(price)?.min(blind_minimum).max(admission_floor),
+        // Nobody can value the coin: the blind floor is the last resort.
+        (None, None) => blind_minimum,
     };
     let native_amount = mul_wide(total_gas, gas_price)
         .checked_mul(w(INBAND_MARKUP))?
@@ -1172,6 +1257,22 @@ pub struct FeeEstimate {
     /// reimbursement was priced against (and re-priced against when the fee
     /// asset is switched). See `MAX_QUOTE_VS_CHAIN_MULTIPLE`.
     pub in_band_gas_basis: u128,
+    /// What the chain will actually charge per gas at this tier — the number
+    /// the speed picker shows beside each option (issue 684). See
+    /// [`effective_gas_price`]. `None` when nothing measured could say it, and
+    /// on Tempo, which has no priority fee at all. It prices nothing: a quote
+    /// is what it is whether or not this could be derived.
+    pub effective_gas_price: Option<u128>,
+    /// The HIGH end of the speed picker's range (issue 685): this tier's cap,
+    /// `maxFeePerGas` — the most the chain can ever charge per gas for it,
+    /// since EIP-1559 charges `min(maxFeePerGas, base_at_inclusion + tip)`.
+    /// [`Self::effective_gas_price`] is what the speed bids NOW; this is how
+    /// high it will go when the base fee spikes. See [`gas_price_range`].
+    ///
+    /// Published exactly when [`Self::effective_gas_price`] is, and never
+    /// without it: the two are one range, and half a range is a number
+    /// without the thing it is compared against. Display only.
+    pub max_gas_price: Option<u128>,
     pub total_gas: u128,
     pub deployed: bool,
     pub tier: FeeTier,
@@ -1202,6 +1303,7 @@ struct ParsedQuote {
     symbol: String,
     usd_balance: String,
     usd_price: Option<String>,
+    native_usd_floor_price: Option<String>,
 }
 
 impl ParsedQuote {
@@ -1210,6 +1312,9 @@ impl ParsedQuote {
             is_native: self.is_native,
             decimals: self.decimals,
             usd_price: self.usd_price.clone(),
+            // Travels with the row, exactly as `usd_price` does, so no call
+            // site can price a native minimum having forgotten it (issue 682).
+            native_usd_floor_price: self.native_usd_floor_price.clone(),
         }
     }
 }
@@ -1257,6 +1362,18 @@ enum Origin {
 #[derive(Clone, Debug, Default)]
 struct Pending {
     gas: Option<ChainGasPrice>,
+    /// The base fee the CHAIN reported, kept apart from
+    /// [`ChainGasPrice::base_fee`] and used for nothing but the per-tier gas
+    /// price on screen (issue 684).
+    ///
+    /// They are not the same number. `ChainGasPrice::base_fee` is floored by
+    /// the chain's minimum and, when `eth_gasPrice` cannot be read at all,
+    /// replaced wholesale by the 5-gwei static fallback — both right for
+    /// PRICING, where a guess that is too high is the safe direction, and both
+    /// fatal for a figure a person reads: 5 gwei stated as Gnosis's gas price
+    /// is off by eight orders of magnitude. `None` means the block did not
+    /// report one, and then no gas price is published at all.
+    measured_base_fee: Option<u128>,
     bundler: Option<Option<FeeBundlerQuote>>,
     quotes: Option<Option<Vec<ParsedQuote>>>,
     recipient: Option<Option<String>>,
@@ -1274,6 +1391,13 @@ enum PricePlan {
         /// larger of our own measurement and the bundler's quote, never on an
         /// unvetted quote alone.
         in_band_gas_basis: u128,
+        /// The per-gas price the chain will actually charge at this tier
+        /// (issue 684), or `None` when nothing measured could say. Display
+        /// only — it prices nothing and gates nothing.
+        effective_gas_price: Option<u128>,
+        /// The tier's cap, the high end of the same range (issue 685). `Some`
+        /// exactly when `effective_gas_price` is.
+        max_gas_price: Option<u128>,
         quoted: bool,
         est_calldata_len: usize,
     },
@@ -1333,6 +1457,17 @@ pub struct FeeEstimateView {
     pub relayer_fee_per_gas: String,
     pub bundler_gas_price: String,
     pub in_band_gas_basis: String,
+    /// What the chain will actually charge per gas at this tier, in wei
+    /// (issue 684) — the figure the speed picker draws beside each option, so
+    /// every shell says the same number instead of deriving four of them.
+    /// `None` = nothing honest to show; a shell draws nothing, never a 0.
+    pub effective_gas_price: Option<String>,
+    /// The high end of that figure's range, in wei (issue 685): this tier's
+    /// cap, `maxFeePerGas`, the most the chain can ever charge per gas at this
+    /// speed. A shell draws `effective_gas_price ~ max_gas_price` — what the
+    /// speed bids now, and how high it will go — or the single figure when the
+    /// two are equal. `Some` exactly when `effective_gas_price` is.
+    pub max_gas_price: Option<String>,
     pub total_gas: String,
     pub deployed: bool,
     pub tier: FeeTier,
@@ -1595,6 +1730,10 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
         ) => {
             let chain_id = model.ctx.as_ref().map(|c| c.chain_id).unwrap_or(0);
             let tempo = is_tempo_chain(chain_id);
+            // Taken from the RAW reading, before the floor and the fallback
+            // that `resolve_gas_price` is allowed to apply — see
+            // [`Pending::measured_base_fee`].
+            model.pending.measured_base_fee = base_fee.as_deref().and_then(parse_units);
             model.pending.gas = Some(resolve_gas_price(
                 chain_id,
                 eth_gas_price.as_deref(),
@@ -1683,6 +1822,7 @@ fn parse_quote_row(row: &FeeAssetQuote) -> ParsedQuote {
         symbol: row.symbol.clone(),
         usd_balance: row.usd_balance.clone(),
         usd_price: row.usd_price.clone(),
+        native_usd_floor_price: row.native_usd_floor_price.clone(),
     }
 }
 
@@ -1711,7 +1851,8 @@ fn try_advance(model: &mut Model) -> Command<FeeEffect, Event> {
         ) else {
             return Command::done();
         };
-        advance_generic(model, &ctx, gas, bundler, quotes)
+        let measured_base_fee = model.pending.measured_base_fee;
+        advance_generic(model, &ctx, gas, measured_base_fee, bundler, quotes)
     }
 }
 
@@ -1722,6 +1863,61 @@ fn try_advance(model: &mut Model) -> Command<FeeEffect, Event> {
 struct AcceptedQuote {
     network_fee_per_gas: u128,
     relayer_fee_per_gas: u128,
+    /// The cap the relay will submit at, and the tip it will sign with — the
+    /// two halves of [`effective_gas_price`] (issue 684). The tip is `None`
+    /// when the row did not report one; nothing derives a price from that.
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: Option<u128>,
+}
+
+/// What the chain will ACTUALLY charge per gas at a tier (issue 684).
+///
+/// Not `max_fee_per_gas`. That is the cap — inclusion headroom, `1.5 / 2.0 /
+/// 3.0 × base_fee + tip` — and the chain never charges it; a mined Polygon
+/// `fast` receipt reads `Max: 805.065222658 Gwei` beside
+/// `Gas Price (effective): 299.589817385 Gwei`. Showing the cap AS the price
+/// would tell somebody `fast` costs three times `slow` when it does not. (It
+/// is shown since issue 685, but as the other end of a range beginning at this
+/// number — see [`gas_price_range`] — never in its place.)
+///
+/// Formally `base_fee + min(tip, cap − base_fee)`, which is the same thing as
+/// `min(cap, base_fee + tip)` wherever the cap can pay the base fee at all,
+/// and the right answer rather than a nonsense one where it cannot. The relay
+/// asserts a cap can never truncate its own tip (`fees.md` §2a,
+/// `OuterFee::delivers_full_tip_at`), so in practice this is `base_fee + tip`
+/// — but it is derived the safe way instead of assuming the assertion holds on
+/// every relay a wallet might ever talk to.
+pub fn effective_gas_price(base_fee: u128, cap: u128, tip: u128) -> u128 {
+    cap.min(add(base_fee, tip))
+}
+
+/// The gas price a tier is shown with, as a range (issue 685): `(what this
+/// speed bids now, how high it will go)`.
+///
+/// A single [`effective_gas_price`] told the tiers apart by their TIP alone,
+/// and on a chain whose tip is a rounding error beside its base fee that is
+/// nothing: the owner saw fees 1.8× apart over gas prices 0.5% apart
+/// (`0.02011 / 0.02013 / 0.02021 gwei`) and read it as being overcharged. Most
+/// of what a dearer tier buys is the other lever — a cap of `1.5 / 2.0 / 3.0 ×
+/// base_fee + tip` (`vela-relay/docs/fees.md` §2a), which is how far the base
+/// fee may spike before the operation stops being includable. So the range is
+///
+/// - low: `base_fee + tip` — the speed's PRIORITY, what it bids right now;
+/// - high: the cap itself, `maxFeePerGas` — its SPIKE RESILIENCE, and the most
+///   the chain can ever charge per gas, because EIP-1559 charges
+///   `min(maxFeePerGas, base_at_inclusion + tip)`.
+///
+/// **The high end is the cap and NOT `base_fee + cap + tip`.** The cap already
+/// contains the tip (`m × base + tip`), so adding either again double-counts,
+/// and the sum exceeds anything the chain can charge: on the three mined
+/// Polygon receipts it would read 660 / 810 / 1105 gwei against caps of 390 /
+/// 527 / 805. A range whose top is impossible is worse than no range.
+///
+/// The two ends are equal when the cap binds (`cap ≤ base_fee + tip`) or when
+/// there is no base fee at all (`m × 0 + tip = tip`); a shell then draws the
+/// one figure, never `x ~ x`.
+pub fn gas_price_range(base_fee: u128, cap: u128, tip: u128) -> (u128, u128) {
+    (effective_gas_price(base_fee, cap, tip), cap)
 }
 
 fn accept_bundler_quote(
@@ -1750,6 +1946,11 @@ fn accept_bundler_quote(
     Some(AcceptedQuote {
         network_fee_per_gas,
         relayer_fee_per_gas,
+        max_fee_per_gas: max_fee,
+        max_priority_fee_per_gas: raw
+            .max_priority_fee_per_gas
+            .as_deref()
+            .and_then(parse_units),
     })
 }
 
@@ -1757,11 +1958,31 @@ fn advance_generic(
     model: &mut Model,
     ctx: &RequestCtx,
     gas: ChainGasPrice,
+    measured_base_fee: Option<u128>,
     bundler: Option<FeeBundlerQuote>,
     quotes: Option<Vec<ParsedQuote>>,
 ) -> Command<FeeEffect, Event> {
     let accepted = accept_bundler_quote(bundler.as_ref(), gas.gas_price);
     let quoted = accepted.is_some();
+    // What this tier's speed actually buys (issue 684). Every factor has to be
+    // a real measurement: the relay's own cap and signed tip, and the base fee
+    // the chain reported. Miss any one of them and there is no honest number,
+    // so there is no number — a fabricated 0 would say the tiers are equal,
+    // which is the very claim this figure exists to test.
+    //
+    // Both ends of the range come out of this one expression (issue 685), so
+    // neither can be published without the other. The high end is the cap
+    // the relay REPORTED — never `local_max` below, which is our own guess and
+    // would put a made-up ceiling beside a measured bid.
+    let range = accepted
+        .as_ref()
+        .zip(measured_base_fee)
+        .and_then(|(quote, base_fee)| {
+            quote
+                .max_priority_fee_per_gas
+                .map(|tip| gas_price_range(base_fee, quote.max_fee_per_gas, tip))
+        });
+    let (effective, max_gas_price) = (range.map(|(low, _)| low), range.map(|(_, high)| high));
     let (network_fee_per_gas, relayer_fee_per_gas, bundler_gas_price) = match accepted {
         Some(quote) => (
             quote.network_fee_per_gas,
@@ -1824,6 +2045,8 @@ fn advance_generic(
         relayer_fee_per_gas,
         bundler_gas_price,
         in_band_gas_basis,
+        effective_gas_price: effective,
+        max_gas_price,
         quoted,
         est_calldata_len,
     });
@@ -2001,6 +2224,8 @@ fn price_generic(
         relayer_fee_per_gas,
         bundler_gas_price,
         in_band_gas_basis,
+        effective_gas_price,
+        max_gas_price,
         quoted,
         ..
     } = plan
@@ -2062,6 +2287,8 @@ fn price_generic(
         relayer_fee_per_gas: *relayer_fee_per_gas,
         bundler_gas_price: *bundler_gas_price,
         in_band_gas_basis: *in_band_gas_basis,
+        effective_gas_price: *effective_gas_price,
+        max_gas_price: *max_gas_price,
         total_gas,
         deployed: ctx.deployed,
         tier: ctx.tier,
@@ -2111,6 +2338,13 @@ fn price_tempo(
         // field is unused on the Tempo path (fee_amount_for_option reads
         // network_fee_per_gas there) and mirrors it for shape completeness.
         in_band_gas_basis: *gas_price_atto,
+        // Tempo prices gas in pathUSD, with no base fee and no priority fee at
+        // all — its sign request carries no such field, and the relay ignores
+        // the tier there (`fees.md` §2a). There is no speed premium to state,
+        // so nothing is stated (issue 684); a 0 would be an invention.
+        effective_gas_price: None,
+        // Nor a cap to put at the top of a range (issue 685).
+        max_gas_price: None,
         total_gas: expected_gas,
         deployed: ctx.deployed,
         tier: ctx.tier,
@@ -2298,6 +2532,8 @@ fn estimate_view(estimate: &FeeEstimate) -> FeeEstimateView {
         relayer_fee_per_gas: estimate.relayer_fee_per_gas.to_string(),
         bundler_gas_price: estimate.bundler_gas_price.to_string(),
         in_band_gas_basis: estimate.in_band_gas_basis.to_string(),
+        effective_gas_price: estimate.effective_gas_price.map(|wei| wei.to_string()),
+        max_gas_price: estimate.max_gas_price.map(|wei| wei.to_string()),
         total_gas: estimate.total_gas.to_string(),
         deployed: estimate.deployed,
         tier: estimate.tier,

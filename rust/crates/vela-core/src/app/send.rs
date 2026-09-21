@@ -888,6 +888,14 @@ pub enum SendOperation {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
+// The same reason `SendFeeOutcome` below carries it, and this enum inherits the
+// size from exactly that variant: a wire type whose JSON shape is pinned by the
+// generated TS. Boxing would buy an allocation per shell answer and change
+// nothing a shell can see. It crossed the lint's 200-byte threshold when
+// `FeeEstimateView` grew its effective gas price (issue 684) — 280 bytes to
+// 304 against an 80-byte neighbour — which is a fact about the lint's default,
+// not about this enum.
+#[allow(clippy::large_enum_variant)]
 pub enum SendShellResult {
     /// `tokens: None` = the load failed (`catch` →
     /// `send.alertLoadTokensError`). The FULL list — the core derives the
@@ -4781,6 +4789,8 @@ fn fee_to_view(fee: &FeeEstimate) -> FeeEstimateView {
         relayer_fee_per_gas: fee.relayer_fee_per_gas.to_string(),
         bundler_gas_price: fee.bundler_gas_price.to_string(),
         in_band_gas_basis: fee.in_band_gas_basis.to_string(),
+        effective_gas_price: fee.effective_gas_price.map(|wei| wei.to_string()),
+        max_gas_price: fee.max_gas_price.map(|wei| wei.to_string()),
         total_gas: fee.total_gas.to_string(),
         deployed: fee.deployed,
         tier: fee.tier,
@@ -4813,6 +4823,11 @@ fn parse_fee_view(view: &FeeEstimateView) -> Option<FeeEstimate> {
         relayer_fee_per_gas: parse(&view.relayer_fee_per_gas)?,
         bundler_gas_price: parse(&view.bundler_gas_price)?,
         in_band_gas_basis: parse(&view.in_band_gas_basis)?,
+        // Display only, so a figure that will not parse is dropped rather than
+        // refusing the whole estimate — unlike every field above it, which the
+        // send is priced and signed against (issue 684).
+        effective_gas_price: view.effective_gas_price.as_deref().and_then(parse),
+        max_gas_price: view.max_gas_price.as_deref().and_then(parse),
         total_gas: parse(&view.total_gas)?,
         deployed: view.deployed,
         tier: view.tier,

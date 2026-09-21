@@ -55,6 +55,9 @@
 	</button>
 
 	{#if open && rows !== undefined}
+		<!-- The SAME row the phone sheet draws, so a choice cannot be described
+		     on one surface and bare on the other — the speed menu's second line
+		     (spec 068) arrives here for free because of that. -->
 		<div class="menu" role="listbox" aria-label={label}>
 			{#each rows as row (row.id)}
 				<SelectRow {row} {onselect} />

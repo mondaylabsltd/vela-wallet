@@ -51,6 +51,10 @@
       "timeTitle": "時間格式",
       "timeSubtitle": "12 小時制或 24 小時制。"
     },
+    "feeSpeed": {
+      "title": "交易速度",
+      "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
+    },
     "advanced": {
       "networksTitle": "網絡",
       "networksSubtitle": "RPC、區塊鏈瀏覽器及 Bundler 網址",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "新增網絡",
       "addNetworkSubtitle": "新增自訂 EVM 網絡",
       "endpointsTitle": "服務端點",
-      "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler"
+      "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler",
+      "feeSpeedTitle": "交易速度",
+      "feeSpeedSubtitle": "每筆轉帳預設用嘅速度"
     },
     "developer": {
       "treasuryTitle": "資金庫",

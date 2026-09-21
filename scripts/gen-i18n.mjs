@@ -288,6 +288,33 @@ for (let i = 1; i < PATHS.length; i++) {
 //   paying for something that is not theirs to pay for. On a network the
 //   person added — a local devnet, an internal chain — the operator may have
 //   no way to hold gas there at all, and `customLead` says so.
+// + 9 more (spec 068, the fee you can refresh at a speed you can choose): the
+//   send form's fee row grew a refresh control (`send.feeRefresh`), a calm
+//   line for a quote that is merely old rather than broken (`send.feeStale`),
+//   and a folded speed control (`send.feeSpeedLabel`, plus `send.feeSpeedOnce`
+//   which says out loud that a per-transaction pick is one-shot and does not
+//   rewrite the stored default). Settings gained the stored default itself:
+//   `settings.advanced.feeSpeedTitle` / `…Subtitle` for the row, and ONE new
+//   branch, `settings.feeSpeed`, carrying the sheet's own `title` /`subtitle`.
+//   The tier NAMES were already here (`send.gasTier.*`) and only changed
+//   VALUE, so they are not counted above.
+// + 3 more (spec 068, the owner's ruling on the speed picker):
+//   `send.gasTierHint{Fast,Standard,Slow}`. The heading over those options
+//   asks about SPEED, so every option has to BE a speed — naming the slow one
+//   "Economy" / 经济便宜 mixed a speed scale with a value judgement and read
+//   as a joke. So the NAME went back to the speed (`slow` → Slow / 较慢, a
+//   value-only change again) and what that speed BUYS moved to a description
+//   line under it, which is the thing that makes the cheap tier attractive.
+//   Three FLAT leaves rather than a `send.gasTierHint` branch on purpose: a
+//   branch would move the branch pin as well for nothing, and `rapid` — the
+//   dead fourth tier nothing offers — must not acquire a description it would
+//   then need translating in 15 locales. No new branch.
+// 1674 → 1676 (issue 686, 2026-09-21): +2 flat send leaves — `feeSpeedFree`
+//   (the line under the folded speed control when the fastest speed costs no
+//   more than the person's slower default, so this send takes it) and
+//   `feeSpeedSingle` (the statement that replaces the options on a network
+//   whose speeds nothing tells apart, such as Tempo). Flat, beside
+//   `feeSpeedOnce`, for the same reason as the hints above. No new branch.
 // + 11 more (issues 204-206, the multi-recipient send): what the split form and
 //   its importer did without saying, and what the person had no way to ask for.
 //   `send.batchUnitCaption` names the first choice on the importer;
@@ -302,9 +329,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
 //   puts one amount in every empty row. Everything ELSE those issues needed was
 //   already here, in all fifteen locales, unread. No new branch.
-if (PATHS.length !== 1673) fail(`expected 1673 paths (1586 leaf + 87 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1586) fail(`expected 1586 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 87) fail(`expected 87 branch paths, got ${branchSet.size}`);
+// 1687 (merge of the two above, 2026-09-21): spec 068 and issue 686 added
+//   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
+//   leaf and no branch. The two sets share no path, so they simply add:
+//   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
+if (PATHS.length !== 1687) fail(`expected 1687 paths (1599 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1599) fail(`expected 1599 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

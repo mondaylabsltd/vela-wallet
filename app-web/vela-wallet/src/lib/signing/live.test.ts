@@ -55,6 +55,8 @@ const QUOTED_FEE: FeeView = {
 		relayer_fee_per_gas: '0',
 		bundler_gas_price: '1',
 		in_band_gas_basis: '1',
+		effective_gas_price: null,
+		max_gas_price: null,
 		total_gas: '1',
 		deployed: true,
 		tier: 'fast',

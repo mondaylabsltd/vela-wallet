@@ -46,12 +46,15 @@
 	import { readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
+	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import {
 		withLiveAccounts,
 		withLiveAccountsDesktop,
 		withLiveConnections,
 		withLiveCurrency,
 		withLiveCurrencyDesktop,
+		withLiveFeeSpeed,
+		withLiveFeeSpeedDesktop,
 		withLiveNetworks,
 		withLiveNetworksDesktop,
 		withLiveStorage
@@ -151,6 +154,7 @@
 		void session.boot();
 		void networkAdmin.boot();
 		void currency.boot();
+		void feeTierPreference.boot();
 		void balance.boot();
 		preferences.boot();
 		void refreshGrants();
@@ -288,9 +292,17 @@
 				preferences.setTimeFormat(event.id as 'auto');
 				return;
 			case 'currency':
-				// The one preference with a core behind it: the committed pair
-				// reaches every money surface through `display_currency`.
+				// One of the two preferences with a core behind it: the committed
+				// pair reaches every money surface through `display_currency`.
 				currency.choose(event.id);
+				return;
+			case 'fee-speed':
+				// The other (spec 068). The core validates the name — an id this
+				// build does not offer is refused there rather than reaching
+				// storage and, later, the relay (which answers -32602).
+				if (event.id === 'fast' || event.id === 'standard' || event.id === 'slow') {
+					feeTierPreference.choose(event.id);
+				}
 				return;
 			case 'erase':
 				void erase();
@@ -407,6 +419,7 @@
 		model = withLiveNetworks(model, net, m, selectedNetworkId);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
+		model = withLiveFeeSpeed(model, feeTierPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
 		model = withLivePreferences(model, m, languageValue, data.locale);
@@ -438,6 +451,9 @@
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
 		model = withLiveConnections(model, grants, m);
 		model = withLiveCurrencyDesktop(model, currency.view, currencyCatalog);
+		// The desktop page reuses the phone sheet's rows — one list of tiers,
+		// one set of words, whichever layout is showing.
+		model = withLiveFeeSpeedDesktop(model, feeTierPreference.view, liveHome.feeSpeedSheet);
 		model = {
 			...model,
 			account: { ...model.account, keys: walletKeysModel(walletKeys, backupState, m) }

@@ -51,6 +51,10 @@
    "timeTitle": "Saat biçimi",
    "timeSubtitle": "12 saatlik veya 24 saatlik saat."
   },
+  "feeSpeed": {
+   "title": "İşlem hızı",
+   "subtitle": "Vela'da başlattığınız her gönderim burada başlar. Tek bir gönderim için yine de değiştirebilirsiniz."
+  },
   "advanced": {
    "networksTitle": "Ağlar",
    "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Ağ Ekle",
    "addNetworkSubtitle": "Özel EVM ağı ekle",
    "endpointsTitle": "Servis Uç Noktaları",
-   "endpointsSubtitle": "Zincir verisi, kimlik dizini, Bundler"
+   "endpointsSubtitle": "Zincir verisi, kimlik dizini, Bundler",
+   "feeSpeedTitle": "İşlem hızı",
+   "feeSpeedSubtitle": "Her gönderimin başlangıç değeri"
   },
   "developer": {
    "treasuryTitle": "Hazine",
@@ -267,7 +273,7 @@
   "toLabel": "Alıcı",
   "estFeeLabel": "Tahmini Ücret",
   "estimatingFee": "Tahmin ediliyor...",
-  "gasPriceLabel": "Gas Fiyatı",
+  "gasPriceLabel": "Gas teklifi",
   "gasPriceUserOpLabel": "Gas Fiyatı (UserOp)",
   "gasLimitLabel": "Gas Limiti",
   "walletDeployedLabel": "Cüzdan Dağıtıldı",
@@ -322,6 +328,15 @@
    "rapid": "Çok hızlı",
    "fast": "Hızlı"
   },
+  "gasTierHintFast": "Ağ yoğunken bile ilk onaylanan",
+  "gasTierHintStandard": "Günlük transferler için dengeli",
+  "gasTierHintSlow": "En düşük ücret, acele etmiyorsanız",
+  "feeRefresh": "Ücreti yenile",
+  "feeStale": "Bir süre önce ölçüldü",
+  "feeSpeedLabel": "Hız",
+  "feeSpeedOnce": "Yalnızca bu işlem için",
+  "feeSpeedFree": "Bu ağda Hızlı daha pahalı değil, bu yüzden bu işlem Hızlı gönderiliyor.",
+  "feeSpeedSingle": "Bu ağda tek bir hız var.",
   "batchImport": "Listeyi içe aktar",
   "batchTitle": "Alıcıları içe aktar",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -720,10 +735,10 @@
    "headerSyncFailed": "Cihazlar Arası Eşitleme",
    "identiconHint": "Adresten üretilen kimlik deseni",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Yalnızca bu cihaz",
+   "keyDeviceOnlyBadge": "Cihaza bağlı",
    "keyHardwareBadge": "Donanım",
    "keyLimitReached": "7 anahtar sınırına ulaşıldı",
-   "keySyncedBadge": "Eşitlendi",
+   "keySyncedBadge": "Bulutla eşitlenir",
    "keyUnreadableBody": "Bir güvenlik anahtarı takılı ama bu bilgisayar cüzdanın onu okumasına izin vermiyor. Bu anahtarın arızası değil, bir izin ayarı — Linux'ta dağıtımınızın FIDO udev kurallarını kurun (libu2f-udev ya da bunları kendisi ayarlayan systemd 252 ve üzeri), sonra anahtarı çıkarıp tekrar takın.",
    "keyUnreadableTitle": "Güvenlik anahtarınız açılamıyor",
    "keysHint": "Cüzdan adresi bu anahtar kümesinden çıkar; oluşturduktan sonra ekleme ya da çıkarma olmaz.",
@@ -742,7 +757,7 @@
    "methodSecurityKeyTitle": "USB güvenlik anahtarı",
    "nameTitle": "Cüzdanınıza bir ad verin",
    "nameTooLong": "Bu ad bir geçiş anahtarına sığmayacak kadar uzun — lütfen kısaltın.",
-   "needSecondKeyHint": "Bu anahtar yalnızca bu cihazda; eşitlenmiş yedeği yok. Cihaz kaybolursa cüzdan açılmaz.",
+   "needSecondKeyHint": "Bu anahtarın hiçbir yerde yedeği yok. Kaybolursa cüzdan açılmaz. İkinci bir anahtar ekleyin.",
    "nextBtn": "Devam",
    "openSettings": "Ayarları Aç",
    "pinAttemptsLeft": "Kalan deneme: {{attempts}}",
@@ -753,8 +768,8 @@
    "progressMeterLabel": "Adres türetiliyor",
    "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
    "progressTitle": "Cüzdanınız oluşturuluyor",
-   "providerGeneric": "Geçiş anahtarı",
-   "providerPlatform": "Platform geçiş anahtarı",
+   "providerGeneric": "Telefon veya tablet",
+   "providerPlatform": "Yerleşik geçiş anahtarı",
    "providerSecurityKey": "Güvenlik anahtarı",
    "providerUnknown": "Tanınmayan sağlayıcı",
    "removeKeyBtn": "Kaldır",
@@ -1599,7 +1614,7 @@
    "credential": "Kimlik bilgisi",
    "transport": "Aktarım",
    "attestation": "Doğrulama beyanı",
-   "userVerified": "Kullanıcı doğrulandı"
+   "userVerified": "Kullanırken doğrulama gerekir"
   }
  },
  "contacts": {

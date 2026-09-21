@@ -6,6 +6,22 @@
  */
 export type FeeBundlerQuote = { max_fee_per_gas: string, 
 /**
+ * The tip the relay will SIGN this tier with (`vela-relay/docs/fees.md`
+ * §2b) — `1.00 / 1.25 / 2.00 ×` the market tip for slow / standard / fast.
+ *
+ * It is the only per-tier number that buys priority: a block builder
+ * orders by `min(maxPriorityFeePerGas, maxFeePerGas − base_fee)`, so the
+ * cap above leaves that ordering untouched. Every shell read this row and
+ * threw the field away until issue 684, which is why none of them could
+ * say what a speed actually buys.
+ *
+ * `None` when the row omits it — a generic bundler, or a relay older than
+ * the per-tier tip. `#[serde(default)]` so a shell that does not yet send
+ * it keeps working unchanged; the price is then simply not published.
+ * Never 0 as a stand-in: "not reported" and "no tip" are different facts.
+ */
+max_priority_fee_per_gas: string | null, 
+/**
  * `None` when a generic bundler omits the Vela extension fields.
  */
 network_fee_per_gas: string | null, relayer_fee_per_gas: string | null, };

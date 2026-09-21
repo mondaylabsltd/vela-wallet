@@ -34,11 +34,73 @@ describe('wallet-flow messages', () => {
 	});
 });
 
+/**
+ * The tier words, across the whole corpus (spec 068, the owner's ruling).
+ *
+ * The heading over these options asks about SPEED, so all three names have to
+ * BE speeds — mixing a scale with a value judgement ("Economy" under "Transaction
+ * speed") reads as a joke. The advantage each speed buys lives on its own line
+ * instead, and that line is what stops the slow tier reading as a defect, so
+ * the two halves are pinned together: rename without describing and the cheap
+ * option becomes unattractive; describe without renaming and the scale is
+ * still incoherent.
+ *
+ * Pinned in all 15 locales because a regression here would show up in exactly
+ * one language at a time.
+ */
+describe('the three fee tiers read as one speed scale', () => {
+	// The words the ruling removed, in every locale that had one. A NAME that
+	// matches any of these is a price wearing a speed's clothes.
+	const THRIFT =
+		/econom|經濟|经济|エコノミー|절약|tiết\s*kiệm|hemat|sparsam|эконом|convenien|barato/i;
+
+	const NAMES = ['send.gasTier.fast', 'send.gasTier.standard', 'send.gasTier.slow'] as const;
+	const HINTS = [
+		'send.gasTierHintFast',
+		'send.gasTierHintStandard',
+		'send.gasTierHintSlow'
+	] as const;
+
+	it.each(SUPPORTED_LOCALES)('%s names a speed, never a price', (locale) => {
+		const names = NAMES.map((key) => rawResolve(locale, key));
+		for (const [i, name] of names.entries()) {
+			expect(name, `${NAMES[i]} in ${locale}`).not.toMatch(THRIFT);
+		}
+		// Three rungs of one ladder: a duplicate would mean two of them are the
+		// same speed, which is not a scale.
+		expect(new Set(names).size, `${locale}: ${names.join(' / ')}`).toBe(3);
+	});
+
+	it.each(SUPPORTED_LOCALES)('%s describes what each speed buys', (locale) => {
+		const names = NAMES.map((key) => rawResolve(locale, key));
+		const hints = HINTS.map((key) => rawResolve(locale, key));
+		for (const [i, hint] of hints.entries()) {
+			expect(hint, `${HINTS[i]} in ${locale}`).not.toBe(HINTS[i]);
+			expect(hint.trim(), `${HINTS[i]} in ${locale}`).not.toBe('');
+			// A description, not a second name — and not a paragraph either:
+			// this line sits under an option in a sheet 320px wide.
+			expect(names, `${HINTS[i]} in ${locale}`).not.toContain(hint);
+			expect(hint.length, `${HINTS[i]} in ${locale}: ${hint}`).toBeLessThanOrEqual(80);
+		}
+		expect(new Set(hints).size, `${locale}: ${hints.join(' / ')}`).toBe(3);
+	});
+
+	// `rapid` is a dead variant: nothing constructs it and the relay refuses it
+	// on the wire. It keeps its NAME (removing a corpus key is a different kind
+	// of change) and must never grow a description, which would be 15 locales
+	// of translation for an option no person can ever see.
+	it('leaves the dead `rapid` tier undescribed', () => {
+		expect(WALLET_FLOW_KEYS).not.toContain('send.gasTier.rapid');
+		expect(rawResolve('en', 'send.gasTierHintRapid')).toBe('send.gasTierHintRapid');
+	});
+});
+
 describe('state matrix', () => {
 	const zh = resolveWalletFlowMessages('zh');
 
-	it('builds all 30 mobile states', () => {
-		expect(MOBILE_FLOW_STATES).toHaveLength(30);
+	it('builds all 32 mobile states', () => {
+		// 30, plus SD2 in fiat and SD2 with an 18-decimal figure (issue 231).
+		expect(MOBILE_FLOW_STATES).toHaveLength(32);
 		for (const id of MOBILE_FLOW_STATES) {
 			const model = buildFlowState(id, zh, IDENTICON_STUB);
 			expect(model.state, id).toBe(id);

@@ -51,6 +51,10 @@
       "timeTitle": "Formato de hora",
       "timeSubtitle": "Reloj de 12 o 24 horas."
     },
+    "feeSpeed": {
+      "title": "Velocidad de transacción",
+      "subtitle": "Cada envío que empiezas en Vela comienza aquí. Aun así puedes cambiar uno en particular."
+    },
     "advanced": {
       "networksTitle": "Redes",
       "networksSubtitle": "URLs de RPC, Explorador y Bundler",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Agregar red",
       "addNetworkSubtitle": "Agregar red EVM personalizada",
       "endpointsTitle": "Endpoints de servicio",
-      "endpointsSubtitle": "Datos de cadena, índice de identidad, Bundler"
+      "endpointsSubtitle": "Datos de cadena, índice de identidad, Bundler",
+      "feeSpeedTitle": "Velocidad de transacción",
+      "feeSpeedSubtitle": "El valor inicial de cada envío"
     },
     "developer": {
       "treasuryTitle": "Tesorería",

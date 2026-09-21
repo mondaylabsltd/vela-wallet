@@ -43,7 +43,7 @@
     "toLabel": "收款人",
     "estFeeLabel": "预估手续费",
     "estimatingFee": "估算中...",
-    "gasPriceLabel": "Gas 价格",
+    "gasPriceLabel": "Gas 出价",
     "gasPriceUserOpLabel": "Gas 价格（UserOp）",
     "gasLimitLabel": "Gas 限制",
     "walletDeployedLabel": "钱包已部署",
@@ -69,11 +69,20 @@
     "txHeldFees": "网络费用高于你确认的金额。交易正在等待,费用回落后会自动发送。",
     "txRejectedFees": "网络费用长时间高于你确认的金额,本次没有发送。请按当前费用重新发起。",
     "gasTier": {
-      "slow": "慢速",
+      "slow": "较慢",
       "standard": "标准",
       "rapid": "极速",
-      "fast": "快速"
+      "fast": "超快"
     },
+    "gasTierHintFast": "网络繁忙时也最先确认",
+    "gasTierHintStandard": "日常转账的平衡选择",
+    "gasTierHintSlow": "手续费最低，适合不着急时",
+    "feeRefresh": "刷新费用",
+    "feeStale": "这个数字有点旧了",
+    "feeSpeedLabel": "速度",
+    "feeSpeedOnce": "仅这一笔，下次仍用默认",
+    "feeSpeedFree": "这条网络上选「超快」不额外收费，这笔已改用「超快」。",
+    "feeSpeedSingle": "这条网络只有一种速度。",
     "lock": {
       "netTitle": "不支持该网络",
       "netBody": "此收款请求所在的网络 Vela 暂不支持（链 ID {{chainId}}）。",

@@ -46,6 +46,9 @@ use vela_core::app::ext_cache::{
     Event as ExtCacheEvent, ExtCacheOperation, ExtCacheShellResult, ExtCacheView,
 };
 use vela_core::app::fee_policy::{Event as FeeEvent, FeeOperation, FeeShellResult, FeeView};
+use vela_core::app::fee_tier_pref::{
+    Event as FeeTierPrefEvent, FeeTierPrefOperation, FeeTierPrefShellResult, FeeTierPrefView,
+};
 use vela_core::app::manage_tokens::{Event as MtokEvent, MtokOperation, MtokShellResult, MtokView};
 use vela_core::app::network_admin::{Event as NetEvent, NetOperation, NetShellResult, NetView};
 use vela_core::app::payment_request::{
@@ -95,6 +98,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     FeeOperation::export_all(&config)?;
     FeeShellResult::export_all(&config)?;
     FeeView::export_all(&config)?;
+    FeeTierPrefEvent::export_all(&config)?;
+    FeeTierPrefOperation::export_all(&config)?;
+    FeeTierPrefShellResult::export_all(&config)?;
+    FeeTierPrefView::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;
     GuardShellResult::export_all(&config)?;

@@ -356,7 +356,20 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			addNetworkTitle: k('settings.advanced.addNetworkTitle'),
 			addNetworkSubtitle: k('settings.advanced.addNetworkSubtitle'),
 			endpointsTitle: k('settings.advanced.endpointsTitle'),
-			endpointsSubtitle: k('settings.advanced.endpointsSubtitle')
+			endpointsSubtitle: k('settings.advanced.endpointsSubtitle'),
+			feeSpeedTitle: k('settings.advanced.feeSpeedTitle'),
+			feeSpeedSubtitle: k('settings.advanced.feeSpeedSubtitle')
+		},
+		feeSpeed: {
+			title: k('settings.feeSpeed.title'),
+			subtitle: k('settings.feeSpeed.subtitle'),
+			// The send form's own tier words, so the two surfaces cannot drift.
+			fast: k('send.gasTier.fast'),
+			standard: k('send.gasTier.standard'),
+			slow: k('send.gasTier.slow'),
+			fastHint: k('send.gasTierHintFast'),
+			standardHint: k('send.gasTierHintStandard'),
+			slowHint: k('send.gasTierHintSlow')
 		},
 		networks: {
 			count: k('settings.networks.count'),

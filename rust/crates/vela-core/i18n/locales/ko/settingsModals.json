@@ -104,7 +104,7 @@
       "credential": "자격 증명",
       "transport": "전송 방식",
       "attestation": "증명",
-      "userVerified": "사용자 확인됨"
+      "userVerified": "사용 시 인증 필요"
     }
   }
 }

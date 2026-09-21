@@ -51,6 +51,10 @@
    "timeTitle": "Zeitformat",
    "timeSubtitle": "12-Stunden- oder 24-Stunden-Format."
   },
+  "feeSpeed": {
+   "title": "Transaktionsgeschwindigkeit",
+   "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
+  },
   "advanced": {
    "networksTitle": "Netzwerke",
    "networksSubtitle": "RPC-, Explorer- & Bundler-URLs",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Netzwerk hinzufügen",
    "addNetworkSubtitle": "Eigenes EVM-Netzwerk hinzufügen",
    "endpointsTitle": "Dienst-Endpunkte",
-   "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler"
+   "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler",
+   "feeSpeedTitle": "Transaktionsgeschwindigkeit",
+   "feeSpeedSubtitle": "Der Startwert für jede Überweisung"
   },
   "developer": {
    "treasuryTitle": "Treasury",
@@ -267,7 +273,7 @@
   "toLabel": "An",
   "estFeeLabel": "Geschätzte Gebühr",
   "estimatingFee": "Wird geschätzt ...",
-  "gasPriceLabel": "Gas-Preis",
+  "gasPriceLabel": "Gas-Gebot",
   "gasPriceUserOpLabel": "Gas-Preis (UserOp)",
   "gasLimitLabel": "Gas-Limit",
   "walletDeployedLabel": "Wallet bereitgestellt",
@@ -298,6 +304,15 @@
    "rapid": "Sehr schnell",
    "fast": "Schnell"
   },
+  "gasTierHintFast": "Wird zuerst bestätigt, auch bei ausgelastetem Netzwerk",
+  "gasTierHintStandard": "Ausgewogen für alltägliche Überweisungen",
+  "gasTierHintSlow": "Niedrigste Gebühr, wenn Sie warten können",
+  "feeRefresh": "Gebühr aktualisieren",
+  "feeStale": "Vor einer Weile gemessen",
+  "feeSpeedLabel": "Geschwindigkeit",
+  "feeSpeedOnce": "Nur für diese Transaktion",
+  "feeSpeedFree": "Schnell kostet in diesem Netzwerk nicht mehr – diese Transaktion nutzt daher Schnell.",
+  "feeSpeedSingle": "Dieses Netzwerk hat nur eine Geschwindigkeit.",
   "lock": {
    "netTitle": "Netzwerk nicht unterstützt",
    "netBody": "Diese Zahlungsanfrage befindet sich auf einem Netzwerk, das Vela noch nicht unterstützt (Chain {{chainId}}).",
@@ -720,10 +735,10 @@
    "headerSyncFailed": "Geräteübergreifende Synchronisierung",
    "identiconHint": "Ein aus der Adresse erzeugtes Identitätsmuster",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Nur dieses Gerät",
+   "keyDeviceOnlyBadge": "Gerätegebunden",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limit von 7 erreicht",
-   "keySyncedBadge": "Synchronisiert",
+   "keySyncedBadge": "Cloud-synchronisiert",
    "keyUnreadableBody": "Ein Sicherheitsschlüssel ist angeschlossen, aber dieser Computer lässt die Wallet ihn nicht lesen. Das ist eine Berechtigungseinstellung und kein Defekt des Schlüssels — installieren Sie unter Linux die FIDO-udev-Regeln Ihrer Distribution (libu2f-udev, oder systemd 252 und neuer, das sie selbst einrichtet), und stecken Sie den Schlüssel danach einmal aus und wieder ein.",
    "keyUnreadableTitle": "Ihr Sicherheitsschlüssel lässt sich nicht öffnen",
    "keysHint": "Die Wallet-Adresse ergibt sich aus diesem Schlüsselsatz — nach dem Erstellen kommt keiner dazu und keiner weg.",
@@ -742,7 +757,7 @@
    "methodSecurityKeyTitle": "USB-Sicherheitsschlüssel",
    "nameTitle": "Gib deiner Wallet einen Namen",
    "nameTooLong": "Dieser Name ist zu lang für einen Passkey — bitte kürzen Sie ihn.",
-   "needSecondKeyHint": "Dieser Schlüssel liegt nur auf diesem Gerät, ohne synchronisiertes Backup. Geht das Gerät verloren, bleibt die Wallet zu.",
+   "needSecondKeyHint": "Dieser Schlüssel hat nirgends ein Backup. Geht er verloren, bleibt die Wallet zu. Füge einen zweiten hinzu.",
    "nextBtn": "Weiter",
    "openSettings": "Einstellungen öffnen",
    "pinAttemptsLeft": "Verbleibende Versuche: {{attempts}}",
@@ -753,8 +768,8 @@
    "progressMeterLabel": "Adresse wird abgeleitet",
    "progressSubtitle": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
    "progressTitle": "Wallet wird erstellt",
-   "providerGeneric": "Passkey",
-   "providerPlatform": "Plattform-Passkey",
+   "providerGeneric": "Handy oder Tablet",
+   "providerPlatform": "Integrierter Passkey",
    "providerSecurityKey": "Sicherheitsschlüssel",
    "providerUnknown": "Unbekannter Anbieter",
    "removeKeyBtn": "Entfernen",
@@ -1599,7 +1614,7 @@
    "credential": "Anmeldedaten",
    "transport": "Transport",
    "attestation": "Attestierung",
-   "userVerified": "Nutzer verifiziert"
+   "userVerified": "Bestätigung bei Nutzung"
   }
  },
  "contacts": {

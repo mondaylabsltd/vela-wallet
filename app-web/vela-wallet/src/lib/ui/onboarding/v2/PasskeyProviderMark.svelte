@@ -22,6 +22,8 @@
 	} from '$lib/onboarding/core/wasm-client';
 	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 	import { directoryEntry } from '$lib/onboarding/core/passkey-directory.svelte';
+	import { isHandheld, keyKindGlyph } from '$lib/onboarding/passkey-icons';
+	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
 		/** The row this mark stands for; everything comes off it. */
@@ -29,10 +31,10 @@
 		/** The mark's accessible label. */
 		label: string;
 		/**
-		 * Draw the method's shape glyph when there is no artwork at all — a
-		 * platform authenticator the catalog cannot name. The key list wants a
-		 * filled slot (proportion is its signal: a wide laptop, a tall phone);
-		 * the done card wants nothing rather than a placeholder.
+		 * Draw the glyph for where the key lives when there is no artwork at
+		 * all — a platform authenticator the catalog cannot name. A list wants
+		 * a filled slot: an empty one leaves the names in that row starting a
+		 * few pixels further left than every other row's.
 		 */
 		glyphFallback?: boolean;
 	}
@@ -71,23 +73,33 @@
 		return passkeyFallbackIconDataUri(
 			key.authenticator_attachment,
 			key.transports,
-			key.method === 'security_key',
+			// The REPORT, not the tap: a person who tapped "security key" and
+			// then used Touch ID does not own a fob (issue 207). The core only
+			// consults this flag when the authenticator reported nothing at all.
+			key.kind === 'security_key',
 			strong,
 			soft,
 			hole
 		);
 	});
+
+	/**
+	 * The last resort: the shape of the thing the key lives in — a laptop, a
+	 * phone, a USB key — drawn by the same component the method picker uses, so
+	 * the row and the picker speak one visual language.
+	 *
+	 * Keyed off `kind`, like the caption beside it, which is what stops the slot
+	 * contradicting the words (issue 207: a hardware fob next to "Passkey").
+	 * `isHandheld` reads `navigator`, so it is only asked in the browser — this
+	 * component renders nothing before hydration anyway.
+	 */
+	const glyph = $derived(keyKindGlyph(key.kind, browser ? isHandheld() : false));
 </script>
 
 {#if uri}
 	<img class="mark" src={uri} alt={label} />
 {:else if glyphFallback}
-	<span
-		class="glyph"
-		class:tall={key.method === 'hybrid'}
-		class:squat={key.method === 'security_key'}
-		aria-hidden="true"
-	></span>
+	<span class="glyph"><PasskeyMethodIcon {glyph} /></span>
 {/if}
 
 <style>
@@ -103,27 +115,18 @@
 	 * The last resort, moved here from the key list so one component owns the
 	 * whole question of what a row's leading slot shows.
 	 *
-	 * Proportion is the whole signal: a wide laptop, a tall phone, a squat key.
-	 * A person picks the row that looks like the thing in their hand, so the
-	 * three must not read as one rounded box — which is what they did when they
-	 * shared a height.
+	 * It used to be three bare CSS boxes distinguished only by proportion — a
+	 * wide one, a tall one, a squat one — which is a shape nobody can name.
+	 * Issue 207 replaced them with the picker's own glyphs, drawn by the same
+	 * component, so a row shows a laptop, a phone or a USB key. The wrapper
+	 * keeps the slot the size of a provider mark, so rows with and without
+	 * artwork still line up.
 	 */
 	.glyph {
+		display: grid;
 		flex: 0 0 var(--icon-xl);
+		place-items: center;
 		width: var(--icon-xl);
-		height: var(--icon-sm);
-		border: var(--border-emphasis) solid var(--color-fg-muted);
-		border-radius: var(--radius-sm);
-	}
-
-	.tall {
-		flex-basis: var(--icon-sm);
-		width: var(--icon-sm);
 		height: var(--icon-xl);
-	}
-
-	.squat {
-		height: var(--icon-xs);
-		border-radius: var(--radius-full);
 	}
 </style>

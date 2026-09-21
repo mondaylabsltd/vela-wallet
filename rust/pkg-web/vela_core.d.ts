@@ -387,6 +387,19 @@ export class FeePolicyCore {
 }
 
 /**
+ * r" The default transaction speed (spec 068): the stored tier a send
+ * r" starts at, the factory `fast` when nothing was chosen.
+ */
+export class FeeTierPrefCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
  * A translation engine.
  */
 export class I18n {
@@ -891,6 +904,7 @@ export interface InitOutput {
     readonly __wbg_displaycurrencycore_free: (a: number, b: number) => void;
     readonly __wbg_extcachecore_free: (a: number, b: number) => void;
     readonly __wbg_feepolicycore_free: (a: number, b: number) => void;
+    readonly __wbg_feetierprefcore_free: (a: number, b: number) => void;
     readonly __wbg_i18n_free: (a: number, b: number) => void;
     readonly __wbg_logincore_free: (a: number, b: number) => void;
     readonly __wbg_managetokenscore_free: (a: number, b: number) => void;
@@ -978,6 +992,10 @@ export interface InitOutput {
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feepolicycore_view: (a: number) => [number, number, number, number];
+    readonly feetierprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly feetierprefcore_new: () => number;
+    readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feetierprefcore_view: (a: number) => [number, number, number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
     readonly functionSelector: (a: number, b: number) => [number, number, number, number];

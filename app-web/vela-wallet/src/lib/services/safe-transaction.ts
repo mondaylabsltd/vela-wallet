@@ -442,6 +442,22 @@ export interface TransactionFeeEstimate {
 	 * quote alone. See MAX_QUOTE_VS_CHAIN_MULTIPLE.
 	 */
 	inBandGasBasis: bigint;
+	/**
+	 * What the chain will ACTUALLY charge per gas at this tier — `base fee +
+	 * this tier's signed tip` (issue 684). The core derives it
+	 * (`fee_policy::effective_gas_price`); this field exists only so a remembered
+	 * estimate keeps it across the wire. Absent when nothing measured could say,
+	 * and on a chain with no priority fee at all. Display only: it prices
+	 * nothing and gates nothing.
+	 */
+	effectiveGasPrice?: bigint;
+	/**
+	 * The top of that figure's range: this tier's cap, `maxFeePerGas`, the most
+	 * the chain can ever charge per gas at this speed (issue 685,
+	 * `fee_policy::gas_price_range`). Present exactly when `effectiveGasPrice`
+	 * is, and like it, display only.
+	 */
+	maxGasPrice?: bigint;
 	/** Total gas units (verification + call + preVerification). */
 	totalGas: bigint;
 	/** Whether the wallet is already deployed on this chain. */
@@ -509,6 +525,25 @@ export function sameAssetFeeLimit(
 export interface QuotedInBandFee {
 	amount: bigint;
 	recipient: string;
+	/**
+	 * The speed tier this quote was PRICED at (spec 068), sent to the relay as
+	 * `eth_sendUserOperation`'s optional third parameter.
+	 *
+	 * It travels with the amount and the recipient because it belongs to the
+	 * same fact — what the person was shown — and the relay resolves the NAME
+	 * against the base fee it reads at submit time, so a quote that went stale
+	 * between signing and inclusion cannot mis-set the price. Omitted ⇒ no
+	 * third parameter, which is the pre-068 wire and leaves the relay at its
+	 * own pace; absent is NOT the same as `fast`, so a surface that shows a
+	 * speed always names it.
+	 *
+	 * `rapid` is excluded structurally, not by convention: it is a dead variant
+	 * nothing constructs and the relay has never reported, and a relay asked
+	 * for it answers -32602 before any handler runs. The type is what keeps it
+	 * off the wire, so "nothing currently constructs it" never has to be true
+	 * for this to stay safe.
+	 */
+	tier?: Exclude<GasTier, 'rapid'>;
 }
 
 const INBAND_MARKUP = 3n;
@@ -562,6 +597,18 @@ export function calculateInBandFeeAmount(
 	// never below the 0.00001-coin admission floor — on a coin dearer than $1000,
 	// $0.01 is worth less than that), else a flat 0.001-coin blind floor (below 3
 	// decimals, one base unit). `!nativeUsdPrice` is falsy for 0n too — unpriceable.
+	//
+	// This copy is deliberately the PRE-682 rule. The core gained a
+	// `native_usd_floor_price` input so a coin the relay cannot price is floored
+	// at a cent instead of a blind 0.001 of it (issue 682); this copy is reached
+	// only by submits that never went through a fee session — `sendUserOpInBand`
+	// with no `quoted_fee` threaded, i.e. the programmatic dapp path — and those
+	// have no warm balances cache to read a price from anyway. Since the core
+	// lets that price only LOWER its floor, the worst this divergence can do is
+	// charge what every send charged before the fix. Wiring it here would mean
+	// inventing a price source for a path that has none; the honest answer is to
+	// record it (follow-up: feed the floor price on the request route) rather
+	// than let the two copies quietly mean different things.
 	const nativeUsdPrice = usdPriceScaled(nativeAsset.usdPrice, true);
 	const nativeMinimum = nativeUsdPrice
 		? bigintMax(ceilDiv(STABLE_MIN_USD_SCALED * nativeUnit, nativeUsdPrice), admissionFloor)
@@ -639,6 +686,7 @@ export function rawBundlerGasCost(fee: TransactionFeeEstimate): bigint {
 /** Fetch fresh on-chain gas price (bypasses cache). */
 export async function refreshGasPrice(chainId: number): Promise<bigint> {
 	_gasPriceCache.delete(chainId);
+	invalidateFeeSignals(chainId);
 	const { gasPrice } = await getGasPrices(chainId);
 	return gasPrice;
 }
@@ -1045,11 +1093,69 @@ export interface RawGasSignals {
 	priorityFee: string | null;
 }
 
+// The fee row must stay calm (issue 212). These two readers used to be
+// deliberately uncached, and the core re-samples on every quote run — the
+// warm-up, the form, a recipient edit, Max, the Continue pre-check — so
+// editing the RECIPIENT re-rolled the gas price, and two public endpoints that
+// disagree made the same send read 0.000332 BNB and then 0.000665. A
+// measurement is now good for 15 s per chain (the window `getGasPrices` has
+// always used), concurrent asks share one round, and:
+//   - only a REAL, COMPLETE measurement is kept. A failed or zero
+//     `eth_gasPrice`, a read whose block or tip leg failed (the tip is nearly
+//     the whole price on Gnosis — holding a tipless read would hold a fee the
+//     relay refuses), a null or zero relay quote, or a rejected promise is
+//     never pinned — one hiccup must not own the next 15 seconds;
+//   - `invalidateFeeSignals` is called by the explicit refresh
+//     (`FeeQuote.requote`), when a quote settles as failed (so a retry never
+//     reuses the inputs that failed it), and at the START of every submit and
+//     of `refreshGasPrice`, beside each `_gasPriceCache.delete` — so the
+//     submit, and the first quote after it, landed or not, measure again.
+const FEE_SIGNALS_CACHE_TTL = 15_000; // 15s — the same window as GAS_PRICE_CACHE_TTL
+const _rawGasSignalsCache = new Map<
+	number,
+	{ at: number; wantTip: boolean; signals: RawGasSignals }
+>();
+const _rawGasSignalsRequests = new Map<string, Promise<RawGasSignals>>();
+const _rawBundlerQuoteCache = new Map<string, { at: number; quote: RawBundlerQuote }>();
+const _rawBundlerQuoteRequests = new Map<string, Promise<RawBundlerQuote | null>>();
+/** Bumped by every invalidate, so a read that was already in flight when the
+ *  person asked for a fresh one cannot land its older answer in the cache. */
+const _feeSignalsEpoch = new Map<number, number>();
+
+/**
+ * Forget this chain's cached gas signals and relay gas quote, so the next quote
+ * run measures again. Called by the refresh affordance, by a quote that
+ * settled as failed, and wherever `_gasPriceCache` is dropped (the start of
+ * every submit and of `refreshGasPrice`).
+ */
+export function invalidateFeeSignals(chainId: number): void {
+	_feeSignalsEpoch.set(chainId, (_feeSignalsEpoch.get(chainId) ?? 0) + 1);
+	_rawGasSignalsCache.delete(chainId);
+	for (const key of [..._rawGasSignalsRequests.keys(), ..._rawBundlerQuoteCache.keys()]) {
+		if (!key.startsWith(`${chainId}:`)) continue;
+		_rawGasSignalsRequests.delete(key);
+		_rawBundlerQuoteCache.delete(key);
+	}
+	for (const key of [..._rawBundlerQuoteRequests.keys()]) {
+		if (key.startsWith(`${chainId}:`)) _rawBundlerQuoteRequests.delete(key);
+	}
+}
+
+/** Test seam: drop every cached fee signal. */
+export function _resetFeeSignalsCache(): void {
+	_rawGasSignalsCache.clear();
+	_rawGasSignalsRequests.clear();
+	_rawBundlerQuoteCache.clear();
+	_rawBundlerQuoteRequests.clear();
+	_feeSignalsEpoch.clear();
+}
+
 /**
  * `eth_gasPrice` ∥ latest block's `baseFeePerGas` ∥ `eth_maxPriorityFeePerGas`,
- * as decimal strings. Deliberately UNCACHED, unlike `getGasPrices`: the core
- * asks for these once per quote run, and the run that matters most is the one
- * behind the refresh affordance, which wants a fresh read by definition.
+ * as decimal strings. Held for 15 s per chain with in-flight coalescing — see
+ * the note above; it used to be uncached, which is what let a recipient edit
+ * move the fee (issue 212). The refresh affordance invalidates first, so the
+ * run that wants a fresh read still gets one.
  *
  * A present tip result — even `0x0`, which every OP-stack L2 returns — is a real
  * measurement and comes back as `"0"`; a failed or skipped read comes back
@@ -1060,6 +1166,39 @@ export async function fetchRawGasSignals(
 	chainId: number,
 	wantTip: boolean
 ): Promise<RawGasSignals> {
+	const cached = _rawGasSignalsCache.get(chainId);
+	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) {
+		return { ...cached.signals };
+	}
+	const key = `${chainId}:${wantTip}`;
+	const pending = _rawGasSignalsRequests.get(key);
+	// Each caller gets its own copy, as a cache hit does.
+	if (pending) return pending.then((signals) => ({ ...signals }));
+	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
+	const request = readRawGasSignals(chainId, wantTip)
+		.then(({ signals, complete }) => {
+			// Only a real, complete measurement is kept. Without a positive
+			// `eth_gasPrice` the core falls to its 5 gwei default (100x on BSC),
+			// and without the tip it under-prices Gnosis ~40x — neither guess may
+			// be pinned. An endpoint that never answers a leg simply never caches,
+			// which is what every chain did before issue 212.
+			if (complete && (_feeSignalsEpoch.get(chainId) ?? 0) === epoch) {
+				_rawGasSignalsCache.set(chainId, { at: Date.now(), wantTip, signals });
+			}
+			return { ...signals };
+		})
+		.finally(() => {
+			if (_rawGasSignalsRequests.get(key) === request) _rawGasSignalsRequests.delete(key);
+		});
+	_rawGasSignalsRequests.set(key, request);
+	return request;
+}
+
+/** `complete` = every leg that was asked for answered, and the price is positive. */
+async function readRawGasSignals(
+	chainId: number,
+	wantTip: boolean
+): Promise<{ signals: RawGasSignals; complete: boolean }> {
 	const [gasPriceRes, blockRes, tipRes] = await Promise.all([
 		rpcCall('eth_gasPrice', [], chainId).catch(() => null),
 		rpcCall('eth_getBlockByNumber', ['latest', false], chainId).catch(() => null),
@@ -1069,16 +1208,37 @@ export async function fetchRawGasSignals(
 	]);
 	const decimal = (value: unknown): string | null =>
 		typeof value === 'string' ? parseHexUInt64(value).toString() : null;
-	return {
+	const signals: RawGasSignals = {
 		ethGasPrice: decimal(gasPriceRes?.result),
 		baseFee: decimal((blockRes?.result as { baseFeePerGas?: string } | null)?.baseFeePerGas),
 		priorityFee: decimal(tipRes?.result)
 	};
+	// A block that ANSWERED without `baseFeePerGas` is a real pre-London reading,
+	// not a failed leg; a block that did not answer is.
+	const blockAnswered = typeof blockRes?.result === 'object' && blockRes.result !== null;
+	const complete =
+		signals.ethGasPrice !== null &&
+		BigInt(signals.ethGasPrice) > 0n &&
+		blockAnswered &&
+		(!wantTip || signals.priorityFee !== null);
+	return { signals, complete };
 }
 
 /** One `pimlico_getUserOperationGasPrice` tier, unjudged. Decimal strings. */
 export interface RawBundlerQuote {
 	maxFeePerGas: string;
+	/**
+	 * The tip the relay will actually SIGN this tier with (`fees.md` §2b), and
+	 * the only per-tier number that buys priority — a builder orders by
+	 * `min(maxPriorityFeePerGas, maxFeePerGas − baseFee)`, so the cap above
+	 * leaves it untouched. It was read and dropped here until issue 684, which
+	 * is why no shell could say what a speed actually buys.
+	 *
+	 * `null` when the row omits it — a generic bundler, or a relay older than
+	 * the per-tier tip. Never 0 as a stand-in: "not reported" and "no tip" are
+	 * different facts and only the second is a number worth showing.
+	 */
+	maxPriorityFeePerGas: string | null;
 	/** `null` when a generic bundler omits the Vela extension field. */
 	networkFeePerGas: string | null;
 	relayerFeePerGas: string | null;
@@ -1091,9 +1251,47 @@ export interface RawBundlerQuote {
  *
  * A zero `maxFeePerGas` is NOT filtered out the way `getBundlerGasQuote` filters
  * it: that rejection is `accept_bundler_quote`'s. The `vela.zeroGasQuote` fault
- * seam therefore still reaches the core, which is the point of keeping it.
+ * seam therefore still reaches the core, which is the point of keeping it —
+ * and it is checked AHEAD of the 15 s cache (issue 212), which it neither
+ * reads nor writes, so a cached real quote can never mask the fault and the
+ * forged zero can never outlive it.
  */
 export async function fetchRawBundlerQuote(
+	chainId: number,
+	tier: GasTier
+): Promise<RawBundlerQuote | null> {
+	if (gasQuoteShouldZero(chainId)) return readRawBundlerQuote(chainId, tier);
+	const key = `${chainId}:${tier}`;
+	const cached = _rawBundlerQuoteCache.get(key);
+	if (cached && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) return { ...cached.quote };
+	const pending = _rawBundlerQuoteRequests.get(key);
+	if (pending) return pending.then((quote) => (quote ? { ...quote } : null));
+	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
+	const request = readRawBundlerQuote(chainId, tier)
+		.then((quote) => {
+			// Never a null quote, nor a zero one the core rejects as degenerate
+			// (`accept_bundler_quote`): "the relay did not answer" is not a
+			// measurement, and pinning it would hold the fallback label for 15 s.
+			// The seam is re-checked because it may have been armed while this
+			// was in flight.
+			if (
+				quote &&
+				BigInt(quote.maxFeePerGas) > 0n &&
+				!gasQuoteShouldZero(chainId) &&
+				(_feeSignalsEpoch.get(chainId) ?? 0) === epoch
+			) {
+				_rawBundlerQuoteCache.set(key, { at: Date.now(), quote });
+			}
+			return quote ? { ...quote } : null;
+		})
+		.finally(() => {
+			if (_rawBundlerQuoteRequests.get(key) === request) _rawBundlerQuoteRequests.delete(key);
+		});
+	_rawBundlerQuoteRequests.set(key, request);
+	return request;
+}
+
+async function readRawBundlerQuote(
 	chainId: number,
 	tier: GasTier
 ): Promise<RawBundlerQuote | null> {
@@ -1135,6 +1333,7 @@ export async function fetchRawBundlerQuote(
 		typeof value === 'string' ? parseHexUInt64(value).toString() : null;
 	return {
 		maxFeePerGas: parseHexUInt64(t.maxFeePerGas as string).toString(),
+		maxPriorityFeePerGas: decimal(t.maxPriorityFeePerGas),
 		networkFeePerGas: decimal(t.networkFeePerGas),
 		relayerFeePerGas: decimal(t.relayerFeePerGas)
 	};
@@ -1263,6 +1462,7 @@ async function sendUserOp(
 	// Clear gas price cache to get fresh values — stale prices cause
 	// "gas price too low" rejections on chains with volatile gas (e.g. Gnosis).
 	_gasPriceCache.delete(chainId);
+	invalidateFeeSignals(chainId);
 	const [deployed, nonceResult, gasPrices] = await Promise.all([
 		isDeployed(safeAddress, chainId),
 		getNonce(safeAddress, chainId).catch(() => null),
@@ -1541,6 +1741,7 @@ async function sendUserOpTempo(
 	}
 
 	_gasPriceCache.delete(chainId);
+	invalidateFeeSignals(chainId);
 	const [deployed, nonceResult, gasPrices] = await Promise.all([
 		isDeployed(safeAddress, chainId),
 		getNonce(safeAddress, chainId).catch(() => null),
@@ -1686,7 +1887,7 @@ async function sendUserOpTempo(
 
 	let userOpHash: string;
 	try {
-		userOpHash = await submitUserOp(userOp, chainId, { feeToken });
+		userOpHash = await submitUserOp(userOp, chainId, { feeToken }, quotedFee?.tier);
 	} catch (err) {
 		const errMsg = err instanceof Error ? err.message : String(err);
 		const existingHash = parseExistingUserOpHash(errMsg);
@@ -1795,6 +1996,7 @@ async function sendUserOpInBand(
 	await verifyChainReady(chainId);
 
 	_gasPriceCache.delete(chainId);
+	invalidateFeeSignals(chainId);
 	const [deployed, nonceResult] = await Promise.all([
 		isDeployed(safeAddress, chainId),
 		getNonce(safeAddress, chainId).catch(() => null)
@@ -1959,7 +2161,7 @@ async function sendUserOpInBand(
 
 	let userOpHash: string;
 	try {
-		userOpHash = await submitUserOp(userOp, chainId);
+		userOpHash = await submitUserOp(userOp, chainId, undefined, quotedFee?.tier);
 	} catch (err) {
 		const errMsg = err instanceof Error ? err.message : String(err);
 		const existingHash = parseExistingUserOpHash(errMsg);
@@ -2808,7 +3010,12 @@ async function estimateGas(userOp: UserOperation, chainId: number): Promise<GasE
 async function submitUserOp(
 	userOp: UserOperation,
 	chainId: number,
-	extra?: Record<string, string>
+	extra?: Record<string, string>,
+	/**
+	 * The tier the displayed quote was priced at (spec 068). Present ⇒ it goes
+	 * on the wire as the third `eth_sendUserOperation` parameter.
+	 */
+	tier?: Exclude<GasTier, 'rapid'>
 ): Promise<string> {
 	const dict = userOpToDict(userOp, extra);
 	const initCodePresent = userOp.initCode.length >= 20;
@@ -2852,7 +3059,26 @@ async function submitUserOp(
 	const RETRY_DELAY = 3_000;
 
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-		const response = await rpcCall('eth_sendUserOperation', [dict, ENTRY_POINT], chainId);
+		// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
+		// about speed (`vela-relay-core/src/wire.rs`, `docs/fees.md` §2a). The
+		// tier is a NAME, never a wei figure: the relay resolves it against the
+		// base fee it reads at submit time and clamps the result between its
+		// inclusion floor and what the signed reimbursement funds. An omitted
+		// third element is the pre-068 wire exactly, and an unknown name is
+		// refused with -32602 before any handler runs — which is why the name
+		// only ever comes from a quote the core settled.
+		//
+		// RELEASE ORDER (spec 068, "Sequencing"): a relay that predates the
+		// three-element params parses them as a two-element tuple with
+		// `deny_unknown_fields` in force and answers -32602, so EVERY send from
+		// this build fails against it. This client must not reach production
+		// before the tier-aware `vela-relay` is live on BOTH the docker and the
+		// Cloudflare deployments (`vela-relay-core/src/wire.rs`
+		// `SendUserOperationParams`, `docs/fees.md` §2a). There is deliberately
+		// no capability probe and no silent fallback: guessing which relay is
+		// on the other end is how a screen and a chain start disagreeing.
+		const params = tier === undefined ? [dict, ENTRY_POINT] : [dict, ENTRY_POINT, tier];
+		const response = await rpcCall('eth_sendUserOperation', params, chainId);
 
 		const result = response.result as string | undefined;
 		if (result) return result;

@@ -14,21 +14,45 @@ import type { CreateKeyRow } from './generated/CreateKeyRow';
 import type { CreateView } from './generated/CreateView';
 import type { PromptKind } from './generated/PromptKind';
 
+/**
+ * What the core would report this shape to be — a mirror of
+ * `vela_core::passkey::reported_method`, so a fixture is a row the machine
+ * could really emit rather than a combination it never produces. A fixture that
+ * disagrees with the core is a gallery that lies about the screen (issue 207).
+ */
+function reportedKind(attachment: string, transports: string): CreateKeyRow['kind'] | undefined {
+	const has = (hint: string) => transports.split(',').some((t) => t.trim() === hint);
+	if (has('usb') || has('nfc') || has('ble')) return 'security_key';
+	if (has('hybrid') && (attachment === 'cross-platform' || !has('internal'))) return 'hybrid';
+	if (has('internal') || attachment === 'platform') return 'platform';
+	if (attachment === 'cross-platform') return 'security_key';
+	return undefined;
+}
+
 function key(over: Partial<CreateKeyRow> = {}): CreateKeyRow {
-	return {
+	const row: CreateKeyRow = {
 		name: 'Everyday wallet',
 		authenticator_attachment: 'platform',
 		transports: 'internal,hybrid',
 		confirmed: true,
 		synced: true,
+		synced_known: true,
 		// A real, resolvable AAGUID by default: the gallery should show the
 		// case people actually see (a named vault with its own mark), and the
 		// unknown-provider fallback is one override away.
 		aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
 		provider_name: 'Apple Passwords',
 		method: 'platform',
+		kind: 'platform',
 		...over
 	};
+	// The report decides, unless the fixture pinned a kind itself.
+	return 'kind' in over
+		? row
+		: {
+				...row,
+				kind: reportedKind(row.authenticator_attachment, row.transports) ?? row.method
+			};
 }
 
 function view(over: Partial<CreateView> = {}): CreateView {
@@ -123,7 +147,14 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			name: 'Everyday wallet',
 			keys: [
 				key(),
-				key({ name: 'Key 2', method: 'hybrid', transports: 'hybrid' }),
+				key({
+					name: 'Key 2',
+					method: 'hybrid',
+					authenticator_attachment: 'cross-platform',
+					transports: 'hybrid,internal',
+					aaguid: '',
+					provider_name: ''
+				}),
 				// The degradation path, on purpose: a hardware key is not in the
 				// provider catalog, so this row must fall back to its shape glyph
 				// and the generic line.
@@ -131,6 +162,7 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 					name: 'Key 3',
 					method: 'security_key',
 					synced: false,
+					authenticator_attachment: 'cross-platform',
 					transports: 'usb',
 					aaguid: '',
 					provider_name: ''
@@ -212,8 +244,26 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			name: 'Everyday wallet',
 			keys: [
 				key(),
-				key({ name: 'Key 2', method: 'hybrid' }),
-				key({ name: 'Key 3', method: 'security_key', synced: false })
+				// Shaped as the authenticators really report themselves, so the
+				// three rows differ where the screen differs: a phone reached by
+				// a code, then a hardware key the catalog cannot name.
+				key({
+					name: 'Key 2',
+					method: 'hybrid',
+					authenticator_attachment: 'cross-platform',
+					transports: 'hybrid,internal',
+					aaguid: '',
+					provider_name: ''
+				}),
+				key({
+					name: 'Key 3',
+					method: 'security_key',
+					synced: false,
+					authenticator_attachment: 'cross-platform',
+					transports: 'usb',
+					aaguid: '',
+					provider_name: ''
+				})
 			],
 			address: '0x88cCA0B0F1C0e2F3a4B5C6d7E8f90A1b2C3d6894',
 			can_go_back: false

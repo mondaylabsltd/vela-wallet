@@ -104,7 +104,7 @@
       "credential": "Kimlik bilgisi",
       "transport": "Aktarım",
       "attestation": "Doğrulama beyanı",
-      "userVerified": "Kullanıcı doğrulandı"
+      "userVerified": "Kullanırken doğrulama gerekir"
     }
   }
 }

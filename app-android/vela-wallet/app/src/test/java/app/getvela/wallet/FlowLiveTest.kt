@@ -3,6 +3,7 @@ package app.getvela.wallet
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowLive
@@ -21,6 +22,7 @@ import app.getvela.wallet.feature.wallet.core.FeedItem
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
+import app.getvela.wallet.feature.wallet.core.ReceiveAsset
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -115,6 +117,70 @@ class FlowLiveTest {
         val rejoined = live.account.lines.first + live.account.lines.second
         assertEquals(42, rejoined.length)
         assertFalse("a copy button must not put an ellipsis on the clipboard", rejoined.contains("…"))
+    }
+
+    /**
+     * The mark in the middle of the code is the asset's own logo.
+     *
+     * The screen drew the lettered disc and nothing else, so a BNB code showed
+     * a coloured circle reading "BNB" where web and iOS drew the coin. The
+     * model always had the URLs; this pins that it keeps handing them over, in
+     * order, for both a network code (R2) and a token's (R3).
+     */
+    @Test
+    fun `the centre mark carries the asset's logo candidates`() {
+        Marks.base = "https://data.example/"
+        try {
+            val bnb = FlowLive.receiveQr(
+                qrFixture(), mine, "Me",
+                PaymentRequestView(
+                    asset = ReceiveAsset(chain_id = 56, symbol = "BNB", network_name = "BNB Chain"),
+                ),
+            )
+            assertEquals(
+                listOf("https://data.example/chainlogos/eip155-56.png"),
+                bnb.centre.logoUrls,
+            )
+            // A coin on its own chain wears no chain badge — it would be the
+            // same logo twice.
+            assertTrue(bnb.centre.badgeHidden)
+
+            val usdc = FlowLive.receiveQr(
+                qrFixture(), mine, "Me",
+                PaymentRequestView(
+                    asset = ReceiveAsset(
+                        chain_id = 100,
+                        token_address = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83",
+                        symbol = "USDC",
+                        network_name = "Gnosis",
+                    ),
+                ),
+                strings = strings,
+            )
+            // Checksummed first, lowercase second — the fallback chain the
+            // renderer walks in order.
+            assertEquals(2, usdc.centre.logoUrls.size)
+            assertTrue(usdc.centre.logoUrls[0].startsWith("https://data.example/assets/eip155-100/0x"))
+            assertEquals(
+                "https://data.example/chainlogos/eip155-100.png",
+                usdc.centre.badgeLogoUrl,
+            )
+        } finally {
+            Marks.base = ""
+        }
+    }
+
+    /** No chain-data endpoint: the lettered disc is the whole mark, not a blank circle. */
+    @Test
+    fun `without an endpoint the centre mark falls back to its letters`() {
+        Marks.base = ""
+        val live = FlowLive.receiveQr(
+            qrFixture(), mine, "Me",
+            PaymentRequestView(asset = ReceiveAsset(chain_id = 56, symbol = "BNB")),
+        )
+
+        assertTrue(live.centre.logoUrls.isEmpty())
+        assertEquals("BNB", live.centre.ticker)
     }
 
     // -- the warning gate -----------------------------------------------------

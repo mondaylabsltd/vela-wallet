@@ -36,6 +36,7 @@ import type { NetServiceHealth } from '$lib/core/generated/NetServiceHealth';
 import type { NetView } from '$lib/core/generated/NetView';
 import type { NetWizardView } from '$lib/core/generated/NetWizardView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import {
 	dateFormatOptions,
 	formatDate,
@@ -459,6 +460,56 @@ export function withLiveCurrency(
 		currencySheet: {
 			...model.currencySheet,
 			rows: liveCurrencyRows(model.currencySheet.rows, view, catalog)
+		}
+	};
+}
+
+/**
+ * The default-speed preference, live (spec 068).
+ *
+ * One shape for both layouts: the row shows the tier in force and the picker
+ * marks it. `view.tier` is ALWAYS a real tier — the core answers the factory
+ * `fast` when nothing was stored — so neither surface ever has to draw an
+ * "unknown speed", and neither can disagree with the send screen's folded
+ * control, which reads the same view.
+ */
+export function withLiveFeeSpeed(
+	model: SettingsHomeModel,
+	view: FeeTierPrefView
+): SettingsHomeModel {
+	const label =
+		model.feeSpeedSheet.rows.find((row) => row.id === view.tier)?.label ??
+		model.feeSpeedSheet.rows[0]?.label ??
+		'';
+	return {
+		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) => (row.id === 'fee-speed' ? { ...row, value: label } : row))
+		})),
+		feeSpeedSheet: {
+			...model.feeSpeedSheet,
+			rows: model.feeSpeedSheet.rows.map((row) => ({
+				...row,
+				selected: row.id === view.tier
+			}))
+		}
+	};
+}
+
+/** DST's 交易速度 row, live: the committed tier, and the menu it opens. */
+export function withLiveFeeSpeedDesktop(
+	model: SettingsDesktopModel,
+	view: FeeTierPrefView,
+	sheet: SelectSheetModel
+): SettingsDesktopModel {
+	const rows = sheet.rows.map((row) => ({ ...row, selected: row.id === view.tier }));
+	const label = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
+	return {
+		...model,
+		feeSpeed: {
+			...model.feeSpeed,
+			rows: model.feeSpeed.rows.map((row) => ({ ...row, value: label, options: rows }))
 		}
 	};
 }
@@ -1340,6 +1391,19 @@ export function walletKeysModel(
 	backup: EthereumBackupState | 'checking',
 	m: SettingsMessages
 ): WalletKeysModel {
+	/**
+	 * Where this key lives, when the catalog cannot name its vault.
+	 *
+	 * LOCATION-NEUTRAL on purpose (issue 207). The create flow captions a
+	 * platform key "This device", which is true there — it was minted seconds
+	 * ago on the machine in front of the person. This list is not that: a wallet
+	 * created on another computer and opened here with a synced passkey shows
+	 * ITS keys too, and a row of somebody's desktop labelled "This device"
+	 * would be a plain falsehood. `providerPlatform` is the neutral answer —
+	 * "Built-in passkey", a passkey built into some device — and the two lines
+	 * that ARE true wherever they are read ("Phone or tablet", "Security key")
+	 * are shared with the create flow.
+	 */
 	const fallbackFor = (method: string) =>
 		method === 'security_key'
 			? m.keys.providerSecurityKey
@@ -1363,7 +1427,19 @@ export function walletKeysModel(
 					])
 		],
 		details: keyDetails(key, m),
-		key: { ...key, synced: key.synced ?? true, method: key.method as CreateKeyRow['method'] }
+		// The row as the create flow's components expect it. `method` here is
+		// already the authenticator's REPORT (`wallet_keys::method_of`), so it
+		// is also this row's `kind` — the field the mark is drawn from. And
+		// "nobody answered" stays visible: `synced_known` is false, rather than
+		// `synced ?? true` quietly presenting a fail-open guess as a fact
+		// (issue 207; the pills above have always been honest about it).
+		key: {
+			...key,
+			synced: key.synced ?? true,
+			synced_known: key.synced !== null,
+			method: key.method as CreateKeyRow['method'],
+			kind: key.method as CreateKeyRow['kind']
+		}
 	}));
 	return {
 		title: m.keys.title,

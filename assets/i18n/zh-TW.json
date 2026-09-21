@@ -51,6 +51,10 @@
    "timeTitle": "時間格式",
    "timeSubtitle": "12 小時制或 24 小時制。"
   },
+  "feeSpeed": {
+   "title": "交易速度",
+   "subtitle": "在 Vela 發起的每筆轉帳都從這裡開始。傳送時仍可單獨調整某一筆。"
+  },
   "advanced": {
    "networksTitle": "網路",
    "networksSubtitle": "RPC、區塊鏈瀏覽器與 Bundler 網址",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "新增網路",
    "addNetworkSubtitle": "新增自訂 EVM 網路",
    "endpointsTitle": "服務端點",
-   "endpointsSubtitle": "鏈上資料、身分索引、Bundler"
+   "endpointsSubtitle": "鏈上資料、身分索引、Bundler",
+   "feeSpeedTitle": "交易速度",
+   "feeSpeedSubtitle": "每筆轉帳預設使用的速度"
   },
   "developer": {
    "treasuryTitle": "金庫",
@@ -267,7 +273,7 @@
   "toLabel": "至",
   "estFeeLabel": "預估手續費",
   "estimatingFee": "估算中…",
-  "gasPriceLabel": "Gas 價格",
+  "gasPriceLabel": "Gas 出價",
   "gasPriceUserOpLabel": "Gas 價格（UserOp）",
   "gasLimitLabel": "Gas 上限",
   "walletDeployedLabel": "錢包已部署",
@@ -293,11 +299,20 @@
   "txHeldFees": "網路費用高於你確認的金額。交易正在等待,費用回落後會自動發送。",
   "txRejectedFees": "網路費用長時間高於你確認的金額,本次沒有發送。請按目前費用重新發起。",
   "gasTier": {
-   "slow": "慢速",
+   "slow": "較慢",
    "standard": "標準",
    "rapid": "極速",
-   "fast": "快速"
+   "fast": "超快"
   },
+  "gasTierHintFast": "網路繁忙時也最先確認",
+  "gasTierHintStandard": "日常轉帳的平衡選擇",
+  "gasTierHintSlow": "手續費最低，適合不趕時間時",
+  "feeRefresh": "重新整理費用",
+  "feeStale": "這個數字有點舊了",
+  "feeSpeedLabel": "速度",
+  "feeSpeedOnce": "僅這一筆，下次仍用預設",
+  "feeSpeedFree": "這條網路上選「超快」不額外收費，這筆已改用「超快」。",
+  "feeSpeedSingle": "這條網路只有一種速度。",
   "batchImport": "匯入清單",
   "batchTitle": "匯入收款人",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -720,10 +735,10 @@
    "headerSyncFailed": "跨裝置同步",
    "identiconHint": "由地址產生的身分圖案",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "僅本機",
+   "keyDeviceOnlyBadge": "裝置綁定",
    "keyHardwareBadge": "硬體",
    "keyLimitReached": "已達上限 7 把",
-   "keySyncedBadge": "已同步",
+   "keySyncedBadge": "雲端同步",
    "keyUnreadableBody": "安全金鑰已插入，但這台電腦不允許錢包讀取它。這是權限設定的問題，金鑰本身沒壞——在 Linux 上，請安裝發行版的 FIDO udev 規則（libu2f-udev；systemd 252 以上會自動設定），然後拔出金鑰再插回去。",
    "keyUnreadableTitle": "無法開啟你的安全金鑰",
    "keysHint": "錢包地址由這組密鑰決定，建立後不能再增減。",
@@ -742,7 +757,7 @@
    "methodSecurityKeyTitle": "USB 安全金鑰",
    "nameTitle": "給錢包取個名字",
    "nameTooLong": "名稱太長，無法寫入通行密鑰——請縮短一些。",
-   "needSecondKeyHint": "這把密鑰只存在本機，沒有同步備份。裝置一旦遺失，錢包就打不開了。",
+   "needSecondKeyHint": "這把密鑰沒有任何備份。一旦遺失，錢包就打不開了。再加一把吧。",
    "nextBtn": "繼續",
    "openSettings": "開啟設定",
    "pinAttemptsLeft": "剩餘嘗試次數：{{attempts}}",
@@ -753,8 +768,8 @@
    "progressMeterLabel": "推導地址",
    "progressSubtitle": "用 {{count}} 把密鑰推導地址。合約在第一筆交易時部署，不花 gas。",
    "progressTitle": "正在建立錢包",
-   "providerGeneric": "通行密鑰",
-   "providerPlatform": "平台通行密鑰",
+   "providerGeneric": "手機或平板",
+   "providerPlatform": "內建通行密鑰",
    "providerSecurityKey": "安全金鑰",
    "providerUnknown": "未識別的提供方",
    "removeKeyBtn": "移除",
@@ -1593,13 +1608,13 @@
    "title": "金鑰",
    "subtitle": "其中任何一把通行密鑰都能為這個錢包簽署，所有網路通用。",
    "keyN": "金鑰 {{n}}",
-   "notSynced": "僅限本裝置",
+   "notSynced": "裝置綁定",
    "fromDevice": "暫時連不上註冊表，僅顯示本機記得的內容。",
    "publicKey": "公鑰",
    "credential": "憑證",
    "transport": "傳輸方式",
    "attestation": "認證聲明",
-   "userVerified": "已驗證使用者"
+   "userVerified": "使用時需驗證"
   }
  },
  "contacts": {

@@ -13,8 +13,12 @@ import {
 	liveNetworkDetail,
 	liveNetworkRows,
 	liveRelayer,
-	liveRpcProviders
+	liveRpcProviders,
+	withLiveFeeSpeed,
+	withLiveFeeSpeedDesktop
 } from './live';
+import { buildDesktopState, buildMobileState } from './fixtures';
+import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 
@@ -350,5 +354,54 @@ describe('the relayer bootstrap sheet', () => {
 			expect(panel.address).toBe('0x3e59292e18417f814112f731e7163534c6d2fe3c');
 			expect(panel.primary).toBe(m.relayer.retryBtn);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Spec 068 — the stored default transaction speed
+// ---------------------------------------------------------------------------
+
+describe('the default transaction speed, live (spec 068)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const view = (tier: FeeTierPrefView['tier'], committed: boolean): FeeTierPrefView => ({
+		tier,
+		committed,
+		offered: ['fast', 'standard', 'slow']
+	});
+	const row = (model: ReturnType<typeof buildMobileState>) =>
+		model.sections.flatMap((section) => section.rows).find((r) => r.id === 'fee-speed');
+
+	it('shows the committed tier on the row and ticks it in the sheet', () => {
+		const model = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), view('slow', true));
+		expect(row(model)?.value).toBe(m.feeSpeed.slow);
+		expect(model.feeSpeedSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual(['slow']);
+	});
+
+	// A device that never chose still has to read as something, and the
+	// something is the factory default — what every shell did before 068.
+	it('reads as the factory default when nothing was ever chosen', () => {
+		const model = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), view('fast', false));
+		expect(row(model)?.value).toBe(m.feeSpeed.fast);
+		expect(model.feeSpeedSheet.rows.filter((r) => r.selected).map((r) => r.id)).toEqual(['fast']);
+	});
+
+	it('never offers the dead `rapid` tier', () => {
+		const model = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), view('standard', true));
+		expect(model.feeSpeedSheet.rows.map((r) => r.id)).toEqual(['fast', 'standard', 'slow']);
+	});
+
+	// One list of tiers for both layouts: the desktop dropdown is filled from
+	// the phone sheet's own rows, so the two surfaces cannot drift apart.
+	it('fills the desktop dropdown from the same rows, with the same tick', () => {
+		const phone = withLiveFeeSpeed(buildMobileState('st1', m, IDENTICON), view('standard', true));
+		const desktop = withLiveFeeSpeedDesktop(
+			buildDesktopState('dst1', m, IDENTICON),
+			view('standard', true),
+			phone.feeSpeedSheet
+		);
+		expect(desktop.feeSpeed.rows[0].value).toBe(m.feeSpeed.standard);
+		expect(desktop.feeSpeed.rows[0].options?.filter((r) => r.selected).map((r) => r.id)).toEqual([
+			'standard'
+		]);
 	});
 });

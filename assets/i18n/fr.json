@@ -51,6 +51,10 @@
    "timeTitle": "Format d'heure",
    "timeSubtitle": "Horloge 12 ou 24 heures."
   },
+  "feeSpeed": {
+   "title": "Vitesse des transactions",
+   "subtitle": "Chaque envoi que vous lancez dans Vela démarre ici. Vous pouvez toujours en modifier un seul au moment de l'envoi."
+  },
   "advanced": {
    "networksTitle": "Réseaux",
    "networksSubtitle": "URL RPC, explorateur et Bundler",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Ajouter un réseau",
    "addNetworkSubtitle": "Ajouter un réseau EVM personnalisé",
    "endpointsTitle": "Points d'accès des services",
-   "endpointsSubtitle": "Données de chaîne, index d'identité, Bundler"
+   "endpointsSubtitle": "Données de chaîne, index d'identité, Bundler",
+   "feeSpeedTitle": "Vitesse des transactions",
+   "feeSpeedSubtitle": "Le réglage de départ de chaque envoi"
   },
   "developer": {
    "treasuryTitle": "Trésorerie",
@@ -267,7 +273,7 @@
   "toLabel": "À",
   "estFeeLabel": "Frais estim.",
   "estimatingFee": "Estimation...",
-  "gasPriceLabel": "Prix du gas",
+  "gasPriceLabel": "Offre de gas",
   "gasPriceUserOpLabel": "Prix du gas (UserOp)",
   "gasLimitLabel": "Limite de gas",
   "walletDeployedLabel": "Portefeuille déployé",
@@ -323,6 +329,15 @@
    "rapid": "Très rapide",
    "fast": "Rapide"
   },
+  "gasTierHintFast": "Confirmé en premier, même quand le réseau est saturé",
+  "gasTierHintStandard": "Équilibré pour les transferts du quotidien",
+  "gasTierHintSlow": "Les frais les plus bas, si vous pouvez attendre",
+  "feeRefresh": "Actualiser les frais",
+  "feeStale": "Mesuré il y a un moment",
+  "feeSpeedLabel": "Vitesse",
+  "feeSpeedOnce": "Pour cette transaction uniquement",
+  "feeSpeedFree": "Sur ce réseau, Rapide ne coûte pas plus cher : cet envoi passe donc en Rapide.",
+  "feeSpeedSingle": "Ce réseau n'a qu'une seule vitesse.",
   "batchImport": "Importer une liste",
   "batchTitle": "Importer des destinataires",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -723,10 +738,10 @@
    "headerSyncFailed": "Synchronisation multi-appareils",
    "identiconHint": "Un motif d'identité généré à partir de l'adresse",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Cet appareil uniquement",
+   "keyDeviceOnlyBadge": "Liée à l'appareil",
    "keyHardwareBadge": "Matériel",
    "keyLimitReached": "Limite de 7 atteinte",
-   "keySyncedBadge": "Synchronisée",
+   "keySyncedBadge": "Synchronisée dans le cloud",
    "keyUnreadableBody": "Une clé de sécurité est branchée, mais cet ordinateur n'autorise pas le portefeuille à la lire. C'est un réglage de permissions, pas une panne de la clé — sous Linux, installez les règles udev FIDO de votre distribution (libu2f-udev, ou systemd 252 et plus, qui les met en place lui-même), puis débranchez et rebranchez la clé.",
    "keyUnreadableTitle": "Impossible d'ouvrir votre clé de sécurité",
    "keysHint": "L'adresse du portefeuille découle de cet ensemble de clés — après création, on n'en ajoute ni n'en retire.",
@@ -745,7 +760,7 @@
    "methodSecurityKeyTitle": "Clé de sécurité USB",
    "nameTitle": "Nommez votre portefeuille",
    "nameTooLong": "Ce nom est trop long pour une clé d'accès — veuillez le raccourcir.",
-   "needSecondKeyHint": "Cette clé n'existe que sur cet appareil, sans sauvegarde synchronisée. Appareil perdu, portefeuille inaccessible.",
+   "needSecondKeyHint": "Cette clé n'est sauvegardée nulle part. Si vous la perdez, le portefeuille reste fermé. Ajoutez-en une deuxième.",
    "nextBtn": "Continuer",
    "openSettings": "Ouvrir les Réglages",
    "pinAttemptsLeft": "Tentatives restantes : {{attempts}}",
@@ -756,8 +771,8 @@
    "progressMeterLabel": "Dérivation de l'adresse",
    "progressSubtitle": "Dérivation de l'adresse à partir de {{count}} clés. Le contrat se déploie à votre première transaction — pas de gas maintenant.",
    "progressTitle": "Création de votre portefeuille",
-   "providerGeneric": "Passkey",
-   "providerPlatform": "Passkey de plateforme",
+   "providerGeneric": "Téléphone ou tablette",
+   "providerPlatform": "Passkey intégré",
    "providerSecurityKey": "Clé de sécurité",
    "providerUnknown": "Fournisseur non reconnu",
    "removeKeyBtn": "Retirer",
@@ -1602,7 +1617,7 @@
    "credential": "Identifiant",
    "transport": "Transport",
    "attestation": "Attestation",
-   "userVerified": "Utilisateur vérifié"
+   "userVerified": "Vérification à chaque utilisation"
   }
  },
  "contacts": {

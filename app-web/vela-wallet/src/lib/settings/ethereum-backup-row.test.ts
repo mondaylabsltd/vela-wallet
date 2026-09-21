@@ -83,16 +83,21 @@ describe('walletKeysModel', () => {
 		expect(model.loading).toBe(false);
 		expect(model.note).toBeUndefined();
 		expect(model.rows.map((row) => row.name)).toEqual(['Interleave', 'Key 2', 'Key 3']);
+		// Location-NEUTRAL wording, unlike the create flow's "This device": this
+		// list can hold a key that lives on a computer the person is not sitting
+		// at (issue 207).
 		expect(model.rows.map((row) => row.holderFallback)).toEqual([
-			'Platform passkey',
+			'Built-in passkey',
 			'Security key',
-			'Passkey'
+			'Phone or tablet'
 		]);
 		expect(model.rows[0].fingerprint).toBe('abab…abab');
+		// The badge answers ONE question — cloud-synced or device-bound — in the same words
+		// the create flow uses for the same fact (issue 207).
 		expect(model.rows.map((row) => row.pills.map((pill) => pill.text))).toEqual([
-			['User-verified', 'Synced'],
+			['Verify to use', 'Cloud-synced'],
 			['Device-bound'],
-			['Synced']
+			['Cloud-synced']
 		]);
 		// What a row opens onto: the explorer's facts, the two a person pastes elsewhere copyable.
 		expect(model.rows[0].details.map((d) => [d.label, d.copy])).toEqual([
@@ -103,6 +108,9 @@ describe('walletKeysModel', () => {
 			['Attestation', false]
 		]);
 		expect(model.rows[0].details[0].value).toBe('0x04' + 'ab'.repeat(64));
+		// The mark and the caption read one field, and it is the report.
+		expect(model.rows.map((row) => row.key.kind)).toEqual(['platform', 'security_key', 'hybrid']);
+		expect(model.rows.every((row) => row.key.synced_known)).toBe(true);
 		expect(model.backupExplain).toContain('Private keys never leave');
 	});
 
@@ -120,6 +128,10 @@ describe('walletKeysModel', () => {
 		);
 		expect(model.note).toBe(m.keys.fromDevice);
 		expect(model.rows[0].pills).toEqual([]);
+		// …and the row handed to the shared mark says the same thing, instead of
+		// letting `synced ?? true` present a fail-open guess as a verified fact
+		// (issue 207).
+		expect(model.rows[0].key).toMatchObject({ synced_known: false, kind: 'platform' });
 		// Nothing to open when only the device answered.
 		expect(model.rows[0].details.map((d) => d.label)).toEqual(['Public key', 'Transport']);
 		// A registry that answered with nothing was not unreachable: no such note.

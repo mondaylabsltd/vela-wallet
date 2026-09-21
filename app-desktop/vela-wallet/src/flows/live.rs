@@ -2470,6 +2470,8 @@ mod tests {
             relayer_fee_per_gas: "0".to_owned(),
             bundler_gas_price: "1".to_owned(),
             in_band_gas_basis: "1".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
             total_gas: "1".to_owned(),
             deployed: true,
             tier: FeeTier::Fast,

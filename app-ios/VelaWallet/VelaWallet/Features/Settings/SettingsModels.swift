@@ -451,7 +451,7 @@ struct WalletKeyRowModel: Identifiable {
     let holder: String
     /// `197d…647b` — what tells two unnamed keys apart.
     let fingerprint: String
-    /// "User-verified", "Synced" / "Device-bound" — the registry explorer's pills.
+    /// "Verify to use", "Cloud-synced" / "Device-bound" — the registry explorer's pills.
     let pills: [KeyPillModel]
     /// What the row opens onto: the explorer's facts. Empty = nothing to open.
     let details: [KeyDetailModel]

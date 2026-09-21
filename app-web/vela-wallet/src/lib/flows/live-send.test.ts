@@ -20,6 +20,7 @@ import {
 	liveSendReceipt,
 	sendTokenClass,
 	sendTokenId,
+	speedSetVerdict,
 	visibleSendTokens,
 	type SendLiveInputs
 } from './live-send';
@@ -128,6 +129,8 @@ const QUOTE = {
 	relayer_fee_per_gas: '0',
 	bundler_gas_price: '1',
 	in_band_gas_basis: '1',
+	effective_gas_price: null,
+	max_gas_price: null,
 	total_gas: '1',
 	deployed: true,
 	tier: 'fast' as const,
@@ -253,7 +256,8 @@ describe('the form', () => {
 		const waiting = liveSendForm(formModel(), inputs({ fee_busy: true, selected_token: ETH }));
 		expect(waiting.fee.value).toBe('…');
 		const quoted = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
-		expect(quoted.fee.value).toBe('0.0021 ETH · ≈$6.30');
+		expect(quoted.fee.value).toBe('0.0021 ETH');
+		expect(quoted.fee.valueFiat).toBe('≈ $6.30');
 		const idle = liveSendForm(formModel(), inputs({ selected_token: ETH }));
 		expect(idle.fee.value).toBe('—');
 	});
@@ -377,6 +381,52 @@ describe('the form', () => {
 				inputs({ amount: '1500', amount_fiat_code: 'USD', token_amount: '' })
 			);
 			expect(model.amount?.fiat).toBe('');
+		});
+	});
+
+	/**
+	 * Issue 231: the hero read "4.00" with no unit. The unit was known all
+	 * along — it reached the screen reader and nothing else.
+	 */
+	describe('the unit on the figure', () => {
+		const typedIn = (code: string | null, currency = USD) =>
+			liveSendForm(formModel(), {
+				...inputs({ selected_token: ETH, amount: '4.00', amount_fiat_code: code }),
+				currency
+			}).amount;
+
+		it('leads a fiat figure with the symbol the line beneath would use', () => {
+			expect(typedIn('USD')?.adornment).toEqual({ prefix: '$' });
+			expect(typedIn('EUR')?.adornment).toEqual({ prefix: '€' });
+		});
+
+		it('follows the figure with the code when the catalog has no symbol for it', () => {
+			// Never a borrowed "$": an unknown currency is named, not guessed.
+			expect(typedIn('PLN')?.adornment).toEqual({ suffix: 'PLN' });
+		});
+
+		it('follows a token figure with the token', () => {
+			expect(typedIn(null)?.adornment).toEqual({ suffix: 'ETH' });
+		});
+
+		it("is the FIGURE's currency, not the display currency that moved under it", () => {
+			// Typed in yuan; the display currency has since become euros. "€"
+			// over these digits would be a relabel — the same number, a new unit.
+			const figure = typedIn('CNY', { code: 'EUR', rate: 0.9, committed: true });
+			expect(figure?.adornment).toEqual({ prefix: '¥' });
+			expect(figure?.denomLabel).toBe('CNY');
+		});
+
+		it('claims no unit at all when there is none to name', () => {
+			const model = liveSendForm(formModel(), inputs({ selected_token: null }));
+			expect(model.amount?.adornment).toEqual({});
+		});
+
+		it('leaves the empty field empty, with a placeholder to show for it', () => {
+			// It used to hand the input a real "0", so typing 4 made "04".
+			const model = liveSendForm(formModel(), inputs({ selected_token: ETH, amount: '' }));
+			expect(model.amount?.value).toBe('');
+			expect(model.amount?.placeholder).toBe('0');
 		});
 	});
 
@@ -883,13 +933,15 @@ describe('the fee row names the coin that is paying', () => {
 				}
 			)
 		);
-		expect(model.fee.value).toBe('0.944 USDT · ≈$0.94');
+		expect(model.fee.value).toBe('0.944 USDT');
+		expect(model.fee.valueFiat).toBe('≈ $0.94');
 		expect(model.fee.mark.ticker).toBe('USDT');
 	});
 
 	it('a native fee still reads in the native coin', () => {
 		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
-		expect(model.fee.value).toBe('0.0021 ETH · ≈$6.30');
+		expect(model.fee.value).toBe('0.0021 ETH');
+		expect(model.fee.valueFiat).toBe('≈ $6.30');
 	});
 });
 
@@ -925,7 +977,8 @@ describe('the fee row says what the fee costs', () => {
 				}
 			)
 		);
-		expect(model.fee.value).toBe('0.000091 BNB · ≈$0.05');
+		expect(model.fee.value).toBe('0.000091 BNB');
+		expect(model.fee.valueFiat).toBe('≈ $0.05');
 	});
 
 	it('falls back to the balances feed when the relay published no price', () => {
@@ -933,7 +986,8 @@ describe('the fee row says what the fee costs', () => {
 			formModel(),
 			inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote })
 		);
-		expect(model.fee.value).toBe('0.000091 BNB · ≈$0.05');
+		expect(model.fee.value).toBe('0.000091 BNB');
+		expect(model.fee.valueFiat).toBe('≈ $0.05');
 	});
 
 	it('shows the coin alone when nothing can price it', () => {
@@ -943,6 +997,7 @@ describe('the fee row says what the fee costs', () => {
 			inputs({ tokens: [unpriced], selected_token: unpriced, fee: bnbQuote })
 		);
 		expect(model.fee.value).toBe('0.000091 BNB');
+		expect(model.fee.valueFiat).toBeUndefined();
 	});
 
 	// Half a cent is where the fiat half stops helping: "$0.00" beside a real
@@ -954,6 +1009,7 @@ describe('the fee row says what the fee costs', () => {
 			inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: dust })
 		);
 		expect(model.fee.value).toBe('0.000001 BNB');
+		expect(model.fee.valueFiat).toBeUndefined();
 	});
 
 	it('converts into the display currency, at the committed rate only', () => {
@@ -961,12 +1017,14 @@ describe('the fee row says what the fee costs', () => {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
 			currency: { code: 'EUR', rate: 2, committed: true }
 		});
-		expect(model.fee.value).toBe('0.000091 BNB · ≈€0.11');
+		expect(model.fee.value).toBe('0.000091 BNB');
+		expect(model.fee.valueFiat).toBe('≈ €0.11');
 		const unpriced = liveSendForm(formModel(), {
 			...inputs({ tokens: [cheapChain], selected_token: cheapChain, fee: bnbQuote }),
 			currency: { code: 'EUR', rate: null, committed: false }
 		});
-		expect(unpriced.fee.value).toBe('0.000091 BNB · ≈$0.05');
+		expect(unpriced.fee.value).toBe('0.000091 BNB');
+		expect(unpriced.fee.valueFiat).toBe('≈ $0.05');
 	});
 });
 
@@ -1040,6 +1098,37 @@ describe('the fee-coin sheet', () => {
 			m['send.warnInsufficientGas'].replace('{{sym}}', 'USDC')
 		);
 	});
+
+	// Issue 682. The cheaper floor on a coin the relay cannot price is
+	// 83,333,333,333,334 wei — 0.000083 OKB, ≈$0.01 at ~$120/coin. This sheet's
+	// four-decimal trim truncated that to a bare "0", so the row one tap above
+	// read "0.000083 OKB · ≈ $0.01" and the sheet said the fee was "~0 OKB".
+	// A fee that reads as free is the worst answer a fee surface can give.
+	it('never prints a real fee as "0", however small the coin figure is', () => {
+		const model = liveFeeTokenPick(
+			feeSheetModel(),
+			inputs(
+				{ selected_token: ETH },
+				{
+					options: [
+						{
+							symbol: 'OKB',
+							contract: null,
+							decimals: 18,
+							balance: '1000000000000000000',
+							recipient: '0x1',
+							usd_balance: '120',
+							usd_price: null,
+							amount: '83333333333334',
+							insufficient: false,
+							selected: true
+						}
+					]
+				}
+			)
+		);
+		expect(model.rows[0].fee).toBe('~0.000083 OKB');
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -1105,5 +1194,644 @@ describe('the picker narrows to the sidebar chain and the class chips', () => {
 		);
 		expect(model.fee.value).not.toBe('…');
 		expect(model.fee.value).toMatch(/ETH/);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Spec 068 — the fee you can refresh, at a speed you can choose
+// ---------------------------------------------------------------------------
+
+describe('the fee row’s refresh and its stale line (spec 068)', () => {
+	it('always offers the refresh, named from the corpus', () => {
+		const model = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
+		expect(model.fee.refreshLabel).toBe(m['send.feeRefresh']);
+		expect(model.fee.refreshLabel).not.toBe('send.feeRefresh');
+	});
+
+	// `FeeView.stale` had NO consumer in this shell before 068: the quote's 30s
+	// TTL elapsed and the screen said nothing at all.
+	it('says an old quote is old — and says it calmly, in the corpus’s words', () => {
+		const fresh = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
+		expect(fresh.fee.staleNote).toBeUndefined();
+
+		const old = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, fee: QUOTE }, { stale: true })
+		);
+		expect(old.fee.staleNote).toBe(m['send.feeStale']);
+		// The figure is still there. "Old" is not "gone", and blanking it would
+		// be a worse answer than the number the person is looking at.
+		expect(old.fee.value).toBe('0.0021 ETH');
+	});
+
+	it('stops saying it the moment a fresh measurement is out', () => {
+		const measuring = liveSendForm(
+			formModel(),
+			inputs({ selected_token: ETH, fee: QUOTE }, { stale: true, busy: true })
+		);
+		expect(measuring.fee.staleNote).toBeUndefined();
+		expect(measuring.fee.refreshing).toBe(true);
+	});
+
+	it('is not spinning when nothing is in flight', () => {
+		const settled = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE }));
+		expect(settled.fee.refreshing).toBe(false);
+	});
+});
+
+describe('the folded speed control (spec 068)', () => {
+	const quoteAt = (tier: 'fast' | 'standard' | 'slow', totalWei: string) => ({
+		...IDLE_FEE,
+		fee: { ...QUOTE, tier, total_wei: totalWei }
+	});
+	const speedInputs = (
+		open: boolean,
+		tier: 'fast' | 'standard' | 'slow',
+		rows: { tier: 'fast' | 'standard' | 'slow'; view: FeeView; busy?: boolean }[]
+	): SendLiveInputs => ({
+		...inputs({ selected_token: ETH, fee: QUOTE }),
+		speed: { open, tier, rows }
+	});
+
+	const THREE = [
+		{ tier: 'fast' as const, view: quoteAt('fast', '2100000000000000') },
+		{ tier: 'standard' as const, view: quoteAt('standard', '1300000000000000') },
+		{ tier: 'slow' as const, view: quoteAt('slow', '1000000000000000') }
+	];
+
+	it('is not drawn at all where no session can honour it', () => {
+		expect(liveSendForm(formModel(), inputs({ selected_token: ETH })).speed).toBeUndefined();
+	});
+
+	// The trap this whole control exists to avoid: a folded line that shows a
+	// hardcoded tier would disagree with Settings the moment somebody changed
+	// their default.
+	it('shows the tier in force folded, whichever one that is', () => {
+		for (const tier of ['fast', 'standard', 'slow'] as const) {
+			const model = liveSendForm(formModel(), speedInputs(false, tier, THREE));
+			expect(model.speed?.open).toBe(false);
+			expect(model.speed?.value).toBe(m[`send.gasTier.${tier}` as 'send.gasTier.fast']);
+			expect(model.speed?.options.filter((o) => o.selected).map((o) => o.id)).toEqual([tier]);
+		}
+	});
+
+	// Named by SPEED, all three of them: the control's own label is "Speed", so
+	// a name that answered "cheap" instead would be answering another question.
+	it('names the three tiers from the corpus and never offers the dead fourth', () => {
+		const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
+		expect(model.speed?.options.map((o) => o.id)).toEqual(['fast', 'standard', 'slow']);
+		expect(model.speed?.options.map((o) => o.label)).toEqual(['Fast', 'Standard', 'Slow']);
+		expect(model.speed?.options.some((o) => o.id === 'rapid')).toBe(false);
+	});
+
+	// …and the advantage the name no longer carries, one line per option. This
+	// is what makes the slow tier a choice rather than a defect, so a row that
+	// lost it would quietly undo the rename above.
+	it('gives every option the line that says what that speed buys', () => {
+		const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
+		expect(model.speed?.options.map((o) => o.detail)).toEqual([
+			m['send.gasTierHintFast'],
+			m['send.gasTierHintStandard'],
+			m['send.gasTierHintSlow']
+		]);
+		expect(model.speed?.options.map((o) => o.detail)).toEqual([
+			'First to confirm, even when the network is busy',
+			'Balanced for everyday transfers',
+			'Lowest fee, if you can wait'
+		]);
+	});
+
+	// Each option's figure is its OWN quote's — never one number scaled into
+	// three. The reported tier price and the relay's submit cap are different
+	// quantities (spec 068), so arithmetic here would be wrong as well as a
+	// second writer of a number the core owns.
+	it('gives every option its own fee, from its own quote', () => {
+		const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
+		expect(model.speed?.options.map((o) => o.value)).toEqual([
+			'0.0021 ETH',
+			'0.0013 ETH',
+			'0.001 ETH'
+		]);
+		expect(model.speed?.options.map((o) => o.valueFiat)).toEqual(['≈ $6.30', '≈ $3.90', '≈ $3.00']);
+	});
+
+	it('waits for a tier’s own measurement rather than borrowing another tier’s', () => {
+		const model = liveSendForm(
+			formModel(),
+			speedInputs(true, 'fast', [
+				THREE[0],
+				{ tier: 'standard', view: IDLE_FEE, busy: true },
+				{ tier: 'slow', view: { ...IDLE_FEE, busy: true } }
+			])
+		);
+		expect(model.speed?.options.map((o) => o.value)).toEqual(['0.0021 ETH', '…', '…']);
+		expect(model.speed?.options.map((o) => o.valueFiat)).toEqual(['≈ $6.30', undefined, undefined]);
+	});
+
+	it('says a dash, not a borrowed figure, when a tier settles with nothing', () => {
+		const model = liveSendForm(
+			formModel(),
+			speedInputs(true, 'fast', [THREE[0], THREE[1], { tier: 'slow', view: IDLE_FEE }])
+		);
+		expect(model.speed?.options[2].value).toBe('—');
+	});
+
+	/**
+	 * Issue 684 — what each speed actually BUYS.
+	 *
+	 * The owner surveyed the picker across every network and found three
+	 * identical fees on seven of them. Measured, the cause is the $0.01 dust
+	 * floor: `fee_policy` clamps every tier to it on any chain whose real cost
+	 * is under a cent, so three genuinely different tiers round to one figure.
+	 * The tiers still buy different inclusion — each signs a different tip —
+	 * and this is the only thing on the row that shows it.
+	 */
+	describe('the gas price beside each speed (issue 684)', () => {
+		const priced = (
+			tier: 'fast' | 'standard' | 'slow',
+			totalWei: string,
+			effective: string | null
+		) => ({
+			tier,
+			view: {
+				...IDLE_FEE,
+				fee: { ...QUOTE, tier, total_wei: totalWei, effective_gas_price: effective }
+			}
+		});
+
+		it('states the effective gas price the core settled on, per tier', () => {
+			// The three mined Polygon receipts, to the wei.
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					priced('fast', '2100000000000000', '299589817385'),
+					priced('standard', '1300000000000000', '282464783233'),
+					priced('slow', '1000000000000000', '270164477149')
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'300 gwei',
+				'282 gwei',
+				'270 gwei'
+			]);
+		});
+
+		/**
+		 * The case the whole figure exists for: every tier clamped to the same
+		 * $0.01 fee, so the fees say nothing and the gas prices say everything.
+		 * Optimism's real underlying tiers, which are all under a cent.
+		 */
+		it('is what tells three floor-clamped tiers apart', () => {
+			const cent = (tier: 'fast' | 'standard' | 'slow', effective: string) => ({
+				tier,
+				view: {
+					...IDLE_FEE,
+					fee: {
+						...QUOTE,
+						tier,
+						total_wei: '0',
+						effective_gas_price: effective,
+						fee_asset: {
+							type: 'erc20' as const,
+							token: '0xdead',
+							decimals: 6,
+							amount: '10000',
+							symbol: 'USDC'
+						}
+					}
+				}
+			});
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					cent('fast', '3244'),
+					cent('standard', '2377'),
+					cent('slow', '1937')
+				])
+			);
+			// Three rows, still. Nothing collapses and nothing is hidden.
+			expect(model.speed?.options).toHaveLength(3);
+			expect(model.speed?.options.map((o) => o.value)).toEqual([
+				'0.01 USDC',
+				'0.01 USDC',
+				'0.01 USDC'
+			]);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'3,244 wei',
+				'2,377 wei',
+				'1,937 wei'
+			]);
+		});
+
+		it('says nothing at all where there is no honest number', () => {
+			// A chain with no priority fee (Tempo): every tier settled, none
+			// with a figure. Nothing is drawn, and no empty line is kept for it.
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					priced('fast', '2100000000000000', null),
+					priced('standard', '1300000000000000', null),
+					priced('slow', '1000000000000000', null)
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				undefined,
+				undefined,
+				undefined
+			]);
+			expect(model.speed?.gasPriceLine).toBe(false);
+		});
+
+		/**
+		 * The set is formatted together, so it is drawn together. Each tier is
+		 * its own quote session and they land one at a time; drawn as they came,
+		 * a row's "270 gwei" became "270.2 gwei" — or changed unit — when a
+		 * neighbour arrived. Held back until every row has answered, and the
+		 * line held open meanwhile so the option does not change height.
+		 */
+		it('draws the gas prices once the whole set has answered, not row by row', () => {
+			const partial = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					priced('fast', '2100000000000000', '299589817385'),
+					priced('standard', '1300000000000000', '270400000000'),
+					{ tier: 'slow' as const, view: IDLE_FEE, busy: true }
+				])
+			);
+			expect(partial.speed?.options.map((o) => o.gasPrice)).toEqual([
+				undefined,
+				undefined,
+				undefined
+			]);
+			expect(partial.speed?.gasPriceLine).toBe(true);
+			const complete = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					priced('fast', '2100000000000000', '299589817385'),
+					priced('standard', '1300000000000000', '270400000000'),
+					priced('slow', '1000000000000000', '270164477149')
+				])
+			);
+			expect(complete.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'299.6 gwei',
+				'270.4 gwei',
+				'270.2 gwei'
+			]);
+			expect(complete.speed?.gasPriceLine).toBe(true);
+		});
+
+		// A refresh is not a wait: the row keeps its settled figure while it
+		// re-measures, as the fee beside it does, so the gas prices hold too.
+		it('keeps the gas prices through a refresh, as the fees are kept', () => {
+			const refreshing = (row: ReturnType<typeof priced>) => ({
+				...row,
+				view: { ...row.view, busy: true }
+			});
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					refreshing(priced('fast', '2100000000000000', '299589817385')),
+					priced('standard', '1300000000000000', '282464783233'),
+					refreshing(priced('slow', '1000000000000000', '270164477149'))
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'300 gwei',
+				'282 gwei',
+				'270 gwei'
+			]);
+		});
+
+		it('never draws another tier’s gas price under this tier’s name', () => {
+			// The row in force renders the MAIN session's view, which still holds
+			// the previous speed's quote for a frame after a tap (issue 681).
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'slow', [
+					priced('fast', '2100000000000000', '299589817385'),
+					priced('standard', '1300000000000000', '282464783233'),
+					{ tier: 'slow' as const, view: priced('fast', '2100000000000000', '299589817385').view }
+				])
+			);
+			expect(model.speed?.options[2].gasPrice).toBeUndefined();
+		});
+
+		it('names the figure for a screen reader, from the corpus', () => {
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', THREE));
+			expect(model.speed?.gasPriceLabel).toBe(m['send.gasPriceLabel']);
+			expect(model.speed?.gasPriceLabel).not.toBe('send.gasPriceLabel');
+		});
+	});
+
+	/**
+	 * Issue 685 — the gas price as a RANGE: what a speed bids now ~ its cap.
+	 *
+	 * The owner, on an ETH L2: 0.00006 / 0.00004 / 0.000033 ETH over 0.02021 /
+	 * 0.02013 / 0.02011 gwei. The fees differ 1.8×, the bids 0.5%, and a person
+	 * paying 80% more for a figure 0.5% higher concludes they are being cheated.
+	 * Most of what the dearer tier buys is its cap, so the cap is drawn too.
+	 */
+	describe('the gas price as a range (issue 685)', () => {
+		const ranged = (
+			tier: 'fast' | 'standard' | 'slow',
+			totalWei: string,
+			effective: string | null,
+			max: string | null
+		) => ({
+			tier,
+			view: {
+				...IDLE_FEE,
+				fee: {
+					...QUOTE,
+					tier,
+					total_wei: totalWei,
+					effective_gas_price: effective,
+					max_gas_price: max
+				}
+			}
+		});
+
+		it('draws each tier as its bid ~ its cap, from the core’s own numbers', () => {
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					ranged('fast', '60000000000000', '20210000', '60410000'),
+					ranged('standard', '40000000000000', '20130000', '40230000'),
+					ranged('slow', '33000000000000', '20110000', '30160000')
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'0.02021 ~ 0.06041 gwei',
+				'0.02013 ~ 0.04023 gwei',
+				'0.02011 ~ 0.03016 gwei'
+			]);
+		});
+
+		it('draws the single figure where the two ends are one number', () => {
+			// BSC: no base fee, so every cap is its own tip.
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					ranged('fast', '2100000000000000', '100000000', '100000000'),
+					ranged('standard', '1300000000000000', '62500000', '62500000'),
+					ranged('slow', '1000000000000000', '50000000', '50000000')
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				'0.1 gwei',
+				'0.0625 gwei',
+				'0.05 gwei'
+			]);
+		});
+
+		it('never draws a cap without the bid it caps', () => {
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					ranged('fast', '2100000000000000', null, '805065222658'),
+					ranged('standard', '1300000000000000', null, '527288291674'),
+					ranged('slow', '1000000000000000', null, '390302745042')
+				])
+			);
+			expect(model.speed?.options.map((o) => o.gasPrice)).toEqual([
+				undefined,
+				undefined,
+				undefined
+			]);
+			expect(model.speed?.gasPriceLine).toBe(false);
+		});
+
+		it('holds all three ranges back until every tier has answered', () => {
+			const partial = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					ranged('fast', '2100000000000000', '299589817385', '805065222658'),
+					ranged('standard', '1300000000000000', '282464783233', '527288291674'),
+					{ tier: 'slow' as const, view: IDLE_FEE, busy: true }
+				])
+			);
+			expect(partial.speed?.options.map((o) => o.gasPrice)).toEqual([
+				undefined,
+				undefined,
+				undefined
+			]);
+			expect(partial.speed?.gasPriceLine).toBe(true);
+		});
+	});
+
+	/**
+	 * Issue 681 — the fee row after a pick that had to re-measure.
+	 *
+	 * Promotion covers the normal tap: the row the person touched was already a
+	 * settled quote, so it simply becomes the fee in force. The exception is a
+	 * tap on a row that had not landed yet (the picker was re-opened a moment
+	 * ago, say), where a real measurement is the only honest answer. What the
+	 * row must NOT do while that measurement is out is keep drawing the money of
+	 * the speed that was just left — `send.fee` survives a tier change, so it
+	 * would, and the person would read 超快's figure under 较慢's name. That is
+	 * the reported defect, one size smaller.
+	 */
+	it('never shows the previous tier’s money under the new tier’s name', () => {
+		const measuring = liveSendForm(
+			formModel(),
+			// The person has just chosen Slow; everything in hand was priced Fast.
+			speedInputs(false, 'slow', [THREE[0], THREE[1], { tier: 'slow', view: IDLE_FEE, busy: true }])
+		);
+		expect(measuring.fee.value).toBe('…');
+		expect(measuring.fee.valueFiat).toBeUndefined();
+		// The option in force says the same thing, rather than borrowing the
+		// figure the row above just stopped showing.
+		expect(measuring.speed?.options.find((o) => o.id === 'slow')?.value).toBe('…');
+		// And "this figure is from a while ago" is a fact about a figure.
+		const old = liveSendForm(formModel(), {
+			...speedInputs(false, 'slow', THREE),
+			fee: { ...IDLE_FEE, stale: true }
+		});
+		expect(old.fee.value).toBe('…');
+		expect(old.fee.staleNote).toBeUndefined();
+		// Once this tier's own quote lands, the row is a figure again.
+		const landed = liveSendForm(formModel(), {
+			...speedInputs(false, 'slow', THREE),
+			send: { ...EMPTY_SEND, selected_token: ETH, fee: { ...QUOTE, tier: 'slow' } }
+		});
+		expect(landed.fee.value).toBe('0.0021 ETH');
+	});
+
+	// The promise the picker makes, in words, before the tap that would
+	// otherwise look like it rewrote a setting.
+	it('says out loud that a pick here is one-shot', () => {
+		const model = liveSendForm(formModel(), speedInputs(true, 'slow', THREE));
+		expect(model.speed?.onceNote).toBe(m['send.feeSpeedOnce']);
+		expect(model.speed?.label).toBe(m['send.feeSpeedLabel']);
+	});
+
+	// The confirm is the last screen before a signature. A speed that was
+	// CHOSEN belongs on it — that is where a mis-tap is still cheap to undo —
+	// while a send at the stored default adds no row, because most sends need
+	// no decision about speed and a permanent line would ask for one.
+	it('restates a chosen speed on the confirm, and only a chosen one', () => {
+		const chosen = liveSendConfirm(confirmModel(), {
+			...speedInputs(false, 'slow', THREE),
+			speed: { open: false, tier: 'slow', picked: true, rows: THREE }
+		});
+		expect(new Map(chosen.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
+			m['send.gasTier.slow']
+		);
+
+		const untouched = liveSendConfirm(confirmModel(), speedInputs(false, 'fast', THREE));
+		expect(untouched.facts.some((f) => f.label === m['send.feeSpeedLabel'])).toBe(false);
+	});
+
+	/**
+	 * Issue 686 — what picking a speed buys on THIS network.
+	 *
+	 * A: the fastest speed taken because it costs no more than a slower
+	 * default — said on the control, restated on the confirm.
+	 * B: a network whose speeds nothing tells apart (Tempo) — one statement
+	 * where three options offered a choice that does nothing.
+	 */
+	describe('when the choice buys nothing extra (issue 686)', () => {
+		const at = (
+			tier: 'fast' | 'standard' | 'slow',
+			totalWei: string,
+			range: [string, string] | null
+		) => ({
+			tier,
+			view: {
+				...IDLE_FEE,
+				fee: {
+					...QUOTE,
+					tier,
+					total_wei: totalWei,
+					effective_gas_price: range?.[0] ?? null,
+					max_gas_price: range?.[1] ?? null
+				}
+			}
+		});
+		const TEMPO = [
+			at('fast', '10000000000000', null),
+			at('standard', '10000000000000', null),
+			at('slow', '10000000000000', null)
+		];
+		const FLOOR_CLAMPED = [
+			at('fast', '10000000000000', ['3244', '9000']),
+			at('standard', '10000000000000', ['2377', '6000']),
+			at('slow', '10000000000000', ['1937', '4500'])
+		];
+
+		it('says a Tempo-shaped network has one speed, instead of three options', () => {
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', TEMPO));
+			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
+			expect(model.speed?.singleNote).not.toBe('send.feeSpeedSingle');
+		});
+
+		it('keeps all three options where only the fees are equal', () => {
+			// The owner's ruling: on a floor-clamped chain the range is the choice.
+			const model = liveSendForm(formModel(), speedInputs(true, 'fast', FLOOR_CLAMPED));
+			expect(model.speed?.singleNote).toBeUndefined();
+			expect(model.speed?.options).toHaveLength(3);
+		});
+
+		it('keeps the options, not a premature statement, while a speed is measuring', () => {
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					TEMPO[0],
+					TEMPO[1],
+					{ tier: 'slow' as const, view: IDLE_FEE, busy: true }
+				])
+			);
+			expect(model.speed?.singleNote).toBeUndefined();
+		});
+
+		it('keeps the statement through a refresh rather than blinking back to three rows', () => {
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', [
+					{ ...TEMPO[0], view: { ...TEMPO[0].view, busy: true }, busy: true },
+					TEMPO[1],
+					TEMPO[2]
+				])
+			);
+			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
+		});
+
+		it('says why a slower default is running at the fastest speed', () => {
+			const model = liveSendForm(formModel(), {
+				...speedInputs(false, 'fast', FLOOR_CLAMPED),
+				speed: { open: false, tier: 'fast', free: true, rows: FLOOR_CLAMPED }
+			});
+			// The summary names the tier actually in force…
+			expect(model.speed?.value).toBe(m['send.gasTier.fast']);
+			// …and says why, in the corpus's words.
+			expect(model.speed?.freeNote).toBe(m['send.feeSpeedFree']);
+			expect(model.speed?.freeNote).not.toBe('send.feeSpeedFree');
+
+			const notFree = liveSendForm(formModel(), speedInputs(false, 'fast', FLOOR_CLAMPED));
+			expect(notFree.speed?.freeNote).toBeUndefined();
+		});
+
+		it('never calls a speed free over a network with one speed (B before A)', () => {
+			const model = liveSendForm(formModel(), {
+				...speedInputs(true, 'fast', TEMPO),
+				speed: { open: true, tier: 'fast', free: true, rows: TEMPO }
+			});
+			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
+			expect(model.speed?.freeNote).toBeUndefined();
+		});
+
+		it('restates a free upgrade on the confirm, as it restates a pick', () => {
+			const model = liveSendConfirm(confirmModel(), {
+				...speedInputs(false, 'fast', FLOOR_CLAMPED),
+				speed: { open: false, tier: 'fast', free: true, rows: FLOOR_CLAMPED }
+			});
+			expect(new Map(model.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
+				m['send.gasTier.fast']
+			);
+			// …with its reason, so Settings saying Slow is not left unexplained on
+			// the last screen before the signature either.
+			const fact = model.facts.find((f) => f.label === m['send.feeSpeedLabel']);
+			expect(fact?.note).toBe(m['send.feeSpeedFree']);
+
+			// A pick carries no reason: the person made it.
+			const picked = liveSendConfirm(confirmModel(), speedInputs(true, 'slow', FLOOR_CLAMPED));
+			expect(picked.facts.find((f) => f.label === m['send.feeSpeedLabel'])?.note).toBeUndefined();
+		});
+
+		const measuring = [
+			TEMPO[0],
+			{ tier: 'standard' as const, view: IDLE_FEE, busy: true },
+			{ tier: 'slow' as const, view: IDLE_FEE, busy: true }
+		];
+
+		it('says a network it already knows has one speed at once, while the rest re-measure', () => {
+			const model = liveSendForm(formModel(), {
+				...speedInputs(true, 'fast', measuring),
+				speed: { open: true, tier: 'fast', oneSpeedKnown: true, rows: measuring }
+			});
+			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
+			// Unknown, the same frame is three rows still measuring — never a guess.
+			const unknown = liveSendForm(formModel(), speedInputs(true, 'fast', measuring));
+			expect(unknown.speed?.singleNote).toBeUndefined();
+		});
+
+		it('lets settled numbers overrule what it remembered', () => {
+			const model = liveSendForm(formModel(), {
+				...speedInputs(true, 'fast', FLOOR_CLAMPED),
+				speed: { open: true, tier: 'fast', oneSpeedKnown: true, rows: FLOOR_CLAMPED }
+			});
+			expect(model.speed?.singleNote).toBeUndefined();
+			expect(model.speed?.options).toHaveLength(3);
+		});
+
+		it('gives a verdict only on a set where every speed has settled', () => {
+			expect(speedSetVerdict(TEMPO)).toBe('one');
+			expect(speedSetVerdict(FLOOR_CLAMPED)).toBe('several');
+			expect(speedSetVerdict(measuring)).toBeNull();
+			// A failed row is no evidence either: it neither teaches nor unlearns.
+			expect(
+				speedSetVerdict([TEMPO[0], TEMPO[1], { tier: 'slow' as const, view: IDLE_FEE }])
+			).toBeNull();
+		});
 	});
 });

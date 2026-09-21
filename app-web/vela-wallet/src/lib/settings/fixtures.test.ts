@@ -225,6 +225,9 @@ describe('desktop canon', () => {
 			'networks',
 			'rpc-providers',
 			'endpoints',
+			// Spec 068 — the stored default transaction speed, in the position
+			// the phone's 高级 section gives it (after 服务端点, before 存储).
+			'fee-speed',
 			'storage',
 			'about'
 		]);

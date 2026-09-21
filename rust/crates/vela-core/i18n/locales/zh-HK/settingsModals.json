@@ -98,13 +98,13 @@
       "title": "鎖匙",
       "subtitle": "當中任何一條通行密鑰都可以幫呢個錢包簽署，所有網絡通用。",
       "keyN": "鎖匙 {{n}}",
-      "notSynced": "只限呢部機",
+      "notSynced": "裝置綁定",
       "fromDevice": "暫時連唔到註冊表，只顯示呢部機記得嘅內容。",
       "publicKey": "公鑰",
       "credential": "憑證",
       "transport": "傳輸方式",
       "attestation": "認證聲明",
-      "userVerified": "已驗證用戶"
+      "userVerified": "使用時需驗證"
     }
   }
 }

@@ -104,7 +104,7 @@
       "credential": "Thông tin xác thực",
       "transport": "Phương thức truyền",
       "attestation": "Chứng thực",
-      "userVerified": "Đã xác minh người dùng"
+      "userVerified": "Cần xác minh khi dùng"
     }
   }
 }

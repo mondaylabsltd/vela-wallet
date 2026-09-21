@@ -380,6 +380,11 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
         symbol: symbol.to_owned(),
         usd_balance,
         usd_price,
+        // Issue 682's floor price is a WEB seam so far: this shell has no
+        // balances feed to read a native price out of yet, and `None` is
+        // exactly the pre-682 answer (the blind 0.001-coin floor), so
+        // desktop's behaviour is unchanged rather than half-changed.
+        native_usd_floor_price: None,
     })
 }
 
@@ -454,6 +459,10 @@ pub fn raw_bundler_quote(chain_id: u32, tier: FeeTier) -> Option<FeeBundlerQuote
     let row = body.get("result")?.get(tier_key(tier))?;
     Some(FeeBundlerQuote {
         max_fee_per_gas: decimal_of_hex(row.get("maxFeePerGas"))?,
+        // The tip this tier is actually signed with — the half of the quote
+        // that buys priority, and what the core turns into the per-tier gas
+        // price on screen (issue 684). Absent on a generic bundler.
+        max_priority_fee_per_gas: decimal_of_hex(row.get("maxPriorityFeePerGas")),
         network_fee_per_gas: decimal_of_hex(row.get("networkFeePerGas")),
         relayer_fee_per_gas: decimal_of_hex(row.get("relayerFeePerGas")),
     })

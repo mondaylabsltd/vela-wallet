@@ -104,7 +104,7 @@
       "credential": "Kredensial",
       "transport": "Transport",
       "attestation": "Atestasi",
-      "userVerified": "Pengguna terverifikasi"
+      "userVerified": "Perlu verifikasi saat digunakan"
     }
   }
 }

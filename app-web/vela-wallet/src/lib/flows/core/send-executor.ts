@@ -356,7 +356,13 @@ export function createSendExecutor(ports: SendShellPorts) {
 						operation.quoted_fee
 							? {
 									amount: fromWireAmount(operation.quoted_fee.amount),
-									recipient: operation.quoted_fee.recipient
+									recipient: operation.quoted_fee.recipient,
+									// The speed the person was shown, named on the wire beside
+									// the reimbursement it was priced with (spec 068). Read
+									// from the live quote session at the moment of submission,
+									// so the screen and the chain cannot disagree about which
+									// tier this send is.
+									tier: ports.feeTier() ?? undefined
 								}
 							: undefined
 					);

@@ -98,13 +98,13 @@
       "title": "キー",
       "subtitle": "どのパスキーでも、このウォレットの署名ができます。すべてのネットワークで共通です。",
       "keyN": "キー {{n}}",
-      "notSynced": "この端末のみ",
+      "notSynced": "端末に紐付け",
       "fromDevice": "レジストリに接続できません。この端末が覚えている内容を表示しています。",
       "publicKey": "公開鍵",
       "credential": "クレデンシャル",
       "transport": "トランスポート",
       "attestation": "アテステーション",
-      "userVerified": "本人確認済み"
+      "userVerified": "使用時に本人確認"
     }
   }
 }

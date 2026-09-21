@@ -63,6 +63,15 @@
 		openBatch(): void;
 		openScanner(): void;
 		/**
+		 * The fee row's ⟳ and the folded speed control (spec 068). All three
+		 * are the session's: a refresh is a fresh measurement on the SAME
+		 * quote session, and a tier pick re-prices this one send without
+		 * touching the stored default.
+		 */
+		refreshFee?(): void;
+		toggleSpeed?(): void;
+		pickSpeed?(id: string): void;
+		/**
 		 * The recipient picker's two answers (spec 028 US5, wired by the contacts
 		 * session): one person from the book, or a whole group as split-mode
 		 * recipients. Optional, and the same shape `FlowsMobile` declares.
@@ -167,6 +176,9 @@
 			onpickRecipient={() => go('contact-pick')}
 			onscan={() => (send ? send.openScanner() : go('scan'))}
 			onfee={() => (send ? send.openFeeSheet() : go('fee-token'))}
+			onfeerefresh={send?.refreshFee ? () => send.refreshFee?.() : undefined}
+			onspeed={send?.toggleSpeed ? () => send.toggleSpeed?.() : undefined}
+			onspeedpick={send?.pickSpeed ? (id) => send.pickSpeed?.(id) : undefined}
 			ondenom={send ? () => send.toggleDenom() : undefined}
 			onmax={send ? () => send.max() : undefined}
 			onrecipientAction={(id) => {

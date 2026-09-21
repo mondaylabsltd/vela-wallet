@@ -25,7 +25,7 @@ use vela_core::app::network_admin::{
     NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
     NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
     NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS,
-    BUNDLER_BASE, DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
+    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
     DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE, REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 
@@ -943,7 +943,7 @@ fn an_unverifiable_rpc_still_saves() {
                     chain_id: 1,
                     rpc_url: "https://offline.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
-                    bundler_url: format!("{BUNDLER_BASE}/1"),
+                    bundler_url: String::new(),
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1028,7 +1028,7 @@ fn a_held_save_commits_once_the_probe_agrees() {
                     chain_id: 1,
                     rpc_url: "https://my-node.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
-                    bundler_url: format!("{BUNDLER_BASE}/1"),
+                    bundler_url: String::new(),
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1060,7 +1060,7 @@ fn a_held_save_over_an_emptied_rpc_field_still_lands() {
                 chain_id: 1,
                 rpc_url: String::new(),
                 explorer_url: ETH_SCAN.to_owned(),
-                bundler_url: format!("{BUNDLER_BASE}/1"),
+                bundler_url: String::new(),
             }]
         }),
         "an unverifiable (empty) URL saves; got {ops:?}"
@@ -1141,6 +1141,98 @@ fn an_override_save_never_clears_the_saved_bundler_url() {
     assert_eq!(
         configs[0].bundler_url, "https://my-bundler.example/1",
         "bundler preserved"
+    );
+}
+
+/// Invariant ⑤, the half nobody wrote down: a BUILT-IN network's bundler is
+/// the configured relay, not a constant.
+///
+/// The shells seed their bundler pool from these rows (Android's
+/// `NetworkEndpointSource` has no other source at all), so a row pinned to
+/// `DEFAULT_BUNDLER_SERVICE_URL` made Settings › Service nodes › Vela Relay a
+/// field that saved, probed, showed a latency badge — and changed where not
+/// one user operation went, on any of the 24 chains Vela ships.
+#[test]
+fn a_builtin_rows_bundler_follows_the_configured_relay() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![],
+        endpoints: NetStoredEndpoints {
+            bundler_service_url: Some("https://my-relay.example".to_owned()),
+            ..Default::default()
+        },
+        provider_keys: NetProviderKeys::default(),
+    });
+    let row = &sut.view().networks[0];
+    assert_eq!(row.chain_id, 1);
+    assert_eq!(row.bundler_url, "https://my-relay.example/1");
+
+    // And it MOVES: editing the field re-points every built-in row, with no
+    // reload in between.
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::BundlerService,
+        value: "https://other-relay.example".to_owned(),
+    });
+    sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::BundlerService,
+    });
+    assert_eq!(
+        sut.view().networks[0].bundler_url,
+        "https://other-relay.example/1"
+    );
+}
+
+/// The same rule against a record written BEFORE it existed: an RPC override
+/// saved a copy of the shipped relay into `bundler_url`, and reading that copy
+/// back as a per-network override would pin the chain to it forever.
+#[test]
+fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![NetNetworkConfig {
+            chain_id: 1,
+            rpc_url: "https://saved-rpc.example".to_owned(),
+            explorer_url: ETH_SCAN.to_owned(),
+            bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/1"),
+        }],
+        endpoints: NetStoredEndpoints {
+            bundler_service_url: Some("https://my-relay.example".to_owned()),
+            ..Default::default()
+        },
+        provider_keys: NetProviderKeys::default(),
+    });
+    assert_eq!(
+        sut.view().networks[0].bundler_url,
+        "https://my-relay.example/1"
+    );
+}
+
+/// A per-network bundler somebody really set still outranks the relay.
+#[test]
+fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![NetNetworkConfig {
+            chain_id: 1,
+            rpc_url: "https://saved-rpc.example".to_owned(),
+            explorer_url: ETH_SCAN.to_owned(),
+            bundler_url: "https://my-bundler.example/1".to_owned(),
+        }],
+        endpoints: NetStoredEndpoints {
+            bundler_service_url: Some("https://my-relay.example".to_owned()),
+            ..Default::default()
+        },
+        provider_keys: NetProviderKeys::default(),
+    });
+    assert_eq!(
+        sut.view().networks[0].bundler_url,
+        "https://my-bundler.example/1"
     );
 }
 
@@ -1827,7 +1919,6 @@ fn builtin_service_endpoints_point_at_the_cloudflare_deployments() {
         DEFAULT_ETHEREUM_DATA_URL,
         "https://ethereum-data.getvela.app"
     );
-    assert_eq!(BUNDLER_BASE, "https://vela-relay-cf.getvela.app");
     assert_eq!(
         DEFAULT_BUNDLER_SERVICE_URL,
         "https://vela-relay-cf.getvela.app"

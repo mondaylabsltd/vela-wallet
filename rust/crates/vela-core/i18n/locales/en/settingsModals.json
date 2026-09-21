@@ -104,7 +104,7 @@
       "credential": "Credential",
       "transport": "Transport",
       "attestation": "Attestation",
-      "userVerified": "User-verified"
+      "userVerified": "Verify to use"
     }
   }
 }

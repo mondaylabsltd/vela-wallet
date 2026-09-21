@@ -21,6 +21,7 @@ import { chainName } from '$lib/services/networks';
 import { tokenChainId, tokenId, tokenLogoURLs, type APIToken } from '$lib/services/tokens-model';
 
 import type { FeeCall } from '$lib/core/generated/FeeCall';
+import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendFeeOutcome } from '$lib/core/generated/SendFeeOutcome';
 import type { SendOperation } from '$lib/core/generated/SendOperation';
@@ -91,6 +92,28 @@ export interface SendShellPorts {
 	 * reachable from a module.
 	 */
 	feeQuote(request: SendFeeQuoteRequest): Promise<SendFeeOutcome>;
+	/**
+	 * The tier the quote ON SCREEN was priced at, or `null` when nothing is
+	 * quoted (spec 068).
+	 *
+	 * The core's `SubmitUserOp` carries the reimbursement it was shown but not
+	 * the speed it was priced at — the tier is a shell-side choice (the stored
+	 * default, or a one-shot pick on the send screen), so the shell is what
+	 * can answer it. Read from the SAME live session the fee row renders, at
+	 * the moment of submission, which is the only way the tier named on the
+	 * wire and the figure the person approved can be guaranteed to be the same
+	 * measurement. A shell that kept its own copy would be the second writer
+	 * this whole integration exists to avoid.
+	 *
+	 * Typed as the tiers this shell may OFFER (`OfferedTier` in `live-send.ts`,
+	 * spelled out here so `core/` keeps importing nothing from the view layer).
+	 * `rapid` is a dead variant the relay has never reported and refuses with
+	 * -32602 before any handler runs, so keeping it out of the wire is the
+	 * compiler's job, not a comment's: a port that cannot return it cannot send
+	 * it. A quote that somehow carried it answers `null`, which is the pre-068
+	 * wire — never a relabelling to a tier it was not priced at.
+	 */
+	feeTier(): Exclude<FeeTier, 'rapid'> | null;
 }
 
 /** What `EstimateFee` asks for, in the shell's own vocabulary. */
@@ -108,6 +131,13 @@ export interface SendFeeQuoteRequest {
 	 * copy, and it cannot go stale across an account switch.
 	 */
 	publicKeyHex: string | undefined;
+	/**
+	 * How fast this operation should be (spec 068). The shell's to decide —
+	 * the core asks what an operation costs, not how urgent it is — so this is
+	 * filled in by the surface that owns the speed control, and omitting it
+	 * keeps the historical `fast`.
+	 */
+	tier?: FeeTier;
 }
 
 export type SendSessionOptions = SessionOptions<SendView> & {

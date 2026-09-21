@@ -51,6 +51,10 @@
    "timeTitle": "Formato de hora",
    "timeSubtitle": "Relógio de 12 ou 24 horas."
   },
+  "feeSpeed": {
+   "title": "Velocidade da transação",
+   "subtitle": "Cada envio que você começa no Vela parte daqui. Você ainda pode mudar um envio específico."
+  },
   "advanced": {
    "networksTitle": "Redes",
    "networksSubtitle": "URLs de RPC, Explorer e Bundler",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Adicionar rede",
    "addNetworkSubtitle": "Adicione uma rede EVM personalizada",
    "endpointsTitle": "Endpoints de serviço",
-   "endpointsSubtitle": "Dados da chain, índice de identidade, Bundler"
+   "endpointsSubtitle": "Dados da chain, índice de identidade, Bundler",
+   "feeSpeedTitle": "Velocidade da transação",
+   "feeSpeedSubtitle": "O valor inicial de cada envio"
   },
   "developer": {
    "treasuryTitle": "Tesouraria",
@@ -267,7 +273,7 @@
   "toLabel": "Para",
   "estFeeLabel": "Taxa estimada",
   "estimatingFee": "Estimando...",
-  "gasPriceLabel": "Preço do gas",
+  "gasPriceLabel": "Lance de gas",
   "gasPriceUserOpLabel": "Preço do gas (UserOp)",
   "gasLimitLabel": "Limite de gas",
   "walletDeployedLabel": "Carteira implantada",
@@ -323,6 +329,15 @@
    "rapid": "Muito rápido",
    "fast": "Rápido"
   },
+  "gasTierHintFast": "Confirma primeiro, mesmo com a rede congestionada",
+  "gasTierHintStandard": "Equilíbrio para as transferências do dia a dia",
+  "gasTierHintSlow": "A menor taxa, se você puder esperar",
+  "feeRefresh": "Atualizar taxa",
+  "feeStale": "Medido há algum tempo",
+  "feeSpeedLabel": "Velocidade",
+  "feeSpeedOnce": "Somente para esta transação",
+  "feeSpeedFree": "Nesta rede, Rápido não custa mais, então este envio usa Rápido.",
+  "feeSpeedSingle": "Esta rede tem só uma velocidade.",
   "batchImport": "Importar lista",
   "batchTitle": "Importar destinatários",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -723,10 +738,10 @@
    "headerSyncFailed": "Sincronização entre dispositivos",
    "identiconHint": "Um padrão de identidade gerado a partir do endereço",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Só neste aparelho",
+   "keyDeviceOnlyBadge": "Vinculada ao aparelho",
    "keyHardwareBadge": "Hardware",
    "keyLimitReached": "Limite de 7 atingido",
-   "keySyncedBadge": "Sincronizada",
+   "keySyncedBadge": "Sincronizada na nuvem",
    "keyUnreadableBody": "Há uma chave de segurança conectada, mas este computador não permite que a carteira a leia. É uma configuração de permissões, não um defeito da chave — no Linux, instale as regras udev de FIDO da sua distribuição (libu2f-udev, ou systemd 252 e posteriores, que as configura sozinho) e reconecte a chave.",
    "keyUnreadableTitle": "Não foi possível abrir sua chave de segurança",
    "keysHint": "O endereço da carteira é definido por este conjunto de chaves — depois de criada, não dá para adicionar nem remover.",
@@ -745,7 +760,7 @@
    "methodSecurityKeyTitle": "Chave de segurança USB",
    "nameTitle": "Dê um nome à sua carteira",
    "nameTooLong": "Este nome é longo demais para uma passkey — encurte-o, por favor.",
-   "needSecondKeyHint": "Esta chave só existe neste aparelho, sem cópia sincronizada. Se perder o aparelho, a carteira não abre.",
+   "needSecondKeyHint": "Esta chave não tem cópia em lugar nenhum. Se você perdê-la, a carteira não abre. Adicione uma segunda.",
    "nextBtn": "Continuar",
    "openSettings": "Abrir configurações",
    "pinAttemptsLeft": "Tentativas restantes: {{attempts}}",
@@ -756,8 +771,8 @@
    "progressMeterLabel": "Derivando endereço",
    "progressSubtitle": "Derivando o endereço de {{count}} chaves. O contrato é implantado na sua primeira transação — sem gas agora.",
    "progressTitle": "Criando sua carteira",
-   "providerGeneric": "Passkey",
-   "providerPlatform": "Passkey de plataforma",
+   "providerGeneric": "Celular ou tablet",
+   "providerPlatform": "Passkey integrada",
    "providerSecurityKey": "Chave de segurança",
    "providerUnknown": "Provedor não reconhecido",
    "removeKeyBtn": "Remover",
@@ -1596,13 +1611,13 @@
    "title": "Chaves",
    "subtitle": "Qualquer uma destas chaves de acesso pode assinar por esta carteira, em todas as redes.",
    "keyN": "Chave {{n}}",
-   "notSynced": "Vinculada ao dispositivo",
+   "notSynced": "Vinculada ao aparelho",
    "fromDevice": "Não foi possível consultar o registro. Mostrando o que este dispositivo lembra.",
    "publicKey": "Chave pública",
    "credential": "Credencial",
    "transport": "Transporte",
    "attestation": "Atestação",
-   "userVerified": "Usuário verificado"
+   "userVerified": "Verificação ao usar"
   }
  },
  "contacts": {

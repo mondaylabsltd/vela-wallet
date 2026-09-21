@@ -62,13 +62,11 @@ const PUBLIC_RPCS: &[(u32, &[&str])] = &[
         1,
         &["https://ethereum-rpc.publicnode.com", "https://1rpc.io/eth"],
     ),
+    // bsc.meowrpc.com was dropped (issue #212; measured 2026-09-20): its
+    // eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
     (
         56,
-        &[
-            "https://bsc-rpc.publicnode.com",
-            "https://bsc.drpc.org",
-            "https://bsc.meowrpc.com",
-        ],
+        &["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org"],
     ),
     (
         137,
@@ -792,8 +790,11 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
     if let Some(url) = stored_custom_bundler(chain_id) {
         add(url, RpcSource::User, &mut bundler);
     }
+    // `builtin_base()`, NOT the constant: Settings > Service nodes > Vela
+    // Relay writes `bundlerServiceURL`, and reading past it here is what made
+    // that field inert — every user operation still went to the shipped relay.
     add(
-        format!("{}/{chain_id}", crate::executor::relay::BUILTIN_BASE),
+        format!("{}/{chain_id}", crate::executor::relay::builtin_base()),
         RpcSource::Default,
         &mut bundler,
     );
@@ -906,6 +907,38 @@ mod tests {
             assert!(
                 bundler.iter().any(|e| e.url.ends_with("/100")),
                 "the relay's chain base must be the bundler endpoint"
+            );
+        });
+    }
+
+    /// The bundler tier follows Settings > Service nodes > Vela Relay.
+    ///
+    /// It used to read `relay::BUILTIN_BASE` — so the field saved, probed and
+    /// showed a latency badge, and every user operation still went to the
+    /// shipped relay. The pool is the only thing that decides where a bundler
+    /// call lands, so this is where "configured" has to be true.
+    #[test]
+    fn the_bundler_tier_follows_the_configured_relay() {
+        storage::tests::with_temp_state("pool-relay", || {
+            let (_, shipped) = collect_endpoints(100);
+            assert_eq!(
+                shipped.first().map(|e| e.url.as_str()),
+                Some(format!("{}/100", crate::executor::relay::BUILTIN_BASE).as_str())
+            );
+
+            if storage::write_value(
+                storage::KEY_SERVICE_ENDPOINTS,
+                json!({ "bundlerServiceURL": "https://my-relay.example/" }),
+            )
+            .is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let (_, configured) = collect_endpoints(100);
+            assert_eq!(
+                configured.first().map(|e| e.url.as_str()),
+                Some("https://my-relay.example/100"),
+                "the configured relay, with its trailing slash folded in"
             );
         });
     }

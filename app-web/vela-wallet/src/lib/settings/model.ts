@@ -113,6 +113,9 @@ export type SettingsPageId =
 	| 'rpc-providers'
 	| 'endpoints'
 	| 'storage'
+	/** Spec 068 — the stored default transaction speed (desktop page; on the
+	 *  phone the same preference is a row that opens a sheet). */
+	| 'fee-speed'
 	| 'about';
 
 /**
@@ -129,6 +132,8 @@ export type SettingsOverlayId =
 	| 'number-format'
 	| 'date-format'
 	| 'time-format'
+	/** Spec 068: the stored default transaction speed. */
+	| 'fee-speed'
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
@@ -233,6 +238,14 @@ export interface SelectRowModel {
 	glyph?: string;
 	/** Secondary label after the primary one — the currency sheet's 美元. */
 	caption?: string;
+	/**
+	 * A second line UNDER the label, saying what choosing this row buys — the
+	 * speed sheet's "Lowest fee, if you can wait" (spec 068, the owner's
+	 * ruling). Deliberately not `caption`: that one sits INLINE after the
+	 * label, which is the currency sheet's shape and the wrong one for a
+	 * sentence. A row with no advantage to state simply omits it.
+	 */
+	detail?: string;
 	selected?: boolean;
 	/** Renders in the mono face — every number/date/time sample does. */
 	mono?: boolean;
@@ -578,6 +591,8 @@ export interface SettingsHomeModel {
 	numberSheet: SelectSheetModel;
 	dateSheet: SelectSheetModel;
 	timeSheet: SelectSheetModel;
+	/** Spec 068 — the default transaction speed, three rows named by what they buy. */
+	feeSpeedSheet: SelectSheetModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -662,7 +677,7 @@ export interface WalletKeyRowModel {
 	holderFallback: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
-	/** "User-verified", "Synced" / "Device-bound" — drawn as pills, the explorer's way. */
+	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
 	pills: { text: string; tone: 'verified' | 'synced' | 'local' }[];
 	/**
 	 * What the row opens onto: the registry explorer's facts, each copyable.
@@ -701,6 +716,16 @@ export interface SettingsDesktopModel {
 		avatar: FormRowModel & { segmented: SegmentedModel };
 	};
 	localization: {
+		title: string;
+		description: string;
+		rows: FormRowModel[];
+	};
+	/**
+	 * Spec 068 — the same shape as `localization` on purpose: one dropdown
+	 * row, so the desktop's control is the desktop's usual control and not a
+	 * second pattern invented for one preference.
+	 */
+	feeSpeed: {
 		title: string;
 		description: string;
 		rows: FormRowModel[];

@@ -51,6 +51,10 @@
    "timeTitle": "Format waktu",
    "timeSubtitle": "Format jam 12 atau 24."
   },
+  "feeSpeed": {
+   "title": "Kecepatan transaksi",
+   "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
+  },
   "advanced": {
    "networksTitle": "Jaringan",
    "networksSubtitle": "URL RPC, Explorer & Bundler",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Tambah Jaringan",
    "addNetworkSubtitle": "Tambahkan jaringan EVM kustom",
    "endpointsTitle": "Endpoint Layanan",
-   "endpointsSubtitle": "Data chain, indeks identitas, Bundler"
+   "endpointsSubtitle": "Data chain, indeks identitas, Bundler",
+   "feeSpeedTitle": "Kecepatan transaksi",
+   "feeSpeedSubtitle": "Default untuk setiap pengiriman"
   },
   "developer": {
    "treasuryTitle": "Treasury",
@@ -267,7 +273,7 @@
   "toLabel": "Ke",
   "estFeeLabel": "Est. Biaya",
   "estimatingFee": "Mengestimasi...",
-  "gasPriceLabel": "Harga Gas",
+  "gasPriceLabel": "Tawaran gas",
   "gasPriceUserOpLabel": "Harga Gas (UserOp)",
   "gasLimitLabel": "Batas Gas",
   "walletDeployedLabel": "Dompet Terdeploy",
@@ -308,6 +314,15 @@
    "rapid": "Sangat cepat",
    "fast": "Cepat"
   },
+  "gasTierHintFast": "Paling dulu terkonfirmasi, bahkan saat jaringan sibuk",
+  "gasTierHintStandard": "Seimbang untuk transfer sehari-hari",
+  "gasTierHintSlow": "Biaya paling rendah, jika tidak terburu-buru",
+  "feeRefresh": "Segarkan biaya",
+  "feeStale": "Diukur beberapa saat lalu",
+  "feeSpeedLabel": "Kecepatan",
+  "feeSpeedOnce": "Hanya untuk transaksi ini",
+  "feeSpeedFree": "Di jaringan ini, Cepat tidak lebih mahal, jadi transaksi ini memakai Cepat.",
+  "feeSpeedSingle": "Jaringan ini hanya punya satu kecepatan.",
   "batchImport": "Impor daftar",
   "batchTitle": "Impor penerima",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -720,10 +735,10 @@
    "headerSyncFailed": "Sinkronisasi Lintas Perangkat",
    "identiconHint": "Pola identitas yang dihasilkan dari alamat",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Hanya perangkat ini",
+   "keyDeviceOnlyBadge": "Terikat perangkat",
    "keyHardwareBadge": "Perangkat keras",
    "keyLimitReached": "Batas 7 kunci tercapai",
-   "keySyncedBadge": "Tersinkron",
+   "keySyncedBadge": "Tersinkron ke cloud",
    "keyUnreadableBody": "Kunci keamanan sudah terpasang, tetapi komputer ini tidak mengizinkan dompet membacanya. Ini soal pengaturan izin, bukan kerusakan kunci — di Linux, pasang aturan udev FIDO dari distribusi Anda (libu2f-udev, atau systemd 252 ke atas yang mengaturnya sendiri), lalu cabut dan pasang kembali kuncinya.",
    "keyUnreadableTitle": "Kunci keamanan Anda tidak bisa dibuka",
    "keysHint": "Alamat dompet ditentukan oleh set kunci ini — setelah dibuat tidak bisa ditambah atau dikurangi.",
@@ -742,7 +757,7 @@
    "methodSecurityKeyTitle": "Kunci keamanan USB",
    "nameTitle": "Beri nama dompet Anda",
    "nameTooLong": "Nama ini terlalu panjang untuk passkey — mohon persingkat.",
-   "needSecondKeyHint": "Kunci ini hanya ada di perangkat ini, tanpa cadangan tersinkron. Perangkat hilang, dompet tak bisa dibuka.",
+   "needSecondKeyHint": "Kunci ini tidak dicadangkan di mana pun. Kalau hilang, dompet tak bisa dibuka. Tambahkan satu lagi.",
    "nextBtn": "Lanjut",
    "openSettings": "Buka Pengaturan",
    "pinAttemptsLeft": "Sisa percobaan: {{attempts}}",
@@ -753,8 +768,8 @@
    "progressMeterLabel": "Menurunkan alamat",
    "progressSubtitle": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
    "progressTitle": "Sedang membuat dompet",
-   "providerGeneric": "Passkey",
-   "providerPlatform": "Passkey platform",
+   "providerGeneric": "Ponsel atau tablet",
+   "providerPlatform": "Passkey bawaan",
    "providerSecurityKey": "Kunci keamanan",
    "providerUnknown": "Penyedia tak dikenal",
    "removeKeyBtn": "Hapus",
@@ -1599,7 +1614,7 @@
    "credential": "Kredensial",
    "transport": "Transport",
    "attestation": "Atestasi",
-   "userVerified": "Pengguna terverifikasi"
+   "userVerified": "Perlu verifikasi saat digunakan"
   }
  },
  "contacts": {

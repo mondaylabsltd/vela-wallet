@@ -18,10 +18,10 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::fee_policy::{
     atto_to_token_units, calc_max_fee_per_gas, calculate_in_band_fee_amount,
-    derive_chain_gas_price, encode_erc20_transfer, from_base_units, is_tempo_chain,
-    max_native_sendable, min_gas_price_wei, raw_bundler_gas_cost, reserve_fee_token,
-    reserve_native_gas, same_asset_fee_limit, tempo_call_gas_limit, tempo_expected_gas,
-    tempo_fee_token_units, tempo_minimum_fee_token_units, tempo_quote_is_stale,
+    derive_chain_gas_price, effective_gas_price, encode_erc20_transfer, from_base_units,
+    gas_price_range, is_tempo_chain, max_native_sendable, min_gas_price_wei, raw_bundler_gas_cost,
+    reserve_fee_token, reserve_native_gas, same_asset_fee_limit, tempo_call_gas_limit,
+    tempo_expected_gas, tempo_fee_token_units, tempo_minimum_fee_token_units, tempo_quote_is_stale,
     tempo_reimbursement, tempo_settlement_split, tempo_split_safety_gas, tier_multiplier,
     to_base_units, usd_price_scaled, AssetPricing, Event, FeeAsset, FeeAssetKind, FeeAssetQuote,
     FeeAssetView, FeeBundlerQuote, FeeCall, FeeEstimate, FeeFailure, FeeGasOutcome,
@@ -55,6 +55,7 @@ fn native_row(balance: &str) -> FeeAssetQuote {
         symbol: "ETH".to_owned(),
         usd_balance: "1868.70".to_owned(),
         usd_price: Some("1868.70000000".to_owned()),
+        native_usd_floor_price: None,
     }
 }
 
@@ -68,6 +69,7 @@ fn usdc_row(balance: &str) -> FeeAssetQuote {
         symbol: "USDC".to_owned(),
         usd_balance: "5.00".to_owned(),
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     }
 }
 
@@ -81,6 +83,7 @@ fn pathusd_row(balance: &str) -> FeeAssetQuote {
         symbol: "pathUSD".to_owned(),
         usd_balance: "5.00".to_owned(),
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     }
 }
 
@@ -115,6 +118,7 @@ fn bundler_ok() -> Res {
     Res::BundlerQuote {
         quote: Some(FeeBundlerQuote {
             max_fee_per_gas: "2000000000".to_owned(),
+            max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("1000000000".to_owned()),
             relayer_fee_per_gas: Some("1000000000".to_owned()),
         }),
@@ -384,11 +388,13 @@ fn conversion_rounds_native_up_fee_token_down_never_undercharging() {
         is_native: true,
         decimals: 18,
         usd_price: Some("1868.71".to_owned()),
+        native_usd_floor_price: None,
     };
     let usdc = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(1, 1, &usdc, &native),
@@ -403,16 +409,19 @@ fn in_band_fee_native_is_gas_times_price_times_three() {
         is_native: true,
         decimals: 18,
         usd_price: Some("1868.70000000".to_owned()),
+        native_usd_floor_price: None,
     };
     let native_without_price = AssetPricing {
         is_native: true,
         decimals: 18,
         usd_price: None,
+        native_usd_floor_price: None,
     };
     let usdc = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &native, &native),
@@ -447,6 +456,297 @@ fn in_band_fee_native_is_gas_times_price_times_three() {
     );
 }
 
+/// Issue 682, the measured one: XLayer's OKB comes back from the relay with
+/// `usdPrice: null`, so the blind 0.001-coin floor fired and every send paid
+/// 0.001 OKB ≈ $0.12 — twelve times the cent that floor stands in for. The
+/// wallet knew the price all along (the fee line rendered "≈$0.12" from it);
+/// this hands it to the core for the MINIMUM only.
+///
+/// The real numbers, measured 2026-09-21: OKB ≈ $120, base 0.02 gwei, tip 0,
+/// ~600k gas.
+#[test]
+fn an_unpriced_native_coin_floors_at_a_cent_when_the_shell_can_price_it() {
+    let okb_blind = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: None,
+    };
+    let okb_shell_priced = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: Some("120".to_owned()),
+    };
+
+    // 600k gas × 0.02 gwei = 1.2e13 wei = 0.000012 OKB of real relay cost.
+    let total_gas = 600_000u128;
+    let gas_price = 20_000_000u128; // 0.02 gwei
+    let relay_cost = total_gas * gas_price;
+    assert_eq!(relay_cost, 12_000_000_000_000);
+
+    // Before: a flat 0.001 OKB = 1e15 wei = $0.12.
+    assert_eq!(
+        calculate_in_band_fee_amount(total_gas, gas_price, &okb_blind, &okb_blind),
+        Some(1_000_000_000_000_000)
+    );
+
+    // After: $0.01 worth at $120/OKB = 0.0000833… OKB, ceiled.
+    let fee =
+        calculate_in_band_fee_amount(total_gas, gas_price, &okb_shell_priced, &okb_shell_priced)
+            .expect("a shell-priced native coin is quotable");
+    assert_eq!(fee, 83_333_333_333_334);
+
+    // The three inequalities the fix has to keep true, spelled out because a
+    // cheaper floor that stops getting the transaction admitted is not a fix.
+    //
+    // ① still above the relay's 0.00001-coin admission floor (`admission.rs`).
+    let admission_floor = 10_000_000_000_000u128; // 0.00001 OKB
+    assert!(
+        fee > admission_floor,
+        "{fee} must clear the admission floor {admission_floor}"
+    );
+    assert!(fee / admission_floor >= 8, "8.3× the admission floor");
+    // ② still above what the relay's settlement wants (1.4 × its own cost).
+    let settlement = relay_cost * 14 / 10; // 0.0000168 OKB
+    assert!(
+        fee > settlement,
+        "{fee} must fund settlement's {settlement}"
+    );
+    assert!(fee / settlement >= 4, "~5× the settlement requirement");
+    // ③ and it is twelve times cheaper than the blind floor it replaces.
+    assert_eq!(1_000_000_000_000_000u128 / fee, 11); // 12.0× before integer truncation
+    assert!(fee * 12 > 1_000_000_000_000_000);
+}
+
+/// The clamp that makes the cheaper floor safe. On a coin dearer than ~$1000,
+/// $0.01 buys LESS than 0.00001 of it, and a payment under the relay's
+/// admission floor is simply refused — so `.max(admission_floor)` is
+/// load-bearing on the new path exactly as it is on the relay-priced one.
+#[test]
+fn a_very_expensive_shell_priced_coin_still_meets_the_admission_floor() {
+    // 0.00001 of an 18-decimal coin.
+    let admission_floor = 10_000_000_000_000u128;
+    // $2,000/coin: $0.01 is 5e-6 of it = 5e12 wei, HALF the admission floor.
+    let dear = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: Some("2000".to_owned()),
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &dear, &dear),
+        Some(admission_floor)
+    );
+    // And a coin cheap enough for $0.01 to exceed the floor is NOT clamped up.
+    let cheap = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: Some("120".to_owned()),
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(1, 1, &cheap, &cheap),
+        Some(83_333_333_333_334)
+    );
+}
+
+/// The ruling this fix is fenced by: the floor price is for the FLOOR. The
+/// stablecoin conversion keeps reading `usd_price` alone, so an unpriced native
+/// coin still refuses a stablecoin fee — "a zero/absent USD price is 'cannot
+/// quote', never rate 1". A display fallback is fine; a conversion fallback is
+/// not, and this asserts the shell's price never became one.
+#[test]
+fn a_floor_price_never_becomes_a_stablecoin_conversion_rate() {
+    let native_shell_priced = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: Some("120".to_owned()),
+    };
+    let usdc = AssetPricing {
+        is_native: false,
+        decimals: 6,
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native_shell_priced),
+        None
+    );
+    // The native row of the very same quote IS payable — that asymmetry is the
+    // point: we can floor without a rate, we cannot convert without one.
+    assert!(calculate_in_band_fee_amount(
+        200_000,
+        1_000_000_000,
+        &native_shell_priced,
+        &native_shell_priced
+    )
+    .is_some());
+}
+
+/// The owner's constraint: nothing about what a PRICED send costs may move. A
+/// relay price present wins outright, and the floor price beside it changes no
+/// byte — on the native path or the stablecoin one.
+#[test]
+fn a_relay_priced_coin_ignores_the_floor_price_entirely() {
+    let with_floor = |floor: Option<&str>| AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: Some("1868.70000000".to_owned()),
+        native_usd_floor_price: floor.map(str::to_owned),
+    };
+    let usdc = AssetPricing {
+        is_native: false,
+        decimals: 6,
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    };
+    for floor in [None, Some("1"), Some("999999")] {
+        let native = with_floor(floor);
+        // The pre-issue-682 vectors of `in_band_fee_native_is_gas_times_price_times_three`
+        // and `in_band_fee_converts_to_stable_with_cent_floor`, unchanged.
+        assert_eq!(
+            calculate_in_band_fee_amount(200_000, 1_000_000_000, &native, &native),
+            Some(600_000_000_000_000)
+        );
+        assert_eq!(
+            calculate_in_band_fee_amount(1, 1, &native, &native),
+            Some(10_000_000_000_000)
+        );
+        assert_eq!(
+            calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
+            Some(1_121_220)
+        );
+        assert_eq!(
+            calculate_in_band_fee_amount(1, 1, &usdc, &native),
+            Some(18_687)
+        );
+    }
+}
+
+/// A floor price that is not a price is not a price. Zero, blank and garbage
+/// all fall through to the blind 0.001-coin fallback — the last resort stays,
+/// and none of them is quietly read as 1.
+#[test]
+fn an_unusable_floor_price_falls_through_to_the_blind_fallback() {
+    let blind_floor = 1_000_000_000_000_000u128; // 0.001 of an 18-dp coin
+    for floor in [None, Some("0"), Some("0.00000000"), Some(""), Some("abc")] {
+        let native = AssetPricing {
+            is_native: true,
+            decimals: 18,
+            usd_price: None,
+            native_usd_floor_price: floor.map(str::to_owned),
+        };
+        assert_eq!(
+            calculate_in_band_fee_amount(600_000, 20_000_000, &native, &native),
+            Some(blind_floor),
+            "floor price {floor:?} must not be read as a price"
+        );
+    }
+    // Below 3 decimals the blind fallback is one base unit, and the cap on the
+    // shell-priced path is that same one unit.
+    let tiny_blind = AssetPricing {
+        is_native: true,
+        decimals: 2,
+        usd_price: None,
+        native_usd_floor_price: None,
+    };
+    // Zero gas so the floor is the only thing left standing — at 1 gas × 1 wei
+    // the ×3 markup (3 units) already clears both floors and would hide them.
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &tiny_blind, &tiny_blind),
+        Some(1)
+    );
+    let tiny_priced = AssetPricing {
+        is_native: true,
+        decimals: 2,
+        usd_price: None,
+        native_usd_floor_price: Some("0.5".to_owned()),
+    };
+    // $0.01 at $0.50/coin would be 0.02 coin = 2 base units — ABOVE the blind
+    // floor of 1 unit, so the cap holds it to 1: the shell's price only ever
+    // lowers this floor. See `a_shell_price_may_only_lower_the_floor`.
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &tiny_priced, &tiny_priced),
+        Some(1)
+    );
+}
+
+/// The cap on the new path, and the reason for it.
+///
+/// The floor is `$0.01 ÷ price`, so an UNDER-estimated price RAISES what the
+/// user pays. The shell's price is its own on-chain derivation, and on exactly
+/// the coins this branch serves — no relay price, therefore almost never a
+/// Chainlink feed — `choose_native_price` hands back the raw DEX quote with no
+/// sanity band; `wallet-api.ts` records X Layer's WOKB/USDC pool quoting OKB at
+/// ~$5 against a true ~$120. Uncapped, that junk quote would charge 0.002 OKB,
+/// twice the blind floor this issue exists to cut. So the shell's price may
+/// only ever LOWER the floor: the worst case is what today already charges.
+///
+/// The same cap answers the other direction: a genuinely CHEAP coin (under $10,
+/// where a cent is worth more than 0.001 of it) keeps today's 0.001-coin floor
+/// instead of a fee 10× or 500× larger. A person holding a sliver of a cheap
+/// coin who can send today can still send.
+#[test]
+fn a_shell_price_may_only_lower_the_floor_never_raise_it() {
+    let blind_floor = 1_000_000_000_000_000u128; // 0.001 of an 18-dp coin
+    let shell_priced = |price: &str| AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: None,
+        native_usd_floor_price: Some(price.to_owned()),
+    };
+
+    // The measured junk quote: OKB read at $5 instead of ~$120. Uncapped this
+    // is ceil(1e6 × 1e18 / 5e8) = 2e15 wei = 0.002 coin, twice the blind floor.
+    let junk = shell_priced("5");
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &junk, &junk),
+        Some(blind_floor),
+        "a low price must not raise the floor above what the blind fallback charges"
+    );
+
+    // A cheap coin, no bad price involved: $1/coin values a cent at 0.01 coin,
+    // ten times the blind floor. Capped, it stays at the blind floor.
+    let cheap = shell_priced("1");
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &cheap, &cheap),
+        Some(blind_floor)
+    );
+    // $0.02/coin — 0.5 coin uncapped, 500× — likewise.
+    let very_cheap = shell_priced("0.02");
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &very_cheap, &very_cheap),
+        Some(blind_floor)
+    );
+
+    // $10 is the crossover: at exactly $10 a cent IS 0.001 of the coin, so cap
+    // and cent agree, and every coin dearer than that gets the saving.
+    let crossover = shell_priced("10");
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &crossover, &crossover),
+        Some(blind_floor)
+    );
+    let dearer = shell_priced("10.01");
+    let fee = calculate_in_band_fee_amount(0, 0, &dearer, &dearer).expect("priceable");
+    assert!(fee < blind_floor, "{fee} must be under the blind floor");
+
+    // The relay-priced path is NOT capped: a price we did not derive ourselves
+    // is the one we quote against, and $0.01 worth of a $1 coin is 0.01 of it.
+    // This is the pre-682 answer, unchanged.
+    let relay_priced_cheap = AssetPricing {
+        is_native: true,
+        decimals: 18,
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: Some("1".to_owned()),
+    };
+    assert_eq!(
+        calculate_in_band_fee_amount(0, 0, &relay_priced_cheap, &relay_priced_cheap),
+        Some(10_000_000_000_000_000)
+    );
+}
+
 /// `calculateInBandFeeAmount` stablecoin vectors (`inband-send.test.ts:203-214`),
 /// including the native 0.00001 floor and the $0.01 stable floor (invariant ③).
 #[test]
@@ -455,11 +755,13 @@ fn in_band_fee_converts_to_stable_with_cent_floor() {
         is_native: true,
         decimals: 18,
         usd_price: Some("1868.70000000".to_owned()),
+        native_usd_floor_price: None,
     };
     let usdc = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     // 0.0006 ETH × $1868.70 = $1.12122 = 1.121220 USDC.
     assert_eq!(
@@ -477,6 +779,7 @@ fn in_band_fee_converts_to_stable_with_cent_floor() {
         is_native: true,
         decimals: 18,
         usd_price: Some("100".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(1, 1, &usdc, &low_price_native),
@@ -492,21 +795,25 @@ fn zero_usd_price_is_unpriceable_not_rate_one() {
         is_native: true,
         decimals: 18,
         usd_price: Some("0".to_owned()),
+        native_usd_floor_price: None,
     };
     let native = AssetPricing {
         is_native: true,
         decimals: 18,
         usd_price: Some("1868.70".to_owned()),
+        native_usd_floor_price: None,
     };
     let usdc_zero = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("0".to_owned()),
+        native_usd_floor_price: None,
     };
     let usdc = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native_zero),
@@ -541,11 +848,13 @@ fn eighteen_decimal_fee_asset_is_priced_exactly_not_clamped_to_the_cent_floor() 
         is_native: true,
         decimals: 18,
         usd_price: Some("2000".to_owned()),
+        native_usd_floor_price: None,
     };
     let dai = AssetPricing {
         is_native: false,
         decimals: 18,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     // 700_000 × 30 gwei × 3 = 0.063 ETH = $126 = 126 DAI.
     assert_eq!(
@@ -562,6 +871,7 @@ fn eighteen_decimal_fee_asset_is_priced_exactly_not_clamped_to_the_cent_floor() 
         is_native: true,
         decimals: 18,
         usd_price: Some("100".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(1, 1, &dai, &cheap_native),
@@ -572,6 +882,7 @@ fn eighteen_decimal_fee_asset_is_priced_exactly_not_clamped_to_the_cent_floor() 
         is_native: false,
         decimals: 8,
         usd_price: Some("60000".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &wbtc, &eth),
@@ -581,6 +892,7 @@ fn eighteen_decimal_fee_asset_is_priced_exactly_not_clamped_to_the_cent_floor() 
         is_native: false,
         decimals: 0,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(700_000, 30_000_000_000, &whole, &eth),
@@ -599,11 +911,13 @@ fn a_bigger_gas_basis_never_produces_a_smaller_fee() {
         is_native: true,
         decimals: 18,
         usd_price: Some("2000".to_owned()),
+        native_usd_floor_price: None,
     };
     let dai = AssetPricing {
         is_native: false,
         decimals: 18,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     let mut previous = 0u128;
     for gas in [
@@ -630,11 +944,13 @@ fn an_unrepresentable_conversion_refuses_instead_of_shrinking() {
         is_native: true,
         decimals: 18,
         usd_price: Some("2000".to_owned()),
+        native_usd_floor_price: None,
     };
     let absurd_precision = AssetPricing {
         is_native: false,
         decimals: 60,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     // 0.063 ETH → $126 → 126e60 units, which no `u128` can hold.
     assert_eq!(
@@ -647,6 +963,7 @@ fn an_unrepresentable_conversion_refuses_instead_of_shrinking() {
         is_native: false,
         decimals: 200,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(700_000, 30_000_000_000, &nonsense, &eth),
@@ -658,6 +975,7 @@ fn an_unrepresentable_conversion_refuses_instead_of_shrinking() {
         is_native: true,
         decimals: 18,
         usd_price: Some("2000".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(u128::MAX, u128::MAX, &native_pair, &eth),
@@ -678,11 +996,13 @@ fn an_unrepresentable_usd_price_is_unpriceable_not_clamped() {
         is_native: true,
         decimals: 18,
         usd_price: Some(huge.clone()),
+        native_usd_floor_price: None,
     };
     let usdc = AssetPricing {
         is_native: false,
         decimals: 6,
         usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
     };
     assert_eq!(
         calculate_in_band_fee_amount(200_000, 1_000_000_000, &usdc, &native),
@@ -700,6 +1020,8 @@ fn erc20_fee_estimate() -> FeeEstimate {
         relayer_fee_per_gas: 0,
         bundler_gas_price: 1,
         in_band_gas_basis: 1,
+        effective_gas_price: None,
+        max_gas_price: None,
         total_gas: 1,
         deployed: true,
         tier: FeeTier::Fast,
@@ -1565,11 +1887,13 @@ fn settled_stable_amount_uses_never_undercharge_conversion() {
             is_native: false,
             decimals: 6,
             usd_price: Some("1".to_owned()),
+            native_usd_floor_price: None,
         },
         &AssetPricing {
             is_native: true,
             decimals: 18,
             usd_price: Some("1868.70000000".to_owned()),
+            native_usd_floor_price: None,
         },
     )
     .expect("priceable");
@@ -1589,6 +1913,7 @@ fn zero_bundler_quote_falls_back_locally() {
     sut.resolve(Res::BundlerQuote {
         quote: Some(FeeBundlerQuote {
             max_fee_per_gas: "0".to_owned(),
+            max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("0".to_owned()),
             relayer_fee_per_gas: Some("0".to_owned()),
         }),
@@ -1651,6 +1976,7 @@ fn rejects_a_bundler_quote_far_above_the_chain_rate() {
     sut.resolve(Res::BundlerQuote {
         quote: Some(FeeBundlerQuote {
             max_fee_per_gas: "8000000000".to_owned(),
+            max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("4000000000".to_owned()),
             relayer_fee_per_gas: Some("4000000000".to_owned()),
         }),
@@ -1674,6 +2000,7 @@ fn accepts_a_bundler_quote_at_the_three_times_boundary() {
     sut.resolve(Res::BundlerQuote {
         quote: Some(FeeBundlerQuote {
             max_fee_per_gas: "6000000000".to_owned(),
+            max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("3000000000".to_owned()), // exactly 3×
             relayer_fee_per_gas: Some("3000000000".to_owned()),
         }),
@@ -1697,6 +2024,7 @@ fn a_bundler_under_report_is_floored_at_the_chain_measurement() {
     sut.resolve(Res::BundlerQuote {
         quote: Some(FeeBundlerQuote {
             max_fee_per_gas: "1000000000".to_owned(),
+            max_priority_fee_per_gas: None,
             network_fee_per_gas: Some("500000000".to_owned()),
             relayer_fee_per_gas: Some("500000000".to_owned()),
         }),
@@ -2370,4 +2698,354 @@ fn tempo_malformed_recipient_is_not_signed() {
     });
     let fee = sut.view().fee.expect("quote without recipient");
     assert_eq!(fee.fee_recipient, None);
+}
+
+// ---------------------------------------------------------------------------
+// What a speed actually buys — the effective gas price (issue 684)
+// ---------------------------------------------------------------------------
+
+/// The three tiers on Polygon, as three MINED receipts reported them.
+///
+/// `base + signed tip` per tier, to the wei. These are not derived from the
+/// formula under test — they are what the chain charged, read off the
+/// receipts — so the formula has to reproduce them rather than agree with
+/// itself.
+#[test]
+fn the_three_polygon_receipts_reproduce_their_effective_gas_price_to_the_wei() {
+    // (base_fee, signed tip, the receipt's own "Gas Price (effective)")
+    let receipts: [(u128, u128, u128); 3] = [
+        (243_164_376_946, 27_000_100_203, 270_164_477_149), // slow
+        (249_964_783_233, 32_500_000_000, 282_464_783_233), // standard
+        (247_589_616_979, 52_000_200_406, 299_589_817_385), // fast
+    ];
+    for (base_fee, tip, charged) in receipts {
+        // The cap is `m × base + tip` and is never what the chain charges —
+        // `fast`'s receipt read `Max: 805.065222658 Gwei` beside an effective
+        // 299.589817385. Whichever multiple is in force, the answer is the same.
+        for multiple in [3, 2, 1] {
+            let cap = base_fee * multiple + tip;
+            assert_eq!(
+                effective_gas_price(base_fee, cap, tip),
+                charged,
+                "base {base_fee} tip {tip} at a {multiple}× cap"
+            );
+        }
+    }
+}
+
+/// A cap too low to deliver the whole tip is the ceiling, not the sum.
+///
+/// The relay asserts this can never happen (`OuterFee::delivers_full_tip_at`),
+/// which is exactly why it is derived rather than assumed: the wallet talks to
+/// whatever answers, and a cap below `base + tip` would silently truncate the
+/// priority somebody paid for.
+#[test]
+fn a_cap_that_cannot_deliver_the_whole_tip_is_the_price() {
+    let base = 100_u128;
+    // Room for only 5 of the 30 wei tip.
+    assert_eq!(effective_gas_price(base, 105, 30), 105);
+    // Exactly enough is the sum, not the cap — the boundary is not off by one.
+    assert_eq!(effective_gas_price(base, 130, 30), 130);
+    // A cap that cannot even pay the base fee is not turned into one that can.
+    assert_eq!(effective_gas_price(base, 40, 30), 40);
+    // No tip at all: the base fee is the whole price, on any cap.
+    assert_eq!(effective_gas_price(base, 300, 0), 100);
+}
+
+/// The quote's own numbers reach the view, unrounded.
+#[test]
+fn a_quote_that_reports_its_tip_publishes_the_gas_price_that_speed_buys() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    // The measured Polygon `fast` market: base 247.589616979 gwei, tip
+    // 52.000200406 gwei, and the relay's row for that tier around it.
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("299589817385".to_owned()),
+        base_fee: Some("247589616979".to_owned()),
+        priority_fee: Some("52000200406".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            // 3 × base + tip — the cap, which the chain never charges.
+            max_fee_per_gas: "794769051343".to_owned(),
+            max_priority_fee_per_gas: Some("52000200406".to_owned()),
+            network_fee_per_gas: Some("445661310562".to_owned()),
+            relayer_fee_per_gas: Some("297107540375".to_owned()),
+        }),
+    });
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(
+        fee.effective_gas_price.as_deref(),
+        Some("299589817385"),
+        "base + signed tip, not the 794.77 gwei cap"
+    );
+}
+
+/// A row that reports no tip yields NOTHING, never a zero.
+///
+/// A zero would read as "this speed buys a free chain" and, drawn beside its
+/// two neighbours, would claim all three tiers are equal — the exact false
+/// statement this figure exists to test.
+#[test]
+fn a_quote_with_no_reported_tip_publishes_no_gas_price_at_all() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok()); // reports no maxPriorityFeePerGas
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(fee.effective_gas_price, None);
+    // Nor half a range: the cap alone is not a gas price anybody bids (issue 685).
+    assert_eq!(fee.max_gas_price, None);
+}
+
+/// A MEASURED zero is published as zero, not treated like a missing factor.
+///
+/// A third-party bundler that answers `maxPriorityFeePerGas: 0` on a chain
+/// whose block reports `baseFeePerGas: 0` really is quoting a zero gas price,
+/// and the picker then says "0 wei" on every row. That is the chain's own
+/// statement, not a fabrication — the rule is that an ABSENT factor yields no
+/// number, never that an inconvenient one is hidden. Unreachable through the
+/// Vela relay: a zero market tip there makes the cap `m × 0 + 0 = 0`, which
+/// `accept_bundler_quote` already refuses as degenerate. Pinned so the next
+/// reader does not have to re-derive either half.
+#[test]
+fn a_measured_zero_gas_price_is_published_as_zero() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("1000000000".to_owned()),
+        base_fee: Some("0".to_owned()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "2000000000".to_owned(),
+            max_priority_fee_per_gas: Some("0".to_owned()),
+            network_fee_per_gas: Some("1000000000".to_owned()),
+            relayer_fee_per_gas: Some("1000000000".to_owned()),
+        }),
+    });
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(fee.effective_gas_price.as_deref(), Some("0"));
+    // And its range tops out at the relay's own cap — a measured ceiling, so
+    // it is published beside the measured zero (issue 685).
+    assert_eq!(fee.max_gas_price.as_deref(), Some("2000000000"));
+}
+
+/// A base fee the chain never reported is not replaced by the 5-gwei guess.
+///
+/// `resolve_gas_price` is allowed to guess, because a gas price that is too
+/// high only over-funds a quote. A number a person READS has no such safe
+/// direction: 5 gwei stated as Gnosis's gas price is wrong by eight orders of
+/// magnitude.
+#[test]
+fn an_unreported_base_fee_publishes_no_gas_price_rather_than_the_fallback() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("1000000000".to_owned()),
+        base_fee: None,
+        priority_fee: Some("500000000".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "2000000000".to_owned(),
+            max_priority_fee_per_gas: Some("500000000".to_owned()),
+            network_fee_per_gas: Some("1000000000".to_owned()),
+            relayer_fee_per_gas: Some("1000000000".to_owned()),
+        }),
+    });
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(fee.effective_gas_price, None);
+    // Nor half a range: the cap alone is not a gas price anybody bids (issue 685).
+    assert_eq!(fee.max_gas_price, None);
+}
+
+/// Tempo has no priority fee anywhere in its model, so it states none.
+#[test]
+fn tempo_publishes_no_gas_price_because_it_has_no_tip_to_report() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(TEMPO_CHAIN, vec![]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some(TEMPO_BASE_FEE_ATTO.to_string()),
+        base_fee: None,
+        priority_fee: None,
+    });
+    sut.resolve(Res::FeeRecipient {
+        recipient: Some(COLLECTOR.to_owned()),
+    });
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![pathusd_row("5000000")]),
+    });
+    let fee = sut.view().fee.expect("tempo quote");
+    assert_eq!(fee.effective_gas_price, None);
+    assert_eq!(fee.max_gas_price, None);
+}
+
+/// A shell that has not learned to send the tip still parses.
+///
+/// iOS, Android and desktop build this row as JSON. The field is additive, so
+/// an older one omits it and must go on getting exactly the answer it got
+/// before — no gas price, and everything else unchanged.
+#[test]
+fn a_quote_row_without_the_tip_field_still_deserializes() {
+    let row: FeeBundlerQuote = serde_json::from_str(
+        r#"{"max_fee_per_gas":"2000000000","network_fee_per_gas":"1000000000","relayer_fee_per_gas":"1000000000"}"#,
+    )
+    .expect("an older shell's row");
+    assert_eq!(row.max_priority_fee_per_gas, None);
+}
+
+// ---------------------------------------------------------------------------
+// The gas price as a range — what a speed bids now, how high it will go
+// (issue 685)
+// ---------------------------------------------------------------------------
+
+/// The same three mined Polygon receipts, read as ranges, to the wei.
+///
+/// Low end `base + tip` — what the receipt charged. High end the receipt's own
+/// `Max:` — the cap the relay signed. Neither is derived from the formula
+/// under test; both are what the chain reported.
+#[test]
+fn the_three_polygon_receipts_reproduce_their_gas_price_range_to_the_wei() {
+    // (base_fee, signed tip, maxFeePerGas, the range the picker must show)
+    let receipts: [(u128, u128, u128, (u128, u128)); 3] = [
+        // slow: 270.164477149 ~ 390.302745042 gwei
+        (
+            243_164_376_946,
+            27_000_100_203,
+            390_302_745_042,
+            (270_164_477_149, 390_302_745_042),
+        ),
+        // standard: 282.464783233 ~ 527.288291674 gwei
+        (
+            249_964_783_233,
+            32_500_000_000,
+            527_288_291_674,
+            (282_464_783_233, 527_288_291_674),
+        ),
+        // fast: 299.589817385 ~ 805.065222658 gwei
+        (
+            247_589_616_979,
+            52_000_200_406,
+            805_065_222_658,
+            (299_589_817_385, 805_065_222_658),
+        ),
+    ];
+    for (base_fee, tip, cap, range) in receipts {
+        assert_eq!(gas_price_range(base_fee, cap, tip), range, "cap {cap}");
+    }
+}
+
+/// The high end is the CAP, never `base + cap + tip`.
+///
+/// The owner's first proposal. The cap already contains the tip (`m × base +
+/// tip`), so the sum double-counts it and lands above the cap — above anything
+/// EIP-1559 can ever charge, since the chain takes `min(cap, base + tip)`. On
+/// the receipts it would have read 660.47 / 809.75 / 1104.66 gwei: every one of
+/// them an impossible price for its own transaction.
+#[test]
+fn the_top_of_the_range_is_the_cap_and_never_base_plus_cap_plus_tip() {
+    let receipts: [(u128, u128, u128, u128); 3] = [
+        // (base_fee, tip, cap, the double-counted figure that must NOT appear)
+        (
+            243_164_376_946,
+            27_000_100_203,
+            390_302_745_042,
+            660_467_222_191,
+        ),
+        (
+            249_964_783_233,
+            32_500_000_000,
+            527_288_291_674,
+            809_753_074_907,
+        ),
+        (
+            247_589_616_979,
+            52_000_200_406,
+            805_065_222_658,
+            1_104_655_040_043,
+        ),
+    ];
+    for (base_fee, tip, cap, double_counted) in receipts {
+        assert_eq!(
+            base_fee + cap + tip,
+            double_counted,
+            "the fixture's own sum"
+        );
+        let (low, high) = gas_price_range(base_fee, cap, tip);
+        assert_eq!(high, cap);
+        assert_ne!(high, double_counted);
+        // Nothing the chain can charge is above the top of the range.
+        assert!(low <= high);
+    }
+}
+
+/// When both ends are one number, the range IS one number.
+///
+/// A cap that binds (too low to deliver the whole tip), and a chain with no
+/// base fee (BSC: the cap is `m × 0 + tip = tip`), both give equal ends. The
+/// core publishes them equal rather than inventing a spread; the shell then
+/// draws the single figure.
+#[test]
+fn a_range_whose_ends_meet_is_published_with_equal_ends() {
+    // The cap binds: room for only 5 of the 30 wei tip.
+    assert_eq!(gas_price_range(100, 105, 30), (105, 105));
+    // No base fee: whatever the tier's multiple, `m × 0 + tip` is the tip.
+    let tip = 50_000_000_u128;
+    assert_eq!(gas_price_range(0, tip, tip), (tip, tip));
+}
+
+/// The view carries both ends of a reported quote, unrounded.
+#[test]
+fn a_quote_that_reports_its_tip_publishes_both_ends_of_the_range() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    // The Polygon `fast` receipt's market and the cap it was signed with.
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("299589817385".to_owned()),
+        base_fee: Some("247589616979".to_owned()),
+        priority_fee: Some("52000200406".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote {
+        quote: Some(FeeBundlerQuote {
+            max_fee_per_gas: "805065222658".to_owned(),
+            max_priority_fee_per_gas: Some("52000200406".to_owned()),
+            network_fee_per_gas: Some("445661310562".to_owned()),
+            relayer_fee_per_gas: Some("297107540375".to_owned()),
+        }),
+    });
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(fee.effective_gas_price.as_deref(), Some("299589817385"));
+    assert_eq!(fee.max_gas_price.as_deref(), Some("805065222658"));
+}
+
+/// No bundler quote means the local fallback, and the local fallback's cap is
+/// our own guess — so there is no range, not a measured bid under a made-up
+/// ceiling.
+#[test]
+fn a_locally_estimated_fee_publishes_no_range() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(Res::GasPrice {
+        eth_gas_price: Some("1000000000".to_owned()),
+        base_fee: Some("900000000".to_owned()),
+        priority_fee: Some("100000000".to_owned()),
+    });
+    sut.resolve(Res::BundlerQuote { quote: None });
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let fee = sut.view().fee.expect("quote settled");
+    assert_eq!(fee.effective_gas_price, None);
+    assert_eq!(fee.max_gas_price, None);
 }

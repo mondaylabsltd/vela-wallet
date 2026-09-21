@@ -15,6 +15,7 @@
 	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
 	import AmountInput from '../ui/AmountInput.svelte';
 	import FeeRow from '../ui/FeeRow.svelte';
+	import FeeSpeedRow from '../ui/FeeSpeedRow.svelte';
 	import GhostPillRow from '../ui/GhostPillRow.svelte';
 	import RecipientCard from '../ui/RecipientCard.svelte';
 	import RecipientField from '../ui/RecipientField.svelte';
@@ -29,6 +30,11 @@
 		onrecipientAction?: (id: 'add' | 'contacts' | 'import') => void;
 		onremoveRecipient?: (index: number) => void;
 		onfee?: () => void;
+		/** Ask the chain for the fee again (spec 068). */
+		onfeerefresh?: () => void;
+		/** Fold / unfold the speed control, and pick a tier for THIS send only. */
+		onspeed?: () => void;
+		onspeedpick?: (id: string) => void;
 		/** The ⇄ swap — the core's `toggle_fiat_input` (issue 197). */
 		ondenom?: () => void;
 		onmax?: (index: number) => void;
@@ -66,6 +72,9 @@
 		onrecipientAction,
 		onremoveRecipient,
 		onfee,
+		onfeerefresh,
+		onspeed,
+		onspeedpick,
 		ondenom,
 		onmax,
 		onaddRecipient,
@@ -121,6 +130,8 @@
 	{#if model.amount !== undefined}
 		<AmountInput
 			value={model.amount.value}
+			placeholder={model.amount.placeholder}
+			adornment={model.amount.adornment}
 			fiat={model.amount.fiat}
 			denomLabel={model.amount.denomLabel}
 			denomToggle={model.amount.denomToggle}
@@ -194,7 +205,12 @@
 		/>
 	{/if}
 
-	<FeeRow fee={model.fee} onopen={onfee} />
+	<div class="fee-block">
+		<FeeRow fee={model.fee} onopen={onfee} onrefresh={onfeerefresh} />
+		{#if model.speed !== undefined}
+			<FeeSpeedRow speed={model.speed} ontoggle={onspeed} onselect={onspeedpick} />
+		{/if}
+	</div>
 
 	<!--
 		A split can be sixty people long, and what it adds up to is the one
@@ -244,6 +260,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	/* The fee and the speed are one thought — what this transfer costs and
+	   how fast it lands — so they sit closer to each other than to the rows
+	   above and below (spec 068). */
+	.fee-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
 	}
 
 	.sweep-summary {

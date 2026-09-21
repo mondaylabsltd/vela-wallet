@@ -51,6 +51,10 @@
    "timeTitle": "Формат времени",
    "timeSubtitle": "12- или 24-часовой формат."
   },
+  "feeSpeed": {
+   "title": "Скорость транзакций",
+   "subtitle": "Каждая отправка, начатая в Vela, начинается отсюда. Отдельную отправку всё равно можно изменить."
+  },
   "advanced": {
    "networksTitle": "Сети",
    "networksSubtitle": "URL для RPC, обозревателя и Bundler",
@@ -59,7 +63,9 @@
    "addNetworkTitle": "Добавить сеть",
    "addNetworkSubtitle": "Добавить свою EVM-сеть",
    "endpointsTitle": "Сервисные эндпоинты",
-   "endpointsSubtitle": "Данные сетей, индекс идентификаторов, Bundler"
+   "endpointsSubtitle": "Данные сетей, индекс идентификаторов, Bundler",
+   "feeSpeedTitle": "Скорость транзакций",
+   "feeSpeedSubtitle": "Начальное значение для каждой отправки"
   },
   "developer": {
    "treasuryTitle": "Treasury",
@@ -267,7 +273,7 @@
   "toLabel": "Куда",
   "estFeeLabel": "Прибл. комиссия",
   "estimatingFee": "Расчёт…",
-  "gasPriceLabel": "Цена газа",
+  "gasPriceLabel": "Ставка за газ",
   "gasPriceUserOpLabel": "Цена газа (UserOp)",
   "gasLimitLabel": "Лимит газа",
   "walletDeployedLabel": "Кошелёк развёрнут",
@@ -324,6 +330,15 @@
    "rapid": "Очень быстро",
    "fast": "Быстро"
   },
+  "gasTierHintFast": "Подтверждается первой даже при загруженной сети",
+  "gasTierHintStandard": "Баланс для повседневных переводов",
+  "gasTierHintSlow": "Самая низкая комиссия, если можно подождать",
+  "feeRefresh": "Обновить комиссию",
+  "feeStale": "Измерено какое-то время назад",
+  "feeSpeedLabel": "Скорость",
+  "feeSpeedOnce": "Только для этой транзакции",
+  "feeSpeedFree": "В этой сети «Быстро» не стоит дороже, поэтому эта транзакция отправляется со скоростью «Быстро».",
+  "feeSpeedSingle": "В этой сети только одна скорость.",
   "batchImport": "Импорт списка",
   "batchTitle": "Импорт получателей",
   "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
@@ -726,10 +741,10 @@
    "headerSyncFailed": "Синхронизация между устройствами",
    "identiconHint": "Узор-идентификатор, полученный из адреса",
    "keyCount": "{{current}} / {{max}}",
-   "keyDeviceOnlyBadge": "Только это устройство",
+   "keyDeviceOnlyBadge": "Привязан к устройству",
    "keyHardwareBadge": "Аппаратный",
    "keyLimitReached": "Достигнут предел 7",
-   "keySyncedBadge": "Синхронизирован",
+   "keySyncedBadge": "Синхронизирован в облаке",
    "keyUnreadableBody": "Ключ безопасности подключён, но этот компьютер не разрешает кошельку читать его. Это настройка прав доступа, а не поломка ключа — в Linux установите правила udev для FIDO из вашего дистрибутива (libu2f-udev или systemd 252 и новее, который настраивает их сам), затем переподключите ключ.",
    "keyUnreadableTitle": "Не удаётся открыть ключ безопасности",
    "keysHint": "Адрес кошелька определяется этим набором ключей — после создания его не изменить.",
@@ -748,7 +763,7 @@
    "methodSecurityKeyTitle": "USB-ключ безопасности",
    "nameTitle": "Назовите кошелёк",
    "nameTooLong": "Это имя слишком длинное для passkey — пожалуйста, сократите его.",
-   "needSecondKeyHint": "Этот ключ есть только на этом устройстве, без синхронизированной копии. Потеряете устройство — кошелёк не откроется.",
+   "needSecondKeyHint": "У этого ключа нигде нет резервной копии. Потеряете его — кошелёк не откроется. Добавьте второй.",
    "nextBtn": "Продолжить",
    "openSettings": "Открыть настройки",
    "pinAttemptsLeft": "Осталось попыток: {{attempts}}",
@@ -759,8 +774,8 @@
    "progressMeterLabel": "Выводим адрес",
    "progressSubtitle": "Адрес выводится из {{count}} ключей. Контракт развернётся при первой транзакции — сейчас без gas.",
    "progressTitle": "Создаём кошелёк",
-   "providerGeneric": "Ключ доступа",
-   "providerPlatform": "Платформенный ключ доступа",
+   "providerGeneric": "Телефон или планшет",
+   "providerPlatform": "Встроенный ключ доступа",
    "providerSecurityKey": "Ключ безопасности",
    "providerUnknown": "Неизвестный поставщик",
    "removeKeyBtn": "Убрать",
@@ -1599,13 +1614,13 @@
    "title": "Ключи",
    "subtitle": "Любой из этих ключей доступа может подписывать за этот кошелёк во всех сетях.",
    "keyN": "Ключ {{n}}",
-   "notSynced": "Только это устройство",
+   "notSynced": "Привязан к устройству",
    "fromDevice": "Реестр недоступен. Показано то, что помнит это устройство.",
    "publicKey": "Открытый ключ",
    "credential": "Учётные данные",
    "transport": "Транспорт",
    "attestation": "Аттестация",
-   "userVerified": "Пользователь подтверждён"
+   "userVerified": "Подтверждение при использовании"
   }
  },
  "contacts": {
