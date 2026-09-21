@@ -2154,6 +2154,25 @@ impl WalletPage {
                 ),
             );
         }
+        // Nothing to list, and the core has said so — or the sidebar's chain
+        // holds nothing while others do. The empty state rather than a blank
+        // strip, which reads as a list that failed to load (the web's
+        // `assetsSection.mode === 'empty'`).
+        if assets.is_empty()
+            && self.identity.is_some()
+            && wallet_live::assets_strip_empty(
+                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                self.chain_filter,
+            )
+        {
+            assets_col = assets_col.child(empty_state(
+                theme,
+                &mut self.icons,
+                Icon::WalletOutline,
+                self.strings.empty_assets_title.clone(),
+                self.strings.empty_assets_caption.clone(),
+            ));
+        }
 
         div()
             .flex_1()
@@ -3753,6 +3772,35 @@ impl WalletPage {
         }
     }
 
+    /// DSD2cL's total line, which reads what the importer's own view does not
+    /// carry: the balance of the coin being split.
+    ///
+    /// The import SEEDS the form on this branch (it replaces the rows), so
+    /// the line is measured against the whole balance; an import that adds
+    /// to rows already there draws from `split_remaining` instead — the
+    /// second argument, the web's `formHasRows && !replaces`.
+    fn dress_batch_total(&self, body: &mut flow_fixtures::FlowBody, cx: &mut Context<Self>) {
+        let flow_fixtures::FlowBody::BatchImport(model) = body else {
+            return;
+        };
+        let Some(host) = self.send_host.as_ref() else {
+            return;
+        };
+        let host = host.read(cx);
+        let (Some(batch), Some(token)) =
+            (host.batch_view.as_ref(), host.view.selected_token.as_ref())
+        else {
+            return;
+        };
+        model.total = flows_live::batch_total(
+            batch,
+            &token.symbol,
+            &token.balance,
+            None,
+            &self.flow_strings,
+        );
+    }
+
     /// The panel's body: the cores' for a real session, the mocks' otherwise.
     ///
     /// Not every panel has a live source yet — Send is 032's, and the scanner
@@ -3985,6 +4033,7 @@ impl WalletPage {
             amount_field: None,
             recipient_field: None,
             tap_max: None,
+            toggle_denom: None,
             pick_contact_rows: Vec::new(),
             fee_rows: Vec::new(),
             batch_unit: None,
@@ -4296,9 +4345,19 @@ impl WalletPage {
                         }),
                     });
                     actions.tap_max = Some(to_host(SendEvent::TapMax));
+                    // ⇄: the core owns the swap — whether it is possible, and
+                    // what becomes of the figure; the page only says it was
+                    // pressed (the web's `toggle_fiat_input`, #197).
+                    actions.toggle_denom = Some(to_host(SendEvent::ToggleFiatInput));
                     actions.open_contact_pick =
                         Some(to_host(SendEvent::OpenContactPicker { target: None }));
-                    actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
+                    // "+ add recipient" turns one payee into a split — but on
+                    // a split it is the blank-row append bound above, which
+                    // this used to overwrite: the core ignores
+                    // `EnterSplitMode` inside a split, so the pill was dead.
+                    if send.recipients.is_empty() {
+                        actions.add_recipient = Some(to_host(SendEvent::EnterSplitMode));
+                    }
                     actions.open_batch_import = Some(to_host(SendEvent::OpenBatchImport));
                     actions.open_fee_token = Some(Box::new(cx.listener(
                         |this, _: &gpui::ClickEvent, _, cx| {
@@ -9897,7 +9956,8 @@ impl WalletPage {
                 None | Some(FlowPanel::Ds1) => columns,
                 Some(panel) => {
                     let send = self.send_bindings(panel, cx);
-                    let body = self.flow_body(panel, cx);
+                    let mut body = self.flow_body(panel, cx);
+                    self.dress_batch_total(&mut body, cx);
                     let tx_ids = if self.identity.is_some() && panel == FlowPanel::Da1 {
                         flows_live::history_ids(
                             &resident::resident::<ActivityFeed>(cx).read(cx).view(),

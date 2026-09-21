@@ -31,11 +31,17 @@ use crate::wallet::fixtures::{
 ///   their money is gone.
 #[must_use]
 pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceModel {
+    // The last-known total paints first while the core withholds the live
+    // one; live replaces it (max(live, cached) is the core's rule — this only
+    // chooses what to show meanwhile). The web's `liveBalance`.
+    let on_cache = view.display_total_usd.is_none() && view.cached_total_usd.is_some();
     let status = if view.unreachable {
         // A first launch with no network: say so, over the skeleton, rather
         // than show a settled-looking zero (spec 038 finding 15).
         Some((StatusKind::Warning, s.balance_unreachable.clone()))
-    } else if view.refreshing {
+    } else if view.refreshing || on_cache {
+        // A cached figure is a figure being brought up to date — said so, so
+        // yesterday's total never reads as today's.
         Some((StatusKind::Refreshing, s.balance_stale.clone()))
     } else {
         view.notice.map(|notice| {
@@ -62,7 +68,7 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
         };
     }
 
-    let Some(usd) = view.display_total_usd else {
+    let Some(usd) = view.display_total_usd.or(view.cached_total_usd) else {
         return BalanceModel {
             label: s.total_balance.clone(),
             state: BalanceState::Loading,
@@ -78,7 +84,14 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
     let (integer, decimals) = split_fiat(usd, locale);
     BalanceModel {
         label: s.total_balance.clone(),
-        state: if usd == 0.0 {
+        // A zero is "live" only once EVERY chain has answered: a partial zero
+        // (some chain unreachable), or a cached one, is an unknown wallet,
+        // not a listening one.
+        state: if usd == 0.0
+            && !view.balance_unknown
+            && !view.balance_partial
+            && view.tokens.is_empty()
+        {
             BalanceState::ZeroLive
         } else {
             BalanceState::Normal
@@ -487,6 +500,49 @@ mod tests {
         let model = balance(&view(Some(0.0)), &strings(), "en");
         assert_eq!(model.state, BalanceState::ZeroLive);
         assert_eq!(model.integer, SharedString::from("$0"));
+    }
+
+    /// The last-known total paints first — with the refreshing line, so it
+    /// never reads as today's figure — and live replaces it (the web's
+    /// `liveBalance`). A skeleton only when there is nothing known at all.
+    #[test]
+    fn a_cached_total_paints_first_and_says_it_is_refreshing() {
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(42.5);
+        let model = balance(&cached, &strings(), "en");
+        assert_eq!(model.state, BalanceState::Normal);
+        assert_eq!(model.integer, SharedString::from("$42"));
+        assert_eq!(model.decimals, Some(SharedString::from("50")));
+        assert!(
+            matches!(model.status, Some((StatusKind::Refreshing, _))),
+            "a cached figure must say it is being brought up to date"
+        );
+
+        // Live wins over the cache the moment it is there.
+        let mut live = view(Some(40.0));
+        live.cached_total_usd = Some(42.5);
+        let model = balance(&live, &strings(), "en");
+        assert_eq!(model.integer, SharedString::from("$40"));
+        assert!(model.status.is_none(), "{:?}", model.status.map(|s| s.1));
+    }
+
+    /// A zero is "live" only once every chain answered: a partial zero, or a
+    /// cached one, is an unknown wallet — not a listening one.
+    #[test]
+    fn a_partial_or_cached_zero_is_not_live() {
+        let mut partial = view(Some(0.0));
+        partial.balance_partial = true;
+        assert_eq!(
+            balance(&partial, &strings(), "en").state,
+            BalanceState::Normal
+        );
+
+        let mut cached = view(None);
+        cached.cached_total_usd = Some(0.0);
+        assert_eq!(
+            balance(&cached, &strings(), "en").state,
+            BalanceState::Normal
+        );
     }
 
     /// Invariant ⑧: the value is withheld by construction. The core already
@@ -1014,6 +1070,19 @@ pub fn chain_rows(
         });
     }
     rows
+}
+
+/// Whether the home's asset strip says "nothing here" — the web's
+/// `assetsMode(..) === 'empty'`: once the core has actually looked and there
+/// is nothing held, or when the sidebar's chain holds nothing while others do.
+/// A blank strip under a pill reads as a list that failed to load; while the
+/// core is still counting it stays blank, because the hero says "counting".
+#[must_use]
+pub fn assets_strip_empty(view: &BalanceView, filter: Option<u32>) -> bool {
+    if view.tokens.is_empty() {
+        return !view.holdings_loading && !view.balance_unknown;
+    }
+    filter.is_some() && visible_token_indices(view, filter).is_empty()
 }
 
 /// Which holdings the network filter leaves on screen, as indices into the

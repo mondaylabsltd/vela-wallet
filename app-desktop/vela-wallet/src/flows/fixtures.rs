@@ -228,6 +228,12 @@ pub struct ReceiveQr {
     pub warning: SharedString,
     pub save_image: SharedString,
     pub view_on_explorer: SharedString,
+    /// Where "View on Explorer" leads — this account's page on the chain's
+    /// explorer (the web's `explorerAddressURL`). `None` in the mocks.
+    pub explorer_url: Option<SharedString>,
+    /// The whole contract, for the copy beside the contract line — the line
+    /// itself is shortened. `None` for the chain's own coin and the mocks.
+    pub contract_copy: Option<SharedString>,
     /// What the code actually encodes.
     ///
     /// `None` in every mock, and that is why the gallery still draws the
@@ -272,6 +278,9 @@ pub struct TxDetail {
     pub positive: bool,
     pub facts: Vec<FactRow>,
     pub view_on_explorer: SharedString,
+    /// The transaction's page on its chain's explorer (the web's
+    /// `explorerTxURL`). `None` without a hash, and in the mocks.
+    pub explorer_url: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -367,6 +376,11 @@ pub struct RecipientCard {
     pub name: SharedString,
     pub seed: SharedString,
     pub amount: SharedString,
+    /// Live only: what the core says about this row — a repeat of an earlier
+    /// payee (issue 203), an address or an amount it will not take. Empty
+    /// for a row that is fine, and for an unfinished one: an empty field is
+    /// not a mistake.
+    pub notes: Vec<SharedString>,
 }
 
 #[derive(Clone)]
@@ -419,6 +433,18 @@ pub struct SendForm {
     pub recipients: Vec<RecipientCard>,
     pub recipient_actions: Vec<SharedString>,
     pub summary: Option<(SharedString, SharedString)>,
+    /// Live only, split: what the balance has left to give out (the core's
+    /// `split_remaining`, #265), and whether the rows already outrun it —
+    /// the total then draws in the error ink.
+    pub remaining: Option<SharedString>,
+    pub summary_over: bool,
+    /// Live only: the unit the figure is typed in — the fiat code while the
+    /// person types money, the token otherwise (#231). `None` keeps the
+    /// token's symbol as the field's label.
+    pub amount_unit: Option<SharedString>,
+    /// Live only: the ⇄ swap under the figure (#197) — `Some` where the core
+    /// offers it, `Some(false)` when it is offered but would change nothing.
+    pub denom_toggle: Option<bool>,
     /// Live only: the pill that opens the address book beside a typed field.
     /// The mock's recipient card opens the picker itself, so it has none.
     pub pick_contacts: Option<SharedString>,
@@ -473,6 +499,22 @@ pub struct BatchRow {
     pub ok: bool,
     pub address: SharedString,
     pub conversion: SharedString,
+    /// Live only: why the row will not be paid — a duplicate, an address
+    /// that is not one, a line the parser refused.
+    pub note: Option<SharedString>,
+}
+
+/// DSD2cL's total line — the web's `total`: what the import sends, in the
+/// token and (for a fiat sheet) in the sheet's own currency, against what
+/// the account holds.
+#[derive(Clone)]
+pub struct BatchTotal {
+    pub label: SharedString,
+    pub value: SharedString,
+    pub detail: Option<SharedString>,
+    pub balance: SharedString,
+    /// The core's `over_balance`, worded; the total then draws in error ink.
+    pub over: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -488,6 +530,8 @@ pub struct BatchImport {
     pub rate_value: SharedString,
     pub rate_hint: SharedString,
     pub parsed: SharedString,
+    /// Live only: the total line (`None` until a row parses).
+    pub total: Option<BatchTotal>,
     pub rows: Vec<BatchRow>,
     pub rejected: SharedString,
     /// Live only: the over-cap / over-balance / unreadable-file notice,
@@ -671,6 +715,8 @@ fn receive_qr(s: &FlowStrings, asset_mode: bool) -> ReceiveQr {
         warning: s.warning_reminder.clone(),
         save_image: s.save_image.clone(),
         view_on_explorer: s.view_on_explorer.clone(),
+        explorer_url: None,
+        contract_copy: None,
         // The mocks draw the design, not a wallet: no payload, so the card
         // keeps the pattern the drawing shows.
         qr_payload: None,
@@ -851,6 +897,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         positive: received,
         facts,
         view_on_explorer: s.view_on_explorer.clone(),
+        explorer_url: None,
     }
 }
 
@@ -989,18 +1036,21 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                     name: ALICE_DISPLAY.into(),
                     seed: ALICE_FULL.into(),
                     amount: "50".into(),
+                    notes: Vec::new(),
                 },
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "2").into(),
                     name: "Alice".into(),
                     seed: A_HAO_FULL.into(),
                     amount: "30".into(),
+                    notes: Vec::new(),
                 },
                 RecipientCard {
                     ordinal: fill(&s.recipient_n, "n", "3").into(),
                     name: "hold on".into(),
                     seed: HOLD_ON_FULL.into(),
                     amount: "40".into(),
+                    notes: Vec::new(),
                 },
             ],
             recipient_actions: vec![
@@ -1017,6 +1067,10 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
                 .into(),
                 "120 USDT · ≈$120.00".into(),
             )),
+            remaining: None,
+            summary_over: false,
+            amount_unit: None,
+            denom_toggle: None,
             pick_contacts: None,
             notice: None,
             fee,
@@ -1037,6 +1091,10 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         recipients: Vec::new(),
         recipient_actions: Vec::new(),
         summary: None,
+        remaining: None,
+        summary_over: false,
+        amount_unit: None,
+        denom_toggle: None,
         pick_contacts: None,
         notice: None,
         fee,
@@ -1120,21 +1178,25 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
         rate_value: format!("{} 7.25 CNY", fill(&s.batch_rate_label, "sym", "USDT")).into(),
         rate_hint: fill(&fill(&s.batch_rate_hint, "code", "CNY"), "sym", "USDT").into(),
         parsed: fill(&s.batch_parsed, "n", "3").into(),
+        total: None,
         rows: vec![
             BatchRow {
                 ok: true,
                 address: ALICE_DISPLAY.into(),
                 conversion: "5,000 CNY → 689.66".into(),
+                note: None,
             },
             BatchRow {
                 ok: true,
                 address: "0x21aE…9F3c".into(),
                 conversion: "8,000 CNY → 1,103.45".into(),
+                note: None,
             },
             BatchRow {
                 ok: false,
                 address: format!("0x12zz…{}", s.batch_bad_address).into(),
                 conversion: "—".into(),
+                note: None,
             },
         ],
         rejected: fill(&s.batch_rejected_one, "count", "1").into(),
