@@ -46,6 +46,7 @@ pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;
 pub mod dapp_browser;
+pub mod device_storage;
 pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;
@@ -61,6 +62,7 @@ pub mod payment_request;
 #[cfg(target_os = "macos")]
 mod platform_macos;
 pub mod pool;
+pub mod preferences;
 pub mod proxy;
 pub mod qr;
 pub mod receive_watch;

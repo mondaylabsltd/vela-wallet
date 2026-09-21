@@ -5,6 +5,8 @@
 //! clustering (specs/007-desktop-onboarding-gpui/research.md D3); geometry from
 //! the same mocks at their 1280×800 logical size (D5).
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use gpui::{Hsla, Pixels, Window, px, rgb};
 
 /// Which palette is active. Follows the OS appearance unless `VELA_THEME`
@@ -16,11 +18,16 @@ pub enum ThemeMode {
 }
 
 impl ThemeMode {
-    /// `VELA_THEME` override, else the window's current system appearance.
+    /// `VELA_THEME` override, else the person's stored choice (spec 072:
+    /// `vela.theme`), else — for `system` — the window's current appearance.
     pub fn detect(window: &Window) -> Self {
-        match std::env::var("VELA_THEME").as_deref() {
-            Ok("light") => Self::Light,
-            Ok("dark") => Self::Dark,
+        let pinned = match std::env::var("VELA_THEME").as_deref() {
+            Ok(pin @ ("light" | "dark")) => pin.to_owned(),
+            _ => crate::executor::preferences::theme().to_owned(),
+        };
+        match pinned.as_str() {
+            "light" => Self::Light,
+            "dark" => Self::Dark,
             _ => match window.appearance() {
                 gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark => Self::Dark,
                 gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight => Self::Light,
@@ -386,36 +393,74 @@ pub const CONTACTS_MOTION_CROSSFADE_MS: u64 = 150;
 )]
 pub const CONTACTS_MOTION_HOVER_MS: u64 = 120;
 
+/// The person's text size (spec 072: `vela.textScale`), as the factor every
+/// text token below is multiplied by — the six stops of
+/// `vela_core::prefs::TEXT_SCALE_LEVELS`, 0.82 to 1.35. Stored as `f32` bits
+/// because every text in every frame reads it; `1.0` until the preference is
+/// read at launch.
+static TEXT_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
+
+/// Put a text size in force. The next frame draws every token at it.
+pub fn set_text_scale(factor: f64) {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "a factor between 0.82 and 1.35"
+    )]
+    let factor = factor as f32;
+    let factor = if factor.is_finite() && factor > 0. {
+        factor
+    } else {
+        1.
+    };
+    TEXT_SCALE.store(factor.to_bits(), Ordering::Relaxed);
+}
+
+/// The factor in force.
+pub fn text_scale() -> f32 {
+    f32::from_bits(TEXT_SCALE.load(Ordering::Relaxed))
+}
+
+/// A mock-measured text size at the person's scale. Only TEXT scales — the
+/// geometry around it is the design's, exactly as the web's `textScale`
+/// multiplies the type tokens and nothing else.
+fn scaled(size: f32) -> Pixels {
+    scaled_by(size, text_scale())
+}
+
+fn scaled_by(size: f32, factor: f32) -> Pixels {
+    px(size * factor)
+}
+
 /// Wallet type scale (mock-measured).
 pub fn text_balance_hero() -> Pixels {
-    px(40.)
+    scaled(40.)
 }
 pub fn text_balance_decimals() -> Pixels {
-    px(24.)
+    scaled(24.)
 }
 pub fn text_row_title() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 pub fn text_row_sub() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 pub fn text_section() -> Pixels {
-    px(17.)
+    scaled(17.)
 }
 pub fn text_label() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 pub fn text_amount() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 pub fn text_unit() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 pub fn text_panel_title() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 pub fn text_mono_address() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 
 /// Monospace family for addresses. Menlo ships on macOS; the DejaVu face is
@@ -627,39 +672,39 @@ pub const GALLERY_SIDEBAR_W: f32 = 280.;
 
 /// Progress/outcome headline.
 pub fn text_flow_headline() -> Pixels {
-    px(17.)
+    scaled(17.)
 }
 /// Step counter / helper captions.
 pub fn text_flow_caption() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// The glyph inside the status badge circle.
 pub fn text_badge_glyph() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 
 /// The v2 wordmark is small, heavy and widely tracked — a label beside the
 /// mark, not a title. v1's 42 px display treatment is gone with the two-column
 /// welcome it belonged to.
 pub fn text_wordmark() -> Pixels {
-    px(19.)
+    scaled(19.)
 }
 /// The rail's step ordinal, set in the mono face at display size. It is
 /// TYPOGRAPHY, not a widget: a stepper drawn as a control reads as chrome
 /// bolted to the side of the page, which is exactly what it looked like.
 pub fn text_step_ordinal() -> Pixels {
-    px(104.)
+    scaled(104.)
 }
 pub fn line_height_step_ordinal() -> Pixels {
-    px(104. * 0.82)
+    scaled(104. * 0.82)
 }
 /// The `/03` that follows it.
 pub fn text_step_total() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 /// The step's name, under the ordinal.
 pub fn text_step_name() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 /// The rail's tagline, shown before the journey starts and after it ends.
 ///
@@ -669,23 +714,23 @@ pub fn text_step_name() -> Pixels {
 /// fit the rail's 256px inner measure whole, and the longer latin ones wrap
 /// into two lines instead of orphaning a glyph.
 pub fn text_rail_tagline() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 pub fn line_height_rail_tagline() -> Pixels {
-    px(26. * 1.35)
+    scaled(26. * 1.35)
 }
 /// The one sentence under a step's name.
 pub fn line_height_rail_detail() -> Pixels {
-    px(13. * 1.6)
+    scaled(13. * 1.6)
 }
 /// The v2 welcome hero. It carries the screen, so it is nearly twice v1's
 /// tagline; the copy ships its own line break rather than relying on a wrap.
 pub fn text_hero() -> Pixels {
-    px(46.)
+    scaled(46.)
 }
 /// `line-height: 1.25` at the hero size.
 pub fn line_height_hero() -> Pixels {
-    px(46. * 1.25)
+    scaled(46. * 1.25)
 }
 /// One rung down the hero ladder (46/38/31), for a locale whose headline is too
 /// wide for the first. The corpus says which, in `heroTitleFit` — the width is a
@@ -693,64 +738,64 @@ pub fn line_height_hero() -> Pixels {
 /// the widest authored line runs 6.9em (zh) to 12.8em (fr), and at 46 px the
 /// widest of them overruns the 620 px column.
 pub fn text_hero_long() -> Pixels {
-    px(38.)
+    scaled(38.)
 }
 /// `line-height: 1.25` at the long-locale hero size.
 pub fn line_height_hero_long() -> Pixels {
-    px(38. * 1.25)
+    scaled(38. * 1.25)
 }
 /// Flow-screen titles (spec 014). Not the welcome hero — that is `text_hero`.
 pub fn text_tagline() -> Pixels {
-    px(26.)
+    scaled(26.)
 }
 pub fn text_card_title() -> Pixels {
-    px(16.)
+    scaled(16.)
 }
 pub fn text_body() -> Pixels {
-    px(13.)
+    scaled(13.)
 }
 pub fn text_numeral() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// Every v2 button label — welcome, flow, sheet — is this size and BOLD.
 pub fn text_cta() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 /// Flow subtitles and the name field's own text. One notch under
 /// `text_card_title`, which the wallet home still uses at 16.
 pub fn text_flow_sub() -> Pixels {
-    px(15.)
+    scaled(15.)
 }
 /// `line-height: 1.5` at 15.
 pub fn line_height_flow_sub() -> Pixels {
-    px(22.5)
+    scaled(22.5)
 }
 /// `line-height: 1.55` at 13 — the acknowledgement and hint sentences, which
 /// wrap more than anything else on the screen.
 pub fn line_height_ack() -> Pixels {
-    px(13. * 1.55)
+    scaled(13. * 1.55)
 }
 /// `line-height: 1.2` on the 26px flow titles.
 pub fn line_height_title() -> Pixels {
-    px(26. * 1.2)
+    scaled(26. * 1.2)
 }
 /// The uppercase field/section label above an input or a list. Tiny, heavy and
 /// tracked in the design; gpui cannot track, so the case and the weight carry
 /// it (see `ui::vela_wordmark` for the one place hand-tracking was worth it).
 pub fn text_section_label() -> Pixels {
-    px(11.)
+    scaled(11.)
 }
 /// A key row's name, and a progress task's label.
 pub fn text_row_name() -> Pixels {
-    px(14.)
+    scaled(14.)
 }
 /// A key row's provider line, and the mono counters beside a section label.
 pub fn text_row_meta() -> Pixels {
-    px(12.)
+    scaled(12.)
 }
 /// Relaxed body line height (~1.55 at 13 px).
 pub fn line_height_body() -> Pixels {
-    px(20.)
+    scaled(20.)
 }
 
 #[cfg(test)]
@@ -833,6 +878,21 @@ mod tests {
         assert_eq!(CONTACTS_MOTION_PANEL_CLOSE_MS, 200);
         assert_eq!(CONTACTS_MOTION_CROSSFADE_MS, 150);
         assert_eq!(CONTACTS_MOTION_HOVER_MS, 120);
+    }
+
+    /// Spec 072: a text size multiplies the mock-measured token by the core's
+    /// factor for that stop — the smallest stop shrinks, the largest grows,
+    /// and "standard" is the design exactly.
+    #[test]
+    fn a_text_size_multiplies_the_token() {
+        let factor = |level: &str| {
+            #[allow(clippy::cast_possible_truncation, reason = "a small factor")]
+            let factor = vela_core::prefs::text_scale_factor(level) as f32;
+            factor
+        };
+        assert_eq!(scaled_by(13., factor("standard")), px(13.));
+        assert_eq!(scaled_by(20., factor("xlarge")), px(20. * 1.35));
+        assert!(scaled_by(13., factor("compact")) < px(13.));
     }
 
     /// The accent is the brand constant and identical across modes (research D3).

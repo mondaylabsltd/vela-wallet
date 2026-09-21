@@ -95,8 +95,19 @@ pub struct SettingsStrings {
     pub erase_title: SharedString,
     pub erase_subtitle: SharedString,
     pub erase_confirm: SharedString,
+    /// The erase's question (spec 072): what goes, what does not, and the
+    /// line it says instead of leaving when something survived.
+    pub erase_desc: SharedString,
+    pub erase_loses: SharedString,
+    pub erase_keeps: SharedString,
+    pub erase_cancel: SharedString,
+    pub erase_failed: SharedString,
+    /// Every other question's way out.
+    pub cancel: SharedString,
     // appearance panel
     pub language: SharedString,
+    /// The language menu's first row: `auto`.
+    pub language_follow_system: SharedString,
     pub theme_title: SharedString,
     pub theme_light: SharedString,
     pub theme_dark: SharedString,
@@ -215,6 +226,10 @@ pub struct SettingsStrings {
     pub storage_clear: SharedString,
     pub storage_clear_all: SharedString,
     pub storage_disconnect_all: SharedString,
+    /// "Clear all caches?" — the question before it happens.
+    pub storage_clear_title: SharedString,
+    pub storage_clear_body: SharedString,
+    pub storage_clear_confirm: SharedString,
     // about panel
     pub about_tagline: SharedString,
     pub about_version: String,
@@ -313,7 +328,14 @@ impl SettingsStrings {
             erase_title: s("settings.eraseDevice.title"),
             erase_subtitle: s("settings.eraseDevice.subtitle"),
             erase_confirm: s("settings.eraseDevice.confirm"),
+            erase_desc: s("settings.eraseDevice.desc"),
+            erase_loses: s("settings.eraseDevice.loses"),
+            erase_keeps: s("settings.eraseDevice.keeps"),
+            erase_cancel: s("settings.eraseDevice.cancel"),
+            erase_failed: s("settings.eraseDevice.failed"),
+            cancel: s("common.cancel"),
             language: s("language.title"),
+            language_follow_system: s("language.followSystem"),
             theme_title: s("settings.appearance.themeTitle"),
             theme_light: s("settings.appearance.themeLight"),
             theme_dark: s("settings.appearance.themeDark"),
@@ -403,6 +425,9 @@ impl SettingsStrings {
             storage_clear: s("settings.storage.clear"),
             storage_clear_all: s("settings.storage.clearAllCaches"),
             storage_disconnect_all: s("settings.storage.disconnectAll"),
+            storage_clear_title: s("settings.storage.clearTitle"),
+            storage_clear_body: s("settings.storage.clearBody"),
+            storage_clear_confirm: s("settings.storage.clearConfirm"),
             about_tagline: s("about.tagline"),
             about_version: raw("about.version"),
             about_section_technical: s("about.sectionTechnical"),
@@ -472,6 +497,28 @@ mod tests {
                 assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
                 assert!(!value.is_empty(), "`{key}` resolved empty");
             }
+        }
+    }
+
+    /// The words spec 072's questions and menus read — every one already in
+    /// the corpus in fifteen languages, so the desktop's half costs no key.
+    #[test]
+    fn the_settings_parity_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.erase_desc, "settings.eraseDevice.desc"),
+            (&s.erase_loses, "settings.eraseDevice.loses"),
+            (&s.erase_keeps, "settings.eraseDevice.keeps"),
+            (&s.erase_cancel, "settings.eraseDevice.cancel"),
+            (&s.erase_failed, "settings.eraseDevice.failed"),
+            (&s.cancel, "common.cancel"),
+            (&s.language_follow_system, "language.followSystem"),
+            (&s.storage_clear_title, "settings.storage.clearTitle"),
+            (&s.storage_clear_body, "settings.storage.clearBody"),
+            (&s.storage_clear_confirm, "settings.storage.clearConfirm"),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
         }
     }
 

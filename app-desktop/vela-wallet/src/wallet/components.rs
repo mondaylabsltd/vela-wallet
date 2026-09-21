@@ -62,11 +62,53 @@ pub fn identicon_avatar(
     seed: &str,
     size: f32,
 ) -> impl IntoElement {
+    avatar(identicons, seed, "", size)
+}
+
+/// An avatar in the person's style (spec 072: `vela.avatarStyle`): the
+/// identicon of `seed`, or `name`'s first letter on an accent disc — the
+/// web's `avatarSvgForClient`, which also draws `V` for a nameless one.
+pub fn avatar(
+    identicons: &mut IdenticonCache,
+    seed: &str,
+    name: &str,
+    size: f32,
+) -> gpui::AnyElement {
+    if crate::executor::preferences::avatar_initials() {
+        // The accent is the same in both palettes (`accent_is_mode_invariant`),
+        // which is what lets a component without a theme draw it.
+        let accent = Theme::light().accent;
+        return div()
+            .size(px(size))
+            .flex_none()
+            .rounded_full()
+            .bg(accent.opacity(0.14))
+            .flex()
+            .items_center()
+            .justify_center()
+            // Geometry, not type: the letter is a share of the disc, as the
+            // web's 34-in-100, and does not follow the text size.
+            .text_size(px(size * 0.34))
+            .font_weight(gpui::FontWeight::BOLD)
+            .text_color(accent)
+            .child(SharedString::from(initial(name)))
+            .into_any_element();
+    }
     img(ImageSource::Render(identicons.avatar(seed, size as u32)))
         .w(px(size))
         .h(px(size))
         .rounded(px(size / 2.))
         .flex_none()
+        .into_any_element()
+}
+
+/// The letter an initials avatar draws: the name's first, upper-cased, or `V`.
+#[must_use]
+pub fn initial(name: &str) -> String {
+    name.trim()
+        .chars()
+        .next()
+        .map_or_else(|| "V".to_owned(), |first| first.to_uppercase().collect())
 }
 
 /// A passkey provider's mark, or nothing when the catalog does not know the
@@ -126,7 +168,7 @@ pub fn wallet_header(
         .flex()
         .items_center()
         .gap(px(10.))
-        .child(identicon_avatar(identicons, seed, WALLET_AVATAR))
+        .child(avatar(identicons, seed, &name, WALLET_AVATAR))
         .child(
             div()
                 .flex()
