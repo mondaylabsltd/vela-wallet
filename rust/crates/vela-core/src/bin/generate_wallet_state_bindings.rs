@@ -46,6 +46,9 @@ use vela_core::app::ext_cache::{
     Event as ExtCacheEvent, ExtCacheOperation, ExtCacheShellResult, ExtCacheView,
 };
 use vela_core::app::fee_policy::{Event as FeeEvent, FeeOperation, FeeShellResult, FeeView};
+use vela_core::app::fee_speed::{
+    Event as FeeSpeedEvent, FeeSpeedOperation, FeeSpeedShellResult, FeeSpeedView,
+};
 use vela_core::app::fee_tier_pref::{
     Event as FeeTierPrefEvent, FeeTierPrefOperation, FeeTierPrefShellResult, FeeTierPrefView,
 };
@@ -98,6 +101,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     FeeOperation::export_all(&config)?;
     FeeShellResult::export_all(&config)?;
     FeeView::export_all(&config)?;
+    FeeSpeedEvent::export_all(&config)?;
+    FeeSpeedOperation::export_all(&config)?;
+    FeeSpeedShellResult::export_all(&config)?;
+    FeeSpeedView::export_all(&config)?;
     FeeTierPrefEvent::export_all(&config)?;
     FeeTierPrefOperation::export_all(&config)?;
     FeeTierPrefShellResult::export_all(&config)?;

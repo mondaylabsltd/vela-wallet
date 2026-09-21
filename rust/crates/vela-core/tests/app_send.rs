@@ -2985,6 +2985,48 @@ fn the_signed_quote_is_exactly_the_displayed_estimate() {
     assert_eq!(calls[0].data, "0x");
 }
 
+/// Spec 069: the submission names the speed the displayed fee was priced at,
+/// taken from the same estimate as the amount — so the relay is told the tier
+/// the person saw, and no shell keeps a second copy of which speed this is.
+#[test]
+fn the_signed_quote_names_the_tier_it_was_priced_at() {
+    for tier in [FeeTier::Fast, FeeTier::Standard, FeeTier::Slow] {
+        let mut sut = boot(vec![eth("2")]);
+        let mut fee = native_fee(1, 42_000_000_000_000);
+        fee.tier = tier;
+        to_confirm_native(&mut sut, "1", fee);
+        let submit = slide_to_submit(&mut sut);
+        let Op::SubmitUserOp {
+            quoted_fee: Some(quoted),
+            ..
+        } = &submit
+        else {
+            panic!("in-band quote expected: {submit:?}");
+        };
+        assert_eq!(quoted.tier, Some(tier));
+    }
+}
+
+/// The dead `rapid` is never put on the wire: the relay refuses it with
+/// -32602, and a relabelling to a neighbouring tier would name a speed this
+/// fee was not priced at. It names nothing — the pre-068 wire.
+#[test]
+fn a_quote_at_the_dead_tier_names_no_tier() {
+    let mut sut = boot(vec![eth("2")]);
+    let mut fee = native_fee(1, 42_000_000_000_000);
+    fee.tier = FeeTier::Rapid;
+    to_confirm_native(&mut sut, "1", fee);
+    let submit = slide_to_submit(&mut sut);
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("in-band quote expected: {submit:?}");
+    };
+    assert_eq!(quoted.tier, None);
+}
+
 #[test]
 fn a_requote_before_the_slide_signs_the_new_number_not_the_old_one() {
     let mut sut = boot(vec![usdc("100")]);
