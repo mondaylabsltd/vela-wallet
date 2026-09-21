@@ -153,3 +153,31 @@ describe('erase', () => {
 		expect(view.dialog()).toBeNull();
 	});
 });
+
+describe('rows that go somewhere, go there', () => {
+	it('"Get key" opens the provider’s key page; the key test is its own action', async () => {
+		const view = await drawn();
+		await view.click(view.nav(String(m.advanced.rpcProvidersTitle)));
+		const getKey = [...view.root.querySelectorAll<HTMLAnchorElement>('a.action')].find((a) =>
+			a.closest('section')?.textContent?.includes('dRPC')
+		);
+		expect(getKey?.textContent?.trim()).toBe(String(m.rpcProviders.getKey));
+		expect(getKey?.href).toBe('https://drpc.org/');
+		expect(getKey?.target).toBe('_blank');
+
+		const check = view.buttonIn(view.root, String(m.rpcProviders.checkKey));
+		await view.click(check);
+		expect(view.net).toContainEqual({ kind: 'provider-test', provider: 'alchemy' });
+	});
+
+	it('About’s links are links', async () => {
+		const view = await drawn();
+		await view.click(view.nav(String(m.about.title)));
+		const hrefs = [...view.root.querySelectorAll<HTMLAnchorElement>('a.kv')].map((a) => a.href);
+		expect(hrefs).toEqual([
+			'https://getvela.app/',
+			'https://github.com/mondaylabsltd/vela-wallet',
+			'https://safe.global/'
+		]);
+	});
+});

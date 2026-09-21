@@ -48,9 +48,10 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { chainMeta, languageRows, markFor, currencyGlyph } from './fixtures';
+import { chainMeta, languageRows, markFor, currencyGlyph, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
+	AboutModel,
 	AddNetworkModel,
 	BalanceDetailModel,
 	ChainMarkModel,
@@ -336,16 +337,6 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
 
-/**
- * Where each provider's API key is made. The panel sent every "Get key →" to
- * drpc.org, Alchemy's and Ankr's included.
- */
-export const PROVIDER_KEY_URLS = {
-	alchemy: 'https://dashboard.alchemy.com/',
-	drpc: 'https://drpc.org/',
-	ankr: 'https://www.ankr.com/rpc/'
-} as const;
-
 export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
 	return {
 		title: m.advanced.rpcProvidersTitle,
@@ -365,7 +356,11 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 					value: p.key,
 					placeholder: p.has_key ? undefined : m.rpcProviders.notSet
 				},
+				// With a key the action tests it. Without one there is nothing to
+				// test, and "Get key" goes where a key is made — it used to run a
+				// test on the empty field under that label.
 				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
+				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
 				support:
 					test !== null && test.done
 						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
@@ -409,9 +404,36 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 // ---------------------------------------------------------------------------
 
 /**
+ * How many networks this wallet has, once the ledger has been read (spec 072):
+ * the fixture's 12 stood on the Networks row and in About for everyone.
+ * `undefined` until then — an empty cell, never a guess.
+ */
+function networkCount(view: NetView): number | undefined {
+	return view.loaded ? view.networks.length : undefined;
+}
+
+/** About's network row, counted from the list. */
+function aboutWithNetworkCount(
+	about: AboutModel,
+	count: number | undefined,
+	m: SettingsMessages
+): AboutModel {
+	return {
+		...about,
+		rows: about.rows.map((row) =>
+			row.id === 'networks'
+				? {
+						...row,
+						value: count === undefined ? '' : fill(m.about.techNetworksValue, { count })
+					}
+				: row
+		)
+	};
+}
+
+/**
  * Replace the network-owned sections of a built settings model with the
- * core's view. Identity, appearance, localization, storage and about stay
- * exactly as built — their machines are later features.
+ * core's view — the pages, and the two places that count the networks.
  */
 export function withLiveNetworks(
 	model: SettingsHomeModel,
@@ -420,8 +442,21 @@ export function withLiveNetworks(
 	expandedId?: string
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
+	const count = networkCount(view);
 	return {
 		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) =>
+				row.id === 'networks'
+					? {
+							...row,
+							value: count === undefined ? undefined : fill(m.networks.count, { count })
+						}
+					: row
+			)
+		})),
+		about: aboutWithNetworkCount(model.about, count, m),
 		networks: { ...model.networks, rows: liveNetworkRows(view, m, expandedId) },
 		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m),
@@ -440,6 +475,7 @@ export function withLiveNetworksDesktop(
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
+		about: aboutWithNetworkCount(model.about, networkCount(view), m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId),

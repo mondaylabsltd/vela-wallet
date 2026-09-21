@@ -402,6 +402,11 @@ export interface ProviderCardModel {
 	field: UrlFieldModel;
 	/** The blue trailing action inside the field — 检查密钥 / 获取密钥. */
 	action: string;
+	/**
+	 * Where the action GOES, when it is a link: "Get key" opens the
+	 * provider's key page. Absent, the action is the key test.
+	 */
+	actionUrl?: string;
 	/** "支持 12 个网络，共 12 个 · 平均 112ms". */
 	support?: string;
 	/** The "获取密钥 →" link under an unset provider. */
@@ -463,12 +468,16 @@ export interface StorageModel {
 }
 
 export interface KeyValueRowModel {
+	/** Names a row a live overlay rewrites (the network count). */
+	id?: string;
 	label: string;
 	value: string;
 	/** Values in the mono face — every technical detail is. */
 	mono?: boolean;
 	/** Link rows carry the external glyph. */
 	external?: boolean;
+	/** Where a link row goes. A row that draws the glyph opens something. */
+	href?: string;
 }
 
 export interface AboutModel {
