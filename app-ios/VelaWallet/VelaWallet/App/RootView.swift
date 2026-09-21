@@ -901,7 +901,21 @@ struct RootView: View {
                     if value != batchRate { batchRate = value }
                 }
                 .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
-                .onChange(of: amountDraft) { _, value in send.setAmount(value) }
+                // Spec 073: cleaned by the core's rule before the machine
+                // sees it; a cleaned figure is written back and sent by the
+                // change that write raises, a refused paste puts back what the
+                // field had.
+                .onChange(of: amountDraft) { old, value in
+                    guard let clean = AmountText.clean(value, previous: old) else {
+                        amountDraft = old
+                        return
+                    }
+                    if clean != value {
+                        amountDraft = clean
+                        return
+                    }
+                    send.setAmount(clean)
+                }
                 .onChange(of: send.view?.amount) { _, value in
                     if let value, value != amountDraft { amountDraft = value }
                 }

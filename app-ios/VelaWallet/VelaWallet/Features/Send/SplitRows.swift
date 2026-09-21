@@ -44,11 +44,17 @@ enum SplitRows {
         }
     }
 
+    /// A row's share, cleaned by the core's amount rule against what the row
+    /// held (spec 073): "4,5" from a decimal-comma pad is 4.5, and a paste
+    /// with no reading as one figure changes nothing.
     static func amountEdited(_ rows: [Draft], id: String, amount: String) -> [Draft] {
         rows.map { row in
-            guard row.id == id, row.amount != amount else { return row }
+            guard row.id == id,
+                  let clean = AmountText.clean(amount, previous: row.amount),
+                  row.amount != clean
+            else { return row }
             var next = row
-            next.amount = amount
+            next.amount = clean
             return next
         }
     }

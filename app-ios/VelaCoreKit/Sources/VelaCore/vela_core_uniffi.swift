@@ -10016,6 +10016,30 @@ fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -10650,6 +10674,38 @@ public func abiEncodeUint256(valueHex: String)throws  -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_abi_encode_uint256(
         FfiConverterString.lower(valueHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`
+ * (UTF-16 units).
+ */
+public func amountTextCaret(raw: String, clean: String, caret: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_amount_text_caret(
+        FfiConverterString.lower(raw),
+        FfiConverterString.lower(clean),
+        FfiConverterUInt32.lower(caret),uniffiCallStatus
+    )
+})
+}
+/**
+ * An amount field's text as the core reads it — ASCII digits and one `.` —
+ * or `None` for a paste with no reading as one figure (the field keeps
+ * `previous`). `number` is the resolved preset key (`comma_dot`…);
+ * `previous` the field's text before this edit; `pasted` `None` when the
+ * shell cannot tell (a native field). `vela_core::l10n::amount_text` says why.
+ */
+public func amountTextClean(raw: String, number: String, previous: String?, pasted: Bool?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_amount_text_clean(
+        FfiConverterString.lower(raw),
+        FfiConverterString.lower(number),
+        FfiConverterOptionString.lower(previous),
+        FfiConverterOptionBool.lower(pasted),uniffiCallStatus
     )
 })
 }
@@ -12209,6 +12265,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_abi_encode_uint256() != 17049) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_amount_text_caret() != 46568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_amount_text_clean() != 980) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_best_native_dex_price() != 43798) {

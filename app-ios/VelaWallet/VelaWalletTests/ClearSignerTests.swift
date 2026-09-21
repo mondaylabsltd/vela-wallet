@@ -402,8 +402,16 @@ struct ClearSignerChannelTests {
         let port = try #require(await channel.open())
         #expect(await RawPage(port: port).connect())
         guard let address = Self.networkAddress() else { return }
-        #expect(await !RawPage(port: port, host: NWEndpoint.Host(address)).connect(within: 2),
-                "reachable on \(address)")
+        let stranger = RawPage(port: port, host: NWEndpoint.Host(address))
+        if await stranger.connect(within: 2) {
+            // Under the full parallel run another suite's wildcard listener
+            // can hold the same port number on the network side, so a TCP
+            // answer alone proves nothing; what answers must not be THIS
+            // channel, which would switch protocols for the pinned origin.
+            let status = await stranger.upgrade(origin: fixture.origin)
+            #expect(status?.contains(" 101 ") != true,
+                    "the channel answered on \(address): \(status ?? "")")
+        }
         channel.cancel()
     }
 
