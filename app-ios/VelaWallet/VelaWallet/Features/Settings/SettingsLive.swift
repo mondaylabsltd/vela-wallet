@@ -18,6 +18,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SettingsLive {
 
@@ -388,6 +389,60 @@ enum SettingsLive {
         }
         copy.feeSpeedSheet = sheet
         return copy
+    }
+
+    /// How this device signs (spec 071): the two rows' values, the "Sign with"
+    /// sheet's tick and the Clear Signer page's sheet — every verdict in them
+    /// the `sign_pref` core's, so a row cannot say one thing while a signing
+    /// sheet starts at another.
+    static func withSignPref(
+        _ view: SignPrefViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        let sheet = SettingsFixtures.signWithSheet(loc, offered: view.offered, selected: view.method)
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                var changed = row
+                switch row.id {
+                case SettingsFixtures.signWithRow:
+                    changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
+                case SettingsFixtures.signerPageRow:
+                    changed.value = signerPageValue(view, loc: loc)
+                default:
+                    return row
+                }
+                return changed
+            }
+            return updated
+        }
+        copy.signWithSheet = sheet
+        let error: String? = switch view.signerUrlError {
+        case "invalid": loc.t("settings.signing.pageInvalid")
+        case "insecure": loc.t("settings.signing.pageInsecure")
+        default: nil
+        }
+        copy.signerPage = SignerPageModel(
+            title: loc.t("settings.signing.pageTitle"),
+            subtitle: loc.t("settings.signing.pageSubtitle"),
+            field: UrlFieldModel(
+                id: "signer-url", label: "", value: view.signerUrl,
+                placeholder: clearSignerDefaultUrl(), tone: error == nil ? nil : .error
+            ),
+            error: error,
+            foreign: view.signerUsesWalletPasskeys ? nil : loc.t("settings.signing.pageForeign"),
+            save: loc.t("settings.signing.pageSave"),
+            reset: view.signerUrlIsDefault ? nil : loc.t("settings.signing.pageReset")
+        )
+        return copy
+    }
+
+    /// "Official", or the host of the page a person chose.
+    static func signerPageValue(_ view: SignPrefViewWire, loc: Loc) -> String {
+        guard !view.signerUrlIsDefault else { return loc.t("settings.signing.pageOfficial") }
+        return URL(string: view.signerUrl)?.host ?? view.signerUrl
     }
 
     static func withCurrency(

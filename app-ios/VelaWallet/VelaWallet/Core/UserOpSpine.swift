@@ -25,6 +25,15 @@
 //  operation the relay must reject is a prompt wasted — and on this platform it
 //  is also a Face ID sheet somebody has to dismiss for nothing.
 //
+//  ## The Clear Signer is a ceremony, not a second path (spec 071)
+//
+//  When the person chose it, the SAME digest the passkey would have signed
+//  goes to a separate page with the request it covers — the core builds what
+//  the page receives (`clearSignerRequest`) and verifies what comes back —
+//  and an accepted answer continues exactly where an assertion does:
+//  `userOpSign`, `eip1271Signature`. Every other ending is a `clearSigner`
+//  failure the sheet puts into words, and nothing is submitted.
+//
 //  ## Why `signMessage` lives here and 052 never calls it
 //
 //  A dApp's `personal_sign` (spec 053) signs the Safe message hash and wraps
@@ -40,6 +49,8 @@ import VelaCore
 extension UserOpSpine.AccountPort {
     /// Nothing known: the ceremony routes as it always did.
     func keyRoutesJson(of address: String) async -> String { "[]" }
+    /// Nothing known: the Clear Signer's page shows the address alone.
+    func name(of address: String) async -> String? { nil }
 }
 
 @MainActor
@@ -68,10 +79,29 @@ final class UserOpSpine {
         /// Every founding key's credential id and stored transports, as JSON for
         /// the core's `signRoute` — `[{credential_id, transports}]`.
         func keyRoutesJson(of address: String) async -> String
+        /// The account's own name, for the Clear Signer's page.
+        func name(of address: String) async -> String?
     }
+
+    /// What a site asked for, as the Clear Signer's page is told it (spec
+    /// 071): its own method and params, and the origin the browser observed.
+    /// `nil` is the wallet's own send, which the core describes from its calls
+    /// and the page draws as the wallet itself.
+    struct Asked: Equatable {
+        let method: String
+        let paramsJson: String
+        let origin: String
+    }
+
+    /// The Clear Signer's "Sign with" name — not a place a passkey is, so
+    /// `signRoute` never routes it; the ceremony branches here instead.
+    static let clearSignerMethod = "clear_signer"
 
     enum Failure: Equatable {
         case passkeyCancelled
+        /// The Clear Signer ended without an answer the wallet accepts.
+        /// Nothing was signed; the sheet says which of its sentences applies.
+        case clearSigner(ClearSignerNotice)
         case relayerUnavailable
         case bundlerUnderfunded
         case other(String?)
@@ -140,6 +170,7 @@ final class UserOpSpine {
         chainId: Int,
         account: String,
         originalHash: Data,
+        asked: Asked? = nil,
         signingStarted: () -> Void = {}
     ) async throws -> String {
         let keys = await accounts.keys(of: account)
@@ -155,11 +186,25 @@ final class UserOpSpine {
             throw other("The message could not be hashed")
         }
         signingStarted()
-        let assertion = try await assert(account: account, pinned: pinned, challenge: challenge)
+        let signed = try await ceremony(
+            account: account, pinned: pinned, keys: keys, challenge: challenge,
+            buildRequest: { accountName in
+                // A message carries no calls and no operation: the page reads
+                // the site's own params.
+                guard let asked else { return nil }
+                return try clearSignerRequest(
+                    input: Self.clearSignerInput(
+                        asked: asked, chainId: chainId, account: account,
+                        accountName: accountName, keys: keys, calls: []
+                    ),
+                    draft: nil
+                )
+            }
+        )
         do {
             let signature = try eip1271Signature(
-                assertion: Self.webAuthn(assertion),
-                credentialId: assertion.credentialIdHex,
+                assertion: signed.assertion,
+                credentialId: signed.credentialIdHex,
                 keys: keys
             )
             return "0x" + signature.map { String(format: "%02x", $0) }.joined()
@@ -179,6 +224,7 @@ final class UserOpSpine {
         calls: [UserOpCall],
         gasFeeToken: String?,
         quotedFee: Quoted?,
+        asked: Asked? = nil,
         signingStarted: () -> Void = {}
     ) async throws -> String {
         let keys = await accounts.keys(of: account)
@@ -291,14 +337,28 @@ final class UserOpSpine {
             throw other("The operation could not be hashed.")
         }
         signingStarted()
-        let assertion = try await assert(account: account, pinned: pinned, challenge: challenge)
+        let assembled = draft
+        let answer = try await ceremony(
+            account: account, pinned: pinned, keys: keys, challenge: challenge,
+            buildRequest: { accountName in
+                // The ASSEMBLED operation — the one the digest covers — and
+                // the calls before its fee leg, which the core appends last.
+                try clearSignerRequest(
+                    input: Self.clearSignerInput(
+                        asked: asked, chainId: chainId, account: account,
+                        accountName: accountName, keys: keys, calls: calls
+                    ),
+                    draft: assembled
+                )
+            }
+        )
 
         let signed: UserOpDraft
         do {
             signed = try userOpSign(
                 draft: draft,
-                assertion: Self.webAuthn(assertion),
-                credentialId: assertion.credentialIdHex,
+                assertion: answer.assertion,
+                credentialId: answer.credentialIdHex,
                 keys: keys
             )
         } catch {
@@ -347,10 +407,73 @@ final class UserOpSpine {
 
     // MARK: - The one ceremony
 
-    /// The person's "Sign with" choice for the request in hand — `auto` unless a
-    /// signing sheet says otherwise (the spine is shared with Send, which never
-    /// sets it). WHICH key that pins, and how it is reached, is the core's.
+    /// The person's "Sign with" choice for the request in hand: a signing
+    /// sheet's pick, or the stored default where no sheet asks (Send). WHICH
+    /// key that pins, and how it is reached, is the core's.
     var signMethod: () -> String = { "auto" }
+
+    /// The Clear Signer (spec 071). `nil` where there is no screen to open a
+    /// page on — choosing it there is refused before anything is signed.
+    var clearSigner: ClearSignerPort?
+
+    /// One signature over `challenge`: the passkey the person chose, or the
+    /// Clear Signer's answer, which the core has already verified over this
+    /// very digest by one of `keys`. `buildRequest` makes what the page
+    /// receives, given the account's name, and runs only when it is asked.
+    private func ceremony(
+        account: String,
+        pinned: WalletKeyRecord,
+        keys: [WalletKeyRecord],
+        challenge: Data,
+        buildRequest: (_ accountName: String?) throws -> String?
+    ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
+        guard signMethod() == Self.clearSignerMethod else {
+            let assertion = try await assert(account: account, pinned: pinned, challenge: challenge)
+            return (Self.webAuthn(assertion), assertion.credentialIdHex)
+        }
+        guard let clearSigner else {
+            throw other("The Clear Signer cannot be opened here.")
+        }
+        let accountName = await accounts.name(of: account)
+        guard let request = try? buildRequest(accountName) else {
+            throw other("The Clear Signer's request could not be built.")
+        }
+        switch await clearSigner.sign(requestJson: request, digest: challenge, keys: keys) {
+        case .outcome(.accepted(let credentialIdHex, let assertion)):
+            return (assertion, credentialIdHex)
+        case .outcome(.refused(let refusal)):
+            throw Refused(failure: .clearSigner(ClearSignerNotice(refusal)))
+        case .timedOut:
+            throw Refused(failure: .clearSigner(.timeout))
+        case .unavailable:
+            throw other("The Clear Signer could not be opened.")
+        }
+    }
+
+    /// What the page is told: a site's request as it asked, or — `asked`
+    /// absent — the wallet's own send, which the core builds from `calls`.
+    static func clearSignerInput(
+        asked: Asked?,
+        chainId: Int,
+        account: String,
+        accountName: String?,
+        keys: [WalletKeyRecord],
+        calls: [UserOpCall]
+    ) -> ClearSignerInput {
+        let chain = ChainCatalog.meta(chainId)
+        return ClearSignerInput(
+            method: asked?.method ?? "",
+            paramsJson: asked?.paramsJson ?? "",
+            origin: asked?.origin ?? "",
+            chainId: UInt32(chainId),
+            chainName: chain?.displayName,
+            nativeSymbol: chain?.nativeSymbol,
+            account: account,
+            accountName: accountName,
+            credentialIdsHex: keys.map(\.credentialId),
+            calls: calls
+        )
+    }
 
     /// The credential a ceremony is pinned to, its transports and method: the
     /// person's choice when they made one, the stored route otherwise.

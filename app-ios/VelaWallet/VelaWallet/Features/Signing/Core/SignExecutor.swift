@@ -57,6 +57,13 @@ final class SignExecutor {
         var switchAccount: (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
+        /// Who asked, as the Clear Signer's page is told it (spec 071): the
+        /// origin the browser observed, empty for the wallet's own request.
+        var origin: () -> String = { "" }
+        /// The Clear Signer ended without a signature. The core hears a
+        /// cancelled ceremony — the request stays open and may be signed
+        /// another way — and the sheet says which sentence applies.
+        var clearSignerEnded: (ClearSignerNotice) -> Void = { _ in }
     }
 
     private let spine: UserOpSpine
@@ -217,6 +224,9 @@ final class SignExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                // The FINAL params — a guard's rewrite included — are what the
+                // page decodes, as they are what is signed.
+                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             ports.opSubmitted(operation["id"] as? String ?? "", hash)
@@ -229,6 +239,9 @@ final class SignExecutor {
         } catch let refused as UserOpSpine.Refused {
             switch refused.failure {
             case .passkeyCancelled:
+                return ["type": "passkey_cancelled"]
+            case .clearSigner(let notice):
+                ports.clearSignerEnded(notice)
                 return ["type": "passkey_cancelled"]
             case .bundlerUnderfunded:
                 return [
@@ -259,11 +272,16 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
+                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .clearSigner(let notice) = refused.failure {
+                ports.clearSignerEnded(notice)
+                return ["type": "passkey_cancelled"]
+            }
             if case .other(let message) = refused.failure {
                 return ["type": "failed", "message": message ?? "Signing failed"]
             }

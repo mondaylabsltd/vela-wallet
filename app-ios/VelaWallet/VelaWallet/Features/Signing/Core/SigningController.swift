@@ -93,21 +93,32 @@ final class SigningController {
     /// container may drop this controller.
     private(set) var closed = false
 
-    /// "Sign with": WHERE the passkey that signs this request is. This
-    /// controller lives for one request, so the choice cannot outlive the
-    /// question it was made for. `auto` is the wallet's stored route.
+    /// "Sign with": WHERE the passkey that signs this request is — or the
+    /// Clear Signer (spec 071), which is where the request is CHECKED. Each
+    /// request starts at the stored default (`sign_pref`), and this controller
+    /// lives for one request, so a pick cannot outlive the question it was
+    /// made for. `auto` is the wallet's stored route.
     private(set) var signMethod = "auto"
     private(set) var signWithOpen = false
 
-    /// `nil` toggles the list; an id picks a method and closes it.
+    /// `nil` toggles the list; an id the core offers picks a method and
+    /// closes it. The pick is this request's; the default is Settings'.
     func signWith(_ id: String?) {
         guard let id else {
             signWithOpen.toggle()
             return
         }
-        if ["auto", "platform", "hybrid", "security_key"].contains(id) { signMethod = id }
+        if offeredSignMethods().contains(id) {
+            signMethod = id
+            clearSignerNotice = nil
+        }
         signWithOpen = false
     }
+
+    /// How the last Clear Signer ceremony for this request ended without a
+    /// signature. The core heard a cancelled ceremony and kept the request
+    /// open; this is the sentence that says why, until the next slide.
+    private(set) var clearSignerNotice: ClearSignerNotice?
 
     /// The fee row's coin list (the web's `feeOpen`). Which coins pay, what
     /// each costs and which cannot are the fee machine's; the pick is a quote
@@ -195,6 +206,8 @@ final class SigningController {
         pool: RpcPool,
         preferredTier: @escaping () -> String = { "fast" },
         numberPreset: @escaping () -> String = { "comma_dot" },
+        preferredSignMethod: @escaping () -> String = { "auto" },
+        offeredSignMethods: @escaping () -> [String] = { ["auto"] },
         ports: Ports
     ) {
         self.wallet = wallet
@@ -203,6 +216,8 @@ final class SigningController {
         self.ports = ports
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
+        self.preferredSignMethod = preferredSignMethod
+        self.offeredSignMethods = offeredSignMethods
         self.fees = FeeStore(
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
         )
@@ -252,7 +267,15 @@ final class SigningController {
                 self?.recordLanded()
             },
             switchAccount: { _ in true },
-            nativeSymbol: ports.nativeSymbol
+            nativeSymbol: ports.nativeSymbol,
+            // The browser's fact about who asked. The wallet's own request is
+            // not a site, and the page draws an empty origin as the wallet.
+            origin: { [weak self] in
+                guard let request = self?.request, request.transportId != SigningLive.walletTransport
+                else { return "" }
+                return request.origin
+            },
+            clearSignerEnded: { [weak self] notice in self?.clearSignerNotice = notice }
         )
     }
 
@@ -261,9 +284,12 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
-        // Each request starts at the stored default: a pick is one-shot.
+        // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
+        let preferred = preferredSignMethod()
+        signMethod = offeredSignMethods().contains(preferred) ? preferred : "auto"
+        clearSignerNotice = nil
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -364,6 +390,9 @@ final class SigningController {
     /// speed control picks another. The number preset writes each gas bid.
     private let preferredTier: () -> String
     private let numberPreset: () -> String
+    /// The stored "Sign with" and every value the core offers (spec 071).
+    private let preferredSignMethod: () -> String
+    let offeredSignMethods: () -> [String]
 
     private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
@@ -398,6 +427,7 @@ final class SigningController {
 
     /// The slide fired.
     func approve() {
+        clearSignerNotice = nil
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
         )])
