@@ -16,12 +16,12 @@
 - [ ] T016 Currency search box filters (or is not drawn)
 
 ## Android (me)
-- [ ] T020 Preferences: `vela.theme` (DataStore migrated once), `vela.language` = auto, `vela.textScale` own key — via `prefsRead` / `prefsMigrations`
-- [ ] T021 Storage page + erase from the catalog (1024s; erase includes the theme and live dApp grants; verify)
-- [ ] T022 Send `ProvidersOpened` / `EndpointsOpened`; confirm before removing a network; fix the delete label
-- [ ] T023 Add-network wizard: error / couldn't-verify wording (never "Incompatible" for unverified), recheck that re-checks, reset on open
-- [ ] T024 Account switcher: per-account totals
-- [ ] T025 Currency search; JVM tests; device pass
+- [x] T020 Preferences: `vela.theme` (DataStore migrated once), `vela.language` = auto, `vela.textScale` own key — via `prefsRead` / `prefsMigrations`
+- [x] T021 Storage page + erase from the catalog (1024s; erase includes the theme and live dApp grants; verify)
+- [x] T022 Send `ProvidersOpened` / `EndpointsOpened`; confirm before removing a network; fix the delete label
+- [x] T023 Add-network wizard: error / couldn't-verify wording (never "Incompatible" for unverified), recheck that re-checks, reset on open
+- [x] T024 Account switcher: per-account totals
+- [x] T025 Currency search; JVM tests (640); device pass — see quickstart
 
 ## iOS
 - [ ] T030 P0 the seven network events in the core's shape; providers + endpoints pages live
@@ -39,3 +39,7 @@
 - [ ] T043 Erase (dialog, sweep, verify); per-row storage clears + clear all caches (confirm), bar from the catalog
 - [ ] T044 Confirm disconnect / disconnect-all; currency picker; About links; providers / endpoints / overrides save on blur or Enter, not per keystroke
 - [ ] T045 `cargo test`
+
+## Later (found, not in this pass)
+- Android: the Ethereum backup row jumps to the Wallet tab before signing (sign in place, as web / iOS); RPC-fix sheet's provider chips and report link are not tappable; the relayer sheet is never opened live; the endpoints self-host guide link.
+- Core: the add-network wizard's presentation (which callout, recheck, CTA) is still decided per shell — move it into `NetView`; provider metadata (display name, key URL); About content with canonical URLs.
