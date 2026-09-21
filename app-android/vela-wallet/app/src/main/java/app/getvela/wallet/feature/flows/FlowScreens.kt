@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -932,7 +933,9 @@ fun SendFormBody(
         model.amount?.let {
             AmountInput(amount = it, onDenom = onDenom, onValueChange = onAmountChange)
         }
-        model.warning?.let {
+        // A split's refusal travels with its Continue (below); a single form's
+        // sits under the figure it judges.
+        model.warning?.takeIf { model.mode != SendFormMode.Split }?.let {
             Text(
                 text = it,
                 color = colors.warningBase,
@@ -986,6 +989,21 @@ fun SendFormBody(
         }
         FeeRow(fee = model.fee, onOpen = onFee)
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        // A split can be sixty rows long: the core's refusal (over the balance)
+        // or, failing that, which row the dark Continue is waiting on, sits
+        // right above the button it explains (the web's SendForm foot).
+        if (model.mode == SendFormMode.Split) {
+            (model.warning ?: model.hint)?.let { text ->
+                Text(
+                    text = text,
+                    color = if (model.warning != null) colors.warningBase else colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    modifier = Modifier.padding(bottom = VelaSpacing.md),
+                )
+            }
+        }
         FlowCta(
             label = model.cta,
             onClick = onContinue,
@@ -1574,8 +1592,26 @@ fun SendReceiptBody(
     val context = LocalContext.current
     val haptic = rememberVelaHaptic()
 
+    // Spec 038 #D3 / issue 199: while the relay has the op the screen counts,
+    // once a second — the sentences arrive in the model, only the number is
+    // this screen's.
+    val eta = model.eta
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(eta) {
+        while (eta != null) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val elapsed = eta?.elapsedS(now) ?: 0
+
     Column(modifier = modifier.fillMaxWidth()) {
-        StatusHero(stage = model.stage, title = model.title, captions = model.captions)
+        StatusHero(
+            stage = model.stage,
+            title = model.title,
+            captions = model.captions + (eta?.lines(elapsed) ?: emptyList()),
+            progress = if (model.stage == ReceiptStage.Submitted) eta?.progress(elapsed) else null,
+        )
         // The buttons live at the bottom while the status sits near the top:
         // the gap between them is where the waiting happens, and filling it
         // would make the screen look busier than the moment is.

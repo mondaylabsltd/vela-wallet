@@ -35,6 +35,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendDuplicateRowView
+import app.getvela.wallet.feature.send.core.SendRowFieldState
+import app.getvela.wallet.feature.send.core.SendSplitRowIssue
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
@@ -208,6 +211,42 @@ class SendLiveTest {
         assertNotNull(d.viewOnExplorer)
         assertEquals("https://gnosisscan.io/tx/0x1234567890abcdef1234567890abcdef", SendLive.explorerUrl(confirmed, c))
         assertTrue(d.title.contains("0.001") && d.title.contains("XDAI"))
+    }
+
+    /**
+     * Issue 199 (web cf2a9e17): the wait counted up from a still clock and
+     * said "almost there" six seconds into fifteen. With the relay's clock the
+     * receipt counts DOWN inside the typical time, says "almost" only past it,
+     * "slow" past twice it — and the ring eases toward full without closing.
+     */
+    @Test
+    fun `the submitted receipt counts the wait down and fills its ring`() {
+        val drawn = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
+        val submitted = SendView(
+            stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Submitting, user_op_hash = "0xop",
+            receipt = SendReceiptView(status = SendReceiptStatus.Submitted, amount = "0.001", usd_value = 0.0, submitted_at_ms = 1_000_000.0, typical_inclusion_s = 15),
+        )
+        val live = SendLive.receipt(drawn, submitted, ctx())
+        val eta = live.eta!!
+        // The typical line moves into the counted pair, not said twice.
+        assertFalse(live.captions.any { it.contains("typically") })
+        assertEquals(6, eta.elapsedS(1_006_900))
+        assertEquals(0, eta.elapsedS(999_000))
+        assertEquals(listOf("Gnosis typically confirms in ~15s", "~9s remaining"), eta.lines(6))
+        assertEquals("20s elapsed — almost there", eta.lines(20)[1])
+        assertEquals(strings.t(I18nKeys.Flows.TX_SLOW_CONFIRM), eta.lines(30)[1])
+        // ~70% at the typical time, never full while waiting.
+        assertEquals(0.69f, eta.progress(15), 0.01f)
+        assertTrue(eta.progress(0) == 0f && eta.progress(10_000) < 0.93f)
+        assertTrue(eta.progress(10) < eta.progress(11))
+
+        // Without the relay's clock there is nothing to count: the typical time, said once.
+        val noClock = submitted.copy(receipt = submitted.receipt!!.copy(submitted_at_ms = null))
+        val still = SendLive.receipt(drawn, noClock, ctx())
+        assertNull(still.eta)
+        assertTrue(still.captions.any { it.contains("Gnosis") && it.contains("15") })
+        // A custom network with no typical time: no line, no ring to fill.
+        assertNull(SendLive.receipt(drawn, submitted.copy(receipt = submitted.receipt!!.copy(typical_inclusion_s = null)), ctx()).eta)
     }
 
     @Test
@@ -406,6 +445,59 @@ class SendLiveTest {
         assertEquals("0.002 XDAI · ≈ $0.00", live.summary?.value)
         assertTrue(live.summary!!.label.contains("3"))
         assertFalse(live.ctaEnabled)
+    }
+
+    /**
+     * Issues 203–206: a dark Continue with forty rows said nothing. The core
+     * says which row needs what, which row repeats which, whether the rows
+     * outrun the balance and how much is left; the form words all four.
+     */
+    @Test
+    fun `the split form says why Continue is dark`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = splitView.copy(
+            recipients = listOf(
+                SendRecipientDraft("rcpt_1", recipient, "0.1"),
+                SendRecipientDraft("rcpt_2", recipient, "0.2"),
+                SendRecipientDraft("rcpt_3", "0x1234", "1,5"),
+                SendRecipientDraft("rcpt_4", "", ""),
+            ),
+            split_duplicates = listOf(SendDuplicateRowView("rcpt_2", 1)),
+            split_row_issues = listOf(
+                SendSplitRowIssue("rcpt_3", 3, SendRowFieldState.Invalid, SendRowFieldState.Invalid),
+                SendSplitRowIssue("rcpt_4", 4, SendRowFieldState.Empty, SendRowFieldState.Empty),
+            ),
+            split_remaining = "0.41697",
+            confirm_amount = "",
+        )
+        val live = SendLive.form(drawn.model, view, FeeView(), ctx())
+
+        assertNull(live.recipients[0].duplicateNote)
+        assertEquals("Same address as recipient 1", live.recipients[1].duplicateNote)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), live.recipients[2].addressNote)
+        assertEquals(strings.t(I18nKeys.Flows.BAD_AMOUNT), live.recipients[2].amountNote)
+        // An empty field is unfinished, not wrong.
+        assertNull(live.recipients[3].addressNote)
+        assertNull(live.recipients[3].amountNote)
+        // The first unfinished row, and what it needs.
+        assertEquals("Recipient 3 needs an address.", live.hint)
+        assertEquals("0.41697 XDAI left", live.summary?.remaining)
+        assertFalse(live.summary!!.over)
+        assertNull(live.warning)
+
+        // Only the amount missing names the amount; a busy pre-check says nothing.
+        val needsAmount = view.copy(split_row_issues = listOf(SendSplitRowIssue("rcpt_4", 4, SendRowFieldState.Ok, SendRowFieldState.Empty)))
+        assertEquals("Recipient 4 needs an amount.", SendLive.form(drawn.model, needsAmount, FeeView(), ctx()).hint)
+        assertNull(SendLive.form(drawn.model, needsAmount.copy(estimating_gas = true), FeeView(), ctx()).hint)
+
+        // Over the balance: the live refusal, the figure in the refusal colour,
+        // no "left" — and never the single form's stale amount warning.
+        val over = view.copy(split_row_issues = emptyList(), split_over_balance = true, split_remaining = null, amount_warning = SendAmountWarning.NeedGas("XDAI"))
+        val overLive = SendLive.form(drawn.model, over, FeeView(), ctx())
+        assertTrue(overLive.summary!!.over)
+        assertNull(overLive.summary!!.remaining)
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), overLive.warning)
+        assertNull(overLive.hint)
     }
 
     @Test

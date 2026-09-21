@@ -564,6 +564,61 @@ object SettingsLive {
     }
 
     /**
+     * The saved RPC answered its probe: a save went out from the sheet, nothing
+     * new is being typed, and the row's health is measured `ok` (the web's
+     * `rpcRestored`). Only then does the sheet say Done — and Done is what
+     * tells the balance core the chain is fixed.
+     */
+    fun rpcFixRestored(row: NetNetworkRow, draft: String?, saved: Boolean): Boolean =
+        saved && draft == null && row.rpc_health is NetProbeHealth.Ok
+
+    /**
+     * SR2: the RPC fix for the chain the home's status line named — THIS
+     * chain, its URL as the core holds it (or as it is being typed), and the
+     * probe's word after a save (the web's `liveRpcFix`). The fixture drew
+     * Polygon whichever chain had failed.
+     */
+    fun rpcFix(fallback: RpcFixModel, row: NetNetworkRow, draft: String?, saved: Boolean, strings: VelaStrings): RpcFixModel {
+        val health = row.rpc_health
+        val restored = rpcFixRestored(row, draft, saved)
+        val checking = saved && draft == null && health == NetProbeHealth.Checking
+        val badge = when {
+            restored -> healthPill(health, strings) ?: StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.NETWORK_ONLINE))
+            checking -> StatusPillModel(SettingsTone.Neutral, strings.t(I18nKeys.SettingsUi.ADD_CHECKING_COMPATIBILITY))
+            else -> StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))
+        }
+        val mismatch = row.rpc_chain_mismatch
+        return fallback.copy(
+            title = strings.t(I18nKeys.SettingsUi.RPC_FIX_TITLE),
+            mark = ChainMarkModel(row.display_name.take(1).uppercase(), markColour(row.chain_id), Marks.chainLogoUrl(row.chain_id.toInt())),
+            name = row.display_name,
+            meta = strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to row.chain_id.toString())) + " · " + row.native_symbol,
+            badge = badge,
+            callout = when {
+                mismatch != null -> CalloutModel(
+                    CalloutTone.Danger,
+                    strings.t(
+                        I18nKeys.SettingsUi.RPC_CHAIN_MISMATCH,
+                        mapOf("reported" to mismatch.reported_chain_id.toString(), "expected" to mismatch.expected_chain_id.toString()),
+                    ),
+                )
+                restored -> CalloutModel(CalloutTone.Success, strings.t(I18nKeys.SettingsUi.RPC_FIX_RESTORED))
+                else -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.RPC_FIX_WARNING))
+            },
+            field = fallback.field.copy(
+                value = draft ?: row.rpc_url,
+                badge = if (restored) badge else null,
+                tone = if (restored) SettingsTone.Ok else SettingsTone.Error,
+            ),
+            primary = strings.t(if (restored) I18nKeys.SettingsUi.COMMON_DONE else I18nKeys.SettingsUi.RPC_FIX_SAVE),
+            providersLabel = if (restored) null else fallback.providersLabel,
+            providers = if (restored) emptyList() else fallback.providers,
+            report = if (restored) null else fallback.report,
+            restored = restored,
+        )
+    }
+
+    /**
      * Spec 048: the network detail page for THIS network — name, chain, the
      * RPC and explorer overrides as the core holds them. Before this the page
      * showed the fixture's Ethereum whichever row was tapped.

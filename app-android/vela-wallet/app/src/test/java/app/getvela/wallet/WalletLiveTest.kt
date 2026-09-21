@@ -230,6 +230,73 @@ class WalletLiveTest {
         assertEquals(1, model.assetRows.size)
     }
 
+    /**
+     * The device already knows a figure: it paints first, marked as updating,
+     * and the live total replaces it. A skeleton over a known number was a
+     * hero that blinked on every open (the web's `liveBalance`).
+     */
+    @Test
+    fun `a cached total paints first, marked as refreshing`() {
+        val model = home(BalanceView(display_total_usd = null, cached_total_usd = 12.34, refreshing = true))
+
+        assertEquals(BalanceStateKind.Normal, model.balance.state)
+        assertEquals("$12", model.balance.integer)
+        assertEquals("34", model.balance.decimals)
+        assertEquals(BalanceStatusKind.Refreshing, model.balance.status?.kind)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.BALANCE_STALE), model.balance.status?.text)
+
+        // Nothing live and nothing cached is still a skeleton, not a zero.
+        assertEquals(BalanceStateKind.Loading, home(BalanceView(refreshing = true)).balance.state)
+    }
+
+    /**
+     * A zero is "live" only when every chain answered. A partial zero, an
+     * unknown zero and a cached zero are all a wallet nobody has finished
+     * reading — no green dot.
+     */
+    @Test
+    fun `a zero is live only when every chain answered`() {
+        val live = home(BalanceView(display_total_usd = 0.0))
+        assertEquals(BalanceStateKind.ZeroLive, live.balance.state)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.LIVE_INDICATOR), live.balance.liveText)
+
+        for (view in listOf(
+            BalanceView(display_total_usd = 0.0, balance_partial = true),
+            BalanceView(display_total_usd = 0.0, balance_unknown = true),
+            BalanceView(display_total_usd = null, cached_total_usd = 0.0),
+        )) {
+            val model = home(view)
+            assertEquals(view.toString(), BalanceStateKind.Normal, model.balance.state)
+            assertEquals("$0", model.balance.integer)
+            assertNull(model.balance.liveText)
+        }
+    }
+
+    /**
+     * The chain that is down is named — from `banner_chain_ids`, which the core
+     * already cut to failed MINUS rate-limited. A chain that is only
+     * rate-limited is not in it, so the hero never nags to swap an RPC that
+     * will heal on its own; the balance just says it is updating.
+     */
+    @Test
+    fun `a failing chain is named, a rate-limited one is not`() {
+        val one = home(BalanceView(display_total_usd = 4.5, failed_chain_ids = listOf(137), banner_chain_ids = listOf(137))).balance.status
+        assertEquals(BalanceStatusKind.Warning, one?.kind)
+        assertEquals("Polygon RPC unavailable", one?.text)
+
+        val two = home(BalanceView(display_total_usd = 4.5, banner_chain_ids = listOf(137, 42161))).balance.status
+        assertEquals("2 networks RPC unavailable", two?.text)
+
+        val limited = home(
+            BalanceView(display_total_usd = 4.5, refreshing = true, failed_chain_ids = listOf(137), rate_limited_chain_ids = listOf(137)),
+        ).balance.status
+        assertEquals(BalanceStatusKind.Refreshing, limited?.kind)
+
+        val unpriced = home(BalanceView(display_total_usd = 4.5, notice = app.getvela.wallet.feature.wallet.core.BalanceNotice.Unpriced)).balance.status
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.BALANCE_UNPRICED), unpriced?.text)
+        assertNull(home(BalanceView(display_total_usd = 4.5)).balance.status)
+    }
+
     // -- the feed ------------------------------------------------------------
 
     private fun item(

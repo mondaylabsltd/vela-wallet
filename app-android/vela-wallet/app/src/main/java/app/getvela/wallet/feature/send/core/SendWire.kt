@@ -346,6 +346,30 @@ data class SendRecipientDraft(
     val name: String? = null,
 )
 
+/** What one field of a split row still needs (`SendRowFieldState`). */
+@Serializable
+enum class SendRowFieldState {
+    @SerialName("ok") Ok,
+
+    /** Nothing typed yet — unfinished, not wrong. */
+    @SerialName("empty") Empty,
+
+    @SerialName("invalid") Invalid,
+}
+
+/** One split row `Continue` will not take, and which field is why. `ordinal` is `u32`, 1-based. */
+@Serializable
+data class SendSplitRowIssue(
+    val id: String,
+    val ordinal: Int,
+    val address: SendRowFieldState,
+    val amount: SendRowFieldState,
+)
+
+/** A split row that repeats an earlier row's payee (issue 203). `first_ordinal` is `u32`, 1-based. */
+@Serializable
+data class SendDuplicateRowView(val id: String, val first_ordinal: Int)
+
 @Serializable
 data class SendMultiSpecView(val token_address: String? = null, val decimals: Int, val amount: String)
 
@@ -474,6 +498,12 @@ data class SendView(
     val split_mode: Boolean = false,
     val recipients: List<SendRecipientDraft> = emptyList(),
     val split_over_balance: Boolean = false,
+    /** Split only: rows repeating an earlier payee — a note beside the row, never a refusal. */
+    val split_duplicates: List<SendDuplicateRowView> = emptyList(),
+    /** Split only: the gate's reasons, row by row. Empty exactly when the rows pass. */
+    val split_row_issues: List<SendSplitRowIssue> = emptyList(),
+    /** Split only: balance less the rows' sum, token units; `null` while unsummable or over. */
+    val split_remaining: String? = null,
     /** How many more rows an import may add: the cap less the rows already started (the importer's own cap). */
     val split_import_room: Int = BATCH_MAX_RECIPIENTS,
     val picker_target: String? = null,

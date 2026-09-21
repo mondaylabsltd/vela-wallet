@@ -21,6 +21,7 @@ import app.getvela.wallet.feature.flows.SendSelectionModel
 import app.getvela.wallet.feature.flows.SendNoticeModel
 import app.getvela.wallet.feature.flows.SendCtaModel
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.flows.BreakdownRowModel
 import app.getvela.wallet.feature.flows.SummaryLineModel
@@ -35,6 +36,7 @@ import app.getvela.wallet.feature.flows.FeeRowModel
 import app.getvela.wallet.feature.flows.FeeTokenPickModel
 import app.getvela.wallet.feature.flows.FeeTokenRowModel
 import app.getvela.wallet.feature.flows.FlowState
+import app.getvela.wallet.feature.flows.ReceiptEtaModel
 import app.getvela.wallet.feature.flows.ReceiptHashModel
 import app.getvela.wallet.feature.flows.ReceiptStage
 import app.getvela.wallet.feature.flows.RecipientFieldModel
@@ -350,7 +352,7 @@ object SendLive {
             // Only a real address earns an identicon (the founder's anti-poisoning rule).
             amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, ctx),
             recipient = if (view.split_mode) null else recipientModel(view, ctx),
-            recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx) } else emptyList(),
+            recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx, view) } else emptyList(),
             recipientActions = if (view.split_mode) {
                 listOf(
                     RecipientActionModel(RecipientAction.Add, s.t(I18nKeys.Flows.ADD_RECIPIENT)),
@@ -364,7 +366,22 @@ object SendLive {
             fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx),
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
+            hint = splitHint(view, ctx),
         )
+    }
+
+    /**
+     * Why a split's Continue is dark, when a row is why: the FIRST unfinished
+     * recipient and what it still needs (the web's `splitHint`). The core's
+     * `split_row_issues` IS the gate's reason, so nothing here re-derives the
+     * address or amount rule. Silent while the pre-check is out — the button
+     * is busy then, not refused.
+     */
+    internal fun splitHint(view: SendView, ctx: Context): String? {
+        if (!view.split_mode || view.estimating_gas) return null
+        val first = view.split_row_issues.firstOrNull() ?: return null
+        val key = if (first.address == SendRowFieldState.Ok) I18nKeys.Flows.SPLIT_NEEDS_AMOUNT else I18nKeys.Flows.SPLIT_NEEDS_ADDRESS
+        return ctx.strings.t(key, mapOf("n" to first.ordinal.toString()))
     }
 
     private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context): AmountFieldModel {
@@ -426,9 +443,17 @@ object SendLive {
         return null
     }
 
-    /** One of the split's rows as the card draws it: the core's draft, editable in place. */
-    internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context): RecipientCardModel {
+    /**
+     * One of the split's rows as the card draws it: the core's draft, editable
+     * in place, with the core's word on it. Only a field with something IN it
+     * can be wrong (an empty one is unfinished — its placeholder already says
+     * what it wants), and a row that repeats an earlier payee says WHICH row it
+     * repeats (issue 203) — the core matched them; this only picks the words.
+     */
+    internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context, view: SendView? = null): RecipientCardModel {
         val s = ctx.strings
+        val issue = view?.split_row_issues?.firstOrNull { it.id == draft.id }
+        val repeat = view?.split_duplicates?.firstOrNull { it.id == draft.id }
         return RecipientCardModel(
             ordinal = s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to (index + 1).toString())),
             name = draft.name ?: if (ADDRESS.matches(draft.address)) shortAddress(draft.address) else "",
@@ -439,6 +464,9 @@ object SendLive {
             address = draft.address,
             amountValue = draft.amount,
             addressPlaceholder = s.t(I18nKeys.Flows.RECIPIENT_LABEL),
+            addressNote = if (issue?.address == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS) else null,
+            duplicateNote = repeat?.let { s.t(I18nKeys.Flows.RECIPIENT_DUPLICATE, mapOf("n" to it.first_ordinal.toString())) },
+            amountNote = if (issue?.amount == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BAD_AMOUNT) else null,
         )
     }
 
@@ -452,6 +480,11 @@ object SendLive {
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
             value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
+            // The core's live verdict that the rows outrun the balance — the
+            // same predicate Continue refuses on, shown while typing — and how
+            // much is still left to give out when they do not.
+            over = view.split_over_balance,
+            remaining = view.split_remaining?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(it)} $symbol".trim())) },
         )
     }
 
@@ -468,11 +501,15 @@ object SendLive {
                 mapOf("amount" to human(issue.transfer_amount), "fee" to human(issue.fee_amount), "total" to human(issue.total), "symbol" to issue.symbol, "balance" to human(issue.balance)),
             ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount), "symbol" to issue.symbol))
         }
+        // A split has its own live verdict, `split_over_balance`. It does not
+        // take `amount_warning`: that one judges the single form's figure,
+        // which a split leaves behind — a number no longer on the screen.
+        if (view.split_mode) return if (view.split_over_balance) s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY) else null
         view.amount_warning?.let { return warningText(it, s) }
         // Last, ⇄'s own refusal (issue 197; `Some` exactly when the row is
         // shown and dimmed): a dimmed toggle with no sentence is a refusal
         // nobody can act on. Single mode only — the others have no ⇄.
-        if (view.split_mode || view.multi_select_mode) return null
+        if (view.multi_select_mode) return null
         return view.denom_toggle_reason?.let {
             s.t(I18nKeys.Flows.DENOM_TOGGLE_NO_RATE, mapOf("code" to it.code, "symbol" to it.symbol))
         }
@@ -809,21 +846,40 @@ object SendLive {
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )
-            else -> fallback.copy(
-                header = header,
-                stage = ReceiptStage.Submitted,
-                title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
-                captions = listOfNotNull(
-                    if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
-                    receipt.typical_inclusion_s?.let {
-                        s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to it.toString()))
-                    },
-                ),
-                hash = null,
-                viewOnExplorer = null,
-                cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
-                ctaAccent = false,
-            )
+            else -> {
+                val typicalLine = receipt.typical_inclusion_s?.let {
+                    s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to it.toString()))
+                }
+                // Issue 199 (web cf2a9e17): with the relay's clock and the chain's
+                // usual time the screen counts the wait down and fills its ring.
+                // Without the clock the typical time is still worth saying, once.
+                val eta = if (receipt.submitted_at_ms != null && receipt.typical_inclusion_s != null && typicalLine != null) {
+                    ReceiptEtaModel(
+                        submittedAtMs = receipt.submitted_at_ms,
+                        typicalS = receipt.typical_inclusion_s,
+                        typicalLine = typicalLine,
+                        remainingTemplate = s.t(I18nKeys.Flows.TX_REMAINING),
+                        elapsedTemplate = s.t(I18nKeys.Flows.TX_ELAPSED),
+                        slowLine = s.t(I18nKeys.Flows.TX_SLOW_CONFIRM),
+                    )
+                } else {
+                    null
+                }
+                fallback.copy(
+                    header = header,
+                    stage = ReceiptStage.Submitted,
+                    title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
+                    captions = listOfNotNull(
+                        if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
+                        typicalLine.takeIf { eta == null },
+                    ),
+                    hash = null,
+                    viewOnExplorer = null,
+                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                    ctaAccent = false,
+                    eta = eta,
+                )
+            }
         }
     }
 
