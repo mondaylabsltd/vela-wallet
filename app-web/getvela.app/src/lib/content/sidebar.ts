@@ -12,7 +12,7 @@ export interface SidebarItem {
 
 export interface SidebarGroup {
 	/** Key into `chrome.docs.groups` — the group's name is translated copy. */
-	key: 'gettingStarted' | 'using' | 'security' | 'reference';
+	key: 'gettingStarted' | 'using' | 'keys' | 'security' | 'selfHost' | 'reference';
 	/** English title, kept here so this file still reads as the source of truth. */
 	title: string;
 	items: SidebarItem[];
@@ -24,9 +24,9 @@ export const sidebar: SidebarGroup[] = [
 		title: 'Getting Started',
 		items: [
 			{ slug: 'introduction', title: 'Introduction' },
-			{ slug: 'why-vela', title: 'Why we built Vela' },
 			{ slug: 'install', title: 'Install Vela' },
-			{ slug: 'create-wallet', title: 'Create your wallet' }
+			{ slug: 'create-wallet', title: 'Create your wallet' },
+			{ slug: 'why-vela', title: 'Why we built Vela' }
 		]
 	},
 	{
@@ -38,17 +38,34 @@ export const sidebar: SidebarGroup[] = [
 		]
 	},
 	{
-		key: 'security',
-		title: 'Security',
+		// Split out of Security (spec 080): "what if I lose…" is the question
+		// people arrive with most, and it deserves a group they can see.
+		key: 'keys',
+		title: 'Keys & recovery',
 		items: [
 			{ slug: 'passkeys', title: 'How passkeys work' },
 			{ slug: 'signers', title: 'Signers & security keys' },
+			{ slug: 'recovery', title: 'Recovery & sign-in' }
+		]
+	},
+	{
+		key: 'security',
+		title: 'Security',
+		items: [
 			{ slug: 'clear-signing', title: 'Clear signing' },
-			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' },
 			{ slug: 'bybit-attack', title: 'The Bybit attack' },
-			{ slug: 'recovery', title: 'Recovery & sign-in' },
 			{ slug: 'account-contract', title: 'The account contract' },
 			{ slug: 'security-audits', title: 'Audits & known issues' }
+		]
+	},
+	{
+		// The headline promises a wallet you own; this group is where that is
+		// proved step by step (spec 080).
+		key: 'selfHost',
+		title: 'Run it yourself',
+		items: [
+			{ slug: 'self-hosting', title: 'Self-hosting guide' },
+			{ slug: 'clear-signing-self-host', title: 'Self-host the signing page' }
 		]
 	},
 	{

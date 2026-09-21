@@ -12,14 +12,18 @@ const NETWORK_NAMES: Record<string, string> = {
 	'opt-mainnet': 'Optimism',
 	'matic-mainnet': 'Polygon',
 	'bnb-mainnet': 'BNB Chain',
-	'avax-mainnet': 'Avalanche',
+	'avax-mainnet': 'Avalanche'
 };
 
 /** Native token symbols per network */
 const NATIVE_SYMBOLS: Record<string, string> = {
-	'eth-mainnet': 'ETH', 'arb-mainnet': 'ETH', 'base-mainnet': 'ETH',
-	'opt-mainnet': 'ETH', 'matic-mainnet': 'POL', 'bnb-mainnet': 'BNB',
-	'avax-mainnet': 'AVAX',
+	'eth-mainnet': 'ETH',
+	'arb-mainnet': 'ETH',
+	'base-mainnet': 'ETH',
+	'opt-mainnet': 'ETH',
+	'matic-mainnet': 'POL',
+	'bnb-mainnet': 'BNB',
+	'avax-mainnet': 'AVAX'
 };
 
 const SUPPORTED_NETWORKS = Object.keys(NETWORK_NAMES);
@@ -35,6 +39,12 @@ export const GET: RequestHandler = async ({ url }) => {
 	if (!address) return json({ error: 'Missing address parameter' }, { status: 400 });
 
 	const network = url.searchParams.get('network');
+	// `network` becomes part of the Alchemy HOSTNAME below, with the API key in
+	// the path — an unchecked value like `attacker.example/?x=` would send the
+	// key to someone else's server. Only the known slugs may pass.
+	if (network && !SUPPORTED_NETWORKS.includes(network)) {
+		return json({ error: `Unsupported network: ${network}` }, { status: 400 });
+	}
 	const pageSize = Math.min(parseInt(url.searchParams.get('pageSize') || '25'), 100);
 	const pageKey = url.searchParams.get('pageKey') || undefined;
 
@@ -62,7 +72,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		return json({
 			transactions: limited,
-			totalCount: allTxs.length,
+			totalCount: allTxs.length
 		});
 	} catch (e) {
 		return json({ error: (e as Error).message }, { status: 500 });
@@ -77,12 +87,12 @@ interface NormalizedTransaction {
 	chainName: string;
 	from: string;
 	to: string;
-	value: string;         // decimal string (e.g. "0.05")
-	symbol: string;        // "ETH", "USDC", etc.
+	value: string; // decimal string (e.g. "0.05")
+	symbol: string; // "ETH", "USDC", etc.
 	decimals: number;
-	tokenAddress: string | null;  // null = native transfer
+	tokenAddress: string | null; // null = native transfer
 	category: 'send' | 'receive' | 'contract' | 'approve';
-	timestamp: number | null;     // unix seconds
+	timestamp: number | null; // unix seconds
 	blockNumber: string;
 	status: 'confirmed' | 'failed';
 	/** For ERC-721/1155: token ID */
@@ -119,14 +129,14 @@ async function fetchTransactions(
 	address: string,
 	network: string,
 	pageSize: number,
-	pageKey?: string,
+	pageKey?: string
 ): Promise<{ transactions: NormalizedTransaction[]; pageKey?: string }> {
 	const rpcUrl = `https://${network}.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
 
 	// Fetch both sent and received transfers
 	const [sentResult, receivedResult] = await Promise.all([
 		alchemyGetTransfers(rpcUrl, { fromAddress: address }, pageSize, pageKey),
-		alchemyGetTransfers(rpcUrl, { toAddress: address }, pageSize, pageKey),
+		alchemyGetTransfers(rpcUrl, { toAddress: address }, pageSize, pageKey)
 	]);
 
 	const seen = new Set<string>();
@@ -149,26 +159,28 @@ async function alchemyGetTransfers(
 	rpcUrl: string,
 	filter: { fromAddress?: string; toAddress?: string },
 	maxCount: number,
-	pageKey?: string,
+	pageKey?: string
 ): Promise<AlchemyTransferResult> {
 	const body = {
 		id: 1,
 		jsonrpc: '2.0',
 		method: 'alchemy_getAssetTransfers',
-		params: [{
-			...filter,
-			category: ['external', 'internal', 'erc20', 'erc721', 'erc1155'],
-			order: 'desc',
-			maxCount: `0x${maxCount.toString(16)}`,
-			withMetadata: true,
-			...(pageKey ? { pageKey } : {}),
-		}],
+		params: [
+			{
+				...filter,
+				category: ['external', 'internal', 'erc20', 'erc721', 'erc1155'],
+				order: 'desc',
+				maxCount: `0x${maxCount.toString(16)}`,
+				withMetadata: true,
+				...(pageKey ? { pageKey } : {})
+			}
+		]
 	};
 
 	const resp = await fetch(rpcUrl, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(body),
+		body: JSON.stringify(body)
 	});
 
 	const json = await resp.json();
@@ -179,7 +191,7 @@ async function alchemyGetTransfers(
 function normalizeTransfer(
 	transfer: AlchemyTransfer,
 	userAddress: string,
-	network: string,
+	network: string
 ): NormalizedTransaction | null {
 	const isFromUser = transfer.from.toLowerCase() === userAddress.toLowerCase();
 	const isToUser = transfer.to?.toLowerCase() === userAddress.toLowerCase();
@@ -236,6 +248,6 @@ function normalizeTransfer(
 		blockNumber: transfer.blockNum,
 		status: 'confirmed',
 		tokenId: transfer.tokenId,
-		data: null,
+		data: null
 	};
 }
