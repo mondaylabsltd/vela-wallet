@@ -135,6 +135,10 @@ export interface SettingsMessages {
 		chainId: string;
 		/** The delete control on a custom row — "Remove Network" (spec 028 Phase 8). */
 		remove: string;
+		/** What removing one asks first (spec 072). */
+		removeBody: string;
+		removeConfirm: string;
+		removeCancel: string;
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
@@ -188,6 +192,11 @@ export interface SettingsMessages {
 		fiatLabel: string;
 		fiatHint: string;
 		reset: string;
+		/** Spec 072 (FR-010): resetting is destructive and asks first. */
+		resetTitle: string;
+		resetBody: string;
+		resetConfirm: string;
+		resetCancel: string;
 		guide: string;
 	};
 	storage: {
@@ -501,6 +510,9 @@ export const SETTINGS_KEYS = [
 	'onboarding.create.providerSecurityKey',
 	'settingsModals.network.chainId',
 	'settingsModals.network.removeTitle',
+	'settingsModals.network.removeBody',
+	'settingsModals.network.removeConfirm',
+	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
@@ -537,6 +549,10 @@ export const SETTINGS_KEYS = [
 	'settingsModals.endpoints.fiatLabel',
 	'settingsModals.endpoints.fiatHint',
 	'settingsModals.endpoints.resetToDefaults',
+	'settingsModals.endpoints.resetTitle',
+	'settingsModals.endpoints.resetBody',
+	'settingsModals.endpoints.resetConfirm',
+	'settingsModals.endpoints.resetCancel',
 	'settingsModals.endpoints.selfHostGuide',
 	'settings.storage.title',
 	'settings.storage.subtitle',

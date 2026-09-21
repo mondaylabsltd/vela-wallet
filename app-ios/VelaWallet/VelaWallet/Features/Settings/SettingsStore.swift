@@ -77,12 +77,22 @@ final class SettingsStore {
     /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
     /// machine needs it because its first rate rung is Chainlink's fiat feeds
     /// on Ethereum mainnet — a chain read, and therefore a routed one.
-    init(store: VelaStore, accounts: AccountStore, pool: RpcPool) {
+    ///
+    /// `networkPerform` answers the networks machine instead of its executor —
+    /// the hermetic tests' door (spec 072): every event this class sends is put
+    /// to the REAL machine there, with no network behind it, so a spelling the
+    /// core cannot read fails a test rather than a person's screen.
+    init(
+        store: VelaStore,
+        accounts: AccountStore,
+        pool: RpcPool,
+        networkPerform: (([String: Any]) async -> String)? = nil
+    ) {
         self.executor = NetworkAdminExecutor(store: store, accounts: accounts)
         self.currencyExecutor = DisplayCurrencyExecutor(store: store, accounts: accounts, pool: pool)
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
-            perform: { [executor] operation in await executor.perform(operation) },
+            perform: networkPerform ?? { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.networkAdmin = view },
             // A shell fault here is a malformed event or a view this build
             // cannot read — never a person's mistake. Swallowing it silently is
@@ -161,11 +171,17 @@ final class SettingsStore {
     /// Called from the settings route's `.task`. Idempotent: the machines read
     /// their stores once and keep them.
     func open() {
-        core.boot(CoreJSON.string(["type": "started"]))
+        openNetworks()
         openCurrency()
         // The page's two signing rows read what is stored, however Settings
         // was reached (spec 071).
         openSignPref()
+    }
+
+    /// Boot the networks machine alone — it reads its four stores once and
+    /// keeps them. Idempotent, like `open()`.
+    func openNetworks() {
+        core.boot(CoreJSON.string(["type": "started"]))
     }
 
     /// Boot the currency machine alone.
@@ -241,16 +257,20 @@ final class SettingsStore {
 
     // MARK: - The endpoints and providers pages (spec 056 US2)
     //
-    // Eleven events the executor has answered since 050 and nothing has ever
-    // sent. Two whole settings pages were drawn over live operations with no
-    // call sites — the event-parity ruler's largest single block.
+    // Every event below is spelled as `network_admin.rs`' `Event` spells it.
+    // Until 072 five of them sent `"id"` where the core reads `field` or
+    // `provider`, one left out `field`, and one sent `text` for a chain id —
+    // the core refused each one, so both pages and the RPC fix were drawings
+    // that took typing and kept none of it. `NetworkEventsTests` sends every
+    // one to the real machine.
 
-    /// A chain id typed into 添加网络. The core looks it up.
-    func addByChainId(_ text: String) {
-        dispatch(["type": "add_by_chain_id_requested", "text": text])
+    /// A chain id to add without the wizard (the EIP-681 recovery path). The
+    /// core resolves, checks and saves it behind the same dedup gate.
+    func addByChainId(_ chainId: Int) {
+        dispatch(["type": "add_by_chain_id_requested", "chain_id": chainId, "now_iso": Self.nowISO])
     }
 
-    /// ST12 opened. The core reads what is stored and projects the fields.
+    /// ST12 opened. The core probes all four fields.
     func openEndpoints() { dispatch(["type": "endpoints_opened"]) }
 
     /// One endpoint field, as it is typed and when it is left.
@@ -258,39 +278,57 @@ final class SettingsStore {
     /// Two events rather than one because they mean different things: EDITED is
     /// what is on screen, BLURRED is what the person is done saying — and only
     /// the second is worth writing to storage.
-    func editEndpoint(id: String, value: String) {
-        dispatch(["type": "endpoint_edited", "id": id, "value": value])
+    func editEndpoint(_ field: NetEndpointFieldWire, value: String) {
+        dispatch(["type": "endpoint_edited", "field": field.rawValue, "value": value])
     }
 
-    func blurEndpoint(id: String) {
-        dispatch(["type": "endpoint_blurred", "id": id])
+    func blurEndpoint(_ field: NetEndpointFieldWire) {
+        dispatch(["type": "endpoint_blurred", "field": field.rawValue])
     }
 
     func resetEndpoints() { dispatch(["type": "reset_endpoints_to_defaults"]) }
 
-    /// ST11 opened.
+    /// ST11 opened. The core seeds the drafts from the saved keys and tests
+    /// every configured provider.
     func openProviders() { dispatch(["type": "providers_opened"]) }
 
-    func editProviderKey(id: String, value: String) {
-        dispatch(["type": "provider_key_edited", "id": id, "value": value])
+    func editProviderKey(_ provider: NetProviderIdWire, value: String) {
+        dispatch(["type": "provider_key_edited", "provider": provider.rawValue, "value": value])
     }
 
-    func blurProviderKey(id: String) {
-        dispatch(["type": "provider_key_blurred", "id": id])
+    func blurProviderKey(_ provider: NetProviderIdWire) {
+        dispatch(["type": "provider_key_blurred", "provider": provider.rawValue])
     }
 
     /// 测试 — the core asks the provider whether the key works.
-    func testProvider(id: String) {
-        dispatch(["type": "provider_test_requested", "id": id])
+    func testProvider(_ provider: NetProviderIdWire) {
+        dispatch(["type": "provider_test_requested", "provider": provider.rawValue])
     }
 
-    /// One per-network RPC override, as it is typed and when it is left.
-    func editOverride(chainId: Int, value: String) {
-        dispatch(["type": "override_field_edited", "chain_id": chainId, "value": value])
+    /// One field of a network's detail page, as it is typed and when it is
+    /// left. The core probes on every edit and saves on the blur — refusing
+    /// only an RPC that proved it serves another chain.
+    func editOverride(chainId: Int, field: NetOverrideFieldWire, value: String) {
+        dispatch([
+            "type": "override_field_edited",
+            "chain_id": chainId,
+            "field": field.rawValue,
+            "value": value,
+        ])
     }
 
     func blurOverride(chainId: Int) {
         dispatch(["type": "override_blurred", "chain_id": chainId])
+    }
+
+    /// 用此 RPC 重新检查 — the wizard's chain again, through the RPC typed.
+    ///
+    /// It used to send only the RPC, which the core stores and does nothing
+    /// else with: the link took the tap and re-checked nothing.
+    func recheck(customRpc: String) {
+        guard let chainId = networkAdmin?.wizard.chainInfo?.chainId else { return }
+        editCustomRpc(customRpc)
+        selectChain(chainId, keepCustomRpc: true)
     }
 
     func network(id: String) -> NetNetworkRowWire? {

@@ -1,11 +1,16 @@
 /**
- * The preferences that have no machine (spec 028 T431 — research D48).
+ * The display preferences (spec 028 T431 — research D48; spec 072).
  *
- * Theme, language, number / date / time format and avatar style are shell
- * state. There is no Rust core for them and none is invented here: a machine
- * holding four enums and no rule would be a machine in name only. Compare
- * `display_currency`, which DOES have one — because choosing a currency has a
- * rule behind it (a rate must exist, and an unpriceable currency must refuse).
+ * Theme, language, number / date / time format, text size and avatar style.
+ * Choosing one has no rule behind it — compare `display_currency`, whose
+ * machine refuses a currency no rate can price — so there is no machine here.
+ * What IS a rule is the record format: four shells wrote these five
+ * preferences four ways (Android's `system` language and its text size nested
+ * in `vela.localePrefs`, the desktop's `vela.formats`), and a record written
+ * by one then meant something else to the others. How a stored record reads,
+ * and which older spellings are rewritten, is the core's (`vela_core::prefs`,
+ * `prefsRead` / `prefsMigrations`) — this store hands it the entries and
+ * writes back what it says.
  *
  * ## Why localStorage and not the IndexedDB KV
  *
@@ -17,11 +22,16 @@
  * would read the same record if they ever met: `vela.localePrefs` is one JSON
  * object, `vela.avatarStyle` and `vela.language` are bare strings.
  *
- * `vela.theme` is the one key Expo does not have — a phone follows the OS and
- * offers no choice, and a browser tab is a window inside someone else's
- * chrome, where "follow the OS" is a preference rather than the only option.
+ * ## Why two reads
+ *
+ * The core is 4 MB of wasm that arrives after the first render, and a boot
+ * that waited for it would render every figure in the wrong format first. So
+ * `boot()` reads the shared spelling synchronously, and once the core is up
+ * the store is migrated and read again through it — which is when an older
+ * shell's spelling starts to count.
  */
 import { browser } from '$app/environment';
+import { loadCore, prefsMigrations, prefsRead } from '$lib/core/client';
 
 /** What a person picks in 外观. `system` pins nothing and follows the OS. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -106,9 +116,79 @@ function write(key: string, value: string): void {
 	}
 }
 
+function remove(key: string): void {
+	if (!browser) return;
+	try {
+		localStorage.removeItem(key);
+	} catch {
+		/* as above */
+	}
+}
+
 /** A stored value only wins if it is one of the values we ship. */
 function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
 	return allowed.includes(raw as T) ? (raw as T) : fallback;
+}
+
+/** The five preferences, read — `prefsRead`'s record, less the factor the table already holds. */
+interface PrefsRecord {
+	theme: ThemeChoice;
+	language: string;
+	avatarStyle: AvatarStyle;
+	textScale: TextScaleLevel;
+	numberFormat: NumberFormatKey;
+	dateFormat: DateFormatKey;
+	timeFormat: TimeFormatKey;
+}
+
+/**
+ * The first read, before the core is up: the shared spelling only, anything
+ * else the default. The core's read replaces it moments later.
+ */
+function readSharedSpelling(): PrefsRecord {
+	const record: PrefsRecord = {
+		theme: oneOf(read(PREF_KEYS.theme), THEMES, 'system'),
+		language: read(PREF_KEYS.language) ?? 'auto',
+		avatarStyle: oneOf(read(PREF_KEYS.avatarStyle), AVATARS, 'identicon'),
+		textScale: oneOf(
+			read(PREF_KEYS.textScale),
+			TEXT_SCALE_LEVELS.map((level) => level.key),
+			DEFAULT_TEXT_SCALE
+		),
+		numberFormat: 'auto',
+		dateFormat: 'auto',
+		timeFormat: 'auto'
+	};
+	const raw = read(PREF_KEYS.localePrefs);
+	if (raw !== null) {
+		try {
+			const stored = JSON.parse(raw) as Record<string, unknown>;
+			record.numberFormat = oneOf(stored.numberFormat as string, NUMBERS, 'auto');
+			record.dateFormat = oneOf(stored.dateFormat as string, DATES, 'auto');
+			record.timeFormat = oneOf(stored.timeFormat as string, TIMES, 'auto');
+		} catch {
+			/* A torn record reads as the defaults, which is what it means. */
+		}
+	}
+	return record;
+}
+
+/**
+ * The whole store as the core takes it, `{key: rawValue}`. The core picks out
+ * the keys it knows — including the older spellings this file never names.
+ */
+function storedEntries(): string {
+	const entries: Record<string, string> = {};
+	try {
+		for (let i = 0; i < localStorage.length; i += 1) {
+			const key = localStorage.key(i);
+			const value = key === null ? null : localStorage.getItem(key);
+			if (key !== null && value !== null) entries[key] = value;
+		}
+	} catch {
+		/* Blocked storage holds nothing, which reads as the defaults. */
+	}
+	return JSON.stringify(entries);
 }
 
 class Preferences {
@@ -122,39 +202,68 @@ class Preferences {
 	textScale = $state<TextScaleLevel>(DEFAULT_TEXT_SCALE);
 
 	#booted = false;
+	/** Set by every setter: a choice made this visit is newer than any stored read. */
+	#chosen = false;
+	#ready: Promise<void> = Promise.resolve();
 
 	/** The slider's stop for the current level — what the A ——●—— A shows. */
 	get textScaleIndex(): number {
 		return TEXT_SCALE_LEVELS.findIndex((level) => level.key === this.textScale);
 	}
 
+	/** Settles once the core has migrated the store and read it (or could not load). */
+	get ready(): Promise<void> {
+		return this.#ready;
+	}
+
 	/**
 	 * Read what is stored. Idempotent, synchronous, and safe to call from every
 	 * route's `onMount` — the second call is a no-op rather than a second read
 	 * that could land after a person has already chosen something.
+	 *
+	 * Every route that calls this loads the core anyway; the migration rides
+	 * on that same load rather than starting one of its own.
 	 */
 	boot(): void {
 		if (this.#booted || !browser) return;
 		this.#booted = true;
-		this.theme = oneOf(read(PREF_KEYS.theme), THEMES, 'system');
-		this.avatarStyle = oneOf(read(PREF_KEYS.avatarStyle), AVATARS, 'identicon');
-		this.language = read(PREF_KEYS.language) ?? 'auto';
-		this.textScale = oneOf(
-			read(PREF_KEYS.textScale),
-			TEXT_SCALE_LEVELS.map((level) => level.key),
-			DEFAULT_TEXT_SCALE
-		);
-		const raw = read(PREF_KEYS.localePrefs);
-		if (raw !== null) {
-			try {
-				const stored = JSON.parse(raw) as Record<string, unknown>;
-				this.numberFormat = oneOf(stored.numberFormat as string, NUMBERS, 'auto');
-				this.dateFormat = oneOf(stored.dateFormat as string, DATES, 'auto');
-				this.timeFormat = oneOf(stored.timeFormat as string, TIMES, 'auto');
-			} catch {
-				/* A torn record reads as the defaults, which is what it means. */
+		this.#adopt(readSharedSpelling());
+		this.#ready = loadCore().then(
+			() => this.#readThroughCore(),
+			() => {
+				/* No core, no older spellings: the first read stands. */
 			}
+		);
+	}
+
+	/**
+	 * Rewrite what an older shell wrote into the shared spelling — once: the
+	 * migrations are empty for a store that already agrees — then read the
+	 * store again the way every shell reads it. A person who chose something
+	 * while the core was loading is not second-guessed by a read that began
+	 * before they did; the rewrite still lands for the next visit.
+	 */
+	#readThroughCore(): void {
+		const writes = JSON.parse(prefsMigrations(storedEntries())) as {
+			key: string;
+			value: string | null;
+		}[];
+		for (const { key, value } of writes) {
+			if (value === null) remove(key);
+			else write(key, value);
 		}
+		if (this.#chosen) return;
+		this.#adopt(JSON.parse(prefsRead(storedEntries())) as PrefsRecord);
+	}
+
+	#adopt(record: PrefsRecord): void {
+		this.theme = record.theme;
+		this.avatarStyle = record.avatarStyle;
+		this.language = record.language;
+		this.textScale = record.textScale;
+		this.numberFormat = record.numberFormat;
+		this.dateFormat = record.dateFormat;
+		this.timeFormat = record.timeFormat;
 		this.applyTheme();
 		this.applyTextScale();
 	}
@@ -188,22 +297,26 @@ class Preferences {
 
 	setTheme(value: ThemeChoice): void {
 		this.theme = value;
+		this.#chosen = true;
 		write(PREF_KEYS.theme, value);
 		this.applyTheme();
 	}
 
 	setAvatarStyle(value: AvatarStyle): void {
 		this.avatarStyle = value;
+		this.#chosen = true;
 		write(PREF_KEYS.avatarStyle, value);
 	}
 
 	setLanguage(value: string): void {
 		this.language = value;
+		this.#chosen = true;
 		write(PREF_KEYS.language, value);
 	}
 
 	setTextScale(value: TextScaleLevel): void {
 		this.textScale = value;
+		this.#chosen = true;
 		write(PREF_KEYS.textScale, value);
 		this.applyTextScale();
 	}
@@ -216,16 +329,19 @@ class Preferences {
 
 	setNumberFormat(value: NumberFormatKey): void {
 		this.numberFormat = value;
+		this.#chosen = true;
 		this.#saveLocalePrefs();
 	}
 
 	setDateFormat(value: DateFormatKey): void {
 		this.dateFormat = value;
+		this.#chosen = true;
 		this.#saveLocalePrefs();
 	}
 
 	setTimeFormat(value: TimeFormatKey): void {
 		this.timeFormat = value;
+		this.#chosen = true;
 		this.#saveLocalePrefs();
 	}
 
@@ -244,6 +360,8 @@ class Preferences {
 	/** Tests only: forget what was read so the next `boot()` reads again. */
 	resetForTests(): void {
 		this.#booted = false;
+		this.#chosen = false;
+		this.#ready = Promise.resolve();
 		this.theme = 'system';
 		this.avatarStyle = 'identicon';
 		this.numberFormat = 'auto';

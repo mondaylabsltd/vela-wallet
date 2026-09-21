@@ -986,6 +986,13 @@ object SettingsFixtures {
                 cancel = s.t("settingsModals.network.removeCancel"),
                 danger = true,
             ),
+            resetEndpointsSheet = ConfirmSheetModel(
+                title = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_TITLE),
+                body = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_BODY),
+                confirm = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_CONFIRM),
+                cancel = s.t(I18nKeys.SettingsUi.ENDPOINTS_RESET_CANCEL),
+                danger = true,
+            ),
             networkDetail = networkDetail(s, mismatch = state == SettingsScreenState.ST9B),
             addNetwork = addNetwork(s, addMode),
             rpcProviders = rpcProviders(s),

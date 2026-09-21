@@ -143,6 +143,10 @@ export type SettingsOverlayId =
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
+	/** Spec 072: removing a custom network, asked before it happens. */
+	| 'remove-network'
+	/** Spec 072: resetting the service endpoints, asked before it happens. */
+	| 'reset-endpoints'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -400,6 +404,11 @@ export interface ProviderCardModel {
 	field: UrlFieldModel;
 	/** The blue trailing action inside the field — 检查密钥 / 获取密钥. */
 	action: string;
+	/**
+	 * Where the action GOES, when it is a link: "Get key" opens the
+	 * provider's key page. Absent, the action is the key test.
+	 */
+	actionUrl?: string;
 	/** "支持 12 个网络，共 12 个 · 平均 112ms". */
 	support?: string;
 	/** The "获取密钥 →" link under an unset provider. */
@@ -420,6 +429,8 @@ export interface EndpointsModel {
 	description: string;
 	fields: UrlFieldModel[];
 	reset: string;
+	/** Spec 072 (FR-010): what Reset asks before every field goes back. */
+	resetSheet: ConfirmSheetModel;
 	/** Desktop-only trailing link (DST6). */
 	guide?: string;
 }
@@ -461,12 +472,16 @@ export interface StorageModel {
 }
 
 export interface KeyValueRowModel {
+	/** Names a row a live overlay rewrites (the network count). */
+	id?: string;
 	label: string;
 	value: string;
 	/** Values in the mono face — every technical detail is. */
 	mono?: boolean;
 	/** Link rows carry the external glyph. */
 	external?: boolean;
+	/** Where a link row goes. A row that draws the glyph opens something. */
+	href?: string;
 }
 
 export interface AboutModel {
@@ -602,6 +617,8 @@ export interface SettingsHomeModel {
 		addLabel: string;
 		/** The custom row's delete control (spec 028 Phase 8) — it used to borrow `addLabel`. */
 		removeLabel: string;
+		/** The question the delete control asks first (spec 072); its title is the network's name. */
+		removeSheet: ConfirmSheetModel;
 	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
@@ -775,6 +792,7 @@ export interface SettingsDesktopModel {
 		subtitle: string;
 		addLabel: string;
 		removeLabel: string;
+		removeSheet: ConfirmSheetModel;
 		rows: NetworkRowModel[];
 		detail: NetworkDetailModel;
 	};
@@ -783,6 +801,8 @@ export interface SettingsDesktopModel {
 	storage: StorageModel;
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
 	clearCachesSheet: ConfirmSheetModel;
+	/** The phone's erase sheet, as a dialog (spec 072) — the same words, the same failure. */
+	eraseSheet: ConfirmSheetModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

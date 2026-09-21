@@ -33,6 +33,11 @@ struct RootView: View {
     /// The account list, kept rather than passed and forgotten: the parallel
     /// space's door needs it at `.task` time, after `init` has finished.
     private let accounts: AccountStore
+    /// A completed erase (spec 072). The app answers with a NEW root — every
+    /// machine built again from the emptied store, which is the first run,
+    /// as the web's reload is. Nothing that held the erased wallet in memory
+    /// survives to write it back.
+    private let onErased: () -> Void
     @State private var router: Router
     @State private var model: WelcomeModel
     @State private var session: SessionController
@@ -61,6 +66,9 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
+    /// An erase ran and something survived it — said on the erase sheet,
+    /// never swallowed (spec 072 FR-011).
+    @State private var eraseFailed = false
     /// Naming a group — new, or renaming the one it names.
     ///
     /// The platform's own prompt, which is the shape the explore tab's
@@ -216,12 +224,17 @@ struct RootView: View {
     /// redraw when the door opens during `.task`.
     @Environment(\.scenePhase) private var scenePhase
     @State private var parallelSpace = false
-    @State private var launching = !LaunchAnimation.isDisabled
+    /// Seeded in `init`: only a cold start plays the lockup.
+    @State private var launching: Bool
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
-    @State private var pageOpacity: Double = LaunchAnimation.isDisabled ? 1 : 0
+    @State private var pageOpacity: Double
 
-    init(loc: Loc) {
+    /// `firstLaunch` is `false` for the root an erase rebuilt: no launch
+    /// lockup, and no DEBUG account seed writing a wallet back into the store
+    /// the person just emptied.
+    init(loc: Loc, firstLaunch: Bool = true, onErased: @escaping () -> Void = {}) {
         self.loc = loc
+        self.onErased = onErased
         let router = Router()
         _router = State(initialValue: router)
         let flowNav = FlowNav()
@@ -235,7 +248,11 @@ struct RootView: View {
         // Before the session machine boots: it reads `vela.accounts` on its
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
-        DevAccountSeed.applyIfRequested(store: shelf)
+        if firstLaunch { DevAccountSeed.applyIfRequested(store: shelf) }
+        // An older shell's spellings of the five preferences, brought to the
+        // shared record before anything reads them (spec 072). Nothing to do
+        // for a store that already agrees, so this is safe every launch.
+        Preferences.migrate(shelf)
         // One pool, built before anything that reads a chain — the settings
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
@@ -427,6 +444,8 @@ struct RootView: View {
         _paymentRequest = State(initialValue: PaymentRequestStore(
             executor: PaymentRequestExecutor(store: shelf)
         ))
+        _launching = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled)
+        _pageOpacity = State(initialValue: firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
         let prefs = Preferences(store: shelf)
         prefs.boot()
         // Before the first frame, and before the welcome model is built from
@@ -1795,6 +1814,10 @@ struct RootView: View {
             // what failed is a chain number.
             rpcDraft = settings.networkAdmin?.networks
                 .first { $0.chainId == chainId }?.rpcUrl ?? ""
+            // The chain's card, opened in the core — its edit and its save
+            // act on an open card only, so without this the sheet's 保存
+            // reached nothing.
+            settings.expandNetwork(chainId: chainId)
             rescue = .rpcFix
         } else {
             rescueChain = nil
@@ -1826,7 +1849,7 @@ struct RootView: View {
     /// the networks page uses — so one endpoint store has one writer.
     private func commitRescueRpc() {
         guard let chainId = rescueChain else { return }
-        settings.editOverride(chainId: chainId, value: rpcDraft)
+        settings.editOverride(chainId: chainId, field: .rpc, value: rpcDraft)
         settings.blurOverride(chainId: chainId)
         wallet.refresh(pull: true)
     }
@@ -2663,23 +2686,38 @@ struct RootView: View {
         SettingsScreen(
             model: settingsModel(state),
             loc: loc,
+            // Every tab leaves Settings for its own section — only 钱包
+            // answered before (spec 072), so 通讯录 and 探索 took the tap and
+            // stayed here.
             onSelectTab: { tab in
-                if tab == .wallet { router.path.removeLast() }
+                guard tab != .settings else { return }
+                selectTab(tab)
+                if !router.path.isEmpty { router.path.removeLast() }
             },
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
             onSignOut: { session.signOut() },
             networkActions: SettingsNetworkActions(
                 onOpenNetwork: { settings.expandNetwork(chainId: $0) },
+                onEditOverride: { chainId, field, value in
+                    guard let field = NetOverrideFieldWire(rawValue: field) else { return }
+                    settings.editOverride(chainId: chainId, field: field, value: value)
+                },
+                onCommitOverride: { settings.blurOverride(chainId: $0) },
+                onRemoveNetwork: { settings.deleteNetwork(id: $0) },
+                onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
                 onSelectChain: { settings.selectChain($0) },
                 onEditCustomRpc: { settings.editCustomRpc($0) },
+                onRecheck: { settings.recheck(customRpc: $0) },
                 onConfirmAdd: { settings.confirmAdd() },
                 isLive: true
             ),
             appearance: SettingsAppearanceActions(
+                // `auto` is the drawn "follow the system"; `system` is what is
+                // stored and what stops pinning a scheme (spec 072).
                 onTheme: { id in
-                    guard let choice = ThemeChoice(rawValue: id) else { return }
+                    guard let choice = SettingsLive.themeChoice(segment: id) else { return }
                     preferences.setTheme(choice)
                 },
                 onAvatar: { id in
@@ -2722,13 +2760,19 @@ struct RootView: View {
             // from Welcome.
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
+            // The rows' ids ARE the core's field and provider names (the
+            // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(
-                onEditEndpoint: { id, value in settings.editEndpoint(id: id, value: value) },
-                onBlurEndpoint: { id in settings.blurEndpoint(id: id) },
+                onEditEndpoint: { id, value in
+                    NetEndpointFieldWire(rawValue: id).map { settings.editEndpoint($0, value: value) }
+                },
+                onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint($0) } },
                 onResetEndpoints: { settings.resetEndpoints() },
-                onEditProvider: { id, value in settings.editProviderKey(id: id, value: value) },
-                onBlurProvider: { id in settings.blurProviderKey(id: id) },
-                onTestProvider: { id in settings.testProvider(id: id) },
+                onEditProvider: { id, value in
+                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey($0, value: value) }
+                },
+                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey($0) } },
+                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider($0) } },
                 onOpenEndpoints: { settings.openEndpoints() },
                 onOpenProviders: { settings.openProviders() }
             ),
@@ -2749,7 +2793,8 @@ struct RootView: View {
                 settings.submitSignerUrl(text)
                 return settings.signPref?.signerUrlError == nil
             },
-            onResetSignerUrl: { settings.resetSignerUrl() }
+            onResetSignerUrl: { settings.resetSignerUrl() },
+            onOpenLink: { openExternal($0) }
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -2789,12 +2834,19 @@ struct RootView: View {
             // them does not need a page open (idempotent).
             browser.startConnections()
             tellBrowserAboutAccounts()
-            // Both pages ask the core to read what is stored when they open.
-            // Until 056 nothing sent either event, so two live pages rendered
-            // whatever the machine happened to be holding.
-            settings.openEndpoints()
-            settings.openProviders()
+            // The endpoints and providers pages send their own `…_opened`
+            // when they are SHOWN (spec 072) — probing four services and
+            // every saved key each time Settings opened was asking about
+            // pages nobody was looking at.
         }
+    }
+
+    /// A link out of the app — About's rows, "suggest a fix", "Get a key".
+    /// A bare host ("getvela.app") is read as https, as Android reads it.
+    private func openExternal(_ value: String) {
+        let text = value.hasPrefix("http") ? value : "https://\(value)"
+        guard let url = URL(string: text) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func settingsModel(_ state: SettingsStateId) -> SettingsScreenModel {
@@ -2848,7 +2900,7 @@ struct RootView: View {
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
-        model = SettingsLive.withProviderTests(on: model, loc: loc)
+        model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
         // Measured, not drawn (058). `storageTick` is what makes a clear show
         // up: the report is read here, so the page has to be asked to build
         // again after keys are removed.
@@ -2933,30 +2985,40 @@ struct RootView: View {
         wallet.refresh(pull: true)
     }
 
-    /// 抹除此设备 — every key this app owns, and then the door.
+    /// 抹除此设备 — everything of ours on this phone, then the first run.
     ///
     /// **Never run on the founder's phone.** It is wired because a drawn
     /// destructive action that does nothing is worse than one that works;
-    /// verifying it means reading this code, not erasing a device with a real
-    /// wallet on it.
-    private func eraseThisDevice() {
-        // Everything this app owns, by the keys it owns them under. The
-        // signed-in wallet goes through `AccountStore`, which is the one writer
-        // of those two keys.
-        for key in [
-            VelaStore.Key.contacts, VelaStore.Key.contactsDismissed,
-            VelaStore.Key.contactGroups, VelaStore.Key.customNetworks,
-            VelaStore.Key.networkConfig, VelaStore.Key.rpcProviders,
-            VelaStore.Key.displayCurrency, VelaStore.Key.balanceCache,
-            VelaStore.Key.customTokens, VelaStore.Key.transactionHistory,
-            VelaStore.Key.fiatRates, VelaStore.Key.fiatFeedAddrs, VelaStore.Key.fxRates,
-            VelaStore.Key.theme, VelaStore.Key.language, VelaStore.Key.localePrefs,
-            VelaStore.Key.avatarStyle, VelaStore.Key.textScale,
-        ] {
-            shelf.writeString(key, nil)
+    /// verifying it means reading this code and the simulator, not erasing a
+    /// device with a real wallet on it.
+    ///
+    /// The order is the rule (spec 072 FR-011):
+    ///
+    /// 1. The live dApp sessions are cut first (`revoke_all`), so an open page
+    ///    hears it is disconnected rather than keeping a grant nobody holds.
+    /// 2. The store is SCANNED and every key the core calls erasable goes —
+    ///    no hand-kept list (it had eighteen names and missed contacts'
+    ///    siblings, every `vela.perm.*` grant and the name cache) — then the
+    ///    store is looked at again.
+    /// 3. Anything that survived keeps the person here, signed in, with the
+    ///    sheet saying so. Otherwise the app starts over from the empty store
+    ///    — the first run, with no sign-out sheet to cancel afterwards (the
+    ///    old path raised one after the data was already gone).
+    ///
+    /// Returns whether the erase happened.
+    private func eraseThisDevice() -> Bool {
+        browser.revokeAll()
+        let survivors = DeviceStorage.erase(shelf)
+        guard survivors.isEmpty else {
+            print("[vela-wallet] erase incomplete: \(survivors.count) key(s) survived")
+            eraseFailed = true
+            storageTick += 1
+            return false
         }
-        accounts.clearSignedInWallet()
-        session.signOut()
+        eraseFailed = false
+        relayClient.clearCaches()
+        onErased()
+        return true
     }
 
     /// An account row in the switcher.

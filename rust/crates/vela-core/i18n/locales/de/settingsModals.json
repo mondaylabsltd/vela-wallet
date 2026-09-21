@@ -42,7 +42,11 @@
       "fiatLabel": "FIAT-KURSE",
       "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
       "resetToDefaults": "Auf Standard zurücksetzen",
-      "selfHostGuide": "Anleitung zum Selbst-Hosten →"
+      "selfHostGuide": "Anleitung zum Selbst-Hosten →",
+      "resetTitle": "Dienst-Endpunkte zurücksetzen?",
+      "resetBody": "Alle vier Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
+      "resetConfirm": "Zurücksetzen",
+      "resetCancel": "Abbrechen"
     },
     "addNetwork": {
       "modalTitle": "Netzwerk hinzufügen",

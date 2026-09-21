@@ -48,6 +48,8 @@ class NetworkAdmin {
 
 	#loop: EffectLoop<NetEvent> | null = null;
 	#booted: Promise<void> | null = null;
+	/** Screen events raised before the stores were read — replayed, in order, once they are. */
+	#early: NetEvent[] = [];
 
 	/**
 	 * Load the core and hydrate from the stores. Idempotent — every screen that
@@ -63,6 +65,7 @@ class NetworkAdmin {
 				{
 					onView: (view) => {
 						this.view = view;
+						if (view.loaded) this.#replayEarly();
 					},
 					execute: (effect) => executeNetworkAdminOperation(effect),
 					toFailure: networkAdminOperationFailure,
@@ -74,9 +77,28 @@ class NetworkAdmin {
 		return this.#booted;
 	}
 
-	/** Every screen event, verbatim — the core decides what each one means. */
+	/**
+	 * Every screen event, verbatim — the core decides what each one means.
+	 *
+	 * One raised before the stores are read waits for them. The machine seeds
+	 * from what it has loaded: "the providers page opened", answered over an
+	 * empty ledger, left the saved keys showing with no draft behind them, and
+	 * the first field to lose focus then saved an empty key over the one it
+	 * showed (spec 072, P0). Dropped outright before `boot()` had finished,
+	 * it did the same.
+	 */
 	dispatch(event: NetEvent): void {
-		this.#loop?.dispatch(event);
+		if (this.#loop === null || !this.view.loaded || this.#early.length > 0) {
+			this.#early.push(event);
+			return;
+		}
+		this.#loop.dispatch(event);
+	}
+
+	#replayEarly(): void {
+		const early = this.#early;
+		this.#early = [];
+		for (const event of early) this.#loop?.dispatch(event);
 	}
 }
 

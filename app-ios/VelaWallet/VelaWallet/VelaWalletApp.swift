@@ -23,9 +23,17 @@ struct VelaWalletApp: App {
     /// The identifier `Info.plist` permits and the scene registers.
     static let trackerTask = "app.getvela.VelaWallet.tracker"
 
+    /// Which root this is. An erase (spec 072) bumps it, and a new identity
+    /// is a new `RootView` — every machine built again from the emptied
+    /// store, which is exactly the first run. The web reloads the page for the
+    /// same reason: nothing that held the erased wallet in memory may live on
+    /// to write it back.
+    @State private var lifetime = 0
+
     var body: some Scene {
         WindowGroup {
-            RootView(loc: loc)
+            RootView(loc: loc, firstLaunch: lifetime == 0, onErased: { lifetime += 1 })
+                .id(lifetime)
         }
         // A background refresh, which iOS runs at ITS discretion and may never
         // run at all. It is best effort by design, and the wallet's promise

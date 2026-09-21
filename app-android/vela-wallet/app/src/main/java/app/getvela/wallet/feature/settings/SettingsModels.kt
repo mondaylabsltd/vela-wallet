@@ -54,6 +54,9 @@ enum class SettingsOverlay {
 
     /** Spec 072: removing a custom network asks first. */
     RemoveNetwork,
+
+    /** Spec 072: resetting the service endpoints asks first. */
+    ResetEndpoints,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
@@ -523,6 +526,8 @@ data class SettingsScreenModel(
     /** Spec 072: the trash icon's name, and the question it asks. */
     val removeNetworkLabel: String = "",
     val removeNetworkSheet: ConfirmSheetModel = ConfirmSheetModel(title = "", body = "", confirm = "", cancel = "", danger = true),
+    /** Spec 072 (FR-010): what the endpoints' Reset asks before every field goes back. */
+    val resetEndpointsSheet: ConfirmSheetModel = ConfirmSheetModel(title = "", body = "", confirm = "", cancel = "", danger = true),
     val networkDetail: NetworkDetailModel,
     val addNetwork: AddNetworkModel,
     val rpcProviders: RpcProvidersModel,

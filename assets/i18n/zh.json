@@ -1584,7 +1584,11 @@
    "fiatLabel": "法币汇率",
    "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
    "resetToDefaults": "恢复默认",
-   "selfHostGuide": "自行部署指南 →"
+   "selfHostGuide": "自行部署指南 →",
+   "resetTitle": "恢复默认服务节点？",
+   "resetBody": "四项服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
+   "resetConfirm": "恢复默认",
+   "resetCancel": "取消"
   },
   "addNetwork": {
    "modalTitle": "添加网络",

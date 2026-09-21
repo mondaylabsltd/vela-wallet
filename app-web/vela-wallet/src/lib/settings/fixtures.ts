@@ -11,6 +11,7 @@
  * composed HERE, because composition order is a translation concern and the
  * components must never learn one.
  */
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import type { SettingsMessages } from './messages';
 import type {
@@ -476,6 +477,16 @@ function addNetwork(
 	};
 }
 
+/**
+ * Where each provider's API key is made. The panel sent every "Get key →" to
+ * drpc.org, Alchemy's and Ankr's included.
+ */
+export const PROVIDER_KEY_URLS = {
+	alchemy: 'https://dashboard.alchemy.com/',
+	drpc: 'https://drpc.org/',
+	ankr: 'https://www.ankr.com/rpc/'
+} as const;
+
 function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersModel {
 	const support = fill(m.rpcProviders.supportsCount, { count: 12, total: NETWORK_COUNT });
 	return {
@@ -499,8 +510,9 @@ function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersMo
 				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
 				field: { id: 'drpc', label: '', value: '', placeholder: m.rpcProviders.notSet },
 				action: m.rpcProviders.getKey,
+				actionUrl: PROVIDER_KEY_URLS.drpc,
 				link: `${m.rpcProviders.getKey} →`,
-				linkUrl: 'https://drpc.org/'
+				linkUrl: PROVIDER_KEY_URLS.drpc
 			},
 			{
 				id: 'ankr',
@@ -508,6 +520,7 @@ function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersMo
 				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
 				field: { id: 'ankr', label: '', value: '', placeholder: m.rpcProviders.notSet },
 				action: m.rpcProviders.getKey,
+				actionUrl: PROVIDER_KEY_URLS.ankr,
 				support: fill(m.rpcProviders.supportsCount, { count: 8, total: NETWORK_COUNT })
 			}
 		]
@@ -549,6 +562,7 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 			}
 		],
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: withGuide ? m.endpoints.guide : undefined
 	};
 }
@@ -641,20 +655,34 @@ function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 			{ label: m.about.techAccountTypeLabel, value: m.about.techAccountTypeValue },
 			{ label: m.about.techSignerLabel, value: m.about.techSignerValue },
 			{
+				id: 'networks',
 				label: m.about.techNetworksLabel,
 				value: fill(m.about.techNetworksValue, { count: NETWORK_COUNT })
 			}
 		],
 		sectionLinks: withLinksHeading ? m.about.sectionLinks : undefined,
 		links: [
-			{ label: m.about.linkWebsite, value: 'getvela.app', mono: true, external: true },
+			{
+				label: m.about.linkWebsite,
+				value: 'getvela.app',
+				mono: true,
+				external: true,
+				href: 'https://getvela.app'
+			},
 			{
 				label: m.about.linkGitHub,
 				value: 'github.com/mondaylabsltd/vela-wallet',
 				mono: true,
-				external: true
+				external: true,
+				href: 'https://github.com/mondaylabsltd/vela-wallet'
 			},
-			{ label: m.about.linkSafeWallet, value: 'safe.global', mono: true, external: true }
+			{
+				label: m.about.linkSafeWallet,
+				value: 'safe.global',
+				mono: true,
+				external: true,
+				href: 'https://safe.global'
+			}
 		],
 		footer: m.about.footer
 	};
@@ -839,6 +867,17 @@ function clearCachesSheet(m: SettingsMessages): ConfirmSheetModel {
 		confirm: m.storage.clearConfirm,
 		cancel: m.common.cancel,
 		tone: 'accent'
+	};
+}
+
+/** What removing a custom network asks first; the sheet's title is the network's name. */
+function removeNetworkSheet(m: SettingsMessages): ConfirmSheetModel {
+	return {
+		title: m.networks.remove,
+		body: m.networks.removeBody,
+		confirm: m.networks.removeConfirm,
+		cancel: m.networks.removeCancel,
+		tone: 'danger'
 	};
 }
 
@@ -1100,7 +1139,8 @@ export function buildMobileState(
 			subtitle: m.advanced.networksSubtitle,
 			rows: networkRows(m),
 			addLabel: m.advanced.addNetworkTitle,
-			removeLabel: m.networks.remove
+			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m)
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
@@ -1301,6 +1341,7 @@ export function buildDesktopState(
 			subtitle: m.advanced.networksSubtitle,
 			addLabel: m.advanced.addNetworkTitle,
 			removeLabel: m.networks.remove,
+			removeSheet: removeNetworkSheet(m),
 			// DST4 expands Ethereum in place and drops the built-ins below Base
 			// into the custom tail, which is what the mock shows.
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),
@@ -1310,6 +1351,7 @@ export function buildDesktopState(
 		endpoints: endpoints(m, true),
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),
+		eraseSheet: eraseSheet(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

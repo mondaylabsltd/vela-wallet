@@ -176,12 +176,17 @@ struct NetCompatibilityWire: Decodable, Equatable {
     let rpcFailure: NetRpcFailureKindWire?
 }
 
-/// Why the wizard cannot proceed. Tagged, with a chain id on three of four.
+/// Why the wizard cannot proceed. Tagged, with a chain id on four of five.
 enum NetWizardErrorWire: Decodable, Equatable {
     case alreadyAdded(chainId: Int)
     case notFound(chainId: Int)
     case noRpcEndpoint
     case notCompatible(chainId: Int)
+    /// The probes failed, so nothing was learned about the chain (spec 038
+    /// #E1). Not a verdict: worded "unable to verify", never "incompatible".
+    /// Missing here, a view carrying it failed to decode and the whole
+    /// settings screen stopped hearing the core.
+    case checkFailed(chainId: Int)
 
     private enum Keys: String, CodingKey { case type, chainId }
 
@@ -193,6 +198,7 @@ enum NetWizardErrorWire: Decodable, Equatable {
         case "not_found": self = .notFound(chainId: chainId() ?? 0)
         case "no_rpc_endpoint": self = .noRpcEndpoint
         case "not_compatible": self = .notCompatible(chainId: chainId() ?? 0)
+        case "check_failed": self = .checkFailed(chainId: chainId() ?? 0)
         case let other:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container,
@@ -218,7 +224,9 @@ struct NetWizardViewWire: Decodable, Equatable {
 
 // MARK: - Endpoints and providers
 
-enum NetEndpointFieldWire: String, Decodable {
+/// The four service endpoints, spelled as the core's `NetEndpointField` —
+/// the same raw values go back out in `endpoint_edited` / `endpoint_blurred`.
+enum NetEndpointFieldWire: String, Decodable, CaseIterable {
     case ethereumData = "ethereum_data"
     case passkeyIndex = "passkey_index"
     case bundlerService = "bundler_service"
@@ -232,8 +240,15 @@ struct NetEndpointViewWire: Decodable, Equatable {
     let health: NetServiceHealthWire
 }
 
-enum NetProviderIdWire: String, Decodable {
+/// `NetProviderId` — the view's spelling and the events' `provider`.
+enum NetProviderIdWire: String, Decodable, CaseIterable {
     case alchemy, drpc, ankr
+}
+
+/// `NetOverrideField`: which of a network's two editable fields an
+/// `override_field_edited` is about.
+enum NetOverrideFieldWire: String, CaseIterable {
+    case rpc, explorer
 }
 
 struct NetProviderNetRowWire: Decodable, Equatable {

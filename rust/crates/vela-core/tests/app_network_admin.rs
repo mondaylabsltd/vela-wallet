@@ -1712,6 +1712,34 @@ fn a_blur_without_opening_keeps_the_other_saved_keys() {
     );
 }
 
+/// Spec 072: the field being LEFT had no draft either — tabbing through an
+/// unopened page blurred Alchemy's own field, and the blank draft that stood
+/// for "never edited" was written as "cleared", deleting the saved key.
+#[test]
+fn a_blur_on_an_unedited_field_keeps_its_own_saved_key() {
+    let mut sut = sut_with_alchemy_key();
+    let ops = sut.dispatch(Event::ProviderKeyBlurred {
+        provider: NetProviderId::Alchemy,
+    });
+    assert_eq!(
+        ops.first(),
+        Some(&Op::WriteRpcProviders {
+            keys: NetProviderKeys {
+                alchemy: Some("abc".to_owned()),
+                ..Default::default()
+            }
+        }),
+        "the saved key is written back, not cleared"
+    );
+    let shown = sut
+        .view()
+        .providers
+        .iter()
+        .find(|p| p.provider == NetProviderId::Alchemy)
+        .map(|p| p.key.clone());
+    assert_eq!(shown, Some("abc".to_owned()));
+}
+
 #[test]
 fn clearing_a_key_removes_the_provider_entirely() {
     let mut sut = sut_with_alchemy_key();

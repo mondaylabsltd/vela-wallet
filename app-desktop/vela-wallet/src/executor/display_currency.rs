@@ -150,8 +150,10 @@ impl Machine for DisplayCurrency {
             // that could not commit. Both halves land together, which is why
             // they were one debt.
             CurrencyOperation::ReadDeviceCurrency => {
+                // The MACHINE's region (spec 072): a language chosen in
+                // Settings is a reading preference, not a place.
                 Answer::Now(CurrencyShellResult::DeviceCurrency {
-                    code: region_currency(crate::loc::Loc::from_env().language()),
+                    code: region_currency(&crate::loc::system_tag()),
                 })
             }
 

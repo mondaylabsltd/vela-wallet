@@ -14,13 +14,15 @@
 		field: UrlFieldModel;
 		/** Trailing in-field action — the RPC-provider cards' 检查密钥 / 获取密钥. */
 		action?: string;
+		/** When the action is a place to go (获取密钥 → the provider's key page), not a thing to do. */
+		actionHref?: string;
 		onaction?: () => void;
 		oninput?: (value: string) => void;
 		/** Leaving the field is the save signal on every network surface. */
 		onblur?: () => void;
 	}
 
-	let { field, action, onaction, oninput, onblur }: Props = $props();
+	let { field, action, actionHref, onaction, oninput, onblur }: Props = $props();
 </script>
 
 <div class="field">
@@ -44,7 +46,10 @@
 			oninput={(event) => oninput?.(event.currentTarget.value)}
 			onblur={() => onblur?.()}
 		/>
-		{#if action !== undefined}
+		{#if action !== undefined && actionHref !== undefined}
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a page outside the app (a provider's key page) -->
+			<a class="action" href={actionHref} target="_blank" rel="noreferrer noopener">{action}</a>
+		{:else if action !== undefined}
 			<button type="button" class="action" onclick={onaction}>{action}</button>
 		{/if}
 	</div>
@@ -115,6 +120,7 @@
 	.action {
 		border: none;
 		background: none;
+		text-decoration: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-info-base);

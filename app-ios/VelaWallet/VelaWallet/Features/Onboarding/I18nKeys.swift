@@ -316,10 +316,17 @@ enum I18nKeys {
         static let keysProviderGeneric = "onboarding.create.providerGeneric"
         static let keysProviderSecurityKey = "onboarding.create.providerSecurityKey"
         static let networkOffline = "settingsModals.health.offline"
+        static let healthHttpsRequired = "settingsModals.health.httpsRequired"
+        static let healthInvalid = "settingsModals.health.invalid"
         static let chainId = "settingsModals.network.chainId"
         static let fieldRpcUrl = "settingsModals.network.fieldRpcUrl"
         static let fieldExplorer = "settingsModals.network.fieldExplorer"
         static let rpcChainMismatch = "settingsModals.network.rpcChainMismatch"
+            // Removing a custom network, asked first (spec 072).
+        static let networkRemoveTitle = "settingsModals.network.removeTitle"
+        static let networkRemoveBody = "settingsModals.network.removeBody"
+        static let networkRemoveConfirm = "settingsModals.network.removeConfirm"
+        static let networkRemoveCancel = "settingsModals.network.removeCancel"
 
             // Add network.
         static let addDescription = "settingsModals.addNetwork.description"
@@ -339,6 +346,8 @@ enum I18nKeys {
         static let addRecheckWithRpc = "settingsModals.addNetwork.recheckWithRpc"
         static let addTestnet = "settingsModals.addNetwork.testnet"
         static let addUnableToVerify = "settingsModals.addNetwork.unableToVerify"
+        static let addChecking = "settingsModals.addNetwork.checkingCompatibility"
+        static let addRetry = "settingsModals.addNetwork.retry"
 
             // The wizard's three refusals (spec 050).
             //
@@ -371,6 +380,10 @@ enum I18nKeys {
         static let endpointFiat = "settingsModals.endpoints.fiatLabel"
         static let endpointFiatHint = "settingsModals.endpoints.fiatHint"
         static let endpointsReset = "settingsModals.endpoints.resetToDefaults"
+        static let endpointsResetTitle = "settingsModals.endpoints.resetTitle"
+        static let endpointsResetBody = "settingsModals.endpoints.resetBody"
+        static let endpointsResetConfirm = "settingsModals.endpoints.resetConfirm"
+        static let endpointsResetCancel = "settingsModals.endpoints.resetCancel"
 
             // Device storage.
         static let storageTitle = "settings.storage.title"
@@ -443,6 +456,7 @@ enum I18nKeys {
         static let eraseKeeps = "settings.eraseDevice.keeps"
         static let eraseConfirm = "settings.eraseDevice.confirm"
         static let eraseCancel = "settings.eraseDevice.cancel"
+        static let eraseFailed = "settings.eraseDevice.failed"
 
             // Feedback.
         static let bugTitle = "componentsUi.bugReport.title"

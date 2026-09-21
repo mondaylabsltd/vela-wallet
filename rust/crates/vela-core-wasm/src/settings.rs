@@ -74,3 +74,29 @@ pub fn storage_is_cache_key(key: &str) -> bool {
 pub fn storage_is_erasable_key(key: &str) -> bool {
     storage_catalog::is_erasable_key(key)
 }
+
+/// Is this key the wallet's at all (counted in the storage total)?
+#[wasm_bindgen(js_name = storageIsOurs)]
+pub fn storage_is_ours(key: &str) -> bool {
+    storage_catalog::is_ours(key)
+}
+
+/// Records in a stored list value; `undefined` when it is not a list.
+#[wasm_bindgen(js_name = storageRecordsIn)]
+pub fn storage_records_in(value: &str) -> Option<u32> {
+    storage_catalog::records_in(value).map(|n| u32::try_from(n).unwrap_or(u32::MAX))
+}
+
+/// `{value, unit}` — a byte count in 1024s, for the shell to format in the
+/// person's numbers.
+#[wasm_bindgen(js_name = storageBytesDisplay)]
+pub fn storage_bytes_display(bytes: f64) -> String {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::allow_attributes
+    )]
+    let bytes = bytes.max(0.0) as u64;
+    let (value, unit) = storage_catalog::bytes_display(bytes);
+    json!({ "value": value, "unit": unit }).to_string()
+}

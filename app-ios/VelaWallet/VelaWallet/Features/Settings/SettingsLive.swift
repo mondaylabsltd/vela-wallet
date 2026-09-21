@@ -22,11 +22,12 @@ import VelaCore
 
 enum SettingsLive {
 
-    /// Swap in the networks the core actually knows about.
+    /// Swap in the networks the core actually knows about — the list, each
+    /// network's page, the wizard, the advanced row's count, and the two pages
+    /// behind the providers and endpoints rows (spec 072).
     ///
-    /// Everything else on the model — the sections, the theme and avatar
-    /// pickers, storage, about, every sheet — is untouched fixture, and stays
-    /// that way until its own machine is wired.
+    /// Everything else on the model — the other rows, the pickers, storage,
+    /// about, every sheet — is left for its own builder below.
     static func withNetworks(
         _ view: NetViewWire,
         on model: SettingsScreenModel,
@@ -47,7 +48,163 @@ enum SettingsLive {
             copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
         }
         copy.addNetwork = wizard(view.wizard, loc: loc, fallback: model.addNetwork)
+        // The advanced row counts THIS device's list, custom chains included —
+        // it read the drawing's twelve on every phone.
+        let count = loc.t(I18nKeys.SettingsUi.networkCount, vars: ["count": String(view.networks.count)])
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                guard row.id == "networks" else { return row }
+                var changed = row
+                changed.value = count
+                return changed
+            }
+            return updated
+        }
+        // The two pages behind the advanced rows are the core's view too
+        // (spec 072): until now they drew the fixture — "Alchemy · Connected ·
+        // alch_k3y…9fQ2" for everyone — over whatever was actually saved.
+        copy.rpcProviders = providers(view, loc: loc, fallback: model.rpcProviders)
+        copy.endpoints = endpoints(view, loc: loc, fallback: model.endpoints)
         return copy
+    }
+
+    // MARK: - RPC providers and service endpoints (spec 072)
+
+    /// The three providers' display names — brand names, not corpus strings.
+    private static let providerNames: [NetProviderIdWire: String] = [
+        .alchemy: "Alchemy", .drpc: "dRPC", .ankr: "Ankr",
+    ]
+
+    /// Where each provider's API key is made: the web's `PROVIDER_KEY_URLS`,
+    /// so "Get a key" goes to the same page on every Vela.
+    static let providerKeyUrls: [NetProviderIdWire: String] = [
+        .alchemy: "https://dashboard.alchemy.com/",
+        .drpc: "https://drpc.org/",
+        .ankr: "https://www.ankr.com/rpc/",
+    ]
+
+    /// ST11 from the core: each provider's saved key (or its draft while one
+    /// is open), whether one is configured, and the last test's count.
+    ///
+    /// The field's own action is the one thing to do next: with no key, go
+    /// and get one (the provider's page); with one, check it (a test).
+    static func providers(
+        _ view: NetViewWire, loc: Loc, fallback: RpcProvidersModel
+    ) -> RpcProvidersModel {
+        let k = I18nKeys.SettingsUi.self
+        let notSet = loc.t(k.providerNotSet)
+        return RpcProvidersModel(
+            title: fallback.title,
+            subtitle: fallback.subtitle,
+            description: fallback.description,
+            providers: view.providers.map { provider in
+                let id = provider.provider
+                return ProviderCardModel(
+                    id: id.rawValue,
+                    name: providerNames[id] ?? id.rawValue,
+                    badge: provider.hasKey
+                        ? StatusPillModel(tone: .ok, label: loc.t(k.providerConnected))
+                        : StatusPillModel(tone: .neutral, label: notSet),
+                    field: UrlFieldModel(
+                        id: id.rawValue, label: "", value: provider.key,
+                        placeholder: provider.hasKey ? nil : notSet,
+                        action: loc.t(provider.hasKey ? k.providerCheckKey : k.providerGetKey)
+                    ),
+                    // Only a FINISHED test has a count worth saying; one still
+                    // running says nothing rather than "0 of 12".
+                    support: provider.test.flatMap { test in
+                        test.done
+                            ? loc.t(k.providerSupports, vars: [
+                                "count": String(test.okCount), "total": String(test.total),
+                            ])
+                            : nil
+                    },
+                    linkUrl: provider.hasKey ? nil : providerKeyUrls[id]
+                )
+            }
+        )
+    }
+
+    /// ST12 from the core: the four endpoints as stored (the default shows as
+    /// the placeholder) and how each last answered.
+    static func endpoints(
+        _ view: NetViewWire, loc: Loc, fallback: EndpointsModel
+    ) -> EndpointsModel {
+        let k = I18nKeys.SettingsUi.self
+        return EndpointsModel(
+            title: fallback.title,
+            description: fallback.description,
+            fields: view.endpoints.map { endpoint in
+                let (label, hint) = switch endpoint.field {
+                case .ethereumData: (k.endpointChainData, k.endpointChainDataHint)
+                case .passkeyIndex: (k.endpointPasskey, k.endpointPasskeyHint)
+                case .bundlerService: (k.endpointRelay, k.endpointRelayHint)
+                case .fiatRates: (k.endpointFiat, k.endpointFiatHint)
+                }
+                return UrlFieldModel(
+                    id: endpoint.field.rawValue,
+                    label: loc.t(label),
+                    value: endpoint.value,
+                    placeholder: endpoint.defaultValue,
+                    hint: loc.t(hint),
+                    badge: servicePill(endpoint.health, loc: loc)
+                )
+            },
+            reset: fallback.reset
+        )
+    }
+
+    /// Every `NetServiceHealth` worded — an endpoint that answered as some
+    /// other service is "invalid", not "offline", and the two are fixed
+    /// differently.
+    static func servicePill(_ health: NetServiceHealthWire, loc: Loc) -> StatusPillModel {
+        let k = I18nKeys.SettingsUi.self
+        switch health {
+        case .checking:
+            return StatusPillModel(tone: .neutral, label: "···")
+        case .ok(let latencyMs, _):
+            guard latencyMs >= 1000 else {
+                return StatusPillModel(tone: .ok, label: "\(Int(latencyMs.rounded()))ms")
+            }
+            return StatusPillModel(
+                tone: .warn,
+                label: "\(loc.t(k.networkSlow)) · \(Formats.number(latencyMs / 1000, minimumFractionDigits: 1, maximumFractionDigits: 1))s"
+            )
+        case .notHttps:
+            return StatusPillModel(tone: .error, label: loc.t(k.healthHttpsRequired))
+        case .unreachable:
+            return StatusPillModel(tone: .error, label: loc.t(k.networkOffline))
+        case .invalidResponse:
+            return StatusPillModel(tone: .error, label: loc.t(k.healthInvalid))
+        }
+    }
+
+    /// The confirmation before "Reset to defaults" (FR-010), in the corpus's
+    /// own words — the same question every shell asks.
+    static func resetEndpointsConfirm(loc: Loc) -> ConfirmSheetModel {
+        let k = I18nKeys.SettingsUi.self
+        return ConfirmSheetModel(
+            title: loc.t(k.endpointsResetTitle),
+            body: loc.t(k.endpointsResetBody),
+            confirm: loc.t(k.endpointsResetConfirm),
+            cancel: loc.t(k.endpointsResetCancel),
+            danger: true
+        )
+    }
+
+    /// The confirmation before a custom network goes: its name and chain on
+    /// the sheet, so the question names what it removes.
+    static func removeNetworkConfirm(_ row: SettingsNetworkRowModel, loc: Loc) -> ConfirmSheetModel {
+        let k = I18nKeys.SettingsUi.self
+        return ConfirmSheetModel(
+            title: loc.t(k.networkRemoveTitle),
+            body: loc.t(k.networkRemoveBody),
+            confirm: loc.t(k.networkRemoveConfirm),
+            cancel: loc.t(k.networkRemoveCancel),
+            danger: true,
+            note: "\(row.name) · \(row.meta)"
+        )
     }
 
     // MARK: - display_currency
@@ -76,7 +233,7 @@ enum SettingsLive {
                 var changed = row
                 switch row.id {
                 case "language":
-                    changed.value = languageName(preferences.language, loc: loc)
+                    changed.value = languageValue(preferences.language, loc: loc)
                 case "number-format":
                     changed.value = Formats.example(preferences.numberFormat)
                 case "date-format":
@@ -115,14 +272,23 @@ enum SettingsLive {
         // The drawn sheet calls "follow the device" `system`; the STORED value
         // is `auto`, because that is what web and Android write. One mapping,
         // in one place.
+        //
+        // "Follow system" notes the language it resolves to NOW — the drawing
+        // said 简体中文 on every phone.
+        let resolved = languageName(loc.resolvedLanguage, loc: loc)
         copy.languageSheet = picked(
             model.languageSheet,
             id: preferences.language == "auto" ? "system" : preferences.language
-        ) { $0 }
+        ) { row in
+            guard row.id == "system" else { return row }
+            var changed = row
+            changed.note = "\(loc.t(I18nKeys.SettingsUi.commonSystem)) · \(resolved)"
+            return changed
+        }
 
         copy.theme = SegmentedModel(
             label: model.theme.label, segments: model.theme.segments,
-            selected: preferences.theme.rawValue
+            selected: themeSegment(preferences.theme)
         )
         copy.avatar = SegmentedModel(
             label: model.avatar.label, segments: model.avatar.segments,
@@ -182,32 +348,32 @@ enum SettingsLive {
     /// What a language tag is CALLED — in its own language, which is how the
     /// drawn sheet lists them, so the row's value and the sheet's label agree.
     static func languageName(_ tag: String, loc: Loc) -> String {
-        guard tag != "auto" else { return loc.t(I18nKeys.SettingsUi.commonSystem) }
+        if let endonym = SettingsFixtures.localeEndonyms.first(where: { $0.id == tag }) {
+            return endonym.label
+        }
         let locale = Locale(identifier: tag)
         return locale.localizedString(forIdentifier: tag)?.capitalized ?? tag
     }
 
-    /// 测试 on every provider card, live only.
-    ///
-    /// The DRAWN panel has no such control: the gallery cannot ask a provider
-    /// anything, so a button there would be a picture of an action. The live
-    /// page can, and the core has had `provider_test_requested` since 050 with
-    /// nothing to send it.
-    static func withProviderTests(
-        on model: SettingsScreenModel, loc: Loc
-    ) -> SettingsScreenModel {
-        var copy = model
-        copy.rpcProviders = RpcProvidersModel(
-            title: model.rpcProviders.title,
-            subtitle: model.rpcProviders.subtitle,
-            description: model.rpcProviders.description,
-            providers: model.rpcProviders.providers.map { provider in
-                var changed = provider
-                changed.test = loc.t("settingsModals.rpcProviders.test")
-                return changed
-            }
-        )
-        return copy
+    /// The language row's value: the language chosen, or — following the
+    /// device — the one it resolves to, marked as the system's (the web's
+    /// `languageValue`). It said "System" alone, which names no language.
+    static func languageValue(_ stored: String, loc: Loc) -> String {
+        guard stored == "auto" else { return languageName(stored, loc: loc) }
+        return "\(languageName(loc.resolvedLanguage, loc: loc)) · \(loc.t(I18nKeys.SettingsUi.commonSystem))"
+    }
+
+    /// The drawn theme segments call "follow the system" `auto`; what is
+    /// STORED is `system` (`vela.theme`, every shell's spelling). Both
+    /// directions here, once — the tap used to go through
+    /// `ThemeChoice(rawValue: "auto")`, which is nil, so once Light or Dark was
+    /// picked the system's theme could never be chosen again (spec 072).
+    static func themeSegment(_ choice: ThemeChoice) -> String {
+        choice == .system ? "auto" : choice.rawValue
+    }
+
+    static func themeChoice(segment id: String) -> ThemeChoice? {
+        id == "auto" ? .system : ThemeChoice(rawValue: id)
     }
 
     /// The row id the screen routes to the host (spec 062).
@@ -485,24 +651,27 @@ enum SettingsLive {
     /// somebody 1,234.56 dollars is 1,234.56 yuan. The core models that
     /// difference (`rate: null` is not `1`) and this is where the shell honours
     /// it.
+    ///
+    /// **A chosen currency is named even when it cannot be priced.** It used
+    /// to fall back to "USD · $1,234.56" whenever the rate was missing, which
+    /// told somebody who had picked CNY that they had not — the code alone is
+    /// the honest row: their choice, and no figure (spec 072).
     static func currencyRowValue(_ view: CurrencyViewWire) -> String {
         let sample = 1_234.56
-        guard let rate = view.rate, rate > 0, view.committed,
-              let entry = CurrencyCatalog.entry(view.code)
-        else {
-            // Degraded: say USD, show USD.
+        guard view.committed else {
+            // Nothing chosen: the USD placeholder is what is in force.
             let usd = CurrencyCatalog.entry("USD")
             return "USD · \(usd?.glyph ?? "$")\(format(sample))"
+        }
+        guard let rate = view.rate, rate > 0, let entry = CurrencyCatalog.entry(view.code) else {
+            return view.code
         }
         return "\(view.code) · \(entry.glyph)\(format(sample * rate))"
     }
 
+    /// In the person's own number format, as every other figure is.
     private static func format(_ amount: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 2
-        formatter.maximumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+        Formats.number(amount, minimumFractionDigits: 2, maximumFractionDigits: 2)
     }
 
     // MARK: - The add-network wizard
@@ -513,6 +682,12 @@ enum SettingsLive {
     /// verdict — the badge, the checks, whether 添加 is offered at all — is the
     /// core's; **`can_add` is never re-derived here**, because a second opinion
     /// is how a screen offers to add a chain the core will refuse.
+    ///
+    /// Three answers, never two (the web's `liveAddNetwork`): compatible,
+    /// incompatible, and UNVERIFIED — the probes failed, so nothing was learned
+    /// about the chain. That last one is worded "unable to verify" with a
+    /// retry, never "incompatible": a proxy that refused once told the founder
+    /// that Celo was incompatible, and Celo is not (spec 038 #E1).
     static func wizard(
         _ wizard: NetWizardViewWire,
         loc: Loc,
@@ -541,39 +716,80 @@ enum SettingsLive {
         }
 
         model.subtitle = "\(info.name) · \(chainMeta(loc, info.chainId))"
-        model.candidate = SettingsNetworkRowModel(
-            id: String(info.chainId),
-            chainId: info.chainId,
-            mark: mark(chainId: info.chainId, name: info.name),
-            name: info.name,
-            meta: candidateMeta(wizard, loc: loc),
-            badge: verdictBadge(wizard, loc: loc)
-        )
-
-        if let compat = wizard.compat {
-            model.checksTitle = loc.t(k.addCompatibilityCheck)
-            model.checks = checks(compat, loc: loc)
-        }
-
         model.customRpc = UrlFieldModel(
             id: "custom-rpc",
             label: loc.t(k.addCustomRpcTitle),
             value: wizard.customRpc,
             placeholder: loc.t(k.addCustomRpcPlaceholder)
         )
-        model.callout = errorCallout(wizard.error, loc: loc)
-            ?? (wizard.compat?.compatible == false
-                ? CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
-                : nil)
+        func candidate(meta: String, badge: StatusPillModel?) -> SettingsNetworkRowModel {
+            SettingsNetworkRowModel(
+                id: String(info.chainId),
+                chainId: info.chainId,
+                mark: mark(chainId: info.chainId, name: info.name),
+                name: info.name,
+                meta: meta,
+                badge: badge
+            )
+        }
+
+        switch wizard.phase {
+        case .resolving, .checking:
+            // Still asking. A neutral pill, and no list of checks that have not
+            // been made yet.
+            model.candidate = candidate(
+                meta: loc.t(k.addChecking),
+                badge: StatusPillModel(tone: .neutral, label: loc.t(k.addCompatibilityCheck))
+            )
+            return model
+        case .error:
+            model.candidate = candidate(meta: chainMeta(loc, info.chainId), badge: nil)
+            model.callout = errorCallout(wizard.error, loc: loc)
+            // A check that could not run can run again; a refusal cannot.
+            switch wizard.error {
+            case .checkFailed, .noRpcEndpoint: model.recheck = loc.t(k.addRecheckWithRpc)
+            default: break
+            }
+            return model
+        default:
+            break
+        }
+
+        guard let compat = wizard.compat else {
+            model.candidate = candidate(meta: loc.t(k.addCompatibilityCheck), badge: nil)
+            return model
+        }
+        if compat.rpcFailure != nil {
+            // Unverified: nothing was learned, so there is no check list to
+            // show — only the way to ask again.
+            model.candidate = candidate(
+                meta: loc.t(k.addCompatibilityCheck),
+                badge: StatusPillModel(tone: .warn, label: loc.t(k.addUnableToVerify))
+            )
+            model.retry = loc.t(k.addRetry)
+            model.recheck = loc.t(k.addRecheckWithRpc)
+            return model
+        }
+
+        model.candidate = candidate(
+            meta: candidateMeta(wizard, loc: loc),
+            badge: compat.compatible
+                ? StatusPillModel(tone: .ok, label: loc.t(k.addCompatible))
+                : StatusPillModel(tone: .error, label: loc.t(k.addIncompatible))
+        )
+        model.checksTitle = loc.t(k.addCompatibilityCheck)
+        model.checks = checks(compat, loc: loc)
 
         // The gate. An accent CTA appears only when the CORE says the chain can
-        // be added; otherwise the drawing's outline-plus-recheck pair, because
-        // an action you cannot take should not be dressed as the action you
-        // came for.
+        // be added; otherwise the re-check, because an action you cannot take
+        // should not be dressed as the action you came for.
         if wizard.canAdd {
             model.primary = loc.t(k.addButton)
-        } else if wizard.compat?.compatible == false {
-            model.secondary = loc.t(k.addChainTool)
+        } else if !compat.compatible {
+            model.callout = CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
+            // The drawing's "Open Chain Setup Tool" is not offered: no client
+            // has a page for it to open, and a button that goes nowhere is the
+            // inert control this spec removes (SC-001).
             model.recheck = loc.t(k.addRecheckWithRpc)
         }
         return model
@@ -620,14 +836,6 @@ enum SettingsLive {
         return loc.t(k.addCompatibilityCheck)
     }
 
-    private static func verdictBadge(_ wizard: NetWizardViewWire, loc: Loc) -> StatusPillModel? {
-        let k = I18nKeys.SettingsUi.self
-        guard let compat = wizard.compat else { return nil }
-        return compat.compatible
-            ? StatusPillModel(tone: .ok, label: loc.t(k.addCompatible))
-            : StatusPillModel(tone: .error, label: loc.t(k.addIncompatible))
-    }
-
     /// The core's refusal, in the words the corpus already has.
     private static func errorCallout(_ error: NetWizardErrorWire?, loc: Loc) -> CalloutModel? {
         let k = I18nKeys.SettingsUi.self
@@ -640,6 +848,8 @@ enum SettingsLive {
         // nothing to verify against. Recorded as a wording gap.
         case .noRpcEndpoint: loc.t(k.addUnableToVerify)
         case .notCompatible: loc.t(k.addNotCompatible)
+        // Not a verdict: the probes failed and nothing was learned.
+        case .checkFailed: loc.t(k.addUnableToVerify)
         }
         return CalloutModel(tone: .warning, text: text)
     }
@@ -672,13 +882,15 @@ enum SettingsLive {
             subtitle: "\(chainMeta(loc, network.chainId)) · \(network.nativeSymbol)",
             mark: mark(chainId: network.chainId, name: network.displayName),
             name: network.displayName,
-            note: fallback.note,
+            // A custom network is not "built-in · cannot be removed".
+            note: network.isCustom ? loc.t(I18nKeys.SettingsUi.networkCustom) : fallback.note,
             // **Never the fixture's pill.** `?? fallback.badge` used to be here,
             // and on a real phone it painted 在线 · 45ms over an endpoint
             // nothing had probed — the fixture's own constant, presented as a
             // measurement. Unmeasured is neutral and says nothing.
             badge: badge(network.rpcHealth) ?? Self.unmeasured,
-            rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth),
+            rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth,
+                       tone: network.rpcChainMismatch == nil ? nil : .error),
             explorer: field(fallback.explorer, value: network.explorerUrl,
                             health: network.explorerHealth),
             // (Both fields drop the fixture's pill for the same reason.)
@@ -731,10 +943,13 @@ enum SettingsLive {
         )
     }
 
+    /// `tone` is the core's refusal (a red box for the RPC another chain
+    /// answered), never the fixture's.
     private static func field(
         _ fallback: UrlFieldModel,
         value: String,
-        health: NetProbeHealthWire?
+        health: NetProbeHealthWire?,
+        tone: SettingsTone? = nil
     ) -> UrlFieldModel {
         UrlFieldModel(
             id: fallback.id,
@@ -743,7 +958,7 @@ enum SettingsLive {
             placeholder: fallback.placeholder,
             hint: fallback.hint,
             badge: badge(health),
-            tone: fallback.tone,
+            tone: tone,
             action: fallback.action
         )
     }
@@ -910,6 +1125,20 @@ enum SettingsLive {
                     action: group.action
                 )
             }
+        )
+        return live
+    }
+
+    /// An erase that ran and left something behind (spec 072 FR-011): the
+    /// sheet stays up with the reason in its own callout, and the person is
+    /// still signed in — never sent to the first run over a partial wipe.
+    static func withEraseFailure(
+        _ failed: Bool, on model: SettingsScreenModel, loc: Loc
+    ) -> SettingsScreenModel {
+        guard failed else { return model }
+        var live = model
+        live.eraseSheet.callout = CalloutModel(
+            tone: .danger, text: loc.t(I18nKeys.SettingsUi.eraseFailed)
         )
         return live
     }

@@ -9,6 +9,7 @@
  * core's module doc assigns to shells.
  */
 
+import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
@@ -16,10 +17,9 @@ import { moneyText, trimBalance } from '$lib/wallet/live';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
-	GROUP_OF_ITEM,
-	STORAGE_ITEM_IDS,
 	type DeviceStorageReport,
-	type StorageItemId
+	type StorageItemId,
+	type StorageItemReport
 } from '$lib/services/device-storage';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
@@ -49,9 +49,10 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { chainMeta, languageRows, markFor, currencyGlyph } from './fixtures';
+import { chainMeta, languageRows, markFor, currencyGlyph, PROVIDER_KEY_URLS } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type {
+	AboutModel,
 	AddNetworkModel,
 	BalanceDetailModel,
 	ChainMarkModel,
@@ -59,6 +60,7 @@ import type {
 	RpcFixModel,
 	SettingsDesktopModel,
 	CheckItemModel,
+	ConfirmSheetModel,
 	EndpointsModel,
 	NetworkDetailModel,
 	NetworkRowModel,
@@ -336,16 +338,6 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
 
-/**
- * Where each provider's API key is made. The panel sent every "Get key →" to
- * drpc.org, Alchemy's and Ankr's included.
- */
-export const PROVIDER_KEY_URLS = {
-	alchemy: 'https://dashboard.alchemy.com/',
-	drpc: 'https://drpc.org/',
-	ankr: 'https://www.ankr.com/rpc/'
-} as const;
-
 export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
 	return {
 		title: m.advanced.rpcProvidersTitle,
@@ -365,7 +357,11 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 					value: p.key,
 					placeholder: p.has_key ? undefined : m.rpcProviders.notSet
 				},
+				// With a key the action tests it. Without one there is nothing to
+				// test, and "Get key" goes where a key is made — it used to run a
+				// test on the empty field under that label.
 				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
+				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
 				support:
 					test !== null && test.done
 						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
@@ -400,6 +396,7 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 			};
 		}),
 		reset: m.endpoints.reset,
+		resetSheet: resetEndpointsQuestion(m),
 		guide: m.endpoints.guide
 	};
 }
@@ -409,9 +406,36 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 // ---------------------------------------------------------------------------
 
 /**
+ * How many networks this wallet has, once the ledger has been read (spec 072):
+ * the fixture's 12 stood on the Networks row and in About for everyone.
+ * `undefined` until then — an empty cell, never a guess.
+ */
+function networkCount(view: NetView): number | undefined {
+	return view.loaded ? view.networks.length : undefined;
+}
+
+/** About's network row, counted from the list. */
+function aboutWithNetworkCount(
+	about: AboutModel,
+	count: number | undefined,
+	m: SettingsMessages
+): AboutModel {
+	return {
+		...about,
+		rows: about.rows.map((row) =>
+			row.id === 'networks'
+				? {
+						...row,
+						value: count === undefined ? '' : fill(m.about.techNetworksValue, { count })
+					}
+				: row
+		)
+	};
+}
+
+/**
  * Replace the network-owned sections of a built settings model with the
- * core's view. Identity, appearance, localization, storage and about stay
- * exactly as built — their machines are later features.
+ * core's view — the pages, and the two places that count the networks.
  */
 export function withLiveNetworks(
 	model: SettingsHomeModel,
@@ -420,8 +444,21 @@ export function withLiveNetworks(
 	expandedId?: string
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
+	const count = networkCount(view);
 	return {
 		...model,
+		sections: model.sections.map((section) => ({
+			...section,
+			rows: section.rows.map((row) =>
+				row.id === 'networks'
+					? {
+							...row,
+							value: count === undefined ? undefined : fill(m.networks.count, { count })
+						}
+					: row
+			)
+		})),
+		about: aboutWithNetworkCount(model.about, count, m),
 		networks: { ...model.networks, rows: liveNetworkRows(view, m, expandedId) },
 		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
 		addNetwork: liveAddNetwork(view.wizard, m),
@@ -440,6 +477,7 @@ export function withLiveNetworksDesktop(
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
+		about: aboutWithNetworkCount(model.about, networkCount(view), m),
 		networks: {
 			...model.networks,
 			rows: liveNetworkRows(view, m, expandedId),
@@ -937,11 +975,11 @@ export function withLivePreferencesDesktop(
  * distinction it preserves is the whole reason `EraseIncompleteError` exists:
  * data is still here, and the person is still signed in.
  */
-export function withEraseFailure(
-	model: SettingsHomeModel,
+export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
+	model: M,
 	m: SettingsMessages,
 	failed: boolean
-): SettingsHomeModel {
+): M {
 	if (!failed) return model;
 	return {
 		...model,
@@ -1101,8 +1139,9 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 		cache: 'cache',
 		sessions: 'sessions'
 	};
-	const isItem = (id: string): id is StorageItemId =>
-		(STORAGE_ITEM_IDS as readonly string[]).includes(id);
+	// The report's rows are the catalog's, each with its group: a drawn row
+	// the catalog has no entry for keeps its drawn meta.
+	const measured = (id: string): StorageItemReport | undefined => report.items[id as StorageItemId];
 	return {
 		...model,
 		storage: {
@@ -1123,11 +1162,12 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 				// ever say "0 records" about a thing that cannot exist here.
 				items: group.items
 					.filter((item) => !WEB_HAS_NO[item.id as StorageItemId])
-					.map((item) =>
-						isItem(item.id) && GROUP_OF_ITEM[item.id] !== 'sessions'
-							? { ...item, meta: storageItemMeta(item.id, report, m) }
-							: item
-					)
+					.map((item) => {
+						const row = measured(item.id);
+						return row !== undefined && row.group !== 'sessions'
+							? { ...item, meta: storageItemMeta(item.id as StorageItemId, report, m) }
+							: item;
+					})
 			}))
 		}
 	};

@@ -42,7 +42,11 @@
       "fiatLabel": "TỶ GIÁ FIAT",
       "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
       "resetToDefaults": "Khôi phục mặc định",
-      "selfHostGuide": "Hướng dẫn tự triển khai →"
+      "selfHostGuide": "Hướng dẫn tự triển khai →",
+      "resetTitle": "Khôi phục điểm cuối dịch vụ?",
+      "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
+      "resetConfirm": "Khôi phục",
+      "resetCancel": "Hủy"
     },
     "addNetwork": {
       "modalTitle": "Thêm mạng",

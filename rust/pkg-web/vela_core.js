@@ -4350,6 +4350,25 @@ export function signMessageHash(method, params_json) {
 }
 
 /**
+ * `{value, unit}` — a byte count in 1024s, for the shell to format in the
+ * person's numbers.
+ * @param {number} bytes
+ * @returns {string}
+ */
+export function storageBytesDisplay(bytes) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.storageBytesDisplay(bytes);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * @param {string} key
  * @returns {boolean}
  */
@@ -4368,6 +4387,18 @@ export function storageIsErasableKey(key) {
     const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.storageIsErasableKey(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * Is this key the wallet's at all (counted in the storage total)?
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsOurs(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsOurs(ptr0, len0);
     return ret !== 0;
 }
 
@@ -4403,6 +4434,18 @@ export function storageItems() {
     } finally {
         wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
+}
+
+/**
+ * Records in a stored list value; `undefined` when it is not a list.
+ * @param {string} value
+ * @returns {number | undefined}
+ */
+export function storageRecordsIn(value) {
+    const ptr0 = passStringToWasm0(value, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageRecordsIn(ptr0, len0);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
 }
 
 /**

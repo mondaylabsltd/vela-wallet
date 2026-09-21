@@ -1574,7 +1574,11 @@
    "fiatLabel": "FİAT KURLARI",
    "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
    "resetToDefaults": "Varsayılanlara Sıfırla",
-   "selfHostGuide": "Kendin barındırma kılavuzu →"
+   "selfHostGuide": "Kendin barındırma kılavuzu →",
+   "resetTitle": "Servis uç noktaları sıfırlansın mı?",
+   "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+   "resetConfirm": "Sıfırla",
+   "resetCancel": "İptal"
   },
   "addNetwork": {
    "modalTitle": "Ağ Ekle",

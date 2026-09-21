@@ -6,20 +6,24 @@
 //! "Automatic" through `Intl`; a desktop has no `Intl`, so the same answer
 //! comes from a small table over the locale tags the app ships (the way
 //! `display_currency::region_currency` does for money). The choice is stored
-//! under one key as the same words the web uses, so a reader of either store
-//! sees one vocabulary.
+//! as the record every Vela shares, `vela.localePrefs`, read through the
+//! core's `prefs` (spec 072) — until then the desktop wrote its own
+//! `vela.formats` with its own field names, which the launch migration now
+//! moves over (`preferences::migrate`).
 
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use serde_json::{Map, Value};
+use serde_json::Value;
 use vela_core::l10n::currency::FiatOptions;
 use vela_core::l10n::datetime::{DatePreset, TimePreset};
 use vela_core::l10n::number::NumberPreset;
+use vela_core::prefs::{self, Prefs};
 
 use crate::executor::storage;
 
-/// The store key. One object, three fields, each a preset word or `auto`.
-pub const KEY: &str = "vela.formats";
+/// The store key: `{numberFormat, dateFormat, timeFormat}`, each a preset
+/// word or `auto`.
+pub const KEY: &str = prefs::keys::LOCALE_PREFS;
 
 /// The pickable presets, in the order the web's sheets list them.
 pub const NUMBER_OPTIONS: [NumberPreset; 4] = [
@@ -109,7 +113,12 @@ fn update(apply: impl FnOnce(&mut Choice)) {
 }
 
 fn load() -> Choice {
-    decode(storage::read_value(KEY).ok().flatten().as_ref())
+    decode(&prefs::read(&storage::raw_entries().unwrap_or_default()))
+}
+
+/// Read the store again — after an erase, which leaves "Automatic" behind.
+pub fn reload() {
+    *cell().lock().unwrap_or_else(PoisonError::into_inner) = load();
 }
 
 /// The tag the strings resolved from — pinned to `en` under test so a figure a
@@ -119,7 +128,7 @@ fn device_tag() -> String {
         return "en".to_owned();
     }
     static TAG: OnceLock<String> = OnceLock::new();
-    TAG.get_or_init(crate::loc::requested_tag).clone()
+    TAG.get_or_init(crate::loc::system_tag).clone()
 }
 
 #[must_use]
@@ -193,24 +202,25 @@ fn preset<T: Copy>(table: &[(T, &'static str)], word: Option<&str>) -> Option<T>
     table.iter().find(|(_, w)| *w == word).map(|(p, _)| *p)
 }
 
+/// The shared record, spelled by the core.
 #[must_use]
 pub fn encode(choice: Choice) -> Value {
-    let mut fields = Map::new();
-    fields.insert("number".into(), word(&NUMBER_WORDS, choice.number).into());
-    fields.insert("date".into(), word(&DATE_WORDS, choice.date).into());
-    fields.insert("time".into(), word(&TIME_WORDS, choice.time).into());
-    Value::Object(fields)
+    storage::stored_value(&prefs::locale_prefs_json(
+        word(&NUMBER_WORDS, choice.number),
+        word(&DATE_WORDS, choice.date),
+        word(&TIME_WORDS, choice.time),
+    ))
 }
 
-/// Anything unreadable — a missing field, a word this build does not know —
-/// is "Automatic", never a crash and never somebody else's preset.
+/// What the core read. Anything it could not — a missing field, a word this
+/// build does not know — it already answered as `auto`, which is "Automatic"
+/// here: never a crash and never somebody else's preset.
 #[must_use]
-pub fn decode(value: Option<&Value>) -> Choice {
-    let field = |name: &str| value.and_then(|v| v.get(name)).and_then(Value::as_str);
+pub fn decode(read: &Prefs) -> Choice {
     Choice {
-        number: preset(&NUMBER_WORDS, field("number")),
-        date: preset(&DATE_WORDS, field("date")),
-        time: preset(&TIME_WORDS, field("time")),
+        number: preset(&NUMBER_WORDS, Some(read.number_format)),
+        date: preset(&DATE_WORDS, Some(read.date_format)),
+        time: preset(&TIME_WORDS, Some(read.time_format)),
     }
 }
 
@@ -218,38 +228,61 @@ pub fn decode(value: Option<&Value>) -> Choice {
 mod tests {
     use super::*;
 
+    /// What the core reads out of one stored record.
+    fn read_record(key: &str, record: &Value) -> Choice {
+        decode(&prefs::read(&[(key.to_owned(), record.to_string())]))
+    }
+
     #[test]
     fn the_web_s_words_round_trip() {
         for number in NUMBER_OPTIONS.map(Some).into_iter().chain([None]) {
             for date in DATE_OPTIONS.map(Some).into_iter().chain([None]) {
                 for time in TIME_OPTIONS.map(Some).into_iter().chain([None]) {
                     let choice = Choice { number, date, time };
-                    assert_eq!(decode(Some(&encode(choice))), choice);
+                    assert_eq!(read_record(KEY, &encode(choice)), choice);
                 }
             }
         }
+        // The web's record, field for field (spec 072) — not the desktop's
+        // old `{number, date, time}`.
         assert_eq!(
             encode(Choice {
                 number: None,
                 date: Some(DatePreset::DmyDot),
                 time: Some(TimePreset::H12)
             }),
-            serde_json::json!({ "number": "auto", "date": "dmy_dot", "time": "h12" })
+            serde_json::json!({ "numberFormat": "auto", "dateFormat": "dmy_dot", "timeFormat": "h12" })
         );
     }
 
     #[test]
     fn an_unknown_word_reads_as_automatic() {
-        let stored = serde_json::json!({ "number": "roman", "date": 13, "time": "h12" });
+        let stored =
+            serde_json::json!({ "numberFormat": "roman", "dateFormat": 13, "timeFormat": "h12" });
         assert_eq!(
-            decode(Some(&stored)),
+            read_record(KEY, &stored),
             Choice {
                 number: None,
                 date: None,
                 time: Some(TimePreset::H12)
             }
         );
-        assert_eq!(decode(None), Choice::default());
+        assert_eq!(decode(&prefs::read(&[])), Choice::default());
+    }
+
+    /// An older desktop's record still reads, before the launch migration has
+    /// had its chance to move it.
+    #[test]
+    fn the_desktops_old_record_still_reads() {
+        let old = serde_json::json!({ "number": "space_comma", "date": "iso", "time": "h24" });
+        assert_eq!(
+            read_record(prefs::keys::LEGACY_FORMATS, &old),
+            Choice {
+                number: Some(NumberPreset::SpaceComma),
+                date: Some(DatePreset::Iso),
+                time: Some(TimePreset::H24),
+            }
+        );
     }
 
     #[test]

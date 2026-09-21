@@ -1584,7 +1584,11 @@
    "fiatLabel": "FIAT RATES",
    "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
    "resetToDefaults": "Reset to Defaults",
-   "selfHostGuide": "Self-hosting guide →"
+   "selfHostGuide": "Self-hosting guide →",
+   "resetTitle": "Reset the service endpoints?",
+   "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
+   "resetConfirm": "Reset",
+   "resetCancel": "Cancel"
   },
   "addNetwork": {
    "modalTitle": "Add Network",

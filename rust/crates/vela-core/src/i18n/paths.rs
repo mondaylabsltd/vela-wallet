@@ -3,12 +3,12 @@
 //! The SHARED key-path table: every dotted path in the corpus, sorted, interned
 //! once for all 15 locales. Regenerate with `node scripts/gen-i18n.mjs`.
 //!
-//! 1713 paths = 1624 leaf + 89 branch. Repeated per locale these key bytes
-//! would cost 676110 bytes; interned once they cost 46683.
+//! 1717 paths = 1628 leaf + 89 branch. Repeated per locale these key bytes
+//! would cost 678240 bytes; interned once they cost 46825.
 
 /// Every path in the corpus, strictly sorted. Lookup is a binary search here, then
 /// an O(1) index into the active locale's value table.
-pub(crate) static PATHS: [&str; 1713] = [
+pub(crate) static PATHS: [&str; 1717] = [
     "about",
     "about.footer",
     "about.linkGitHub",
@@ -1650,6 +1650,10 @@ pub(crate) static PATHS: [&str; 1713] = [
     "settingsModals.endpoints.modalTitle",
     "settingsModals.endpoints.passkeyHint",
     "settingsModals.endpoints.passkeyLabel",
+    "settingsModals.endpoints.resetBody",
+    "settingsModals.endpoints.resetCancel",
+    "settingsModals.endpoints.resetConfirm",
+    "settingsModals.endpoints.resetTitle",
     "settingsModals.endpoints.resetToDefaults",
     "settingsModals.endpoints.selfHostGuide",
     "settingsModals.health",
@@ -1741,12 +1745,12 @@ pub(crate) static IS_BRANCH: [u8; 215] = [
     0x42, 0x00, 0x00, 0x9c, 0x24, 0x49, 0x08, 0x00, 0x01, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x10,
     0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x80, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x49, 0x00, 0x02, 0x84, 0x00, 0x49, 0x88, 0x00, 0x81,
-    0x20, 0x20, 0x00, 0x01, 0x00, 0x00, 0x60, 0x08, 0x00, 0x00, 0x20, 0x40, 0x00, 0x88, 0x00, 0x04,
-    0x20, 0x00, 0x81, 0x00, 0x82, 0x00, 0x00,
+    0x20, 0x20, 0x00, 0x01, 0x00, 0x00, 0x60, 0x08, 0x00, 0x00, 0x20, 0x40, 0x00, 0x80, 0x08, 0x40,
+    0x00, 0x02, 0x10, 0x08, 0x20, 0x08, 0x00,
 ];
 
 /// Number of entries in [`PATHS`]. Value tables carry `N_PATHS + 1` offsets.
-pub(crate) const N_PATHS: usize = 1713;
+pub(crate) const N_PATHS: usize = 1717;
 
 /// Index of `path` in [`PATHS`], or `None`.
 pub(crate) fn path_id(path: &str) -> Option<usize> {

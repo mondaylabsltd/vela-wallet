@@ -155,8 +155,19 @@ struct SettingsUrlField: View {
     ///
     /// An atom the drawing was missing, not a screen the drawing never had.
     var text: Binding<String>?
-    /// Committed on submit or on losing focus — where the core runs its probes.
+    /// Committed on submit — and, with `commitsOnBlur`, on losing focus, where
+    /// the core runs its probes.
     var onCommit: () -> Void = {}
+    /// "Saved as soon as you leave the field" (the network page says so under
+    /// its RPC): leaving the field hands it over too, not only Return. Off by
+    /// default, because some commits also close a sheet, and tapping beside a
+    /// field is not a decision to close it.
+    var commitsOnBlur = false
+    /// The blue action inside the field — "Check key", "Get a key" — as a
+    /// button. `nil` leaves it the drawn label.
+    var onAction: (() -> Void)?
+
+    @FocusState private var focused: Bool
 
     private var border: Color {
         switch field.tone {
@@ -202,7 +213,11 @@ struct SettingsUrlField: View {
                         // wants a capitalising, autocorrecting keyboard.
                         .keyboardType(.URL)
                         .submitLabel(.done)
+                        .focused($focused)
                         .onSubmit(onCommit)
+                        .onChange(of: focused) { _, isFocused in
+                            if commitsOnBlur, !isFocused { onCommit() }
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text(field.value.isEmpty ? (field.placeholder ?? "") : field.value)
@@ -212,7 +227,15 @@ struct SettingsUrlField: View {
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if let action = field.action {
+                if let action = field.action, let onAction {
+                    Button(action: onAction) {
+                        Text(action)
+                            .typeRole(Typography.body)
+                            .foregroundStyle(theme.infoBase)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else if let action = field.action {
                     Text(action)
                         .typeRole(Typography.body)
                         .foregroundStyle(theme.infoBase)
