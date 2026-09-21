@@ -181,4 +181,28 @@ class RelayClientTest {
         assertNull(relay.isDeployed(100, "0x88cCA0EeDbF2C4426110bbFc998F048689266894"))
         assertTrue(port.calls.first { it.contains("eth_call") }.startsWith("Rpc:"))
     }
+
+    /**
+     * The recipient-risk `is_contract` is the web's rule: an EIP-7702
+     * delegated EOA (`0xef0100 ++ impl`) is a wallet, not a contract.
+     * `isDeployed` (the sender's Safe) keeps counting any code.
+     */
+    @Test
+    fun `a 7702-delegated account is a wallet, not a contract`() = runBlocking {
+        val to = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val delegated = "0xef0100" + "63c0c19a282a1B52b07dD5a65b58948A07DAE32B"
+        port.answer(
+            "eth_getCode",
+            body(delegated), body(delegated.uppercase().replace("0X", "0x")), body("0x6080"), body("0x"),
+            body("0xef0100" + "ab".repeat(21)),
+        )
+        assertEquals(false, relay.isContract(100, to))
+        assertEquals(false, relay.isContract(100, to))
+        assertEquals(true, relay.isContract(100, to))
+        assertEquals(false, relay.isContract(100, to))
+        assertEquals("not exactly 23 bytes: a contract", true, relay.isContract(100, to))
+        assertNull(relay.isContract(100, to))
+        port.answer("eth_getCode", body(delegated))
+        assertEquals("the sender's deployment reads any code", true, relay.isDeployed(100, to))
+    }
 }
