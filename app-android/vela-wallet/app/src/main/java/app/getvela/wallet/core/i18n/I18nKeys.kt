@@ -627,6 +627,23 @@ object I18nKeys {
         // Spec 043: the live send's remaining words — every one already in
         // the corpus; the fixture never needed them because it never failed.
         const val FEE_ESTIMATING = "componentsUi.gas.estimating"
+
+        // Spec 068 (Android's since 069): the fee you can refresh, at a speed
+        // you can choose. `send.gasTier.rapid` is deliberately absent — the
+        // tier is dead, the relay refuses it, and nothing here may name it.
+        const val FEE_REFRESH = "send.feeRefresh"
+        const val FEE_STALE = "send.feeStale"
+        const val FEE_SPEED_LABEL = "send.feeSpeedLabel"
+        const val FEE_SPEED_ONCE = "send.feeSpeedOnce"
+        const val FEE_SPEED_FREE = "send.feeSpeedFree"
+        const val FEE_SPEED_SINGLE = "send.feeSpeedSingle"
+        const val GAS_PRICE_LABEL = "send.gasPriceLabel"
+        const val GAS_TIER_FAST = "send.gasTier.fast"
+        const val GAS_TIER_STANDARD = "send.gasTier.standard"
+        const val GAS_TIER_SLOW = "send.gasTier.slow"
+        const val GAS_TIER_HINT_FAST = "send.gasTierHintFast"
+        const val GAS_TIER_HINT_STANDARD = "send.gasTierHintStandard"
+        const val GAS_TIER_HINT_SLOW = "send.gasTierHintSlow"
         const val CANNOT_CONVERT = "send.warnCannotConvert"
         const val TX_PREPARING = "send.txPreparing"
         const val TX_SIGNING = "send.txSigning"
@@ -732,6 +749,11 @@ object I18nKeys {
         const val ADD_NETWORK_SUBTITLE = "settings.advanced.addNetworkSubtitle"
         const val ENDPOINTS_TITLE = "settings.advanced.endpointsTitle"
         const val ENDPOINTS_SUBTITLE = "settings.advanced.endpointsSubtitle"
+        // Spec 069: the default transaction speed — the row, and its sheet.
+        const val FEE_SPEED_TITLE = "settings.advanced.feeSpeedTitle"
+        const val FEE_SPEED_SUBTITLE = "settings.advanced.feeSpeedSubtitle"
+        const val FEE_SPEED_SHEET_TITLE = "settings.feeSpeed.title"
+        const val FEE_SPEED_SHEET_SUBTITLE = "settings.feeSpeed.subtitle"
 
         // Network list + detail.
         const val NETWORK_COUNT = "settings.networks.count"

@@ -5,6 +5,7 @@ import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.RestAnswer
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -95,6 +96,8 @@ class SendMachineTest {
             // the relay accepts (persist follows submit); what must hold is
             // that tracking follows the write. Recorded below.
             events += "relay.send"
+            // Spec 069: the speed the displayed fee was priced at, by name.
+            events += "relay.tier:${params.getOrNull(2) ?: "-"}"
             FakeRelayPort.body("0xhash")
         }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
@@ -161,6 +164,10 @@ class SendMachineTest {
         assertEquals("0xhash", receipt.user_op_hash)
         assertEquals("signed exactly once", 1, signs)
         assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
+        // The stored default (the factory Fast, here) priced the quote, and the
+        // same tier is named on the wire beside the fee it priced (spec 069).
+        assertEquals(FeeTier.Fast, confirm.fee!!.tier)
+        assertTrue("the wire names the tier: $events", "relay.tier:fast" in events)
 
         // The pending row, in the feed's own shape, and the handoff after it.
         // The handoff happens after the last view emission, so poll rather than wait on the flow.

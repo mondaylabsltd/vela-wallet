@@ -194,6 +194,7 @@ fun SettingsRoute(
                 "about" -> page = SettingsPage.About
                 "language" -> overlay = SettingsOverlay.Language
                 "currency" -> overlay = SettingsOverlay.Currency
+                SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -1143,6 +1144,9 @@ private fun SettingsSheet(
                 }
                 SettingsOverlay.Currency -> SelectSheetBody(model.currencySheet) {
                     onSheetSelect(SettingsOverlay.Currency, it)
+                }
+                SettingsOverlay.FeeSpeed -> SelectSheetBody(model.feeSpeedSheet) {
+                    onSheetSelect(SettingsOverlay.FeeSpeed, it)
                 }
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
                     onSheetSelect(SettingsOverlay.NumberFormat, it)

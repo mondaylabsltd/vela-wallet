@@ -180,7 +180,16 @@ sealed class SendSubmitFailure {
 
 /** Present ⇔ in-band: the fee leg to sign EXACTLY as quoted (invariant ①). */
 @Serializable
-data class SendQuotedFee(val amount: String, val recipient: String)
+data class SendQuotedFee(
+    val amount: String,
+    val recipient: String,
+    /**
+     * The speed this fee was priced at, taken by the core from the same
+     * estimate as the amount (spec 069) and named on the wire beside it.
+     * `null` names nothing — the pre-068 wire.
+     */
+    val tier: FeeTier? = null,
+)
 
 /** The row the feed will show, written at submit — before tracking begins. */
 @Serializable

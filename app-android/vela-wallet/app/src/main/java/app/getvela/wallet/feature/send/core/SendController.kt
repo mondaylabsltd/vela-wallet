@@ -14,11 +14,15 @@ import app.getvela.wallet.feature.wallet.core.RpcPool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.FeePolicyCore
+import uniffi.vela_core_uniffi.FeeSpeedCore
 import uniffi.vela_core_uniffi.BatchImportCore
 import app.getvela.wallet.feature.documents.DocumentPorts
 import uniffi.vela_core_uniffi.SendCore
@@ -59,6 +63,9 @@ class SendController(
     documents: () -> DocumentPorts? = { null },
     /** Spec 046 US3: a scanned chain the wallet lacks goes to the settings machine. */
     addNetwork: suspend (Long) -> SendAddNetworkOutcome = { SendAddNetworkOutcome.NotFound },
+    /** Spec 069: the stored default speed, and the resolved number preset its gas bids are written in. */
+    private val preferredTier: () -> FeeTier = { FeeTier.Fast },
+    private val numberPreset: () -> String = { "comma_dot" },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -86,20 +93,112 @@ class SendController(
         keyHexes = { address: String -> accountPort.keysOf(address).map { it.publicKeyHex } },
     )
 
-    private val feeHost = CoreHost(
-        bridge = FeePolicyCore().asBridge(),
+    // -- the fee sessions (spec 069) ---------------------------------------------
+    //
+    // One `fee_policy` session is IN FORCE — the quote the send machine
+    // pre-checks against, the fee row shows and the submit signs — and one
+    // PREVIEW per other tier the `fee_speed` core wants priced. Every rule of
+    // the speed control is that core's; what this class owns is the sessions
+    // and the reconcile step every shell runs (`fee_speed.rs`): when the
+    // session in force is not pricing the tier in force, PROMOTE the preview
+    // that already priced this operation at that tier (the price tapped is the
+    // price paid, #681), else re-price once nothing is measuring.
+    //
+    // All bookkeeping happens under [sessionLock]; the scope is IO, and a
+    // session's commits, the speed view and the executor's quote all arrive
+    // on their own threads. Nothing suspends while the lock is held.
+
+    private val sessionLock = Any()
+    private var nextSessionKey = 0L
+    private var generation = 0L
+    private var askSeq = 0L
+    private val previews = mutableListOf<FeeSession>()
+
+    /** What a session was asked to price; compared minus the tier. */
+    private data class QuoteAsk(
+        val chainId: Int,
+        val account: String,
+        val publicKeyAvailable: Boolean,
+        val tier: FeeTier,
+        val calls: List<FeeCall>,
+        val feeToken: String?,
+    ) {
+        fun sameOperation(other: QuoteAsk): Boolean = copy(tier = other.tier) == other
+
+        fun event(deployed: Boolean) = FeeEvent.QuoteRequested(
+            chain_id = chainId,
+            account = account,
+            deployed = deployed,
+            public_key_available = publicKeyAvailable,
+            tier = tier,
+            calls = calls,
+            fee_token = feeToken,
+        )
+    }
+
+    /** One `fee_policy` session: in force, or a preview of another tier. */
+    private inner class FeeSession(val key: Long) {
+        val host = CoreHost(
+            bridge = FeePolicyCore().asBridge(),
+            scope = scope,
+            initial = FeeView(),
+            serializer = FeeView.serializer(),
+            perform = JsonShell.perform(FeeOperation.serializer(), FeeShellResult.serializer(), feeExecutor::perform),
+            escapedFailure = JsonShell.escapedFailure(
+                FeeOperation.serializer(),
+                FeeShellResult.serializer(),
+                fallback = FeeShellResult.TtlElapsed,
+                answer = feeExecutor::neutralAnswer,
+            ),
+            onFault = { error -> VelaLog.failure("send.fee.fault", "core fault", error) },
+        )
+        @Volatile var ask: QuoteAsk? = null
+        @Volatile var deployed: Boolean? = null
+        /** The deployment read before the dispatch — as much "measuring" as the core's `busy`. */
+        @Volatile var reading = false
+        @Volatile var generation = 0L
+        private var watch: kotlinx.coroutines.Job? = null
+
+        /**
+         * Begin reporting. Separate from construction: the first session is
+         * built while this controller is, and a watcher that fired on another
+         * thread before `inForce` was assigned would read a field not yet set.
+         */
+        fun start(): FeeSession {
+            host.start()
+            // Every commit, not every distinct view: see `CoreHost.commits`.
+            watch = scope.launch { host.commits.collect { reportQuotes() } }
+            return this
+        }
+
+        val view: FeeView get() = host.view.value
+
+        fun dispose() {
+            watch?.cancel()
+            host.dispose()
+        }
+    }
+
+
+    // -- the speed control (spec 069) ----------------------------------------------
+
+    private val speedHost = CoreHost(
+        bridge = FeeSpeedCore().asBridge(),
         scope = scope,
-        initial = FeeView(),
-        serializer = FeeView.serializer(),
-        perform = JsonShell.perform(FeeOperation.serializer(), FeeShellResult.serializer(), feeExecutor::perform),
-        escapedFailure = JsonShell.escapedFailure(
-            FeeOperation.serializer(),
-            FeeShellResult.serializer(),
-            fallback = FeeShellResult.TtlElapsed,
-            answer = feeExecutor::neutralAnswer,
-        ),
-        onFault = { error -> VelaLog.failure("send.fee.fault", "core fault", error) },
+        initial = FeeSpeedView(),
+        serializer = FeeSpeedView.serializer(),
+        // `fee_speed` asks the shell for nothing; an operation would be a core bug.
+        perform = { operation -> error("fee_speed asked for an operation: $operation") },
+        escapedFailure = { operation, error -> throw IllegalStateException("fee_speed operation $operation", error) },
+        onFault = { error -> VelaLog.failure("send.speed.fault", "core fault", error) },
     )
+
+    /** The speed control, as the core decided it — the send form draws this. */
+    val speed: StateFlow<FeeSpeedView> = speedHost.view
+
+    private fun newSession(): FeeSession = FeeSession(nextSessionKey++)
+
+    private val inForce = MutableStateFlow(newSession())
 
     private val ports: SendExecutor.SendPorts = object : SendExecutor.SendPorts {
         override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
@@ -198,12 +297,45 @@ class SendController(
 
     val batch: StateFlow<BatchView> = batchHost.view
 
-    /** The fee session's view — the fee-token sheet reads this. */
-    val fee: StateFlow<FeeView> = feeHost.view
+    /**
+     * The fee session in force — whichever session that is right now, so a
+     * promotion swaps what the fee row and the fee-token sheet read without
+     * either of them knowing (spec 069). `pending` folded into `busy`.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val fee: StateFlow<FeeView> = inForce
+        .flatMapLatest { session -> session.host.view }
+        .stateIn(scope, SharingStarted.Eagerly, FeeView())
+
+    /** The fee view of the session pricing `tier` — for formatting that option's fee. */
+    fun feeViewOf(tier: FeeTier): FeeView? = synchronized(sessionLock) {
+        inForce.value.takeIf { it.ask?.tier == tier }?.view
+            ?: previews.firstOrNull { it.ask?.tier == tier }?.view
+    }
 
     init {
         sendHost.start()
-        feeHost.start()
+        speedHost.start()
+        inForce.value.start()
+        speedHost.dispatch(FeeSpeedEvent.Reset, FeeSpeedEvent.serializer())
+        // Every decision the speed core takes, carried out at once, in order:
+        // promote or re-price the session in force FIRST, then bring the
+        // previews in line — the other way round would dispose the very
+        // session somebody tapped.
+        scope.launch {
+            speedHost.view.collect { speedPass() }
+        }
+        // The send leaving its form ends any free-upgrade question.
+        scope.launch {
+            var lastOnForm: Boolean? = null
+            sendHost.view.collect { view ->
+                val onForm = view.stage == SendStage.EnterDetails
+                if (onForm != lastOnForm) {
+                    lastOnForm = onForm
+                    speedHost.dispatch(FeeSpeedEvent.StageChanged(onForm), FeeSpeedEvent.serializer())
+                }
+            }
+        }
         // The fee session's later word flows into the send machine: a
         // re-quote after a fee-token pick or a TTL expiry replaces the
         // estimate the confirm screen shows (desktop `sync_fee_to_send`).
@@ -211,7 +343,7 @@ class SendController(
             var lastFee: FeeEstimateView? = null
             var lastBusy = false
             var lastStale = false
-            feeHost.view.collect { view ->
+            fee.collect { view ->
                 if (view.busy != lastBusy) {
                     lastBusy = view.busy
                     dispatch(SendEvent.FeeBusyChanged(view.busy))
@@ -228,12 +360,14 @@ class SendController(
                 if (view.stale != lastStale) {
                     lastStale = view.stale
                     val current = send.value
-                    val request = lastQuote
-                    if (view.stale && !view.busy && request != null &&
+                    val session = inForce.value
+                    val ask = session.ask
+                    val deployed = session.deployed
+                    if (view.stale && !view.busy && ask != null && deployed != null &&
                         current.stage == SendStage.Confirm && current.tx_status == SendTxStatus.Idle && !current.sending
                     ) {
-                        VelaLog.event("send.fee", "re-quote on stale", "chain" to request.chain_id)
-                        feeHost.dispatch(request, FeeEvent.serializer())
+                        VelaLog.event("send.fee", "re-quote on stale", "chain" to ask.chainId)
+                        session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
                     }
                 }
             }
@@ -246,9 +380,9 @@ class SendController(
 
     // -- the fee bridge (research D7) ----------------------------------------------
 
-    /** The last quote asked, re-asked verbatim when it goes stale on the confirm page (spec 045 US4). */
+    /** A send-machine question is out on the session in force; nothing may re-price over it. */
     @Volatile
-    private var lastQuote: FeeEvent.QuoteRequested? = null
+    private var answering = false
 
     private suspend fun requestQuote(
         chainId: Int,
@@ -257,40 +391,171 @@ class SendController(
         gasFeeToken: String?,
         publicKeyAvailable: Boolean,
     ): SendFeeOutcome {
-        val deployed = relayRef.isDeployed(chainId, account) ?: false
-        val before = feeHost.view.value.fee
-        val request = FeeEvent.QuoteRequested(
-            chain_id = chainId,
-            account = account,
-            deployed = deployed,
-            public_key_available = publicKeyAvailable,
-            tier = FeeTier.Fast,
-            calls = calls,
-            fee_token = gasFeeToken,
+        // HOW FAST is the shell's to say (spec 068): the tier the speed core
+        // has in force — the stored default, a one-shot pick, a free upgrade.
+        val ask = QuoteAsk(chainId, account, publicKeyAvailable, speed.value.tier, calls, gasFeeToken)
+        answering = true
+        try {
+            val session = askInForce(ask) ?: return SendFeeOutcome.Failed(SendEstimateFailure.Other)
+            val before = session.second
+            // Settled = not busy, and either a NEW estimate or a failure — on
+            // whichever session is in force by then: a promotion of the same
+            // operation answers this question with the quote that was tapped.
+            //
+            // Woken by `commits`, NOT by `view`: a re-quote at the same price is
+            // a view that `equals` the one before the request, and a StateFlow
+            // never delivers that to a collector that missed the `busy` in
+            // between (see `CoreHost.commits`).
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            val settled = withTimeoutOrNull(QUOTE_TIMEOUT_MS) {
+                inForce
+                    .flatMapLatest { s -> s.host.commits.map { s } }
+                    .map { s -> s.view to s.reading }
+                    .first { (view, reading) ->
+                        !reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+                    }.first
+            } ?: return SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
+            val estimate = settled.fee
+            return when {
+                settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
+                estimate != null -> SendFeeOutcome.Ok(estimate)
+                else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
+            }
+        } finally {
+            answering = false
+            speedPass()
+        }
+    }
+
+    /**
+     * Price `ask` on the session in force: the deployment read first, then the
+     * question. The ask is recorded NOW, before the read, so a preview of the
+     * previous operation can never be promoted over a question still out.
+     * Returns the session and the estimate it held before, or `null` when a
+     * newer ask superseded this one during the read.
+     */
+    private suspend fun askInForce(ask: QuoteAsk): Pair<FeeSession, FeeEstimateView?>? {
+        val (session, seq) = synchronized(sessionLock) {
+            val session = inForce.value
+            askSeq += 1
+            generation += 1
+            session.ask = ask
+            session.deployed = null
+            session.reading = true
+            session.generation = generation
+            session to askSeq
+        }
+        reportQuotes()
+        val deployed = relayRef.isDeployed(ask.chainId, ask.account) ?: false
+        val before = synchronized(sessionLock) {
+            if (seq != askSeq || inForce.value !== session) return null
+            session.reading = false
+            session.deployed = deployed
+            val before = session.view.fee
+            session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
+            before
+        }
+        speedPass()
+        return session to before
+    }
+
+    // -- the reconcile step (`fee_speed.rs`) -------------------------------------
+
+    /** Every session's state, whole, to the speed core. */
+    private fun reportQuotes() = synchronized(sessionLock) {
+        val main = inForce.value
+        val event = FeeSpeedEvent.QuotesChanged(
+            chain_id = main.ask?.chainId,
+            in_force = TierQuote(busy = main.reading || main.view.busy, fee = main.view.fee),
+            previews = previews.mapNotNull { session ->
+                val tier = session.ask?.tier ?: return@mapNotNull null
+                TierPreviewQuote(tier = tier, busy = session.reading || session.view.busy, fee = session.view.fee)
+            },
         )
-        lastQuote = request
-        feeHost.dispatch(request, FeeEvent.serializer())
-        // Settled = not busy, and either a NEW estimate or a failure. The
-        // reference check is what keeps a stale estimate from answering a
-        // fresh request; every commit decodes a fresh object.
-        //
-        // Woken by `commits`, NOT by `view`: a re-quote at the same price is a
-        // view that `equals` the one before the request, and a StateFlow never
-        // delivers that to a collector that missed the `busy` in between — the
-        // wait then ran out its whole timeout with the answer sitting in the
-        // view (see `CoreHost.commits`).
-        val settled = withTimeoutOrNull(QUOTE_TIMEOUT_MS) {
-            feeHost.commits
-                .map { feeHost.view.value }
-                .first { view ->
-                    !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+        speedHost.dispatch(event, FeeSpeedEvent.serializer())
+    }
+
+    /** Rule 1, then rule 2: the tier in force, then the previews beside it. */
+    private fun speedPass() {
+        val repriced = synchronized(sessionLock) {
+            val view = speed.value
+            val main = inForce.value
+            val ask = main.ask
+            var reprice: QuoteAsk? = null
+            if (ask != null && ask.tier != view.tier) {
+                if (promote(view.tier)) {
+                    // Promoted: the quotes moved, say so.
+                } else if (!main.reading && !main.view.busy && !answering) {
+                    reprice = ask.copy(tier = view.tier)
                 }
-        } ?: return SendFeeOutcome.Failed(SendEstimateFailure.Timeout)
-        val estimate = settled.fee
-        return when {
-            settled.failed != null -> SendFeeOutcome.Failed(failure(settled.failed))
-            estimate != null -> SendFeeOutcome.Ok(estimate)
-            else -> SendFeeOutcome.Failed(SendEstimateFailure.Other)
+            }
+            syncPreviews(view.previews)
+            reprice
+        }
+        reportQuotes()
+        // Never over a measurement that is out — the send machine may be
+        // waiting on it. What is left is a tier with nothing priced for it.
+        if (repriced != null) scope.launch { askInForce(repriced) }
+    }
+
+    /**
+     * THE PRICE YOU TAP IS THE PRICE YOU GET (issue 681): the preview that
+     * already priced THIS operation at `tier` becomes the session in force —
+     * no second question to the relay — and the one it replaces stays on as
+     * its own tier's preview. Refused when that preview has no settled quote
+     * of its own, or priced another operation than the one last asked.
+     */
+    private fun promote(tier: FeeTier): Boolean {
+        val main = inForce.value
+        val mainAsk = main.ask ?: return false
+        val index = previews.indexOfFirst { session ->
+            val ask = session.ask
+            ask != null && ask.tier == tier && ask.sameOperation(mainAsk) && !session.reading &&
+                !session.view.busy && session.view.fee?.tier == tier
+        }
+        if (index < 0) return false
+        val promoted = previews.removeAt(index)
+        // A deployment read still out for the demoted session must not
+        // dispatch onto the one now in force.
+        askSeq += 1
+        main.reading = false
+        if (main.ask != null && main.deployed != null) previews.add(main) else main.dispose()
+        inForce.value = promoted
+        VelaLog.event("send.speed", "promoted", "tier" to tier.name)
+        return true
+    }
+
+    /**
+     * Rule 2: a preview for every tier the core names, pricing the same
+     * operation as the session in force at the same generation; every other
+     * preview disposed. Nothing is created while the session in force is
+     * still reading — its question is not settled enough to replay.
+     */
+    private fun syncPreviews(wanted: List<FeeTier>) {
+        val main = inForce.value
+        val base = main.ask?.takeIf { !main.reading && main.deployed != null }
+        val deployed = main.deployed
+        val iterator = previews.iterator()
+        while (iterator.hasNext()) {
+            val session = iterator.next()
+            val ask = session.ask
+            val keep = base != null && ask != null && ask.tier in wanted && ask.sameOperation(base) &&
+                session.generation == generation
+            if (!keep) {
+                iterator.remove()
+                session.dispose()
+            }
+        }
+        if (base == null || deployed == null) return
+        for (tier in wanted) {
+            if (previews.any { it.ask?.tier == tier }) continue
+            val session = newSession()
+            val ask = base.copy(tier = tier)
+            session.ask = ask
+            session.deployed = deployed
+            session.generation = generation
+            previews.add(session.start())
+            session.host.dispatch(ask.event(deployed), FeeEvent.serializer())
         }
     }
 
@@ -309,7 +574,50 @@ class SendController(
     fun open(account: SendAccountRef?, display: SendDisplayContext, params: SendOpenParams = SendOpenParams()) {
         _closed.value = false
         _alert.value = null
+        // A new send starts at the stored default: the one-shot pick, a free
+        // upgrade and the fold all die with the send before it (spec 068).
+        speedHost.dispatch(FeeSpeedEvent.Reset, FeeSpeedEvent.serializer())
+        preferenceChanged()
         dispatch(SendEvent.Open(account = account, params = params, display = display))
+    }
+
+    // -- the speed control (spec 069) -----------------------------------------------
+
+    /**
+     * The stored default or the number preset moved: a send already open
+     * follows the new default until the person picks a speed on it.
+     */
+    fun preferenceChanged() =
+        speedHost.dispatch(FeeSpeedEvent.Configure(preferredTier(), numberPreset()), FeeSpeedEvent.serializer())
+
+    /** Fold or unfold the control. */
+    fun toggleSpeed() = speedHost.dispatch(FeeSpeedEvent.Toggle, FeeSpeedEvent.serializer())
+
+    /** A tap on an option — one-shot, never the stored preference. */
+    fun pickSpeed(tier: FeeTier) = speedHost.dispatch(FeeSpeedEvent.Pick(tier), FeeSpeedEvent.serializer())
+
+    /**
+     * The refresh control: measure again. The held readings go FIRST (issue
+     * 212), so this is a new measurement rather than the number on screen,
+     * and the other tiers are re-priced with it.
+     */
+    fun refreshFee() {
+        val session = inForce.value
+        val ask = session.ask ?: return
+        relayRef.invalidateFeeSignals(ask.chainId)
+        if (session.reading) return
+        if (session.deployed == null) {
+            // The last attempt never reached the core, so `Requote` would be a
+            // no-op and the control a dead button: ask again for real.
+            scope.launch { askInForce(ask) }
+            return
+        }
+        synchronized(sessionLock) {
+            generation += 1
+            session.generation = generation
+        }
+        session.host.dispatch(FeeEvent.Requote, FeeEvent.serializer())
+        speedPass()
     }
 
     fun displayChanged(display: SendDisplayContext) = dispatch(SendEvent.DisplayChanged(display))

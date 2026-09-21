@@ -42,6 +42,9 @@ enum class SettingsOverlay {
      * action word — so no new sentence is invented for it.
      */
     ClearStorageItem,
+
+    /** The default transaction speed (spec 069): three speeds, each with what it buys. */
+    FeeSpeed,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
@@ -137,6 +140,12 @@ data class SelectRowModel(
     val selected: Boolean = false,
     /** Mono face — every number/date/time sample wants it. */
     val mono: Boolean = false,
+    /**
+     * A line UNDER the label — the speed sheet's "Lowest fee, if you can
+     * wait" (spec 068's ruling: the name is the speed, what it buys goes
+     * under it, never squeezed beside it).
+     */
+    val detail: String? = null,
 )
 
 @Immutable
@@ -486,6 +495,8 @@ data class SettingsScreenModel(
     val signOutSheet: ConfirmSheetModel,
     val languageSheet: SelectSheetModel,
     val currencySheet: SelectSheetModel,
+    /** Spec 069: the default transaction speed's sheet. */
+    val feeSpeedSheet: SelectSheetModel = SelectSheetModel(title = "", rows = emptyList()),
     val numberSheet: SelectSheetModel,
     val dateSheet: SelectSheetModel,
     val timeSheet: SelectSheetModel,

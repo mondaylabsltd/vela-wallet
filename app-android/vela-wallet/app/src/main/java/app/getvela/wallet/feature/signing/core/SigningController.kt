@@ -69,6 +69,12 @@ class SigningController(
     measureCall: suspend (chainId: Int, from: String, to: String, valueHex: String, data: String) -> String? =
         { _, _, _, _, _ -> null },
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    /**
+     * The stored default speed (spec 069): a dApp transaction is priced — and,
+     * through the quoted fee, submitted — at the speed Settings names, which
+     * is `fast` for everybody who never chose.
+     */
+    private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     receiptWaitMs: Long = 120_000L,
     receiptPollMs: Long = 3_000L,
 ) {
@@ -259,7 +265,8 @@ class SigningController(
             feeHost.dispatch(
                 FeeEvent.QuoteRequested(
                     chain_id = chainId, account = wallet.address, deployed = deployed, public_key_available = true,
-                    tier = FeeTier.Fast, calls = calls, fee_token = null,
+                    tier = preferredTier().let { if (it == FeeTier.Rapid) FeeTier.Fast else it },
+                    calls = calls, fee_token = null,
                 ),
                 FeeEvent.serializer(),
             )
@@ -288,7 +295,9 @@ class SigningController(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,
             bundler_cost_wei = null,
             gas_fee_token = null,
-            quoted_fee = fee.fee?.let { SignQuotedFee(amount = it.total_wei, recipient = it.fee_recipient.orEmpty()) },
+            // The speed this very estimate was priced at, named on the wire
+            // beside the amount (spec 069); the core drops a `rapid`.
+            quoted_fee = fee.fee?.let { SignQuotedFee(amount = it.total_wei, recipient = it.fee_recipient.orEmpty(), tier = it.tier) },
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
             intent = clear.result?.intent,

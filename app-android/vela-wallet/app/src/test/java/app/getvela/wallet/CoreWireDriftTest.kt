@@ -765,6 +765,20 @@ class CoreWireDriftTest {
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
+    /** Spec 069: the default speed's machine and the speed control's. */
+    @Test
+    fun speedViewsEventsAndPreferenceMatchTheGeneratedMirrors() {
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.FeeTierPrefView>("FeeTierPrefView")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.FeeTierPrefOperation>("FeeTierPrefOperation")
+        assertVariantsExhaustive<app.getvela.wallet.feature.settings.core.FeeTierPrefShellResult>("FeeTierPrefShellResult")
+        assertVariantsExist<app.getvela.wallet.feature.settings.core.FeeTierPrefEvent>("FeeTierPrefEvent")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.FeeSpeedView>("FeeSpeedView")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.FeeSpeedOptionView>("FeeSpeedOptionView")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.TierQuote>("TierQuote")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.TierPreviewQuote>("TierPreviewQuote")
+        assertVariantsExist<app.getvela.wallet.feature.send.core.FeeSpeedEvent>("FeeSpeedEvent")
+    }
+
     @Test
     fun trackerViewsOperationsAndResultsMatch() {
         assertFieldsExist<TrackView>("TrackView")

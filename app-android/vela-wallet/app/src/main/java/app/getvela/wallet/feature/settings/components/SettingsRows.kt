@@ -248,13 +248,23 @@ fun VelaSelectRow(
             }
             // The chosen row is stated twice — accent text and a check —
             // because the check alone disappears at the note's type size.
-            Text(
-                text = row.label,
-                color = if (row.selected) colors.accentBase else colors.fgBase,
-                fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
-                fontWeight = if (row.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
-                fontSize = VelaTextSize.lg,
-            )
+            Column(modifier = if (row.detail != null) Modifier.weight(1f) else Modifier) {
+                Text(
+                    text = row.label,
+                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
+                    fontWeight = if (row.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
+                    fontSize = VelaTextSize.lg,
+                )
+                if (row.detail != null) {
+                    Text(
+                        text = row.detail,
+                        color = colors.fgSubtle,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.base,
+                    )
+                }
+            }
             if (row.caption != null) {
                 Text(
                     text = row.caption,

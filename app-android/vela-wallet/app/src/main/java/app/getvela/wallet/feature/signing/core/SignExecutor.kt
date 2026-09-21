@@ -124,7 +124,7 @@ class SignExecutor(
                 account = op.address,
                 calls = calls,
                 gasFeeToken = op.gas_fee_token,
-                quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient) },
+                quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
             )
             ports.opSubmitted(op.id, hash)

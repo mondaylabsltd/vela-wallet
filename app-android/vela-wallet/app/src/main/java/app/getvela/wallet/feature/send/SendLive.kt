@@ -1,6 +1,10 @@
 package app.getvela.wallet.feature.send
 
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.flows.FeeSpeedModel
+import app.getvela.wallet.feature.flows.FeeSpeedOptionModel
+import app.getvela.wallet.feature.send.core.FeeSpeedView
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.flows.ContactGroupModel
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.diagnostics.VelaLog
@@ -253,7 +257,7 @@ object SendLive {
         view.multi_specs.firstOrNull { it.token_address == token.token_address }?.amount ?: token.balance
 
     /** SD2d — the sweep's form: the picked rows with the core's amounts, one recipient for all. */
-    internal fun sweepForm(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context): SendFormModel {
+    internal fun sweepForm(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context, speed: SpeedInputs? = null): SendFormModel {
         val s = ctx.strings
         val picked = pickedTokens(view)
         val chainId = view.multi_chain_id ?: view.selected_token?.chain_id ?: 1
@@ -277,7 +281,8 @@ object SendLive {
             recipientActions = emptyList(),
             summary = null,
             recipient = recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT)),
-            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx),
+            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
+            speed = speed?.let { speedModel(it, view, ctx) },
             cta = s.t(I18nKeys.Flows.CONTINUE),
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
@@ -301,8 +306,8 @@ object SendLive {
 
     // -- SD2 ---------------------------------------------------------------------
 
-    internal fun form(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context): SendFormModel {
-        if (view.multi_select_mode) return sweepForm(fallback, view, fee, ctx)
+    internal fun form(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context, speed: SpeedInputs? = null): SendFormModel {
+        if (view.multi_select_mode) return sweepForm(fallback, view, fee, ctx, speed)
         val s = ctx.strings
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
@@ -340,7 +345,8 @@ object SendLive {
                 emptyList()
             },
             summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
-            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx),
+            fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
+            speed = speed?.let { speedModel(it, view, ctx) },
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
         )
@@ -430,14 +436,104 @@ object SendLive {
         SendAlertKind.AccountUnavailable -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ACCOUNT_UNAVAILABLE_BODY)
     }
 
-    private fun feeRow(fallback: FeeRowModel, estimate: FeeEstimateView?, busy: Boolean, view: SendView, fee: FeeView?, ctx: Context): FeeRowModel {
+    private fun feeRow(
+        fallback: FeeRowModel,
+        inHand: FeeEstimateView?,
+        busy: Boolean,
+        view: SendView,
+        fee: FeeView?,
+        ctx: Context,
+        speed: SpeedInputs? = null,
+    ): FeeRowModel {
+        // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681):
+        // on the path where a pick re-measures, the estimate in hand still
+        // belongs to the speed just left — the send machine keeps it across a
+        // tier change — and "measuring" is the honest thing to say.
+        val ofAnotherTier = inHand != null && speed != null && offered(inHand.tier) != speed.view.tier
+        val estimate = inHand.takeIf { !ofAnotherTier }
         val (text, mark) = feeText(estimate, view, fee, ctx)
+        val s = ctx.strings
         return fallback.copy(
             mark = mark ?: fallback.mark,
+            // A figure in hand stays on screen while a re-quote is out (spec
+            // 028); only a figure of ANOTHER speed gives way to "measuring".
             value = when {
+                ofAnotherTier -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
                 estimate != null -> text
-                busy -> ctx.strings.t(I18nKeys.Flows.FEE_ESTIMATING)
+                busy -> s.t(I18nKeys.Flows.FEE_ESTIMATING)
                 else -> "—"
+            },
+            refreshLabel = speed?.let { s.t(I18nKeys.Flows.FEE_REFRESH) },
+            // A measurement is out — whoever started it — the same fact the
+            // "measuring" text reads, so the row is never settled and busy at once.
+            refreshing = busy,
+            // `FeeView.stale` had no consumer on Android: the 30 s TTL ran out
+            // and nothing said so. Not while a fresh measurement is out, and
+            // not over a row with no figure of its own on it.
+            staleNote = if (speed != null && fee?.stale == true && !busy && estimate != null) s.t(I18nKeys.Flows.FEE_STALE) else null,
+        )
+    }
+
+    /**
+     * The speed control's inputs (spec 069): the `fee_speed` core's view, and
+     * the fee session pricing each tier — whose fee-coin options format that
+     * option's fee, as the fee row formats its own.
+     */
+    internal class SpeedInputs(val view: FeeSpeedView, val feeViewOf: (FeeTier) -> FeeView?)
+
+    /** A tier as one this build offers: the dead `rapid` reads as the factory `fast`. */
+    private fun offered(tier: FeeTier): FeeTier = if (tier == FeeTier.Rapid) FeeTier.Fast else tier
+
+    private fun tierName(tier: FeeTier, ctx: Context): String = ctx.strings.t(
+        when (offered(tier)) {
+            FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_STANDARD
+            FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_SLOW
+            else -> I18nKeys.Flows.GAS_TIER_FAST
+        },
+    )
+
+    private fun tierHint(tier: FeeTier, ctx: Context): String = ctx.strings.t(
+        when (offered(tier)) {
+            FeeTier.Standard -> I18nKeys.Flows.GAS_TIER_HINT_STANDARD
+            FeeTier.Slow -> I18nKeys.Flows.GAS_TIER_HINT_SLOW
+            else -> I18nKeys.Flows.GAS_TIER_HINT_FAST
+        },
+    )
+
+    /**
+     * The folded speed control (spec 068), drawn from the `fee_speed` core's
+     * view (spec 069). Every figure is that tier's OWN settled quote, echoed
+     * by the core; only the words and the fee line are made here.
+     */
+    internal fun speedModel(speed: SpeedInputs, view: SendView, ctx: Context): FeeSpeedModel {
+        val s = ctx.strings
+        val core = speed.view
+        return FeeSpeedModel(
+            label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
+            // THEIR default (or their pick for this send), never a hardcoded one.
+            value = tierName(core.tier, ctx),
+            open = core.open,
+            onceNote = s.t(I18nKeys.Flows.FEE_SPEED_ONCE),
+            freeNote = if (core.free_note) s.t(I18nKeys.Flows.FEE_SPEED_FREE) else null,
+            singleNote = if (core.single) s.t(I18nKeys.Flows.FEE_SPEED_SINGLE) else null,
+            gasPriceLabel = s.t(I18nKeys.Flows.GAS_PRICE_LABEL),
+            gasPriceLine = core.gas_price_line,
+            options = core.options.map { option ->
+                val quote = option.fee
+                FeeSpeedOptionModel(
+                    id = option.tier.name.lowercase(),
+                    label = tierName(option.tier, ctx),
+                    detail = tierHint(option.tier, ctx),
+                    // "measuring" while this tier's own quote is out, "—" when
+                    // there is none to be had.
+                    value = when {
+                        quote != null -> feeText(quote, view, speed.feeViewOf(option.tier), ctx).first
+                        option.measuring -> "…"
+                        else -> "—"
+                    },
+                    gasPrice = option.gas_price,
+                    selected = option.selected,
+                )
             },
         )
     }
@@ -565,7 +661,7 @@ object SendLive {
 
     // -- SD3 ---------------------------------------------------------------------
 
-    internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView? = null): SendConfirmModel {
+    internal fun confirm(fallback: SendConfirmModel, view: SendView, ctx: Context, fee: FeeView? = null, speed: FeeSpeedView? = null): SendConfirmModel {
         val s = ctx.strings
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
@@ -608,6 +704,18 @@ object SendLive {
                     label = s.t(I18nKeys.Flows.EST_FEE),
                     value = if (view.fee != null) "~$feeLine" else s.t(I18nKeys.Flows.FEE_ESTIMATING),
                 ),
+            ) + listOfNotNull(
+                // The speed, but only when it was CHOSEN for this send, or taken
+                // because it was free (spec 068 / issue 686): the last screen
+                // before a signature says so, and a free upgrade says why. A
+                // send at the stored default adds no row.
+                speed?.takeIf { it.picked || it.free }?.let { chosen ->
+                    FactRowModel(
+                        label = s.t(I18nKeys.Flows.FEE_SPEED_LABEL),
+                        value = tierName(chosen.tier, ctx),
+                        note = if (chosen.picked) null else s.t(I18nKeys.Flows.FEE_SPEED_FREE),
+                    )
+                },
             ),
             breakdown = if (split) {
                 view.recipients.map { draft ->
