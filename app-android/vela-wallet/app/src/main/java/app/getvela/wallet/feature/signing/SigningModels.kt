@@ -156,6 +156,8 @@ data class FeeTokenOption(
     val balance: String,
     val fee: String,
     val selected: Boolean,
+    /** The core's `insufficient`: shown for context, never pickable (invariant ⑧). */
+    val disabled: Boolean = false,
 )
 
 @Immutable
@@ -166,6 +168,10 @@ sealed interface FeeModel {
         /** Present only while the selector is open (cs33). */
         val selectorTitle: String? = null,
         val options: List<FeeTokenOption> = emptyList(),
+        /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
+        val tappable: Boolean = false,
+        /** Issue #262: why the slide is shut — the paying coin is not there. */
+        val warning: String? = null,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */

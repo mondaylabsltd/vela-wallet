@@ -60,6 +60,8 @@ fun SigningSheet(
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
     onSignWith: (String?) -> Unit = {},
+    onFee: () -> Unit = {},
+    onFeePick: (String) -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -67,7 +69,7 @@ fun SigningSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = modifier,
     ) {
-        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount, onSignWith = onSignWith)
+        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount, onSignWith = onSignWith, onFee = onFee, onFeePick = onFeePick)
     }
 }
 
@@ -81,6 +83,9 @@ fun SigningSheetContent(
     onCustomAmount: (String) -> Unit = {},
     /** `null` toggles the list; an id picks a method and closes it. */
     onSignWith: (String?) -> Unit = {},
+    /** Issue #262: the fee row's tap and its coin list's pick. */
+    onFee: () -> Unit = {},
+    onFeePick: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -145,7 +150,7 @@ fun SigningSheetContent(
         )
 
         TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
-        SigningFee(model.fee)
+        SigningFee(model.fee, onFee = onFee, onPick = onFeePick)
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
         SlideToConfirm(

@@ -6,6 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeEvent
 import app.getvela.wallet.feature.send.core.FeeExecutor
@@ -189,6 +190,30 @@ class SigningController(
         signWithOpen.value = false
     }
 
+    /**
+     * The fee row's coin list (the web's `feeOpen`, ef49b6b1). Which coins pay,
+     * what each costs and which cannot are the fee machine's; the pick is a
+     * quote PARAMETER the core re-prices the operation in, and the approve
+     * carries the same view's `fee_token` (issue #262: an account holding USDT
+     * and no ETH was quoted in ETH with no way to choose the coin it has).
+     */
+    val feeOpen = MutableStateFlow(false)
+
+    /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
+    fun feeTapped() {
+        val view = fee.value
+        when {
+            view.failed != null -> feeHost.dispatch(FeeEvent.Requote, FeeEvent.serializer())
+            view.options.size > 1 -> feeOpen.value = !feeOpen.value
+        }
+    }
+
+    /** A coin from the list (`null` = the native coin); a coin that cannot pay is refused by the core. */
+    fun pickFee(contract: String?) {
+        feeHost.dispatch(FeeEvent.SelectFeeAsset(contract), FeeEvent.serializer())
+        feeOpen.value = false
+    }
+
     private val _closed = MutableStateFlow(false)
 
     /** The request was answered: the sheet may go, and this controller with it. */
@@ -287,8 +312,17 @@ class SigningController(
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,
             bundler_cost_wei = null,
-            gas_fee_token = null,
-            quoted_fee = fee.fee?.let { SignQuotedFee(amount = it.total_wei, recipient = it.fee_recipient.orEmpty()) },
+            // The coin the person picked pays, and the amount signed is in THAT
+            // coin — the send core's own rule (`submit_user_op`): an ERC-20 fee's
+            // amount rides in `fee_asset`, `total_wei` is 0 for it.
+            gas_fee_token = fee.fee_token,
+            quoted_fee = fee.fee?.let {
+                val amount = when (val asset = it.fee_asset) {
+                    is FeeAssetView.Erc20 -> asset.amount
+                    FeeAssetView.Native -> it.total_wei
+                }
+                SignQuotedFee(amount = amount, recipient = it.fee_recipient.orEmpty())
+            },
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
             intent = clear.result?.intent,

@@ -1502,6 +1502,53 @@ fn picker_shows_native_always_and_held_stables_only() {
     assert!(!view.options[1].insufficient);
 }
 
+/// Issue #262: an account holding 0 of the native coin (2 USDT and 0 ETH on
+/// mainnet) was quoted in ETH and the confirm gate stayed open — the op was
+/// signed, accepted and never bundled. The native row is still the default
+/// and still quoted; it is simply not confirmable, and switching to a coin
+/// that can pay opens the gate.
+#[test]
+fn a_native_fee_the_account_does_not_hold_is_not_confirmable() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row("0"), usdc_row("5000000")]),
+    });
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert!(
+        view.fee.is_some(),
+        "still quoted: the person sees the figure"
+    );
+    assert!(view.failed.is_none());
+    let native = view.options.iter().find(|o| o.contract.is_none()).unwrap();
+    assert!(native.selected && native.insufficient);
+    assert!(!view.confirm_fee_ready, "a fee in a coin that is not there");
+
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(USDC.to_owned()),
+    });
+    assert!(sut.view().confirm_fee_ready, "USDC covers it");
+}
+
+/// The gate refuses only a PROVABLE shortfall: a native balance that covers
+/// the fee stays confirmable (the happy path above), and one exactly equal to
+/// it is enough.
+#[test]
+fn a_native_balance_exactly_covering_the_fee_is_confirmable() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row(&NATIVE_FEE_WEI.to_string()), usdc_row("0")]),
+    });
+    sut.resolve(estimated());
+    assert!(sut.view().confirm_fee_ready);
+}
+
 /// `GasFeeCard.handleFeeTokenSelect` fast path: a known option recomputes
 /// locally from the shared gas basis — no RPC round trip.
 #[test]
@@ -1686,8 +1733,11 @@ fn a_requested_fee_token_the_balance_cannot_cover_is_refused() {
     assert!(view.fee.is_none(), "a doomed op is never quoted");
     assert!(!view.confirm_fee_ready);
 
-    // The native row itself is never gated this way — it is the only
-    // denomination left, and `estimateTransactionFee` does not gate it either.
+    // The native row itself is never REFUSED this way — it is the only
+    // denomination left, and `estimateTransactionFee` does not gate it
+    // either: it is still quoted, so the person sees what it would cost. What
+    // it is not, since issue #262, is confirmable while the balance is
+    // provably under that cost (`a_native_fee_the_account_does_not_hold_…`).
     let mut sut = Sut::new();
     sut.dispatch(request(CHAIN, vec![]));
     sut.resolve(gas_ok());
@@ -1696,7 +1746,13 @@ fn a_requested_fee_token_the_balance_cannot_cover_is_refused() {
         quotes: Some(vec![native_row("1")]),
     });
     sut.resolve(estimated());
-    assert!(sut.view().confirm_fee_ready);
+    let view = sut.view();
+    assert!(view.failed.is_none());
+    assert!(view.fee.is_some(), "quoted, never refused");
+    assert!(
+        !view.confirm_fee_ready,
+        "1 wei cannot pay a 0.00135 ETH fee"
+    );
 }
 
 /// `GasFeeCard.handleRefresh`: ignored while busy; a failed refresh keeps the

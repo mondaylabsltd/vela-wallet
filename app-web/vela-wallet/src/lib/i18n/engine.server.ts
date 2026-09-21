@@ -843,6 +843,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeEstimating: k('componentsUi.gas.estimating'),
 		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
+		feeShort: k('send.warnInsufficientGas'),
 		feeEstimated: k('componentsUi.signing.feeEstimated'),
 		feeBalance: k('componentsUi.gas.rowBalance'),
 		techFunction: k('componentsUi.signing.techFunction'),
