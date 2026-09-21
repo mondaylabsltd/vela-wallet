@@ -1239,6 +1239,810 @@ fn dummy_estimation_call() -> FeeCall {
 }
 
 // ---------------------------------------------------------------------------
+// Speed choice — spec 068, issues 212 / 681 / 684 / 685 / 686
+// ---------------------------------------------------------------------------
+//
+// The rules that decide WHAT the speed control says, moved here from the web
+// shell (`speed-choice.ts`, `free-speed.ts`, `gas-price.ts` and the picker in
+// `live-send.ts`; founder ruling 2026-09-21) so the three native shells read
+// the same answers instead of writing a second, third and fourth copy.
+//
+// Every figure the control draws is a REAL quote of the transaction at that
+// tier — one `fee_policy` session per tier, each asked `QuoteRequested{tier}`.
+// Nothing below scales one tier's number into another's: the relay's reported
+// tier price and its submit cap are different quantities (spec 068, "Money and
+// speed are two different levers"). These functions only READ settled quotes
+// and decide what they mean together.
+//
+// Invariants, each pinned in `tests/app_fee_policy.rs` against the web's own
+// vectors (the web tests were the oracle — same inputs, same outputs):
+//
+// ⓐ **Evidence is a settled quote OF THAT TIER.** A quote still measuring, a
+//    failed one, or another tier's figure is `None` — never "free", never
+//    "equal". A row holding the previous speed's number for a frame after a tap
+//    (issue 681) is exactly the case this exists for.
+// ⓑ **One speed (686 B) before a free speed (686 A).** Tiers nothing on screen
+//    tells apart — same charge AND no gas-price range — are not an upgrade.
+// ⓒ **Equal fees alone never collapse the picker.** On a floor-clamped chain
+//    the gas-price range is the choice.
+// ⓓ **A pick is a decision; an upgrade never overrules one**, and nothing is
+//    re-decided once the send has left its form.
+// ⓔ **Gas prices are formatted over the SET**: one unit (gwei from 0.001 gwei
+//    up, else wei) and one precision (3 significant digits, widened to at most
+//    5 only to keep distinct prices distinct), rounded half-up, never
+//    truncated. Canonical ASCII here; the shell only swaps in its number
+//    preset's separators and writes the unit name.
+// ⓕ **Compared as exact integers**, never as formatted strings or floats.
+
+/// The fastest speed anybody is offered — what a free upgrade goes to.
+pub const FASTEST_TIER: FeeTier = FeeTier::Fast;
+
+/// How long a chain's gas signals and the relay's gas quote stay good, per
+/// chain (issue 212), in milliseconds.
+///
+/// A SHELL cache with a core number: it is shared by every `fee_policy`
+/// session on the page (the tier previews are separate sessions, and sharing
+/// the chain reads is what keeps three rows from costing three round trips),
+/// so it cannot live in one machine's model. Every shell implements the same
+/// contract — [`gas_signals_cacheable`] and [`bundler_quote_cacheable`] say
+/// what may be kept; the spec says when it is dropped.
+pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 15_000;
+
+/// The narrow slice of a settled quote ([`FeeEstimateView`]) the speed rules
+/// read. A shell passes its `fee` straight through; nothing else is looked at.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SpeedQuote {
+    /// The tier this quote was priced AT (`FeeEstimateView::tier`).
+    pub tier: FeeTier,
+    pub chain_id: u32,
+    pub total_wei: String,
+    pub fee_asset: FeeAssetView,
+    pub effective_gas_price: Option<String>,
+    pub max_gas_price: Option<String>,
+}
+
+impl From<&FeeEstimateView> for SpeedQuote {
+    fn from(view: &FeeEstimateView) -> Self {
+        Self {
+            tier: view.tier,
+            chain_id: view.chain_id,
+            total_wei: view.total_wei.clone(),
+            fee_asset: view.fee_asset.clone(),
+            effective_gas_price: view.effective_gas_price.clone(),
+            max_gas_price: view.max_gas_price.clone(),
+        }
+    }
+}
+
+/// One tier and the quote settled FOR it — `None` while measuring, failed, or
+/// when all that is in hand is another tier's figure (invariant ⓐ).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SpeedEvidence {
+    pub tier: FeeTier,
+    pub quote: Option<SpeedQuote>,
+}
+
+/// One row of the picker as the shell holds it: the tier, the `fee` of the
+/// session that row renders (which may still be ANOTHER tier's for a frame),
+/// and whether a measurement is out (`busy` — the core's `busy` OR the shell's
+/// own pending account-context read).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SpeedRow {
+    pub tier: FeeTier,
+    pub quote: Option<SpeedQuote>,
+    pub busy: bool,
+}
+
+/// Whether a settled set of tiers offers a choice at all (issue 686 B).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SpeedSetVerdict {
+    One,
+    Several,
+}
+
+/// The unit a set of gas prices is written in. `gwei` and `wei` are proper
+/// nouns: the shell writes the variant's wire name, untranslated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum GasPriceUnit {
+    Gwei,
+    Wei,
+}
+
+/// One tier's gas price in wei: what it bids now (`low`, the quote's
+/// `effective_gas_price`) and how high it will go (`high`, its cap).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GasPriceRange {
+    pub low: U256,
+    pub high: Option<U256>,
+}
+
+/// [`GasPriceRange`] on the wire — decimal wei strings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct GasPriceRangeWire {
+    pub low: String,
+    pub high: Option<String>,
+}
+
+/// One tier's gas price as canonical digits in the set's unit: ASCII digits,
+/// `.` as the decimal mark, no grouping (`"0.02011"`, `"3244"`). `high` is
+/// `None` when the range is one figure — no top, or ends that print alike.
+/// The shell draws `low ~ high unit` or `low unit`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct GasPriceFigure {
+    pub low: String,
+    pub high: Option<String>,
+}
+
+/// A set of gas prices, formatted together (invariant ⓔ), in the order given.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct GasPriceFigures {
+    pub unit: GasPriceUnit,
+    pub figures: Vec<Option<GasPriceFigure>>,
+}
+
+/// One option of the speed picker.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SpeedPickerRow {
+    pub tier: FeeTier,
+    /// This row holds a settled quote of ITS OWN tier — the only quote the
+    /// shell may draw a fee from (issue 681).
+    pub priced: bool,
+    /// With no figure to draw: `true` = a measurement is out ("…"), `false` =
+    /// there is none to be had ("—"). Also `true` while the row still holds
+    /// another tier's figure, which must never be drawn under this name.
+    pub measuring: bool,
+    /// The tier in force.
+    pub selected: bool,
+    /// Nothing while any row is still being measured (so the set's precision
+    /// never shifts under the reader), and nothing for a tier with no bid.
+    pub gas_price: Option<GasPriceFigure>,
+}
+
+/// Everything the folded speed control decides (spec 068 / issues 684–686).
+/// Wording stays in the shell: `send.gasTier.*`, `send.gasTierHint*`,
+/// `send.feeSpeedLabel`, `send.feeSpeedOnce`, `send.feeSpeedFree`,
+/// `send.feeSpeedSingle`, `send.gasPriceLabel`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SpeedPickerView {
+    pub rows: Vec<SpeedPickerRow>,
+    pub gas_price_unit: GasPriceUnit,
+    /// This network has ONE speed (686 B): say `send.feeSpeedSingle` instead
+    /// of offering a choice that does nothing.
+    pub single: bool,
+    /// Say `send.feeSpeedFree` — the tier in force is the fastest because it
+    /// costs what the person's own default costs (686 A). Never beside
+    /// `single`: a speed that buys nothing is not an upgrade.
+    pub free_note: bool,
+    /// Keep the gas-price line. Held open while anything is still being
+    /// measured, so the rows do not shrink and grow back on every refresh;
+    /// dropped once, not per row, when a settled set has no figure anywhere.
+    pub gas_price_line: bool,
+}
+
+/// A decimal wei string as an integer, or `None`. `None` for anything that is
+/// not plain ASCII digits — "the core published nothing" and "the price is
+/// zero" are different facts, and only the second is a number (`gasPriceWei`).
+fn parse_wei(value: Option<&str>) -> Option<U256> {
+    let value = value?;
+    if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    U256::from_str_radix(value, 10).ok()
+}
+
+/// The same charge: same chain, same wei, same coin (and token amount).
+/// Exact integers-as-strings; nothing rounds (invariant ⓕ).
+fn same_charge(a: &SpeedQuote, b: &SpeedQuote) -> bool {
+    a.chain_id == b.chain_id && a.total_wei == b.total_wei && a.fee_asset == b.fee_asset
+}
+
+/// Whether a quote carries a gas price the picker can draw.
+fn has_gas_price(quote: &SpeedQuote) -> bool {
+    parse_wei(quote.effective_gas_price.as_deref()).is_some()
+}
+
+fn indistinguishable_quotes(quotes: &[Option<&SpeedQuote>]) -> bool {
+    if quotes.len() < 2 {
+        return false;
+    }
+    let Some(first) = quotes[0] else {
+        return false;
+    };
+    quotes
+        .iter()
+        .all(|quote| quote.is_some_and(|q| same_charge(q, first) && !has_gas_price(q)))
+}
+
+/// The FIRST row naming the tier decides, settled or not — a later row cannot
+/// stand in for a measurement that is still out.
+fn evidence_of(rows: &[SpeedEvidence], tier: FeeTier) -> Option<&SpeedQuote> {
+    rows.iter()
+        .find(|row| row.tier == tier)
+        .and_then(|row| row.quote.as_ref())
+}
+
+/// Nothing the screen can show tells these tiers apart: every one settled, all
+/// charging the same, none with a gas price. `false` for fewer than two rows
+/// and for any row without a settled quote.
+pub fn speed_indistinguishable(rows: &[SpeedEvidence]) -> bool {
+    let quotes: Vec<Option<&SpeedQuote>> = rows.iter().map(|row| row.quote.as_ref()).collect();
+    indistinguishable_quotes(&quotes)
+}
+
+/// 686 B: this network has one speed — only once EVERY offered tier is in
+/// `rows`, so the statement never arrives early.
+pub fn one_speed(rows: &[SpeedEvidence], offered: &[FeeTier]) -> bool {
+    if !offered
+        .iter()
+        .all(|tier| rows.iter().any(|row| row.tier == *tier))
+    {
+        return false;
+    }
+    let quotes: Vec<Option<&SpeedQuote>> = rows
+        .iter()
+        .filter(|row| offered.contains(&row.tier))
+        .map(|row| row.quote.as_ref())
+        .collect();
+    indistinguishable_quotes(&quotes)
+}
+
+/// 686 A: the fastest speed costs exactly what `preferred` costs and is
+/// actually different from it, so this send should go at the fastest speed.
+/// `false` with either quote missing (hold, never guess), for a `preferred`
+/// that already IS the fastest, and — invariant ⓑ — where nothing tells the
+/// two apart.
+pub fn speed_is_free(preferred: FeeTier, rows: &[SpeedEvidence]) -> bool {
+    if preferred == FASTEST_TIER {
+        return false;
+    }
+    let (Some(mine), Some(fastest)) = (
+        evidence_of(rows, preferred),
+        evidence_of(rows, FASTEST_TIER),
+    ) else {
+        return false;
+    };
+    if indistinguishable_quotes(&[Some(mine), Some(fastest)]) {
+        return false;
+    }
+    same_charge(mine, fastest)
+}
+
+/// The tier this send runs at: the one-shot pick, else the fastest when it was
+/// taken for free, else the person's stored default.
+pub fn tier_in_force(picked: Option<FeeTier>, preferred: FeeTier, free_fast: bool) -> FeeTier {
+    picked.unwrap_or(if free_fast && preferred != FASTEST_TIER {
+        FASTEST_TIER
+    } else {
+        preferred
+    })
+}
+
+/// The one tier a free upgrade is judged against: the fastest while the send
+/// runs at the default, the default while it runs upgraded. `None` — so not
+/// one extra quote — for a default that is already the fastest (the factory
+/// default, so most people), for a send with a pick on it, and once the send
+/// has left its form (invariant ⓓ).
+pub fn free_speed_partner(
+    picked: Option<FeeTier>,
+    preferred: FeeTier,
+    in_force: FeeTier,
+    on_form: bool,
+) -> Option<FeeTier> {
+    if !on_form || picked.is_some() || preferred == FASTEST_TIER {
+        return None;
+    }
+    Some(if in_force == FASTEST_TIER {
+        preferred
+    } else {
+        FASTEST_TIER
+    })
+}
+
+/// This send's pick after a tap on the tier ALREADY in force. While a free
+/// upgrade is in question the tap is a decision and is recorded; otherwise it
+/// changes nothing (tapping the ticked option is not a new decision).
+pub fn pick_in_force(
+    picked: Option<FeeTier>,
+    partner: Option<FeeTier>,
+    tapped: FeeTier,
+) -> Option<FeeTier> {
+    if picked.is_some() {
+        return picked;
+    }
+    partner.map(|_| tapped)
+}
+
+/// The tiers to keep priced beside the one in force — each its own
+/// `fee_policy` session: every other offered tier while the control is open,
+/// only the free partner while it is folded, nothing otherwise.
+pub fn preview_tiers(
+    open: bool,
+    offered: &[FeeTier],
+    in_force: FeeTier,
+    partner: Option<FeeTier>,
+) -> Vec<FeeTier> {
+    if open {
+        return offered
+            .iter()
+            .copied()
+            .filter(|tier| *tier != in_force)
+            .collect();
+    }
+    partner.into_iter().collect()
+}
+
+/// Whether to swap the fee in force for its free-speed partner: `Some(true)`
+/// — promote the fastest, it is free; `Some(false)` — the fees parted, promote
+/// the default back; `None` — hold. `mine` / `theirs` are the settled quotes of
+/// the session in force and of the partner's preview, `None` while either is
+/// measuring (the shell's pending read included) or failed; a quote of another
+/// tier is no evidence either (invariant ⓐ). The swap itself is a PROMOTION
+/// of the partner's session (issue 681), never a re-quote.
+pub fn free_speed_swap(
+    preferred: FeeTier,
+    in_force: FeeTier,
+    partner: Option<FeeTier>,
+    mine: Option<&SpeedQuote>,
+    theirs: Option<&SpeedQuote>,
+) -> Option<bool> {
+    let partner = partner?;
+    let mine = mine.filter(|quote| quote.tier == in_force)?;
+    let theirs = theirs.filter(|quote| quote.tier == partner)?;
+    let rows = [
+        SpeedEvidence {
+            tier: in_force,
+            quote: Some(mine.clone()),
+        },
+        SpeedEvidence {
+            tier: partner,
+            quote: Some(theirs.clone()),
+        },
+    ];
+    let free = speed_is_free(preferred, &rows);
+    (free != (in_force == FASTEST_TIER)).then_some(free)
+}
+
+/// A row's quote if it is OF THIS ROW'S TIER (invariant ⓐ).
+fn own_quote(row: &SpeedRow) -> Option<&SpeedQuote> {
+    row.quote.as_ref().filter(|quote| quote.tier == row.tier)
+}
+
+fn own_evidence(rows: &[SpeedRow]) -> Vec<SpeedEvidence> {
+    rows.iter()
+        .map(|row| SpeedEvidence {
+            tier: row.tier,
+            quote: own_quote(row).cloned(),
+        })
+        .collect()
+}
+
+/// Whether this network has one speed, from a SETTLED set only: `None`
+/// whenever any row has no settled quote of its own. A shell remembers a
+/// `One` per chain (and forgets it on `Several`) and hands it back as
+/// `one_speed_known`, so the control reopened on Tempo says so at once.
+pub fn speed_set_verdict(rows: &[SpeedRow]) -> Option<SpeedSetVerdict> {
+    if rows.iter().any(|row| own_quote(row).is_none()) {
+        return None;
+    }
+    Some(if one_speed(&own_evidence(rows), &OFFERED_TIERS) {
+        SpeedSetVerdict::One
+    } else {
+        SpeedSetVerdict::Several
+    })
+}
+
+/// The tiers a person may be offered, fastest first — the picker's order.
+/// The same list `fee_tier_pref` validates a stored preference against.
+pub const OFFERED_TIERS: [FeeTier; 3] = super::fee_tier_pref::OFFERED;
+
+/// A quote's gas price as a range: `None` without a parsable bid; the top
+/// only when it parses and is not below the bid.
+pub fn gas_price_range_of(quote: &SpeedQuote) -> Option<GasPriceRange> {
+    let low = parse_wei(quote.effective_gas_price.as_deref())?;
+    let high = parse_wei(quote.max_gas_price.as_deref()).filter(|high| *high >= low);
+    Some(GasPriceRange { low, high })
+}
+
+/// The folded speed control, decided (spec 068). `rows` in the order the
+/// picker draws them ([`OFFERED_TIERS`]). `free` is the shell's "running
+/// upgraded" flag (the tier in force was taken because it is free, not
+/// picked); `one_speed_known` its memory of [`speed_set_verdict`] for this
+/// chain.
+pub fn speed_picker(
+    rows: &[SpeedRow],
+    in_force: FeeTier,
+    free: bool,
+    one_speed_known: bool,
+) -> SpeedPickerView {
+    // Nothing is drawn until every row has answered: tiers land one at a time,
+    // and formatted as they came the first "270 gwei" would become "270.2
+    // gwei" when a neighbour arrived. A row still holding its OWN settled
+    // figure through a refresh is not waiting.
+    let waiting = rows
+        .iter()
+        .any(|row| own_quote(row).is_none() && (row.busy || row.quote.is_some()));
+    let figures = if waiting {
+        GasPriceFigures {
+            unit: GasPriceUnit::Wei,
+            figures: vec![None; rows.len()],
+        }
+    } else {
+        let ranges: Vec<Option<GasPriceRange>> = rows
+            .iter()
+            .map(|row| own_quote(row).and_then(gas_price_range_of))
+            .collect();
+        gas_price_figures(&ranges)
+    };
+    // Held through a re-measure like the gas prices are, so the statement does
+    // not blink back into three rows on every refresh; the chain's last
+    // verdict stands in until the fresh numbers decide again.
+    let single = if waiting {
+        one_speed_known
+    } else {
+        one_speed(&own_evidence(rows), &OFFERED_TIERS)
+    };
+    let gas_price_line = waiting || figures.figures.iter().any(Option::is_some);
+    SpeedPickerView {
+        rows: rows
+            .iter()
+            .zip(figures.figures)
+            .map(|(row, gas_price)| {
+                let priced = own_quote(row).is_some();
+                SpeedPickerRow {
+                    tier: row.tier,
+                    priced,
+                    measuring: row.busy || (!priced && row.quote.is_some()),
+                    selected: row.tier == in_force,
+                    gas_price,
+                }
+            })
+            .collect(),
+        gas_price_unit: figures.unit,
+        single,
+        free_note: free && !single,
+        gas_price_line,
+    }
+}
+
+/// 0.001 gwei: a set whose largest price reaches it reads in gwei.
+const GWEI_BRANCH_FLOOR_WEI: u128 = 1_000_000;
+const WEI_PER_GWEI: u128 = 1_000_000_000;
+/// Three significant digits read well; five is the give-up point — two tiers
+/// that still print alike there differ by under one part in ten thousand.
+const GAS_PRICE_MIN_SIGNIFICANT: usize = 3;
+const GAS_PRICE_MAX_SIGNIFICANT: usize = 5;
+
+/// Round half up to `significant` digits — to NEAREST, since nobody is billed
+/// this rate and truncating would understate every figure.
+fn round_to_significant(wei: U256, significant: usize) -> U256 {
+    let digits = wei.to_string().len();
+    if digits <= significant {
+        return wei;
+    }
+    let exponent = u64::try_from(digits - significant).unwrap_or(u64::MAX);
+    let scale = U256::from(10u8).pow(U256::from(exponent));
+    let quotient = wei / scale;
+    let remainder = wei % scale;
+    // `remainder < scale ≤ 10^75`, so doubling it cannot overflow 256 bits.
+    let rounded = if remainder * U256::from(2u8) >= scale {
+        quotient + U256::from(1u8)
+    } else {
+        quotient
+    };
+    rounded * scale
+}
+
+/// Wei as canonical gwei digits at `significant` digits (no unit).
+fn gwei_digits(wei: U256, significant: usize) -> String {
+    let value = round_to_significant(wei, significant);
+    let whole = value / U256::from(WEI_PER_GWEI);
+    let frac = format!("{:0>9}", (value % U256::from(WEI_PER_GWEI)).to_string());
+    let frac = frac.trim_end_matches('0');
+    if frac.is_empty() {
+        whole.to_string()
+    } else {
+        format!("{whole}.{frac}")
+    }
+}
+
+/// The fewest digits that keep every DISTINCT price distinct. Equal prices
+/// print equally, which is the truth on a tipless chain, not a collision.
+fn significant_digits(values: &[U256]) -> usize {
+    for significant in GAS_PRICE_MIN_SIGNIFICANT..GAS_PRICE_MAX_SIGNIFICANT {
+        let mut seen: Vec<(String, U256)> = Vec::with_capacity(values.len());
+        let mut collided = false;
+        for wei in values {
+            let text = gwei_digits(*wei, significant);
+            if seen.iter().any(|(t, other)| *t == text && other != wei) {
+                collided = true;
+                break;
+            }
+            seen.push((text, *wei));
+        }
+        if !collided {
+            return significant;
+        }
+    }
+    GAS_PRICE_MAX_SIGNIFICANT
+}
+
+/// A set of gas-price ranges as figures, in the order given (invariant ⓔ).
+///
+/// `None` in, `None` out: a chain that reports no priority fee (Tempo) has no
+/// honest number, and a fabricated `0` would claim the tiers are equal. The
+/// unit is chosen by the set's LARGEST number — the top of the dearest range —
+/// so rows never split across units, and the precision is voted over every
+/// end of every range. A range whose ends print alike even at five digits is
+/// ONE price and votes as one, so a Linea-shaped cap a few wei over its bid
+/// cannot widen the whole set. In wei every integer prints exactly, so only
+/// truly equal ends are one price there.
+pub fn gas_price_figures(ranges: &[Option<GasPriceRange>]) -> GasPriceFigures {
+    let floor = U256::from(GWEI_BRANCH_FLOOR_WEI);
+    let in_gwei = ranges
+        .iter()
+        .flatten()
+        .any(|range| range.low >= floor || range.high.is_some_and(|high| high >= floor));
+    let top_of = |range: &GasPriceRange| -> Option<U256> {
+        let high = range.high?;
+        if in_gwei
+            && gwei_digits(high, GAS_PRICE_MAX_SIGNIFICANT)
+                == gwei_digits(range.low, GAS_PRICE_MAX_SIGNIFICANT)
+        {
+            return None;
+        }
+        Some(high)
+    };
+    let known: Vec<U256> = ranges
+        .iter()
+        .flatten()
+        .flat_map(|range| std::iter::once(range.low).chain(top_of(range)))
+        .collect();
+    let significant = if in_gwei {
+        significant_digits(&known)
+    } else {
+        0
+    };
+    let digits = |wei: U256| {
+        if in_gwei {
+            gwei_digits(wei, significant)
+        } else {
+            wei.to_string()
+        }
+    };
+    GasPriceFigures {
+        unit: if in_gwei {
+            GasPriceUnit::Gwei
+        } else {
+            GasPriceUnit::Wei
+        },
+        figures: ranges
+            .iter()
+            .map(|range| {
+                let range = range.as_ref()?;
+                let low = digits(range.low);
+                // Equal ends are one figure — `x ~ x` would announce a spread
+                // that is not there.
+                let high = top_of(range).map(digits).filter(|high| *high != low);
+                Some(GasPriceFigure { low, high })
+            })
+            .collect(),
+    }
+}
+
+/// Issue 212: may this gas-signal read be kept for [`FEE_SIGNALS_CACHE_TTL_MS`]?
+/// Only a REAL, COMPLETE measurement: a positive `eth_gasPrice` (without it the
+/// core falls to its 5 gwei default, 100× on BSC), a block that ANSWERED (one
+/// without `baseFeePerGas` is a real pre-London reading; one that did not
+/// answer is a failed leg), and — where the tip is asked for — a tip (it is
+/// nearly the whole price on Gnosis; holding a tipless read under-prices ~40×).
+/// One hiccup must not own the next 15 seconds.
+pub fn gas_signals_cacheable(
+    eth_gas_price: Option<&str>,
+    block_answered: bool,
+    want_tip: bool,
+    priority_fee: Option<&str>,
+) -> bool {
+    parse_wei(eth_gas_price).is_some_and(|price| !price.is_zero())
+        && block_answered
+        && (!want_tip || priority_fee.is_some())
+}
+
+/// Issue 212: may the relay's gas quote be kept? Never a zero one — that is a
+/// degenerate quote `accept_bundler_quote` rejects, and pinning it would hold
+/// the fallback for 15 s. (A missing quote is never offered to this at all.)
+pub fn bundler_quote_cacheable(max_fee_per_gas: &str) -> bool {
+    parse_wei(Some(max_fee_per_gas)).is_some_and(|fee| !fee.is_zero())
+}
+
+/// One question to the speed rules, as JSON — the ONE door every shell uses
+/// (`feeSpeedRule` in wasm, `fee_speed_rule` over uniffi), so the web and the
+/// natives call the same functions with the same shapes. The answer is the
+/// JSON of the named function's return value. Desktop links the crate and
+/// calls the functions directly.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "rule", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeeSpeedRule {
+    /// → `bool` ([`speed_indistinguishable`])
+    Indistinguishable { rows: Vec<SpeedEvidence> },
+    /// → `bool` ([`one_speed`])
+    OneSpeed {
+        rows: Vec<SpeedEvidence>,
+        offered: Vec<FeeTier>,
+    },
+    /// → `bool` ([`speed_is_free`])
+    SpeedIsFree {
+        preferred: FeeTier,
+        rows: Vec<SpeedEvidence>,
+    },
+    /// → `FeeTier` ([`tier_in_force`])
+    TierInForce {
+        picked: Option<FeeTier>,
+        preferred: FeeTier,
+        free_fast: bool,
+    },
+    /// → `FeeTier | null` ([`free_speed_partner`])
+    FreeSpeedPartner {
+        picked: Option<FeeTier>,
+        preferred: FeeTier,
+        in_force: FeeTier,
+        on_form: bool,
+    },
+    /// → `FeeTier | null` ([`pick_in_force`])
+    PickInForce {
+        picked: Option<FeeTier>,
+        partner: Option<FeeTier>,
+        tapped: FeeTier,
+    },
+    /// → `FeeTier[]` ([`preview_tiers`])
+    PreviewTiers {
+        open: bool,
+        offered: Vec<FeeTier>,
+        in_force: FeeTier,
+        partner: Option<FeeTier>,
+    },
+    /// → `bool | null` ([`free_speed_swap`]). The quotes are boxed only to
+    /// keep this enum small; on the wire they are plain `SpeedQuote`s.
+    FreeSpeedSwap {
+        preferred: FeeTier,
+        in_force: FeeTier,
+        partner: Option<FeeTier>,
+        mine: Option<Box<SpeedQuote>>,
+        theirs: Option<Box<SpeedQuote>>,
+    },
+    /// → `SpeedSetVerdict | null` ([`speed_set_verdict`])
+    SpeedSetVerdict { rows: Vec<SpeedRow> },
+    /// → [`SpeedPickerView`] ([`speed_picker`])
+    SpeedPicker {
+        rows: Vec<SpeedRow>,
+        in_force: FeeTier,
+        free: bool,
+        one_speed_known: bool,
+    },
+    /// → [`GasPriceFigures`] ([`gas_price_figures`]); ends are decimal wei.
+    GasPriceFigures {
+        ranges: Vec<Option<GasPriceRangeWire>>,
+    },
+    /// → `bool` ([`gas_signals_cacheable`])
+    GasSignalsCacheable {
+        eth_gas_price: Option<String>,
+        block_answered: bool,
+        want_tip: bool,
+        priority_fee: Option<String>,
+    },
+    /// → `bool` ([`bundler_quote_cacheable`])
+    BundlerQuoteCacheable { max_fee_per_gas: String },
+    /// → `number` ([`FEE_SIGNALS_CACHE_TTL_MS`])
+    FeeSignalsCacheTtlMs,
+    /// → `FeeTier[]` ([`OFFERED_TIERS`])
+    OfferedTiers,
+}
+
+fn wire_range(range: &GasPriceRangeWire) -> Result<GasPriceRange, String> {
+    let wei = |text: &str| parse_wei(Some(text)).ok_or_else(|| format!("not decimal wei: {text}"));
+    Ok(GasPriceRange {
+        low: wei(&range.low)?,
+        high: range.high.as_deref().map(wei).transpose()?,
+    })
+}
+
+/// Answer one [`FeeSpeedRule`] as the JSON of the function it names. `Err`
+/// only for a gas-price end that is not decimal wei.
+pub fn answer_speed_rule(rule: &FeeSpeedRule) -> Result<serde_json::Value, String> {
+    use serde_json::to_value;
+    let value = match rule {
+        FeeSpeedRule::Indistinguishable { rows } => to_value(speed_indistinguishable(rows)),
+        FeeSpeedRule::OneSpeed { rows, offered } => to_value(one_speed(rows, offered)),
+        FeeSpeedRule::SpeedIsFree { preferred, rows } => to_value(speed_is_free(*preferred, rows)),
+        FeeSpeedRule::TierInForce {
+            picked,
+            preferred,
+            free_fast,
+        } => to_value(tier_in_force(*picked, *preferred, *free_fast)),
+        FeeSpeedRule::FreeSpeedPartner {
+            picked,
+            preferred,
+            in_force,
+            on_form,
+        } => to_value(free_speed_partner(*picked, *preferred, *in_force, *on_form)),
+        FeeSpeedRule::PickInForce {
+            picked,
+            partner,
+            tapped,
+        } => to_value(pick_in_force(*picked, *partner, *tapped)),
+        FeeSpeedRule::PreviewTiers {
+            open,
+            offered,
+            in_force,
+            partner,
+        } => to_value(preview_tiers(*open, offered, *in_force, *partner)),
+        FeeSpeedRule::FreeSpeedSwap {
+            preferred,
+            in_force,
+            partner,
+            mine,
+            theirs,
+        } => to_value(free_speed_swap(
+            *preferred,
+            *in_force,
+            *partner,
+            mine.as_deref(),
+            theirs.as_deref(),
+        )),
+        FeeSpeedRule::SpeedSetVerdict { rows } => to_value(speed_set_verdict(rows)),
+        FeeSpeedRule::SpeedPicker {
+            rows,
+            in_force,
+            free,
+            one_speed_known,
+        } => to_value(speed_picker(rows, *in_force, *free, *one_speed_known)),
+        FeeSpeedRule::GasPriceFigures { ranges } => {
+            let ranges = ranges
+                .iter()
+                .map(|range| range.as_ref().map(wire_range).transpose())
+                .collect::<Result<Vec<_>, _>>()?;
+            to_value(gas_price_figures(&ranges))
+        }
+        FeeSpeedRule::GasSignalsCacheable {
+            eth_gas_price,
+            block_answered,
+            want_tip,
+            priority_fee,
+        } => to_value(gas_signals_cacheable(
+            eth_gas_price.as_deref(),
+            *block_answered,
+            *want_tip,
+            priority_fee.as_deref(),
+        )),
+        FeeSpeedRule::BundlerQuoteCacheable { max_fee_per_gas } => {
+            to_value(bundler_quote_cacheable(max_fee_per_gas))
+        }
+        FeeSpeedRule::FeeSignalsCacheTtlMs => to_value(FEE_SIGNALS_CACHE_TTL_MS),
+        FeeSpeedRule::OfferedTiers => to_value(OFFERED_TIERS),
+    };
+    value.map_err(|error| error.to_string())
+}
+
+/// [`answer_speed_rule`] over JSON text — the wasm and uniffi doors.
+pub fn speed_rule_json(request: &str) -> Result<String, String> {
+    let rule: FeeSpeedRule = serde_json::from_str(request).map_err(|error| error.to_string())?;
+    let answer = answer_speed_rule(&rule)?;
+    serde_json::to_string(&answer).map_err(|error| error.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 

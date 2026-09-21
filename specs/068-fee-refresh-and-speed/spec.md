@@ -204,3 +204,53 @@ Relay first (it is additive and invisible until a client asks), then web, then
 the three native shells. Do not ship a client that names a tier before the relay
 that honours it — a named tier would be silently ignored, which is the class of
 "the screen says one thing, the chain does another" this whole batch is about.
+
+## Where the rules live (owner ruling, 2026-09-21)
+
+Web shipped 068 first, and part of its rules were web TypeScript. They are now
+the core's, in `rust/crates/vela-core/src/app/fee_policy.rs` ("Speed choice"),
+pinned by `tests/app_fee_policy.rs` (`mod speed_choice`, the web's own vectors).
+Every shell reaches them through ONE JSON door — `feeSpeedRule` (wasm),
+`fee_speed_rule` (uniffi, `None` = request did not parse); desktop calls the
+Rust functions directly. The request is a `FeeSpeedRule` (`{"rule": …}`), the
+answer the JSON of the function it names.
+
+What a native shell does to match the web:
+
+1. **One `fee_policy` session per tier shown.** The tier in force is the main
+   session (`QuoteRequested { tier, … }`); every tier in `preview_tiers(open,
+   OFFERED_TIERS, in_force, partner)` gets its own session priced for the SAME
+   request. Re-price the previews whenever the main session is asked again or
+   refreshed. Never scale one tier's figure into another's.
+2. **Tier in force** = `tier_in_force(picked, preferred, free_fast)`; `preferred`
+   is `fee_tier_pref`'s view. **Free partner** = `free_speed_partner(picked,
+   preferred, in_force, on_form)`. After each settle, `free_speed_swap(preferred,
+   in_force, partner, mine, theirs)` → `Some(flag)` means PROMOTE the partner's
+   session into the main one (no re-quote) and set `free_fast = flag`. A tap on
+   the tier already in force sets `picked = pick_in_force(picked, partner, tapped)`;
+   any other tap promotes that tier's preview and sets `picked`. The pick is
+   one-shot and never written to `fee_tier_pref`.
+3. **Draw the control from `speed_picker(rows, in_force, free, one_speed_known)`**
+   (`rows` = `SpeedRow { tier, quote: that session's fee, busy }`, in
+   `OFFERED_TIERS` order). Per row: `priced` → draw that session's fee;
+   else `measuring` → "…", else "—"; `gas_price` → `low ~ high unit` or
+   `low unit`, digits localized with the number preset, unit untranslated.
+   `single` → `send.feeSpeedSingle` instead of rows; `free_note` →
+   `send.feeSpeedFree`; `gas_price_line` keeps the `send.gasPriceLabel` line.
+   Remember `speed_set_verdict(rows)` per chain (`One` add, `Several` forget)
+   and pass it back as `one_speed_known`. Wording: `send.gasTier.{fast,standard,
+   slow}`, `send.gasTierHint{Fast,Standard,Slow}`, `send.feeSpeedLabel`,
+   `send.feeSpeedOnce`, `send.feeRefresh`, `send.feeStale`.
+4. **The 15 s fee-signal cache (issue 212) is a SHELL cache with core rules.**
+   It is shared by every fee session on the page (that is what keeps three
+   previews from costing three chain reads), so it cannot live in one machine.
+   Contract: key the chain's gas signals (`eth_gasPrice` ∥ latest block's
+   `baseFeePerGas` ∥ `eth_maxPriorityFeePerGas`) by chain + whether the tip was
+   asked, and the relay's `pimlico_getUserOperationGasPrice` row by chain +
+   tier; hold each for `FEE_SIGNALS_CACHE_TTL_MS` (15 000); keep a read only
+   when `gas_signals_cacheable(eth_gas_price, block_answered, want_tip,
+   priority_fee)` / `bundler_quote_cacheable(max_fee_per_gas)` say so; coalesce
+   concurrent asks; drop the chain's entries — and let no read already in
+   flight land (an epoch per chain) — on the explicit refresh, when a quote
+   settles `failed`, and at the start of every submit. A fault seam that forges
+   a zero quote sits ahead of the cache and never writes it.

@@ -3105,3 +3105,966 @@ fn a_locally_estimated_fee_publishes_no_range() {
     assert_eq!(fee.effective_gas_price, None);
     assert_eq!(fee.max_gas_price, None);
 }
+
+// ---------------------------------------------------------------------------
+// Speed choice — spec 068, issues 212 / 681 / 684 / 685 / 686
+// ---------------------------------------------------------------------------
+//
+// These rules were written in the web shell first and moved here (founder
+// ruling 2026-09-21). The web's unit tests were the oracle, so the vectors are
+// theirs, same inputs, same outputs:
+//
+// - `app-web/vela-wallet/src/lib/flows/speed-choice.test.ts` (686 A/B)
+// - `app-web/vela-wallet/src/lib/flows/gas-price.test.ts` (684/685 figures;
+//   the web draws `comma_dot` grouping on top — the core's digits are
+//   ungrouped, so `3,000 wei` is `3000` here)
+// - `app-web/vela-wallet/src/lib/flows/core/free-speed.svelte.test.ts` and
+//   the picker cases of `live-send.test.ts`
+// - `app-web/vela-wallet/src/lib/services/safe-transaction-fee-signals.test.ts`
+//   (what the 15 s cache may keep)
+//
+// The web tests still run, unchanged, over the core through `feeSpeedRule`.
+
+mod speed_choice {
+    use vela_core::app::fee_policy::{
+        answer_speed_rule, bundler_quote_cacheable, free_speed_partner, free_speed_swap,
+        gas_price_figures, gas_price_range_of, gas_signals_cacheable, one_speed, pick_in_force,
+        preview_tiers, speed_indistinguishable, speed_is_free, speed_picker, speed_rule_json,
+        speed_set_verdict, tier_in_force, FeeAssetView, FeeSpeedRule, FeeTier, GasPriceFigures,
+        GasPriceRange, GasPriceUnit, SpeedEvidence, SpeedQuote, SpeedRow, SpeedSetVerdict,
+        FASTEST_TIER, FEE_SIGNALS_CACHE_TTL_MS, OFFERED_TIERS,
+    };
+    use vela_core::app::fee_tier_pref::OFFERED;
+
+    use alloy_primitives::U256;
+    use FeeTier::{Fast, Slow, Standard};
+
+    fn usdc(amount: &str) -> FeeAssetView {
+        FeeAssetView::Erc20 {
+            token: "0xdead".to_owned(),
+            decimals: 6,
+            amount: amount.to_owned(),
+            symbol: Some("USDC".to_owned()),
+        }
+    }
+
+    /// `speed-choice.test.ts`'s `BASE`: chain 10, 0 wei, 0.01 USDC.
+    fn quote(tier: FeeTier) -> SpeedQuote {
+        SpeedQuote {
+            tier,
+            chain_id: 10,
+            total_wei: "0".to_owned(),
+            fee_asset: usdc("10000"),
+            effective_gas_price: None,
+            max_gas_price: None,
+        }
+    }
+
+    fn ranged(tier: FeeTier, low: &str, high: &str) -> SpeedQuote {
+        SpeedQuote {
+            effective_gas_price: Some(low.to_owned()),
+            max_gas_price: Some(high.to_owned()),
+            ..quote(tier)
+        }
+    }
+
+    fn ev(quote: SpeedQuote) -> SpeedEvidence {
+        SpeedEvidence {
+            tier: quote.tier,
+            quote: Some(quote),
+        }
+    }
+
+    fn missing(tier: FeeTier) -> SpeedEvidence {
+        SpeedEvidence { tier, quote: None }
+    }
+
+    /// Tempo: the relay ignores the tier — every speed the same, none with a gas price.
+    fn tempo() -> Vec<SpeedEvidence> {
+        OFFERED_TIERS.iter().map(|tier| ev(quote(*tier))).collect()
+    }
+
+    /// Optimism's real tiers, all clamped to the $0.01 floor — each with its own range.
+    fn floor_clamped() -> Vec<SpeedEvidence> {
+        vec![
+            ev(ranged(Fast, "3244", "9000")),
+            ev(ranged(Standard, "2377", "6000")),
+            ev(ranged(Slow, "1937", "4500")),
+        ]
+    }
+
+    /// An ordinary chain: the faster speed is dearer.
+    fn priced() -> Vec<SpeedEvidence> {
+        vec![
+            ev(SpeedQuote {
+                total_wei: "30".to_owned(),
+                ..ranged(Fast, "3244", "9000")
+            }),
+            ev(SpeedQuote {
+                total_wei: "20".to_owned(),
+                ..ranged(Standard, "2377", "6000")
+            }),
+            ev(SpeedQuote {
+                fee_asset: usdc("9000"),
+                ..ranged(Slow, "1937", "4500")
+            }),
+        ]
+    }
+
+    #[test]
+    fn the_offered_tiers_are_fee_tier_prefs_and_rapid_is_never_one() {
+        assert_eq!(OFFERED_TIERS, OFFERED);
+        assert_eq!(OFFERED_TIERS, [Fast, Standard, Slow]);
+        assert_eq!(FASTEST_TIER, Fast);
+        assert!(!OFFERED_TIERS.contains(&FeeTier::Rapid));
+    }
+
+    // --- B: a network with one speed says so (issue 686) -------------------
+
+    #[test]
+    fn one_speed_fires_on_tempos_shape() {
+        assert!(one_speed(&tempo(), &OFFERED_TIERS));
+    }
+
+    #[test]
+    fn one_speed_never_fires_merely_because_the_fees_are_equal() {
+        assert!(!one_speed(&floor_clamped(), &OFFERED_TIERS));
+    }
+
+    #[test]
+    fn one_speed_never_fires_where_the_fees_differ() {
+        assert!(!one_speed(&priced(), &OFFERED_TIERS));
+        let t = tempo();
+        let slow = ev(SpeedQuote {
+            total_wei: "1".to_owned(),
+            ..quote(Slow)
+        });
+        assert!(!one_speed(
+            &[t[0].clone(), t[1].clone(), slow],
+            &OFFERED_TIERS
+        ));
+    }
+
+    #[test]
+    fn one_speed_waits_for_every_speed() {
+        let t = tempo();
+        assert!(!one_speed(
+            &[t[0].clone(), t[1].clone(), missing(Slow)],
+            &OFFERED_TIERS
+        ));
+        assert!(!one_speed(&[t[0].clone(), t[1].clone()], &OFFERED_TIERS));
+    }
+
+    #[test]
+    fn indistinguishable_reads_the_charge_in_the_coin_not_just_the_wei() {
+        let coin = ev(SpeedQuote {
+            fee_asset: usdc("10001"),
+            ..quote(Slow)
+        });
+        assert!(!speed_indistinguishable(&[tempo()[0].clone(), coin]));
+        // Fewer than two rows is nothing to compare.
+        assert!(!speed_indistinguishable(&[tempo()[0].clone()]));
+    }
+
+    // --- A: when the fastest speed costs no more, take it (issue 686) -------
+
+    #[test]
+    fn free_for_a_slower_default_on_a_floor_clamped_chain() {
+        assert!(speed_is_free(Slow, &floor_clamped()));
+        assert!(speed_is_free(Standard, &floor_clamped()));
+    }
+
+    #[test]
+    fn nothing_to_upgrade_for_somebody_already_on_the_fastest() {
+        assert!(!speed_is_free(Fast, &floor_clamped()));
+    }
+
+    #[test]
+    fn not_free_when_the_fastest_is_dearer() {
+        assert!(!speed_is_free(Standard, &priced()));
+        assert!(!speed_is_free(Slow, &priced()));
+        let coin_slow = SpeedQuote {
+            effective_gas_price: Some("1937".to_owned()),
+            total_wei: "30".to_owned(),
+            fee_asset: usdc("9000"),
+            ..ranged(Slow, "1937", "4500")
+        };
+        let fast = priced()[0].clone();
+        assert!(!speed_is_free(Slow, &[fast.clone(), ev(coin_slow.clone())]));
+        let same_coin = SpeedQuote {
+            fee_asset: usdc("10000"),
+            ..coin_slow
+        };
+        assert!(speed_is_free(Slow, &[fast, ev(same_coin)]));
+    }
+
+    #[test]
+    fn free_holds_until_both_quotes_have_settled() {
+        let f = floor_clamped();
+        assert!(!speed_is_free(Slow, &[f[0].clone(), missing(Slow)]));
+        assert!(!speed_is_free(Slow, &[missing(Fast), f[2].clone()]));
+        assert!(!speed_is_free(Slow, &[f[2].clone()]));
+    }
+
+    #[test]
+    fn free_compares_exact_amounts_never_what_they_print_as() {
+        let fast = SpeedQuote {
+            effective_gas_price: Some("3244".to_owned()),
+            total_wei: "1000000000000000001".to_owned(),
+            ..quote(Fast)
+        };
+        let slow = SpeedQuote {
+            effective_gas_price: Some("1937".to_owned()),
+            total_wei: "1000000000000000000".to_owned(),
+            ..quote(Slow)
+        };
+        assert!(!speed_is_free(Slow, &[ev(fast), ev(slow)]));
+    }
+
+    // --- precedence: B before A (issue 686) ---------------------------------
+
+    #[test]
+    fn no_upgrade_on_a_network_whose_speeds_nothing_tells_apart() {
+        let t = tempo();
+        assert!(!speed_is_free(Slow, &t));
+        assert!(!speed_is_free(Slow, &[t[0].clone(), t[2].clone()]));
+    }
+
+    #[test]
+    fn an_upgrade_when_the_fees_match_but_the_ranges_differ() {
+        assert!(!one_speed(&floor_clamped(), &OFFERED_TIERS));
+        assert!(speed_is_free(Slow, &floor_clamped()));
+    }
+
+    // --- the route's free-speed steps (free-speed.svelte.test.ts) -----------
+
+    #[test]
+    fn the_tier_in_force_is_the_pick_then_a_free_fast_then_the_default() {
+        assert_eq!(tier_in_force(Some(Slow), Standard, true), Slow);
+        assert_eq!(tier_in_force(None, Slow, true), Fast);
+        assert_eq!(tier_in_force(None, Slow, false), Slow);
+        // A Fast default is never "upgraded".
+        assert_eq!(tier_in_force(None, Fast, true), Fast);
+    }
+
+    #[test]
+    fn a_fast_default_asks_nothing_extra() {
+        assert_eq!(free_speed_partner(None, Fast, Fast, true), None);
+    }
+
+    #[test]
+    fn the_partner_is_fast_at_the_default_and_the_default_when_upgraded() {
+        assert_eq!(free_speed_partner(None, Slow, Slow, true), Some(Fast));
+        assert_eq!(
+            free_speed_partner(None, Standard, Fast, true),
+            Some(Standard)
+        );
+    }
+
+    #[test]
+    fn a_pick_or_leaving_the_form_asks_nothing() {
+        assert_eq!(free_speed_partner(Some(Slow), Standard, Slow, true), None);
+        assert_eq!(free_speed_partner(None, Slow, Slow, false), None);
+    }
+
+    #[test]
+    fn a_tap_on_the_tier_in_force_is_a_decision_only_while_an_upgrade_is_in_question() {
+        // Slow tapped while Fast was still measuring: recorded.
+        assert_eq!(pick_in_force(None, Some(Fast), Slow), Some(Slow));
+        // The ticked Fast of a Fast default: no pick at all.
+        assert_eq!(pick_in_force(None, None, Fast), None);
+        // A pick already made stands.
+        assert_eq!(
+            pick_in_force(Some(Standard), Some(Fast), Slow),
+            Some(Standard)
+        );
+    }
+
+    #[test]
+    fn previews_every_other_tier_open_and_only_the_partner_folded() {
+        assert_eq!(
+            preview_tiers(true, &OFFERED_TIERS, Fast, None),
+            vec![Standard, Slow]
+        );
+        assert_eq!(
+            preview_tiers(false, &OFFERED_TIERS, Slow, Some(Fast)),
+            vec![Fast]
+        );
+        assert!(preview_tiers(false, &OFFERED_TIERS, Fast, None).is_empty());
+    }
+
+    fn settled(tier: FeeTier, total_wei: &str, ranged_quote: bool) -> SpeedQuote {
+        let (low, high) = match tier {
+            Fast => ("3244", "9000"),
+            Standard => ("2377", "6000"),
+            _ => ("1937", "4500"),
+        };
+        SpeedQuote {
+            tier,
+            chain_id: 10,
+            total_wei: total_wei.to_owned(),
+            fee_asset: FeeAssetView::Native,
+            effective_gas_price: ranged_quote.then(|| low.to_owned()),
+            max_gas_price: ranged_quote.then(|| high.to_owned()),
+        }
+    }
+
+    #[test]
+    fn the_swap_takes_fast_when_it_costs_what_the_default_costs() {
+        let slow = settled(Slow, "10000", true);
+        let fast = settled(Fast, "10000", true);
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), Some(&slow), Some(&fast)),
+            Some(true)
+        );
+        // Already upgraded and still free: hold.
+        assert_eq!(
+            free_speed_swap(Slow, Fast, Some(Slow), Some(&fast), Some(&slow)),
+            None
+        );
+    }
+
+    #[test]
+    fn the_swap_keeps_the_default_when_fast_is_dearer_and_gives_it_back_when_fees_part() {
+        let slow = settled(Slow, "10000", true);
+        let dear = settled(Fast, "10001", true);
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), Some(&slow), Some(&dear)),
+            None
+        );
+        assert_eq!(
+            free_speed_swap(Slow, Fast, Some(Slow), Some(&dear), Some(&slow)),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn the_swap_does_not_upgrade_where_nothing_tells_the_speeds_apart() {
+        let slow = settled(Slow, "10000", false);
+        let fast = settled(Fast, "10000", false);
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), Some(&slow), Some(&fast)),
+            None
+        );
+    }
+
+    #[test]
+    fn the_swap_holds_while_measuring_and_on_another_tiers_figure() {
+        let slow = settled(Slow, "10000", true);
+        let fast = settled(Fast, "10000", true);
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), Some(&slow), None),
+            None
+        );
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), None, Some(&fast)),
+            None
+        );
+        assert_eq!(
+            free_speed_swap(Slow, Slow, None, Some(&slow), Some(&fast)),
+            None
+        );
+        // The session in force still holds the previous tier's quote.
+        assert_eq!(
+            free_speed_swap(Slow, Slow, Some(Fast), Some(&fast), Some(&fast)),
+            None
+        );
+    }
+
+    // --- the picker (live-send.test.ts, spec 068 + issues 681/684/686) ------
+
+    fn row(tier: FeeTier, quote: Option<SpeedQuote>, busy: bool) -> SpeedRow {
+        SpeedRow { tier, quote, busy }
+    }
+
+    fn polygon(tier: FeeTier, effective: &str) -> SpeedQuote {
+        SpeedQuote {
+            effective_gas_price: Some(effective.to_owned()),
+            max_gas_price: None,
+            fee_asset: FeeAssetView::Native,
+            total_wei: match tier {
+                Fast => "2100000000000000",
+                Standard => "1300000000000000",
+                _ => "1000000000000000",
+            }
+            .to_owned(),
+            ..quote(tier)
+        }
+    }
+
+    fn texts(view: &vela_core::app::fee_policy::SpeedPickerView) -> Vec<Option<String>> {
+        let unit = match view.gas_price_unit {
+            GasPriceUnit::Gwei => "gwei",
+            GasPriceUnit::Wei => "wei",
+        };
+        view.rows
+            .iter()
+            .map(|row| {
+                row.gas_price.as_ref().map(|f| match &f.high {
+                    Some(high) => format!("{} ~ {high} {unit}", f.low),
+                    None => format!("{} {unit}", f.low),
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_picker_states_each_tiers_own_gas_price() {
+        let view = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), false),
+                row(Standard, Some(polygon(Standard, "282464783233")), false),
+                row(Slow, Some(polygon(Slow, "270164477149")), false),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert_eq!(
+            texts(&view),
+            vec![
+                Some("300 gwei".to_owned()),
+                Some("282 gwei".to_owned()),
+                Some("270 gwei".to_owned())
+            ]
+        );
+        assert!(view.gas_price_line);
+        assert!(!view.single);
+        assert_eq!(
+            view.rows.iter().map(|r| r.selected).collect::<Vec<_>>(),
+            vec![true, false, false]
+        );
+        assert!(view.rows.iter().all(|r| r.priced && !r.measuring));
+    }
+
+    #[test]
+    fn the_picker_draws_nothing_where_there_is_no_honest_number() {
+        let none = |tier| SpeedQuote {
+            effective_gas_price: None,
+            ..polygon(tier, "1")
+        };
+        let view = speed_picker(
+            &[
+                row(Fast, Some(none(Fast)), false),
+                row(Standard, Some(none(Standard)), false),
+                row(Slow, Some(none(Slow)), false),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert_eq!(texts(&view), vec![None, None, None]);
+        assert!(!view.gas_price_line);
+    }
+
+    #[test]
+    fn the_picker_draws_the_set_once_every_row_has_answered() {
+        let partial = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), false),
+                row(Standard, Some(polygon(Standard, "270400000000")), false),
+                row(Slow, None, true),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert_eq!(texts(&partial), vec![None, None, None]);
+        assert!(partial.gas_price_line);
+        assert!(partial.rows[2].measuring && !partial.rows[2].priced);
+        let complete = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), false),
+                row(Standard, Some(polygon(Standard, "270400000000")), false),
+                row(Slow, Some(polygon(Slow, "270164477149")), false),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert_eq!(
+            texts(&complete),
+            vec![
+                Some("299.6 gwei".to_owned()),
+                Some("270.4 gwei".to_owned()),
+                Some("270.2 gwei".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn the_picker_keeps_the_gas_prices_through_a_refresh() {
+        let view = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), true),
+                row(Standard, Some(polygon(Standard, "282464783233")), false),
+                row(Slow, Some(polygon(Slow, "270164477149")), true),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert_eq!(
+            texts(&view),
+            vec![
+                Some("300 gwei".to_owned()),
+                Some("282 gwei".to_owned()),
+                Some("270 gwei".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn the_picker_never_draws_another_tiers_figure_under_this_tiers_name() {
+        let view = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), false),
+                row(Standard, Some(polygon(Standard, "282464783233")), false),
+                row(Slow, Some(polygon(Fast, "299589817385")), false),
+            ],
+            Slow,
+            false,
+            false,
+        );
+        assert_eq!(view.rows[2].gas_price, None);
+        // "…", not "—": a measurement of this tier is what is missing.
+        assert!(!view.rows[2].priced && view.rows[2].measuring);
+    }
+
+    #[test]
+    fn the_picker_says_dash_for_a_tier_with_nothing_to_be_had() {
+        let view = speed_picker(
+            &[
+                row(Fast, Some(polygon(Fast, "299589817385")), false),
+                row(Standard, Some(polygon(Standard, "282464783233")), false),
+                row(Slow, None, false),
+            ],
+            Fast,
+            false,
+            false,
+        );
+        assert!(!view.rows[2].priced && !view.rows[2].measuring);
+    }
+
+    #[test]
+    fn the_picker_collapses_into_one_speed_and_then_never_says_free() {
+        let tempo_rows: Vec<SpeedRow> = OFFERED_TIERS
+            .iter()
+            .map(|tier| row(*tier, Some(quote(*tier)), false))
+            .collect();
+        let view = speed_picker(&tempo_rows, Fast, true, false);
+        assert!(view.single);
+        assert!(!view.free_note);
+        assert_eq!(speed_set_verdict(&tempo_rows), Some(SpeedSetVerdict::One));
+    }
+
+    #[test]
+    fn the_picker_says_free_on_a_floor_clamped_upgrade() {
+        let rows: Vec<SpeedRow> = floor_clamped()
+            .into_iter()
+            .map(|e| row(e.tier, e.quote, false))
+            .collect();
+        let view = speed_picker(&rows, Fast, true, false);
+        assert!(!view.single);
+        assert!(view.free_note);
+        assert_eq!(speed_set_verdict(&rows), Some(SpeedSetVerdict::Several));
+    }
+
+    #[test]
+    fn the_picker_holds_a_known_one_speed_chain_while_it_re_measures() {
+        let rows = vec![
+            row(Fast, Some(quote(Fast)), false),
+            row(Standard, None, true),
+            row(Slow, None, true),
+        ];
+        assert!(speed_picker(&rows, Fast, false, true).single);
+        assert!(!speed_picker(&rows, Fast, false, false).single);
+        // …and a set still measuring is no verdict either way.
+        assert_eq!(speed_set_verdict(&rows), None);
+    }
+
+    // --- gas-price figures (gas-price.test.ts, issues 684/685) ---------------
+
+    fn wei(value: u128) -> U256 {
+        U256::from(value)
+    }
+
+    fn singles(values: &[Option<u128>]) -> Vec<Option<String>> {
+        let ranges: Vec<Option<GasPriceRange>> = values
+            .iter()
+            .map(|v| {
+                v.map(|low| GasPriceRange {
+                    low: wei(low),
+                    high: None,
+                })
+            })
+            .collect();
+        render(&gas_price_figures(&ranges))
+    }
+
+    fn ranges(values: &[Option<(u128, Option<u128>)>]) -> Vec<Option<String>> {
+        let ranges: Vec<Option<GasPriceRange>> = values
+            .iter()
+            .map(|v| {
+                v.map(|(low, high)| GasPriceRange {
+                    low: wei(low),
+                    high: high.map(wei),
+                })
+            })
+            .collect();
+        render(&gas_price_figures(&ranges))
+    }
+
+    fn render(figures: &GasPriceFigures) -> Vec<Option<String>> {
+        let unit = match figures.unit {
+            GasPriceUnit::Gwei => "gwei",
+            GasPriceUnit::Wei => "wei",
+        };
+        figures
+            .figures
+            .iter()
+            .map(|f| {
+                f.as_ref().map(|f| match &f.high {
+                    Some(high) => format!("{} ~ {high} {unit}", f.low),
+                    None => format!("{} {unit}", f.low),
+                })
+            })
+            .collect()
+    }
+
+    fn one(value: u128) -> String {
+        singles(&[Some(value)])[0].clone().expect("a figure")
+    }
+
+    fn s(texts: &[&str]) -> Vec<Option<String>> {
+        texts.iter().map(|t| Some((*t).to_owned())).collect()
+    }
+
+    #[test]
+    fn gas_price_unit_is_chosen_by_the_number() {
+        assert_eq!(one(300_000_000_000), "300 gwei");
+        assert_eq!(one(25_000_000_000), "25 gwei");
+        assert_eq!(one(50_000_000), "0.05 gwei");
+        assert_eq!(one(5_000_000), "0.005 gwei");
+        assert_eq!(one(3_000), "3000 wei");
+        assert_eq!(one(10), "10 wei");
+        assert_eq!(one(999_999), "999999 wei");
+        assert_eq!(one(1_000_000), "0.001 gwei");
+        assert_eq!(one(1_000_001), "0.001 gwei");
+        assert_eq!(one(0), "0 wei");
+        assert_eq!(one(1), "1 wei");
+    }
+
+    #[test]
+    fn gas_price_has_nothing_to_say_without_an_honest_number() {
+        assert_eq!(singles(&[None]), vec![None]);
+        assert_eq!(
+            singles(&[None, Some(10), None]),
+            vec![None, Some("10 wei".to_owned()), None]
+        );
+    }
+
+    #[test]
+    fn gas_price_precision_is_decided_over_the_set() {
+        let polygon = [
+            Some(270_164_477_149),
+            Some(282_464_783_233),
+            Some(299_589_817_385),
+        ];
+        assert_eq!(singles(&polygon), s(&["270 gwei", "282 gwei", "300 gwei"]));
+        assert_eq!(
+            singles(&[Some(270_100_000_000), Some(270_400_000_000)]),
+            s(&["270.1 gwei", "270.4 gwei"])
+        );
+        assert_eq!(
+            singles(&[
+                Some(270_100_000_000),
+                Some(270_400_000_000),
+                Some(299_000_000_000)
+            ]),
+            s(&["270.1 gwei", "270.4 gwei", "299 gwei"])
+        );
+        assert_eq!(
+            singles(&[Some(5_000_000), Some(5_000_000), Some(5_000_000)]),
+            s(&["0.005 gwei", "0.005 gwei", "0.005 gwei"])
+        );
+        assert_eq!(
+            singles(&[Some(1_937), Some(2_377), Some(3_244)]),
+            s(&["1937 wei", "2377 wei", "3244 wei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_puts_every_tier_in_one_unit() {
+        assert_eq!(
+            singles(&[Some(1_200_000), Some(750_000), Some(600_000)]),
+            s(&["0.0012 gwei", "0.00075 gwei", "0.0006 gwei"])
+        );
+        assert_eq!(
+            singles(&[Some(999_999), Some(1_000_000), Some(1_000_001)]),
+            s(&["0.001 gwei", "0.001 gwei", "0.001 gwei"])
+        );
+        assert_eq!(
+            singles(&[Some(999_999), Some(875_000), Some(800_000)]),
+            s(&["999999 wei", "875000 wei", "800000 wei"])
+        );
+        assert_eq!(
+            singles(&[None, Some(1_200_000), Some(750_000)]),
+            vec![
+                None,
+                Some("0.0012 gwei".to_owned()),
+                Some("0.00075 gwei".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn gas_price_never_grows_a_long_tail() {
+        assert_eq!(
+            singles(&[Some(50_000_100), Some(50_000_000), Some(50_000_000)]),
+            s(&["0.05 gwei", "0.05 gwei", "0.05 gwei"])
+        );
+        assert_eq!(
+            singles(&[Some(270_110_000_000), Some(270_140_000_000)]),
+            s(&["270.11 gwei", "270.14 gwei"])
+        );
+        assert_eq!(
+            singles(&[
+                Some(20_200_000_000),
+                Some(20_125_000_000),
+                Some(20_100_000_000)
+            ]),
+            s(&["20.2 gwei", "20.13 gwei", "20.1 gwei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_rounds_to_nearest() {
+        assert_eq!(one(299_589_817_385), "300 gwei");
+        assert_eq!(one(999_999_999), "1 gwei");
+    }
+
+    #[test]
+    fn gas_price_range_makes_the_owners_l2_tiers_differ_like_their_fees() {
+        assert_eq!(
+            ranges(&[
+                Some((20_210_000, Some(60_410_000))),
+                Some((20_130_000, Some(40_230_000))),
+                Some((20_110_000, Some(30_160_000))),
+            ]),
+            s(&[
+                "0.02021 ~ 0.06041 gwei",
+                "0.02013 ~ 0.04023 gwei",
+                "0.02011 ~ 0.03016 gwei"
+            ])
+        );
+        assert_eq!(
+            ranges(&[
+                Some((299_589_817_385, Some(805_065_222_658))),
+                Some((282_464_783_233, Some(527_288_291_674))),
+                Some((270_164_477_149, Some(390_302_745_042))),
+            ]),
+            s(&["300 ~ 805 gwei", "282 ~ 527 gwei", "270 ~ 390 gwei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_range_writes_both_ends_in_one_unit() {
+        assert_eq!(
+            ranges(&[
+                Some((750_000, Some(1_500_000))),
+                Some((650_000, Some(1_050_000))),
+                Some((600_000, Some(900_000))),
+            ]),
+            s(&[
+                "0.00075 ~ 0.0015 gwei",
+                "0.00065 ~ 0.00105 gwei",
+                "0.0006 ~ 0.0009 gwei"
+            ])
+        );
+        assert_eq!(
+            ranges(&[Some((3_244, Some(5_000))), Some((1_937, Some(2_900)))]),
+            s(&["3244 ~ 5000 wei", "1937 ~ 2900 wei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_range_whose_ends_meet_is_one_figure() {
+        assert_eq!(
+            ranges(&[Some((50_000_000, Some(50_000_000)))]),
+            s(&["0.05 gwei"])
+        );
+        assert_eq!(
+            ranges(&[
+                Some((50_000_000, Some(50_000_100))),
+                Some((50_000_000, Some(50_000_000)))
+            ]),
+            s(&["0.05 gwei", "0.05 gwei"])
+        );
+        assert_eq!(ranges(&[Some((10, Some(10)))]), s(&["10 wei"]));
+    }
+
+    #[test]
+    fn gas_price_range_a_few_wei_wide_does_not_widen_the_set() {
+        let bids = [51_234_567, 64_043_209];
+        assert_eq!(
+            ranges(&[
+                Some((bids[0], Some(bids[0] + 3))),
+                Some((bids[1], Some(bids[1] + 3)))
+            ]),
+            singles(&[Some(bids[0]), Some(bids[1])])
+        );
+        assert_eq!(
+            singles(&[Some(bids[0]), Some(bids[1])]),
+            s(&["0.0512 gwei", "0.064 gwei"])
+        );
+        assert_eq!(
+            ranges(&[
+                Some((51_234_567, Some(51_234_574))),
+                Some((64_043_209, Some(128_086_411)))
+            ]),
+            s(&["0.0512 gwei", "0.064 ~ 0.128 gwei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_range_widens_over_all_six_numbers() {
+        assert_eq!(
+            ranges(&[
+                Some((270_100_000_000, Some(270_400_000_000))),
+                Some((250_000_000_000, Some(390_000_000_000)))
+            ]),
+            s(&["270.1 ~ 270.4 gwei", "250 ~ 390 gwei"])
+        );
+    }
+
+    #[test]
+    fn gas_price_range_with_no_bid_or_no_top() {
+        assert_eq!(
+            ranges(&[
+                None,
+                Some((270_164_477_149, None)),
+                Some((282_464_783_233, Some(527_288_291_674)))
+            ]),
+            vec![
+                None,
+                Some("270 gwei".to_owned()),
+                Some("282 ~ 527 gwei".to_owned())
+            ]
+        );
+    }
+
+    /// `gas-price.test.ts`'s `gasPriceWei` vectors: a decimal string from the
+    /// core, and nothing else — "published nothing" is not "zero".
+    #[test]
+    fn a_gas_price_is_decimal_wei_or_nothing() {
+        let bid = |effective: Option<&str>| {
+            gas_price_range_of(&SpeedQuote {
+                effective_gas_price: effective.map(str::to_owned),
+                ..quote(Fast)
+            })
+            .map(|range| range.low)
+        };
+        assert_eq!(bid(Some("270164477149")), Some(wei(270_164_477_149)));
+        assert_eq!(bid(Some("0")), Some(wei(0)));
+        for refused in [None, Some(""), Some("0x10"), Some("12.5")] {
+            assert_eq!(bid(refused), None);
+        }
+        // A top below the bid is no top.
+        let range = gas_price_range_of(&ranged(Fast, "9000", "3244")).unwrap();
+        assert_eq!(range.high, None);
+    }
+
+    // --- what the 15 s cache may keep (issue 212) -----------------------------
+
+    #[test]
+    fn the_fee_signal_window_is_fifteen_seconds() {
+        assert_eq!(FEE_SIGNALS_CACHE_TTL_MS, 15_000);
+    }
+
+    #[test]
+    fn only_a_complete_gas_reading_is_kept() {
+        assert!(gas_signals_cacheable(
+            Some("50000000"),
+            true,
+            true,
+            Some("50000000")
+        ));
+        // Sparse but complete: a 0 tip, a pre-London block, a skipped tip.
+        assert!(gas_signals_cacheable(
+            Some("50000000"),
+            true,
+            true,
+            Some("0")
+        ));
+        assert!(gas_signals_cacheable(Some("50000000"), true, false, None));
+        // A failed or zero eth_gasPrice, a failed block leg, a missing tip.
+        assert!(!gas_signals_cacheable(None, true, true, Some("1")));
+        assert!(!gas_signals_cacheable(Some("0"), true, true, Some("1")));
+        assert!(!gas_signals_cacheable(
+            Some("50000000"),
+            false,
+            true,
+            Some("1")
+        ));
+        assert!(!gas_signals_cacheable(Some("50000000"), true, true, None));
+    }
+
+    #[test]
+    fn a_zero_relay_quote_is_never_kept() {
+        assert!(bundler_quote_cacheable("100000000"));
+        assert!(!bundler_quote_cacheable("0"));
+        assert!(!bundler_quote_cacheable("0x10"));
+    }
+
+    // --- the JSON door every shell calls ---------------------------------------
+
+    #[test]
+    fn the_json_door_answers_what_the_functions_answer() {
+        assert_eq!(
+            speed_rule_json(r#"{"rule":"offered_tiers"}"#).unwrap(),
+            r#"["fast","standard","slow"]"#
+        );
+        assert_eq!(
+            speed_rule_json(r#"{"rule":"fee_signals_cache_ttl_ms"}"#).unwrap(),
+            "15000"
+        );
+        assert_eq!(
+            speed_rule_json(
+                r#"{"rule":"free_speed_partner","picked":null,"preferred":"slow","in_force":"slow","on_form":true}"#
+            )
+            .unwrap(),
+            r#""fast""#
+        );
+        assert_eq!(
+            speed_rule_json(
+                r#"{"rule":"pick_in_force","picked":null,"partner":null,"tapped":"fast"}"#
+            )
+            .unwrap(),
+            "null"
+        );
+        let figures = speed_rule_json(
+            r#"{"rule":"gas_price_figures","ranges":[{"low":"750000","high":"1500000"},null]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&figures).unwrap(),
+            serde_json::json!({"unit":"gwei","figures":[{"low":"0.00075","high":"0.0015"},null]})
+        );
+        // A quote passed straight through from a FeeEstimateView (extra
+        // fields and all) is read as its speed slice.
+        let rule: FeeSpeedRule = serde_json::from_str(
+            r#"{"rule":"speed_is_free","preferred":"slow","rows":[
+                {"tier":"fast","quote":{"tier":"fast","chain_id":10,"total_wei":"1","fee_asset":{"type":"native"},"effective_gas_price":"3","max_gas_price":"9","quoted":true}},
+                {"tier":"slow","quote":{"tier":"slow","chain_id":10,"total_wei":"1","fee_asset":{"type":"native"},"effective_gas_price":"2","max_gas_price":"4"}}
+            ]}"#,
+        )
+        .unwrap();
+        assert_eq!(answer_speed_rule(&rule).unwrap(), serde_json::json!(true));
+        assert!(speed_rule_json(r#"{"rule":"no_such_rule"}"#).is_err());
+        assert!(speed_rule_json(
+            r#"{"rule":"gas_price_figures","ranges":[{"low":"0x1","high":null}]}"#
+        )
+        .is_err());
+    }
+}

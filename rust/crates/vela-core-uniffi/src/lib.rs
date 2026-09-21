@@ -1401,6 +1401,15 @@ pub fn quoted_fee_usable(amount: String, recipient: String) -> bool {
         .is_ok_and(|amount| vela_core::user_op::quoted_fee_usable(amount, &recipient))
 }
 
+/// The speed rules (spec 068) — the same JSON door the web calls as
+/// `feeSpeedRule`: `request_json` is a `FeeSpeedRule`
+/// (`{"rule":"speed_picker",…}`), the answer the JSON of the function it
+/// names. `None` only for a request that does not parse.
+#[uniffi::export]
+pub fn fee_speed_rule(request_json: String) -> Option<String> {
+    vela_core::app::fee_policy::speed_rule_json(&request_json).ok()
+}
+
 /// The relay's `[existingHash:0x…]` marker: a previous operation is still
 /// pending, and this is its hash to poll instead of failing.
 #[uniffi::export]

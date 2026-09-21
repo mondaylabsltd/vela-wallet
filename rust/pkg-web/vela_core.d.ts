@@ -660,6 +660,16 @@ export function encodeType(typed_data_json: string): string;
 
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
+/**
+ * The speed rules (spec 068, issues 212/681/684/685/686) — ONE door, JSON in
+ * and JSON out: `request_json` is a `FeeSpeedRule`, the answer is the JSON
+ * of the function it names (`fee_policy::answer_speed_rule`). The web shell's
+ * speed control, free-speed upgrade, tier previews, gas-price figures and
+ * fee-signal cache all ask here instead of deciding in TypeScript. Throws only
+ * for a request that does not parse.
+ */
+export function feeSpeedRule(request_json: string): string;
+
 export function fromBase64Url(s: string): Uint8Array;
 
 export function fromHex(s: string): Uint8Array;
@@ -988,6 +998,7 @@ export interface InitOutput {
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeSpeedRule: (a: number, b: number) => [number, number, number, number];
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

@@ -807,6 +807,17 @@ pub fn min_gas_price_wei(chain_id: u32) -> String {
     vela_core::app::fee_policy::min_gas_price_wei(chain_id).to_string()
 }
 
+/// The speed rules (spec 068, issues 212/681/684/685/686) — ONE door, JSON in
+/// and JSON out: `request_json` is a `FeeSpeedRule`, the answer is the JSON
+/// of the function it names (`fee_policy::answer_speed_rule`). The web shell's
+/// speed control, free-speed upgrade, tier previews, gas-price figures and
+/// fee-signal cache all ask here instead of deciding in TypeScript. Throws only
+/// for a request that does not parse.
+#[wasm_bindgen(js_name = feeSpeedRule)]
+pub fn fee_speed_rule(request_json: &str) -> JsResult<String> {
+    vela_core::app::fee_policy::speed_rule_json(request_json).map_err(|e| JsValue::from_str(&e))
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.
