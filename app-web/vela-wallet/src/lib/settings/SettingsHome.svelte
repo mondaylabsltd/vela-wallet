@@ -215,6 +215,10 @@
 				return model.feeSpeedSheet.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
+			// The row being cleared names it: "localhost:8814", "Contacts and
+			// groups". An untitled sheet asked "Disconnect?" without saying what.
+			case 'clear-storage-item':
+				return pendingStorage?.item.label ?? '';
 			case 'erase-device':
 				return model.eraseSheet.title;
 			case 'feedback':

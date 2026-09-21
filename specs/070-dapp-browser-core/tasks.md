@@ -29,27 +29,27 @@ Legend: `[P]` parallelisable, `[USn]` user story. Paths are repo-relative.
 - [x] T034 UX: search, editable address bar, Back = page back, star toggle, site-menu actions, network row, truthful lock, error page, loading bar, crashed state
 - [x] T035 Settings: connected sites list + Disconnect; storage clear → `revoke_all`
 - [x] T036 Explore scan routing (URL / address / `wc:`)
-- [ ] T037 JVM tests (executor + controller against the real core); device pass quickstart A
+- [x] T037 JVM tests (executor + controller against the real core) — 628 pass; device pass quickstart A on the Android phone (A1–A19, a real dust tx on Gnosis)
 
 ## Phase 4 — iOS (US1–US5)
 
-- [ ] T040 `DbrWire.swift`, executor; `frameInfo.securityOrigin`; `webViewWebContentProcessDidTerminate`; `didFinish/didFail` → `load_finished`
-- [ ] T041 Engine teardown (remove handler, weak proxy), no settle on leaving Explore, background tab filter removed (core owns it)
-- [ ] T042 Delete `DappRpc.swift`, `RequestRouter.swift` decisions, bridge string/assembly
-- [ ] T043 Signing pinning + `signing_answered` + `cancel_signing`; wire `receiptFor` via core
-- [ ] T044 UX list (as T034), connected sites, scan routing
-- [ ] T045 Hermetic tests; device pass quickstart B
+- [x] T040 `DbrWire.swift`, executor; `frameInfo.securityOrigin`; `webViewWebContentProcessDidTerminate`; `didFinish/didFail` → `load_finished`
+- [x] T041 Engine teardown (remove handler, weak proxy), no settle on leaving Explore, background tab filter removed (core owns it)
+- [x] T042 Delete `DappRpc.swift`, `RequestRouter.swift` decisions, bridge string/assembly
+- [x] T043 Signing pinning + `signing_answered` + `cancel_signing`; wire `receiptFor` via core
+- [x] T044 UX list (as T034), connected sites, scan routing
+- [x] T045 Hermetic tests (VelaWalletTests 669 pass); device pass quickstart B — `BrowserAcceptanceTests` 9/9 on the iOS 26.2 simulator (UI automation cannot be enabled remotely on the iPhone 11); on the iPhone 11 (iOS 26.5.2) the non-tap rows over Web Inspector. Found and fixed there: a launch into Explore left the endpoint pool unbooted (page reads -32603)
 
 ## Phase 5 — desktop
 
-- [ ] T050 `webview.rs` uses `dapp_provider_script(Desktop)`; `browser_host.rs` on `DappBrowser`; delete `executor/dapp_rpc.rs` table
-- [ ] T051 Signing queue replaces the silent drop; granted address passed; connected sites panel
-- [ ] T052 `cargo test` desktop
+- [x] T050 `webview.rs` uses `dapp_provider_script(Desktop)`; `browser_host.rs` on `DappBrowser`; delete `executor/dapp_rpc.rs` table
+- [x] T051 Signing queue replaces the silent drop; granted address passed; connected sites panel
+- [x] T052 `cargo test` desktop — 444 pass
 
 ## Phase 6 — extension + docs
 
 - [x] T060 esbuild entry → core `provider/inpage.js`; `protocol.js` constants pinned by test; `eth_coinbase` / `wallet_revokePermissions` in the table; stale 4001 comments fixed
 - [x] T061 web unit test: `classifyMethod` vs `dappRpcClassify` (wasm) over every method name either side knows
-- [ ] T062 extension e2e
-- [ ] T063 Delete the browser half of `dapp_permissions` (once iOS and desktop are off it); rewrite `docs/dapp-browser/ARCHITECTURE.md` (done)
-- [ ] T064 CI pre-push checklist (i18n vectors, rustfmt ×2, pkg-web, Swift wire defaults)
+- [x] T062 extension e2e — 23/23 on chromium. SC-305 had been failing on `main` too: the storage row's confirm sheet (spec 058) was untitled, so it never named the site, and the test predated the sheet; both fixed
+- [ ] T063 Delete the browser half of `dapp_permissions` — **deferred**: every in-app browser is off it, but the web wallet's own connect flow (`src/lib/dapp/core/dperm-connect.ts`: `provider_request`, `navigation_started`, `browser_closed`) still drives it. Moving that flow onto `dapp_browser` is its own change. `docs/dapp-browser/ARCHITECTURE.md` rewritten (done)
+- [x] T064 CI pre-push checklist: i18n vectors (no diff), rustfmt in `rust/` and the desktop, `build-web.mjs --check` after the rebuild, Swift wires (iOS suite green)
