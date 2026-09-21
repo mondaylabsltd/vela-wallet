@@ -2,7 +2,8 @@
 //  SettingsWire.swift
 //  VelaWallet
 //
-//  The `network_admin` machine's view model, in Swift.
+//  The `network_admin` machine's view model, in Swift — and, since spec 071,
+//  `sign_pref`'s.
 //
 //  Same rule as `CoreViews.swift` and `ContactsWire.swift`: views are
 //  `Decodable` through `CoreJSON.decoder` (`.convertFromSnakeCase`); operations
@@ -23,6 +24,7 @@
 //
 
 import Foundation
+import VelaCore
 
 // MARK: - Health
 
@@ -282,4 +284,32 @@ struct NetViewWire: Decodable, Equatable {
     let endpoints: [NetEndpointViewWire]
     let providers: [NetProviderViewWire]
     let lastAddedChainId: Int?
+}
+
+// MARK: - sign_pref (spec 071)
+
+/// `sign_pref`'s view (spec 071): the "Sign with" every signing sheet starts
+/// at, and the Clear Signer page. Every judgement in it is the core's.
+struct SignPrefViewWire: Decodable, Equatable {
+    /// Always an offered name; `auto` when nothing was chosen.
+    let method: String
+    let methodCommitted: Bool
+    /// Every "Sign with" value, in the order a picker lists them.
+    let offered: [String]
+    /// The page the Clear Signer opens. Always usable.
+    let signerUrl: String
+    let signerUrlIsDefault: Bool
+    /// `invalid` | `insecure` — the last address typed was refused and
+    /// nothing was stored.
+    let signerUrlError: String?
+    /// Whether a page there can use this wallet's `getvela.app` passkeys.
+    let signerUsesWalletPasskeys: Bool
+
+    /// What the machine says before it has read anything: `auto`, the
+    /// official page, and everything it offers.
+    static var initial: SignPrefViewWire? {
+        (try? SignPrefCore().view()).flatMap {
+            try? CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object($0))
+        }
+    }
 }

@@ -37,32 +37,6 @@ struct FeeTierPrefViewWire: Decodable, Equatable {
     let offered: [String]
 }
 
-/// `sign_pref`'s view (spec 071): the "Sign with" every signing sheet starts
-/// at, and the Clear Signer page. Every judgement in it is the core's.
-struct SignPrefViewWire: Decodable, Equatable {
-    /// Always an offered name; `auto` when nothing was chosen.
-    let method: String
-    let methodCommitted: Bool
-    /// Every "Sign with" value, in the order a picker lists them.
-    let offered: [String]
-    /// The page the Clear Signer opens. Always usable.
-    let signerUrl: String
-    let signerUrlIsDefault: Bool
-    /// `invalid` | `insecure` — the last address typed was refused and
-    /// nothing was stored.
-    let signerUrlError: String?
-    /// Whether a page there can use this wallet's `getvela.app` passkeys.
-    let signerUsesWalletPasskeys: Bool
-
-    /// What the machine says before it has read anything: `auto`, the
-    /// official page, and everything it offers.
-    static var initial: SignPrefViewWire? {
-        (try? SignPrefCore().view()).flatMap {
-            try? CoreJSON.decode(SignPrefViewWire.self, from: CoreJSON.object($0))
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class SettingsStore {
