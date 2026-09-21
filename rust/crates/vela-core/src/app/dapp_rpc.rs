@@ -197,6 +197,25 @@ pub fn chain_param(params: &Value) -> Option<u32> {
     u32::try_from(parsed).ok().filter(|chain| *chain > 0)
 }
 
+/// The account a signing request asks to act as, when it names one:
+/// `eth_sendTransaction` / `wallet_sendCalls` → `params[0].from`;
+/// `personal_sign` → `params[1]`; `eth_signTypedData_v3`/`_v4` →
+/// `params[0]`; `eth_signTypedData`/`_v1` → `params[1]` (their order is
+/// `[data, address]`). Only a well-formed address counts.
+pub fn requested_address(method: &str, params: &Value) -> Option<String> {
+    let list = params.as_array()?;
+    let candidate = match method {
+        "eth_sendTransaction" | "wallet_sendCalls" => list.first()?.get("from")?.as_str()?,
+        "personal_sign" | "eth_signTypedData" | "eth_signTypedData_v1" => list.get(1)?.as_str()?,
+        m if m.contains("signTypedData") => list.first()?.as_str()?,
+        _ => return None,
+    };
+    let is_address = candidate.len() == 42
+        && candidate.starts_with("0x")
+        && candidate[2..].bytes().all(|b| b.is_ascii_hexdigit());
+    is_address.then(|| candidate.to_owned())
+}
+
 /// `1` → `"0x1"`.
 pub fn hex_chain_id(chain_id: u32) -> String {
     format!("0x{chain_id:x}")
@@ -212,16 +231,21 @@ pub struct PageRequest {
     pub doc: String,
     pub id: String,
     pub method: String,
-    /// Always a JSON array: absent params arrive as `[]`.
+    /// A JSON array (absent params arrive as `[]`) — or, for
+    /// `wallet_watchAsset` alone, the object EIP-747 specifies.
     pub params: Value,
 }
 
 /// What a bridge message turned out to be.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PageMessage {
-    /// A document started — sent once, before the page's own scripts run.
+    /// A document started — sent before the page's own scripts run (and again
+    /// when a back-forward-cache restore brings it back). `href` is the
+    /// document's own URL: it is what ties a hello to the navigation that
+    /// produced it when the platform reports that navigation late.
     Hello {
         doc: String,
+        href: Option<String>,
     },
     Request(PageRequest),
     /// Refused on shape. `id` is present when the page can be told; without
@@ -259,7 +283,14 @@ pub fn parse_page_message(message_json: &str) -> PageMessage {
         .map(str::to_owned);
     match object.get("t").and_then(Value::as_str) {
         Some("hello") => match doc {
-            Some(doc) => PageMessage::Hello { doc },
+            Some(doc) => PageMessage::Hello {
+                doc,
+                href: object
+                    .get("href")
+                    .and_then(Value::as_str)
+                    .filter(|href| href.len() <= 8 * 1024)
+                    .map(str::to_owned),
+            },
             None => PageMessage::Ignored,
         },
         Some("req") => {
@@ -292,6 +323,10 @@ pub fn parse_page_message(message_json: &str) -> PageMessage {
             let params = match object.get("params") {
                 None | Some(Value::Null) => Value::Array(Vec::new()),
                 Some(params @ Value::Array(_)) => params.clone(),
+                // EIP-747 is the one method whose params are an OBJECT
+                // (`{type, options}`); refusing it broke every "add this token
+                // to your wallet" button (found on the device, spec 070).
+                Some(params @ Value::Object(_)) if method == "wallet_watchAsset" => params.clone(),
                 Some(_) => return invalid(-32602, "Expected params to be an array"),
             };
             if params.to_string().len() > MAX_REQUEST_BYTES {
@@ -497,12 +532,12 @@ const BRIDGE_JS: &str = r#"
 		}
 	};
 	Object.defineProperty(window, '__velaBridge', { value: DOC });
-	send({ t: 'hello', doc: DOC });
+	send({ t: 'hello', doc: DOC, href: location.href });
 	// A page restored from the back-forward cache is an OLD document coming
 	// back without re-running this script: it says hello again so the wallet
 	// makes it current and answers it.
 	window.addEventListener('pageshow', (ev) => {
-		if (ev.persisted) send({ t: 'hello', doc: DOC });
+		if (ev.persisted) send({ t: 'hello', doc: DOC, href: location.href });
 	});
 	window.addEventListener('message', (ev) => {
 		if (ev.source !== window) return;
@@ -627,7 +662,8 @@ mod tests {
         assert_eq!(
             parse_page_message(r#"{"t":"hello","doc":"d1"}"#),
             PageMessage::Hello {
-                doc: "d1".to_owned()
+                doc: "d1".to_owned(),
+                href: None
             }
         );
         assert_eq!(
@@ -672,6 +708,16 @@ mod tests {
                 id: Some(_),
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn watch_asset_takes_the_object_eip_747_specifies() {
+        assert!(matches!(
+            parse_page_message(
+                r#"{"t":"req","doc":"d1","id":"x:2","method":"wallet_watchAsset","params":{"type":"ERC20"}}"#
+            ),
+            PageMessage::Request(_)
         ));
     }
 

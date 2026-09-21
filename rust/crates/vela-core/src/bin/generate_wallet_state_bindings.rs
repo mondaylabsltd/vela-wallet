@@ -30,9 +30,7 @@ use vela_core::app::clear_signing::{
 use vela_core::app::contacts::{
     ContactOperation, ContactShellResult, ContactsView, Event as ContactEvent,
 };
-use vela_core::app::dapp_browser::{
-    DbrOperation, DbrShellResult, DbrView, Event as DbrEvent,
-};
+use vela_core::app::dapp_browser::{DbrOperation, DbrShellResult, DbrView, Event as DbrEvent};
 use vela_core::app::dapp_permissions::{
     DpermOperation, DpermShellResult, DpermView, Event as DpermEvent,
 };

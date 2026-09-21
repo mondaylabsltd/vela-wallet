@@ -89,6 +89,8 @@ pub const READS_QUEUED: usize = 256;
 /// Documents a tab remembers having retired, so a straggler from one of them
 /// is recognised as stale rather than mistaken for a new page.
 const RETIRED_DOCS: usize = 8;
+/// Closed tabs remembered, so a closed page's late message is not a new page.
+const CLOSED_TABS: usize = 64;
 
 // ---------------------------------------------------------------------------
 // Wire value types
@@ -333,6 +335,10 @@ struct Tab {
     /// The current document and its origin.
     doc: Option<String>,
     doc_origin: Option<String>,
+    /// The current document's own URL, from its hello.
+    doc_href: Option<String>,
+    /// The current document's load has finished at least once.
+    doc_loaded: bool,
     /// The origin the tab SHOWS (from its URL) — for the chip, even while a
     /// document has not said hello yet.
     shown_origin: Option<String>,
@@ -393,6 +399,9 @@ pub struct Model {
     sign_queue: VecDeque<SignJob>,
     /// Lower-cased user-operation hashes pages were answered with.
     user_ops: Vec<String>,
+    /// Tabs the shell closed. A straggler from one of them is ignored, never
+    /// adopted as a new page.
+    closed_tabs: VecDeque<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -507,10 +516,22 @@ impl App for DappBrowser {
                 }
             }
             Event::NavigationStarted { tab, url } => {
+                if model.closed_tabs.contains(&tab) {
+                    return render();
+                }
                 let entry = model.tabs.entry(tab).or_default();
-                entry.loading = true;
                 entry.crashed = false;
                 entry.shown_origin = origin_of(&url);
+                // On Android the new document's hello can come BEFORE the
+                // platform says the load started. A current document that has
+                // not finished loading, at exactly this URL, IS this load's
+                // document — marking the load as hello-less would retire it
+                // when the load finishes.
+                let already_here = entry.doc.is_some()
+                    && !entry.doc_loaded
+                    && entry.doc_href.as_deref().map(without_fragment)
+                        == Some(without_fragment(&url));
+                entry.loading = !already_here;
             }
             Event::LoadFinished { tab, url } => {
                 let Some(entry) = model.tabs.get_mut(&tab) else {
@@ -522,6 +543,9 @@ impl App for DappBrowser {
                 // A load that began and ended with no document saying hello:
                 // whatever was open belongs to a document that is gone.
                 let orphaned = std::mem::replace(&mut entry.loading, false) && entry.doc.is_some();
+                if !orphaned {
+                    entry.doc_loaded = entry.doc.is_some();
+                }
                 if orphaned {
                     retire_document(model, &tab, true, &mut out);
                     if let Some(entry) = model.tabs.get_mut(&tab) {
@@ -532,6 +556,12 @@ impl App for DappBrowser {
             Event::TabClosed { tab } => {
                 retire_document(model, &tab, false, &mut out);
                 model.tabs.remove(&tab);
+                if !model.closed_tabs.contains(&tab) {
+                    model.closed_tabs.push_back(tab);
+                    while model.closed_tabs.len() > CLOSED_TABS {
+                        model.closed_tabs.pop_front();
+                    }
+                }
             }
             Event::RendererGone { tab } => {
                 retire_document(model, &tab, false, &mut out);
@@ -943,7 +973,7 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, out: &mut Out
 fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     // A subframe cannot be answered without speaking as the top page; the
     // script installs nothing there, so this is a direct call to the host.
-    if !message.is_main_frame {
+    if !message.is_main_frame || model.closed_tabs.contains(&message.tab) {
         return;
     }
     let Some(frame_origin) = origin_of(&message.frame_origin) else {
@@ -951,7 +981,12 @@ fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     };
     match parse_page_message(&message.message_json) {
         PageMessage::Ignored => {}
-        PageMessage::Hello { doc } => hello(model, &message.tab, doc, frame_origin, out),
+        PageMessage::Hello { doc, href } => {
+            hello(model, &message.tab, doc, frame_origin, out);
+            if let Some(tab) = model.tabs.get_mut(&message.tab) {
+                tab.doc_href = href;
+            }
+        }
         PageMessage::Invalid {
             doc,
             id,
@@ -989,7 +1024,14 @@ fn hello(model: &mut Model, tab_id: &str, doc: String, origin: String, out: &mut
     tab.retired.retain(|retired| retired != &doc);
     tab.doc = Some(doc);
     tab.doc_origin = Some(origin.clone());
+    tab.doc_href = None;
+    tab.doc_loaded = false;
     tab.shown_origin = Some(origin);
+}
+
+/// A URL without its `#fragment` — a fragment change is not a new load.
+fn without_fragment(url: &str) -> &str {
+    url.split('#').next().unwrap_or(url)
 }
 
 /// Is `doc` the tab's current document? A never-seen document is adopted (its
@@ -1161,6 +1203,25 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
             if grant_addresses.is_empty() {
                 deliver_error(tab_id, &doc, &id, 4100, "This site is not connected", out);
                 return;
+            }
+            // A request naming an account must name the one this site was
+            // shown — never a silent swap of the signer (the popup entry's
+            // `StaleAuthorizedAddress`, now every entry's).
+            if let Some(asked) = dapp_rpc::requested_address(&request.method, &request.params) {
+                if !grant_addresses
+                    .iter()
+                    .any(|granted| granted.eq_ignore_ascii_case(&asked))
+                {
+                    deliver_error(
+                        tab_id,
+                        &doc,
+                        &id,
+                        4100,
+                        "The requested account is not connected to this site",
+                        out,
+                    );
+                    return;
+                }
             }
             let job = SignJob {
                 tab: tab_id.to_owned(),

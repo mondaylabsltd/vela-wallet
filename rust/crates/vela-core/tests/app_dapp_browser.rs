@@ -402,7 +402,8 @@ fn watch_asset_is_false_and_unknowns_are_4200() {
         DAPP,
         "1",
         "wallet_watchAsset",
-        json!([{}]),
+        // EIP-747's params are an object, not an array.
+        json!({"type": "ERC20", "options": {}}),
     ));
     assert_eq!(watch["result"], json!(false));
     let sign = only_answer(&ask(
@@ -1329,9 +1330,16 @@ fn a_revoke_while_queued_refuses_the_waiting_signature() {
 #[test]
 fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
     let mut sut = connected(DAPP);
-    hello(&mut sut, "t1", "d1", DAPP);
-    // Android: the new document's hello and first request beat onPageStarted.
-    hello(&mut sut, "t1", "d2", DAPP);
+    let first = json!({"t":"hello","doc":"d1","href":"https://dapp.example/a"});
+    sut.dispatch(page("t1", DAPP, first));
+    sut.dispatch(Event::LoadFinished {
+        tab: "t1".to_owned(),
+        url: "https://dapp.example/a".to_owned(),
+    });
+    // Android: the new document's hello and first request beat onPageStarted
+    // — and the bridge says hello exactly once.
+    let second = json!({"t":"hello","doc":"d2","href":"https://dapp.example/b#top"});
+    sut.dispatch(page("t1", DAPP, second));
     let read = ask(
         &mut sut,
         "t1",
@@ -1344,18 +1352,20 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
     assert!(read.iter().any(|op| matches!(op, Op::Read { .. })));
     let nav = sut.dispatch(Event::NavigationStarted {
         tab: "t1".to_owned(),
-        url: "https://dapp.example/".to_owned(),
+        url: "https://dapp.example/b".to_owned(),
     });
     assert!(
         delivered(&nav).is_empty(),
         "navigation_started settles nothing"
     );
-    sut.dispatch(page("t1", DAPP, json!({"t":"hello","doc":"d2"})));
     let done = sut.dispatch(Event::LoadFinished {
         tab: "t1".to_owned(),
-        url: "https://dapp.example/".to_owned(),
+        url: "https://dapp.example/b".to_owned(),
     });
-    assert!(delivered(&done).is_empty());
+    assert!(
+        delivered(&done).is_empty(),
+        "the live document is not retired"
+    );
     let answer = sut.resolve_matching(
         |op| matches!(op, Op::Read { .. }),
         Res::ReadAnswered {
@@ -1363,6 +1373,105 @@ fn the_new_documents_warm_up_survives_a_late_navigation_callback() {
         },
     );
     assert_eq!(only_answer(&answer)["result"], json!("0x10"));
+    let later = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d2",
+        DAPP,
+        "2",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(later["doc"], json!("d2"), "d2 is still the page");
+}
+
+#[test]
+fn a_navigation_away_before_the_first_page_finished_still_settles_it() {
+    let mut sut = connected(DAPP);
+    let first = json!({"t":"hello","doc":"d1","href":"https://dapp.example/slow"});
+    sut.dispatch(page("t1", DAPP, first));
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_sendTransaction",
+        json!([{"to":A2}]),
+    );
+    // The person leaves before the slow page finished; the next page has no provider.
+    sut.dispatch(Event::NavigationStarted {
+        tab: "t1".to_owned(),
+        url: "https://elsewhere.example/".to_owned(),
+    });
+    let ops = sut.dispatch(Event::LoadFinished {
+        tab: "t1".to_owned(),
+        url: "https://elsewhere.example/".to_owned(),
+    });
+    assert_eq!(error_code(&only_answer(&ops)), 4900);
+    assert!(ops.contains(&Op::CancelSigning {
+        tab: "t1".to_owned(),
+        id: "1".to_owned()
+    }));
+}
+
+#[test]
+fn a_closed_tabs_straggler_is_never_a_new_page() {
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    sut.dispatch(Event::TabClosed {
+        tab: "t1".to_owned(),
+    });
+    assert!(hello(&mut sut, "t1", "d9", DAPP).is_empty());
+    assert!(ask(&mut sut, "t1", "d1", DAPP, "1", "eth_accounts", json!([])).is_empty());
+    assert!(sut.view().tabs.is_empty());
+}
+
+#[test]
+fn a_request_naming_another_account_is_refused() {
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let tx = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_sendTransaction",
+        json!([{"from": A2, "to": A3}]),
+    ));
+    assert_eq!(error_code(&tx), 4100);
+    let msg = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "personal_sign",
+        json!(["0x00", A2]),
+    ));
+    assert_eq!(error_code(&msg), 4100);
+    let typed = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "3",
+        "eth_signTypedData_v4",
+        json!([A2, "{}"]),
+    ));
+    assert_eq!(error_code(&typed), 4100);
+    // The granted account, in any case, is fine.
+    let ok = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "4",
+        "eth_sendTransaction",
+        json!([{"from": A1.to_uppercase().replace("0X", "0x"), "to": A3}]),
+    );
+    assert!(forwarded(&ok).is_some());
 }
 
 #[test]
