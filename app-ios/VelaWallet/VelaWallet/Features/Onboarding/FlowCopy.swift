@@ -77,18 +77,30 @@ func methodCopy(_ method: KeyMethod) -> (title: String, body: String) {
     }
 }
 
-/// The provider line under a key's name.
+/// The provider line under a key's name, when the AAGUID catalog cannot name
+/// the vault: WHERE THIS KEY LIVES, in the method picker's own words.
 ///
-/// Keyed off the METHOD the person chose, deliberately — the alternative is
-/// `transports`, which is a comma-joined machine list ("internal,hybrid"). What
-/// an authenticator reports about its wire protocols is not a sentence, and a
-/// person reading their own key list is owed one.
-func providerLineFor(_ method: KeyMethod) -> String {
-    switch method {
-    case .platform: I18nKeys.Create.providerPlatform
-    case .hybrid: I18nKeys.Create.providerGeneric
+/// Takes `key.kind` — what the AUTHENTICATOR reported — never `key.method`, the
+/// tap in the picker (issue #207): a hybrid tap answered by a USB key is a
+/// security key, and a row that said "Phone or tablet" beside it was wrong.
+/// The web's `providerLineFor` (`onboarding/core/copy.ts`).
+func providerLineFor(_ kind: KeyMethod) -> String {
+    switch kind {
+    case .platform: I18nKeys.Create.methodPlatformTitle
+    case .hybrid: I18nKeys.Create.methodHybridTitle
     case .securityKey: I18nKeys.Create.providerSecurityKey
     }
+}
+
+/// The one badge a key row wears (issue #207): is this passkey cloud-synced or
+/// device-bound? `nil` when nobody can vouch for the answer — an unreadable
+/// attestation makes `synced` fail open to `true` for the second-key GATE, and
+/// a gate is not a badge. The web's `keyBadge`.
+func keyBadge(_ key: CreateKeyRow) -> (text: String, synced: Bool)? {
+    guard key.syncedKnown else { return nil }
+    return key.synced
+        ? (I18nKeys.Create.keySyncedBadge, true)
+        : (I18nKeys.Create.keyDeviceOnlyBadge, false)
 }
 
 /// One entry per notice or question the core can raise.

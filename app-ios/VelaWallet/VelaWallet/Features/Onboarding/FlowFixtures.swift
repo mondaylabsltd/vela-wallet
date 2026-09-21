@@ -93,9 +93,11 @@ enum FlowFixtures {
             transports: platformKey ? "internal,hybrid" : "usb,nfc",
             confirmed: confirmed,
             synced: synced,
+            syncedKnown: true,
             aaguid: platformKey ? "fbfc3007-154e-4ecc-8c0b-6e020557d7bd" : "",
             providerName: platformKey ? "Apple Passwords" : "",
-            method: method
+            method: method,
+            kind: method
         )
     }
 

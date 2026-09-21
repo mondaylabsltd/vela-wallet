@@ -355,16 +355,16 @@ private struct KeyRow: View {
             // Who is holding this key, when the core's AAGUID catalog knows:
             // the vault's own mark and its own name. When it does not — a
             // hardware key, an authenticator that reported nothing — the row
-            // says what it always said, from `method`.
+            // says where the key LIVES, from the authenticator's report (#207).
             PasskeyProviderMark(
                 key: key,
-                label: holder ?? loc.t(providerLineFor(key.method)),
+                label: holder ?? loc.t(providerLineFor(key.kind)),
                 glyphFallback: true
             )
 
             VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                 Text(key.name).typeRole(Typography.rowTitle).foregroundStyle(theme.fgBase)
-                Text(holder ?? loc.t(providerLineFor(key.method)))
+                Text(holder ?? loc.t(providerLineFor(key.kind)))
                     .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.fgMuted)
             }
@@ -372,19 +372,21 @@ private struct KeyRow: View {
 
             // One trailing slot, as the design draws it. A key that has not
             // confirmed its membership has no status to show yet, so the retry
-            // TAKES that slot rather than crowding in beside it.
+            // TAKES that slot rather than crowding in beside it. A key whose
+            // attestation nobody could read has no badge either: the slot stays
+            // empty rather than claiming a backup (#207).
             if key.confirmed {
-                Text(loc.t(key.synced
-                    ? I18nKeys.Create.keySyncedBadge
-                    : I18nKeys.Create.keyDeviceOnlyBadge))
-                    .typeRole(Typography.label)
-                    .foregroundStyle(key.synced ? theme.successBase : theme.fgMuted)
-                    .padding(.horizontal, Tokens.Space.s8)
-                    .padding(.vertical, Tokens.Space.s4)
-                    .background(
-                        key.synced ? theme.successSoft : theme.bgSunken,
-                        in: Capsule()
-                    )
+                if let badge = keyBadge(key) {
+                    Text(loc.t(badge.text))
+                        .typeRole(Typography.label)
+                        .foregroundStyle(badge.synced ? theme.successBase : theme.fgMuted)
+                        .padding(.horizontal, Tokens.Space.s8)
+                        .padding(.vertical, Tokens.Space.s4)
+                        .background(
+                            badge.synced ? theme.successSoft : theme.bgSunken,
+                            in: Capsule()
+                        )
+                }
             } else {
                 Button(action: onConfirm) {
                     Text(loc.t(I18nKeys.Create.confirmKeyBtn))
@@ -752,11 +754,11 @@ struct DoneScreen: View {
                                     }
                                 }
                                 Spacer()
-                                Text(loc.t(key.synced
-                                    ? I18nKeys.Create.keySyncedBadge
-                                    : I18nKeys.Create.keyDeviceOnlyBadge))
-                                    .typeRole(Typography.label)
-                                    .foregroundStyle(key.synced ? theme.successBase : theme.fgMuted)
+                                if let badge = keyBadge(key) {
+                                    Text(loc.t(badge.text))
+                                        .typeRole(Typography.label)
+                                        .foregroundStyle(badge.synced ? theme.successBase : theme.fgMuted)
+                                }
                             }
                             .padding(.vertical, Tokens.Space.s8)
                         }
