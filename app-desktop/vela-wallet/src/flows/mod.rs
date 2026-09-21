@@ -347,6 +347,8 @@ pub struct FlowStrings {
     /// the balance to give out.
     pub recipient_duplicate: String,
     pub bad_amount: SharedString,
+    /// Why ⇄ is dimmed: no rate for the display currency (#197).
+    pub denom_toggle_no_rate: String,
     pub split_remaining: String,
     /// The importer's skipped-duplicate line.
     pub batch_dup: SharedString,
@@ -580,6 +582,7 @@ impl FlowStrings {
             assets_count: raw("componentsTx.receipt.assetsCount"),
             recipient_duplicate: raw("send.recipientDuplicate"),
             bad_amount: s("send.badAmount"),
+            denom_toggle_no_rate: raw("send.denomToggleNoRate"),
             split_remaining: raw("send.splitRemaining"),
             batch_dup: s("send.batchDup"),
             native_alias_title: s("addToken.nativeAliasTitle"),
@@ -690,6 +693,7 @@ mod tests {
             (&s.confirm_total_line, "{{fiat}}"),
             (&s.recipient_duplicate, "{{n}}"),
             (&s.split_remaining, "{{amount}}"),
+            (&s.denom_toggle_no_rate, "{{code}}"),
         ] {
             assert!(template.contains(var), "`{template}` must carry {var}");
         }

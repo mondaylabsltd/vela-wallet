@@ -1680,9 +1680,16 @@ fn build_notice(
         .as_ref()
         .map(|warning| amount_warning_text(warning, chain_id, s))
         .or_else(|| {
-            send.denom_toggle_reason
-                .as_ref()
-                .map(|issue| cannot_convert(issue, s))
+            // The ⇄ row's own sentence (the web's `denomReason`): the swap
+            // has no rate, so the figure stays in the token — which is what
+            // the person should type in.
+            send.denom_toggle_reason.as_ref().map(|issue| {
+                SharedString::from(fill(
+                    &fill(&s.denom_toggle_no_rate, "code", &issue.code),
+                    "symbol",
+                    &issue.symbol,
+                ))
+            })
         })?;
     Some((
         SendNotice {
@@ -2649,7 +2656,14 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
         rate_section: s.batch_rate_section.clone(),
         rate_value: rate_value.into(),
         rate_hint: rate_hint.into(),
-        parsed: fill(&s.batch_parsed, "n", &view.recipient_count.to_string()).into(),
+        // Lines READ, not rows kept: the count above a list is the length of
+        // that list, refused lines included (the web's `seen`).
+        parsed: fill(
+            &s.batch_parsed,
+            "n",
+            &(view.preview.len() + view.errors.len()).to_string(),
+        )
+        .into(),
         // The page adds it: the line reads the account's balance, which the
         // importer's own view does not carry (`batch_total`).
         total: None,
@@ -3797,7 +3811,28 @@ mod parity_tests {
                 denom_toggle_enabled: false,
                 ..base
             };
-            assert_eq!(with_inputs(&refused, send_form).denom_toggle, Some(false));
+            let refused = SendView {
+                denom_toggle_reason: Some(SendUnitIssue {
+                    code: "CNY".to_owned(),
+                    symbol: "xDAI".to_owned(),
+                }),
+                ..refused
+            };
+            let form = with_inputs(&refused, send_form);
+            assert_eq!(form.denom_toggle, Some(false));
+            let why = form.notice.map(|n| n.body).unwrap_or_default();
+            assert!(why.contains("CNY") && !why.contains("{{"), "{why}");
+            assert_ne!(
+                why,
+                cannot_convert(
+                    &SendUnitIssue {
+                        code: "CNY".to_owned(),
+                        symbol: "xDAI".to_owned()
+                    },
+                    &strings()
+                ),
+                "the ⇄ row's own sentence, not the amount warning's"
+            );
         });
     }
 
@@ -3917,6 +3952,11 @@ mod parity_tests {
             "sheet order, each skipped line with its reason"
         );
         assert_eq!(model.rows[0].conversion, "5000 CNY → 689.66 USDT");
+        assert_eq!(model.parsed, fill(&s.batch_parsed, "n", "4"), "lines read");
+        assert!(
+            model.rows[1].conversion.is_empty(),
+            "a refused line has no figure"
+        );
 
         let total = batch_total(&view, "USDT", "1000", None, &s)
             .unwrap_or_else(|| unreachable!("one row parsed"));

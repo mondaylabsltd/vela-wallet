@@ -1829,12 +1829,15 @@ fn batch_import(
                         .flex()
                         .flex_col()
                         .items_end()
-                        .child(
-                            div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .child(row.conversion.clone()),
-                        )
+                        // A refused line has no figure; its reason alone.
+                        .when(!row.conversion.is_empty(), |el| {
+                            el.child(
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_muted)
+                                    .child(row.conversion.clone()),
+                            )
+                        })
                         // Why this line will not be paid, beside the line.
                         .when_some(row.note.clone(), |el, note| {
                             el.child(
