@@ -1454,10 +1454,7 @@ mod tests {
             kind: KeyMethod::Hybrid,
             ..usb.clone()
         };
-        assert_eq!(
-            provider_line(&phone),
-            "onboarding.create.methodHybridTitle"
-        );
+        assert_eq!(provider_line(&phone), "onboarding.create.methodHybridTitle");
     }
 
     /// data-model §3's screen-selection table, which is the whole of the create
