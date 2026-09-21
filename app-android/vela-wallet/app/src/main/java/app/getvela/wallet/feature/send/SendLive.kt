@@ -192,7 +192,7 @@ object SendLive {
     // -- SD2c: the batch sheet (spec 045 US3) --------------------------------------
 
     /** The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so. */
-    internal fun batchImport(fallback: BatchImportModel, batch: BatchView, view: SendView, ctx: Context): BatchImportModel {
+    internal fun batchImport(fallback: BatchImportModel, batch: BatchView, view: SendView, ctx: Context, replaces: Boolean = false): BatchImportModel {
         val s = ctx.strings
         val symbol = view.selected_token?.symbol ?: ""
         val count = batch.recipient_count
@@ -230,6 +230,21 @@ object SendLive {
                 batch.over_balance -> s.t(I18nKeys.Flows.BATCH_OVER_BALANCE, mapOf("sym" to symbol))
                 batch.template_saved -> s.t(I18nKeys.Flows.BATCH_TEMPLATE_SAVED)
                 else -> null
+            },
+            noteWarning = batch.over_cap || batch.over_balance,
+            // Said once the import can happen, beside the button that does it — and
+            // with the way to choose the other (the web's `merge` line). Only when
+            // there is someone on the form: the core's own count, read back from
+            // the room it reports.
+            merge = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+                s.t(if (replaces) I18nKeys.Flows.BATCH_REPLACES_ROWS else I18nKeys.Flows.BATCH_ADDS_TO_ROWS)
+            } else {
+                null
+            },
+            mergeAction = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+                s.t(if (replaces) I18nKeys.Flows.BATCH_ADD_INSTEAD else I18nKeys.Flows.BATCH_REPLACE_INSTEAD)
+            } else {
+                null
             },
             cta = when (count) {
                 0 -> s.t(I18nKeys.Flows.BATCH_APPLY_EMPTY)

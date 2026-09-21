@@ -330,6 +330,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     onPaste = send?.onBatchPaste,
                     onRate = send?.onBatchRate,
                     onRateReset = { send?.onBatchRateReset?.invoke() },
+                    onMerge = { send?.onBatchMerge?.invoke() },
                 )
             }
         }
@@ -467,6 +468,8 @@ class SendCallbacks(
     val onBatchRate: ((String) -> Unit)? = null,
     val onBatchRateReset: () -> Unit = {},
     val onBatchApply: () -> Unit = {},
+    /** Issue #271: switch this import between adding to and replacing the rows on the form. */
+    val onBatchMerge: () -> Unit = {},
 )
 
 /** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */

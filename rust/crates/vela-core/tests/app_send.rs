@@ -3798,6 +3798,42 @@ fn a_bare_address_scan_fills_the_recipient_field() {
     assert!(!view.locked);
 }
 
+/// Issue #270: "Scan to fill the address" is a row ON the contact picker. The
+/// scan that filled the field is the pick — the picker goes with the scanner,
+/// instead of coming back up over the address it just produced.
+#[test]
+fn a_scan_from_the_contact_picker_closes_the_picker_too() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    assert!(sut.view().show_contact_picker);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT.to_owned(),
+        },
+    });
+    let view = sut.view();
+    assert!(!view.show_scanner);
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipient, RECIPIENT);
+
+    // The same from a request code without a chain: the address fills, both close.
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::OpenScanner);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Request {
+            recipient: RECIPIENT_B.to_owned(),
+            chain_id: None,
+            token_address: None,
+            amount_base_units: None,
+        },
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert_eq!(view.recipient, RECIPIENT_B);
+}
+
 // ===========================================================================
 // Continue credential path
 // ===========================================================================
