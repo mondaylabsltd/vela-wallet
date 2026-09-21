@@ -138,6 +138,19 @@ pub fn read_value(key: &str) -> Result<Option<Value>> {
     Ok(read_all()?.get(key).cloned())
 }
 
+/// Every key under `prefix`, with its value.
+///
+/// For the stores that are ONE key per thing rather than one document —
+/// `vela.perm.<origin>` and `vela.chain.<origin>` are the other clients'
+/// spelling, and a reader that needed a list of origins first would need a
+/// second key to keep in step with the first.
+pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
+    Ok(read_all()?
+        .into_iter()
+        .filter(|(key, _)| key.starts_with(prefix))
+        .collect())
+}
+
 /// What this wallet is actually using on disk, and how many records it holds.
 ///
 /// One JSON document, so the size is one `metadata` call and the record count
