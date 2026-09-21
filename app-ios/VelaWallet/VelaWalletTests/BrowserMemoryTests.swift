@@ -131,7 +131,7 @@ struct BrowserMemoryTests {
         let full = ExploreLive.home(
             explore: view(favorites: [site("https://app.aave.com", "app.aave.com")],
                           favoritesFull: true),
-            history: .empty, permissions: .empty, engine: nil,
+            history: .empty, dbr: .empty, engine: nil,
             identity: (name: "Me", address: "0x88cca0eedbf2c4426110bbfc998f048689266894"),
             loc: loc()
         )
@@ -140,7 +140,7 @@ struct BrowserMemoryTests {
 
         let room = ExploreLive.home(
             explore: view(favorites: [site("https://app.aave.com", "app.aave.com")]),
-            history: .empty, permissions: .empty, engine: nil,
+            history: .empty, dbr: .empty, engine: nil,
             identity: (name: "Me", address: "0x88cca0eedbf2c4426110bbfc998f048689266894"),
             loc: loc()
         )
@@ -255,13 +255,15 @@ struct BrowserMemoryTests {
     /// claim about itself.
     @Test func theConsentSurfaceLeadsWithTheOrigin() {
         let panel = ExploreLive.connectionModel(
-            permissions: DpermViewWire(
-                consent: DpermConsentViewWire(
-                    origin: "https://app.uniswap.org", methods: ["eth_requestAccounts"]
+            dbr: DbrViewWire(
+                ready: true,
+                consent: DbrConsentViewWire(
+                    tab: "t1", origin: "https://app.uniswap.org", methods: ["eth_requestAccounts"],
+                    address: "0x88cca0eedbf2c4426110bbfc998f048689266894", chainId: 1
                 ),
-                connectedAddress: nil,
-                currentOrigin: "https://app.uniswap.org"
+                tabs: [], sites: [], signing: nil, queuedSigning: 0
             ),
+            tab: nil,
             engine: nil,
             identity: (name: "Me", address: "0x88cca0eedbf2c4426110bbfc998f048689266894"),
             loc: loc()

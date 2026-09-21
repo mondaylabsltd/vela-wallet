@@ -76,6 +76,12 @@ final class BrowserAcceptanceTests: XCTestCase {
         if asked { approve.tap() }
         XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_requestAccounts ok"),
                       "the page was never connected")
+        // The chain is the SITE's since spec 070 (Ethereum for a site never
+        // seen, research R5), and the parallel space's Safe lives on Gnosis:
+        // the page puts itself there, as a dApp would.
+        app.webViews.buttons["Switch to Gnosis"].firstMatch.tap()
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict wallet_switchEthereumChain ok"),
+                      "the page could not switch itself to Gnosis")
         return asked
     }
 
@@ -142,12 +148,13 @@ final class BrowserAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-browser-announce")
     }
 
-    /// The address bar shows the page's own host, and the padlock tells the
-    /// truth about the scheme.
+    /// The address bar shows the page's own host, and the lock tells the
+    /// truth about the origin.
     ///
-    /// The harness is served over http on loopback, so the padlock must be
-    /// ABSENT here. A browser chrome that claimed a lock it did not have would
-    /// be the single most dangerous thing in this cut.
+    /// The harness is served over http on LOOPBACK — a local dev server, which
+    /// the core counts as secure (spec 070: https, or a loopback / private-
+    /// network host; the same rule that lets it sign). What must never appear
+    /// here is the INSECURE mark, which is for public http.
     func testTheAddressBarShowsThePagesOwnHost() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
@@ -155,8 +162,8 @@ final class BrowserAcceptanceTests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["127.0.0.1:8137"].waitForExistence(timeout: 30),
                       "the address bar shows a host the page is not on")
-        XCTAssertFalse(app.images["explore.secureSite"].exists,
-                       "an http page must not be drawn with a padlock")
+        XCTAssertFalse(app.images["explore.insecure"].exists,
+                       "a loopback dev server is not public http, and is not flagged as it")
 
         attach(app.screenshot(), named: "device-browser-address-bar")
     }
@@ -273,10 +280,13 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         // `eth_chainId` needs no permission: it is the wallet's own answer
-        // about itself, from the grant mirror, with no network at all.
+        // about the SITE's chain (spec 070: per origin, kept across launches —
+        // Ethereum for a site never seen, else the site's own), with no
+        // network at all. Which chain depends on this device's history; the
+        // notation does not.
         app.webViews.buttons["Chain"].firstMatch.tap()
-        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_chainId ok \"0x64\""),
-                      "the page was told the wrong chain, or told it in the wrong notation")
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_chainId ok \"0x"),
+                      "the page was told the chain in the wrong notation, or not at all")
 
         // A real read, through this wallet's endpoints for this chain.
         app.webViews.buttons["Block number"].firstMatch.tap()
@@ -288,9 +298,10 @@ final class BrowserAcceptanceTests: XCTestCase {
     /// **`eth_sign` is refused**, and the refusal is not a lie about a human
     /// action.
     ///
-    /// 4900 rather than 4001: nobody declined anything. The same answer the
-    /// extension, the desktop and Android give, checked here on the page's own
-    /// side of the channel.
+    /// 4200 "unsupported method" (spec 070 research R4): nobody declined
+    /// anything (4001), and the wallet is not disconnected (4900, what the
+    /// native shells answered before the core owned the table). The
+    /// extension's answer, now every client's.
     func testEthSignIsRefusedWithoutReachingAnybody() throws {
         let app = launchBrowsing()
         XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
@@ -298,7 +309,7 @@ final class BrowserAcceptanceTests: XCTestCase {
         XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
 
         app.webViews.buttons["eth_sign"].firstMatch.tap()
-        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sign err 4900"),
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sign err 4200"),
                       "eth_sign was not refused as policy")
         attach(app.screenshot(), named: "device-browser-ethsign-refused")
     }

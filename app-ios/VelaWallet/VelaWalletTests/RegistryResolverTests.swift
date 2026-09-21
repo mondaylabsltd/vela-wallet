@@ -65,7 +65,14 @@ struct RegistryResolverTests {
     }
 
     private static let fixture: Fixture = {
-        let url = ProviderBundleTests.repoRoot
+        // The repo root, from this file (`ProviderBundleTests` held it until
+        // spec 070 retired the bundled provider).
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // VelaWalletTests
+            .deletingLastPathComponent()   // app-ios/VelaWallet
+            .deletingLastPathComponent()   // app-ios
+            .deletingLastPathComponent()   // repo root
+        let url = repoRoot
             .appendingPathComponent("app-web/vela-wallet/src/lib/onboarding/core/__fixtures__/registry-chain.json")
         let json = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [String: Any] ?? [:]
         return Fixture(

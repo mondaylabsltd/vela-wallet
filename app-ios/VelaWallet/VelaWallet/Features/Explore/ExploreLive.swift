@@ -6,8 +6,9 @@
 //  `ExploreFixtures`.
 //
 //  Three views go in — `explore_sites` (favourites, groups, tabs),
-//  `browser_history` (recents) and `dapp_permissions` (the connected chip) —
-//  and the drawn `ExploreHomeModel` comes out. The fixtures stay exactly where
+//  `browser_history` (recents) and `dapp_browser` (the consent sheet and, per
+//  tab, the origin, the connected account, the chain, the lock and whether the
+//  page crashed) — and the drawn `ExploreHomeModel` comes out. The fixtures stay exactly where
 //  they are: E1–E7 are gallery states, and a gallery that ran somebody else's
 //  JavaScript would not be a gallery.
 //
@@ -28,14 +29,16 @@ enum ExploreLive {
     static func home(
         explore: ExploreViewWire,
         history: BhistViewWire,
-        permissions: DpermViewWire,
+        dbr: DbrViewWire,
         engine: BrowserEngine?,
         identity: (name: String, address: String),
-        chainId: Int = 100,
+        chainIds: [Int] = [],
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
             || !explore.tabs.isEmpty
+        // The core's facts about the tab in front — never another tab's.
+        let tab = engine == nil ? nil : dbr.tab(explore.selectedTab)
 
         var tiles: [TileModel] = explore.favorites.map { .site(site(from: $0)) }
         // The grid is full: draw NO add affordance rather than one that
@@ -43,19 +46,24 @@ enum ExploreLive {
         if !explore.favoritesFull { tiles.append(.add(loc.t("explore.add"))) }
 
         let connection = connectionModel(
-            permissions: permissions, engine: engine, identity: identity,
-            chainId: chainId, loc: loc
+            dbr: dbr, tab: tab, engine: engine, identity: identity,
+            chainIds: chainIds, loc: loc
         )
+        let bookmarked = engine.map { current in
+            explore.favorites.contains { $0.origin == current.origin }
+        } ?? false
         let siteMenu = ExploreSheet.siteMenu(
             site: engine.map(currentSite) ?? ExploreFixtures.uniswap,
             // The site MENU names the page; the connection sheet judges it.
             // Android splits them the same way: a menu that shouted "insecure"
             // at every http page would be a warning nobody reads, and the
             // warning belongs where a person is about to grant something.
-            statusLine: (engine?.secure ?? false)
+            statusLine: (tab?.secure ?? false)
                 ? loc.t("explore.secureSite")
                 : (engine?.host ?? ""),
-            items: ExploreFixtures.siteMenuItems(loc)
+            items: siteMenuItems(
+                bookmarked: bookmarked, connected: tab?.connectedAddress != nil, loc: loc
+            )
         )
 
         return ExploreHomeModel(
@@ -78,7 +86,7 @@ enum ExploreLive {
                 : (title: loc.t("explore.favorites"), action: loc.t("explore.edit"), tiles: tiles),
             groups: groups(explore: explore, history: history, loc: loc),
             browser: browserModel(
-                explore: explore, permissions: permissions, engine: engine,
+                explore: explore, tab: tab, engine: engine,
                 identity: identity
             ),
             tabs: tabs(explore: explore, loc: loc),
@@ -100,6 +108,23 @@ enum ExploreLive {
                 settings: loc.t("componentsUi.mainNav.settings")
             )
         )
+    }
+
+    /// The ⋯ sheet's items, saying what a tap will do NOW: the star's row
+    /// removes a site that is already a favourite, and Disconnect is offered
+    /// only to a site that is connected.
+    static func siteMenuItems(bookmarked: Bool, connected: Bool, loc: Loc) -> [SiteMenuItem] {
+        ExploreFixtures.siteMenuItems(loc).compactMap { item in
+            switch item.id {
+            case "favorite" where bookmarked:
+                return SiteMenuItem(id: item.id, icon: "starSolid",
+                                    label: loc.t("explore.removeFromFavorites"))
+            case "disconnect" where !connected:
+                return nil
+            default:
+                return item
+            }
+        }
     }
 
     // MARK: - Groups
@@ -197,15 +222,18 @@ enum ExploreLive {
 
     static func browserModel(
         explore: ExploreViewWire,
-        permissions: DpermViewWire,
+        tab: DbrTabViewWire?,
         engine: BrowserEngine?,
         identity: (name: String, address: String)
     ) -> BrowserModel {
         BrowserModel(
             url: engine?.url ?? "",
             host: engine?.host ?? "",
-            secure: engine?.secure ?? false,
-            connected: permissions.isConnected,
+            // The core's judgement of the tab's origin, never a prefix check
+            // here: a loopback dev server is not "insecure", and a page that
+            // has not said hello yet is not "secure" either.
+            secure: tab?.secure ?? false,
+            connected: tab?.connectedAddress != nil,
             canBack: engine?.canGoBack ?? false,
             canForward: engine?.canGoForward ?? false,
             bookmarked: engine.map { current in
@@ -220,65 +248,80 @@ enum ExploreLive {
     }
 
     static func connectionModel(
-        permissions: DpermViewWire,
+        dbr: DbrViewWire,
+        tab: DbrTabViewWire?,
         engine: BrowserEngine?,
         identity: (name: String, address: String),
-        chainId: Int = 100,
+        chainIds: [Int] = [],
         loc: Loc
     ) -> ConnectionModel {
-        // The origin that is ASKING outranks the one in the address bar. They
-        // are normally the same; when a page navigates with a request still
-        // open they are not, and the sheet must name the asker.
-        let origin = permissions.consent?.origin
-            ?? permissions.currentOrigin
-            ?? engine?.origin ?? ""
+        // The origin that is ASKING outranks the one in front. They are
+        // normally the same; when a background tab asks, or a page navigates
+        // with a request still open, they are not, and the sheet must name
+        // the asker.
+        let consent = dbr.consent
+        let origin = consent?.origin ?? tab?.origin ?? engine?.origin ?? ""
         let host = BrowserEngine.hostOf(origin: origin)
         // The **origin** is the fact. A site's name and its icon are claims it
         // makes about itself, and a consent sheet that led with the claim
         // would be a sheet somebody can dress up.
         let asked = site(host: host, name: host, origin: origin)
+        // The asker's own facts: the tab that asked, when it is not in front.
+        let facts = consent.flatMap { dbr.tab($0.tab) } ?? tab
+        let secure = facts?.secure ?? false
+        let connected = consent == nil && tab?.connectedAddress != nil
+        let chainId = consent?.chainId ?? tab?.chainId ?? 1
 
-        let status = statusLine(
-            secure: origin.hasPrefix("https://"),
-            connected: permissions.isConnected,
-            host: host,
-            loc: loc
-        )
+        // The account the site SEES — the grant's — or, while it asks, the
+        // one a grant would be made for. Named when it is this wallet's
+        // active account, which it is unless a switch is still landing.
+        let shown = consent?.address ?? tab?.connectedAddress ?? identity.address
+        let isActive = shown.caseInsensitiveCompare(identity.address) == .orderedSame
 
         return ConnectionModel(
             // A site that is ASKING is named in the title — "连接到 {host}".
             // The anti-phishing line: the sheet's first sentence is the origin
             // the request came from, not a generic heading a person skims.
             // Android has titled it this way since 044.
-            title: permissions.consent == nil
+            title: consent == nil
                 ? loc.t("explore.connectionTitle")
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
-            statusLine: status,
+            statusLine: statusLine(secure: secure, connected: connected, host: host, loc: loc),
             account: (
-                name: identity.name,
-                address: AddressText.short(identity.address),
-                seed: identity.address
+                name: isActive ? identity.name : AddressText.short(shown),
+                address: AddressText.short(shown),
+                seed: shown
             ),
             switchLabel: loc.t("explore.switchAccount"),
             networkLabel: loc.t("explore.network"),
             network: (
-                name: ChainCatalog.meta(chainId)?.displayName ?? String(chainId),
+                name: chainName(chainId),
                 dot: SettingsLive.chainColor(chainId)
             ),
             explainer: loc.t("explore.connectionExplainer"),
             disconnect: loc.t("explore.disconnect"),
             // When a site is ASKING, the explainer is the one written for
             // exactly that moment: what a connection is, and what it is not.
-            footnote: permissions.consent == nil
+            footnote: consent == nil
                 ? loc.t("explore.autoRequestHint")
                 : loc.t("connect.browser.body"),
-            secure: origin.hasPrefix("https://"),
-            consent: permissions.consent == nil ? nil : (
+            secure: secure,
+            consent: consent == nil ? nil : (
                 approve: loc.t("connect.dapp.approve"),
                 reject: loc.t("connect.dapp.reject")
-            )
+            ),
+            origin: origin,
+            chainId: chainId,
+            // The wallet's own networks, and nothing a page named.
+            networks: origin.isEmpty ? [] : chainIds.map { id in
+                NetworkChoiceModel(id: id, name: chainName(id), dot: SettingsLive.chainColor(id))
+            }
         )
+    }
+
+    private static func chainName(_ chainId: Int) -> String {
+        ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
     }
 
     /// The line under a site's name.

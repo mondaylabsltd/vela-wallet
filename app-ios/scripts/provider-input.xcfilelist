@@ -1,8 +1,0 @@
-# The page-side EIP-1193 provider, read from the web tree.
-#
-# ONE provider script for four clients. The extension ships these bytes, the
-# desktop injects them, Android syncs them into its assets, and this copies
-# them into the app bundle. A second hand-written provider would be a second
-# set of answers to questions about somebody's money.
-$(SRCROOT)/../../app-web/vela-wallet/extension/lib/protocol.js
-$(SRCROOT)/../../app-web/vela-wallet/extension/inpage.js

@@ -2908,6 +2908,166 @@ public func FfiConverterTypeCtapCeremonyHost_lower(_ value: CtapCeremonyHost) ->
 
 
 /**
+ * The in-app browser's whole decision half (spec 070): every page
+ * message, every tab, per-origin chains, the signing line, bounded
+ * reads — the shell owns the WebViews, posts strings and runs calls.
+ */
+public protocol DappBrowserCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The in-app browser's whole decision half (spec 070): every page
+ * message, every tab, per-origin chains, the signing line, bounded
+ * reads — the shell owns the WebViews, posts strings and runs calls.
+ */
+open class DappBrowserCore: DappBrowserCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_dappbrowsercore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_dappbrowsercore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_dappbrowsercore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dappbrowsercore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dappbrowsercore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dappbrowsercore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDappBrowserCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = DappBrowserCore
+
+    public static func lift(_ handle: UInt64) throws -> DappBrowserCore {
+        return DappBrowserCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: DappBrowserCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DappBrowserCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: DappBrowserCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDappBrowserCore_lift(_ handle: UInt64) throws -> DappBrowserCore {
+    return try FfiConverterTypeDappBrowserCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDappBrowserCore_lower(_ value: DappBrowserCore) -> UInt64 {
+    return FfiConverterTypeDappBrowserCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Per-origin dApp permissions and the in-app browser's consent flow:
  * the reads it answers itself, the grants it keeps, the requests it
  * forwards to signing, the events the page hears.
@@ -9368,6 +9528,19 @@ public func create2Address(deployerHex: String, salt: Data, initCodeHash: Data)t
 })
 }
 /**
+ * Address-bar text → the URL to load: `https://` for a host, `http://` only
+ * for loopback / private-network hosts, a DuckDuckGo search for anything
+ * else (spec 070 research R6). `None` for blank input.
+ */
+public func dappBrowserInput(text: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_browser_input(
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
+/**
  * Is this provider method one that asks for a signature? The routing
  * table's first question (spec 044), answered by the core so the shell's
  * allowlist and the machine's own notion of "a signing method" cannot drift.
@@ -9391,6 +9564,20 @@ public func dappOriginOf(url: String) -> String?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_origin_of(
         FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
+ * The whole document-start script an in-app browser injects (spec 070):
+ * THE provider (`vela-core/provider/inpage.js`, the extension's too) and
+ * the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
+ * difference is how the bridge hands a string to native code.
+ */
+public func dappProviderScript(host: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_provider_script(
+        FfiConverterString.lower(host),uniffiCallStatus
     )
 })
 }
@@ -10630,10 +10817,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_create2_address() != 41676) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_browser_input() != 24918) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_origin_of() != 63765) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_provider_script() != 52260) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_decode_calldata() != 44581) {
@@ -11062,6 +11255,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_view() != 40709) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_dispatch() != 3733) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_resolve_effect() != 4017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_view() != 50479) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_dispatch() != 51338) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11243,6 +11445,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_createwalletcore_new() != 56933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_dappbrowsercore_new() != 15572) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_dapppermissionscore_new() != 56408) {

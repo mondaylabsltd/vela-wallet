@@ -68,3 +68,41 @@ struct BrowserFailureView: View {
         .accessibilityIdentifier("explore.loadFailed")
     }
 }
+
+/// What a tab whose renderer died says (spec 070 FR-013).
+///
+/// Before 070 `webViewWebContentProcessDidTerminate` was not implemented: the
+/// page went white and every request it had open waited forever. Now the core
+/// has settled those requests (4900) by the time this is drawn, and the one
+/// thing left to offer is a reload — the wallet itself is untouched, and the
+/// sentence says so.
+struct BrowserCrashedView: View {
+    @Environment(\.theme) private var theme
+
+    let title: String
+    let detail: String
+    let reload: String
+    var onReload: () -> Void = {}
+
+    var body: some View {
+        VStack(spacing: Tokens.Space.s12) {
+            LucideIcon(.triangleAlert, size: LucideIconSize.action)
+                .foregroundStyle(theme.fgMuted)
+            Text(verbatim: title)
+                .typeRole(Typography.title)
+                .foregroundStyle(theme.fgBase)
+                .multilineTextAlignment(.center)
+            Text(verbatim: detail)
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgSubtle)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Tokens.Space.s24)
+            VelaButton(title: reload, kind: .secondary, action: onReload)
+                .padding(.horizontal, Tokens.Space.s24)
+                .padding(.top, Tokens.Space.s8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.bgBase)
+        .accessibilityIdentifier("explore.pageCrashed")
+    }
+}
