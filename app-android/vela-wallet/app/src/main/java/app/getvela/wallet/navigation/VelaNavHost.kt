@@ -1725,7 +1725,7 @@ fun VelaNavHost(
                     )
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
-                    m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
+                    m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
                         networks.networks.firstOrNull { it.id == id }?.let { row ->
@@ -1931,6 +1931,15 @@ fun VelaNavHost(
                         // Spec 072: the providers page loads the saved keys and
                         // tests them; the endpoints page probes; the wizard starts
                         // clean — the phone web's own open events.
+                        // The account sheet asks the balance core for every account's
+                        // total, as the home's switcher does, and lets it go on close.
+                        onOverlayShown = { shown ->
+                            if (shown == SettingsOverlay.Accounts) {
+                                application.container.wallet.switcherOpened(sessionView.accounts.map { it.address })
+                            } else {
+                                application.container.wallet.switcherClosed()
+                            }
+                        },
                         onPageShown = { shown ->
                             when (shown) {
                                 SettingsPage.RpcProviders -> settings.openProviders()

@@ -889,15 +889,21 @@ object SettingsLive {
 
     private const val MASK = "••••"
 
-    /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
-    fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(
-        accountsSheet = model.accountsSheet.copy(
-            // The count line ends in the separator that precedes a total; this sheet shows none, so the separator goes too.
-            summary = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString())).trimEnd(' ', '·'),
-            rows = accounts.mapIndexed { i, (name, address) ->
-                AccountsSheetRowModel(name = name.ifBlank { ExploreLive.shortAddress(address) }, addressDisplay = ExploreLive.shortAddress(address), addressFull = address, amount = "", selected = i == activeIndex)
-            },
-        ),
+    /**
+     * The accounts sheet: the home's own switcher (spec 072) — this device's
+     * accounts, the active one ticked, each with the total the balance core
+     * keeps for it once the sheet asked (`SwitcherOpened`), in the display
+     * currency. One builder for both places a person switches accounts.
+     */
+    fun withAccounts(
+        model: SettingsScreenModel,
+        accounts: List<Pair<String, String>>,
+        activeIndex: Int,
+        switcher: app.getvela.wallet.feature.wallet.core.BalanceSwitcherView,
+        currency: app.getvela.wallet.feature.settings.core.CurrencyView,
+        strings: VelaStrings,
+    ): SettingsScreenModel = model.copy(
+        accountsSheet = app.getvela.wallet.feature.wallet.WalletLive.accountSwitcher(accounts, activeIndex, switcher, currency, strings),
     )
 
     /**

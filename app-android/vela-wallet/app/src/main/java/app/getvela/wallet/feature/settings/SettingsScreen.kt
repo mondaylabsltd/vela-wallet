@@ -167,6 +167,8 @@ data class SettingsActions(
     val onSignerUrlReset: () -> Unit = {},
     /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
     val onPageShown: (SettingsPage) -> Unit = {},
+    /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
+    val onOverlayShown: (SettingsOverlay) -> Unit = {},
 )
 
 @Composable
@@ -183,6 +185,7 @@ fun SettingsRoute(
     // Spec 072: the network a trash tap asked about, until the sheet answers.
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
+    LaunchedEffect(overlay) { actions.onOverlayShown(overlay) }
     // The storage row waiting on an answer, and the warning its group carries
     // (spec 058): 清除 asks before it removes.
     var pendingStorage by remember { mutableStateOf<Pair<StorageItemModel, String>?>(null) }
@@ -1294,11 +1297,27 @@ private fun SheetTitle(title: String, subtitle: String? = null) {
 private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)? = null, onSelect: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title, sheet.subtitle)
+    // Spec 072: the search box filters — it was drawn and did nothing.
+    var query by remember(sheet.title) { mutableStateOf("") }
     if (sheet.searchPlaceholder != null) {
-        VelaUrlField(label = "", value = "", placeholder = sheet.searchPlaceholder)
+        VelaUrlField(
+            label = "",
+            value = query,
+            placeholder = sheet.searchPlaceholder,
+            keyboard = androidx.compose.ui.text.input.KeyboardType.Text,
+            onValueChange = { query = it },
+        )
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
     }
-    sheet.rows.forEach { VelaSelectRow(it, onClick = onSelect) }
+    val needle = query.trim()
+    sheet.rows
+        .filter { row ->
+            needle.isEmpty() ||
+                row.label.contains(needle, ignoreCase = true) ||
+                row.caption?.contains(needle, ignoreCase = true) == true ||
+                row.id.contains(needle, ignoreCase = true)
+        }
+        .forEach { VelaSelectRow(it, onClick = onSelect) }
     if (sheet.footerNote != null) {
         Text(
             text = sheet.footerNote,
