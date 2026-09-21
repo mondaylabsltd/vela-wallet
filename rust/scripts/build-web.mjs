@@ -45,7 +45,12 @@ const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
  * bundle size: at 4 MB raw the brotli'd wire cost is roughly 1.3 MB, fetched
  * once and cached immutably under its source-fingerprint name.
  */
-const MAX_WASM_BYTES = 4_000_000;
+//
+// 4.1 MB since spec 071: the Clear Signer (request, verification, the
+// `sign_pref` machine, and the loopback connection the page's suite runs)
+// added 77 KB raw — 12 KB brotli'd (916,776 → ~929 KB on the wire). Raised
+// by a measured step, not removed: growth still has to be argued for.
+const MAX_WASM_BYTES = 4_100_000;
 
 const CHECK_ONLY = process.argv.includes('--check');
 

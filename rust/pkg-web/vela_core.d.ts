@@ -574,6 +574,19 @@ export class SessionCore {
 }
 
 /**
+ * r#" How this device signs by default (spec 071): the "Sign with" every"#
+ * r" signing sheet starts at, and which Clear Signer page it opens.
+ */
+export class SignPrefCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    view(): string;
+}
+
+/**
  * r" The dApp signing approval lifecycle.
  */
 export class SignRequestCore {
@@ -664,8 +677,10 @@ export function clearSignerDefaultUrl(): string;
 
 /**
  * `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
- * accountName?, credentialIdsHex, userOp?, feeLegIndex?}` → the page's
- * `{intent, context}`.
+ * accountName?, credentialIdsHex, userOp?, calls?}` → the page's `{intent,
+ * context}`. As the phones' `clear_signer_request`: `calls` are the
+ * operation's legs before its fee leg (so the fee leg is `calls.length`),
+ * and an empty `method` — the wallet's own send — makes them the intent.
  */
 export function clearSignerRequest(input_json: string): string;
 
@@ -1000,6 +1015,7 @@ export interface InitOutput {
     readonly __wbg_rpcpoolcore_free: (a: number, b: number) => void;
     readonly __wbg_sendcore_free: (a: number, b: number) => void;
     readonly __wbg_sessioncore_free: (a: number, b: number) => void;
+    readonly __wbg_signprefcore_free: (a: number, b: number) => void;
     readonly __wbg_signrequestcore_free: (a: number, b: number) => void;
     readonly __wbg_tokentrustcore_free: (a: number, b: number) => void;
     readonly __wbg_txtrackercore_free: (a: number, b: number) => void;
@@ -1181,6 +1197,10 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly signprefcore_new: () => number;
+    readonly signprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signprefcore_view: (a: number) => [number, number, number, number];
     readonly signrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
