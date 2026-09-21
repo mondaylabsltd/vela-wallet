@@ -481,7 +481,7 @@ enum SendLive {
 
     /// A tier as one this build offers: the dead `rapid` reads as the factory
     /// `fast`, the core's own answer for it.
-    private static func offered(_ tier: String) -> String {
+    static func offered(_ tier: String) -> String {
         ["fast", "standard", "slow"].contains(tier) ? tier : "fast"
     }
 
@@ -502,8 +502,12 @@ enum SendLive {
     /// The folded speed control (spec 068), drawn from the `fee_speed` core's
     /// view (spec 069). Every figure is that tier's OWN settled quote, echoed by
     /// the core; only the words and the fee line are made here.
+    ///
+    /// The dApp signing sheet draws the same control (spec 069) and passes no
+    /// send view: each option is then written the way that sheet writes its
+    /// own fee row.
     static func speedModel(
-        _ speed: SpeedInputs, view: SendViewWire, display: WalletLive.Display, loc: Loc
+        _ speed: SpeedInputs, view: SendViewWire?, display: WalletLive.Display, loc: Loc
     ) -> FeeSpeedModel {
         let core = speed.view
         return FeeSpeedModel(

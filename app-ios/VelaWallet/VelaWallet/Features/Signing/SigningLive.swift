@@ -103,7 +103,9 @@ enum SigningLive {
         clear rawClear: ClearSigningViewWire,
         guard guardView: GuardViewWire,
         fee: FeeViewWire?,
-        context: Context
+        context: Context,
+        /// The sheet's speed control (spec 069); `nil` draws the fee alone.
+        speed: SendLive.SpeedInputs? = nil
     ) -> SigningModel {
         let loc = context.loc
         let host = BrowserEngine.hostOf(origin: request.origin)
@@ -144,13 +146,14 @@ enum SigningLive {
                 explorerLabel: fallback.tech.explorerLabel
             ),
             techOpen: false,
-            fee: feeModel(clear: clear, fee: fee, context: context),
+            fee: feeModel(clear: clear, fee: fee, context: context, speedTier: speed?.view.tier),
             signer: (label: s(loc, "signingAccount"),
                      name: context.walletName,
                      seed: context.walletAddress),
             confirm: (hint: s(loc, "slideToConfirm"),
                       action: confirmLabel(clear: clear, loc: loc),
-                      enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear)),
+                      enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
+                                              speedTier: speed?.view.tier)),
             panelTitle: s(loc, "signatureRequest")
         )
         // The wallet's own request (the key backup) is not a site: its own mark
@@ -159,6 +162,11 @@ enum SigningLive {
         model.dappIconUrls = own ? [] : siteIconUrls(origin: request.origin)
         model.networkLogoUrl = Marks.chainLogoURL(request.chainId)
         model.signWith = signWith(context: context)
+        if !isOffChain(clear) {
+            model.feeSpeed = speed.map {
+                SendLive.speedModel($0, view: nil, display: context.display, loc: loc)
+            }
+        }
         return model
     }
 
@@ -170,15 +178,26 @@ enum SigningLive {
     /// **An off-chain signature has no fee**, so the fee machine has nothing
     /// to be ready about. Requiring its readiness there would make a
     /// `personal_sign` unsignable forever.
+    ///
+    /// **The fee's say includes its speed** (spec 069): between a tap and that
+    /// speed's own figure landing, the core's `confirm_fee_ready` is still true
+    /// on the speed just left, and the slide must not sign it.
     static func confirmEnabled(
         sign: SignViewWire, guard guardView: GuardViewWire, fee: FeeViewWire?,
-        clear: ClearSigningViewWire
+        clear: ClearSigningViewWire, speedTier: String? = nil
     ) -> Bool {
-        sign.confirmGateOpen
+        let feeReady = (fee?.confirmFeeReady ?? false) && !feeOfAnotherTier(fee, speedTier: speedTier)
+        return sign.confirmGateOpen
             && guardView.confirmAllowed
-            && (isOffChain(clear) || (fee?.confirmFeeReady ?? false))
+            && (isOffChain(clear) || feeReady)
             && !sign.isSigning
             && !sign.isSubmitting
+    }
+
+    /// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
+    static func feeOfAnotherTier(_ fee: FeeViewWire?, speedTier: String?) -> Bool {
+        guard let estimate = fee?.fee, let speedTier else { return false }
+        return SendLive.offered(estimate.tier) != SendLive.offered(speedTier)
     }
 
     static func isOffChain(_ clear: ClearSigningViewWire) -> Bool {
@@ -644,11 +663,13 @@ enum SigningLive {
     // MARK: - The fee and the verb
 
     static func feeModel(
-        clear: ClearSigningViewWire, fee: FeeViewWire?, context: Context
+        clear: ClearSigningViewWire, fee: FeeViewWire?, context: Context, speedTier: String? = nil
     ) -> FeeModel {
         if isOffChain(clear) { return .offchain(note: s(context.loc, "noNetworkFee")) }
         let value: String
-        if let estimate = fee?.fee {
+        // For the moment between a speed being picked and its own figure
+        // landing, the fee in hand is the previous speed's: "estimating".
+        if let estimate = fee?.fee, !feeOfAnotherTier(fee, speedTier: speedTier) {
             // The send screens' own line, through the send screens' own
             // formatter (issue 201): the coin that is ACTUALLY paying — an
             // in-band ERC-20 fee is its own amount under its own ticker, never

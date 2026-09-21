@@ -184,6 +184,8 @@ struct SigningModel {
     /// The wallet asking ITSELF (the key backup): its own mark and name, and
     /// no host — it is not a site.
     var dappOwn = false
+    /// The speed control under the fee (spec 069) — the send form's own.
+    var feeSpeed: FeeSpeedModel?
     /// The site's own icon, tried in order OVER the letter (founder ruling
     /// 2026-09-19). Https only.
     var dappIconUrls: [String] = []

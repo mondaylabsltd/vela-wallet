@@ -1090,6 +1090,7 @@ struct RootView: View {
                         onAllowanceChip: { chip in signing?.guardPreset(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
                         onSignWith: { id in signing?.signWith(id) },
+                        onSpeed: { id in signing?.speed(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         onSelectTab: selectTab
@@ -1221,6 +1222,7 @@ struct RootView: View {
             store: shelf,
             pool: pool,
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
+            numberPreset: { Formats.resolve(Formats.current.number).rawValue },
             ports: SigningController.Ports(
                 respond: respond,
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
@@ -2072,7 +2074,8 @@ struct RootView: View {
             clear: live.clear,
             guard: live.guardView,
             fee: live.fee,
-            context: context
+            context: context,
+            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) }
         )
     }
 
@@ -2522,7 +2525,8 @@ struct RootView: View {
                     onConfirm: { signing.approve() },
                     onAllowanceChip: { chip in signing.guardPreset(chip) },
                     onAllowanceAmount: { text in signing.guardCustomAmount(text) },
-                    onSignWith: { id in signing.signWith(id) }
+                    onSignWith: { id in signing.signWith(id) },
+                    onSpeed: { id in signing.speed(id) }
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])

@@ -72,7 +72,13 @@ final class SigningController {
     private(set) var sign: SignViewWire = .empty
     private(set) var clear: ClearSigningViewWire = .empty
     private(set) var guardView: GuardViewWire = .empty
-    private(set) var fee: FeeViewWire?
+    /// The fee in force — whichever session prices the tier in force now.
+    var fee: FeeViewWire? { fees.view }
+    /// The speed control, as the `fee_speed` core decided it (spec 069).
+    var speed: FeeSpeedViewWire? { fees.speed }
+
+    /// The fee view of the session pricing `tier`, for that option's line.
+    func feeView(of tier: String) -> FeeViewWire? { fees.view(of: tier) }
 
     private(set) var request: Incoming?
     /// The page has its answer and the core has cleared the sheet. The
@@ -98,7 +104,10 @@ final class SigningController {
     private var signCore: CoreStore<SignViewWire>!
     private var clearCore: CoreStore<ClearSigningViewWire>!
     private var guardCore: CoreStore<GuardViewWire>!
-    private var feeCore: CoreStore<FeeViewWire>!
+    /// The fee sessions and the speed control — the very store the send form
+    /// runs (spec 069), so the sheet's speeds, previews, free upgrade and "the
+    /// price you tap is the price you get" cannot drift from the form's.
+    private let fees: FeeStore
 
     private let wallet: (address: String, credentialId: String)
     private let relay: RelayClient
@@ -127,6 +136,8 @@ final class SigningController {
     /// The calls this request carries, kept for the re-quote.
     private var feeCalls: [[String: Any]] = []
     private var requoting = false
+    /// Whether the person could still choose, as last told to the speed core.
+    private var lastOnForm: Bool?
 
     init(
         wallet: (address: String, credentialId: String),
@@ -136,6 +147,7 @@ final class SigningController {
         store: VelaStore,
         pool: RpcPool,
         preferredTier: @escaping () -> String = { "fast" },
+        numberPreset: @escaping () -> String = { "comma_dot" },
         ports: Ports
     ) {
         self.wallet = wallet
@@ -143,11 +155,12 @@ final class SigningController {
         self.pool = pool
         self.ports = ports
         self.preferredTier = preferredTier
+        self.numberPreset = numberPreset
+        self.fees = FeeStore(relay: relay, accounts: accounts)
 
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
-        let feeExecutor = FeeExecutor(relay: relay, accounts: accounts)
 
         signCore = CoreStore(
             bridge: SignRequestCore(),
@@ -167,12 +180,7 @@ final class SigningController {
             onView: { [weak self] view in self?.guardView = view },
             onFault: { print("[vela-wallet] approval_guard fault: \($0)") }
         )
-        feeCore = CoreStore(
-            bridge: FeePolicyCore(),
-            perform: { await feeExecutor.perform($0) },
-            onView: { [weak self] view in self?.commitFee(view) },
-            onFault: { print("[vela-wallet] fee_policy fault: \($0)") }
-        )
+        fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
             respond: { [weak self] transportId, id, json in
@@ -202,6 +210,9 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
+        // Each request starts at the stored default: a pick is one-shot.
+        fees.resetSpeed()
+        fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -298,8 +309,10 @@ final class SigningController {
 
     /// The stored default speed (spec 069): a dApp transaction is priced —
     /// and, through the quoted fee, submitted — at the speed Settings names,
-    /// which is `fast` for everybody who never chose.
+    /// which is `fast` for everybody who never chose, until the sheet's own
+    /// speed control picks another. The number preset writes each gas bid.
     private let preferredTier: () -> String
+    private let numberPreset: () -> String
 
     private func requestQuote(chainId: Int) {
         guard !feeCalls.isEmpty else { return }
@@ -307,18 +320,28 @@ final class SigningController {
             guard let self else { return }
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
             else { return }
-            dispatch(feeCore, [
-                "type": "quote_requested",
-                "chain_id": chainId,
-                "account": wallet.address,
-                "deployed": deployed,
-                "public_key_available": true,
-                "tier": ["fast", "standard", "slow"].contains(preferredTier()) ? preferredTier() : "fast",
-                "calls": feeCalls,
-                "fee_token": NSNull(),
-            ])
+            // HOW FAST is the speed core's to say: the store asks at its tier.
+            fees.ask(
+                chainId: chainId, account: wallet.address, deployed: deployed,
+                publicKeyAvailable: true, calls: feeCalls, feeToken: nil
+            )
         }
     }
+
+    // MARK: - The speed control (spec 069)
+
+    /// `nil` folds or unfolds the control; a tier is a one-shot pick, never
+    /// the stored preference.
+    func speed(_ tier: String?) {
+        guard let tier else {
+            fees.toggleSpeed()
+            return
+        }
+        fees.pickSpeed(tier)
+    }
+
+    /// The refresh control: measure again, the held readings dropped first.
+    func refreshFee() { fees.refresh() }
 
     // MARK: - What the sheet does
 
@@ -371,6 +394,7 @@ final class SigningController {
         sign.confirmGateOpen
             && guardView.confirmAllowed
             && (fee?.confirmFeeReady ?? false)
+            && !SigningLive.feeOfAnotherTier(fee, speedTier: speed?.tier)
             && !sign.isSigning
             && !sign.isSubmitting
     }
@@ -386,6 +410,13 @@ final class SigningController {
 
     private func commitSign(_ view: SignViewWire) {
         sign = view
+        // A free upgrade is decided only while the person can still choose —
+        // never under a slide that has already gone.
+        let onForm = view.surface == .sheet && !view.isSigning && !view.isSubmitting
+        if onForm != lastOnForm {
+            lastOnForm = onForm
+            fees.speedStage(onForm: onForm)
+        }
 
         if let handoff = view.trackerHandoff, !handedOff {
             handedOff = true
@@ -398,16 +429,15 @@ final class SigningController {
     }
 
     private func commitFee(_ view: FeeViewWire) {
-        fee = view
         // A quote goes stale while somebody reads. While the sheet is up and
         // nothing is signing, ask again — otherwise the slide shuts with no
         // way to reopen it, which is what Android's phase 5 watched happen.
+        // The core keeps the request it priced; `requote` re-runs THAT one.
         guard view.stale, !view.busy, !answered, !requoting,
-              sign.surface == .sheet, !sign.isSigning, !sign.isSubmitting,
-              let chainId = request?.chainId
+              sign.surface == .sheet, !sign.isSigning, !sign.isSubmitting
         else { return }
         requoting = true
-        requestQuote(chainId: chainId)
+        fees.requote()
         Task { @MainActor [weak self] in self?.requoting = false }
     }
 

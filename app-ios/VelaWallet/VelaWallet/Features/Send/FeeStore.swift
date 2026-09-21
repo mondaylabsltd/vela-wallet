@@ -42,6 +42,9 @@ final class FeeStore {
 
     /// The fee session in force — what the fee row and the fee-token sheet read.
     private(set) var view: FeeViewWire?
+    /// Told every view of the session in force — for an owner that reacts to
+    /// one (the signing sheet re-asks a stale quote). Promotions included.
+    @ObservationIgnored var onInForce: ((FeeViewWire) -> Void)?
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     private(set) var speed: FeeSpeedViewWire?
 
@@ -172,6 +175,7 @@ final class FeeStore {
     /// readings behind it, so a retry measures again (issue 212).
     private func inForceChanged() {
         view = inForce.view
+        if let view { onInForce?(view) }
         guard let view, !view.busy else { return }
         if view.failed != nil, let ask = inForce.ask {
             relay.invalidateFeeSignals(chainId: ask.chainId)
@@ -236,6 +240,24 @@ final class FeeStore {
             }))
             askInForce(ask)
         }
+    }
+
+    /// Price the operation at the tier in force and let the fee row show it
+    /// when it lands — for a surface nobody's machine is waiting on (the dApp
+    /// signing sheet, spec 069). Same sessions, same speed rules as `quote`.
+    func ask(
+        chainId: Int,
+        account: String,
+        deployed: Bool,
+        publicKeyAvailable: Bool,
+        calls: [[String: Any]],
+        feeToken: String?
+    ) {
+        askInForce(Ask(
+            chainId: chainId, account: account, deployed: deployed,
+            publicKeyAvailable: publicKeyAvailable, tier: speed?.tier ?? "fast",
+            calls: calls, feeToken: feeToken
+        ))
     }
 
     /// Price `ask` on the session in force. Recorded before the dispatch, so a

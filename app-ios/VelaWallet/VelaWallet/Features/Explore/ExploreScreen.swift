@@ -31,6 +31,8 @@ struct ExploreScreen: View {
     var onAllowanceChip: (String) -> Void = { _ in }
     var onAllowanceAmount: (String) -> Void = { _ in }
     var onSignWith: (String?) -> Void = { _ in }
+    /// The live sheet's speed control (spec 069): `nil` folds, an id picks.
+    var onSpeed: (String?) -> Void = { _ in }
     /// The sheet went away without a tap. The core routes what that means by
     /// phase — a refusal before the commitment, a dismissal after it — so the
     /// shell reports the gesture and decides nothing.
@@ -276,7 +278,8 @@ struct ExploreScreen: View {
                     onConfirm: onSigningConfirm,
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
-                    onSignWith: onSignWith
+                    onSignWith: onSignWith,
+                    onSpeed: onSpeed
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])
