@@ -165,9 +165,13 @@ class SendParityBridgeTest {
     @Test
     fun `an account holding nothing says so, not that nothing matched`() {
         val send = controller(emptyList())
-        val before = send.send.value
+        val before = send.commits.value
         send.open(SendAccountRef(id = "cred", address = safe), SendDisplayContext(code = "USD", rate = 1.0, fiat_decimals = 2))
-        val view = send.settle { it !== before && !it.loading }
+        // An empty account's settled view can `equal` the one before the open,
+        // and StateFlow never re-emits an equal value: waiting on the VIEW for
+        // "it changed" timed out now and then. The commit counter always moves.
+        runBlocking { withTimeout(15_000) { send.commits.first { it > before && !send.send.value.loading } } }
+        val view = send.send.value
         val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
         val pick = SendLive.pick(drawn.model, view, ctx())
         assertTrue(pick.rows.isEmpty())
