@@ -7,8 +7,7 @@
 	 * the person came to decide. The fiat line stays subordinate even when the
 	 * denominations swap — the amount being ENTERED leads, whichever it is.
 	 */
-	import { amountTextCaret, amountTextClean } from '$lib/core/kernels';
-	import { resolvedFormatKeys } from '$lib/services/locale-format';
+	import { composing, pasted, takeAmount } from '../amount-field';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 
@@ -88,48 +87,25 @@
 	});
 
 	/**
-	 * Made readable for the core before it is sent on — the core's
-	 * `l10n::amount_text` says why a decimal comma cannot be left to the
-	 * machine, and every shell's amount field calls the same rule.
+	 * Made readable for the core before it is sent on — `amount-field.ts`
+	 * says why a decimal comma cannot be left to the machine.
 	 */
-	function take(el: HTMLInputElement, pasted: boolean) {
-		const raw = el.value;
-		const clean = amountTextClean(raw, resolvedFormatKeys().number, pasted, text);
-		if (clean === null) {
-			// A paste with no reading as ONE figure ("1.5e-7", "4.5.6"). The
-			// field keeps what it had and nothing is sent on: an amount of
-			// money is refused whole, never salvaged into a different one.
-			el.value = text;
-			el.setSelectionRange(text.length, text.length);
-			return;
-		}
-		if (clean !== raw) {
-			// Written back only when it differs, and with the caret kept where
-			// the person left it: a dropped character must not throw them to the
-			// end of the figure.
-			const caret = el.selectionStart;
-			el.value = clean;
-			if (caret !== null) {
-				const at = amountTextCaret(raw, clean, caret);
-				el.setSelectionRange(at, at);
-			}
-		}
+	function take(el: HTMLInputElement, paste: boolean) {
+		const clean = takeAmount(el, text, paste);
+		if (clean === null) return;
 		text = clean;
 		oninput?.(clean);
 	}
 
 	function typed(event: Event & { currentTarget: HTMLInputElement }) {
 		const el = event.currentTarget;
-		if ('isComposing' in event && event.isComposing) {
-			// An IME is mid-word (a ja / zh / ko keyboard in full-width mode):
-			// writing to the field now would break the composition. The field
-			// is still SIZED for what it holds; the text is read, cleaned and
-			// sent on when the composition ends.
+		if (composing(event)) {
+			// The field is still SIZED for what it holds while an IME composes;
+			// the text is read, cleaned and sent on when the composition ends.
 			text = el.value;
 			return;
 		}
-		const kind = 'inputType' in event ? event.inputType : undefined;
-		take(el, kind === 'insertFromPaste' || kind === 'insertFromDrop');
+		take(el, pasted(event));
 	}
 </script>
 
