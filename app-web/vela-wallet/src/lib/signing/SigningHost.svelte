@@ -283,9 +283,17 @@
 			else onfee();
 		}}
 		onfeepick={(id) => {
-			// The pick is a quote PARAMETER: the core re-prices the operation in
-			// that coin, and the approve carries `fee_token` from the same view.
-			fee.selectAsset(id === 'native' ? null : id);
+			// The pick is a quote PARAMETER, and part of the operation every
+			// speed's preview replays (spec 069): the whole question is asked
+			// again in that coin, so a speed picked next is still paid in it.
+			// Telling the session in force alone would leave the previews in
+			// the old coin, and promoting one would switch the coin back. The
+			// approve carries `fee_token` from the same view.
+			const token = id === 'native' ? null : id;
+			const last = fee.lastRequest;
+			if (last && last.feeToken !== token) {
+				void fee.requestQuote({ ...last, feeToken: token, tier: speedControl.tier });
+			}
 			feeOpen = false;
 		}}
 		onsignwith={onSignWith}

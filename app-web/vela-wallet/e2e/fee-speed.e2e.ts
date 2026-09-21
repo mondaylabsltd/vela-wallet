@@ -791,3 +791,92 @@ test('a stored default is what the send form starts at, with no tap at all', asy
 	await expect(page.getByText(en('send.txSubmittedTitle'))).toBeVisible({ timeout: 30_000 });
 	expect(sent[0][2]).toBe('slow');
 });
+
+/**
+ * Spec 069 on the dApp sheet: a fee coin picked there is part of the question
+ * every speed is priced for. Pick USDC, then Slow — the fee is still USDC.
+ *
+ * Until this was pinned, only the session in force heard the coin
+ * (`select_fee_asset`); the speed previews priced the OLD coin, and tapping a
+ * speed promoted one — the payment switched back to ETH under the person, who
+ * had just walked away from it.
+ */
+test('the dApp sheet keeps the coin picked when a speed is picked after it', async ({ page }) => {
+	const USDC = '0x' + 'cc'.repeat(20);
+	await page.addInitScript(() => localStorage.setItem('vela.dev.console', '1'));
+	await stubChain(page);
+	const base = tieredRelay(() => 'pending');
+	await stubRelay(page, RELAY, (method, params) => {
+		if (method === 'vela_getInBandGasQuote') {
+			return [
+				{
+					recipient: '0x' + 'fe'.repeat(20),
+					asset: 'native',
+					feeToken: null,
+					balance: '0x14d1120d7b160000',
+					decimals: 18,
+					symbol: 'ETH',
+					usdBalance: '4500',
+					usdPrice: '3000'
+				},
+				{
+					recipient: '0x' + 'fe'.repeat(20),
+					asset: 'erc20',
+					feeToken: USDC,
+					balance: '0x' + 100_000_000n.toString(16),
+					decimals: 6,
+					symbol: 'USDC',
+					usdBalance: '100',
+					usdPrice: '1'
+				}
+			];
+		}
+		return base(method, params);
+	});
+	await enterWallet(page);
+	await page.waitForFunction(
+		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+		null,
+		{ timeout: 20_000 }
+	);
+
+	// A page asks for a plain transfer, from the account on screen.
+	await page.evaluate((to) => {
+		const accounts = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]') as {
+			address: string;
+		}[];
+		const from = accounts[Number(localStorage.getItem('vela.activeAccountIndex') ?? 0)].address;
+		const vela = window as unknown as {
+			vela: { requester: { fire(method: string, params: unknown[]): Promise<unknown> } };
+		};
+		void vela.vela.requester
+			.fire('eth_sendTransaction', [{ from, to, value: '0x2386f26fc10000' }])
+			.catch(() => undefined);
+	}, RECIPIENT);
+	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toBeVisible({
+		timeout: 25_000
+	});
+
+	// The fee row, in ETH; its list, and USDC picked.
+	const feeRow = page.getByRole('button', {
+		name: new RegExp('^' + en('componentsUi.gas.networkFee'))
+	});
+	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
+	await feeRow.click();
+	await page.getByRole('button', { name: /USDC/ }).first().click();
+	await expect(feeRow).toContainText('USDC', { timeout: 30_000 });
+
+	// Then a speed — the preview it promotes was priced in USDC too.
+	const speed = page.getByRole('button', { expanded: false }).filter({
+		hasText: en('send.feeSpeedLabel')
+	});
+	await speed.click();
+	const slow = page.getByRole('button', { pressed: false }).filter({
+		hasText: en('send.gasTier.slow')
+	});
+	await expect(slow).toContainText('USDC', { timeout: 30_000 });
+	await slow.click();
+	await expect(speed).toContainText(en('send.gasTier.slow'));
+	await expect(feeRow).toContainText('USDC', { timeout: 30_000 });
+	await expect(feeRow).not.toContainText('ETH');
+});
