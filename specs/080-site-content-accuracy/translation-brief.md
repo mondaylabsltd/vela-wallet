@@ -46,10 +46,12 @@ es-MX and pt-BR use Mexican / Brazilian usage.
    English changed in spec 080 (compare with `git diff dd482131 -- app-web/getvela.app/src/lib/i18n/messages/en.ts`
    or read `en.ts` and `zh.json` side by side):
    - `home`: `meta.description`, `meta.ogDescription`, `meta.organization`,
-     `hero.facts[2].link`, `hero.facts[3].link`, `why.p1`, all of `tradeoffs.items`,
-     all of `compare.rows` (row 11's feature is now "Source code"),
-     `pricing.cards`, `networks.heading`, `networks.body`,
-     `faq.items[0].a`, `faq.items[1].a`, `faq.items[5].a`, `faq.items[6].a`;
+     `hero.facts[2].link`, `hero.facts[3].term` and `.link`, `why.p1`,
+     all of `tradeoffs.items`, all of `compare.rows` (now **13** rows: a new
+     "Adding a key later" row after "Losing one key", and "Open source" became
+     "Source code"), `pricing.cards`, `networks.heading`, `networks.body`,
+     `seal.label`, `seal.verify`, `faq.items[0].a`, `faq.items[1].a`,
+     `faq.items[4].a`, `faq.items[5].a`, `faq.items[6].a`;
    - `about`: `meta.description`, `lede`, `team.bio`, `values[0..2].body`;
    - `roadmap`: `upcoming` and `shipped` are **new arrays** (5 and 10 items) —
      replace them entirely;
