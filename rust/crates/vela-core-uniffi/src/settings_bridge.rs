@@ -10,15 +10,13 @@ fn entries_of(entries: HashMap<String, String>) -> Vec<(String, String)> {
     entries.into_iter().collect()
 }
 
-/// The five display preferences, read from the store whatever its spelling.
+/// The four display preferences, read from the store whatever its spelling.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct PrefsRecord {
     /// `system` | `light` | `dark`.
     pub theme: String,
     /// `auto`, or a locale tag.
     pub language: String,
-    /// `initials` | `identicon`.
-    pub avatar_style: String,
     /// `compact` … `xlarge`.
     pub text_scale: String,
     pub text_scale_factor: f64,
@@ -47,7 +45,6 @@ pub fn prefs_read(entries: HashMap<String, String>) -> PrefsRecord {
     PrefsRecord {
         theme: read.theme.to_owned(),
         language: read.language,
-        avatar_style: read.avatar_style.to_owned(),
         text_scale: read.text_scale.to_owned(),
         text_scale_factor: prefs::text_scale_factor(read.text_scale),
         number_format: read.number_format.to_owned(),
