@@ -7,7 +7,7 @@
 use gpui::SharedString;
 
 use vela_core::app::activity_feed::{FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedView};
-use vela_core::app::balance_dashboard::{BalanceNotice, BalanceView};
+use vela_core::app::balance_dashboard::{BalanceNotice, BalanceToken, BalanceView};
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
 
@@ -606,6 +606,38 @@ mod tests {
                     .any(|(label, value)| *label == s.label_contract && *value == s.native_token)
             );
             assert_eq!(xdai.activity.len(), 1, "its own transaction");
+            // …and the id that row opens, from the same walk.
+            assert_eq!(xdai.activity_ids, vec!["a".to_owned()]);
+            assert!(mon.activity_ids.is_empty());
+
+            // View on explorer: the token page scoped to this account for an
+            // ERC-20, the account page for the chain's own coin.
+            let account = held.address.clone().unwrap_or_default();
+            assert!(!account.is_empty());
+            assert_eq!(
+                mon.explorer_url.as_deref(),
+                Some(
+                    format!(
+                        "https://monadscan.com/token/0xAbCdEf0000000000000000000000000000000009?a={account}"
+                    )
+                    .as_str()
+                )
+            );
+            assert_eq!(
+                xdai.explorer_url.as_deref(),
+                Some(format!("https://gnosisscan.io/address/{account}").as_str())
+            );
+
+            // 转账 from a token opens the form with THAT token chosen: its
+            // symbol, and its network spelled as the send executor spells
+            // `SendToken.network` — any other spelling lands on the picker.
+            let params = token_send_params(&held.tokens[1]);
+            assert_eq!(params.preselected_symbol.as_deref(), Some("MON"));
+            assert_eq!(
+                params.preselected_network,
+                Some(crate::executor::send::to_send_token(&held.tokens[1]).network)
+            );
+            assert!(params.prefilled_recipient.is_none() && !params.locked);
 
             // The list moved underneath: no panel rather than the wrong one.
             assert!(asset_detail(&held, &feed, 9, &s, "en-US").is_none());
@@ -1097,6 +1129,18 @@ pub fn asset_detail(
     locale: &str,
 ) -> Option<AssetDetailModel> {
     let token = view.tokens.get(index)?;
+    let own: Vec<&FeedItem> = feed
+        .rows
+        .iter()
+        .filter_map(|row| match row {
+            FeedRow::Item { item }
+                if item.symbol == token.symbol && item.chain_id == token.chain_id =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect();
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
     let figure = |value: f64| {
@@ -1168,19 +1212,44 @@ pub fn asset_detail(
         facts,
         // This asset's own transactions, from the same feed the home draws.
         // Matched on symbol AND chain: two chains' USDC are different money.
-        activity: feed
-            .rows
+        activity: own
             .iter()
-            .filter_map(|row| match row {
-                FeedRow::Item { item }
-                    if item.symbol == token.symbol && item.chain_id == token.chain_id =>
-                {
-                    Some(activity_row(feed, item, s, view.hidden))
-                }
-                _ => None,
-            })
+            .map(|item| activity_row(feed, item, s, view.hidden))
             .collect(),
+        // …and the id behind each, from the SAME walk, so row N opens
+        // record N.
+        activity_ids: own.iter().map(|item| item.id.clone()).collect(),
+        explorer_url: token_explorer_url(token, view.address.as_deref()).map(SharedString::from),
     })
+}
+
+/// Where "view on explorer" leads for a held token (the web's
+/// `tokenExplorerURL`): the token page, scoped to this account, for an
+/// ERC-20; the account page for the chain's own coin. `None` for a chain with
+/// no explorer — no link rather than a wrong one.
+#[must_use]
+pub fn token_explorer_url(token: &BalanceToken, account: Option<&str>) -> Option<String> {
+    let base = crate::executor::custom_tokens::explorer_base(token.chain_id)?;
+    match token.token_address.as_deref() {
+        None => account.map(|account| format!("{base}/address/{account}")),
+        Some(contract) => Some(match account {
+            Some(account) => format!("{base}/token/{contract}?a={account}"),
+            None => format!("{base}/token/{contract}"),
+        }),
+    }
+}
+
+/// The send a token's own 转账 opens: that token, on its network, already
+/// chosen (the web's `enter('send', { assetId })`). The network is spelled
+/// the way this shell's send executor spells `SendToken.network` — the core
+/// matches the two strings, and any other spelling lands on the picker.
+#[must_use]
+pub fn token_send_params(token: &BalanceToken) -> vela_core::app::send::SendOpenParams {
+    vela_core::app::send::SendOpenParams {
+        preselected_symbol: Some(token.symbol.clone()),
+        preselected_network: Some(crate::executor::send::network_id(token.chain_id)),
+        ..vela_core::app::send::SendOpenParams::default()
+    }
 }
 
 /// The chain tint for an activity badge.

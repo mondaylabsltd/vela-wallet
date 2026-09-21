@@ -20,7 +20,7 @@ use vela_core::app::clear_signing::{
 use vela_core::app::fee_policy::FeeView;
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
 
-use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel};
+use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
 use crate::signing::{SigningStrings, Tone};
 
 /// The core's risk grade in the drawn vocabulary.
@@ -893,6 +893,8 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
 pub fn fee_model(
     clear: &ClearSigningView,
     fee: &FeeView,
+    chain_id: u32,
+    open: bool,
     s: &SigningStrings,
     locale: &str,
 ) -> FeeModel {
@@ -915,8 +917,67 @@ pub fn fee_model(
             fee,
             locale,
         )),
-        selector: None,
+        // The coins the relay will take, open in the sheet when asked — each
+        // with its balance and this request's cost in it. A coin that cannot
+        // pay is DRAWN (for context) but the page binds it nothing.
+        selector: open.then(|| {
+            (
+                s.fee_token_title.clone(),
+                fee.options
+                    .iter()
+                    .map(|option| {
+                        let scale = 10f64.powi(option.decimals as i32);
+                        let units = |raw: &str| {
+                            vela_core::l10n::number::format_token_amount(
+                                raw.parse::<f64>().unwrap_or(0.0) / scale,
+                                crate::executor::format_prefs::current().number,
+                                false,
+                            )
+                        };
+                        FeeTokenOption {
+                            mark: (
+                                SharedString::from(
+                                    option.symbol.chars().take(1).collect::<String>(),
+                                ),
+                                crate::flows::live::chain_tint(chain_id),
+                            ),
+                            name: SharedString::from(option.symbol.clone()),
+                            balance: SharedString::from(format!(
+                                "{} {}",
+                                s.fee_balance,
+                                units(&option.balance)
+                            )),
+                            fee: SharedString::from(match &option.amount {
+                                Some(amount) => format!("~{} {}", units(amount), option.symbol),
+                                None => "—".to_owned(),
+                            }),
+                            selected: option.selected,
+                            insufficient: option.insufficient,
+                        }
+                    })
+                    .collect(),
+            )
+        }),
+        warning: insufficient_gas_warning(fee, s),
     }
+}
+
+/// Issue #262: a wallet with 0 ETH and some USDT on mainnet was quoted in
+/// ETH. The core shuts the slide in exactly that case — quoted, not
+/// ready, and the coin it was quoted in cannot pay — and this is the sentence
+/// that says why, in the send screen's words.
+#[must_use]
+pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.fee.is_none() || fee.confirm_fee_ready {
+        return None;
+    }
+    let selected = fee.options.iter().find(|option| option.selected)?;
+    selected.insufficient.then(|| {
+        SharedString::from(crate::signing::fill(
+            &s.warn_insufficient_gas,
+            &[("sym", &selected.symbol)],
+        ))
+    })
 }
 
 /// Who is asking, and on which chain.
@@ -1669,5 +1730,130 @@ mod identity_tests {
         assert_eq!(name, "127.0.0.1:8137");
         assert_eq!(letter, "1");
         assert_eq!(dapp_identity("").2, "?");
+    }
+}
+
+#[cfg(test)]
+mod fee_tests {
+    use super::*;
+    use vela_core::app::fee_policy::{
+        FeeAssetView, FeeEstimateView, FeeOptionView, FeePolicy, FeeTier,
+    };
+
+    fn strings() -> SigningStrings {
+        SigningStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    fn option(
+        symbol: &str,
+        contract: Option<&str>,
+        insufficient: bool,
+        selected: bool,
+    ) -> FeeOptionView {
+        FeeOptionView {
+            symbol: symbol.to_owned(),
+            contract: contract.map(str::to_owned),
+            decimals: 6,
+            balance: "2000000".to_owned(),
+            recipient: "0xee2c".to_owned(),
+            usd_balance: "2".to_owned(),
+            usd_price: Some("1".to_owned()),
+            amount: Some("1250000".to_owned()),
+            insufficient,
+            selected,
+        }
+    }
+
+    /// A settled, native-quoted mainnet fee over the given coin list.
+    fn quoted(options: Vec<FeeOptionView>, ready: bool) -> FeeView {
+        let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        fee.fee = Some(FeeEstimateView {
+            chain_id: 1,
+            total_wei: "91000000000000".to_owned(),
+            max_fee_per_gas: "1".to_owned(),
+            network_fee_per_gas: "1".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "1".to_owned(),
+            in_band_gas_basis: "21000".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
+            total_gas: "21000".to_owned(),
+            deployed: true,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: Some("0xee2c".to_owned()),
+        });
+        fee.options = options;
+        fee.confirm_fee_ready = ready;
+        fee
+    }
+
+    /// The coin list opens in the sheet with every coin the relay takes —
+    /// including one that cannot pay, drawn for context and marked so the
+    /// page binds it nothing.
+    #[test]
+    fn the_open_fee_row_lists_every_coin_and_marks_the_ones_that_cannot_pay() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let fee = quoted(
+            vec![
+                option("ETH", None, true, true),
+                option(
+                    "USDT",
+                    Some("0xdac17f958d2ee523a2206206994597c13d831ec7"),
+                    false,
+                    false,
+                ),
+            ],
+            false,
+        );
+
+        match fee_model(&clear, &fee, 1, false, &s, "en") {
+            FeeModel::OnChain { selector, .. } => assert!(selector.is_none(), "closed"),
+            _ => unreachable!("a transaction has a fee row"),
+        }
+        match fee_model(&clear, &fee, 1, true, &s, "en") {
+            FeeModel::OnChain {
+                selector: Some((title, options)),
+                ..
+            } => {
+                assert_eq!(title, s.fee_token_title);
+                assert_eq!(options.len(), 2);
+                assert!(options[0].insufficient && options[0].selected);
+                assert!(!options[1].insufficient);
+                assert_eq!(options[1].name, "USDT");
+                assert!(options[1].fee.contains("USDT"), "{}", options[1].fee);
+            }
+            _ => unreachable!("an open fee row lists its coins"),
+        }
+    }
+
+    /// Issue #262: quoted in a coin the wallet cannot pay with, the slide is
+    /// shut — and the sheet says why, in the send screen's words.
+    #[test]
+    fn a_fee_the_quoted_coin_cannot_pay_says_so() {
+        let s = strings();
+        let broke = quoted(vec![option("ETH", None, true, true)], false);
+        let text = insufficient_gas_warning(&broke, &s)
+            .unwrap_or_else(|| unreachable!("the gate is shut and nothing says why"));
+        assert!(text.contains("ETH"), "{text}");
+        assert!(!text.contains("{{"), "{text}");
+
+        // Ready: nothing to explain.
+        assert!(
+            insufficient_gas_warning(&quoted(vec![option("ETH", None, true, true)], true), &s)
+                .is_none()
+        );
+        // Not ready for another reason: this sentence is not the reason.
+        assert!(
+            insufficient_gas_warning(&quoted(vec![option("ETH", None, false, true)], false), &s)
+                .is_none()
+        );
+        // Not quoted yet: no verdict at all.
+        let mut unquoted = broke;
+        unquoted.fee = None;
+        assert!(insufficient_gas_warning(&unquoted, &s).is_none());
     }
 }

@@ -14,7 +14,9 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
-use crate::wallet::components::{activity_row, asset_row, empty_state, icon_img, token_icon_logos};
+use crate::wallet::components::{
+    activity_row, asset_row, empty_state, icon_img, skeleton_row, token_icon_logos,
+};
 
 use super::components::{
     accent_button, address_card, fact_row, fee_row, filter_chips, flow_search, ghost_button,
@@ -23,7 +25,7 @@ use super::components::{
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
-    DepositEntry, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr, ScanModal,
+    DepositEntry, FeeTokenPick, FlowBody, HistoryPanel, ReceiveList, ReceiveQr, ScanModal,
     SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
 };
 
@@ -108,6 +110,9 @@ pub struct PanelActions {
     /// DSD2cL, live: the rate, editable — the shown string IS the applied rate.
     pub batch_rate_field: Option<AddressField>,
     pub batch_rate_reset: Option<Click>,
+    /// DSD2cL, live: the merge line's "Replace them instead" / "Add to them
+    /// instead".
+    pub batch_merge: Option<Click>,
     /// DSD2L / DSD3L, live: the way out the core's refusal offers — edit the
     /// amount, add the network, check the top-up again.
     pub notice_action: Option<Click>,
@@ -238,8 +243,8 @@ pub fn render(
             actions.acknowledge,
             actions.save_image,
         ),
-        FlowBody::History(groups) => {
-            history(groups, theme, icons, actions.open_tx, actions.open_tx_rows)
+        FlowBody::History(model) => {
+            history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
         }
         FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons),
         FlowBody::Assets(model) => assets(model, theme, icons, actions.open_add_token),
@@ -495,13 +500,32 @@ fn deposit_section(deposits: &[DepositEntry], theme: &Theme) -> Option<Div> {
 }
 
 fn history(
-    groups: &[HistoryGroup],
+    model: &HistoryPanel,
     theme: &Theme,
     icons: &mut IconCache,
     mut open_tx: Option<Click>,
     per_row: Vec<Click>,
 ) -> Div {
     let mut col = div().flex().flex_col();
+    if model.loading {
+        return col
+            .child(skeleton_row(theme))
+            .child(skeleton_row(theme))
+            .child(skeleton_row(theme));
+    }
+    // A history with nothing in it is a fact, not a problem: one quiet line
+    // rather than an illustrated empty state (the web's `.empty`).
+    if let Some(text) = &model.empty {
+        return col.child(
+            div()
+                .py(px(48.))
+                .text_center()
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_muted)
+                .child(text.clone()),
+        );
+    }
+    let groups = &model.groups;
     // Row order here IS the order the page bound its listeners in, because both
     // walk the same groups. A live panel binds one per row; the fixture binds
     // one and gives it to the first.
@@ -1762,6 +1786,29 @@ fn batch_import(
     );
     if let Some(notice) = &model.notice {
         col = col.child(notice_card(notice, theme, None, None));
+    }
+    // What the import does to the rows already on the form, beside the button
+    // that does it — and the way to choose the other, because either can be
+    // what is meant.
+    if let Some((note, action)) = &model.merge {
+        col = col.child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_x(px(8.))
+                .text_size(theme::text_row_sub())
+                .child(div().text_color(theme.fg_muted).child(note.clone()))
+                .child(clickable(
+                    "batch-merge",
+                    actions.batch_merge.take(),
+                    div()
+                        .cursor_pointer()
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme.accent)
+                        .child(action.clone()),
+                )),
+        );
     }
     // Bad rows are marked and skipped, never silently dropped, and the CTA
     // counts only the good ones — a button that says "Import 3" and imports 2

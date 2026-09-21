@@ -43,9 +43,9 @@ use vela_core::app::fee_policy::{
     Event as FeeEvent, FeeFailure, FeeOperation, FeePolicy, FeeShellResult, FeeTier, FeeView,
 };
 use vela_core::app::send::{
-    BATCH_MAX_RECIPIENTS, Event as SendEvent, Send, SendAccountRef, SendAlertKind,
-    SendDisplayContext, SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation,
-    SendReceiptOutcome, SendRecipientDraft, SendShellResult, SendView,
+    Event as SendEvent, Send, SendAccountRef, SendAlertKind, SendDisplayContext,
+    SendEstimateFailure, SendFeeOutcome, SendOpenParams, SendOperation, SendReceiptOutcome,
+    SendRecipientDraft, SendShellResult, SendView,
 };
 use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
 
@@ -70,6 +70,16 @@ pub struct PinDialog {
     pub focus: FocusHandle,
 }
 
+/// What an applied import becomes: appended to the form's rows by default,
+/// seeding them only when the person chose to replace what is there.
+fn batch_apply_event(replaces: bool, recipients: Vec<SendRecipientDraft>) -> SendEvent {
+    if replaces {
+        SendEvent::SeedSplitRecipients { recipients }
+    } else {
+        SendEvent::AppendSplitRecipients { recipients }
+    }
+}
+
 pub struct SendHost {
     send: CoreHost<Send>,
     pub view: SendView,
@@ -81,6 +91,10 @@ pub struct SendHost {
     /// from a previous open is never reused because the core is new.
     batch: Option<CoreHost<BatchImport>>,
     pub batch_view: Option<BatchView>,
+    /// The person chose "Replace them instead": this import SEEDS the split
+    /// rather than adding to the rows already on the form (issue #265). A
+    /// choice about one import — it resets whenever the sheet opens.
+    pub batch_replaces: bool,
     /// The display currency the sheet reads fiat figures in by default.
     display_code: String,
     ctx: SendContext,
@@ -152,6 +166,7 @@ impl SendHost {
             fee_view,
             batch: None,
             batch_view: None,
+            batch_replaces: false,
             display_code,
             ctx,
             channel,
@@ -245,6 +260,7 @@ impl SendHost {
             return;
         };
         self.batch = Some(CoreHost::<BatchImport>::new());
+        self.batch_replaces = false;
         self.batch_dispatch(
             BatchEvent::Open {
                 token: BatchToken {
@@ -254,7 +270,11 @@ impl SendHost {
                     price_usd: token.price_usd,
                 },
                 currency_code: self.display_code.clone(),
-                max_recipients: u32::try_from(BATCH_MAX_RECIPIENTS).unwrap_or(u32::MAX),
+                // What an import can actually add: the core's cap less the
+                // rows already started. Opened at a flat sixty, its "only the
+                // first N will be sent" was a promise the append then broke by
+                // truncating past it.
+                max_recipients: self.view.split_import_room,
             },
             cx,
         );
@@ -274,6 +294,12 @@ impl SendHost {
         };
         let pending = batch.resolve(id, result);
         self.pump_batch(pending, cx);
+    }
+
+    /// "Replace them instead" / "Add to them instead".
+    pub fn toggle_batch_merge(&mut self, cx: &mut Context<Self>) {
+        self.batch_replaces = !self.batch_replaces;
+        cx.notify();
     }
 
     /// The desktop's paste: the drawn box is not a text editor, so clicking
@@ -311,8 +337,11 @@ impl SendHost {
                 .collect();
             self.batch = None;
             self.batch_view = None;
+            // ADDED to whoever is already on the form, unless the person chose
+            // to replace them: an import that silently threw typed rows away
+            // was issue #265.
             if !recipients.is_empty() {
-                self.dispatch(SendEvent::SeedSplitRecipients { recipients }, cx);
+                self.dispatch(batch_apply_event(self.batch_replaces, recipients), cx);
             }
             self.dispatch(SendEvent::CloseBatchImport, cx);
         }
@@ -834,6 +863,30 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue #265: an import ADDS to the recipients already on the form, and
+    /// replaces them only when the person chose "Replace them instead".
+    #[test]
+    fn an_import_adds_to_the_form_unless_told_to_replace() {
+        let rows = || {
+            vec![SendRecipientDraft {
+                id: String::new(),
+                address: "0x00000000000000000000000000000000000000aa".to_owned(),
+                amount: "1".to_owned(),
+                name: Some("Ana".to_owned()),
+            }]
+        };
+        match batch_apply_event(false, rows()) {
+            SendEvent::AppendSplitRecipients { recipients } => {
+                assert_eq!(recipients, rows(), "the rows go through untouched");
+            }
+            other => unreachable!("appended by default, not {other:?}"),
+        }
+        assert!(matches!(
+            batch_apply_event(true, rows()),
+            SendEvent::SeedSplitRecipients { .. }
+        ));
+    }
 
     /// The host without gpui: both machines pumped to quiescence on this
     /// thread, every blocking answer performed inline, the two timers left
