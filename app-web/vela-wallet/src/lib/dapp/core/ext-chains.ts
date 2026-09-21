@@ -13,8 +13,8 @@
  * Nothing is decided here; the pool's ban and latency state stays where it is
  * (core state, on the wallet's side of the boundary).
  */
-import { getAllNetworksSync, nativeSymbol } from '$lib/services/networks';
-import { PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
+import { DEFAULT_NETWORKS, getAllNetworksSync, nativeSymbol } from '$lib/services/networks';
+import { getBuiltinBundlerUrl, PUBLIC_RPCS } from '$lib/services/rpc-pool-endpoints';
 import { CHAINS_KEY } from '../keys';
 
 /** One chain, as the worker needs it. */
@@ -38,6 +38,13 @@ export interface ExtChainCatalog {
 /** The catalog as it is now — pure, so it can be asserted without storage. */
 export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 	const chains: Record<string, ExtChainEntry> = {};
+	// A built-in chain's bundler is the CONFIGURED relay (Settings › Service
+	// nodes › Vela Relay), not the constant baked into `DEFAULT_NETWORKS`:
+	// `collectBundlerUrls` has always read it that way, and a catalog that
+	// disagrees sends every dApp call to a relay the wallet itself stopped
+	// using. A custom network keeps its own bundler, which is the one the
+	// person typed when they added it.
+	const builtinChainIds = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 	for (const network of getAllNetworksSync()) {
 		const rpc: string[] = [];
 		const add = (url: string | undefined) => {
@@ -50,7 +57,9 @@ export function buildExtChainCatalog(nowMs = Date.now()): ExtChainCatalog {
 			name: network.displayName,
 			symbol: nativeSymbol(network.chainId),
 			rpc,
-			bundler: network.bundlerURL,
+			bundler: builtinChainIds.has(network.chainId)
+				? `${getBuiltinBundlerUrl()}/${network.chainId}`
+				: network.bundlerURL,
 			explorer: network.explorerURL
 		};
 	}

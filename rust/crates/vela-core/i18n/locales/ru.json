@@ -51,6 +51,10 @@
       "timeTitle": "Формат времени",
       "timeSubtitle": "12- или 24-часовой формат."
     },
+    "feeSpeed": {
+      "title": "Скорость транзакций",
+      "subtitle": "Каждая отправка, начатая в Vela, начинается отсюда. Отдельную отправку всё равно можно изменить."
+    },
     "advanced": {
       "networksTitle": "Сети",
       "networksSubtitle": "URL для RPC, обозревателя и Bundler",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Добавить сеть",
       "addNetworkSubtitle": "Добавить свою EVM-сеть",
       "endpointsTitle": "Сервисные эндпоинты",
-      "endpointsSubtitle": "Данные сетей, индекс идентификаторов, Bundler"
+      "endpointsSubtitle": "Данные сетей, индекс идентификаторов, Bundler",
+      "feeSpeedTitle": "Скорость транзакций",
+      "feeSpeedSubtitle": "Начальное значение для каждой отправки"
     },
     "developer": {
       "treasuryTitle": "Treasury",

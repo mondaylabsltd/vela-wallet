@@ -141,7 +141,7 @@ final class RelayClient {
 
     private let port: RelayPort
     /// The configured relay host, for when the pool names no base for a chain.
-    private let builtinBase: () -> String
+    private let builtinBase: () async -> String
     private let now: () -> Double
     /// The submit retry's pause; tests set zero.
     private let retryDelayMs: Double
@@ -151,7 +151,7 @@ final class RelayClient {
 
     init(
         port: RelayPort,
-        builtinBase: @escaping () -> String = { NetDefaults.bundlerServiceURL },
+        builtinBase: @escaping () async -> String = { NetDefaults.bundlerServiceURL },
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 },
         retryDelayMs: Double = RelayClient.submitRetryDelayMs
     ) {
@@ -164,7 +164,16 @@ final class RelayClient {
     // MARK: - REST
 
     private func restGet(chainId: Int, path: String) async -> CoreHTTP.RestAnswer {
-        var base = await port.bundlerBase(chainId: chainId) ?? builtinBase()
+        // The pool's answer when it has one; otherwise the CONFIGURED relay —
+        // `NetDefaults` is the last resort, not the fallback. Spelled out
+        // rather than `??` because the right-hand side is an async call and
+        // `??` takes a non-async autoclosure.
+        var base: String
+        if let pooled = await port.bundlerBase(chainId: chainId) {
+            base = pooled
+        } else {
+            base = await builtinBase()
+        }
         while base.hasSuffix("/") { base.removeLast() }
         let xRpcUrl = await port.bestRpcUrl(chainId: chainId)
         return await port.restGet(url: base + path, xRpcUrl: xRpcUrl)

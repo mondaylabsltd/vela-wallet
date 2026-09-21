@@ -29,11 +29,32 @@ import {
 	simulateUserOpGas
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress } from '$lib/services/accounts';
+import { getCachedNativePriceUsd } from '$lib/services/wallet-api';
 
 import type { FeeAssetQuote } from '$lib/core/generated/FeeAssetQuote';
 import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
 import type { FeeEffect, FeeSessionOptions } from './fee-types';
 import { decimalToHex } from '$lib/services/amount-codec';
+
+/**
+ * Whether the RELAY's published price is one the core will actually use.
+ *
+ * Deliberately narrower than `!== null`, because the core is: `usd_price_scaled`
+ * parses a plain `\d+(\.\d+)?` and then drops zero ("a zero price is
+ * unpriceable"), while `bundler-service.ts`'s `parseDecimalString` hands
+ * through anything `Number()` finds finite and non-negative — `"0"` and
+ * `"1e-7"` both survive it. A relay row that says "0" therefore means exactly
+ * what `null` means to the core, and if this shell read it as "priced" it would
+ * withhold the floor price it has and the issue-682 overcharge would live on
+ * one spelling away from the fix.
+ */
+function relayPricedTheCoin(usdPrice: string | null): boolean {
+	if (usdPrice === null) return false;
+	// The core's own grammar: digits, one optional dot, nothing else — no sign,
+	// no exponent. Anything it would call garbage is not a price here either.
+	if (!/^\d+(\.\d+)?$/.test(usdPrice)) return false;
+	return Number(usdPrice) > 0;
+}
 
 /**
  * One `vela_getInBandGasQuote` row onto the wire, UNFILTERED.
@@ -44,16 +65,19 @@ import { decimalToHex } from '$lib/services/amount-codec';
  * filtering here would hide rows the core is entitled to reason about, and the
  * two filters would drift the moment either changed.
  */
-function toWireQuote(quote: {
-	recipient: string;
-	asset: 'native' | 'erc20';
-	feeToken: string | null;
-	balance: bigint;
-	decimals: number;
-	symbol: string;
-	usdBalance: string;
-	usdPrice: string | null;
-}): FeeAssetQuote {
+function toWireQuote(
+	quote: {
+		recipient: string;
+		asset: 'native' | 'erc20';
+		feeToken: string | null;
+		balance: bigint;
+		decimals: number;
+		symbol: string;
+		usdBalance: string;
+		usdPrice: string | null;
+	},
+	nativeFloorPriceUsd: number | null
+): FeeAssetQuote {
 	return {
 		recipient: quote.recipient,
 		asset: quote.asset,
@@ -62,7 +86,45 @@ function toWireQuote(quote: {
 		decimals: quote.decimals,
 		symbol: quote.symbol,
 		usd_balance: quote.usdBalance,
-		usd_price: quote.usdPrice
+		usd_price: quote.usdPrice,
+		// Issue 682. The relay publishes no price for a coin its feed does not
+		// know — every network the user ADDED, in practice — and the core's
+		// "$0.01 worth of the coin" minimum then fell back to a blind flat
+		// 0.001 of it: on XLayer's OKB (~$120) that is $0.12, twelve times the
+		// cent, on every send. So when the relay has no price we hand over the
+		// one this wallet already derived on-chain for the balances feed.
+		//
+		// A FLOOR PRICE, NOT A CONVERSION RATE. It only reaches the native
+		// minimum in `fee_policy.rs`; the stablecoin conversion keeps reading
+		// `usd_price` alone and keeps refusing when it is absent. Sent only on
+		// the native row, because that is the only row that reads it, and only
+		// when the relay priced nothing — a relay price still wins outright, so
+		// nothing about a priced send moves. And the core only ever lets this
+		// price LOWER its floor, so the worst it can do is leave today's charge
+		// exactly where it is.
+		//
+		// `toFixed(8)` because the core parses a plain `\d+(\.\d+)?` at eight
+		// decimals: `String(1e-7)` is `"1e-7"`, which it would (rightly) call
+		// garbage. Eight is its own precision, so nothing is lost; a coin worth
+		// less than half of $0.00000001 formats as zero and the core reads that
+		// as "still unpriceable", which is the honest answer.
+		//
+		// A price is a POSITIVE FINITE number or it is not a price: `NaN` and
+		// `Infinity` would cross as the literal words, and 0 would cross as
+		// "0.00000000". The core refuses all three, but none of them should
+		// ever be put on the wire as this wallet's opinion of what a coin costs.
+		// The upper bound is `toFixed`'s own: at 1e21 and above it switches BACK
+		// to exponent notation ((1e21).toFixed(8) === "1e+21"), so the claim
+		// above is enforced here rather than merely asserted.
+		native_usd_floor_price:
+			quote.asset === 'native' &&
+			!relayPricedTheCoin(quote.usdPrice) &&
+			nativeFloorPriceUsd !== null &&
+			Number.isFinite(nativeFloorPriceUsd) &&
+			nativeFloorPriceUsd > 0 &&
+			nativeFloorPriceUsd < 1e21
+				? nativeFloorPriceUsd.toFixed(8)
+				: null
 	};
 }
 
@@ -87,6 +149,11 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 					quote: quote
 						? {
 								max_fee_per_gas: quote.maxFeePerGas,
+								// The tip this tier will actually be SIGNED with — the
+								// half of the row that buys priority. Read and dropped
+								// here until issue 684; the core turns it into the
+								// per-tier gas price the speed picker shows.
+								max_priority_fee_per_gas: quote.maxPriorityFeePerGas,
 								network_fee_per_gas: quote.networkFeePerGas,
 								relayer_fee_per_gas: quote.relayerFeePerGas
 							}
@@ -99,9 +166,13 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 				// prescribes that those stay in the shell, and they are what makes a
 				// chip switch free.
 				const quotes = await fetchInBandGasQuotes(operation.chain_id, operation.account);
+				// Read once per answer, from the balances feed already in memory
+				// (issue 682) — a synchronous cache read, never a fetch, so a
+				// cold cache simply means the core gets today's blind floor.
+				const nativeFloorPriceUsd = getCachedNativePriceUsd(operation.account, operation.chain_id);
 				return {
 					type: 'in_band_quotes',
-					quotes: quotes ? quotes.map(toWireQuote) : null
+					quotes: quotes ? quotes.map((quote) => toWireQuote(quote, nativeFloorPriceUsd)) : null
 				};
 			}
 

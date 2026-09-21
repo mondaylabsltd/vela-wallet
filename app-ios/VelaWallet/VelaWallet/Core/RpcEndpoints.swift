@@ -111,12 +111,23 @@ enum RpcEndpoints {
     /// error anywhere: the shell answered "no quotes", the core waited, and the
     /// screen said 估算中… forever.
     static func collectBundlers(chainId: Int, accounts: AccountStore) async -> [CollectedEndpoint] {
+        let base = await builtinBundlerBase(accounts: accounts)
+        return [CollectedEndpoint(url: "\(base)/\(chainId)", source: "default")]
+    }
+
+    /// The relay host, from Settings › Service nodes › Vela Relay, or the one
+    /// Vela ships (`getBuiltinBundlerUrl()`).
+    ///
+    /// One reader, because the pool and the relay client both need it and two
+    /// readers is how a configured relay ends up honoured on one path and not
+    /// the other.
+    static func builtinBundlerBase(accounts: AccountStore) async -> String {
         let endpoints = await accounts.loadServiceEndpoints()
         var base = (endpoints["bundlerServiceURL"] as? String)
             .flatMap { $0.isEmpty ? nil : $0 }
             ?? NetDefaults.bundlerServiceURL
         while base.hasSuffix("/") { base.removeLast() }
-        return [CollectedEndpoint(url: "\(base)/\(chainId)", source: "default")]
+        return base
     }
 
     // MARK: - Bans

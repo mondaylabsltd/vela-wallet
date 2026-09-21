@@ -51,6 +51,10 @@
       "timeTitle": "時刻の形式",
       "timeSubtitle": "12時間制または24時間制です。"
     },
+    "feeSpeed": {
+      "title": "取引の速度",
+      "subtitle": "Vela から始める送金はすべてここから始まります。送金時に一回だけ変えることもできます。"
+    },
     "advanced": {
       "networksTitle": "ネットワーク",
       "networksSubtitle": "RPC・エクスプローラー・Bundler の URL",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "ネットワークを追加",
       "addNetworkSubtitle": "カスタム EVM ネットワークを追加",
       "endpointsTitle": "サービスエンドポイント",
-      "endpointsSubtitle": "チェーンデータ、ID インデックス、Bundler"
+      "endpointsSubtitle": "チェーンデータ、ID インデックス、Bundler",
+      "feeSpeedTitle": "取引の速度",
+      "feeSpeedSubtitle": "すべての送金の初期値"
     },
     "developer": {
       "treasuryTitle": "Treasury",

@@ -46,10 +46,13 @@ export function getBuiltinBundlerUrl(): string {
 	return getBundlerServiceURL();
 }
 
-/** Reliable public RPCs per chain (curated, CORS-friendly; Expo table verbatim). */
+/** Reliable public RPCs per chain (curated, CORS-friendly; the Expo table, minus
+ *  endpoints dropped for measured cause — see the inline notes). */
 export const PUBLIC_RPCS: Record<number, string[]> = {
 	1: ['https://ethereum-rpc.publicnode.com', 'https://1rpc.io/eth'],
-	56: ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://bsc.meowrpc.com'],
+	// bsc.meowrpc.com was dropped (issue 212; measured 2026-09-20): its
+	// eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
+	56: ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org'],
 	137: ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'],
 	42161: ['https://arbitrum-one-rpc.publicnode.com', 'https://1rpc.io/arb'],
 	10: ['https://optimism-rpc.publicnode.com', 'https://1rpc.io/op'],
@@ -142,26 +145,28 @@ export async function collectBundlerUrls(
 		entries.push({ url, source });
 	};
 
-	// 1. User-configured override (NetworkConfig editor)
-	try {
-		const config = await getNetworkConfig(chainId);
-		if (config?.bundlerURL) {
-			const defaultNet = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
-			if (!defaultNet || config.bundlerURL !== defaultNet.bundlerURL) {
-				add(config.bundlerURL, 'user');
-			}
-		}
-	} catch {
-		// unreadable config contributes nothing
-	}
-
-	// 2. A custom network's own bundlerURL (set during Add Network)
+	// 1. A CUSTOM network's bundler — the override editor's, then the one the
+	//    Add Network wizard recorded.
+	//
+	//    A built-in chain has none, and the exclusion is the whole point. The
+	//    bundler field is not editable per network (`network_admin.rs`
+	//    invariant ⑤), so a value stored against a built-in chain is not a
+	//    choice anybody made: it is a snapshot of whatever relay was the
+	//    default the day somebody edited that chain's RPC. Honouring it as a
+	//    `user` tier puts it above the relay below — which is how Settings ›
+	//    Service nodes › Vela Relay ends up saved, probed, badged, and ignored.
 	if (!defaultChainIds.has(chainId)) {
+		try {
+			const config = await getNetworkConfig(chainId);
+			if (config?.bundlerURL) add(config.bundlerURL, 'user');
+		} catch {
+			// unreadable config contributes nothing
+		}
 		const net = getAllNetworksSync().find((n) => n.chainId === chainId);
 		if (net?.bundlerURL) add(net.bundlerURL, 'user');
 	}
 
-	// 3. Built-in vela relay (always the fallback)
+	// 2. The relay: the one configured in Settings, or the one Vela ships.
 	add(`${getBuiltinBundlerUrl()}/${chainId}`, 'builtin');
 
 	return entries;

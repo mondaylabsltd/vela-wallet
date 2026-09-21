@@ -105,6 +105,8 @@
 				return { title: model.appearance.title, description: undefined };
 			case 'localization':
 				return { title: model.localization.title, description: model.localization.description };
+			case 'fee-speed':
+				return { title: model.feeSpeed.title, description: model.feeSpeed.description };
 			case 'networks':
 				return { title: model.networks.title, description: model.networks.subtitle };
 			case 'rpc-providers':
@@ -256,6 +258,25 @@
 							ontoggle={() => toggleDropdown(row.id)}
 							onselect={(id) => {
 								onprefevent?.({ kind: row.id as 'number-format', id });
+								openDropdown = undefined;
+							}}
+						/>
+					</FormRow>
+				{/each}
+			{:else if page === 'fee-speed'}
+				<!-- Spec 068. The same FormRow + Dropdown the localization page
+				     uses: one preference, chosen the way every other desktop
+				     preference is chosen. -->
+				{#each model.feeSpeed.rows as row (row.id)}
+					<FormRow label={row.label}>
+						<Dropdown
+							value={row.value ?? ''}
+							label={row.label}
+							open={openDropdown === row.id}
+							rows={row.options}
+							ontoggle={() => toggleDropdown(row.id)}
+							onselect={(id) => {
+								onprefevent?.({ kind: 'fee-speed', id });
 								openDropdown = undefined;
 							}}
 						/>

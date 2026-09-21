@@ -104,6 +104,8 @@ export const MOBILE_FLOW_STATES: FlowStateId[] = [
 	'sd2d',
 	'sd2e',
 	'sd2f',
+	'sd2g',
+	'sd2h',
 	'sd3',
 	'sd3b',
 	'sd3c',
@@ -674,21 +676,79 @@ function sendPick(m: WalletFlowMessages, multi: boolean): SendPickModel {
 	};
 }
 
+/**
+ * SD2's figure in its three drawings (issue 231). The unit rides the figure in
+ * every one: a token symbol after it, a currency symbol before it, and an
+ * 18-decimal Max, which has to step down the hero ladder and stay in the column.
+ */
+const SEND_FIGURES = {
+	token: { value: '120', adornment: { suffix: 'USDT' }, fiat: '≈ $120.00' },
+	fiat: { value: '120.00', adornment: { prefix: '$' }, fiat: '≈ 120 USDT' },
+	long: { value: '53.483600000000000001', adornment: { suffix: 'USDT' }, fiat: '≈ $53.48' }
+};
+
 function sendForm(
 	m: WalletFlowMessages,
 	identicon: Identicon,
-	mode: 'single' | 'split' | 'sweep'
+	mode: 'single' | 'split' | 'sweep',
+	figure: keyof typeof SEND_FIGURES = 'token'
 ): SendFormModel {
 	const fee = {
 		label: m['componentsUi.gas.networkFee'],
 		mark: { ticker: 'ETH', badgeColor: CHAIN_COLORS.ethereum },
-		value:
-			mode === 'single'
-				? '0.0021 ETH · ≈$0.55'
-				: mode === 'split'
-					? '0.0034 ETH · ≈$0.89'
-					: '0.0041 ETH · ≈$1.07',
-		openLabel: m['send.feeTokenLabel']
+		value: mode === 'single' ? '0.0021 ETH' : mode === 'split' ? '0.0034 ETH' : '0.0041 ETH',
+		valueFiat: mode === 'single' ? '≈ $0.55' : mode === 'split' ? '≈ $0.89' : '≈ $1.07',
+		openLabel: m['send.feeTokenLabel'],
+		refreshLabel: m['send.feeRefresh']
+	};
+
+	// Drawn FOLDED, which is how the control always arrives (spec 068): the
+	// board shows what a person sees on opening the form, not the picker. The
+	// summary is `fast` here because that is the factory default; live, it is
+	// whatever this person chose in Settings.
+	const speed = {
+		label: m['send.feeSpeedLabel'],
+		value: m['send.gasTier.fast'],
+		open: false,
+		onceNote: m['send.feeSpeedOnce'],
+		gasPriceLabel: m['send.gasPriceLabel'],
+		gasPriceLine: true,
+		// Drawn with real-looking figures rather than an empty list: each option
+		// carries its OWN fee live, and a fixture that showed names alone would
+		// be a picture of a control that asks somebody to choose blind. The gas
+		// prices are Ethereum's measured shape (issue 684) — three tiers that
+		// differ by the tip even where the fees would not — drawn as ranges
+		// since issue 685: a 0.048 gwei base fee under each tier's cap of 1.5 /
+		// 2 / 3 × base + tip, with tips of 1.00 / 1.25 / 2.00 × 0.0048 gwei.
+		options: [
+			{
+				id: 'fast',
+				label: m['send.gasTier.fast'],
+				detail: m['send.gasTierHintFast'],
+				value: '0.0021 ETH',
+				valueFiat: '≈ $0.55',
+				gasPrice: '0.0576 ~ 0.154 gwei',
+				selected: true
+			},
+			{
+				id: 'standard',
+				label: m['send.gasTier.standard'],
+				detail: m['send.gasTierHintStandard'],
+				value: '0.0013 ETH',
+				valueFiat: '≈ $0.33',
+				gasPrice: '0.054 ~ 0.102 gwei',
+				selected: false
+			},
+			{
+				id: 'slow',
+				label: m['send.gasTier.slow'],
+				detail: m['send.gasTierHintSlow'],
+				value: '0.0010 ETH',
+				valueFiat: '≈ $0.25',
+				gasPrice: '0.0528 ~ 0.0768 gwei',
+				selected: false
+			}
+		]
 	};
 
 	const header = {
@@ -735,6 +795,7 @@ function sendForm(
 				note: m['send.multiSendSameRecipient']
 			},
 			fee,
+			speed,
 			cta: m['send.continueBtn']
 		};
 	}
@@ -787,6 +848,7 @@ function sendForm(
 				value: '120 USDT · ≈$120.00'
 			},
 			fee,
+			speed,
 			cta: m['send.continueBtn']
 		};
 	}
@@ -796,8 +858,8 @@ function sendForm(
 		mode,
 		token,
 		amount: {
-			value: '120',
-			fiat: '≈ $120.00',
+			...SEND_FIGURES[figure],
+			placeholder: '0',
 			denomLabel: m['send.feeTokenLabel'],
 			// Drawn live: SD2's token is priced, which is the condition the core
 			// shows the ⇄ row on.
@@ -812,6 +874,7 @@ function sendForm(
 		},
 		addRecipient: m['send.addRecipient'],
 		fee,
+		speed,
 		cta: m['send.continueBtn']
 	};
 }
@@ -1192,6 +1255,18 @@ export function buildFlowState(
 				state,
 				base: { kind: 'send-form', model: sendForm(m, identicon, 'single') },
 				sheet: { kind: 'fee-token', model: feeTokenPick(m) },
+				textScale: scale
+			};
+		case 'sd2g':
+			return {
+				state,
+				base: { kind: 'send-form', model: sendForm(m, identicon, 'single', 'fiat') },
+				textScale: scale
+			};
+		case 'sd2h':
+			return {
+				state,
+				base: { kind: 'send-form', model: sendForm(m, identicon, 'single', 'long') },
 				textScale: scale
 			};
 		case 'sd3':

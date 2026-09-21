@@ -160,15 +160,17 @@ enum ChainCatalog {
         chains.first { $0.apiNetworkId == apiNetworkId }
     }
 
-    /// Curated public endpoints, CORS-friendly, the Expo table verbatim.
+    /// Curated public endpoints, CORS-friendly: the Expo table, minus endpoints
+    /// dropped for measured cause (see the inline notes).
     ///
     /// A **fallback tier**, not a preference: the core scores them below a
     /// user's own endpoint and below a paid provider, and only measured latency
     /// moves anything after that.
     static let publicRPCs: [Int: [String]] = [
         1: ["https://ethereum-rpc.publicnode.com", "https://1rpc.io/eth"],
-        56: ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org",
-             "https://bsc.meowrpc.com"],
+        // bsc.meowrpc.com was dropped (issue #212; measured 2026-09-20): its
+        // eth_gasPrice flips between 0.05, 0.1 and 1.0 gwei and ~33% of calls error.
+        56: ["https://bsc-rpc.publicnode.com", "https://bsc.drpc.org"],
         137: ["https://polygon-bor-rpc.publicnode.com", "https://1rpc.io/matic"],
         42_161: ["https://arbitrum-one-rpc.publicnode.com", "https://1rpc.io/arb"],
         10: ["https://optimism-rpc.publicnode.com", "https://1rpc.io/op"],

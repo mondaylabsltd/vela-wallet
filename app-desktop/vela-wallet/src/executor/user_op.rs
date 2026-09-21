@@ -317,6 +317,7 @@ fn pricing(quote: &FeeAssetQuote) -> AssetPricing {
         is_native: quote.asset == FeeAssetKind::Native,
         decimals: quote.decimals,
         usd_price: quote.usd_price.clone(),
+        native_usd_floor_price: quote.native_usd_floor_price.clone(),
     }
 }
 
@@ -856,6 +857,7 @@ mod tests {
             symbol: "X".to_owned(),
             usd_balance: "0".to_owned(),
             usd_price: None,
+            native_usd_floor_price: None,
         };
         let usdc = "0x2222222222222222222222222222222222222222";
         let quotes = vec![

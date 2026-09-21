@@ -30,7 +30,7 @@ import {
 } from '$lib/services/tokens-model';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
-import { currencyGlyph } from '$lib/settings/fixtures';
+import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
 import type {
@@ -160,6 +160,32 @@ export function moneyParts(
 export function moneyText(usd: number, currency: CurrencyView): string {
 	const parts = moneyParts(usd, currency);
 	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
+}
+
+/**
+ * The unit drawn beside a figure that is being TYPED (issue 231): the send
+ * form's hero read "4.00" with nothing to say whether that was dollars or
+ * coins — the unit was known and reached only the screen reader.
+ *
+ * `code` is the FIGURE's own currency (`SendView.amount_fiat_code`), never the
+ * display currency: a figure typed in CNY is still CNY in the instant the
+ * display currency changes under it, and drawing the new symbol over the old
+ * digits is the relabel this project has paid for more than once. `null` means
+ * the figure is in token units, and the unit is the token's symbol.
+ *
+ * A currency with a real symbol leads the figure ("$4.00"), exactly as
+ * `moneyText` writes it on the line beneath; one the catalog has no symbol for
+ * follows it as its code ("4.00 PLN"), and a token always follows
+ * ("0.00075 BNB"). Nothing here defaults to "$": an unknown unit is no
+ * adornment at all, which is a gap a person can see rather than a claim.
+ */
+export function unitAdornment(
+	code: string | null,
+	tokenSymbol: string
+): { prefix?: string; suffix?: string } {
+	if (code === null) return tokenSymbol === '' ? {} : { suffix: tokenSymbol };
+	const symbol = currencySymbol(code);
+	return symbol === null ? { suffix: code } : { prefix: symbol };
 }
 
 /**

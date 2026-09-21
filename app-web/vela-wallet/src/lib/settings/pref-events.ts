@@ -21,8 +21,16 @@ export type SettingsPrefEvent =
 	| { kind: 'language'; id: string }
 	/** The slider's stop, 0-based — `TEXT_SCALE_LEVELS` names what it means. */
 	| { kind: 'text-scale'; index: number }
-	/** A display-currency code — the one row here that DOES reach a core (`display_currency`). */
+	/** A display-currency code — one of two rows here that reach a core (`display_currency`). */
 	| { kind: 'currency'; id: string }
+	/**
+	 * A default transaction speed — `fast` / `standard` / `slow` (spec 068).
+	 * The second row with a core behind it (`fee_tier_pref`), and the reason
+	 * the comment above no longer says "the one". A per-transaction pick on
+	 * the send screen is NOT this event: that choice is one-shot and never
+	 * rewrites the stored default.
+	 */
+	| { kind: 'fee-speed'; id: string }
 	| { kind: 'number-format'; id: string }
 	| { kind: 'date-format'; id: string }
 	| { kind: 'time-format'; id: string }

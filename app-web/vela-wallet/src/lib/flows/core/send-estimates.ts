@@ -33,6 +33,12 @@ export function toFeeWire(fee: TransactionFeeEstimate): FeeEstimateView {
 		relayer_fee_per_gas: fee.relayerFeePerGas.toString(),
 		bundler_gas_price: fee.bundlerGasPrice.toString(),
 		in_band_gas_basis: fee.inBandGasBasis.toString(),
+		// Display only (issue 684), so it crosses as "no figure" rather than as
+		// a 0 when there is none — the picker draws nothing for `null` and
+		// would draw "0 wei" for a zero.
+		effective_gas_price: fee.effectiveGasPrice?.toString() ?? null,
+		// The top of that figure's range (issue 685), absent the same way.
+		max_gas_price: fee.maxGasPrice?.toString() ?? null,
 		total_gas: fee.totalGas.toString(),
 		deployed: fee.deployed,
 		tier: fee.tier,
@@ -61,6 +67,16 @@ export function fromFeeWire(view: FeeEstimateView): TransactionFeeEstimate {
 		relayerFeePerGas: fromWireAmount(view.relayer_fee_per_gas),
 		bundlerGasPrice: fromWireAmount(view.bundler_gas_price),
 		inBandGasBasis: fromWireAmount(view.in_band_gas_basis),
+		// `fromWireAmount` would turn an absent figure into 0n, which this one
+		// field must never be: "no honest price" and "the price is zero" are
+		// different facts here (issue 684). `== null`, not `=== null`: a view
+		// that arrives without the key at all (hand-built, or remembered by an
+		// older build) is just as absent, and `fromWireAmount(undefined)` is 0n.
+		effectiveGasPrice:
+			view.effective_gas_price == null ? undefined : fromWireAmount(view.effective_gas_price),
+		// The same rule for the top of its range (issue 685): an absent cap is
+		// no range, and a `0n` here would draw one ending at zero.
+		maxGasPrice: view.max_gas_price == null ? undefined : fromWireAmount(view.max_gas_price),
 		totalGas: fromWireAmount(view.total_gas),
 		deployed: view.deployed,
 		tier: view.tier,

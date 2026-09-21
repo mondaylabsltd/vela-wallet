@@ -39,7 +39,12 @@
 
 	<ul class="facts">
 		{#each model.facts as fact (fact.label)}
-			<li><FactRow {fact} /></li>
+			<li>
+				<FactRow {fact} />
+				{#if fact.note !== undefined}
+					<p class="note">{fact.note}</p>
+				{/if}
+			</li>
 		{/each}
 	</ul>
 
@@ -109,6 +114,16 @@
 	.cta {
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+	/* Why a fact reads as it does (issue 686: a speed taken because it was
+	   free). Quiet, under its row and inside the same card, so the reason is
+	   read with the value and not mistaken for a warning. */
+	.note {
+		margin: 0;
+		padding-bottom: var(--space-lg);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
 	}
 	.alert {
 		margin: 0;

@@ -245,7 +245,10 @@ struct RootView: View {
         // The money path. One relay client, one spine, one fee session — the
         // spine is shared with 053's dApp transactions, which is why it is
         // built here rather than inside the send store.
-        let relay = RelayClient(port: PoolRelayPort(pool: pool))
+        let relay = RelayClient(
+            port: PoolRelayPort(pool: pool),
+            builtinBase: { await RpcEndpoints.builtinBundlerBase(accounts: store) }
+        )
         self.relayClient = relay
         let port = SendAccountPort(accounts: store)
         self.sendAccountPort = port

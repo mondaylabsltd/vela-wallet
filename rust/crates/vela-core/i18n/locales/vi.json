@@ -51,6 +51,10 @@
       "timeTitle": "Định dạng giờ",
       "timeSubtitle": "Đồng hồ 12 giờ hoặc 24 giờ."
     },
+    "feeSpeed": {
+      "title": "Tốc độ giao dịch",
+      "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
+    },
     "advanced": {
       "networksTitle": "Mạng lưới",
       "networksSubtitle": "URL của RPC, Explorer và Bundler",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Thêm mạng",
       "addNetworkSubtitle": "Thêm mạng EVM tùy chỉnh",
       "endpointsTitle": "Điểm cuối dịch vụ",
-      "endpointsSubtitle": "Dữ liệu chain, chỉ mục danh tính, Bundler"
+      "endpointsSubtitle": "Dữ liệu chain, chỉ mục danh tính, Bundler",
+      "feeSpeedTitle": "Tốc độ giao dịch",
+      "feeSpeedSubtitle": "Mặc định cho mọi giao dịch gửi"
     },
     "developer": {
       "treasuryTitle": "Ngân quỹ",

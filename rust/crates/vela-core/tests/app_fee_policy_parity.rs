@@ -86,6 +86,11 @@ fn asset_of(input: &Value, key: &str) -> AssetPricing {
         is_native: asset["is_native"].as_bool().expect("is_native"),
         decimals: u32::try_from(asset["decimals"].as_u64().expect("decimals")).expect("decimals"),
         usd_price: asset["usd_price"].as_str().map(str::to_owned),
+        // The parity corpus replays the TypeScript original, which has no such
+        // input: issue 682's floor price is a Rust-side addition, and leaving
+        // it `None` here is what keeps this file a parity check rather than a
+        // record of how far the two have drifted.
+        native_usd_floor_price: None,
     }
 }
 

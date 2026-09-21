@@ -51,6 +51,10 @@
       "timeTitle": "Format waktu",
       "timeSubtitle": "Format jam 12 atau 24."
     },
+    "feeSpeed": {
+      "title": "Kecepatan transaksi",
+      "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
+    },
     "advanced": {
       "networksTitle": "Jaringan",
       "networksSubtitle": "URL RPC, Explorer & Bundler",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Tambah Jaringan",
       "addNetworkSubtitle": "Tambahkan jaringan EVM kustom",
       "endpointsTitle": "Endpoint Layanan",
-      "endpointsSubtitle": "Data chain, indeks identitas, Bundler"
+      "endpointsSubtitle": "Data chain, indeks identitas, Bundler",
+      "feeSpeedTitle": "Kecepatan transaksi",
+      "feeSpeedSubtitle": "Default untuk setiap pengiriman"
     },
     "developer": {
       "treasuryTitle": "Treasury",

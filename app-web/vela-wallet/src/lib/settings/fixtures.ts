@@ -135,7 +135,18 @@ export const LOCALE_ENDONYMS: { id: string; label: string }[] = [
 /** Currency rows, with the symbol the ST5 badge shows. */
 /** The live money formatter's glyph lookup — content, so it lives here. */
 export function currencyGlyph(code: string): string {
-	return CURRENCIES.find((c) => c.id === code)?.glyph ?? code + ' ';
+	return currencySymbol(code) ?? code + ' ';
+}
+
+/**
+ * The same lookup, saying out loud when it MISSED (issue 231). `currencyGlyph`
+ * folds "no symbol" into a `CODE ` prefix, which is right inside a sentence
+ * ("≈ PLN 4.00") and wrong beside a figure being typed, where a code belongs
+ * after the number. One catalog behind both, so the send form's hero and the
+ * "≈" line beneath it cannot come to disagree about what a currency looks like.
+ */
+export function currencySymbol(code: string): string | null {
+	return CURRENCIES.find((c) => c.id === code)?.glyph ?? null;
 }
 
 const CURRENCIES = [
@@ -295,6 +306,21 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					icon: 'zap',
 					title: m.advanced.endpointsTitle,
 					subtitle: m.advanced.endpointsSubtitle,
+					trailing: 'chevron'
+				},
+				// Spec 068. It sits in 高级 rather than 本地化 because it is not
+				// about how a figure READS — it changes what a transaction costs
+				// and how fast it lands. The value shown is the committed
+				// preference; the fixture draws the factory default.
+				// `clock`, not the `zap` above it: two adjacent rows wearing the same
+				// lightning bolt read as one group and neither is scannable, and a
+				// money-and-speed preference is nothing like a list of endpoints.
+				{
+					id: 'fee-speed',
+					icon: 'clock',
+					title: m.advanced.feeSpeedTitle,
+					subtitle: m.advanced.feeSpeedSubtitle,
+					value: m.feeSpeed.fast,
 					trailing: 'chevron'
 				},
 				{
@@ -679,6 +705,30 @@ function languageSheet(m: SettingsMessages, current: string): SelectSheetModel {
 	};
 }
 
+/**
+ * The default-speed sheet (spec 068).
+ *
+ * Three rows, fastest first, each NAMED by its speed and DESCRIBED by what
+ * that speed buys — the owner's ruling: the heading asks 交易速度, so every
+ * option has to be a speed, and the advantage goes on the second line where it
+ * is the reason somebody would pick the slow one. `rapid` is not offered — it
+ * is a dead variant nothing constructs and the relay refuses on the wire.
+ * The subtitle is load-bearing: it says that this is where every transaction
+ * STARTS, and that a single send can still be changed, so nobody reads the
+ * send screen's picker as having quietly rewritten this.
+ */
+function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
+	return {
+		title: m.feeSpeed.title,
+		subtitle: m.feeSpeed.subtitle,
+		rows: [
+			{ id: 'fast', label: m.feeSpeed.fast, detail: m.feeSpeed.fastHint, selected: true },
+			{ id: 'standard', label: m.feeSpeed.standard, detail: m.feeSpeed.standardHint },
+			{ id: 'slow', label: m.feeSpeed.slow, detail: m.feeSpeed.slowHint }
+		]
+	};
+}
+
 function currencySheet(m: SettingsMessages): SelectSheetModel {
 	return {
 		title: m.currency.title,
@@ -1001,6 +1051,7 @@ export function buildMobileState(
 		signOutSheet: signOutSheet(m, state === 'st3b'),
 		languageSheet: languageSheet(m, 'zh'),
 		currencySheet: currencySheet(m),
+		feeSpeedSheet: feeSpeedSheet(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1058,6 +1109,9 @@ export function buildDesktopState(
 		{ id: 'networks', icon: 'network', label: m.advanced.networksTitle },
 		{ id: 'rpc-providers', icon: 'server', label: m.advanced.rpcProvidersTitle },
 		{ id: 'endpoints', icon: 'zap', label: m.advanced.endpointsTitle },
+		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
+		// between 服务端点 and 存储, and this list mirrors that list.
+		{ id: 'fee-speed', icon: 'clock', label: m.advanced.feeSpeedTitle },
 		{ id: 'storage', icon: 'hard-drive', label: m.storage.title },
 		{ id: 'about', icon: 'info', label: m.about.title }
 	];
@@ -1149,6 +1203,18 @@ export function buildDesktopState(
 					label: m.localization.timeTitle,
 					kind: 'dropdown',
 					value: TIME_SAMPLES[0]
+				}
+			]
+		},
+		feeSpeed: {
+			title: m.feeSpeed.title,
+			description: m.feeSpeed.subtitle,
+			rows: [
+				{
+					id: 'fee-speed',
+					label: m.advanced.feeSpeedTitle,
+					kind: 'dropdown',
+					value: m.feeSpeed.fast
 				}
 			]
 		},

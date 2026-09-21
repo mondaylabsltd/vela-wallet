@@ -13,6 +13,7 @@
  */
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
+import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
@@ -23,14 +24,24 @@ import { chainName, nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
-import { moneyText, trimBalance } from '$lib/wallet/live';
+import { moneyText, trimBalance, unitAdornment } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
 import type { WalletFlowMessages } from './messages';
-import { feeLine, feeOptionPriceUsd, feeParts, feeSymbol } from './fee-line';
+import {
+	feeAmountText,
+	feeLine,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts,
+	feeSymbol
+} from './fee-line';
+import { gasPriceRangeTexts, gasPriceWei, type GasPriceRange } from './gas-price';
+import { oneSpeed } from './speed-choice';
 import { chainMark, tokenMarkFor } from './marks';
 import type {
 	FactRowModel,
 	FeeRowModel,
+	FeeSpeedModel,
 	FlowHeaderModel,
 	FeeTokenPickModel,
 	SendConfirmModel,
@@ -73,7 +84,102 @@ export interface SendLiveInputs {
 	 * had a `console.warn` where the sentence should have been.
 	 */
 	alert?: SendAlertKind | null;
+	/**
+	 * The speed control's live state (spec 068). Absent ⇒ no control is drawn,
+	 * which is what a surface with no quote sessions behind it must do rather
+	 * than offer a choice it cannot honour.
+	 *
+	 * `rows` carries a whole `FeeView` per tier because each option shows its
+	 * OWN fee, priced at its own tier, in its own fee coin — the symbol and
+	 * the price come off the same view as the amount, which is the rule
+	 * `fee-line.ts` exists to keep. The row for `tier` is the MAIN session's
+	 * view, so the option in force and the fee row above it can never be two
+	 * different numbers for the same speed.
+	 */
+	speed?: {
+		open: boolean;
+		/** The tier THIS send runs at: a one-shot pick, else the stored default. */
+		tier: OfferedTier;
+		/**
+		 * The tier above is a deliberate one-shot PICK, not the stored default.
+		 * The confirm screen restates the speed only then: a person who bumped
+		 * this one payment off their usual pace — or mis-tapped on the way past —
+		 * should see that fact on the last screen before they sign, while
+		 * everybody else keeps a confirm that says nothing about a decision they
+		 * never made.
+		 */
+		picked?: boolean;
+		/**
+		 * The tier above is the fastest one because on this network it costs
+		 * exactly what the person's own default costs (issue 686), not because
+		 * anybody picked it. Never set over an explicit pick, and never written
+		 * back to the stored preference — it is a fact about this send on this
+		 * network. The control says so in one line, so Settings saying "Slow"
+		 * while the chain receives "Fast" is never left unexplained.
+		 */
+		free?: boolean;
+		/**
+		 * This chain already settled as having one speed (issue 686 B) — the
+		 * route's memory of `speedSetVerdict`. Read only while the set is being
+		 * measured again; settled numbers always decide for themselves.
+		 */
+		oneSpeedKnown?: boolean;
+		rows: SpeedRowInput[];
+	};
 }
+
+/**
+ * The tiers a person may be offered.
+ *
+ * `rapid` is excluded on purpose and permanently: the variant exists in
+ * `FeeTier` and has a translation, but nothing constructs it, the relay has
+ * never reported it, and a relay asked for it answers -32602 (spec 068, "a
+ * dead fourth tier — leave it, never offer it"). Excluding it in the TYPE is
+ * what stops a later `Object.keys`-style enumeration from putting it on a
+ * screen.
+ */
+export type OfferedTier = Exclude<FeeTier, 'rapid'>;
+
+/**
+ * The offered tiers, fastest first — the picker's order, and the same list
+ * `fee_tier_pref::OFFERED` validates a stored preference against.
+ */
+export const OFFERED_TIERS: readonly OfferedTier[] = ['fast', 'standard', 'slow'];
+
+/**
+ * A tier as one this shell may offer.
+ *
+ * Only `rapid` can fail, and nothing constructs it — but the narrowing has to
+ * live somewhere, and "fall back to the factory default" is the same answer
+ * the core gives a stored name it does not recognise. Never a silent
+ * downgrade: `fast` is what every shell did before there was a choice.
+ */
+export function offeredTier(tier: FeeTier): OfferedTier {
+	return tier === 'rapid' ? 'fast' : tier;
+}
+
+/**
+ * What each offered tier is CALLED — the speed itself, never a number. The
+ * effective gas price a tier buys is drawn BESIDE the name (issue 684); it is
+ * supporting information, and naming a tier by it would answer a question the
+ * control's own label did not ask.
+ */
+const TIER_LABEL_KEY = {
+	fast: 'send.gasTier.fast',
+	standard: 'send.gasTier.standard',
+	slow: 'send.gasTier.slow'
+} as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
+
+/**
+ * …and what each one BUYS, the line under the name (spec 068, the owner's
+ * ruling). Separate from the name on purpose: the heading asks about speed, so
+ * the name has to be a speed and the advantage has to be somewhere else.
+ */
+const TIER_HINT_KEY = {
+	fast: 'send.gasTierHintFast',
+	standard: 'send.gasTierHintStandard',
+	slow: 'send.gasTierHintSlow'
+} as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
 
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
 export type SendClassFilter = 'all' | 'stable' | 'gas' | 'other';
@@ -211,7 +317,33 @@ function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
-	const quote = send.fee ?? fee.fee;
+	const inHand = send.fee ?? fee.fee;
+	// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681).
+	//
+	// On the one path a pick still re-quotes — a speed tapped before its own
+	// preview had settled — the estimate in hand belongs to the tier that was
+	// just left. Nothing clears it: `send.fee` survives a tier change (the send
+	// core has no event for one), and `fee.fee` holds the old answer until the
+	// new one lands. So the row went on showing 超快's money under 较慢's name
+	// for a whole round trip, which is the reported defect one size smaller —
+	// "我选择的价格和展示的价格不一致了". "…" is the honest thing to say: this
+	// speed's figure is being measured. Showing nothing for a second beats
+	// relabelling a number.
+	const ofAnotherTier =
+		inHand !== null && inputs.speed !== undefined && inHand.tier !== inputs.speed.tier;
+	const quote = ofAnotherTier ? null : inHand;
+	// The same words and the same price source as `feeText`, in two pieces
+	// (issue 231): the row lets the money drop to a second line whole when it
+	// is tight, and never breaks its label to make room.
+	const quoteParts = quote ? feeParts(quote, fee.options) : null;
+	const line =
+		quote && quoteParts
+			? feeLineParts(
+					quoteParts,
+					feeUnitPriceUsd(quoteParts.contract, quote.chain_id, inputs),
+					inputs.currency
+				)
+			: null;
 	const chainId = send.selected_token?.chain_id ?? quote?.chain_id ?? 1;
 	const symbol = quote ? feeSymbol(quote, fee.options) : nativeSymbol(chainId);
 	return {
@@ -227,9 +359,183 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 		// A figure in hand stays on screen while a re-quote is out (spec 028
 		// Phase 10): the warm quote lands before the form is complete, and the
 		// payee-aware re-ask must not blank the row it just filled. "…" is for
-		// the frame where there is nothing to show yet.
-		value: quote ? feeText(quote, inputs) : send.fee_busy || fee.busy ? '…' : '—',
-		openLabel: template.openLabel
+		// the frame where there is nothing to show yet — and for the frame where
+		// what is in hand answers about a speed nobody is on any more, which is
+		// a measurement waiting to happen rather than an answer of "none".
+		value: line ? line.coin : send.fee_busy || fee.busy || ofAnotherTier ? '…' : '—',
+		valueFiat: line?.fiat ?? undefined,
+		openLabel: template.openLabel,
+		refreshLabel: m['send.feeRefresh'],
+		// A MEASUREMENT IS OUT — not "somebody tapped ⟳". It is deliberately the
+		// generic busy flag, the same fact the "…" above reads from, so the row
+		// can never claim to be both settled and measuring: a second tap would
+		// only supersede a run already in flight, whoever started it. The cost
+		// is that the icon also turns for the form's own re-quotes; that is the
+		// truth about the row, and a still icon over a moving number would not be.
+		refreshing: send.fee_busy || fee.busy,
+		// `FeeView.stale` had NO consumer in this shell (spec 068): the 30s TTL
+		// elapsed and nothing on screen said so, while the person spent their
+		// drift budget on think-time. Not said while a fresh measurement is out,
+		// because "this is old" is about to stop being true. Nor over a row with
+		// no figure on it: "from a while ago" is a fact about a number, and the
+		// tier just changed under this one (issue 681).
+		staleNote:
+			fee.stale && !fee.busy && !send.fee_busy && !ofAnotherTier ? m['send.feeStale'] : undefined
+	};
+}
+
+/**
+ * A settled quote's gas price as a range (issue 685): what the speed bids now,
+ * and how high it will go. Both ends are the core's (`gas_price_range`) and
+ * are only read here, never computed.
+ *
+ * No bid, no figure — the top of a range is not a gas price anybody offers,
+ * and alone it would read as the price (the mistake issue 684 was careful not
+ * to make). A top that is missing, or that sits BELOW the bid, is no top: the
+ * core derives the bid as `min(cap, base + tip)` so it cannot be above the
+ * cap, and a range drawn upside down would be a claim nothing measured.
+ */
+function gasPriceRangeOf(quote: FeeEstimateView | null): GasPriceRange | null {
+	const low = gasPriceWei(quote?.effective_gas_price);
+	if (low === null) return null;
+	const high = gasPriceWei(quote?.max_gas_price);
+	return high === null || high < low ? { low } : { low, high };
+}
+
+/** One option's figures, as the route hands them over (see `SendLiveInputs.speed`). */
+type SpeedRowInput = { tier: OfferedTier; view: FeeView; busy?: boolean };
+
+/**
+ * An option's quote — priced at ITS OWN tier, or nothing (issue 681). The row
+ * in force renders the MAIN session's view, and for the moment between a tier
+ * being named and its figure landing that view still holds the previous
+ * speed's number — which is the one thing the control must never draw under a
+ * different name.
+ */
+function quoteOfRow(row: SpeedRowInput): FeeEstimateView | null {
+	return row.view.fee !== null && row.view.fee.tier !== row.tier ? null : row.view.fee;
+}
+
+/**
+ * Whether this network has one speed (issue 686 B), judged from a SETTLED set
+ * only: `'one'` or `'several'`, and `null` whenever any option has no settled
+ * quote of its own — measuring, failed, or holding another tier's figure —
+ * because none of those is evidence either way.
+ *
+ * The route remembers a `'one'` per chain (and forgets it on a `'several'`),
+ * so reopening the control on Tempo shows the statement at once instead of
+ * three rows that collapse into it a round trip later.
+ */
+export function speedSetVerdict(rows: readonly SpeedRowInput[]): 'one' | 'several' | null {
+	const evidence = rows.map((row) => ({ tier: row.tier, quote: quoteOfRow(row) }));
+	if (evidence.some((row) => row.quote === null)) return null;
+	return oneSpeed(evidence, OFFERED_TIERS) ? 'one' : 'several';
+}
+
+/**
+ * The folded speed control (spec 068).
+ *
+ * Every figure here is a REAL quote of THIS transaction at that tier — the
+ * shell never scales one tier's number into another's. The relay's reported
+ * tier price and its submit cap are different quantities (spec 068, "Money
+ * and speed are two different levers"), so a tier's price is only ever what
+ * the core settled on for that tier.
+ */
+function feeSpeed(inputs: SendLiveInputs): FeeSpeedModel | undefined {
+	const speed = inputs.speed;
+	if (speed === undefined) return undefined;
+	const m = inputs.m;
+	// An option shows a quote priced at ITS OWN tier or nothing (issue 681).
+	const quoteOf = quoteOfRow;
+	// What each speed actually BUYS (issue 684), formatted across the three
+	// rows at once. Three identical fees with nothing beside them read as a
+	// broken picker — that is what the owner reported, twice — and on a chain
+	// under the $0.01 fee floor this figure is the only thing that tells the
+	// tiers apart. Which is also why the unit and precision are decided over
+	// the SET: see `gas-price.ts`. Since issue 685 each figure is a range —
+	// what the speed bids now ~ its cap — because the bid alone moved by the
+	// tip and hid the lever most of a dearer fee pays for.
+	//
+	// And why nothing is drawn until every row has answered. Each tier is its
+	// own quote session and they land one at a time; formatted as they came,
+	// the first row's "270 gwei" would turn into "270.2 gwei" (or change unit)
+	// when a neighbour arrived. A row "waiting" is exactly one whose fee shows
+	// "…" — a row still holding its settled figure through a refresh is not
+	// waiting, so the gas prices hold still through a refresh as the fees do.
+	const waiting = speed.rows.some(
+		(row) => quoteOf(row) === null && (row.busy === true || row.view.busy || row.view.fee !== null)
+	);
+	const gasPrices = waiting
+		? speed.rows.map(() => null)
+		: gasPriceRangeTexts(speed.rows.map((row) => gasPriceRangeOf(quoteOf(row))));
+	// This network has ONE speed (issue 686): every tier settled, the same fee,
+	// and no gas-price range anywhere — Tempo, whose relay ignores the tier, or
+	// any network shaped like it. Judged under the very hold above, so the
+	// rows are never swapped for the statement while a tier is still being
+	// measured — and, like the gas prices, held through a refresh (a row
+	// keeping its settled figure while it re-measures is not waiting), so the
+	// statement does not blink back into three rows on every ⟳. Equal fees
+	// alone never get here: on a floor-clamped chain the ranges still differ,
+	// and that difference is the choice.
+	//
+	// While the set is still being measured, a verdict this chain ALREADY gave
+	// (`oneSpeedKnown`, remembered by the route) stands in for it: the control
+	// reopened on Tempo says so at once rather than drawing three rows that
+	// collapse a round trip later. Only ever the statement the numbers last
+	// made — once the set settles, the fresh numbers decide again.
+	const single = waiting
+		? speed.oneSpeedKnown === true
+		: oneSpeed(
+				speed.rows.map((row) => ({ tier: row.tier, quote: quoteOf(row) })),
+				OFFERED_TIERS
+			);
+	const optionOf = (row: { tier: OfferedTier; view: FeeView; busy?: boolean }, index: number) => {
+		const { tier, view } = row;
+		const quote = quoteOf(row);
+		const otherTier = quote === null && view.fee !== null;
+		const parts = quote ? feeParts(quote, view.options) : null;
+		const line =
+			quote && parts
+				? feeLineParts(
+						parts,
+						feeUnitPriceUsd(parts.contract, quote.chain_id, inputs),
+						inputs.currency
+					)
+				: null;
+		return {
+			id: tier,
+			label: m[TIER_LABEL_KEY[tier]],
+			detail: m[TIER_HINT_KEY[tier]],
+			// "…" while this tier's own quote is out, "—" when there is none to
+			// be had. Never another tier's figure wearing this tier's name.
+			value: line ? line.coin : row.busy === true || view.busy || otherTier ? '…' : '—',
+			valueFiat: line?.fiat ?? undefined,
+			// No "…" for this one. The fee above already says whether a
+			// measurement is out and a second one on the same row would be
+			// noise — the line is held open empty instead (`gasPriceLine`).
+			gasPrice: gasPrices[index] ?? undefined,
+			selected: tier === speed.tier
+		};
+	};
+	return {
+		label: m['send.feeSpeedLabel'],
+		// THEIR default (or their pick for this send), never a hardcoded one —
+		// this line and the Settings row read the same preference.
+		value: m[TIER_LABEL_KEY[speed.tier]],
+		open: speed.open,
+		onceNote: m['send.feeSpeedOnce'],
+		// Why the tier above is not the person's default (issue 686). Said only
+		// while it is true; never beside the one-speed statement, because a
+		// speed that buys nothing is not an upgrade.
+		freeNote: speed.free && !single ? m['send.feeSpeedFree'] : undefined,
+		singleNote: single ? m['send.feeSpeedSingle'] : undefined,
+		gasPriceLabel: m['send.gasPriceLabel'],
+		// Kept while anything is still being measured, so the rows do not
+		// shrink by a line and grow back on every open, tap and refresh. Only
+		// once the set has settled with no figure anywhere (Tempo, whose sign
+		// request has no tip) does the line go — once, not per row.
+		gasPriceLine: waiting || gasPrices.some((text) => text !== null),
+		options: speed.rows.map(optionOf)
 	};
 }
 
@@ -354,7 +660,17 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 	// is emphatic about that, and this file only reads it.
 	const inFiat = send.amount_fiat_code !== null;
 	const amountBlock = {
-		value: send.amount || '0',
+		// The empty field is EMPTY (issue 231). This used to read
+		// `send.amount || '0'`, which put a real "0" into the input: the
+		// placeholder never showed, and tapping the field and typing 4 made
+		// "04" — which the core stored and echoed back.
+		value: send.amount,
+		placeholder: '0',
+		// The unit, on the figure itself — keyed on the figure's OWN code, like
+		// everything else in this block. `currency.code` is the DISPLAY currency
+		// and may already have moved on; reading it here would draw "$" over
+		// digits typed in yuan.
+		adornment: unitAdornment(send.amount_fiat_code, token?.symbol ?? ''),
 		// The line under the figure is the OTHER denomination (spec 021
 		// component 8; `05-screens-wallet.md:168` — "≈ $12.34" or "0.0042 ETH").
 		// It used to be the fiat value in BOTH modes, so a fiat-denominated
@@ -415,6 +731,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 			summary: undefined,
 			recipient: { ...recipientBlock, note: m['send.multiSendSameRecipient'] },
 			fee: feeRow(inputs, model.fee),
+			speed: feeSpeed(inputs),
 			cta: m['send.continueBtn']
 		};
 	}
@@ -490,6 +807,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		amount: split ? undefined : amountBlock,
 		recipient: split ? undefined : recipientBlock,
 		fee: feeRow(inputs, model.fee),
+		speed: feeSpeed(inputs),
 		// The core's live verdict on the figure, and its last refusal. The
 		// warning is the one that arrives WITHOUT a tap (issue 211: the send
 		// screen said nothing at all about a gas coin the account did not
@@ -673,6 +991,26 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			value: feeText(send.fee ?? inputs.fee.fee, inputs)
 		}
 	];
+
+	// The speed, but only when it was CHOSEN for this send (spec 068). The
+	// confirm is the last screen before a signature, and a payment deliberately
+	// bumped off the usual pace should say so there rather than only on the
+	// form two taps back — that is also where a mis-tap gets caught. A send at
+	// the stored default adds no row: most sends need no decision about speed,
+	// and a permanent line would ask everybody to make one.
+	// A free upgrade (issue 686) is also a send running off the person's usual
+	// pace, so the last screen before the signature names it the same way.
+	if (inputs.speed?.picked || inputs.speed?.free) {
+		facts.push({
+			label: m['send.feeSpeedLabel'],
+			value: m[TIER_LABEL_KEY[inputs.speed.tier]],
+			// …and a free upgrade says WHY, here too (issue 686 rule 5): the
+			// person's Settings name a slower speed, and this is the screen they
+			// check before signing. The reason travels with the tier wherever
+			// the tier is shown. A pick needs no reason — they made it.
+			note: inputs.speed.picked ? undefined : m['send.feeSpeedFree']
+		});
+	}
 
 	// SD3c — the sweep's confirm: N assets, one network, one operation. Each
 	// breakdown row is a reserved spec, i.e. the exact amount the signature
@@ -918,10 +1256,14 @@ export function liveFeeTokenPick(
 			balanceLabel: fill(m['send.balanceLabel'], {
 				amount: trimBalance((Number(option.balance) / 10 ** option.decimals).toString(), 4)
 			}),
+			// The SAME formatter and the same decimal budget as the fee row this
+			// sheet opens from (issue 682): four decimals of its own hand-rolled
+			// trim printed an 0.000083 OKB fee as "~0 OKB" under the word
+			// "estimated", one tap below a row reading "0.000083 OKB · ≈ $0.01".
 			fee:
 				option.amount === null
 					? '—'
-					: `~${trimBalance((Number(option.amount) / 10 ** option.decimals).toString(), 4)} ${option.symbol}`,
+					: `~${feeAmountText(Number(option.amount) / 10 ** option.decimals, option.contract === null ? 6 : 4)} ${option.symbol}`,
 			selected: option.selected,
 			// The verdict this file's own comment promised and never passed on
 			// (issue 211): the native row is always offered, balance or not,

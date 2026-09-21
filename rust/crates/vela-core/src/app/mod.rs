@@ -52,6 +52,7 @@ pub mod display_currency;
 pub mod explore_sites;
 pub mod ext_cache;
 pub mod fee_policy;
+pub mod fee_tier_pref;
 pub mod login;
 pub mod manage_tokens;
 pub mod money;

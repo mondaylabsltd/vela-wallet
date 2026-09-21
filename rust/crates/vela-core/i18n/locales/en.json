@@ -51,6 +51,10 @@
       "timeTitle": "Time format",
       "timeSubtitle": "12-hour or 24-hour clock."
     },
+    "feeSpeed": {
+      "title": "Transaction speed",
+      "subtitle": "Every send you start in Vela begins here. You can still change a single one when you send it."
+    },
     "advanced": {
       "networksTitle": "Networks",
       "networksSubtitle": "RPC, Explorer & Bundler URLs",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Add Network",
       "addNetworkSubtitle": "Add custom EVM network",
       "endpointsTitle": "Service Endpoints",
-      "endpointsSubtitle": "Chain data, identity index, Bundler"
+      "endpointsSubtitle": "Chain data, identity index, Bundler",
+      "feeSpeedTitle": "Transaction speed",
+      "feeSpeedSubtitle": "What every send starts at"
     },
     "developer": {
       "treasuryTitle": "Treasury",

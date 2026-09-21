@@ -24,7 +24,7 @@ import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
-import { feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
+import { feeAmountText, feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
 import { chainLogoURL } from '$lib/services/tokens-model';
 import { trimBalance } from '$lib/wallet/live';
 import { chainName } from '$lib/services/networks';
@@ -330,6 +330,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// person can switch when sending and not when signing is two products).
 	const amount = (raw: string, decimals: number) =>
 		trimBalance((Number(raw) / 10 ** decimals).toString(), 4);
+	// The fee itself goes through the shared formatter, at the same decimal
+	// budget as the row above it (issue 682): the four-decimal trim printed an
+	// 0.000083 OKB fee as "~0 OKB", and a fee that reads as free is the one
+	// thing this sheet may never say.
+	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
+		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
 	const selector =
 		inputs.feeOpen === true && fee.options.length > 1
 			? {
@@ -342,7 +348,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 						fee:
 							option.amount === null
 								? '—'
-								: `~${amount(option.amount, option.decimals)} ${option.symbol}`,
+								: `~${feeAmount(option.amount, option.decimals, option.contract)} ${option.symbol}`,
 						selected: option.selected,
 						insufficient: option.insufficient
 					}))

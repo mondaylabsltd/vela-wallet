@@ -139,6 +139,7 @@
 		'number-format': 'number-format',
 		'date-format': 'date-format',
 		'time-format': 'time-format',
+		'fee-speed': 'fee-speed',
 		feedback: 'feedback'
 	};
 
@@ -210,6 +211,8 @@
 				return model.dateSheet.title;
 			case 'time-format':
 				return model.timeSheet.title;
+			case 'fee-speed':
+				return model.feeSpeedSheet.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			case 'erase-device':
@@ -237,6 +240,8 @@
 				return model.dateSheet.subtitle;
 			case 'time-format':
 				return model.timeSheet.subtitle;
+			case 'fee-speed':
+				return model.feeSpeedSheet.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -476,6 +481,16 @@
 						sheet={model.timeSheet}
 						onselect={(id) => {
 							onprefevent?.({ kind: 'time-format', id });
+							close();
+						}}
+					/>
+				{:else if overlay === 'fee-speed'}
+					<!-- Spec 068: the DEFAULT speed, stored. A per-transaction pick
+					     lives on the send screen and never comes through here. -->
+					<SelectSheetBody
+						sheet={model.feeSpeedSheet}
+						onselect={(id) => {
+							onprefevent?.({ kind: 'fee-speed', id });
 							close();
 						}}
 					/>

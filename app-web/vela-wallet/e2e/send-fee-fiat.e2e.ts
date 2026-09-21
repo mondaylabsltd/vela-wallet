@@ -31,7 +31,9 @@ test.use({ viewport: { width: 390, height: 844 } });
 test.setTimeout(120_000);
 
 const STUB = 'https://stub-rpc.test/rpc';
-const RELAY = /vela-relay\.getvela\.app/;
+// The app asks the Cloudflare relay (`vela-relay-cf`, endpoints.ts since spec 060);
+// the older host is kept so a stub written against either still intercepts.
+const RELAY = /vela-relay(-cf)?\.getvela\.app/;
 const ONE_AND_A_HALF_ETH = 1_500_000_000_000_000_000n;
 const PRICE_8DP = 3000n * 100_000_000n;
 const RECIPIENT = '0x' + 'ab'.repeat(20);
@@ -97,12 +99,21 @@ async function composeSend(page: Page, relay: RelayHandler): Promise<void> {
 	await page.getByRole('textbox', { name: 'ETH' }).fill('0.1');
 }
 
+/**
+ * The form's row draws the coin and the money as two pieces (issue 231), so a
+ * tight row drops the money to a second line whole — joined by the "≈" alone,
+ * spaced like the amount's own "≈" line above it, and with no "·" to be left
+ * dangling at the head of a dropped line. The confirm screen still reads
+ * `feeLine`'s one sentence, "· ≈$0.55", which is why there are two shapes here.
+ */
+const FORM_FEE = /[\d.]+ ETH\s*≈ \$[\d,]+\.\d\d/;
+
 test('the fee row says what the fee costs, in money as well as in the coin', async ({ page }) => {
 	await composeSend(page, happyRelay('0x' + 'a1'.repeat(32), '0x' + 'b2'.repeat(32)));
 
 	// The coin amount is the quote's; the money beside it is that coin's price.
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
-	await expect(feeRow).toContainText(/[\d.]+ ETH · ≈\$[\d,]+\.\d\d/, { timeout: 30_000 });
+	await expect(feeRow).toContainText(FORM_FEE, { timeout: 30_000 });
 
 	// …and the screen that is actually signed from says the same thing.
 	await page.getByRole('button', { name: en('send.continueBtn') }).click();
@@ -130,5 +141,5 @@ test('an unpriced relay row falls back to the price the amount line uses', async
 	});
 
 	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
-	await expect(feeRow).toContainText(/[\d.]+ ETH · ≈\$[\d,]+\.\d\d/, { timeout: 30_000 });
+	await expect(feeRow).toContainText(FORM_FEE, { timeout: 30_000 });
 });

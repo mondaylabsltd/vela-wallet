@@ -64,6 +64,31 @@ export interface SettingsMessages {
 		addNetworkSubtitle: string;
 		endpointsTitle: string;
 		endpointsSubtitle: string;
+		/** Spec 068: the stored default transaction speed. */
+		feeSpeedTitle: string;
+		feeSpeedSubtitle: string;
+	};
+	/**
+	 * The speed sheet (spec 068). The option NAMES are the send flow's own
+	 * (`send.gasTier.*`) — one set of words for a tier, so Settings and the
+	 * send form can never call the same speed two different things. `rapid` is
+	 * not among them: it is a dead variant the relay refuses.
+	 */
+	feeSpeed: {
+		title: string;
+		subtitle: string;
+		fast: string;
+		standard: string;
+		slow: string;
+		/**
+		 * One line under each name, saying what that speed buys. The heading
+		 * over this sheet asks about SPEED, so a name that answered "cheap"
+		 * instead would not be answering the question — the advantage belongs
+		 * here (spec 068, the owner's ruling).
+		 */
+		fastHint: string;
+		standardHint: string;
+		slowHint: string;
 	};
 	networks: {
 		/** Template with `{{count}}`. */
@@ -392,6 +417,16 @@ export const SETTINGS_KEYS = [
 	'settings.advanced.addNetworkSubtitle',
 	'settings.advanced.endpointsTitle',
 	'settings.advanced.endpointsSubtitle',
+	'settings.advanced.feeSpeedTitle',
+	'settings.advanced.feeSpeedSubtitle',
+	'settings.feeSpeed.title',
+	'settings.feeSpeed.subtitle',
+	'send.gasTier.fast',
+	'send.gasTier.standard',
+	'send.gasTier.slow',
+	'send.gasTierHintFast',
+	'send.gasTierHintStandard',
+	'send.gasTierHintSlow',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

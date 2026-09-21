@@ -35,6 +35,13 @@ bridge_class!(
 );
 
 bridge_class!(
+    /// The default transaction speed (spec 068): the stored tier a send
+    /// starts at, the factory `fast` when nothing was chosen.
+    FeeTierPrefCore,
+    vela_core::app::fee_tier_pref::FeeTierPref
+);
+
+bridge_class!(
     /// Never-unlimited approval guard and allowance editor.
     ApprovalGuardCore,
     vela_core::app::approval_guard::ApprovalGuard

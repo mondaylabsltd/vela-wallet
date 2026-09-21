@@ -50,6 +50,8 @@ export type FlowStateId =
 	| 'sd2d'
 	| 'sd2e'
 	| 'sd2f'
+	| 'sd2g'
+	| 'sd2h'
 	| 'sd3'
 	| 'sd3b'
 	| 'sd3c'
@@ -132,6 +134,13 @@ export interface FactRowModel {
 	copy?: string;
 	/** The whole text the affordance copies, when `value` is a shortened form. */
 	copyValue?: string;
+	/**
+	 * One calm sentence under the row, saying why its value is what it is. The
+	 * send confirm uses it for a speed taken because it was free (issue 686),
+	 * so the tier and its reason reach the last screen before a signature
+	 * together. Drawn by the screens that set it; the row itself ignores it.
+	 */
+	note?: string;
 }
 
 export type StatusTone = 'success' | 'warning' | 'error' | 'info';
@@ -413,8 +422,130 @@ export interface SweepRowModel {
 export interface FeeRowModel {
 	label: string;
 	mark: TokenMarkModel;
+	/** The coin half — "0.0021 ETH" — or the "…" / "—" that stands in for it. */
 	value: string;
+	/**
+	 * What that costs — "≈ $0.55" — when anything can say (issue 231). Its own
+	 * field so a narrow row can drop it onto a second line WHOLE: as one string
+	 * the row broke wherever the text ran out, which was inside "Network fee".
+	 */
+	valueFiat?: string;
 	openLabel: string;
+	/**
+	 * The refresh affordance's accessible name (spec 068). The fee is the one
+	 * figure on this screen that moves on its own, and until now a person
+	 * could neither re-read it nor be told it had gone quiet.
+	 */
+	refreshLabel: string;
+	/** A refresh is out. The control says so, so a tap is never ambiguous. */
+	refreshing?: boolean;
+	/**
+	 * The quote's 30s TTL elapsed (`FeeView.stale`, which had no consumer in
+	 * this shell at all). Deliberately CALM wording and muted tone: a figure
+	 * that is merely old is not a fault, and dressing it as one would teach
+	 * people to fear a fee row that is doing its job.
+	 */
+	staleNote?: string;
+}
+
+/** One row of the folded speed control (spec 068). */
+export interface FeeSpeedOptionModel {
+	/** The wire tier name — `fast` / `standard` / `slow`. */
+	id: string;
+	/**
+	 * The SPEED itself — 超快 / 标准 / 较慢. Never a number: the control's own
+	 * label asks about speed, so the answer has to be one. The gas price below
+	 * is supporting information BESIDE the name, not the name.
+	 */
+	label: string;
+	/**
+	 * What that speed buys, one short line under the name — "Lowest fee, if
+	 * you can wait". The owner's ruling (spec 068): under a heading that asks
+	 * about speed every option has to BE a speed, so the advantage cannot live
+	 * in the name. It lives here, and it is the reason the slow tier reads as
+	 * a choice rather than a defect.
+	 */
+	detail?: string;
+	/**
+	 * This option's OWN fee, priced at this option's tier — "0.0021 ETH", or
+	 * the "…" / "—" that stands in for it. The whole point of opening the
+	 * control is seeing the trade, and a row of names without prices asks
+	 * somebody to choose blind.
+	 */
+	value: string;
+	/** What that costs, when anything can price it — "≈ $0.55". */
+	valueFiat?: string;
+	/**
+	 * What this speed actually BUYS: the effective gas price the chain will
+	 * charge at this tier — "300 gwei", "3,000 wei" (issue 684).
+	 *
+	 * The fee beside it stops distinguishing the tiers on any chain whose real
+	 * cost is under a cent, because `fee_policy` clamps all three to the $0.01
+	 * floor; the owner reported three identical fees on seven networks. The
+	 * tiers still buy different inclusion — each signs a different tip — and
+	 * this is where that difference becomes visible. Quiet and secondary: the
+	 * fee stays the primary figure.
+	 *
+	 * Absent when there is no honest number — a chain with no priority fee at
+	 * all (Tempo), or a quote that did not report one. Never a stand-in 0,
+	 * which would claim the tiers are equal. Absent on EVERY row while any
+	 * tier is still being measured, because the set is formatted together and
+	 * a partial set would re-shape as the rest arrived.
+	 *
+	 * A range since issue 685 — `0.02011 ~ 0.03016 gwei`, what the speed bids
+	 * now and how high it will go (its cap) — or one figure where the two
+	 * ends are the same. Already formatted: unit, precision and glyph are
+	 * decided over the whole set in `gas-price.ts`, never per option.
+	 */
+	gasPrice?: string;
+	selected: boolean;
+}
+
+/**
+ * The speed control (spec 068), folded away until the person opens it.
+ *
+ * Folded, it shows THEIR default (the `fee_tier_pref` core's committed tier),
+ * never a hardcoded one, so this row and the Settings row can never disagree.
+ * A pick here is ONE-SHOT: it prices and submits this send and never rewrites
+ * the stored preference — which is what `onceNote` says out loud.
+ */
+export interface FeeSpeedModel {
+	label: string;
+	/** The folded summary: the tier in force for THIS send. */
+	value: string;
+	open: boolean;
+	onceNote: string;
+	/**
+	 * Why the tier in force is the fastest one when the person's default is
+	 * slower (issue 686): on this network it costs no more, so this send takes
+	 * it. One calm line under the folded summary, present only while that is
+	 * what happened — the screen must never say "Fast" over a Settings row that
+	 * says "Slow" without saying why.
+	 */
+	freeNote?: string;
+	/**
+	 * This network has one speed (issue 686): every tier settled at the same
+	 * fee with no gas-price range to tell them apart, so the options are
+	 * replaced by this one statement. Absent whenever anything differs, or
+	 * while any tier is still being measured.
+	 */
+	singleNote?: string;
+	/**
+	 * Names {@link FeeSpeedOptionModel.gasPrice}, drawn beside it. Under a fee
+	 * and in the same numeric face, an unnamed "3,244 wei" reads as a second
+	 * amount being charged — and on a floor-clamped chain one that disagrees
+	 * with the fee about which tier is dearer. A named figure can at least be
+	 * looked up; a bare one leaves the person guessing.
+	 */
+	gasPriceLabel: string;
+	/**
+	 * Whether the options carry a gas-price line at all. True while any tier
+	 * is still being measured (the line is reserved, empty) and whenever any
+	 * tier has a figure, so the rows keep one height instead of losing a line
+	 * and regaining it each time a tier re-measures.
+	 */
+	gasPriceLine: boolean;
+	options: FeeSpeedOptionModel[];
 }
 
 export type SendFormMode = 'single' | 'split' | 'sweep';
@@ -429,7 +560,16 @@ export interface SendFormModel {
 	sweepRows?: SweepRowModel[];
 	/** single only: the big enterable amount. */
 	amount?: {
+		/** What has been typed — `''` when nothing has, never a stand-in "0". */
 		value: string;
+		/** What the empty field shows instead. */
+		placeholder: string;
+		/**
+		 * The figure's unit, drawn beside it (issue 231): a currency symbol
+		 * leads, a currency code or a token symbol follows. At most one is set;
+		 * neither is, only when there is no unit to name.
+		 */
+		adornment: { prefix?: string; suffix?: string };
 		fiat: string;
 		/** The unit the figure is TYPED in — the entry field's accessible name. */
 		denomLabel: string;
@@ -464,6 +604,12 @@ export interface SendFormModel {
 	/** split and sweep: the total line above the fee. */
 	summary?: { label: string; value: string };
 	fee: FeeRowModel;
+	/**
+	 * The speed control under the fee row (spec 068). Absent in surfaces that
+	 * only draw a fee — the gallery's sweep board, say — so nothing has to
+	 * invent a tier it cannot honour.
+	 */
+	speed?: FeeSpeedModel;
 	/**
 	 * The core's last refusal, in the corpus's words (spec 038 #D4): an
 	 * estimate that failed, an address that is not one. Live only; the

@@ -148,11 +148,6 @@ f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314";
 /// The wizard's search debounce (SettingsScreen.tsx:606).
 pub const SEARCH_DEBOUNCE_MS: u32 = 300;
 
-/// Vela's per-chain ERC-4337 bundler base for BUILT-IN networks
-/// (network.ts:33). Custom networks use the *configurable* service endpoint
-/// instead (`getBundlerServiceURL()`).
-pub const BUNDLER_BASE: &str = "https://vela-relay-cf.getvela.app";
-
 // `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324).
 pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
 pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
@@ -2194,7 +2189,12 @@ fn network_defaults(model: &Model, chain_id: u32) -> Option<NetworkDefaults> {
         return Some(NetworkDefaults {
             rpc_url: b.rpc_url.to_owned(),
             explorer_url: b.explorer_url.to_owned(),
-            bundler_url: format!("{BUNDLER_BASE}/{chain_id}"),
+            // Empty, NOT the relay URL: a built-in network has no bundler
+            // of its own, and a snapshot of today's relay written here is
+            // what `network_row` would later mistake for a per-network
+            // override — freezing the chain on the relay that happened to be
+            // configured when somebody edited its RPC.
+            bundler_url: String::new(),
         });
     }
     model
@@ -2937,7 +2937,7 @@ fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
             false,
             b.rpc_url.to_owned(),
             b.explorer_url.to_owned(),
-            format!("{BUNDLER_BASE}/{}", b.chain_id),
+            format!("{}/{}", effective_bundler_service_url(model), b.chain_id),
         ));
     }
     for n in &model.custom_networks {
@@ -2978,8 +2978,16 @@ fn network_row(
         .map(|c| c.explorer_draft.clone())
         .or_else(|| saved.map(|c| c.explorer_url.clone()))
         .unwrap_or(default_explorer);
+    // An override's bundler counts only when it is one: empty is "none", and
+    // so is a record written before this was fixed, which snapshotted the
+    // shipped relay verbatim. Either way the default — the CONFIGURED service
+    // endpoint for a built-in, the record's own URL for a custom network —
+    // must win, or Settings › Service nodes › Vela Relay would go on being a
+    // field that changes nothing.
+    let shipped = format!("{DEFAULT_BUNDLER_SERVICE_URL}/{chain_id}");
     let bundler_url = saved
         .map(|c| c.bundler_url.clone())
+        .filter(|url| !url.is_empty() && *url != shipped)
         .unwrap_or(default_bundler);
     NetNetworkRow {
         id,

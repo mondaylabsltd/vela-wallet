@@ -51,6 +51,10 @@
       "timeTitle": "时间格式",
       "timeSubtitle": "12 小时制或 24 小时制。"
     },
+    "feeSpeed": {
+      "title": "交易速度",
+      "subtitle": "在 Vela 发起的每笔转账都从这里开始。发送时仍可单独调整某一笔。"
+    },
     "advanced": {
       "networksTitle": "网络",
       "networksSubtitle": "RPC、区块浏览器与打包器地址",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "添加网络",
       "addNetworkSubtitle": "添加自定义 EVM 网络",
       "endpointsTitle": "服务节点",
-      "endpointsSubtitle": "链上数据、身份索引、打包器"
+      "endpointsSubtitle": "链上数据、身份索引、打包器",
+      "feeSpeedTitle": "交易速度",
+      "feeSpeedSubtitle": "每笔转账默认使用的速度"
     },
     "developer": {
       "treasuryTitle": "金库",

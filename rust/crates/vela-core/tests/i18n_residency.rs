@@ -18,6 +18,19 @@ use vela_core::i18n::{Catalog, I18n};
 const CORPUS_BYTES: usize = 990_499;
 /// SC-005's budget for `ja` + `en`.
 const SC005_BUDGET: usize = 135_345;
+/// The worst-case PAIR, which is not the SC-005 pair: `ru` is the largest
+/// catalog in the corpus (Cyrillic costs two bytes a character), so `ru` + `en`
+/// is the ceiling the "any sequence" test below has to clear. It is a headroom
+/// guard, not the success criterion — SC-005 itself is asserted against
+/// `SC005_BUDGET` in `cold_start_holds_only_the_active_language_and_the_fallback`,
+/// and that assertion is untouched.
+///
+/// Raised from 140_000 by spec 068, which added nine paths (the fee refresh,
+/// the folded speed control and the stored default in Settings) and pushed
+/// `ru` to 140_175. Trimming the Russian copy to fit would have meant saying
+/// less to Russian readers than to everyone else for the sake of 175 bytes, so
+/// the guard moved instead — deliberately, and by a little.
+const WORST_LOCALE_CEILING: usize = 142_000;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {
@@ -155,7 +168,7 @@ fn residency_is_bounded_at_two_under_any_sequence() {
         );
         assert!(resident.contains(&"en"), "{lng}: en is not resident");
         assert!(
-            engine.resident_bytes() <= SC005_BUDGET.max(140_000),
+            engine.resident_bytes() <= SC005_BUDGET.max(WORST_LOCALE_CEILING),
             "{lng}: residency grew to {}",
             engine.resident_bytes()
         );

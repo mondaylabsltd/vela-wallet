@@ -51,6 +51,10 @@
       "timeTitle": "Zeitformat",
       "timeSubtitle": "12-Stunden- oder 24-Stunden-Format."
     },
+    "feeSpeed": {
+      "title": "Transaktionsgeschwindigkeit",
+      "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
+    },
     "advanced": {
       "networksTitle": "Netzwerke",
       "networksSubtitle": "RPC-, Explorer- & Bundler-URLs",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Netzwerk hinzufügen",
       "addNetworkSubtitle": "Eigenes EVM-Netzwerk hinzufügen",
       "endpointsTitle": "Dienst-Endpunkte",
-      "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler"
+      "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler",
+      "feeSpeedTitle": "Transaktionsgeschwindigkeit",
+      "feeSpeedSubtitle": "Der Startwert für jede Überweisung"
     },
     "developer": {
       "treasuryTitle": "Treasury",

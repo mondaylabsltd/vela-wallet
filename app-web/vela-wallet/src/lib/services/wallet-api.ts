@@ -265,6 +265,50 @@ export function getCachedHeldTokens(address: string | undefined, chainId: number
 	return out;
 }
 
+/**
+ * Synchronously read what this wallet thinks one native coin is worth on a
+ * chain, from the same in-memory balances cache — `null` when the cache is
+ * cold or the price could not be found. Never triggers a fetch.
+ *
+ * Issue 682. The relay's in-band quote carries `usdPrice: null` for any coin
+ * its price feed does not know, and a network the user ADDED is almost never
+ * in that feed. The core then fell back to a blind flat 0.001 of the coin for
+ * its "$0.01 worth" minimum: on XLayer's OKB (~$120) that is $0.12, twelve
+ * times the cent, on every send. This wallet knew the price the whole time —
+ * it is what the fee line renders "≈$0.12" from, derived on-chain by
+ * `native-price.ts` (DEX quotes + Chainlink, with the sanity rungs) and stored
+ * on the native row of the balances feed. `fee-executor.ts` hands it to the
+ * core, which uses it for that MINIMUM ONLY.
+ *
+ * Deliberately the same source the send screen already trusts (the second rung
+ * of `live-send.ts`'s `feeUnitPriceUsd`), not a third price of our own: two
+ * prices for one coin is how a screen and a signature start disagreeing.
+ *
+ * WHAT THIS DOES NOT COVER, said plainly so nobody reads more into it. Two
+ * things must both hold for an answer: the balances cache is warm for this
+ * account (so the wallet's own screens, which fetch it — not the dApp request
+ * window, which loads fresh and never does), and `queryChainAssets` could price
+ * the coin at all, which needs this chain's registry document to supply a
+ * wrapped native and a DEX (`chain-tokens.ts`) or the symbol to hit an Ethereum
+ * Chainlink feed. A chain nobody's registry describes still answers `null`, and
+ * the core still falls back to its blind floor there. So this fixes the
+ * measured case — a chain the WALLET can price and the relay cannot — not
+ * every network a user could conceivably add.
+ */
+export function getCachedNativePriceUsd(
+	address: string | undefined,
+	chainId: number
+): number | null {
+	if (!address) return null;
+	const entry = tokenCache.get(address.trim().toLowerCase());
+	if (!entry?.tokens?.length) return null;
+	const native = entry.tokens.find((t) => tokenChainId(t) === chainId && isNativeToken(t));
+	const price = native?.priceUsd ?? null;
+	// A zero or negative "price" is not a price — it must fall through to the
+	// core's blind floor, never be used to value a cent.
+	return price !== null && price > 0 ? price : null;
+}
+
 /** Fetch USD to target currency exchange rate (unchanged). */
 export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
 	const url = `https://getvela.app/api/exchange-rate?currency=${encodeURIComponent(currency)}`;

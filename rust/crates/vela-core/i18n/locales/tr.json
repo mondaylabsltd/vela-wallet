@@ -51,6 +51,10 @@
       "timeTitle": "Saat biçimi",
       "timeSubtitle": "12 saatlik veya 24 saatlik saat."
     },
+    "feeSpeed": {
+      "title": "İşlem hızı",
+      "subtitle": "Vela'da başlattığınız her gönderim burada başlar. Tek bir gönderim için yine de değiştirebilirsiniz."
+    },
     "advanced": {
       "networksTitle": "Ağlar",
       "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
@@ -59,7 +63,9 @@
       "addNetworkTitle": "Ağ Ekle",
       "addNetworkSubtitle": "Özel EVM ağı ekle",
       "endpointsTitle": "Servis Uç Noktaları",
-      "endpointsSubtitle": "Zincir verisi, kimlik dizini, Bundler"
+      "endpointsSubtitle": "Zincir verisi, kimlik dizini, Bundler",
+      "feeSpeedTitle": "İşlem hızı",
+      "feeSpeedSubtitle": "Her gönderimin başlangıç değeri"
     },
     "developer": {
       "treasuryTitle": "Hazine",
