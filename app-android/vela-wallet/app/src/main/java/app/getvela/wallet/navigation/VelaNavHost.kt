@@ -1757,6 +1757,7 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { settings.resetEndpoints() },
+                        onEndpointsOpened = { settings.openEndpoints() },
                         onRpcFixField = { value -> rpcDraft = value },
                         onRpcFixPrimary = {
                             rescueChainId?.let { chainId ->
