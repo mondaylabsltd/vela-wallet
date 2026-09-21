@@ -1539,3 +1539,8 @@ export function buildDesktopFlowState(
 export function buildDesktopScan(m: WalletFlowMessages): ScanModel {
 	return scan(m, true);
 }
+
+/** The phone scanner's model (S1's), for a host other than the flows — explore. */
+export function buildMobileScan(m: WalletFlowMessages): ScanModel {
+	return scan(m, false);
+}

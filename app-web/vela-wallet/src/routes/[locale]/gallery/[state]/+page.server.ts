@@ -29,6 +29,7 @@ import {
 	buildDesktopFlowState,
 	buildDesktopScan,
 	buildFlowState,
+	buildMobileScan,
 	DESKTOP_FLOW_STATES,
 	MOBILE_FLOW_STATES
 } from '$lib/flows/fixtures';
@@ -53,7 +54,27 @@ import {
 	MOBILE_STATES as SETTINGS_MOBILE_STATES
 } from '$lib/settings/fixtures';
 import type { DesktopSettingsStateId, MobileSettingsStateId } from '$lib/settings/model';
+import type { WalletFlowMessages } from '$lib/flows/messages';
+import type { ScanNoticeMessages } from '$lib/flows/core/scanner.svelte';
 import type { EntryGenerator, PageServerLoad } from './$types';
+
+/**
+ * The scanner behind the start page's scan button (issue 273): S1's model and
+ * only the sentences it can say, not the whole flow corpus.
+ */
+function exploreScan(m: WalletFlowMessages) {
+	return {
+		model: buildMobileScan(m),
+		messages: {
+			'home.invalidQrTitle': m['home.invalidQrTitle'],
+			'componentsUi.scanner.noQrFoundMsg': m['componentsUi.scanner.noQrFoundMsg'],
+			'componentsUi.scanner.permissionText': m['componentsUi.scanner.permissionText'],
+			'componentsUi.scanner.noCamera': m['componentsUi.scanner.noCamera'],
+			'componentsUi.scanner.insecureOrigin': m['componentsUi.scanner.insecureOrigin'],
+			'componentsUi.scanner.cameraUnavailable': m['componentsUi.scanner.cameraUnavailable']
+		} satisfies ScanNoticeMessages
+	};
+}
 
 export const entries: EntryGenerator = () =>
 	(['zh', 'en'] as const).flatMap((locale) =>
@@ -154,7 +175,8 @@ export const load: PageServerLoad = ({ params }) => {
 			kind: 'explore-mobile' as const,
 			model: buildExploreMobileState(state, resolveExploreMessages(locale), identiconSvgFor),
 			copy: resolveExploreMessages(locale),
-			signing: buildSigningState('cs12', resolveSigningMessages(locale), identiconSvgFor)
+			signing: buildSigningState('cs12', resolveSigningMessages(locale), identiconSvgFor),
+			scan: exploreScan(resolveWalletFlowMessages(locale))
 		};
 	}
 	if ((EXPLORE_DESKTOP_STATES as readonly string[]).includes(params.state)) {
