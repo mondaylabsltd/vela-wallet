@@ -175,13 +175,13 @@ pub fn read_gas_signals(chain_id: u32, want_tip: bool) -> (RawGasSignals, bool) 
         .as_ref()
         .and_then(|b| b.get("result"))
         .is_some_and(Value::is_object);
-    let complete = signals
-        .eth_gas_price
-        .as_deref()
-        .and_then(|price| price.parse::<u128>().ok())
-        .is_some_and(|price| price > 0)
-        && block_answered
-        && (!want_tip || signals.priority_fee.is_some());
+    // What may be held is the core's rule (`fee_policy::gas_signals_cacheable`).
+    let complete = vela_core::app::fee_policy::gas_signals_cacheable(
+        signals.eth_gas_price.as_deref(),
+        block_answered,
+        want_tip,
+        signals.priority_fee.as_deref(),
+    );
     (signals, complete)
 }
 

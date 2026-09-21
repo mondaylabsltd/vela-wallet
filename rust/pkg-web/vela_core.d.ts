@@ -628,6 +628,11 @@ export function buildGroupProof(seed_hex: string, rp_id: string, challenge_hex: 
  */
 export function buildMemberProof(authenticator_data_hex: string, client_data_json_hex: string, signature_der_hex: string): RegistryProofJs;
 
+/**
+ * Issue 212: may the relay's gas quote for one tier be held?
+ */
+export function bundlerQuoteCacheable(max_fee_per_gas: string): boolean;
+
 export function canonicalizeSignature(sig: string): string;
 
 export function checksumAddress(address_hex: string): string;
@@ -673,11 +678,23 @@ export function encodeType(typed_data_json: string): string;
 
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
+/**
+ * Issue 212: how long a chain's fee signals may be held, in ms — the one
+ * number every shell's cache used to carry its own copy of.
+ */
+export function feeSignalsCacheTtlMs(): number;
+
 export function fromBase64Url(s: string): Uint8Array;
 
 export function fromHex(s: string): Uint8Array;
 
 export function functionSelector(signature: string): Uint8Array;
+
+/**
+ * Issue 212: may this gas-signal read be held? Decimal wei in; see
+ * `fee_policy::gas_signals_cacheable`.
+ */
+export function gasSignalsCacheable(eth_gas_price: string | null | undefined, block_answered: boolean, want_tip: boolean, priority_fee?: string | null): boolean;
 
 /**
  * The uncompressed public key of the one-time group key a 32-byte seed
@@ -959,6 +976,7 @@ export interface InitOutput {
     readonly browserhistorycore_view: (a: number) => [number, number, number, number];
     readonly buildGroupProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly buildMemberProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly bundlerQuoteCacheable: (a: number, b: number) => number;
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
@@ -1002,6 +1020,7 @@ export interface InitOutput {
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1017,6 +1036,7 @@ export interface InitOutput {
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
     readonly functionSelector: (a: number, b: number) => [number, number, number, number];
+    readonly gasSignalsCacheable: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly groupPublicKeyFromSeed: (a: number, b: number) => [number, number, number, number];
     readonly hashTypedData: (a: number, b: number) => [number, number, number, number];
     readonly i18nInterpolate: (a: number, b: number, c: number) => [number, number, number, number];

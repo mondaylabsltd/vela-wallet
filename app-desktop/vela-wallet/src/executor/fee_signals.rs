@@ -31,8 +31,10 @@ use vela_core::app::fee_policy::{FeeBundlerQuote, FeeTier};
 use crate::executor::chain::{self, RawGasSignals};
 use crate::executor::relay;
 
-/// The same window as `chain_gas_price` and the web's `FEE_SIGNALS_CACHE_TTL`.
-const TTL: Duration = Duration::from_secs(15);
+/// The core's window (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`), the one every
+/// shell's fee-signal cache holds a reading for.
+const TTL: Duration =
+    Duration::from_millis(vela_core::app::fee_policy::FEE_SIGNALS_CACHE_TTL_MS as u64);
 
 struct Held<T> {
     at: Instant,
@@ -99,10 +101,7 @@ pub fn bundler_quote(chain_id: u32, tier: FeeTier) -> Option<FeeBundlerQuote> {
     let started = epoch(chain_id);
     let quote = relay::raw_bundler_quote(chain_id, tier);
     if let Some(quote) = &quote
-        && quote
-            .max_fee_per_gas
-            .parse::<u128>()
-            .is_ok_and(|cap| cap > 0)
+        && vela_core::app::fee_policy::bundler_quote_cacheable(&quote.max_fee_per_gas)
         && epoch(chain_id) == started
     {
         keep(&QUOTES, key, quote.clone());

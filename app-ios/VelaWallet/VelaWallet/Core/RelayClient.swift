@@ -153,12 +153,13 @@ final class RelayClient {
     // session re-samples on every quote run, and since 069 up to three
     // sessions price one send at once, one per speed. Uncached, a recipient
     // edit re-rolled the gas price, and three tiers priced on three readings
-    // could not be compared. A COMPLETE reading is held 15 s per chain — the
-    // web's `fetchRawGasSignals` window — and dropped by the refresh control,
+    // could not be compared. A COMPLETE reading is held for the core's window
+    // (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`, 15 s) per chain, what counts as
+    // complete is the core's rule too, and it is dropped by the refresh control,
     // a failed quote and every submit (`invalidateFeeSignals`). The epoch
     // stops a read that was in flight when somebody asked for a fresh one
     // from landing its older answer in the cache.
-    private static let feeSignalsTTLMs: Double = 15_000
+    private static let feeSignalsTTLMs = Double(feeSignalsCacheTtlMs())
     private var gasSignalsCache: [String: (signals: GasSignals, at: Double)] = [:]
     private var bundlerQuoteCache: [String: (quote: [String: Any], at: Double)] = [:]
     private var feeSignalsEpoch: [Int: Int] = [:]
@@ -356,7 +357,7 @@ final class RelayClient {
         ]
         // Never a zero cap, which the core rejects as degenerate: "the relay
         // did not answer" is not a measurement worth holding.
-        if maxFee != "0", feeSignalsEpoch[chainId, default: 0] == epoch {
+        if bundlerQuoteCacheable(maxFeePerGas: maxFee), feeSignalsEpoch[chainId, default: 0] == epoch {
             bundlerQuoteCache[key] = (quote, now())
         }
         return quote
@@ -538,8 +539,10 @@ final class RelayClient {
         // answered, and the price is positive. A block that ANSWERED without a
         // base fee is a real pre-London reading; one that did not answer is a
         // failed leg.
-        let positive = signals.ethGasPrice.map { $0 != "0" } ?? false
-        let complete = positive && block is [String: Any] && (!wantTip || signals.priorityFee != nil)
+        let complete = gasSignalsCacheable(
+            ethGasPrice: signals.ethGasPrice, blockAnswered: block is [String: Any],
+            wantTip: wantTip, priorityFee: signals.priorityFee
+        )
         if complete, feeSignalsEpoch[chainId, default: 0] == epoch {
             gasSignalsCache[key] = (signals, now())
         }

@@ -14,8 +14,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import uniffi.vela_core_uniffi.bundlerQuoteCacheable
 import uniffi.vela_core_uniffi.entryPointAddress
+import uniffi.vela_core_uniffi.feeSignalsCacheTtlMs
 import uniffi.vela_core_uniffi.functionSelector
+import uniffi.vela_core_uniffi.gasSignalsCacheable
 
 /**
  * The relay (bundler) and the chain, as the send path talks to them —
@@ -178,14 +181,15 @@ class RelayClient(
         val key = "$chainId:${tierKey(tier)}"
         synchronized(feeSignalCache) {
             (feeSignalCache[key] as? Pair<*, *>)?.let { (quote, at) ->
-                if (quote is FeeBundlerQuote && now() - (at as Long) < FEE_SIGNALS_TTL_MS) return quote
+                if (quote is FeeBundlerQuote && now() - (at as Long) < feeSignalsTtlMs) return quote
             }
         }
         val epoch = feeSignalEpoch(chainId)
         val quote = readBundlerQuote(chainId, tier)
         // Never a missing quote, nor a zero cap the core rejects as
-        // degenerate: "the relay did not answer" is not a measurement.
-        if (quote != null && (quote.max_fee_per_gas.toBigIntegerOrNull()?.signum() ?: 0) > 0 && feeSignalEpoch(chainId) == epoch) {
+        // degenerate: "the relay did not answer" is not a measurement. The
+        // rule is the core's (`fee_policy::bundler_quote_cacheable`).
+        if (quote != null && bundlerQuoteCacheable(quote.max_fee_per_gas) && feeSignalEpoch(chainId) == epoch) {
             synchronized(feeSignalCache) { feeSignalCache[key] = quote to now() }
         }
         return quote
@@ -377,7 +381,7 @@ class RelayClient(
         val key = "$chainId:gas:$wantTip"
         synchronized(feeSignalCache) {
             (feeSignalCache[key] as? Pair<*, *>)?.let { (signals, at) ->
-                if (signals is GasSignals && now() - (at as Long) < FEE_SIGNALS_TTL_MS) return signals
+                if (signals is GasSignals && now() - (at as Long) < feeSignalsTtlMs) return signals
             }
         }
         val epoch = feeSignalEpoch(chainId)
@@ -391,8 +395,9 @@ class RelayClient(
         }
         val signals = GasSignals(gasPrice, baseFee, tip)
         // A block that ANSWERED without `baseFeePerGas` is a real pre-London
-        // reading; a block that did not answer is a failed leg.
-        val complete = (gasPrice?.toBigIntegerOrNull()?.signum() ?: 0) > 0 && block != null && (!wantTip || tip != null)
+        // reading; a block that did not answer is a failed leg. What may be
+        // held is the core's rule (`fee_policy::gas_signals_cacheable`).
+        val complete = gasSignalsCacheable(gasPrice, block != null, wantTip, tip)
         if (complete && feeSignalEpoch(chainId) == epoch) {
             synchronized(feeSignalCache) { feeSignalCache[key] = signals to now() }
         }
@@ -421,6 +426,9 @@ class RelayClient(
         synchronized(infoCache) { infoCache.clear() }
     }
 
+    /** The core's fee-signal window (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`). */
+    private val feeSignalsTtlMs: Long by lazy { feeSignalsCacheTtlMs().toLong() }
+
     private val getNonceSelector: String by lazy {
         functionSelector("getNonce(address,uint192)").joinToString("") { "%02x".format(it) }
     }
@@ -429,8 +437,6 @@ class RelayClient(
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
 
-        /** The web's `FEE_SIGNALS_CACHE_TTL` — and `getGasPrices`' window. */
-        const val FEE_SIGNALS_TTL_MS = 15_000L
         const val SUBMIT_MAX_RETRIES = 3
         const val SUBMIT_RETRY_DELAY_MS = 3_000L
 

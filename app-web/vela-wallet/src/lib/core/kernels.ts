@@ -636,3 +636,29 @@ export function minGasPriceWei(chainId: number): bigint {
 export function peggedNativeUsd(symbol: string): number | null {
 	return wasm.peggedNativeUsd(symbol) ?? null;
 }
+
+/**
+ * Issue 212's fee-signal cache is a SHELL cache with core rules: how long a
+ * chain's gas signals and the relay's quote may be held, and which readings
+ * may be held at all (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`,
+ * `gas_signals_cacheable`, `bundler_quote_cacheable`). Every shell asks the
+ * same three questions of the core instead of carrying its own answers.
+ */
+export function feeSignalsCacheTtlMs(): number {
+	return wasm.feeSignalsCacheTtlMs();
+}
+
+/** A gas-signal read may be held only when it is complete and real. Decimal wei. */
+export function gasSignalsCacheable(
+	ethGasPrice: string | null,
+	blockAnswered: boolean,
+	wantTip: boolean,
+	priorityFee: string | null
+): boolean {
+	return wasm.gasSignalsCacheable(ethGasPrice, blockAnswered, wantTip, priorityFee);
+}
+
+/** The relay's gas quote for one tier may be held only when its cap is real. */
+export function bundlerQuoteCacheable(maxFeePerGas: string): boolean {
+	return wasm.bundlerQuoteCacheable(maxFeePerGas);
+}

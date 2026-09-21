@@ -60,6 +60,31 @@ number presets; `NumberPreset` gained its wire names (`comma_dot`, …).
 The web's unit tests moved with the code, vector for vector
 (`rust/crates/vela-core/tests/app_fee_speed.rs`, 57 tests).
 
+### The fee-signal cache — a shell cache with core rules [added 2026-09-21]
+
+The 15 s cache of issue 212 is shared by every `fee_policy` session on the
+page — the tier previews are sessions of their own, and sharing the chain
+reads is what keeps three rows from costing three round trips — so it cannot
+live in one machine. Each shell keeps it; what it may keep, and for how long,
+is the core's (`fee_policy.rs`, exported to wasm and uniffi; taken from PR
+#296, which the owner folded into 069):
+
+- `FEE_SIGNALS_CACHE_TTL_MS` (15 000) — how long a reading is held.
+- `gas_signals_cacheable(eth_gas_price, block_answered, want_tip,
+  priority_fee)` — only a REAL, COMPLETE reading: a positive `eth_gasPrice`, a
+  block that answered (one without `baseFeePerGas` is a real pre-London read),
+  and the tip when it was asked for. Decimal wei in.
+- `bundler_quote_cacheable(max_fee_per_gas)` — never a zero relay cap.
+
+The contract every shell keeps: the chain's gas signals (`eth_gasPrice` ∥
+latest block's `baseFeePerGas` ∥ `eth_maxPriorityFeePerGas`) keyed by chain +
+whether the tip was asked, the relay's `pimlico_getUserOperationGasPrice` row
+by chain + tier; concurrent asks coalesce; the chain's entries are dropped —
+and a read already in flight may not land (an epoch per chain) — on the
+explicit refresh, when a quote settles `failed`, and at the start of every
+submit. A fault seam that forges a zero quote sits ahead of the cache and
+never writes it.
+
 ### `fee_tier_pref` — exported over uniffi
 
 It existed (spec 068) but only the wasm bridge exported it. Both machines are

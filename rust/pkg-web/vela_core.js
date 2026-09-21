@@ -2781,6 +2781,18 @@ export function buildMemberProof(authenticator_data_hex, client_data_json_hex, s
 }
 
 /**
+ * Issue 212: may the relay's gas quote for one tier be held?
+ * @param {string} max_fee_per_gas
+ * @returns {boolean}
+ */
+export function bundlerQuoteCacheable(max_fee_per_gas) {
+    const ptr0 = passStringToWasm0(max_fee_per_gas, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.bundlerQuoteCacheable(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * @param {string} sig
  * @returns {string}
  */
@@ -3102,6 +3114,16 @@ export function extractAttestationPublicKey(attestation_object) {
 }
 
 /**
+ * Issue 212: how long a chain's fee signals may be held, in ms — the one
+ * number every shell's cache used to carry its own copy of.
+ * @returns {number}
+ */
+export function feeSignalsCacheTtlMs() {
+    const ret = wasm.feeSignalsCacheTtlMs();
+    return ret >>> 0;
+}
+
+/**
  * @param {string} s
  * @returns {Uint8Array}
  */
@@ -3147,6 +3169,24 @@ export function functionSelector(signature) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * Issue 212: may this gas-signal read be held? Decimal wei in; see
+ * `fee_policy::gas_signals_cacheable`.
+ * @param {string | null | undefined} eth_gas_price
+ * @param {boolean} block_answered
+ * @param {boolean} want_tip
+ * @param {string | null} [priority_fee]
+ * @returns {boolean}
+ */
+export function gasSignalsCacheable(eth_gas_price, block_answered, want_tip, priority_fee) {
+    var ptr0 = isLikeNone(eth_gas_price) ? 0 : passStringToWasm0(eth_gas_price, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(priority_fee) ? 0 : passStringToWasm0(priority_fee, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.gasSignalsCacheable(ptr0, len0, block_answered, want_tip, ptr1, len1);
+    return ret !== 0;
 }
 
 /**

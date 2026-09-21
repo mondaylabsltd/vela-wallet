@@ -9263,6 +9263,17 @@ public func bestNativeDexPrice(groups: [NativeQuoteGroup]) -> Double?  {
     )
 })
 }
+/**
+ * Issue 212: may the relay's gas quote for one tier be held?
+ */
+public func bundlerQuoteCacheable(maxFeePerGas: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_bundler_quote_cacheable(
+        FfiConverterString.lower(maxFeePerGas),uniffiCallStatus
+    )
+})
+}
 public func canonicalizeSignature(sig: String)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -9469,6 +9480,17 @@ public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256P
 })
 }
 /**
+ * Issue 212: how long a chain's fee signals may be held, in ms — the one
+ * number every shell's cache used to carry its own copy of.
+ */
+public func feeSignalsCacheTtlMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_signals_cache_ttl_ms(uniffiCallStatus
+    )
+})
+}
+/**
  * The first usable price across quote groups — the CUSTOM-token rule.
  *
  * Deliberately not [`best_native_dex_price`]: that one takes the deepest pool
@@ -9511,6 +9533,21 @@ public func functionSelector(signature: String)throws  -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_function_selector(
         FfiConverterString.lower(signature),uniffiCallStatus
+    )
+})
+}
+/**
+ * Issue 212: may this gas-signal read be held? Decimal wei in; see
+ * `fee_policy::gas_signals_cacheable`.
+ */
+public func gasSignalsCacheable(ethGasPrice: String?, blockAnswered: Bool, wantTip: Bool, priorityFee: String?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_gas_signals_cacheable(
+        FfiConverterOptionString.lower(ethGasPrice),
+        FfiConverterBool.lower(blockAnswered),
+        FfiConverterBool.lower(wantTip),
+        FfiConverterOptionString.lower(priorityFee),uniffiCallStatus
     )
 })
 }
@@ -10560,6 +10597,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_best_native_dex_price() != 43798) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_bundler_quote_cacheable() != 62844) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_canonicalize_signature() != 18808) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10620,6 +10660,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_signals_cache_ttl_ms() != 43504) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_first_grouped_quote_price() != 50678) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10630,6 +10673,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_function_selector() != 15995) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_gas_signals_cacheable() != 13841) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
