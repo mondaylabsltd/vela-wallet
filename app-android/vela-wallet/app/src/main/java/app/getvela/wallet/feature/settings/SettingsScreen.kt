@@ -248,7 +248,11 @@ fun SettingsRoute(
         onSearchNetwork = actions.onSearchNetwork,
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
-        onResetEndpoints = actions.onResetEndpoints,
+        onResetEndpoints = { overlay = SettingsOverlay.ResetEndpoints },
+        onConfirmResetEndpoints = {
+            overlay = SettingsOverlay.None
+            actions.onResetEndpoints()
+        },
         onSegment = actions.onSegment,
         onTextScale = actions.onTextScale,
         onStorageClear = { id ->
@@ -321,6 +325,7 @@ fun SettingsScreen(
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
     onConfirmRemoveNetwork: () -> Unit = {},
+    onConfirmResetEndpoints: () -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
@@ -452,6 +457,7 @@ fun SettingsScreen(
                 storageConfirm = storageConfirm,
                 onConfirmStorage = onConfirmStorage,
                 onConfirmRemoveNetwork = onConfirmRemoveNetwork,
+                onConfirmResetEndpoints = onConfirmResetEndpoints,
                 onClearCaches = onClearCaches,
                 onErase = onErase,
                 onFeedbackSend = onFeedbackSend,
@@ -1142,6 +1148,7 @@ private fun SettingsSheet(
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
     onConfirmRemoveNetwork: () -> Unit = {},
+    onConfirmResetEndpoints: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
     onFeedbackSend: (String) -> Unit = {},
@@ -1222,6 +1229,11 @@ private fun SettingsSheet(
                 SettingsOverlay.RemoveNetwork -> ConfirmSheetBody(
                     model.removeNetworkSheet,
                     onConfirm = onConfirmRemoveNetwork,
+                    onCancel = onDismiss,
+                )
+                SettingsOverlay.ResetEndpoints -> ConfirmSheetBody(
+                    model.resetEndpointsSheet,
+                    onConfirm = onConfirmResetEndpoints,
                     onCancel = onDismiss,
                 )
                 SettingsOverlay.ClearStorageItem -> storageConfirm?.let { sheet ->

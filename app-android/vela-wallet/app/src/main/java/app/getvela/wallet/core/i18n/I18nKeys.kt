@@ -859,6 +859,10 @@ object I18nKeys {
         const val ENDPOINT_FIAT = "settingsModals.endpoints.fiatLabel"
         const val ENDPOINT_FIAT_HINT = "settingsModals.endpoints.fiatHint"
         const val ENDPOINTS_RESET = "settingsModals.endpoints.resetToDefaults"
+        const val ENDPOINTS_RESET_TITLE = "settingsModals.endpoints.resetTitle"
+        const val ENDPOINTS_RESET_BODY = "settingsModals.endpoints.resetBody"
+        const val ENDPOINTS_RESET_CONFIRM = "settingsModals.endpoints.resetConfirm"
+        const val ENDPOINTS_RESET_CANCEL = "settingsModals.endpoints.resetCancel"
 
         // Device storage.
         const val STORAGE_TITLE = "settings.storage.title"
