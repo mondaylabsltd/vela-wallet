@@ -1170,7 +1170,24 @@ struct SendReceiptBody: View {
 
     var body: some View {
         VStack(spacing: Tokens.Space.s8) {
-            StatusHeroView(stage: model.stage, title: model.title, captions: model.captions)
+            // Spec 038 #D3 / issue 199: while the relay has the op, the screen
+            // counts — one second is the right grain. The sentences arrive in
+            // the model; only the number is this screen's.
+            if let eta = model.eta, model.stage == .submitted {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let nowMs = context.date.timeIntervalSince1970 * 1000
+                    StatusHeroView(stage: model.stage, title: model.title,
+                                   captions: model.captions + eta.lines(nowMs: nowMs),
+                                   progress: eta.progress(nowMs: nowMs))
+                }
+            } else {
+                StatusHeroView(stage: model.stage, title: model.title, captions: model.captions,
+                               progress: model.stage == .confirmed ? 1 : nil)
+            }
+            if !model.breakdown.isEmpty {
+                ReceiptBreakdownView(title: model.breakdownTitle, rows: model.breakdown)
+                    .padding(.bottom, Tokens.Space.s8)
+            }
             if let hash = model.hash {
                 HStack(spacing: Tokens.Space.s4) {
                     Text(verbatim: hash.label)
@@ -1192,6 +1209,47 @@ struct SendReceiptBody: View {
                 VelaButton(title: explorer, kind: .secondary, action: onExplorer)
             }
         }
+    }
+}
+
+/// A split's people on the receipt (#261): who got what, as the confirm
+/// listed them — from the core's frozen transfers.
+private struct ReceiptBreakdownView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let title: String?
+    let rows: [BreakdownRowModel]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            if let title {
+                Text(verbatim: title)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+            }
+            VStack(spacing: Tokens.Space.s0) {
+                ForEach(rows) { row in
+                    HStack(spacing: Tokens.Space.s8) {
+                        if let seed = row.identiconSeed {
+                            IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark)
+                        }
+                        Text(verbatim: row.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                        Spacer(minLength: Tokens.Space.s8)
+                        Text(verbatim: row.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                    }
+                    .padding(.vertical, Tokens.Space.s8)
+                }
+            }
+            .padding(.horizontal, Tokens.Space.s12)
+            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

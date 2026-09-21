@@ -28,6 +28,8 @@ enum WalletFlowGeometry {
     /// The spinner arc inside it.
     static let statusSpinner: CGFloat = 26
     static let statusSpinnerStroke: CGFloat = 3
+    /// The waiting ring OUTSIDE the disc (issue 199, the web's 2.5 in 104).
+    static let statusRingStroke: CGFloat = 2.5
 
     /// The receive network-row chain badge, measured 40 in R1. Larger than
     /// the 32 token icon because this row IS the network, not a token that
