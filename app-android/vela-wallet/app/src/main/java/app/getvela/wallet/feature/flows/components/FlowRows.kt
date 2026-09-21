@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.format.cleanAmountEdit
 import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -394,10 +395,14 @@ fun RecipientCard(
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
-                    typed = next
-                    sent.addLast(next)
-                    if (sent.size > 256) sent.removeFirst()
-                    onAmountChange(next)
+                    // Spec 073: the core's amount rule, as the send figure.
+                    val clean = cleanAmountEdit(next, typed)
+                    if (clean != null) {
+                        typed = clean
+                        sent.addLast(clean)
+                        if (sent.size > 256) sent.removeFirst()
+                        onAmountChange(clean)
+                    }
                 },
                 singleLine = true,
                 textStyle = amountStyle,

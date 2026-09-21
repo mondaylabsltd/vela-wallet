@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.rotate
+import app.getvela.wallet.core.format.cleanAmountEdit
 import app.getvela.wallet.feature.signing.SignWithModel
 import app.getvela.wallet.core.designsystem.components.VelaLogo
 import app.getvela.wallet.core.marks.RemoteLogo
@@ -653,7 +654,14 @@ fun AllowanceEditor(
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = typed,
-                        onValueChange = { next -> typed = next; onCustomAmount(next) },
+                        // Spec 073: the cap's parser drops every comma, so a
+                        // raw "4,5" allowed 45 — cleaned by the core's rule first.
+                        onValueChange = { next ->
+                            cleanAmountEdit(next, typed)?.let { clean ->
+                                typed = clean
+                                onCustomAmount(clean)
+                            }
+                        },
                         singleLine = true,
                         textStyle = androidx.compose.ui.text.TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
