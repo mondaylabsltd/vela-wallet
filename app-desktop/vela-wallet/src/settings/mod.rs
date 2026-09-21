@@ -204,6 +204,11 @@ pub struct SettingsStrings {
     /// Spec 038 #E1: the probes failed — not a verdict.
     pub wizard_unable_to_verify: SharedString,
     pub endpoints_reset: SharedString,
+    /// Spec 072 (FR-010): the question the reset asks first.
+    pub endpoints_reset_title: SharedString,
+    pub endpoints_reset_body: SharedString,
+    pub endpoints_reset_confirm: SharedString,
+    pub endpoints_reset_cancel: SharedString,
     pub endpoints_guide: SharedString,
     // storage panel
     pub storage_subtitle: SharedString,
@@ -404,6 +409,10 @@ impl SettingsStrings {
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
+            endpoints_reset_title: s("settingsModals.endpoints.resetTitle"),
+            endpoints_reset_body: s("settingsModals.endpoints.resetBody"),
+            endpoints_reset_confirm: s("settingsModals.endpoints.resetConfirm"),
+            endpoints_reset_cancel: s("settingsModals.endpoints.resetCancel"),
             endpoints_guide: s("settingsModals.endpoints.selfHostGuide"),
             storage_subtitle: s("settings.storage.subtitle"),
             storage_summary: raw("settings.storage.summary"),

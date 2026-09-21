@@ -188,6 +188,8 @@ enum Confirm {
     Disconnect { origin: String, name: SharedString },
     /// Every connected site.
     DisconnectAll,
+    /// Service endpoints back to Vela's own, what was typed forgotten.
+    ResetEndpoints,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2174,6 +2176,11 @@ impl WalletPage {
                 let host = self.browser_host(cx);
                 host.update(cx, |host, cx| host.dispatch(DbrEvent::RevokeAll, cx));
             }
+            Confirm::ResetEndpoints => {
+                resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
+                    resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
+                });
+            }
         }
         self.confirm = None;
         cx.notify();
@@ -2233,6 +2240,15 @@ impl WalletPage {
                 note: None,
                 confirm: s.storage_disconnect_all.clone(),
                 cancel: s.cancel.clone(),
+                danger: true,
+            },
+            Confirm::ResetEndpoints => ConfirmCopy {
+                title: s.endpoints_reset_title.clone(),
+                body: s.endpoints_reset_body.clone(),
+                callout: None,
+                note: None,
+                confirm: s.endpoints_reset_confirm.clone(),
+                cancel: s.endpoints_reset_cancel.clone(),
                 danger: true,
             },
         }
@@ -8070,10 +8086,10 @@ impl WalletPage {
                 .pt(px(16.))
                 .child(if live {
                     reset
-                        .on_click(cx.listener(|_, _, _, cx| {
-                            resident::resident::<NetworkAdmin>(cx).update(cx, |resident, cx| {
-                                resident.dispatch(NetEvent::ResetEndpointsToDefaults, cx);
-                            });
+                        // Asks first (FR-010): every address the person typed
+                        // goes.
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.confirm = Some(Confirm::ResetEndpoints);
                             cx.notify();
                         }))
                         .into_any_element()
