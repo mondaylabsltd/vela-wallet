@@ -15,7 +15,8 @@
  *
  * The promises it keeps are the channel contract's:
  *   - one answer, once (a settled request cannot be re-answered);
- *   - silence is refusal (a window closed without a decision answers 4001);
+ *   - silence is never a clean refusal (a window closed without a decision
+ *     answers 4900 — the request may have landed; only Cancel is 4001);
  *   - the wallet's own record outlives the page's answer (026's persist-at-
  *     submit ordering is untouched, so an operation that was submitted is in
  *     the activity feed whether or not the dApp ever heard back).
@@ -71,7 +72,8 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
 		return isRequest(detail) ? detail : null;
 	} catch {
 		// The worker was evicted and could not be woken. The window has nothing
-		// to show, and closing it answers 4001 — which is the honest outcome.
+		// to show, and closing it answers 4900 (the core's `browser_closed`) —
+		// never 4001, which a dApp reads as "nothing happened, safe to retry".
 		return null;
 	}
 }

@@ -14,7 +14,7 @@
  * MV3 evicts an idle worker, and a page promise that never settles is the worst
  * thing this extension can produce — a dApp spinner that spins forever while
  * the person cannot tell whether their money moved. So a request is written
- * down the moment it arrives, a window closed without a decision answers 4001,
+ * down the moment it arrives, a window closed without a decision answers 4900,
  * and content.js has its own deadline on top (spec 027 D37).
  *
  * What this file does hold — and why it is not "state" in the sense above:
@@ -345,6 +345,8 @@ async function answerFromSnapshot(method, origin) {
 			// `[]` for an ungranted origin is the honest answer, and the one
 			// EIP-1193 asks for: a disconnected wallet, with no prompt.
 			return { result: accounts };
+		case 'eth_coinbase':
+			return { result: accounts[0] ?? null };
 		case 'eth_chainId':
 			return chainId > 0 ? { result: toHexChainId(chainId) } : { error: NOT_OPENED() };
 		case 'net_version':
@@ -560,6 +562,15 @@ function route(request, sender, reply) {
 		case 'switch':
 		case 'addChain':
 			void switchChain(request.method, request.params, origin).then(reply);
+			return;
+		case 'revoke':
+			// The site disconnects itself (EIP-2255 `wallet_revokePermissions`).
+			// Removing the grant is the whole act: the storage listener below
+			// tells every tab of the origin `accountsChanged([])` + `disconnect`.
+			void chrome.storage.local
+				.remove(PERM_PREFIX + origin)
+				.then(() => reply({ result: null }))
+				.catch(() => reply({ error: rpcError(ERR.INTERNAL, 'Could not record the disconnect') }));
 			return;
 		case 'watchAsset':
 			// EIP-747: `false` is "not added". Tokens are added in the wallet, where
