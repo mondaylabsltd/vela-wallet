@@ -39,8 +39,13 @@ final class SignExecutor {
     ]
 
     struct Ports {
-        /// The answer, to the transport (tab) that owns the request.
-        var respond: (_ transportId: String, _ id: String, _ json: [String: Any]) -> Void = { _, _, _ in }
+        /// The answer, to the transport (tab) that owns the request — the
+        /// core's own `SignResponsePayload` (`{type: ok, result}` or
+        /// `{type: err, code, kind, message}`), untouched. Whoever owns the
+        /// transport builds the page's message from it: for the in-app
+        /// browser that is `dapp_browser` (spec 070), whose words for a
+        /// refusal are the core's rather than a table here.
+        var respond: (_ transportId: String, _ id: String, _ payload: [String: Any]) -> Void = { _, _, _ in }
         /// The relay accepted. The core must hear this **before** the submit
         /// resolves.
         var opSubmitted: (_ id: String, _ userOpHash: String) -> Void = { _, _ in }
@@ -91,10 +96,7 @@ final class SignExecutor {
             ports.respond(
                 operation["transport_id"] as? String ?? "",
                 operation["id"] as? String ?? "",
-                Self.responseJson(
-                    id: operation["id"] as? String ?? "",
-                    payload: operation["payload"] as? [String: Any] ?? [:]
-                )
+                operation["payload"] as? [String: Any] ?? Self.noAnswer
             )
             return CoreJSON.string(["type": "responded"])
 
@@ -347,39 +349,12 @@ final class SignExecutor {
             && payload.dropFirst(2).allSatisfy { $0.isHexDigit }
     }
 
-    /// The page's answer in the wire's shape; the core chose `ok`/`err` and
-    /// the code.
-    static func responseJson(id: String, payload: [String: Any]) -> [String: Any] {
-        switch payload["type"] as? String ?? "" {
-        case "ok":
-            return BrowserExecutor.resultJson(id: id, result: payload["result"] as? String)
-        case "err":
-            let kind = payload["kind"] as? String ?? ""
-            return BrowserExecutor.errorJson(
-                id: id,
-                code: (payload["code"] as? NSNumber)?.intValue ?? -32603,
-                message: (payload["message"] as? String) ?? defaultMessage(kind)
-            )
-        default:
-            return BrowserExecutor.errorJson(id: id, code: -32603, message: "The wallet produced no answer")
-        }
-    }
-
-    static func defaultMessage(_ kind: String) -> String {
-        switch kind {
-        case "user_rejected": return "User rejected the request"
-        case "wallet_switched_chains": return "The wallet switched chains"
-        case "unsupported_chain": return "Unsupported chain"
-        case "unauthorized_account": return "Unauthorized account"
-        case "invalid_params": return "Invalid params"
-        case "unsupported_capability": return "Unsupported capability"
-        case "unlimited_approval": return "Unlimited approvals are disabled"
-        case "funding_cancelled": return "Funding cancelled"
-        case "submit_failed": return "The transaction could not be submitted"
-        case "stale_fee_quote": return "The fee quote expired"
-        default: return "The request was refused"
-        }
-    }
+    /// What a transport is told when the operation carried no payload at
+    /// all — a shape drift, answered rather than left hanging.
+    static let noAnswer: [String: Any] = [
+        "type": "err", "code": -32603, "kind": "submit_failed",
+        "message": "The wallet produced no answer",
+    ]
 
     /// The calls a request carries: one for `eth_sendTransaction`, many for
     /// `wallet_sendCalls` — and **an empty batch is not a batch**. Hex value

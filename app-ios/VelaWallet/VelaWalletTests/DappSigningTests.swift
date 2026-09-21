@@ -4,8 +4,10 @@
 //
 //  What a page asks for, and what the wallet does about it.
 //
-//  The router's allowlist, the request executor's reading of a request, the
-//  signing controller's assembly, and the sheet the four machines produce.
+//  The request executor's reading of a request, the signing controller's
+//  assembly, and the sheet the four machines produce. (The router's
+//  allowlist moved into the core with spec 070 — `dapp_rpc::classify`, pinned
+//  by `tests/app_dapp_browser.rs` — and its tests with it.)
 //  Hermetic: no network, no ceremony, no device.
 //
 
@@ -14,157 +16,6 @@ import SwiftUI
 import Testing
 import VelaCore
 @testable import VelaWallet
-
-// MARK: - The router
-
-@MainActor
-struct RequestRouterTests {
-
-    /// Records what the router did, so a test can assert on the ABSENCE of a
-    /// call as well as on an answer.
-    final class Recorder {
-        var answers: [(id: String, json: [String: Any])] = []
-        var poolCalls: [(chainId: Int, method: String, bundler: Bool)] = []
-        var signed: [String] = []
-        var switched: [Int] = []
-    }
-
-    private func router(
-        _ recorder: Recorder,
-        chain: Int = 100,
-        known: [Int] = [100, 1],
-        body: [String: Any]? = ["result": "0x2e014dd"],
-        receipt: RequestRouter.Receipt? = nil
-    ) -> RequestRouter {
-        RequestRouter(ports: RequestRouter.Ports(
-            browserChain: { chain },
-            knownChains: { known },
-            switchChain: { recorder.switched.append($0) },
-            poolCall: { chainId, method, _, bundler in
-                recorder.poolCalls.append((chainId, method, bundler))
-                return body
-            },
-            respond: { id, json in recorder.answers.append((id, json)) },
-            sign: { id, _, _, _ in recorder.signed.append(id) },
-            receiptFor: { _ in receipt }
-        ))
-    }
-
-    private func error(_ answer: [String: Any]) -> (code: Int, message: String)? {
-        guard let error = answer["error"] as? [String: Any] else { return nil }
-        return ((error["code"] as? NSNumber)?.intValue ?? 0, error["message"] as? String ?? "")
-    }
-
-    /// **`net_version` is decimal and `eth_chainId` is hex.**
-    ///
-    /// Not a nicety: a hex answer to `net_version` is a string comparison
-    /// every dApp fails, and it fails silently — the site simply believes it
-    /// is on a different network than the wallet.
-    @Test func theTwoChainQuestionsAnswerInTheirOwnNotations() async {
-        let recorder = Recorder()
-        await router(recorder).route(id: "a", method: "eth_chainId", paramsJson: "[]", origin: "https://x.test")
-        await router(recorder).route(id: "b", method: "net_version", paramsJson: "[]", origin: "https://x.test")
-
-        #expect(recorder.answers.first?.json["result"] as? String == "0x64")
-        #expect(recorder.answers.last?.json["result"] as? String == "100")
-        #expect(recorder.poolCalls.isEmpty, "the wallet answers these from itself")
-    }
-
-    /// A method outside the allowlist is refused **4900**, and nothing is
-    /// asked of any endpoint.
-    ///
-    /// 4900 rather than 4001 because the person did not decline. And
-    /// `eth_signTransaction` is the specific method a denylist would fail open
-    /// on: it is not caught by the signing predicate, so a catch-all read
-    /// bucket would proxy a signing request to a public node.
-    @Test func anUnknownMethodIsRefusedAndNeverForwarded() async {
-        for method in ["eth_signTransaction", "debug_traceTransaction", "wallet_invokeSnap"] {
-            let recorder = Recorder()
-            await router(recorder).route(id: "r", method: method, paramsJson: "[]", origin: "https://x.test")
-            #expect(error(recorder.answers.first?.json ?? [:])?.code == 4900, "\(method)")
-            #expect(recorder.poolCalls.isEmpty, "\(method) must not reach a node")
-            #expect(recorder.signed.isEmpty, "\(method) must not reach the sheet")
-        }
-    }
-
-    /// `eth_sign` is refused **before** the signing test that would catch it.
-    /// Policy, not a missing feature.
-    @Test func ethSignIsRefusedAsPolicy() async {
-        let recorder = Recorder()
-        await router(recorder).route(id: "r", method: "eth_sign", paramsJson: "[]", origin: "https://x.test")
-        #expect(error(recorder.answers.first?.json ?? [:])?.code == 4900)
-        #expect(recorder.signed.isEmpty)
-    }
-
-    @Test func aChainSwitchIsCheckedAgainstTheWalletsOwnNetworks() async {
-        let known = Recorder()
-        await router(known).route(id: "a", method: "wallet_switchEthereumChain",
-                                  paramsJson: #"[{"chainId":"0x1"}]"#, origin: "https://x.test")
-        #expect(known.switched == [1])
-        #expect(known.answers.first?.json["result"] is NSNull)
-
-        let unknown = Recorder()
-        await router(unknown).route(id: "b", method: "wallet_switchEthereumChain",
-                                    paramsJson: #"[{"chainId":"0x2105"}]"#, origin: "https://x.test")
-        #expect(error(unknown.answers.first?.json ?? [:])?.code == 4902)
-        #expect(unknown.switched.isEmpty)
-
-        let malformed = Recorder()
-        await router(malformed).route(id: "c", method: "wallet_switchEthereumChain",
-                                      paramsJson: "[{}]", origin: "https://x.test")
-        #expect(error(malformed.answers.first?.json ?? [:])?.code == -32602)
-    }
-
-    /// A receipt poll for a hash **this wallet minted** is translated to the
-    /// transaction that carried it.
-    ///
-    /// The page was answered with a transaction hash, so it polls for one; the
-    /// bundler knows only the user-operation hash. Spec 028 found this when a
-    /// real dApp's swap "submitted but never confirmed".
-    @Test func aReceiptPollForOurOwnOperationIsTranslated() async {
-        let landed = Recorder()
-        await router(landed, receipt: .landed(txHash: "0x151d63c8"))
-            .route(id: "a", method: "eth_getTransactionReceipt",
-                   paramsJson: #"["0xcf9fcae6"]"#, origin: "https://x.test")
-        #expect(landed.poolCalls.count == 1, "the node is still asked — for the TX hash")
-
-        let pending = Recorder()
-        await router(pending, receipt: .pending)
-            .route(id: "b", method: "eth_getTransactionReceipt",
-                   paramsJson: #"["0xcf9fcae6"]"#, origin: "https://x.test")
-        #expect(pending.answers.first?.json["result"] is NSNull,
-                "ours and not landed is exactly what a node says about a transaction it has not seen")
-        #expect(pending.poolCalls.isEmpty)
-    }
-
-    /// A bundler method is routed to the bundler, not the node.
-    @Test func bundlerMethodsAreRoutedToTheBundler() async {
-        let recorder = Recorder()
-        await router(recorder).route(id: "a", method: "eth_sendUserOperation",
-                                     paramsJson: "[]", origin: "https://x.test")
-        #expect(recorder.poolCalls.first?.bundler == true)
-    }
-
-    /// The node's own sentence reaches the page.
-    ///
-    /// A page that shows its user "execution reverted: insufficient allowance"
-    /// can be debugged; one that shows "-32603" cannot.
-    @Test func aNodesRefusalIsPassedOnVerbatim() async {
-        let recorder = Recorder()
-        await router(recorder, body: ["error": ["code": -32000, "message": "execution reverted: nope"]])
-            .route(id: "a", method: "eth_call", paramsJson: "[]", origin: "https://x.test")
-        #expect(error(recorder.answers.first?.json ?? [:])?.code == -32000)
-        #expect(error(recorder.answers.first?.json ?? [:])?.message == "execution reverted: nope")
-    }
-
-    @Test func noEndpointAtAllIsItsOwnAnswer() async {
-        let recorder = Recorder()
-        await router(recorder, body: nil)
-            .route(id: "a", method: "eth_blockNumber", paramsJson: "[]", origin: "https://x.test")
-        #expect(error(recorder.answers.first?.json ?? [:])?.code == -32603)
-        #expect(error(recorder.answers.first?.json ?? [:])?.message == "No endpoint answered")
-    }
-}
 
 // MARK: - Reading a request
 

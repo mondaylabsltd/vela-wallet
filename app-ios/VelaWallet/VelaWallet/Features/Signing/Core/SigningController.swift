@@ -51,10 +51,18 @@ final class SigningController {
         /// The tab that asked. The answer goes there and nowhere else.
         let transportId: String
         let chainId: Int
+        /// The address the site was shown (spec 070). `sign_request` signs
+        /// from it, and never silently from another account.
+        var grantedAddress: String? = nil
     }
 
     struct Ports {
-        var respond: (_ transportId: String, _ id: String, _ json: [String: Any]) -> Void = { _, _, _ in }
+        /// The answer, exactly once: the core's `SignResponsePayload`, and the
+        /// user-operation hash when that hash IS the answer (the receipt did
+        /// not land in time) — so the browser can translate the page's
+        /// receipt polls for it.
+        var respond: (_ transportId: String, _ id: String, _ payload: [String: Any], _ userOpHash: String?) -> Void
+        = { _, _, _, _ in }
         /// The tracker follows the accepted operation to its verdict.
         var trackSubmitted: (_ userOpHash: String, _ recordIds: [String], _ chainId: Int) -> Void
         = { _, _, _ in }
@@ -148,6 +156,17 @@ final class SigningController {
     private var pendingHandoff: SignTrackerHandoffWire?
     private var handedOff = false
     private var answered = false
+    /// The operation the relay accepted for this request, once it has.
+    private var submittedHash: String?
+
+    /// The page has its answer. The sheet may still be up (a submitted state
+    /// waiting to be dismissed), but nothing more will be said to the page.
+    var hasAnswered: Bool { answered }
+
+    /// Past the point of no return: a passkey ceremony or a submit is under
+    /// way. A controller in this state is not dropped when its page goes away
+    /// — the operation may land, and its record must still be written.
+    var committed: Bool { sign.isSigning || sign.isSubmitting || (submittedHash != nil && !answered) }
     /// Where the simulation for the request on screen has got to.
     ///
     /// THREE states, because they are three different sentences and a boolean
@@ -213,13 +232,15 @@ final class SigningController {
         fees.onInForce = { [weak self] view in self?.commitFee(view) }
 
         signExecutor.ports = SignExecutor.Ports(
-            respond: { [weak self] transportId, id, json in
-                self?.ports.respond(transportId, id, json)
-                // The page has its answer; the sheet may go once the core has
-                // cleared it.
-                self?.markAnswered()
+            respond: { [weak self] transportId, id, payload in
+                guard let self else { return }
+                // Mark first: the answer may make the browser forward its next
+                // request at once, and that request must find this one done.
+                markAnswered()
+                ports.respond(transportId, id, payload, Self.opHashAnswer(payload, submitted: submittedHash))
             },
             opSubmitted: { [weak self] id, hash in
+                self?.submittedHash = hash
                 self?.dispatchSign([
                     "type": "op_submitted", "id": id, "user_op_hash": hash,
                     "now_ms": Date().timeIntervalSince1970 * 1000,
@@ -262,7 +283,7 @@ final class SigningController {
             "dedicated_transport": true,
             "per_request_chain": incoming.chainId,
             "dapp": NSNull(),
-            "granted_address": NSNull(),
+            "granted_address": incoming.grantedAddress.flatMap { $0.isEmpty ? nil : $0 } as Any? ?? NSNull(),
             "requested_address": NSNull(),
             "request_ts_ms": NSNull(),
             "now_ms": nowMs,
@@ -393,6 +414,14 @@ final class SigningController {
     /// one itself would answer a page 4001 for a transaction already on chain.
     func swipeDismissed() { dispatchSign(["type": "swipe_dismissed"]) }
 
+    /// The page behind this request is gone and has already been answered
+    /// (4900, by the browser core). The core clears the sheet; a pipeline
+    /// already past the commitment keeps running so its record is written.
+    func transportDropped() {
+        guard let request else { return }
+        dispatchSign(["type": "transport_dropped", "transport_id": request.transportId])
+    }
+
     func fundingCancelled() { dispatchSign(["type": "funding_cancelled"]) }
     func fundingComplete() { dispatchSign(["type": "funding_complete_tapped"]) }
 
@@ -492,6 +521,18 @@ final class SigningController {
     }
 
     // MARK: - The pure parts
+
+    /// The user-operation hash when it is what the page is being answered
+    /// with — `receipt_pending` answers `ok` with the op hash; a landed one
+    /// answers with the TRANSACTION hash and needs no translation.
+    static func opHashAnswer(_ payload: [String: Any], submitted: String?) -> String? {
+        guard payload["type"] as? String == "ok",
+              let result = payload["result"] as? String,
+              let submitted, !submitted.isEmpty,
+              result.caseInsensitiveCompare(submitted) == .orderedSame
+        else { return nil }
+        return submitted
+    }
 
     /// What the confirm slides into: the fee as quoted, the guard's rewrite,
     /// the intent.

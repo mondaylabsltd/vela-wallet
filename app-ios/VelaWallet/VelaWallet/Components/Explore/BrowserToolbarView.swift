@@ -21,6 +21,9 @@ struct BrowserToolbarView: View {
     let connectedLabel: String
     let bookmarkLabel: String
     let tabsLabel: String
+    /// Said by the star when the page is already a favourite — the tap then
+    /// removes it.
+    var removeBookmarkLabel: String = ""
     var onBack: () -> Void = {}
     var onForward: () -> Void = {}
     var onAccount: () -> Void = {}
@@ -54,7 +57,17 @@ struct BrowserToolbarView: View {
             .accessibilityLabel(accountLabel)
 
             Spacer()
-            iconButton(.star, label: bookmarkLabel, enabled: true, action: onBookmark)
+            // Filled when the site is a favourite, so the tap's meaning is
+            // visible before it is made: add, or take away.
+            Button(action: onBookmark) {
+                LucideIcon(browser.bookmarked ? .starSolid : .star,
+                           size: LucideIconSize.browserBarGlyph)
+                    .foregroundStyle(browser.bookmarked ? theme.accentBase : theme.fgBase)
+                    .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(browser.bookmarked && !removeBookmarkLabel.isEmpty
+                                ? removeBookmarkLabel : bookmarkLabel)
             Spacer()
 
             Button(action: onTabs) {

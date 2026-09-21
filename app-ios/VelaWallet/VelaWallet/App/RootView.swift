@@ -122,6 +122,16 @@ struct RootView: View {
     /// and dropped when the page has its answer — four machines that must not
     /// outlive the question they were asked.
     @State private var signing: SigningController?
+    /// The browser core's next request, forwarded while the last one's sheet
+    /// was still closing (spec 070: the core queues, one sheet at a time). It
+    /// opens the moment that sheet is gone.
+    @State private var pendingBrowserSigning: DbrForward?
+    /// Requests whose page went away after the ceremony began. Not shown:
+    /// kept alive only so an operation that may still land gets its record
+    /// written, and dropped once it has answered (`closed`).
+    @State private var retiredSigning: [SigningController] = []
+    /// The account switcher, opened from the browser's connection panel.
+    @State private var exploreSwitcherOpen = false
     /// Whether this wallet's founding keys are on Ethereum too (spec 062),
     /// and for WHICH wallet that was asked — an answer about the previous
     /// account must not be drawn under the next one's name.
@@ -322,9 +332,6 @@ struct RootView: View {
         // bans and their cooldowns — never an endpoint the page named.
         let browserController = BrowserController(store: shelf)
         browserController.ports = BrowserController.Ports(
-            knownChains: { [weak settingsStore] in
-                settingsStore?.networkAdmin?.networks.map(\.chainId) ?? []
-            },
             poolCall: { [weak pool] chainId, method, params, bundler in
                 guard let pool else { return nil }
                 switch await pool.call(
@@ -341,6 +348,16 @@ struct RootView: View {
                 default:
                     return nil
                 }
+            },
+            // A page answered with a user-operation hash polls for its receipt
+            // by that hash; the core asks here which transaction carried it —
+            // the relay's own `eth_getUserOperationReceipt`, the lookup the
+            // tracker and Android's `RelayClient.userOpReceipt` use.
+            resolveUserOp: { [relay] chainId, userOpHash in
+                guard case .resolved(_, let txHash, _, _) = await relay.userOpReceipt(
+                    chainId: chainId, userOpHash: userOpHash
+                ), !txHash.isEmpty else { return nil }
+                return txHash
             },
             writeRecords: { [weak activityStore] rows in
                 TxRecords.writeRecords(rows, store: shelf)
@@ -1077,11 +1094,11 @@ struct RootView: View {
                         model: ExploreLive.home(
                             explore: browser.explore,
                             history: browser.history,
-                            permissions: browser.permissions,
+                            dbr: browser.dbr,
                             engine: browser.current,
                             identity: (name: session.view.activeName,
                                        address: session.view.address),
-                            chainId: browser.browserChain,
+                            chainIds: browser.chainIds,
                             loc: loc
                         ),
                         loc: loc,
@@ -1109,38 +1126,76 @@ struct RootView: View {
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
                         camera: camera,
-                        onSelectTab: selectTab
+                        onSelectTab: selectTab,
+                        onScanPayment: { payment in sendFromScan(payment) },
+                        onSwitchAccount: {
+                            openAccountSwitcher()
+                            exploreSwitcherOpen = true
+                        },
+                        accountSwitcherOpen: exploreSwitcherOpen
                     )
                     .onChange(of: signing?.closed) { _, closed in
                         // The page has its answer and the core cleared the
                         // sheet. Dropping the controller is what makes the
                         // next request start from nothing rather than
                         // inheriting a decoded intent or a half-edited cap.
-                        if closed == true { signing = nil }
+                        if closed == true { signingClosed() }
                     }
-                    .onDisappear {
-                        // Leaving 探索 settles every request the page left
-                        // hanging — as **unknown-pending**, never as a
-                        // refusal: nobody declined anything, and a page told
-                        // 4001 would show its user "you rejected this" when
-                        // they did not.
-                        //
-                        // On the section change rather than on a view's
-                        // `onDisappear` alone would be safer still; this one
-                        // fires for the tab switch and nothing else, because
-                        // the signing sheet is presented OVER this screen and
-                        // leaves the section where it is.
-                        browser.close()
+                    // ONE switcher, the wallet header's: a site's grant
+                    // follows the active account (spec 070), so this is also
+                    // how a person shows a site a different account.
+                    .sheet(isPresented: $exploreSwitcherOpen, onDismiss: {
+                        wallet.switcherClosed()
+                    }) {
+                        SettingsSheet(
+                            model: settingsModel(.st1),
+                            overlay: .accounts,
+                            onDismiss: { exploreSwitcherOpen = false },
+                            onSignOut: {},
+                            onSelectAccount: { address in
+                                switchToAccount(address)
+                                exploreSwitcherOpen = false
+                            },
+                            onAccountCreate: {
+                                exploreSwitcherOpen = false
+                                router.path.append(.create)
+                            },
+                            onAccountSignIn: {
+                                exploreSwitcherOpen = false
+                                onboarding.showSignInMethods = true
+                            }
+                        )
+                        .themed(scheme)
+                    }
+                    // Leaving 探索 settles NOTHING (spec 070): the pages keep
+                    // running, their requests stay open, and their
+                    // connections stay drawn. Only closing a tab, navigating
+                    // or a renderer dying settles a page — the core's rule.
+                    .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
+                    .onChange(of: settings.networkAdmin?.networks.map(\.chainId) ?? []) { _, chains in
+                        if !chains.isEmpty { browser.networksChanged(chains) }
                     }
                     .task {
-                        browser.ports.onSignRequest = { request in
-                            openSigning(request)
+                        // A sheet that finished while 探索 was not on screen
+                        // is dropped now — and whatever was waiting opens.
+                        if signing?.closed == true { signingClosed() }
+                        browser.ports.onForwardToSigning = { forward in
+                            openBrowserSigning(forward)
+                        }
+                        browser.ports.onCancelSigning = { tab, id in
+                            cancelBrowserSigning(tab: tab, id: id)
                         }
                         browser.start()
-                        browser.accountsChanged(
-                            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
-                            active: session.view.address
-                        )
+                        // Idempotent: the network list must be read before a
+                        // page asks to switch, even on a cold deep link here.
+                        settings.open()
+                        // The chains a site may switch to are the wallet's own.
+                        // The settings machine may not have read them yet; the
+                        // catalogue stands in until it has, and the change
+                        // handler above replaces it the moment it does.
+                        let chains = settings.networkAdmin?.networks.map(\.chainId) ?? []
+                        browser.networksChanged(chains.isEmpty ? ChainCatalog.chains.map(\.chainId) : chains)
+                        tellBrowserAboutAccounts()
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
                         // else chose is a browser nobody should install.
@@ -1164,25 +1219,97 @@ struct RootView: View {
     /// drawn, tappable, and did nothing at all. 探索 opens the browser's
     /// fixture layer (spec 022/029) over the real identity; its machines are
     /// not wired yet.
-    /// A page asked for a signature.
+    /// The browser core forwarded a request to the signing sheet (spec 070).
     ///
-    /// A **second** request while one is open is refused rather than queued —
-    /// the permissions machine's `consent_busy` rule, applied to signing. Two
-    /// sheets over one page is a person answering the wrong question.
-    private func openSigning(_ request: BrowserController.SignRequest) {
+    /// The core queues requests itself — one sheet at a time, the rest in
+    /// order — so a second forward only ever arrives once the first has its
+    /// answer. Its sheet may still be closing then (a submitted state waiting
+    /// to be dismissed): the next request waits for it rather than being
+    /// refused. A sheet that is up for something else — the wallet's own
+    /// backup request — is a genuinely busy wallet, and the page is told so
+    /// (-32002) rather than left waiting.
+    private func openBrowserSigning(_ forward: DbrForward) {
+        // A sheet that finished while its screen was not mounted is over,
+        // whether or not anything was watching it close.
+        if signing?.closed == true { signing = nil }
+        if let current = signing {
+            if current.hasAnswered {
+                pendingBrowserSigning = forward
+            } else {
+                browser.signingAnswered(
+                    tab: forward.tab, id: forward.id,
+                    payload: BrowserController.busyPayload(), userOpHash: nil
+                )
+            }
+            return
+        }
         openSigningRequest(
             SigningController.Incoming(
-                id: request.id,
-                method: request.method,
-                paramsJson: request.paramsJson,
-                origin: request.origin,
-                transportId: request.transportId,
-                chainId: request.chainId
+                id: forward.id,
+                method: forward.method,
+                paramsJson: forward.paramsJson,
+                origin: forward.origin,
+                transportId: forward.tab,
+                chainId: forward.chainId,
+                grantedAddress: forward.grantedAddress
             ),
-            respond: { [browser] transportId, id, json in
-                browser.answerFromSigning(transportId: transportId, id: id, json: json)
+            respond: { [browser] transportId, id, payload, userOpHash in
+                // The core builds the page's message, and delivers it to the
+                // tab and DOCUMENT that asked — or to nobody, if that page
+                // has gone.
+                browser.signingAnswered(tab: transportId, id: id, payload: payload, userOpHash: userOpHash)
             }
         )
+    }
+
+    /// The page behind a forwarded request is gone; the core has already
+    /// answered it (4900). Its sheet closes without a word to anyone.
+    private func cancelBrowserSigning(tab: String, id: String) {
+        if let pending = pendingBrowserSigning, pending.tab == tab, pending.id == id {
+            pendingBrowserSigning = nil
+            return
+        }
+        guard let current = signing, let request = current.request,
+              request.transportId == tab, request.id == id
+        else { return }
+        let committed = current.committed
+        current.transportDropped()
+        if committed {
+            // A ceremony or a submit is under way and may land: the record
+            // must still be written. Kept out of sight until it answers.
+            retiredSigning.append(current)
+        }
+        signingClosed()
+    }
+
+    /// The sheet's request is over. Drop it, and open the one waiting.
+    private func signingClosed() {
+        signing = nil
+        retiredSigning.removeAll { $0.closed || $0.hasAnswered }
+        if let next = pendingBrowserSigning {
+            pendingBrowserSigning = nil
+            openBrowserSigning(next)
+        }
+    }
+
+    /// Every account, then the active one — so every grant follows it and the
+    /// pages of re-pinned sites hear `accountsChanged` (spec 070).
+    private func tellBrowserAboutAccounts() {
+        browser.accountsChanged(
+            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
+            active: session.view.address
+        )
+    }
+
+    /// A payment code scanned in 探索: 发送, through the same door a contact
+    /// and the home scanner use — the core's `scan_resolved`.
+    private func sendFromScan(_ payload: String) {
+        section = .wallet
+        flows.enter(.send)
+        Task {
+            await openSend()
+            send.scanned(payload)
+        }
     }
 
     /// The transport of a request the WALLET made of itself. Nothing is
@@ -1207,21 +1334,16 @@ struct RootView: View {
                 transportId: Self.walletTransport,
                 chainId: call.chainId
             ),
-            respond: { _, _, _ in }
+            respond: { _, _, _, _ in }
         )
     }
 
     private func openSigningRequest(
         _ incoming: SigningController.Incoming,
-        respond: @escaping (String, String, [String: Any]) -> Void
+        respond: @escaping (String, String, [String: Any], String?) -> Void
     ) {
         guard signing == nil else {
-            respond(
-                incoming.transportId, incoming.id,
-                BrowserExecutor.errorJson(
-                    id: incoming.id, code: -32002, message: "Another request is open"
-                )
-            )
+            respond(incoming.transportId, incoming.id, BrowserController.busyPayload(), nil)
             return
         }
         let record = accounts.loadAccounts().first {
@@ -1434,11 +1556,11 @@ struct RootView: View {
                         .task(id: contact.address) {
                             contacts.inspect(
                                 address: contact.address,
-                                // The chain the browser is on, because that is
-                                // the chain a page would be paying on. With no
-                                // page open it is Gnosis — recorded as a
+                                // The chain the page in front is on, because
+                                // that is the chain it would be paying on. With
+                                // no page open it is Gnosis — recorded as a
                                 // choice, not a fact about the address.
-                                chainId: browser.browserChain
+                                chainId: browser.currentTab?.chainId ?? 100
                             )
                         }
                     } else {
@@ -2116,7 +2238,7 @@ struct RootView: View {
         // The REQUEST's chain. The browser's was right for a page's request and
         // wrong for the wallet's own: the key backup is on Ethereum whatever
         // chain the last tab was on.
-        let chain = live.request?.chainId ?? browser.browserChain
+        let chain = live.request?.chainId ?? browser.currentTab?.chainId ?? 100
         let request = live.request ?? SigningController.Incoming(
             id: "", method: "", paramsJson: "[]", origin: "",
             transportId: "", chainId: chain
@@ -2604,7 +2726,7 @@ struct RootView: View {
         }
         .onChange(of: signing?.closed) { _, closed in
             guard closed == true else { return }
-            signing = nil
+            signingClosed()
             // Landed, rejected or dismissed — the chain is what knows.
             Task { await checkEthereumBackup() }
         }

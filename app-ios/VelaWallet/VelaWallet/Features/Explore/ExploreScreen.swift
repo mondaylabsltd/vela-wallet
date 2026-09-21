@@ -50,6 +50,15 @@ struct ExploreScreen: View {
     /// scanner is a picture of a frame.
     var camera: CameraScanner?
     var onSelectTab: (WalletTab) -> Void = { _ in }
+    /// A scanned account address or `ethereum:` code — 发送's, through the
+    /// core's `scan_resolved` (spec 070 US5).
+    var onScanPayment: (String) -> Void = { _ in }
+    /// The connection panel's "Switch account": the wallet's one switcher,
+    /// presented by the container once the panel is out of the way.
+    var onSwitchAccount: () -> Void = {}
+    /// Whether that switcher is up. Watched so a site still ASKING gets its
+    /// sheet back when the switcher closes.
+    var accountSwitcherOpen = false
 
     @State private var viewOverride: ExploreView?
     /// **Which** sheet is open — never a snapshot of what it said when it
@@ -71,12 +80,22 @@ struct ExploreScreen: View {
     /// The open sheet is a site ASKING to connect, not a review of one that
     /// already is. Kept so a swipe can be read as the refusal it is.
     @State private var consentOpen = false
+    /// The panel is closing to make way for the account switcher — which is
+    /// not the person declining a site that is asking.
+    @State private var switchingAccount = false
     /// The scanner is up, over the whole screen, as it is in 发送.
     @State private var scanning = false
-    /// A code was read and it is not a web address.
-    @State private var scanRefused = false
+    /// What the last scanned code turned out not to be, said under the frame.
+    @State private var scanRefusal: String?
     /// A picked photo had no code in it.
     @State private var photoEmpty = false
+    /// A WalletConnect code was scanned: said in an alert, with the way that
+    /// does work.
+    @State private var walletConnectRefused = false
+    /// Bumped to put the cursor in the start page's field.
+    @State private var searchFocus = 0
+    /// A one-line confirmation over the page ("Link copied").
+    @State private var toast: String?
 
     /// Which of the three views is on screen.
     ///
@@ -95,11 +114,21 @@ struct ExploreScreen: View {
     /// with a page is selected.
     private var engine: BrowserEngine? { controller?.current }
 
+    /// The core's facts about the tab in front (spec 070): its origin, the
+    /// account it sees, its chain, whether it is secure, whether it crashed.
+    private var currentTab: DbrTabViewWire? {
+        guard engine != nil else { return nil }
+        return controller?.currentTab
+    }
+
     /// Chrome reads the engine, when there is one, and the fixture otherwise.
     /// Never a blend: a live address bar over a drawn page would be a lie
     /// about what is on screen.
     private var browserHost: String { engine?.host ?? model.browser.host }
-    private var browserSecure: Bool { engine?.secure ?? model.browser.secure }
+    /// The lock tells the truth: the core's judgement of the tab's origin.
+    private var browserSecure: Bool {
+        engine == nil ? model.browser.secure : (currentTab?.secure ?? false)
+    }
 
     /// The chrome's model, with the engine's facts substituted where it has
     /// them. `engineTick` is read so SwiftUI redraws when navigation state
@@ -107,12 +136,12 @@ struct ExploreScreen: View {
     private var liveBrowser: BrowserModel {
         guard let engine, let controller else { return model.browser }
         _ = controller.engineTick
-        var live = model.browser
-        live = BrowserModel(
+        let live = model.browser
+        return BrowserModel(
             url: engine.url,
             host: engine.host,
-            secure: engine.secure,
-            connected: controller.permissions.isConnected,
+            secure: browserSecure,
+            connected: currentTab?.connectedAddress != nil,
             canBack: engine.canGoBack,
             canForward: engine.canGoForward,
             bookmarked: controller.explore.favorites.contains { $0.origin == engine.origin },
@@ -120,7 +149,13 @@ struct ExploreScreen: View {
             tabCount: controller.explore.tabs.count,
             page: live.page
         )
-        return live
+    }
+
+    /// The load's progress, while there is one.
+    private var loadProgress: Double? {
+        guard let engine, let controller else { return nil }
+        _ = controller.engineTick
+        return engine.loading ? engine.progress : nil
     }
 
     /// A tile or a row was tapped.
@@ -129,40 +164,72 @@ struct ExploreScreen: View {
             viewOverride = .browsing
             return
         }
+        // The "+" tile adds by browsing: put the cursor where a site is typed,
+        // then the star pins it. Opening its id would load `https://add`.
+        if siteId == TileModel.addId {
+            searchFocus += 1
+            return
+        }
         controller.openSite(id: siteId)
         viewOverride = nil
     }
 
-    /// The ⋯ sheet's seven items.
+    /// The ⋯ sheet's items.
     private func pick(menuItem id: String, site: SiteModel) {
         guard let controller else {
             if id == "close" { viewOverride = .start }
             return
         }
+        let url = controller.current?.url ?? ""
         switch id {
         case "refresh":
             controller.reload()
+        case "share":
+            guard let target = URL(string: url), !url.isEmpty else { return }
+            share(target)
         case "copy":
-            UIPasteboard.general.string = controller.current?.url ?? site.host
+            guard !url.isEmpty else { return }
+            UIPasteboard.general.string = url
+            show(toast: loc.t("explore.linkCopied"))
         case "favorite":
-            guard let engine = controller.current, !engine.url.isEmpty else { return }
-            if controller.explore.favorites.contains(where: { $0.origin == engine.origin }) {
-                controller.removeFavorite(origin: engine.origin)
-            } else {
-                controller.addFavorite(url: engine.url, title: engine.title)
-            }
+            controller.toggleFavorite()
         case "system":
-            if let url = URL(string: controller.current?.url ?? "") { UIApplication.shared.open(url) }
+            if let target = URL(string: url), !url.isEmpty { UIApplication.shared.open(target) }
         case "disconnect":
-            controller.revoke()
+            if let origin = currentTab?.origin { controller.revoke(origin: origin) }
         case "close":
             if let tab = controller.explore.selectedTab { controller.closeTab(tab) }
             viewOverride = .start
         default:
-            // 分享 is 056's: the share sheet is a platform port that cut
-            // builds, and a menu row that silently did nothing would be worse
-            // than one that is honestly not here yet.
             break
+        }
+    }
+
+    /// The system share sheet, from the window's topmost controller — the
+    /// sheet this menu lives in has just gone.
+    private func share(_ url: URL) {
+        Task { @MainActor in
+            // Let the menu's own dismissal finish first: presenting over a
+            // sheet that is leaving is refused by UIKit.
+            try? await Task.sleep(for: .milliseconds(350))
+            guard let presenter = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })?
+                .windows.first(where: \.isKeyWindow)?
+                .rootViewController?.topmost
+            else { return }
+            presenter.present(
+                UIActivityViewController(activityItems: [url], applicationActivities: nil),
+                animated: true
+            )
+        }
+    }
+
+    private func show(toast text: String) {
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if toast == text { toast = nil }
         }
     }
 
@@ -179,12 +246,18 @@ struct ExploreScreen: View {
             }
         }
         .background(theme.bgBase.ignoresSafeArea())
+        .overlay(alignment: .bottom) { toastView }
         .environment(\.walletTextScale, 1)
         .sheet(item: $sheet, onDismiss: {
-            // Swiping a consent sheet away is a person declining. The core
-            // has a different, wider case — a window that closes with no
-            // answer at all settles 4900 — and it reaches that through
-            // `browser_closed` / `navigation_started`, never through here.
+            // Making way for the account switcher is not an answer.
+            if switchingAccount {
+                switchingAccount = false
+                onSwitchAccount()
+                return
+            }
+            // Swiping a consent sheet away is a person declining. A page
+            // that went away with the sheet up is the core's case, not this
+            // one: it settles that page's requests 4900 on its own.
             if consentOpen {
                 consentOpen = false
                 controller?.consentRejected()
@@ -236,18 +309,30 @@ struct ExploreScreen: View {
                 controller?.createGroup(name: name)
             }
         }
+        .alert(loc.t("explore.scan"), isPresented: $walletConnectRefused) {
+            Button(loc.t("explore.close"), role: .cancel) {}
+        } message: {
+            Text(verbatim: loc.t("explore.walletConnectUnsupported"))
+        }
         // A site asked. The sheet opens itself, because a request that waited
         // for somebody to find a menu would be a request the page thinks is
         // hanging.
-        .onChange(of: controller?.permissions.consent?.origin) { _, asking in
+        .onChange(of: controller?.dbr.consent?.origin) { _, asking in
             guard asking != nil else {
                 if consentOpen { consentOpen = false; sheet = nil }
                 return
             }
-            consentOpen = true
-            sheet = .connection
+            presentConsent()
         }
-        .onAppear { sheet = model.sheet?.kind }
+        // The switcher closed and the site is still asking: its question is
+        // put back, with the account now chosen.
+        .onChange(of: accountSwitcherOpen) { _, open in
+            if !open, controller?.dbr.consent != nil { presentConsent() }
+        }
+        .onAppear {
+            sheet = model.sheet?.kind
+            if controller?.dbr.consent != nil { presentConsent() }
+        }
         // The viewfinder runs only while it is on screen, as in 发送. A camera
         // left running behind the start page is a light nobody asked for.
         .task(id: scanning) {
@@ -262,6 +347,33 @@ struct ExploreScreen: View {
         .onDisappear {
             if scanning { camera?.stop() }
             scanning = false
+        }
+    }
+
+    /// The consent sheet, over the page that asked.
+    private func presentConsent() {
+        guard let controller, let consent = controller.dbr.consent, !accountSwitcherOpen else { return }
+        // A background tab asked: bring it to the front, so the page behind
+        // the sheet is the one the sheet names.
+        if controller.explore.tabs.contains(where: { $0.id == consent.tab }) {
+            controller.selectTab(consent.tab)
+            viewOverride = nil
+        }
+        consentOpen = true
+        sheet = .connection
+    }
+
+    @ViewBuilder private var toastView: some View {
+        if let toast {
+            Text(verbatim: toast)
+                .typeRole(Typography.label)
+                .foregroundStyle(theme.bgBase)
+                .padding(.horizontal, Tokens.Space.s16)
+                .padding(.vertical, Tokens.Space.s8)
+                .background(theme.fgBase, in: Capsule())
+                .padding(.bottom, ExploreGeometry.browserBar + Tokens.Space.s16)
+                .transition(.opacity)
+                .accessibilityIdentifier("explore.toast")
         }
     }
 
@@ -299,11 +411,16 @@ struct ExploreScreen: View {
                 secureLabel: loc.t("explore.secureSite"),
                 closeLabel: loc.t("explore.closePage"),
                 menuLabel: loc.t("explore.siteMenu"),
+                insecureLabel: loc.t("connect.browser.a11yInsecure"),
+                url: engine?.url ?? "",
+                addressLabel: loc.t("explore.addressBar"),
+                progress: loadProgress,
                 // The page keeps running — leaving it is not closing it
                 // (FR-013). The tab is still there, and the switcher
                 // brings it straight back.
                 onClose: { viewOverride = .start },
-                onMenu: { sheet = .siteMenu }
+                onMenu: { sheet = .siteMenu },
+                onSubmit: controller == nil ? nil : { text in controller?.open(text) }
             )
             if let engine {
                 ZStack {
@@ -314,7 +431,14 @@ struct ExploreScreen: View {
                     // nothing else, so an unreachable dApp was a white
                     // rectangle under an empty address bar — silence a
                     // person can only read as "the app is broken".
-                    if let failure = engine.failure {
+                    if currentTab?.crashed == true {
+                        BrowserCrashedView(
+                            title: loc.t("explore.pageCrashedTitle"),
+                            detail: loc.t("explore.pageCrashedBody"),
+                            reload: loc.t("explore.reload"),
+                            onReload: { engine.reload() }
+                        )
+                    } else if let failure = engine.failure {
                         BrowserFailureView(
                             title: loc.t("connect.browser.loadFailed"),
                             detail: failure,
@@ -338,13 +462,11 @@ struct ExploreScreen: View {
                 connectedLabel: loc.t("explore.connectedTag"),
                 bookmarkLabel: loc.t("explore.addToFavorites"),
                 tabsLabel: loc.t("explore.tabs"),
+                removeBookmarkLabel: loc.t("explore.removeFromFavorites"),
                 onBack: { controller?.goBack() },
                 onForward: { controller?.goForward() },
                 onAccount: { sheet = .connection },
-                onBookmark: {
-                    guard let engine, !engine.url.isEmpty else { return }
-                    controller?.addFavorite(url: engine.url, title: engine.title)
-                },
+                onBookmark: { controller?.toggleFavorite() },
                 onTabs: { viewOverride = .tabs }
             )
         case .start:
@@ -390,10 +512,11 @@ struct ExploreScreen: View {
                         viewOverride = .browsing
                     },
                     onScan: {
-                        scanRefused = false
+                        scanRefusal = nil
                         photoEmpty = false
                         scanning = true
-                    }
+                    },
+                    focusRequest: searchFocus
                 )
                 .padding(.bottom, Tokens.Space.s20)
 
@@ -402,7 +525,7 @@ struct ExploreScreen: View {
                         // Nothing to open yet. The CTA puts the cursor where
                         // a person can say where to go, rather than opening a
                         // page nobody asked for.
-                        if controller == nil { viewOverride = .browsing }
+                        if controller == nil { viewOverride = .browsing } else { searchFocus += 1 }
                     }
                 }
 
@@ -445,10 +568,11 @@ struct ExploreScreen: View {
         }
     }
 
-    // MARK: - The scanner (issue 273)
+    // MARK: - The scanner (issue 273, spec 070 US5)
 
     /// 发送's scanner surface, over the whole screen. Only the meaning of a
-    /// read differs: here a code is a web address to open, or it is refused.
+    /// read differs: a web address opens here, a payment code goes to 发送,
+    /// and the rest is said for what it is.
     private var scanSurface: some View {
         ScanSurfaceView(
             model: WalletFlowFixtures.scan(loc),
@@ -477,27 +601,35 @@ struct ExploreScreen: View {
     /// What is said under the frame. A code that WAS read and cannot be used
     /// is not a camera failure, so it outranks the camera's own refusals.
     private var scanRefusalText: String? {
-        if scanRefused { return loc.t("home.invalidQrTitle") }
+        if let scanRefusal { return scanRefusal }
         if photoEmpty { return loc.t("componentsUi.scanner.noQrFoundMsg") }
         return camera?.refusal?.text(loc)
     }
 
-    /// A code decoded, from the camera or a photo. A web address opens exactly
-    /// as it would have from the search field; anything else is refused and
-    /// the viewfinder comes back — a poster with the wrong code in frame must
-    /// not end the scan, and re-arming at once would read it forever.
+    /// A code decoded, from the camera or a photo.
+    ///
+    /// An unusable code is said under the frame and the viewfinder comes back
+    /// — a poster with the wrong code in frame must not end the scan, and
+    /// re-arming at once would read it forever.
     private func scanned(_ text: String) {
-        guard let url = ExploreScan.url(from: text) else {
-            scanRefused = true
+        switch ExploreScan.route(text) {
+        case .open(let url):
+            scanning = false
+            controller?.open(url)
+            viewOverride = .browsing
+        case .send(let payment):
+            scanning = false
+            onScanPayment(payment)
+        case .walletConnect:
+            scanning = false
+            walletConnectRefused = true
+        case .unrecognized:
+            scanRefusal = loc.t("explore.scanUnrecognized")
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if scanning { await camera?.start() }
             }
-            return
         }
-        scanning = false
-        controller?.open(url)
-        viewOverride = .browsing
     }
 
     private func scanTool(_ tool: ScanTool) {
@@ -508,7 +640,7 @@ struct ExploreScreen: View {
             Task {
                 guard let image = await PhotoPicker.pick() else { return }
                 guard let payload = QrDecoder.decode(image: image) else {
-                    scanRefused = false
+                    scanRefusal = nil
                     photoEmpty = true
                     return
                 }
@@ -565,6 +697,7 @@ struct ExploreScreen: View {
                 SiteMenuSheetView(
                     site: site, statusLine: statusLine, items: items,
                     closeLabel: loc.t("explore.close"),
+                    secure: controller == nil || browserSecure,
                     onClose: { self.sheet = nil },
                     onPick: { id in
                         self.sheet = nil
@@ -577,9 +710,14 @@ struct ExploreScreen: View {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
                     onClose: { self.sheet = nil },
+                    onSwitch: {
+                        guard controller != nil else { return }
+                        switchingAccount = true
+                        self.sheet = nil
+                    },
                     onDisconnect: {
                         self.sheet = nil
-                        controller?.revoke()
+                        controller?.revoke(origin: connection.origin)
                     },
                     onApprove: {
                         consentOpen = false
@@ -590,6 +728,9 @@ struct ExploreScreen: View {
                         consentOpen = false
                         self.sheet = nil
                         controller?.consentRejected()
+                    },
+                    onPickNetwork: { chainId in
+                        controller?.pickSiteChain(origin: connection.origin, chainId: chainId)
                     }
                 )
             }

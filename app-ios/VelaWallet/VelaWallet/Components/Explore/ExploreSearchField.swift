@@ -17,8 +17,12 @@ struct ExploreSearchField: View {
     let scanLabel: String
     var onSubmit: (String) -> Void = { _ in }
     var onScan: () -> Void = {}
+    /// Bumped by the screen to put the cursor here — the empty state's CTA
+    /// and the favourites' "+" tile both mean "say where to go".
+    var focusRequest: Int = 0
 
     @State private var text = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
         HStack(spacing: Tokens.Space.s8) {
@@ -32,7 +36,9 @@ struct ExploreSearchField: View {
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
                     .submitLabel(.go)
+                    .focused($focused)
                     .onSubmit { onSubmit(text) }
+                    .accessibilityIdentifier("explore.searchField")
             }
             .padding(.horizontal, Tokens.Space.s16)
             .frame(height: ExploreGeometry.searchField)
@@ -46,5 +52,6 @@ struct ExploreSearchField: View {
             .buttonStyle(.plain)
             .accessibilityLabel(scanLabel)
         }
+        .onChange(of: focusRequest) { _, _ in focused = true }
     }
 }
