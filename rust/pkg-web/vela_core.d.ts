@@ -662,6 +662,18 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
+/**
+ * The document-start script an in-app browser injects, for `host`
+ * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
+ * the real bridge in a real browser.
+ */
+export function dappProviderScript(host: string): string;
+
+/**
+ * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+ */
+export function dappRpcClassify(method: string): string;
+
 export function decodeCalldata(sig: string, calldata: Uint8Array): AbiValue;
 
 export function derSignatureToRawLowS(der: Uint8Array): Uint8Array;
@@ -998,6 +1010,8 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly dappProviderScript: (a: number, b: number) => [number, number];
+    readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
     readonly dapppermissionscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

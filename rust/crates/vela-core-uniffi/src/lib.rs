@@ -1459,6 +1459,28 @@ pub fn dapp_is_signing_method(method: String) -> bool {
     vela_core::app::sign_request::is_signing_method(&method)
 }
 
+/// The whole document-start script an in-app browser injects (spec 070):
+/// THE provider (`vela-core/provider/inpage.js`, the extension's too) and
+/// the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
+/// difference is how the bridge hands a string to native code.
+#[uniffi::export]
+pub fn dapp_provider_script(host: String) -> String {
+    use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
+    provider_script(match host.as_str() {
+        "ios" => ProviderHost::Ios,
+        "desktop" => ProviderHost::Desktop,
+        _ => ProviderHost::Android,
+    })
+}
+
+/// Address-bar text → the URL to load: `https://` for a host, `http://` only
+/// for loopback / private-network hosts, a DuckDuckGo search for anything
+/// else (spec 070 research R6). `None` for blank input.
+#[uniffi::export]
+pub fn dapp_browser_input(text: String) -> Option<String> {
+    vela_core::app::dapp_rpc::browser_input(&text)
+}
+
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec
 /// 044): `SafeMessage(bytes message)` under the SAFE's own domain, so a
 /// page's `personal_sign` / typed-data signature verifies on chain.

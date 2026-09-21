@@ -353,6 +353,14 @@ bridge_object!(
 );
 
 bridge_object!(
+    /// The in-app browser's whole decision half (spec 070): every page
+    /// message, every tab, per-origin chains, the signing line, bounded
+    /// reads — the shell owns the WebViews, posts strings and runs calls.
+    DappBrowserCore,
+    vela_core::app::dapp_browser::DappBrowser
+);
+
+bridge_object!(
     /// The browser's own memory: favourites, groups and open tabs.
     ExploreSitesCore,
     vela_core::app::explore_sites::ExploreSites

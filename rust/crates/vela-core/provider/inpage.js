@@ -1,4 +1,19 @@
 /**
+ * THE page-side provider — EIP-1193 + EIP-6963. One file, every Vela.
+ *
+ * Home: `rust/crates/vela-core/provider/inpage.js` (spec 070). The Chrome
+ * extension bundles it as its MAIN-world content script; the core embeds it
+ * (`app::dapp_rpc::provider_script`) with the one bridge that the desktop,
+ * iOS and Android in-app browsers install at document start. It used to be an
+ * ES module importing six constants from the extension's `lib/protocol.js`,
+ * and three native shells each stripped the module keywords with their own
+ * line filter; it is a classic script now, so nothing strips anything.
+ *
+ * The six constants below are PINNED to `extension/lib/protocol.js` (which the
+ * extension's service worker still reads) by `src/lib/dapp/protocol.test.ts`
+ * and by the core's `dapp_rpc` tests — change one side and a test fails.
+ */
+/**
  * The in-page provider — EIP-1193 + EIP-6963 (spec 027 T320).
  *
  * Ported from packages/safari-extension/src/inpage.js @ 52ad8fa9. Runs in the
@@ -26,9 +41,34 @@
  *     policy (eth_sign refusal, and so on)
  */
 /* global browser, chrome */
-import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/protocol.js';
 
 (() => {
+	// ---- the page-side constants (pinned; see the header) ------------------
+	const CHANNEL = 'vela-1193';
+	const RDNS = 'app.getvela';
+	const WALLET_NAME = 'Vela Wallet';
+	const ERR = {
+		USER_REJECTED: 4001,
+		UNAUTHORIZED: 4100,
+		UNSUPPORTED_METHOD: 4200,
+		UNKNOWN_PENDING: 4900,
+		CHAIN_NOT_ADDED: 4902,
+		METHOD_NOT_FOUND: -32601,
+		INVALID_PARAMS: -32602,
+		INTERNAL: -32603
+	};
+	function rpcError(code, message, data) {
+		const e = { code, message };
+		if (data !== undefined) e.data = data;
+		return e;
+	}
+	/** EIP-1193: minimal lowercase hex, e.g. 1 → "0x1". */
+	function toHexChainId(n) {
+		const num = typeof n === 'string' ? parseInt(n, n.startsWith('0x') ? 16 : 10) : n;
+		if (!Number.isFinite(num) || num <= 0) return '0x1';
+		return '0x' + Math.floor(num).toString(16);
+	}
+
 	// World guard. In the page's MAIN world `chrome`/`browser` are undefined; if
 	// they are defined we are running as an ISOLATED content script instead, where
 	// `window.ethereum` would be invisible to the page. Bail rather than install a

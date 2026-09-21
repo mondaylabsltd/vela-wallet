@@ -1558,3 +1558,29 @@ pub fn attest_safe_message_hash(
     vela_core::user_op::compute_safe_message_hash(original_hash, chain_id, safe_address)
         .map_err(err)
 }
+
+// ---------------------------------------------------------------------------
+// dapp_rpc — the routing table the extension's service worker mirrors (spec
+// 070). The worker cannot run the core on every page load; a web unit test
+// replays its JS table against this one so the two cannot drift.
+// ---------------------------------------------------------------------------
+
+/// The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+#[wasm_bindgen(js_name = dappRpcClassify)]
+pub fn dapp_rpc_classify(method: &str) -> String {
+    serde_json::to_string(&vela_core::app::dapp_rpc::classify(method))
+        .unwrap_or_else(|_| "{\"type\":\"unsupported\"}".to_owned())
+}
+
+/// The document-start script an in-app browser injects, for `host`
+/// (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
+/// the real bridge in a real browser.
+#[wasm_bindgen(js_name = dappProviderScript)]
+pub fn dapp_provider_script(host: &str) -> String {
+    use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
+    provider_script(match host {
+        "ios" => ProviderHost::Ios,
+        "desktop" => ProviderHost::Desktop,
+        _ => ProviderHost::Android,
+    })
+}

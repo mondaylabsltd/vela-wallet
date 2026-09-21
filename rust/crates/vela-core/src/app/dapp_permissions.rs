@@ -91,8 +91,11 @@ pub fn is_connect_method(method: &str) -> bool {
     CONNECT_METHODS.contains(&method)
 }
 
+/// The insecure-origin gate's set: [`SIGNING_METHODS`] AND anything else
+/// `dapp_rpc` calls a signature (spec 070 — the two definitions had drifted:
+/// `eth_signTypedData_v2` escaped this gate yet reached a sheet).
 pub fn is_signing_method(method: &str) -> bool {
-    SIGNING_METHODS.contains(&method)
+    SIGNING_METHODS.contains(&method) || super::dapp_rpc::is_signing_method(method)
 }
 
 // ---------------------------------------------------------------------------
