@@ -51,6 +51,22 @@ import uniffi.vela_core_uniffi.TokenTrustCore
  */
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
 
+/**
+ * Issue 188 (the web's feed resident): a transfer the scan just found moved
+ * the balances too, so the hero refetches past the token cache. The core
+ * sets `new_item_id` only for a genuinely-new incoming record, never on the
+ * first pass — so this fires once per arrival: the row glows, the figure
+ * follows. Before this the total stood still until the next focus.
+ */
+internal fun refreshOnArrival(scope: CoroutineScope, feed: StateFlow<FeedView>, refresh: () -> Unit) = scope.launch {
+    var seen = feed.value.new_item_id
+    feed.collect { view ->
+        val id = view.new_item_id
+        if (id != null && id != seen) refresh()
+        seen = id
+    }
+}
+
 class WalletController(
     context: Context,
     private val networks: StateFlow<NetView>,
@@ -487,6 +503,8 @@ class WalletController(
         // The second knot, the same shape: the scan writes through the feed's
         // own store, so it is built FROM the executor it then serves.
         feedExecutor.scan = { address -> scanner.runOnce(address) }
+        // Issue 188: an incoming transfer moves the total too.
+        refreshOnArrival(scope, feedHost.view) { refresh(force = true) }
         trackerHost?.let { host ->
             scope.launch {
                 host.view.collect { view ->
