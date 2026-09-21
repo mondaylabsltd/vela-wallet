@@ -197,7 +197,11 @@ enum WalletLive {
                 ticker: token.symbol,
                 chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
-                balance: token.balance,
+                // Six places, as the web's `trimBalance` and Android's
+                // `trimAmount` show a balance. The core's full precision
+                // ("0.00067035411363817") pushed the ticker and chain out of
+                // the row on a phone — both read "…" (seen on the iPhone 11).
+                balance: trimBalance(token.balance),
                 fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden,
                 // The real logo, with the lettermark behind it (058). The
@@ -211,6 +215,18 @@ enum WalletLive {
                 )
             )
         }
+    }
+
+    /// A balance to glance at (the web's `trimBalance`): at most `maxDecimals`
+    /// places, cut not rounded, trailing zeros dropped, the person's decimal
+    /// mark, no grouping.
+    static func trimBalance(_ balance: String, maxDecimals: Int = 6) -> String {
+        guard let dot = balance.firstIndex(of: ".") else { return balance }
+        let whole = String(balance[..<dot])
+        var fraction = String(balance[balance.index(after: dot)...].prefix(maxDecimals))
+        while fraction.hasSuffix("0") { fraction.removeLast() }
+        if fraction.isEmpty { return whole }
+        return whole + Formats.separators(Formats.current.number).decimal + fraction
     }
 
     private static func fiat(
