@@ -776,6 +776,18 @@ pub fn storage_bar(theme: &Theme, segments: &[(f32, u32)]) -> Div {
 /// 找回" against "清除后自动重建" — which is why the same word 清除 is red in
 /// the first group and plain in the second.
 pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
+    storage_group_with(theme, group, Vec::new())
+}
+
+/// The same group with its row actions armed: `actions[i]` is what row `i`'s
+/// action does, `None` (or a missing entry) leaves it drawn and inert — which
+/// is what every mock row is.
+pub fn storage_group_with(
+    theme: &Theme,
+    group: &StorageGroup,
+    actions: Vec<Option<crate::flows::panels::Click>>,
+) -> Div {
+    let mut actions = actions.into_iter();
     let mut col = div().flex().flex_col().pt(px(16.)).child(
         div()
             .pb(px(4.))
@@ -783,7 +795,7 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
             .text_color(theme.fg_subtle)
             .child(group.label.clone()),
     );
-    for item in &group.items {
+    for (index, item) in group.items.iter().enumerate() {
         let action_tint = if item.destructive {
             theme.error_base
         } else {
@@ -815,12 +827,14 @@ pub fn storage_group(theme: &Theme, group: &StorageGroup) -> Div {
                                 .text_color(theme.fg_subtle)
                                 .child(item.meta.clone()),
                         )
-                        .child(
+                        .child(crate::flows::panels::clickable(
+                            ElementId::from(("storage-action", index)),
+                            actions.next().flatten(),
                             div()
                                 .text_size(theme::text_row_sub())
                                 .text_color(action_tint)
                                 .child(item.action.clone()),
-                        ),
+                        )),
                 )
                 .child(div().h(px(1.)).bg(theme.divider)),
         );

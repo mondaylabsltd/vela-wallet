@@ -56,7 +56,8 @@ use crate::hardware;
 use crate::settings::components::{
     CalloutTone, callout, chain_mark, check_list, danger_card, dropdown_menu, dropdown_menu_picks,
     dropdown_trigger, editable_url_field, form_row, key_value_row, network_row, rpc_banner,
-    segmented, settings_nav_row, status_pill, storage_bar, storage_group, text_scale, url_field,
+    segmented, settings_nav_row, status_pill, storage_bar, storage_group, storage_group_with,
+    text_scale, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -5711,7 +5712,7 @@ impl WalletPage {
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
-            SettingsPage::Storage => self.settings_storage(theme),
+            SettingsPage::Storage => self.settings_storage(theme, cx),
             SettingsPage::About => self.settings_about(theme),
         };
 
@@ -7611,7 +7612,7 @@ impl WalletPage {
         div().flex().flex_col().max_w(px(560.)).child(list)
     }
 
-    fn settings_storage(&mut self, theme: &Theme) -> Div {
+    fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         // Live since 031. The panel told everybody 2.4 MB / 216 records, and a
         // person deciding whether to clear a cache deserves their own number.
@@ -7662,7 +7663,16 @@ impl WalletPage {
                     ),
             )
             .child(storage_bar(theme, &settings_fixtures::STORAGE_SEGMENTS));
+        let live = self.identity.is_some();
         for group in settings_fixtures::storage_groups(&self.settings) {
+            // The connections group is the browser machine's list, live: one
+            // row per connected site, each with its own Disconnect — the
+            // web's `withLiveConnections`. The drawn "4 sites" was a number
+            // about nobody's wallet.
+            if live && group.label == self.settings.storage_connections {
+                col = col.child(self.storage_connections(theme, cx));
+                continue;
+            }
             let action = group.action.clone();
             col = col.child(storage_group(theme, &group));
             if let Some(action) = action {
@@ -7676,6 +7686,88 @@ impl WalletPage {
             }
         }
         col
+    }
+
+    /// Settings → Storage → Connections, from the browser machine.
+    ///
+    /// A revoke here is the same event the connection panel sends: the grant
+    /// leaves the file AND the live session, and any open page of that site
+    /// hears `accountsChanged []` and `disconnect`. "Disconnect all" is the
+    /// Storage clear, and reaches the live session too (spec 070 FR-017).
+    fn storage_connections(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let host = self.browser_host(cx);
+        let sites = host.read(cx).view.sites.clone();
+        let s = &self.settings;
+        let revoke_all = || -> Option<panels::Click> {
+            let host = host.clone();
+            Some(Box::new(
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.dispatch(DbrEvent::RevokeAll, cx));
+                },
+            ))
+        };
+        if sites.is_empty() {
+            // Nothing connected: the one row, saying so. Its action is still
+            // the clear, which has nothing to do — and says nothing wrong.
+            let group = settings_fixtures::StorageGroup {
+                label: s.storage_connections.clone(),
+                action: None,
+                items: vec![settings_fixtures::StorageItem {
+                    label: s.item_dapps.clone(),
+                    meta: SharedString::from(crate::wallet::fill(&s.count_sites, "count", "0")),
+                    action: s.storage_disconnect_all.clone(),
+                    destructive: true,
+                }],
+            };
+            return storage_group_with(theme, &group, vec![revoke_all()]);
+        }
+        let group = settings_fixtures::StorageGroup {
+            label: s.storage_connections.clone(),
+            action: None,
+            items: sites
+                .iter()
+                .map(|site| settings_fixtures::StorageItem {
+                    label: signing_live::dapp_identity(&site.origin).0,
+                    meta: crate::contacts::model::shorten(&site.address),
+                    // Singular: this row cuts off ONE site. "Disconnect all"
+                    // on a row that disconnects one is the label somebody
+                    // taps meaning something else.
+                    action: self.explore.disconnect.clone(),
+                    destructive: true,
+                })
+                .collect(),
+        };
+        let actions = sites
+            .iter()
+            .map(|site| {
+                let (host, origin) = (host.clone(), site.origin.clone());
+                Some(Box::new(
+                    move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                        host.update(cx, |host, cx| {
+                            host.dispatch(
+                                DbrEvent::RevokeRequested {
+                                    origin: origin.clone(),
+                                },
+                                cx,
+                            );
+                        });
+                    },
+                ) as panels::Click)
+            })
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .child(storage_group_with(theme, &group, actions))
+            .child(panels::clickable(
+                "storage-disconnect-all",
+                revoke_all(),
+                div()
+                    .pt(px(16.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(s.storage_disconnect_all.clone()),
+            ))
     }
 
     /// DST8 — the build, the technical inventory, the three links.
