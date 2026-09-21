@@ -2,11 +2,12 @@
 //  PreferencesCodecTests.swift
 //  VelaWalletTests
 //
-//  One preference, one meaning (spec 072 T034).
+//  One preference, one meaning (spec 072 T031, T034).
 //
 //  The five display choices are read through the core's codec (`prefsRead`)
 //  and an older shell's spellings are rewritten once at launch
-//  (`prefsMigrations`).
+//  (`prefsMigrations`). And the theme's "follow the system" is a choice a
+//  person can make again after picking Light or Dark — it could not be.
 //
 
 import Foundation
@@ -120,6 +121,50 @@ struct PreferencesCodecTests {
         #expect(core.map(\.name) == VelaWallet.TextScaleLevel.allCases.map(\.rawValue))
         for (level, stop) in zip(VelaWallet.TextScaleLevel.allCases, core) {
             #expect(abs(Double(level.factor) - stop.factor) < 0.0001, "\(level)")
+        }
+    }
+
+    // MARK: - Theme: follow the system (T031)
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    /// "Follow the system" is selectable, stored as `system`, and shown as
+    /// the chosen segment — after Dark, too. The segment is `auto`, which
+    /// `ThemeChoice(rawValue:)` never read: the tap did nothing and the
+    /// segment was never lit.
+    @Test func followTheSystemIsAChoiceAgainAfterDark() {
+        let (defaults, store) = fresh()
+        let prefs = booted(store)
+        let segments = SettingsFixtures.build(.st1, loc: loc).theme.segments.map(\.id)
+
+        prefs.setTheme(.dark)
+        #expect(SettingsLive.withPreferences(prefs, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            .theme.selected == "dark")
+
+        // The drawn "Follow system" segment, tapped.
+        guard let auto = segments.first(where: { SettingsLive.themeChoice(segment: $0) == .system }),
+              let choice = SettingsLive.themeChoice(segment: auto) else {
+            Issue.record("no segment follows the system")
+            return
+        }
+        prefs.setTheme(choice)
+
+        #expect(prefs.theme == .system)
+        #expect(defaults.string(forKey: VelaStore.Key.theme) == "system")
+        let selected = SettingsLive.withPreferences(prefs, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
+            .theme.selected
+        #expect(segments.contains(selected), "the selection \(selected) is no segment the page draws")
+        #expect(selected == auto)
+        // Applied: a fresh read of the store follows the system too.
+        #expect(booted(store).theme == .system)
+    }
+
+    /// Every drawn theme segment maps to a stored choice, and back.
+    @Test func everyThemeSegmentRoundTrips() {
+        for segment in SettingsFixtures.build(.st1, loc: loc).theme.segments {
+            let choice = SettingsLive.themeChoice(segment: segment.id)
+            #expect(choice != nil, "\(segment.id) stores nothing")
+            if let choice { #expect(SettingsLive.themeSegment(choice) == segment.id) }
         }
     }
 }

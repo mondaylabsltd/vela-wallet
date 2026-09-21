@@ -123,15 +123,16 @@ struct DisplayCurrencyTests {
 
     /// **The defect this machine exists to prevent.**
     ///
-    /// With no rate, the row must degrade to the USD figure under a USD symbol
-    /// — not the same digits relabelled with a ¥, which would tell somebody
-    /// 1,234.56 dollars is 1,234.56 yuan.
+    /// With no rate, the row must never show the same digits relabelled with a
+    /// ¥, which would tell somebody 1,234.56 dollars is 1,234.56 yuan. Since
+    /// 072 it names the currency CHOSEN, with no figure — "USD" there told
+    /// somebody who had picked CNY that their choice had not taken.
     @Test func aMissingRateDegradesRatherThanRelabelling() {
         let unpriced = CurrencyViewWire(code: "CNY", rate: nil, committed: true)
         let value = SettingsLive.currencyRowValue(unpriced)
-        #expect(value.hasPrefix("USD"), "showed \(value) for an unpriceable currency")
-        #expect(!value.contains("CNY"))
+        #expect(value == "CNY", "showed \(value) for a chosen, unpriceable currency")
         #expect(!value.contains("¥"))
+        #expect(!value.contains("USD"))
     }
 
     @Test func aPricedCurrencyConvertsAndWearsItsOwnSymbol() {
@@ -163,10 +164,10 @@ struct DisplayCurrencyTests {
     }
 
     /// A code the catalog has never heard of — a device region can produce one —
-    /// must not crash or invent a symbol.
+    /// must not crash or invent a symbol. It is named, as chosen.
     @Test func anUnknownCodeDegradesInsteadOfInventingASymbol() {
         let exotic = CurrencyViewWire(code: "XPF", rate: 110, committed: true)
         let value = SettingsLive.currencyRowValue(exotic)
-        #expect(value.hasPrefix("USD"))
+        #expect(value == "XPF")
     }
 }

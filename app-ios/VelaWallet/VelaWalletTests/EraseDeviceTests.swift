@@ -125,4 +125,18 @@ struct EraseDeviceTests {
         #expect(!session.view.hasWallet)
         #expect(session.view.signOut == nil)
     }
+
+    /// The erase sheet, when something survived: its own callout says the
+    /// erase did not finish, and the person is still signed in.
+    @Test func aFailedEraseKeepsItsSheetAndSaysSo() {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let base = SettingsFixtures.build(.st16, loc: loc)
+
+        let failed = SettingsLive.withEraseFailure(true, on: base, loc: loc)
+        #expect(failed.eraseSheet.callout?.text == loc.t(I18nKeys.SettingsUi.eraseFailed))
+        #expect(failed.eraseSheet.callout?.tone == .danger)
+
+        let fine = SettingsLive.withEraseFailure(false, on: base, loc: loc)
+        #expect(fine.eraseSheet.callout?.text == base.eraseSheet.callout?.text)
+    }
 }
