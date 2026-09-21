@@ -24,7 +24,7 @@ a {
 
 /*
  * Scrollbars. macOS overlays them and shows them only while you scroll;
- * Windows and Linux draw a classic 17px track that is always on screen, and
+ * Windows and Linux draw a classic 17-pixel track that is always on screen, and
  * in a column layout it stood as a grey bar down the middle of a 4 K display
  * (founder, 2026-09-17). Every scroller gets one thin, quiet thumb and no
  * track, in the theme's own ink — so a dark theme over a light OS does not

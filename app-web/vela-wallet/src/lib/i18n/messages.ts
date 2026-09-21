@@ -193,7 +193,11 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.switchDeviceBtn',
 	'onboarding.login.statusCancelledTitle',
 	'onboarding.login.statusCancelledBody',
-	'onboarding.settings.warningText'
+	'onboarding.settings.warningText',
+	'onboarding.storage.unreadableTitle',
+	'onboarding.storage.unreadableBody',
+	'onboarding.storage.signInAgain',
+	'onboarding.storage.resetCopy'
 ] as const;
 
 /** The transient status line the create machine reports. */
