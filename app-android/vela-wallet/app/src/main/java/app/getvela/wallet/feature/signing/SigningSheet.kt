@@ -60,6 +60,8 @@ fun SigningSheet(
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
     onSignWith: (String?) -> Unit = {},
+    onFee: () -> Unit = {},
+    onFeePick: (String) -> Unit = {},
     /** Spec 069: the speed control under the fee. */
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
@@ -76,6 +78,8 @@ fun SigningSheet(
             onChip = onChip,
             onCustomAmount = onCustomAmount,
             onSignWith = onSignWith,
+            onFee = onFee,
+            onFeePick = onFeePick,
             onToggleSpeed = onToggleSpeed,
             onPickSpeed = onPickSpeed,
         )
@@ -92,6 +96,9 @@ fun SigningSheetContent(
     onCustomAmount: (String) -> Unit = {},
     /** `null` toggles the list; an id picks a method and closes it. */
     onSignWith: (String?) -> Unit = {},
+    /** Issue #262: the fee row's tap and its coin list's pick. */
+    onFee: () -> Unit = {},
+    onFeePick: (String) -> Unit = {},
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
 ) {
@@ -158,7 +165,13 @@ fun SigningSheetContent(
         )
 
         TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
-        SigningFee(model.fee, onToggleSpeed = onToggleSpeed, onPickSpeed = onPickSpeed)
+        SigningFee(
+            model.fee,
+            onFee = onFee,
+            onPick = onFeePick,
+            onToggleSpeed = onToggleSpeed,
+            onPickSpeed = onPickSpeed,
+        )
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
         SlideToConfirm(

@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.signing
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
@@ -36,6 +39,11 @@ import app.getvela.wallet.feature.signing.components.SigningPositive
 fun SigningFee(
     fee: FeeModel,
     modifier: Modifier = Modifier,
+    /** The row's tap: retry a failed quote, or open / close the coin list. */
+    onFee: () -> Unit = {},
+    /** A coin from the list, by id (`SigningLive.NATIVE_FEE_ID` for the chain's own). */
+    onPick: (String) -> Unit = {},
+    /** Spec 069: the speed control under the fee — fold/unfold, and a speed by id. */
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
 ) {
@@ -43,14 +51,43 @@ fun SigningFee(
     when (fee) {
         is FeeModel.Hidden -> Unit
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
-        is FeeModel.OnChain -> if (fee.selectorTitle == null) Column(
-            modifier = modifier
+        is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
+            SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed)
+            // Issue #262: the reason the slide below is shut, said where the fix is.
+            fee.warning?.let {
+                Text(
+                    text = it,
+                    color = colors.errorBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.medium,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.padding(top = VelaSpacing.sm, start = VelaSpacing.xl, end = VelaSpacing.xl),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SigningFeeBody(
+    fee: FeeModel.OnChain,
+    onFee: () -> Unit,
+    onPick: (String) -> Unit,
+    onToggleSpeed: () -> Unit,
+    onPickSpeed: (String) -> Unit,
+) {
+    val colors = VelaTheme.colors
+    run {
+        if (fee.selectorTitle == null) Column(
+            modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(VelaRadius.lg))
                 .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg)),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(enabled = fee.tappable, onClick = onFee)
                     .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -88,7 +125,7 @@ fun SigningFee(
             }
         } else {
             Column(
-                modifier = modifier
+                modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.bgSunken, RoundedCornerShape(VelaRadius.lg))
                     .padding(horizontal = VelaSpacing.xl, vertical = VelaSpacing.md),
@@ -96,6 +133,7 @@ fun SigningFee(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable(onClick = onFee)
                         .padding(vertical = VelaSpacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,10 +153,14 @@ fun SigningFee(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(VelaRadius.lg))
                             .background(
                                 if (option.selected) colors.bgRaised else Color.Transparent,
                                 RoundedCornerShape(VelaRadius.lg),
                             )
+                            // A coin that cannot pay is shown for context, never picked.
+                            .clickable(enabled = !option.disabled) { onPick(option.id) }
+                            .alpha(if (option.disabled) 0.45f else 1f)
                             .padding(VelaSpacing.md),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),

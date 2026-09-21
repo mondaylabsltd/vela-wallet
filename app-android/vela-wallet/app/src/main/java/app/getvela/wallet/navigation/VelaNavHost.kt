@@ -76,6 +76,7 @@ import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendCallbacks
 import app.getvela.wallet.MainActivity
 import app.getvela.wallet.feature.scan.ScanCallbacks
+import app.getvela.wallet.feature.scan.LiveScanSurface
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -600,6 +601,7 @@ fun VelaNavHost(
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     val signMethod by controller.signMethod.collectAsStateWithLifecycle()
                     val signWithOpen by controller.signWithOpen.collectAsStateWithLifecycle()
+                    val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -613,6 +615,7 @@ fun VelaNavHost(
                         chainId = signChain,
                         signMethod = signMethod,
                         signWithOpen = signWithOpen,
+                        feeOpen = feeOpen,
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -635,6 +638,8 @@ fun VelaNavHost(
                                 },
                                 onCustomAmount = { controller.guardCustomAmount(it) },
                                 onSignWith = { controller.signWith(it) },
+                                onFee = { controller.feeTapped() },
+                                onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
                                 onToggleSpeed = { controller.toggleSpeed() },
                                 onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
                             )
@@ -1115,6 +1120,35 @@ fun VelaNavHost(
                                 onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
                             ),
                             consent = consentCard,
+                            // Issue #273: the scan icon reads a web address's code and opens
+                            // it here — the send scanner's surface, camera permission and
+                            // photo path. Any other code is refused in one line; WalletConnect
+                            // is not how this wallet connects.
+                            scanner = { onUrl, onClose ->
+                                var refusal by remember { mutableStateOf<String?>(null) }
+                                LiveScanSurface(
+                                    model = remember(strings) { FlowFixtures.scan(strings) },
+                                    callbacks = ScanCallbacks(
+                                        onDecoded = { text ->
+                                            val url = app.getvela.wallet.feature.browser.ExploreLive.scannedUrl(text)
+                                            if (url != null) {
+                                                onUrl(url)
+                                            } else {
+                                                refusal = strings.t(I18nKeys.Flows.SCAN_INVALID_QR)
+                                            }
+                                        },
+                                        onClose = onClose,
+                                        requestPermission = { mainActivity?.requestCameraPermission() ?: false },
+                                        pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
+                                        permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
+                                        grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                                        noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
+                                        cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
+                                        decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
+                                    ),
+                                    message = refusal,
+                                )
+                            },
                         )
                     } else {
                         // The holdings, the feed and the currency are this device's
@@ -1137,8 +1171,10 @@ fun VelaNavHost(
                             onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
                             onStatusClick = {
                                 // Spec 048: the status line's rescue — the RPC fix when a network failed, the per-chain detail otherwise.
+                                // The core's `banner_chain_ids` (failed MINUS rate-limited), the chains the line
+                                // just named: a rate limit heals on its own and never earns the fix sheet.
                                 application.container.pendingSettingsOverlay.value =
-                                    if (application.container.pool.view.value.failed_chains.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
+                                    if (balances.banner_chain_ids.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
                                 navController.push(VelaDestinations.SETTINGS)
                             },
                         )
@@ -1531,6 +1567,14 @@ fun VelaNavHost(
                 var storageTick by remember { mutableStateOf(0) }
                 var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
                 var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                // The RPC fix the home asked for (the web's `openRpcFix`): which chain,
+                // the URL being typed until it is saved, and whether a save went out
+                // from the sheet (its probe then decides "restored").
+                var rescueChainId by remember { mutableStateOf<Long?>(null) }
+                var rpcDraft by remember { mutableStateOf<String?>(null) }
+                var rpcSaved by remember { mutableStateOf(false) }
+                // The row's override fields are loaded on expand, as the network page does.
+                LaunchedEffect(rescueChainId) { rescueChainId?.let { settings.expandOverride(it) } }
                 val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
                 LaunchedEffect(Unit) {
                     settings.refreshCurrency()
@@ -1577,10 +1621,6 @@ fun VelaNavHost(
                         poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
                     )
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                    // A 429 heals by itself and never earns the "fix your RPC" banner: the
-                    // chains are the balance core's `banner_chain_ids`, not the pool's raw
-                    // failed list (which counts rate-limited chains too).
-                    m = SettingsLive.withBanner(m, balanceView.banner_chain_ids, chainNamesNow, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
@@ -1601,7 +1641,17 @@ fun VelaNavHost(
                     // Spec 048: the home's status line asked for a rescue sheet.
                     application.container.pendingSettingsOverlay.value?.let { requested ->
                         application.container.pendingSettingsOverlay.value = null
+                        if (requested == SettingsOverlay.RpcFix) {
+                            rescueChainId = application.container.wallet.balances.value.banner_chain_ids.firstOrNull()?.toLong()
+                            rpcDraft = null
+                            rpcSaved = false
+                        }
                         m = m.copy(overlay = requested)
+                    }
+                    rescueChainId?.let { id ->
+                        networks.networks.firstOrNull { it.chain_id == id }?.let { row ->
+                            m = m.copy(rpcFix = SettingsLive.rpcFix(m.rpcFix, row, rpcDraft, rpcSaved, strings))
+                        }
                     }
                     // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
@@ -1731,6 +1781,25 @@ fun VelaNavHost(
                                 ?.let { settings.expandOverride(it.chain_id) }
                         },
                         onResetEndpoints = { settings.resetEndpoints() },
+                        onRpcFixField = { value -> rpcDraft = value },
+                        onRpcFixPrimary = {
+                            rescueChainId?.let { chainId ->
+                                val row = networks.networks.firstOrNull { it.chain_id == chainId }
+                                if (row != null && SettingsLive.rpcFixRestored(row, rpcDraft, rpcSaved)) {
+                                    // The chain answers again: clear its failure in the balance
+                                    // core and read now — its own retry is throttled like any
+                                    // other fetch, and the person just watched the probe succeed.
+                                    application.container.wallet.fixChainResolved(chainId.toInt())
+                                    application.container.wallet.refresh(force = true)
+                                    rescueChainId = null
+                                } else {
+                                    rpcDraft?.let { settings.editOverride(chainId, NetOverrideField.Rpc, it) }
+                                    settings.commitOverride(chainId)
+                                    rpcDraft = null
+                                    rpcSaved = true
+                                }
+                            }
+                        },
                     ),
                 )
             }

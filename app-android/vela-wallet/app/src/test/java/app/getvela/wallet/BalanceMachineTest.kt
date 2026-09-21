@@ -229,10 +229,10 @@ class BalanceMachineTest {
     }
 
     /**
-     * Settings' two readings of an unread chain, over the real core: a dead
-     * RPC earns the banner and SR3's red retry row; a 429 earns neither — it
-     * is a grey "retrying" line, because it heals by itself. The Android
-     * banner used to take the pool's raw failed list, rate-limited included.
+     * Two readings of an unread chain, over the real core: a dead RPC is in
+     * `banner_chain_ids` (the home's status line) and earns SR3's red retry
+     * row; a 429 earns neither — it is a grey "retrying" line, because it
+     * heals by itself.
      */
     @Test
     fun settingsBannersADeadChainAndOnlyGreysARateLimitedOne() {
@@ -256,8 +256,9 @@ class BalanceMachineTest {
             app.getvela.wallet.feature.settings.SettingsScreenState.SR1,
             strings,
         )
-        val banner = app.getvela.wallet.feature.settings.SettingsLive.withBanner(base, view.banner_chain_ids, names, strings).rpcBanner
-        assertEquals("only the dead chain earns the banner", listOf("Gnosis"), banner?.chips?.map { it.name })
+        // The settings page draws no banner (the web has none); the home's
+        // status line reads this list, and only the dead chain is on it.
+        assertEquals("only the dead chain earns the banner", listOf(100), view.banner_chain_ids)
 
         val detail = app.getvela.wallet.feature.settings.SettingsLive.balanceDetail(
             base.balanceDetail,
@@ -604,6 +605,47 @@ class BalanceMachineTest {
         val view = h.host.settle { it.tokens.any { token -> token.symbol == "NEWC" } }
 
         assertNull(view.tokens.first { it.symbol == "NEWC" }.price_usd)
+    }
+
+    /**
+     * The hero names the chain that is really down — and only that one.
+     *
+     * A dead RPC and a rate-limited one both leave a chain unread, but only
+     * the first is the person's to fix: the core's `banner_chain_ids` is failed
+     * MINUS rate-limited, and the hero's line is worded from it. Then the fix:
+     * `FixChainResolved` drops the chain and reads again, so the repaired
+     * chain stops being named without waiting for the next throttled refresh
+     * (the Android rescue never sent it).
+     */
+    @Test
+    fun aDeadChainIsNamedARateLimitedOneIsNotAndTheFixClearsIt() {
+        val gnosisDown = java.util.concurrent.atomic.AtomicBoolean(true)
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis"), row(137, "POL", "Polygon")),
+        ) { url, _ ->
+            when {
+                url.contains("chain-100") && gnosisDown.get() -> FakeRpcTransport.network()
+                url.contains("chain-137") -> FakeRpcTransport.httpError(429)
+                else -> FakeRpcTransport.body("0x14d1120d7b160000")
+            }
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val failing = h.host.settle { it.failed_chain_ids.containsAll(listOf(100, 137)) && it.rate_limited_chain_ids.contains(137) }
+        assertEquals("the rate-limited chain never reaches the banner", listOf(100), failing.banner_chain_ids)
+        val strings = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
+            java.io.File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes()
+        }.apply { initialize("en") }
+        val line = app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(failing, strings, mapOf(100 to "Gnosis", 137 to "Polygon"))
+        assertEquals("Gnosis RPC unavailable", line?.text)
+
+        gnosisDown.set(false)
+        h.host.dispatch(BalanceEvent.FixChainResolved(100), BalanceEvent.serializer())
+        // The drop is the core's immediate answer; whether the re-read then
+        // lands is the pool's cooldown, which this test does not pin.
+        val fixed = h.host.settle { !it.failed_chain_ids.contains(100) }
+        assertFalse(fixed.banner_chain_ids.contains(100))
+        assertEquals(null, app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(fixed, strings, emptyMap())?.takeIf { it.text.contains("Gnosis") })
     }
 
     private companion object {

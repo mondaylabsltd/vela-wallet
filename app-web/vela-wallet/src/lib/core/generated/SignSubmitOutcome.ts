@@ -6,4 +6,4 @@ import type { SignFundingNeeded } from "./SignFundingNeeded";
  * owns every wording regex (`parseBundlerUnderfunded`,
  * `PasskeyErrorCode.CANCELLED`) — the core only sees typed variants.
  */
-export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "passkey_cancelled" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, };
+export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "receipt_pending", user_op_hash: string, } | { "type": "passkey_cancelled" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, };

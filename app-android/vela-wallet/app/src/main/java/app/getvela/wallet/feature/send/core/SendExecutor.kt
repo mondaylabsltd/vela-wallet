@@ -168,13 +168,13 @@ class SendExecutor(
             SendShellResult.TrackHandedOff
         }
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
-        // `first_time` needs the local send history by counterparty (the
-        // contacts machine's `has_prior_interaction`); it lands with the
-        // identity backfill (T048). `null` = not judged, never "yes".
+        // `first_time` from this device's own send history (the web's
+        // `resolveRecipientRisk`): an address it never sent to wears the
+        // "first time" tag, the poisoning defence. Not an address → `false`.
         is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(
             SendRecipientRisk(
                 is_contract = relay.isDeployed(operation.chain_id, operation.address),
-                first_time = null,
+                first_time = firstTime(operation.address),
             ),
         )
         // No simulation engine on this base (046).
@@ -196,6 +196,10 @@ class SendExecutor(
             SendShellResult.Closed
         }
     }
+
+    /** `true` = never sent to this address from this device; a non-address is never "first". */
+    private suspend fun firstTime(address: String): Boolean =
+        ADDRESS.matches(address) && !feed.hasSentTo(address)
 
     // -- tokens -----------------------------------------------------------------
 
@@ -323,6 +327,9 @@ class SendExecutor(
 
         /** `fee_policy::TEMPO_DEFAULT_FEE_TOKEN` — pathUSD. */
         internal const val TEMPO_DEFAULT_FEE_TOKEN = "0x20c0000000000000000000000000000000000000"
+
+        /** `^0x[0-9a-fA-F]{40}$` — the web's recipient-risk address test. */
+        private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
 
         internal fun unhex(text: String): ByteArray = text.removePrefix("0x").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }

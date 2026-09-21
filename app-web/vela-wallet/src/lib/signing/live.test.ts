@@ -159,6 +159,49 @@ describe('the fee the sheet shows', () => {
 		});
 	});
 
+	// Issue 262: 0 ETH and 2 USDT on mainnet, quoted in ETH. The core keeps the
+	// quote (the person sees the figure) and shuts the gate; the row says why.
+	it('says why the slide is shut when the coin that pays is not there', () => {
+		const eth = {
+			symbol: 'ETH',
+			contract: null,
+			decimals: 18,
+			balance: '0',
+			recipient: '0x1',
+			usd_balance: '0',
+			usd_price: '3000',
+			amount: '2100000000000000',
+			insufficient: true,
+			selected: true
+		};
+		const usdt = {
+			...eth,
+			symbol: 'USDT',
+			contract: '0x' + 'cc'.repeat(20),
+			decimals: 6,
+			balance: '2000000',
+			usd_balance: '2',
+			usd_price: '1',
+			amount: '6300000',
+			insufficient: false,
+			selected: false
+		};
+		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
+		const model = buildSigningModel(inputs({ fee: short }));
+		expect(model?.fee).toMatchObject({ warning: 'Insufficient ETH for gas fees' });
+		expect(model?.confirm.enabled).toBe(false);
+
+		const paid = {
+			...short,
+			options: [{ ...eth, balance: '1', insufficient: false }],
+			confirm_fee_ready: true
+		};
+		expect(buildSigningModel(inputs({ fee: paid }))?.fee).not.toHaveProperty(
+			'warning',
+			expect.anything()
+		);
+	});
+
 	it('names the ERC-20 that is paying, in its own decimals', () => {
 		const usdt = {
 			...QUOTED_FEE,

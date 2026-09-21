@@ -35,6 +35,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendDuplicateRowView
+import app.getvela.wallet.feature.send.core.SendRowFieldState
+import app.getvela.wallet.feature.send.core.SendSplitRowIssue
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
@@ -42,6 +45,8 @@ import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.send.core.SendMultiSpecView
 import app.getvela.wallet.feature.flows.BatchUnit
 import app.getvela.wallet.feature.send.core.BatchPreviewRow
+import app.getvela.wallet.feature.send.core.BatchParseError
+import app.getvela.wallet.feature.send.core.BatchParseReason
 import app.getvela.wallet.feature.send.core.BatchRateStatus
 import app.getvela.wallet.feature.send.core.BatchRecipient
 import app.getvela.wallet.feature.send.core.BatchView
@@ -210,6 +215,42 @@ class SendLiveTest {
         assertTrue(d.title.contains("0.001") && d.title.contains("XDAI"))
     }
 
+    /**
+     * Issue 199 (web cf2a9e17): the wait counted up from a still clock and
+     * said "almost there" six seconds into fifteen. With the relay's clock the
+     * receipt counts DOWN inside the typical time, says "almost" only past it,
+     * "slow" past twice it — and the ring eases toward full without closing.
+     */
+    @Test
+    fun `the submitted receipt counts the wait down and fills its ring`() {
+        val drawn = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
+        val submitted = SendView(
+            stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Submitting, user_op_hash = "0xop",
+            receipt = SendReceiptView(status = SendReceiptStatus.Submitted, amount = "0.001", usd_value = 0.0, submitted_at_ms = 1_000_000.0, typical_inclusion_s = 15),
+        )
+        val live = SendLive.receipt(drawn, submitted, ctx())
+        val eta = live.eta!!
+        // The typical line moves into the counted pair, not said twice.
+        assertFalse(live.captions.any { it.contains("typically") })
+        assertEquals(6, eta.elapsedS(1_006_900))
+        assertEquals(0, eta.elapsedS(999_000))
+        assertEquals(listOf("Gnosis typically confirms in ~15s", "~9s remaining"), eta.lines(6))
+        assertEquals("20s elapsed — almost there", eta.lines(20)[1])
+        assertEquals(strings.t(I18nKeys.Flows.TX_SLOW_CONFIRM), eta.lines(30)[1])
+        // ~70% at the typical time, never full while waiting.
+        assertEquals(0.69f, eta.progress(15), 0.01f)
+        assertTrue(eta.progress(0) == 0f && eta.progress(10_000) < 0.93f)
+        assertTrue(eta.progress(10) < eta.progress(11))
+
+        // Without the relay's clock there is nothing to count: the typical time, said once.
+        val noClock = submitted.copy(receipt = submitted.receipt!!.copy(submitted_at_ms = null))
+        val still = SendLive.receipt(drawn, noClock, ctx())
+        assertNull(still.eta)
+        assertTrue(still.captions.any { it.contains("Gnosis") && it.contains("15") })
+        // A custom network with no typical time: no line, no ring to fill.
+        assertNull(SendLive.receipt(drawn, submitted.copy(receipt = submitted.receipt!!.copy(typical_inclusion_s = null)), ctx()).eta)
+    }
+
     @Test
     fun `the fee sheet lists the session's options with their balances`() {
         val drawn = FlowFixtures.build(FlowState.SD2F, strings).sheet as FlowSheet.FeeToken
@@ -319,6 +360,23 @@ class SendLiveTest {
     }
 
     @Test
+    fun `a split says the same-asset ceiling first, then over-balance, then nothing`() {
+        // The core measures the ceiling against the rows' TOTAL; its sentence
+        // names the most that can be sent, so it outranks "exceeds your balance".
+        val split = SendView(
+            stage = SendStage.EnterDetails, selected_token = xdai, split_mode = true, split_over_balance = true,
+            amount_warning = SendAmountWarning.NotEnoughToken("XDAI"),
+        )
+        val ceiling = split.copy(
+            same_asset_fee_issue = SendFeeIssueView(symbol = "XDAI", transfer_amount = "6000000000000000000", balance = "5000000000000000000", fee_amount = "100000000000000000", total = "6100000000000000000", max_transfer_amount = "4900000000000000000"),
+        )
+        val sentence = SendLive.formWarning(ceiling, ctx())!!
+        assertTrue(sentence, sentence.contains("4.9") && !sentence.contains("000000000"))
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), SendLive.formWarning(split, ctx()))
+        assertNull(SendLive.formWarning(split.copy(split_over_balance = false), ctx()))
+    }
+
+    @Test
     fun `half-typed text gets the placeholder identicon, a real address its own`() {
         val drawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
         val typing = SendLive.form(drawn, SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = "0xabc"), FeeView(), ctx())
@@ -406,6 +464,59 @@ class SendLiveTest {
         assertEquals("0.002 XDAI · ≈ $0.00", live.summary?.value)
         assertTrue(live.summary!!.label.contains("3"))
         assertFalse(live.ctaEnabled)
+    }
+
+    /**
+     * Issues 203–206: a dark Continue with forty rows said nothing. The core
+     * says which row needs what, which row repeats which, whether the rows
+     * outrun the balance and how much is left; the form words all four.
+     */
+    @Test
+    fun `the split form says why Continue is dark`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = splitView.copy(
+            recipients = listOf(
+                SendRecipientDraft("rcpt_1", recipient, "0.1"),
+                SendRecipientDraft("rcpt_2", recipient, "0.2"),
+                SendRecipientDraft("rcpt_3", "0x1234", "1,5"),
+                SendRecipientDraft("rcpt_4", "", ""),
+            ),
+            split_duplicates = listOf(SendDuplicateRowView("rcpt_2", 1)),
+            split_row_issues = listOf(
+                SendSplitRowIssue("rcpt_3", 3, SendRowFieldState.Invalid, SendRowFieldState.Invalid),
+                SendSplitRowIssue("rcpt_4", 4, SendRowFieldState.Empty, SendRowFieldState.Empty),
+            ),
+            split_remaining = "0.41697",
+            confirm_amount = "",
+        )
+        val live = SendLive.form(drawn.model, view, FeeView(), ctx())
+
+        assertNull(live.recipients[0].duplicateNote)
+        assertEquals("Same address as recipient 1", live.recipients[1].duplicateNote)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), live.recipients[2].addressNote)
+        assertEquals(strings.t(I18nKeys.Flows.BAD_AMOUNT), live.recipients[2].amountNote)
+        // An empty field is unfinished, not wrong.
+        assertNull(live.recipients[3].addressNote)
+        assertNull(live.recipients[3].amountNote)
+        // The first unfinished row, and what it needs.
+        assertEquals("Recipient 3 needs an address.", live.hint)
+        assertEquals("0.41697 XDAI left", live.summary?.remaining)
+        assertFalse(live.summary!!.over)
+        assertNull(live.warning)
+
+        // Only the amount missing names the amount; a busy pre-check says nothing.
+        val needsAmount = view.copy(split_row_issues = listOf(SendSplitRowIssue("rcpt_4", 4, SendRowFieldState.Ok, SendRowFieldState.Empty)))
+        assertEquals("Recipient 4 needs an amount.", SendLive.form(drawn.model, needsAmount, FeeView(), ctx()).hint)
+        assertNull(SendLive.form(drawn.model, needsAmount.copy(estimating_gas = true), FeeView(), ctx()).hint)
+
+        // Over the balance: the live refusal, the figure in the refusal colour,
+        // no "left" — and never the single form's stale amount warning.
+        val over = view.copy(split_row_issues = emptyList(), split_over_balance = true, split_remaining = null, amount_warning = SendAmountWarning.NeedGas("XDAI"))
+        val overLive = SendLive.form(drawn.model, over, FeeView(), ctx())
+        assertTrue(overLive.summary!!.over)
+        assertNull(overLive.summary!!.remaining)
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), overLive.warning)
+        assertNull(overLive.hint)
     }
 
     @Test
@@ -521,15 +632,79 @@ class SendLiveTest {
         assertEquals("0.78 GBP", priced.rateValue)
         assertEquals("0.78", priced.rateInput)
         assertTrue(priced.rateEdited)
-        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "1")), priced.parsedLabel)
+        // Lines READ, not rows kept (the web's `seen`).
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "2")), priced.parsedLabel)
         assertEquals(listOf(true, false), priced.rows.map { it.ok })
         assertEquals("Founder", priced.rows[0].address)
         assertEquals("0.001 XDAI", priced.rows[0].conversion)
-        assertEquals("5", priced.rows[1].conversion)
+        assertEquals("an unconverted row shows no figure, not the raw one", "—", priced.rows[1].conversion)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), priced.rows[1].note)
+        assertNull(priced.rows[0].note)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_REJECTED_ONE, mapOf("count" to "1")), priced.rejectedText)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_APPLY_ONE, mapOf("count" to "1")), priced.cta)
         assertFalse(priced.ctaDisabled)
         assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
+    }
+
+    /**
+     * The import sheet says its reasons (the web's `liveBatchImport`): every
+     * refused line in sheet order with why, a duplicate marked, the file's
+     * failure while nothing parsed, and the total read against the balance —
+     * or against what is left when the import adds to rows already typed.
+     */
+    @Test
+    fun `the batch sheet names each refused line, the file error and the total`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true, show_batch_import = true)
+        val batch = BatchView(
+            opened = true, unit = WireBatchUnit.Token, fiat_code = "GBP", raw_text = "…", rate_status = BatchRateStatus.Ok,
+            preview = listOf(
+                BatchPreviewRow(line = 1, address = recipient, valid = true, raw_amount = "1", token_amount = "1", ok = true),
+                BatchPreviewRow(line = 4, address = recipient, valid = true, dup = true, raw_amount = "2", token_amount = "2", ok = false),
+            ),
+            errors = listOf(
+                BatchParseError(line = 2, raw = "0x12zz,5", reason = BatchParseReason.NoAddress),
+                BatchParseError(line = 3, raw = "$recipient,abc", reason = BatchParseReason.NoAmount),
+            ),
+            rejected = 3, recipient_count = 1, total_token = "1", total_fiat = "0.78", can_apply = true,
+        )
+        val live = SendLive.batchImport(drawn.model, batch, view, ctx())
+
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "4")), live.parsedLabel)
+        assertEquals("sheet order", listOf(recipient, "0x12zz,5", "$recipient,abc", recipient), live.rows.map { it.address })
+        assertEquals(
+            listOf(null, strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), strings.t(I18nKeys.Flows.BAD_AMOUNT), strings.t(I18nKeys.Flows.BATCH_DUP)),
+            live.rows.map { it.note },
+        )
+        assertNull("a file error about a list that parsed is about nothing", live.fileError)
+
+        val total = live.total!!
+        assertEquals(
+            "${strings.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${strings.t(I18nKeys.Flows.RECIPIENT_COUNT_ONE, mapOf("count" to "1"))}",
+            total.label,
+        )
+        assertTrue(total.value.startsWith("1 XDAI"))
+        assertTrue("the fiat total rides beside it", total.value.endsWith("GBP"))
+        assertEquals(strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "0.71697 XDAI")), total.remaining)
+
+        // Adding to someone already on the form: what is LEFT, not the balance.
+        val typed = view.copy(split_import_room = 59, split_remaining = "2.25")
+        assertEquals(
+            strings.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "2.25 XDAI")),
+            SendLive.batchImport(drawn.model, batch, typed, ctx()).total!!.remaining,
+        )
+        assertEquals(
+            "replacing them draws from the whole balance again",
+            strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "0.71697 XDAI")),
+            SendLive.batchImport(drawn.model, batch, typed, ctx(), replaces = true).total!!.remaining,
+        )
+
+        val failed = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, file_error = true), view, ctx())
+        assertEquals(
+            "${strings.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${strings.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY)}",
+            failed.fileError,
+        )
+        assertNull("nobody parsed: no total", failed.total)
     }
 
     /** Issue #272: the refusal that dims the button reads as a warning, not as helper text. */

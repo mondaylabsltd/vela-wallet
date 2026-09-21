@@ -40,7 +40,9 @@ import {
 	signerAddressFor,
 	type QuotedInBandFee,
 	type WalletKeySet,
-	type WalletSigner
+	type WalletSigner,
+	UserOpFeeHoldError,
+	UserOpRejectedError
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
@@ -454,7 +456,37 @@ export async function handleSendTransaction(
 	rememberUserOpChain(txResult.userOpHash, effectiveChainId);
 	// Report the hash so the UI can show "submitted, waiting" instead of a blank spin.
 	onSubmitted?.(txResult.userOpHash);
-	return await txResult.waitForTxHash();
+	try {
+		return await txResult.waitForTxHash();
+	} catch (error) {
+		if (receiptStillOutstanding(error)) throw new DAppReceiptPendingError(txResult.userOpHash);
+		throw error;
+	}
+}
+
+/**
+ * The bundler accepted the op but no receipt arrived inside the wait — a
+ * timeout, an unreachable bundler or a relay fee-hold. The op may still land,
+ * so this is NOT a failure and NOT a confirmation (issue 262): the page is
+ * answered with the op hash and the pending record is left for the tracker.
+ */
+export class DAppReceiptPendingError extends Error {
+	constructor(readonly userOpHash: string) {
+		super(`Transaction ${userOpHash.slice(0, 10)}… submitted; its receipt has not arrived yet.`);
+		this.name = 'DAppReceiptPendingError';
+	}
+}
+
+/**
+ * Did `waitForReceipt` give up without a verdict? Only a relay rejection and a
+ * `success === false` drop are verdicts; everything else it throws (timeout,
+ * unreachable, fee-hold) leaves the op in flight.
+ */
+export function receiptStillOutstanding(error: unknown): boolean {
+	if (error instanceof UserOpFeeHoldError) return true;
+	if (error instanceof UserOpRejectedError) return false;
+	const message = (error as { message?: string } | null)?.message ?? '';
+	return !/dropped from the network/i.test(message);
 }
 
 /**

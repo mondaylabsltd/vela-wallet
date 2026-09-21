@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.flows.AmountFieldModel
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.core.BatchView
 import app.getvela.wallet.feature.send.core.BatchRateStatus
+import app.getvela.wallet.feature.send.core.BatchParseReason
 import app.getvela.wallet.feature.send.core.BATCH_MAX_RECIPIENTS
 import app.getvela.wallet.feature.flows.BatchUnit
 import app.getvela.wallet.feature.flows.BatchRowModel
@@ -25,6 +26,7 @@ import app.getvela.wallet.feature.flows.SendSelectionModel
 import app.getvela.wallet.feature.flows.SendNoticeModel
 import app.getvela.wallet.feature.flows.SendCtaModel
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.flows.BreakdownRowModel
 import app.getvela.wallet.feature.flows.SummaryLineModel
@@ -39,6 +41,7 @@ import app.getvela.wallet.feature.flows.FeeRowModel
 import app.getvela.wallet.feature.flows.FeeTokenPickModel
 import app.getvela.wallet.feature.flows.FeeTokenRowModel
 import app.getvela.wallet.feature.flows.FlowState
+import app.getvela.wallet.feature.flows.ReceiptEtaModel
 import app.getvela.wallet.feature.flows.ReceiptHashModel
 import app.getvela.wallet.feature.flows.ReceiptStage
 import app.getvela.wallet.feature.flows.RecipientFieldModel
@@ -206,6 +209,11 @@ object SendLive {
         val s = ctx.strings
         val symbol = view.selected_token?.symbol ?: ""
         val count = batch.recipient_count
+        // Lines READ — the ones that became rows and the ones the parser refused
+        // (the web's `seen`): the count above a list is the length of that list.
+        val seen = batch.preview.size + batch.errors.size
+        // Someone is already on the form (the core's own count, as `merge` reads it).
+        val formHasRows = view.split_import_room < BATCH_MAX_RECIPIENTS
         return fallback.copy(
             unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to batch.fiat_code)),
             unitToken = s.t(I18nKeys.Flows.BATCH_UNIT_TOKEN, mapOf("sym" to symbol)),
@@ -222,13 +230,55 @@ object SendLive {
             rateInput = batch.rate_input,
             rateEdited = batch.rate_edited,
             rateReset = s.t(I18nKeys.Flows.BATCH_RATE_RESET),
-            parsedLabel = s.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to count.toString())),
-            rows = batch.preview.map { row ->
-                BatchRowModel(
-                    ok = row.ok,
-                    address = row.name ?: row.address,
-                    conversion = if (row.token_amount.isNotEmpty()) "${row.token_amount} $symbol" else row.raw_amount,
+            parsedLabel = s.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to seen.toString())),
+            // The sheet's order (the web's `previewRows`): a refused line sits
+            // between the neighbours it has in the sheet, each with its reason.
+            rows = (
+                batch.preview.map { row ->
+                    row.line to BatchRowModel(
+                        ok = row.ok,
+                        address = row.name ?: row.address,
+                        // The core converted it; an unconvertible row carries no
+                        // token amount, and the raw figure there would read as if it had.
+                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${row.token_amount} $symbol" else "—",
+                        note = when {
+                            row.dup -> s.t(I18nKeys.Flows.BATCH_DUP)
+                            !row.valid -> s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS)
+                            else -> null
+                        },
+                    )
+                } + batch.errors.map { error ->
+                    error.line to BatchRowModel(
+                        ok = false,
+                        address = error.raw,
+                        conversion = "",
+                        note = s.t(if (error.reason == BatchParseReason.NoAddress) I18nKeys.Flows.BATCH_BAD_ADDRESS else I18nKeys.Flows.BAD_AMOUNT),
+                    )
+                }
+                ).sortedBy { it.first }.map { it.second },
+            // `file_error` outlives a paste in the core (only the next pick clears
+            // it), and an error about a file above a list that parsed is about nothing.
+            fileError = if (batch.file_error && seen == 0) {
+                "${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY)}"
+            } else {
+                null
+            },
+            total = if (count > 0) {
+                SummaryLineModel(
+                    label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(if (count == 1) I18nKeys.Flows.RECIPIENT_COUNT_ONE else I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to count.toString()))}",
+                    value = "${Formats.current.plain(batch.total_token)} $symbol".trim() +
+                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} ${batch.fiat_code}" } ?: ""),
+                    over = batch.over_balance,
+                    // Adding to people already on the form draws from what the form
+                    // has not given out yet (`split_remaining`), not the whole balance.
+                    remaining = if (formHasRows && !replaces && view.split_remaining != null) {
+                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(view.split_remaining)} $symbol".trim()))
+                    } else {
+                        s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "${trim(view.selected_token?.balance ?: "0")} $symbol".trim()))
+                    },
                 )
+            } else {
+                null
             },
             rejectedText = if (batch.rejected > 0) {
                 s.t(if (batch.rejected == 1) I18nKeys.Flows.BATCH_REJECTED_ONE else I18nKeys.Flows.BATCH_REJECTED_OTHER, mapOf("count" to batch.rejected.toString()))
@@ -246,12 +296,12 @@ object SendLive {
             // with the way to choose the other (the web's `merge` line). Only when
             // there is someone on the form: the core's own count, read back from
             // the room it reports.
-            merge = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+            merge = if (formHasRows && batch.can_apply) {
                 s.t(if (replaces) I18nKeys.Flows.BATCH_REPLACES_ROWS else I18nKeys.Flows.BATCH_ADDS_TO_ROWS)
             } else {
                 null
             },
-            mergeAction = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+            mergeAction = if (formHasRows && batch.can_apply) {
                 s.t(if (replaces) I18nKeys.Flows.BATCH_ADD_INSTEAD else I18nKeys.Flows.BATCH_REPLACE_INSTEAD)
             } else {
                 null
@@ -355,7 +405,7 @@ object SendLive {
             // Only a real address earns an identicon (the founder's anti-poisoning rule).
             amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, ctx),
             recipient = if (view.split_mode) null else recipientModel(view, ctx),
-            recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx) } else emptyList(),
+            recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx, view) } else emptyList(),
             recipientActions = if (view.split_mode) {
                 listOf(
                     RecipientActionModel(RecipientAction.Add, s.t(I18nKeys.Flows.ADD_RECIPIENT)),
@@ -370,7 +420,22 @@ object SendLive {
             speed = speed?.let { speedModel(it, view, ctx) },
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
+            hint = splitHint(view, ctx),
         )
+    }
+
+    /**
+     * Why a split's Continue is dark, when a row is why: the FIRST unfinished
+     * recipient and what it still needs (the web's `splitHint`). The core's
+     * `split_row_issues` IS the gate's reason, so nothing here re-derives the
+     * address or amount rule. Silent while the pre-check is out — the button
+     * is busy then, not refused.
+     */
+    internal fun splitHint(view: SendView, ctx: Context): String? {
+        if (!view.split_mode || view.estimating_gas) return null
+        val first = view.split_row_issues.firstOrNull() ?: return null
+        val key = if (first.address == SendRowFieldState.Ok) I18nKeys.Flows.SPLIT_NEEDS_AMOUNT else I18nKeys.Flows.SPLIT_NEEDS_ADDRESS
+        return ctx.strings.t(key, mapOf("n" to first.ordinal.toString()))
     }
 
     private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context): AmountFieldModel {
@@ -432,9 +497,17 @@ object SendLive {
         return null
     }
 
-    /** One of the split's rows as the card draws it: the core's draft, editable in place. */
-    internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context): RecipientCardModel {
+    /**
+     * One of the split's rows as the card draws it: the core's draft, editable
+     * in place, with the core's word on it. Only a field with something IN it
+     * can be wrong (an empty one is unfinished — its placeholder already says
+     * what it wants), and a row that repeats an earlier payee says WHICH row it
+     * repeats (issue 203) — the core matched them; this only picks the words.
+     */
+    internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context, view: SendView? = null): RecipientCardModel {
         val s = ctx.strings
+        val issue = view?.split_row_issues?.firstOrNull { it.id == draft.id }
+        val repeat = view?.split_duplicates?.firstOrNull { it.id == draft.id }
         return RecipientCardModel(
             ordinal = s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to (index + 1).toString())),
             name = draft.name ?: if (ADDRESS.matches(draft.address)) shortAddress(draft.address) else "",
@@ -445,6 +518,9 @@ object SendLive {
             address = draft.address,
             amountValue = draft.amount,
             addressPlaceholder = s.t(I18nKeys.Flows.RECIPIENT_LABEL),
+            addressNote = if (issue?.address == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS) else null,
+            duplicateNote = repeat?.let { s.t(I18nKeys.Flows.RECIPIENT_DUPLICATE, mapOf("n" to it.first_ordinal.toString())) },
+            amountNote = if (issue?.amount == SendRowFieldState.Invalid) s.t(I18nKeys.Flows.BAD_AMOUNT) else null,
         )
     }
 
@@ -458,6 +534,11 @@ object SendLive {
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
             value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
+            // The core's live verdict that the rows outrun the balance — the
+            // same predicate Continue refuses on, shown while typing — and how
+            // much is still left to give out when they do not.
+            over = view.split_over_balance,
+            remaining = view.split_remaining?.let { s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(it)} $symbol".trim())) },
         )
     }
 
@@ -474,11 +555,15 @@ object SendLive {
                 mapOf("amount" to human(issue.transfer_amount), "fee" to human(issue.fee_amount), "total" to human(issue.total), "symbol" to issue.symbol, "balance" to human(issue.balance)),
             ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount), "symbol" to issue.symbol))
         }
+        // A split has its own live verdict, `split_over_balance`. It does not
+        // take `amount_warning`: that one judges the single form's figure,
+        // which a split leaves behind — a number no longer on the screen.
+        if (view.split_mode) return if (view.split_over_balance) s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY) else null
         view.amount_warning?.let { return warningText(it, s) }
         // Last, ⇄'s own refusal (issue 197; `Some` exactly when the row is
         // shown and dimmed): a dimmed toggle with no sentence is a refusal
         // nobody can act on. Single mode only — the others have no ⇄.
-        if (view.split_mode || view.multi_select_mode) return null
+        if (view.multi_select_mode) return null
         return view.denom_toggle_reason?.let {
             s.t(I18nKeys.Flows.DENOM_TOGGLE_NO_RATE, mapOf("code" to it.code, "symbol" to it.symbol))
         }
@@ -930,21 +1015,40 @@ object SendLive {
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )
-            else -> fallback.copy(
-                header = header,
-                stage = ReceiptStage.Submitted,
-                title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
-                captions = listOfNotNull(
-                    if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
-                    receipt.typical_inclusion_s?.let {
-                        s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to it.toString()))
-                    },
-                ),
-                hash = null,
-                viewOnExplorer = null,
-                cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
-                ctaAccent = false,
-            )
+            else -> {
+                val typicalLine = receipt.typical_inclusion_s?.let {
+                    s.t(I18nKeys.Flows.TX_TYPICAL_TIME, mapOf("chainName" to chain, "estSecs" to it.toString()))
+                }
+                // Issue 199 (web cf2a9e17): with the relay's clock and the chain's
+                // usual time the screen counts the wait down and fills its ring.
+                // Without the clock the typical time is still worth saying, once.
+                val eta = if (receipt.submitted_at_ms != null && receipt.typical_inclusion_s != null && typicalLine != null) {
+                    ReceiptEtaModel(
+                        submittedAtMs = receipt.submitted_at_ms,
+                        typicalS = receipt.typical_inclusion_s,
+                        typicalLine = typicalLine,
+                        remainingTemplate = s.t(I18nKeys.Flows.TX_REMAINING),
+                        elapsedTemplate = s.t(I18nKeys.Flows.TX_ELAPSED),
+                        slowLine = s.t(I18nKeys.Flows.TX_SLOW_CONFIRM),
+                    )
+                } else {
+                    null
+                }
+                fallback.copy(
+                    header = header,
+                    stage = ReceiptStage.Submitted,
+                    title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
+                    captions = listOfNotNull(
+                        if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
+                        typicalLine.takeIf { eta == null },
+                    ),
+                    hash = null,
+                    viewOnExplorer = null,
+                    cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                    ctaAccent = false,
+                    eta = eta,
+                )
+            }
         }
     }
 

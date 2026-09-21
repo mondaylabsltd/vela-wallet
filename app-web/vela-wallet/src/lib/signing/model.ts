@@ -194,6 +194,11 @@ export type FeeModel =
 			 * change for this one request. Absent in the gallery.
 			 */
 			speed?: FeeSpeedModel;
+			/**
+			 * Why the slide is shut: the coin that pays is not there (issue 262 —
+			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled).
+			 */
+			warning?: string;
 	  }
 	/** Off-chain signature: the ✓ line, in place of a fee row. */
 	| { kind: 'offchain'; note: string }

@@ -208,6 +208,8 @@ fun ExploreSearchField(
     scanLabel: String,
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Issue #273: the scan icon opens the scanner (a web address's code); without one it submits. */
+    onScan: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     var text by remember { mutableStateOf("") }
@@ -257,7 +259,7 @@ fun ExploreSearchField(
         Box(
             modifier = Modifier
                 .size(VelaSizing.hitTarget)
-                .clickable { onSubmit(text) },
+                .clickable { onScan?.invoke() ?: onSubmit(text) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(VelaIcons.ScanLine, scanLabel, tint = colors.fgMuted)

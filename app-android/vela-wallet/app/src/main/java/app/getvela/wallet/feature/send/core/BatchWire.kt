@@ -43,6 +43,21 @@ data class BatchPreviewRow(
     val ok: Boolean = false,
 )
 
+/** Why the parser refused a line (`BatchParseReason`). */
+@Serializable
+enum class BatchParseReason {
+    @SerialName("no_address") NoAddress,
+    @SerialName("no_amount") NoAmount,
+}
+
+/** One line the parser refused, as written (`BatchParseError`); `line` is `u32`. */
+@Serializable
+data class BatchParseError(
+    val line: Int,
+    val raw: String = "",
+    val reason: BatchParseReason,
+)
+
 @Serializable
 data class BatchRecipient(
     val address: String,
@@ -65,6 +80,8 @@ data class BatchView(
     val rate_input: String = "",
     val rate_edited: Boolean = false,
     val preview: List<BatchPreviewRow> = emptyList(),
+    /** The lines the parser refused, each with its reason — in sheet order with `preview`. */
+    val errors: List<BatchParseError> = emptyList(),
     val over_cap: Boolean = false,
     val rejected: Int = 0,
     val recipient_count: Int = 0,

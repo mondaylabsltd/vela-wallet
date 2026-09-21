@@ -158,6 +158,9 @@ data class SettingsActions(
     val onAccountSelect: (Int) -> Unit = {},
     val onAccountPrimary: () -> Unit = {},
     val onAccountSecondary: () -> Unit = {},
+    /** The RPC fix sheet's URL being typed, and its Save & Retry / Done. */
+    val onRpcFixField: (String) -> Unit = {},
+    val onRpcFixPrimary: () -> Unit = {},
 )
 
 @Composable
@@ -266,6 +269,14 @@ fun SettingsRoute(
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
+        onRpcFixField = actions.onRpcFixField,
+        onRpcFixPrimary = {
+            // Save & Retry keeps the sheet up to show the probe's answer;
+            // Done (the probe said ok) is the one that closes it.
+            val close = model.rpcFix.restored
+            actions.onRpcFixPrimary()
+            if (close) overlay = SettingsOverlay.None
+        },
     )
 }
 
@@ -314,6 +325,8 @@ fun SettingsScreen(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    onRpcFixField: (String) -> Unit = {},
+    onRpcFixPrimary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -424,6 +437,8 @@ fun SettingsScreen(
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
+                onRpcFixField = onRpcFixField,
+                onRpcFixPrimary = onRpcFixPrimary,
             )
         }
     }
@@ -1109,6 +1124,8 @@ private fun SettingsSheet(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    onRpcFixField: (String) -> Unit = {},
+    onRpcFixPrimary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1177,7 +1194,7 @@ private fun SettingsSheet(
                     onCancel = onDismiss,
                 )
                 SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub)
-                SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onDismiss)
+                SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
@@ -1424,7 +1441,7 @@ private fun FeedbackSheetBody(model: FeedbackModel, onSend: (String) -> Unit = {
 }
 
 @Composable
-private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit) {
+private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: ((String) -> Unit)? = null) {
     val colors = VelaTheme.colors
     SheetTitle(model.title)
     Row(
@@ -1457,6 +1474,7 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit) {
         value = model.field.value,
         badge = model.field.badge,
         tone = model.field.tone,
+        onValueChange = onField,
     )
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
     VelaPrimaryButton(model.primary, onClick = onPrimary, modifier = Modifier.fillMaxWidth())

@@ -156,6 +156,8 @@ data class FeeTokenOption(
     val balance: String,
     val fee: String,
     val selected: Boolean,
+    /** The core's `insufficient`: shown for context, never pickable (invariant ⑧). */
+    val disabled: Boolean = false,
 )
 
 @Immutable
@@ -168,6 +170,10 @@ sealed interface FeeModel {
         val options: List<FeeTokenOption> = emptyList(),
         /** The speed control under the fee (spec 069) — the send form's own. */
         val speed: app.getvela.wallet.feature.flows.FeeSpeedModel? = null,
+        /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
+        val tappable: Boolean = false,
+        /** Issue #262: why the slide is shut — the paying coin is not there. */
+        val warning: String? = null,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */

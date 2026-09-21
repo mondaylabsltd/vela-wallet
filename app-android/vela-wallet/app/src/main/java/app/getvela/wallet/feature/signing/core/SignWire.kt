@@ -213,6 +213,11 @@ sealed class SignSubmitOutcome {
     @SerialName("succeeded")
     data class Succeeded(val result: String) : SignSubmitOutcome()
 
+    /** Accepted, but the receipt did not arrive inside the wait: the page gets the op hash, the record stays pending (issue 262). */
+    @Serializable
+    @SerialName("receipt_pending")
+    data class ReceiptPending(val user_op_hash: String) : SignSubmitOutcome()
+
     @Serializable
     @SerialName("passkey_cancelled")
     data object PasskeyCancelled : SignSubmitOutcome()

@@ -82,7 +82,7 @@
 {:else if data.kind === 'explore-mobile'}
 	<div class="stage">
 		<div class="frame">
-			<ExploreHome model={data.model} copy={data.copy} signing={data.signing} />
+			<ExploreHome model={data.model} copy={data.copy} signing={data.signing} scan={data.scan} />
 		</div>
 	</div>
 {:else if data.kind === 'signing'}

@@ -29,7 +29,8 @@ struct SplitVerdictTests {
         remaining: String? = nil,
         confirmAmount: String = "3",
         estimating: Bool = false,
-        amountWarning: [String: Any]? = nil
+        amountWarning: [String: Any]? = nil,
+        sameAsset: [String: Any]? = nil
     ) throws -> SendViewWire {
         var object = try CoreJSON.object(SendCore().view())
         object["stage"] = "enter_details"
@@ -47,6 +48,7 @@ struct SplitVerdictTests {
         object["confirm_amount"] = confirmAmount
         object["estimating_gas"] = estimating
         object["amount_warning"] = amountWarning as Any? ?? NSNull()
+        object["same_asset_fee_issue"] = sameAsset as Any? ?? NSNull()
         return try CoreJSON.decode(SendViewWire.self, from: object)
     }
 
@@ -167,6 +169,28 @@ struct SplitVerdictTests {
         let blank = try splitView(rows: [row("rcpt_1", Self.alice, "")], confirmAmount: "")
         #expect(SendLive.form(blank, fee: nil, display: .usd, on: try drawnSplit(), loc: loc)
             .summary?.value == "—")
+    }
+
+    /// **The same-asset ceiling comes first in a split too.** When the coin
+    /// being sent also pays the fee, the core measures the ceiling against the
+    /// rows' total; its sentence names the most that can be sent, so it wins
+    /// over "the total exceeds your balance" — the order all four shells draw.
+    @Test func theSameAssetCeilingOutranksTheOverBalanceSentence() throws {
+        let rows = [row("rcpt_1", Self.alice, "4"), row("rcpt_2", Self.bob, "2")]
+        let base = try splitView(rows: rows, over: true, confirmAmount: "6")
+        #expect(SendLive.formWarning(base, loc: loc) == "The total exceeds your balance.")
+
+        let ceiling = try splitView(
+            rows: rows, over: true, confirmAmount: "6",
+            sameAsset: [
+                "symbol": "xDAI", "transfer_amount": "6000000000000000000",
+                "balance": "5000000000000000000", "fee_amount": "100000000000000000",
+                "total": "6100000000000000000", "max_transfer_amount": "4900000000000000000",
+            ]
+        )
+        let text = try #require(SendLive.formWarning(ceiling, loc: loc))
+        #expect(text.contains("4.9 xDAI"), "the most that can be sent: \(text)")
+        #expect(text != "The total exceeds your balance.")
     }
 
     /// **The confirm page repeats the repeat warning** — the page that signs

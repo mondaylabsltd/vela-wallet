@@ -796,6 +796,7 @@ struct RootView: View {
                 tracker.boot()
             }
             .onChange(of: scenePhase) { _, phase in
+                wallet.homePoller.sceneActive(phase == .active)
                 switch phase {
                 case .active: tracker.foregrounded()
                 case .background: tracker.backgrounded()
@@ -1058,6 +1059,16 @@ struct RootView: View {
                         settings.open()
                         wallet.open(address: session.view.address)
                     }
+                    // The 10-minute balance refresh runs exactly while this
+                    // screen is showing and the app is active (the web's
+                    // aggregate poll). A flow opening over the home takes it
+                    // off screen; closing it brings it back — one timer, never
+                    // two.
+                    .onAppear {
+                        wallet.homePoller.sceneActive(scenePhase == .active)
+                        wallet.homePoller.homeVisible(true)
+                    }
+                    .onDisappear { wallet.homePoller.homeVisible(false) }
                 case .contacts:
                     contactsSection
                 case .explore:
@@ -1102,6 +1113,7 @@ struct RootView: View {
                         onSpeed: { id in signing?.speed(id) },
                         onSigningDismissed: { signing?.swipeDismissed() },
                         controller: browser,
+                        camera: camera,
                         onSelectTab: selectTab
                     )
                     .onChange(of: signing?.closed) { _, closed in
@@ -2292,13 +2304,7 @@ struct RootView: View {
     }
 
     private func scanRefusalText() -> String? {
-        switch camera.refusal {
-        case .denied: loc.t("componentsUi.scanner.permissionText")
-        case .restricted: loc.t("componentsUi.scanner.permissionText")
-        case .noCamera: loc.t("componentsUi.scanner.noCamera")
-        case .unavailable: loc.t("componentsUi.scanner.cameraUnavailable")
-        case nil: nil
-        }
+        camera.refusal?.text(loc)
     }
 
     private func openSettings() {

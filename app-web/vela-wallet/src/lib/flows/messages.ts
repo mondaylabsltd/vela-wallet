@@ -282,6 +282,11 @@ export const WALLET_FLOW_KEYS = [
 	// Why ⇄ is inert: no rate to enter the display currency against. Already in
 	// the corpus for the phones; web drew the control and read none of it.
 	'send.denomToggleNoRate',
+	// The same-asset ceiling (`same_asset_fee_issue`): the coin being sent also
+	// pays the fee, and the two together do not fit. The phones and the desktop
+	// have said it since spec 032.
+	'send.sameFeeTokenBody',
+	'send.sameFeeTokenMax',
 
 	// send · confirm
 	'send.confirmTitle',

@@ -211,7 +211,7 @@ function classify(error: unknown): ScanStatus {
  */
 export function scanNotice(
 	state: { status: ScanStatus; nothingFound: boolean; unusable: boolean },
-	m: WalletFlowMessages
+	m: ScanNoticeMessages
 ): string | undefined {
 	// A code that was read and cannot be used is not a scanning failure, and
 	// saying "no QR found" about a QR plainly in frame would be a lie.
@@ -232,6 +232,20 @@ export function scanNotice(
 			return undefined;
 	}
 }
+
+/**
+ * The six sentences `scanNotice` can say — all a host that is not the wallet
+ * page (the explore start page, issue 273) needs to ship to draw a scanner.
+ */
+export type ScanNoticeMessages = Pick<
+	WalletFlowMessages,
+	| 'home.invalidQrTitle'
+	| 'componentsUi.scanner.noQrFoundMsg'
+	| 'componentsUi.scanner.permissionText'
+	| 'componentsUi.scanner.noCamera'
+	| 'componentsUi.scanner.insecureOrigin'
+	| 'componentsUi.scanner.cameraUnavailable'
+>;
 
 /** One scanner per page: two live camera streams is a bug, not a feature. */
 export const scanner = new Scanner();

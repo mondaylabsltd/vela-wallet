@@ -233,6 +233,8 @@ pub struct FlowStrings {
     pub to_name: String,
     pub from_name: String,
     pub view_on_explorer: SharedString,
+    /// The detail's delete — the local record only; the chain keeps it.
+    pub delete_record: SharedString,
     pub status_confirmed: SharedString,
     /// A pending or failed transfer must not wear the confirmed chip. Same key
     /// family the RN `TxStatusBadge` reads, so the three clients say the same
@@ -301,7 +303,9 @@ pub struct FlowStrings {
     pub send_title: String,
     pub balance_label: String,
     pub recipient_n: String,
+    /// "{{count}} recipients" and its singular — pick with `recipients`.
     pub recipient_count: String,
+    pub recipient_count_one: String,
     pub max: SharedString,
     pub recipient_label: SharedString,
     pub add_recipient: SharedString,
@@ -474,6 +478,20 @@ pub struct FlowStrings {
 }
 
 impl FlowStrings {
+    /// "1 recipient" / "3 recipients" — the web's `_one` / `_other` pick.
+    #[must_use]
+    pub fn recipients(&self, count: usize) -> String {
+        crate::wallet::fill(
+            if count == 1 {
+                &self.recipient_count_one
+            } else {
+                &self.recipient_count
+            },
+            "count",
+            &count.to_string(),
+        )
+    }
+
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(key);
         let raw = |key: &str| loc.t(key).to_string();
@@ -516,6 +534,7 @@ impl FlowStrings {
             to_name: raw("history.toName"),
             from_name: raw("history.fromName"),
             view_on_explorer: s("history.viewOnExplorer"),
+            delete_record: s("history.deleteRecord"),
             status_confirmed: s("componentsTx.receipt.statusConfirmed"),
             status_pending: s("componentsTx.detail.statusPending"),
             status_failed: s("componentsTx.detail.statusFailed"),
@@ -571,6 +590,7 @@ impl FlowStrings {
             balance_label: raw("send.balanceLabel"),
             recipient_n: raw("send.recipientN"),
             recipient_count: raw("send.recipientCount_other"),
+            recipient_count_one: raw("send.recipientCount_one"),
             max: s("send.maxBtn"),
             recipient_label: s("send.recipientLabel"),
             add_recipient: s("send.addRecipient"),
@@ -748,6 +768,24 @@ mod tests {
         ] {
             assert!(template.contains(var), "`{template}` must carry {var}");
         }
+    }
+
+    /// One recipient is singular; everything else, none included, takes the
+    /// plural form, the web's `count === 1 ? _one : _other`.
+    #[test]
+    fn a_recipient_count_agrees_with_its_number() {
+        let s = FlowStrings::resolve(&Loc::from_env());
+        assert_eq!(
+            s.recipients(1),
+            crate::wallet::fill(&s.recipient_count_one, "count", "1")
+        );
+        for n in [0, 2, 3] {
+            assert_eq!(
+                s.recipients(n),
+                crate::wallet::fill(&s.recipient_count, "count", &n.to_string())
+            );
+        }
+        assert!(!s.recipients(1).contains("{{"));
     }
 
     /// The stack is what makes a back chevron mean something.

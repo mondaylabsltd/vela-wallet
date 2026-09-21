@@ -242,6 +242,23 @@ class SpeedControl(
     }
 
     /**
+     * A fee coin picked for the operation in force (`null` = the native coin),
+     * by a surface nobody's machine is waiting on (the dApp sheet).
+     *
+     * The coin is part of the operation every preview replays, so the whole
+     * question is asked again with it and the other speeds follow in that
+     * coin. Telling the session in force alone (`SelectFeeAsset`) would leave
+     * the previews pricing the old coin — and a speed tapped next would promote
+     * one, switching the payment back to a coin the person walked away from.
+     */
+    fun chooseFeeToken(feeToken: String?) {
+        val ask = inForce.value.ask ?: return
+        if (ask.feeToken == feeToken) return
+        val next = ask.copy(feeToken = feeToken, tier = speed.value.tier)
+        scope.launch { askInForce(next) }
+    }
+
+    /**
      * The quote in force went stale (the policy's TTL): ask the same question
      * again, if one was asked and nothing is measuring. The fresh estimate
      * arrives on [fee].

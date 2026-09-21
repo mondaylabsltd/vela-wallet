@@ -371,6 +371,8 @@ data class RpcFixModel(
     val providersLabel: String? = null,
     val providers: List<String> = emptyList(),
     val report: String? = null,
+    /** The saved RPC answered: the primary is Done, and pressing it clears the chain's failure. */
+    val restored: Boolean = false,
 )
 
 /** SR3: the quiet rate-limited balance breakdown. */

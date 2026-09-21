@@ -97,6 +97,9 @@ import app.getvela.wallet.feature.send.core.SendTxRecord
 import app.getvela.wallet.feature.send.core.SendTxStatus
 import app.getvela.wallet.feature.send.core.SendUnitIssue
 import app.getvela.wallet.feature.send.core.SendView
+import app.getvela.wallet.feature.send.core.SendSplitRowIssue
+import app.getvela.wallet.feature.send.core.SendDuplicateRowView
+import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.TrackEntryView
 import app.getvela.wallet.feature.send.core.TrackEvent
 import app.getvela.wallet.feature.send.core.TrackLifecycle
@@ -706,6 +709,9 @@ class CoreWireDriftTest {
         assertFieldsExist<SendAccountRef>("SendAccountRef")
         assertFieldsExist<SendOpenParams>("SendOpenParams")
         assertFieldsExist<SendDisplayContext>("SendDisplayContext")
+        assertFieldsExist<SendSplitRowIssue>("SendSplitRowIssue")
+        assertFieldsExist<SendDuplicateRowView>("SendDuplicateRowView")
+        assertStringUnion<SendRowFieldState>("SendRowFieldState")
     }
 
     @Test

@@ -276,6 +276,8 @@ object I18nKeys {
         const val LIVE_INDICATOR = "home.liveIndicator"
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
+        /** "{{name}} RPC unavailable" — the hero's line for one unreachable chain (web `liveBalance`). */
+        const val RPC_UNAVAILABLE_SINGLE = "assets.rpcUnavailableSingle"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -467,6 +469,8 @@ object I18nKeys {
         const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
         const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
         const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"
+        /** A code read, but not one this surface can use (the web scanner's `unusable`). */
+        const val SCAN_INVALID_QR = "home.invalidQrTitle"
 
         // Activity.
         const val HISTORY_TITLE = "history.navTitle"
@@ -555,6 +559,7 @@ object I18nKeys {
         const val RECIPIENT_LABEL = "send.recipientLabel"
         const val RECIPIENT_N = "send.recipientN"
         const val RECIPIENT_COUNT = "send.recipientCount_other"
+        const val RECIPIENT_COUNT_ONE = "send.recipientCount_one"
         const val ADD_RECIPIENT = "send.addRecipient"
         const val FROM_CONTACTS = "send.fromContacts"
         const val BATCH_IMPORT = "send.batchImport"
@@ -562,6 +567,11 @@ object I18nKeys {
         const val RECIPIENT_PICK_ARIA = "send.recipientPickAria"
         const val SCAN_ARIA = "send.scanAria"
         const val SPLIT_TOTAL = "send.splitTotalLabel"
+        const val SPLIT_NEEDS_AMOUNT = "send.splitNeedsAmount"
+        const val SPLIT_NEEDS_ADDRESS = "send.splitNeedsAddress"
+        const val SPLIT_REMAINING = "send.splitRemaining"
+        const val RECIPIENT_DUPLICATE = "send.recipientDuplicate"
+        const val BAD_AMOUNT = "send.badAmount"
         const val CONTINUE = "send.continueBtn"
         const val NETWORK_FEE = "componentsUi.gas.networkFee"
 
@@ -590,6 +600,9 @@ object I18nKeys {
         const val BATCH_RATE_HINT = "send.batchRateHint"
         const val BATCH_PARSED_COUNT = "send.batchParsedCount"
         const val BATCH_BAD_ADDRESS = "send.batchBadAddress"
+        const val BATCH_DUP = "send.batchDup"
+        const val BATCH_IMPORT_FAILED_TITLE = "send.batchImportFailedTitle"
+        const val BATCH_IMPORT_FAILED_BODY = "send.batchImportFailedBody"
         const val BATCH_REJECTED_ONE = "send.batchRejected_one"
         const val BATCH_APPLY_OTHER = "send.batchApply_other"
         const val BATCH_REJECTED_OTHER = "send.batchRejected_other"
@@ -625,6 +638,9 @@ object I18nKeys {
         const val TX_CONFIRMED_TITLE = "send.txConfirmedTitle"
         const val TX_WAITING_CONFIRM = "send.txWaitingConfirm"
         const val TX_TYPICAL_TIME = "send.txTypicalTime"
+        const val TX_REMAINING = "send.txRemaining"
+        const val TX_ELAPSED = "send.txElapsed"
+        const val TX_SLOW_CONFIRM = "send.txSlowConfirm"
         const val TX_HASH = "componentsTx.receipt.txHash"
         const val DONE = "componentsTx.receipt.done"
 
@@ -773,6 +789,8 @@ object I18nKeys {
         const val NETWORK_ONLINE = "settings.networks.online"
         const val NETWORK_SLOW = "settings.networks.slow"
         const val NETWORK_OFFLINE = "settingsModals.health.offline"
+        const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
+        const val HEALTH_INVALID = "settingsModals.health.invalid"
 
         /** The Ethereum backup row (spec 062). */
         const val BACKUP_TITLE = "settingsModals.backup.title"
@@ -808,6 +826,7 @@ object I18nKeys {
         const val ADD_COMPATIBLE = "settingsModals.addNetwork.compatible"
         const val ADD_INCOMPATIBLE = "settingsModals.addNetwork.incompatible"
         const val ADD_COMPATIBILITY_CHECK = "settingsModals.addNetwork.compatibilityCheck"
+        const val ADD_CHECKING_COMPATIBILITY = "settingsModals.addNetwork.checkingCompatibility"
         const val ADD_CHECK_SAFE = "settingsModals.addNetwork.checkSafe"
         const val ADD_CHECK_SIGNER = "settingsModals.addNetwork.checkSigner"
         const val ADD_CHECK_REMAINING = "settingsModals.addNetwork.checkRemaining"

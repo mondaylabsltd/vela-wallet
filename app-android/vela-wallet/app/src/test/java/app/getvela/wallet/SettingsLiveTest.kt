@@ -192,6 +192,45 @@ class SettingsLiveTest {
         assertEquals("https://default.example", field.placeholder)
     }
 
+    /** The web's `servicePill`: every `NetServiceHealth` worded, quiet while checking. */
+    @Test
+    fun anEndpointSaysWhatItsHealthCheckFound() {
+        fun endpoint(health: NetServiceHealth) = NetEndpointView(NetEndpointField.EthereumData, "", "https://d.example", health)
+        val view = NetView(
+            loaded = true,
+            endpoints = listOf(
+                endpoint(NetServiceHealth.Checking),
+                endpoint(NetServiceHealth.Ok(42)),
+                endpoint(NetServiceHealth.Ok(2_400)),
+                endpoint(NetServiceHealth.NotHttps),
+                endpoint(NetServiceHealth.Unreachable(http_status = 502)),
+                endpoint(NetServiceHealth.InvalidResponse(latency_ms = 10)),
+            ),
+        )
+        val pills = SettingsLive.withNetworks(base(), view, strings).endpoints.fields.map { it.badge }
+
+        assertNull("checking claims nothing", pills[0])
+        assertEquals(SettingsTone.Ok, pills[1]!!.tone)
+        assertTrue(pills[1]!!.label.endsWith("42ms"))
+        assertEquals(SettingsTone.Warn, pills[2]!!.tone)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.HEALTH_HTTPS_REQUIRED), pills[3]!!.tone to pills[3]!!.label)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE), pills[4]!!.tone to pills[4]!!.label)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.HEALTH_INVALID), pills[5]!!.tone to pills[5]!!.label)
+    }
+
+    /** The web's `liveNetworkRows`: a custom network's row wears its tag, not a health pill. */
+    @Test
+    fun aCustomNetworkRowCarriesNoHealthPill() {
+        val view = NetView(
+            loaded = true,
+            networks = listOf(row(1, "Ethereum", false, NetProbeHealth.Ok(42)), row(7777, "Seven", true, NetProbeHealth.Ok(42))),
+        )
+        val rows = SettingsLive.withNetworks(base(), view, strings).networks
+        assertTrue(rows[0].badge != null)
+        assertNull(rows[1].badge)
+        assertEquals(strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM), rows[1].tag)
+    }
+
     @Test
     fun aProviderKeyFieldCarriesItsProviderId() {
         val view = NetView(
@@ -560,5 +599,40 @@ class SettingsLiveTest {
         } finally {
             Formats.current = saved
         }
+    }
+
+    /**
+     * SR2 is THIS chain's fix: the fixture drew Polygon whichever chain the
+     * home named. Save & Retry until the saved URL's probe says ok; only then
+     * Done — the press that tells the balance core the chain is fixed.
+     */
+    @Test
+    fun `the rpc fix names the failing chain and says restored only after its own save answers`() {
+        val fallback = base().rpcFix
+        val gnosis = row(100, "Gnosis", custom = false).copy(rpc_url = "https://rpc.gnosis.example", native_symbol = "XDAI")
+
+        val failing = SettingsLive.rpcFix(fallback, gnosis, draft = null, saved = false, strings = strings)
+        assertEquals("Gnosis", failing.name)
+        assertTrue(failing.meta, failing.meta.contains("100") && failing.meta.endsWith("XDAI"))
+        assertEquals("https://rpc.gnosis.example", failing.field.value)
+        assertEquals(SettingsTone.Error, failing.badge.tone)
+        assertEquals(false, failing.restored)
+
+        // Typing shows the draft; a probe that was already ok before any save is not a repair.
+        val healthy = gnosis.copy(rpc_health = NetProbeHealth.Ok(120))
+        assertEquals("https://new.example", SettingsLive.rpcFix(fallback, healthy, "https://new.example", saved = false, strings = strings).field.value)
+        assertEquals(false, SettingsLive.rpcFix(fallback, healthy, null, saved = false, strings = strings).restored)
+
+        // Saved and still probing: neither offline nor restored.
+        val checking = SettingsLive.rpcFix(fallback, gnosis.copy(rpc_health = NetProbeHealth.Checking), null, saved = true, strings = strings)
+        assertEquals(SettingsTone.Neutral, checking.badge.tone)
+        assertEquals(false, checking.restored)
+
+        val restored = SettingsLive.rpcFix(fallback, healthy, null, saved = true, strings = strings)
+        assertTrue(restored.restored)
+        assertEquals(SettingsTone.Ok, restored.badge.tone)
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.SettingsUi.COMMON_DONE), restored.primary)
+        assertTrue(restored.providers.isEmpty())
+        assertNull(restored.report)
     }
 }

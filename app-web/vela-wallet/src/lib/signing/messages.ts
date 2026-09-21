@@ -139,6 +139,8 @@ export interface SigningMessages {
 	/** The fee row after the quote failed; tapping it asks again. */
 	feeRetry: string;
 	feeTokenTitle: string;
+	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
+	feeShort: string;
 	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.

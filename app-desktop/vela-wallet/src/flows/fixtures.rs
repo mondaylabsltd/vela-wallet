@@ -297,6 +297,10 @@ pub struct TxDetail {
     /// The transaction's page on its chain's explorer (the web's
     /// `explorerTxURL`). `None` without a hash, and in the mocks.
     pub explorer_url: Option<SharedString>,
+    /// The record's delete (the web's `deleteLabel`): removes the local
+    /// record, not the transaction. `None` in the mocks, which have nothing
+    /// to delete.
+    pub delete_label: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -969,6 +973,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         facts,
         view_on_explorer: s.view_on_explorer.clone(),
         explorer_url: None,
+        delete_label: None,
     }
 }
 

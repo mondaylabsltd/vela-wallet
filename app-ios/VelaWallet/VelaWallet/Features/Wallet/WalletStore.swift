@@ -31,6 +31,9 @@ final class WalletStore {
     /// The address the dashboard is currently reading for, so re-entering the
     /// tab does not re-announce the same account and throw away its holdings.
     private var scopedTo: String?
+    /// When `autoRefresh` runs: the wallet home on screen, the app active.
+    /// Installed after the store exists, since it closes over it.
+    @ObservationIgnored private(set) var homePoller: HomeBalancePoller!
 
     init(store: VelaStore, pool: RpcPool, held: HeldTokens) {
         self.executor = BalanceExecutor(store: store, pool: pool, held: held)
@@ -45,6 +48,7 @@ final class WalletStore {
         executor.onChainAssets = { [weak self] tokens in
             self?.chainAssetsArrived(tokens)
         }
+        homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
 
     /// Called from the home screen's `.task`, with the signed-in address.
@@ -69,6 +73,16 @@ final class WalletStore {
             "type": "refresh_requested", "force": true, "pull": pull,
         ]))
     }
+
+    /// The home's 10-minute refresh, as the web sends it: NOT forced, not a
+    /// pull — the core's own cache rules decide whether it reads anything.
+    func autoRefresh() {
+        core.dispatch(Self.autoRefreshEvent)
+    }
+
+    static let autoRefreshEvent = CoreJSON.string([
+        "type": "refresh_requested", "force": false, "pull": false,
+    ])
 
     /// Hold a pull gesture open until the refresh it started is done.
     ///

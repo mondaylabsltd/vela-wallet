@@ -54,6 +54,8 @@ object SigningLive {
         /** The person's "Sign with" choice for THIS request, and whether its list is open. */
         val signMethod: String = "auto",
         val signWithOpen: Boolean = false,
+        /** Whether the fee row's coin list is open (issue #262). */
+        val feeOpen: Boolean = false,
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -454,9 +456,33 @@ object SigningLive {
             fee.failed != null -> ctx.strings.t("componentsUi.gas.estimateFailed")
             else -> ctx.strings.t("componentsUi.gas.estimating")
         }
+        val choosable = fee.options.size > 1
+        val selected = fee.options.firstOrNull { it.selected }
+        // Issue #262: the core shut the gate because the coin that pays is not
+        // there — the send form's own sentence (#211), about the same shortfall.
+        val short = estimate != null && !fee.busy && fee.failed == null && !fee.confirm_fee_ready && selected?.insufficient == true
+        val options = if (ctx.feeOpen && choosable) {
+            fee.options.map { option ->
+                FeeTokenOption(
+                    id = option.contract ?: NATIVE_FEE_ID,
+                    mark = TokenMark(option.symbol.take(1).uppercase(), ctx.chainDot),
+                    name = option.symbol,
+                    balance = "${ctx.strings.t("componentsUi.gas.rowBalance")} ${SendLive.fromBase(option.balance, option.decimals)}",
+                    fee = option.amount?.let { "~${SendLive.feeFromBase(it, option.decimals)} ${option.symbol}" } ?: "—",
+                    selected = option.selected,
+                    disabled = option.insufficient,
+                )
+            }
+        } else {
+            emptyList()
+        }
         return FeeModel.OnChain(
             label = ctx.strings.t("componentsUi.gas.networkFee"),
             value = value,
+            selectorTitle = if (options.isEmpty()) null else ctx.strings.s("feeTokenTitle"),
+            options = options,
+            tappable = fee.failed != null || choosable,
+            warning = if (short) ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol)) else null,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
                 SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
@@ -468,6 +494,9 @@ object SigningLive {
         val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)
         return SendLive.feeLine(parts, SendLive.feePriceUsd(parts.contract, fee), ctx.money)
     }
+
+    /** The fee list's id for the chain's own coin (the web's `'native'`). */
+    const val NATIVE_FEE_ID = "native"
 
     /** The slide's verb: the core's intent id, in the corpus's words (the desktop's `confirm_label`). */
     fun confirmLabel(clear: ClearSigningView, s: VelaStrings): String = when (val confirm = clear.confirm) {

@@ -46,7 +46,13 @@ class ScanCallbacks(
  * by [QrDecoder], the photo tool through the picker, torch on its tool.
  */
 @Composable
-fun LiveScanSurface(model: ScanModel, callbacks: ScanCallbacks, modifier: Modifier = Modifier) {
+fun LiveScanSurface(
+    model: ScanModel,
+    callbacks: ScanCallbacks,
+    modifier: Modifier = Modifier,
+    /** The host's word about the last code read (a code it cannot use), on the status line. */
+    message: String? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var granted by remember {
@@ -88,7 +94,7 @@ fun LiveScanSurface(model: ScanModel, callbacks: ScanCallbacks, modifier: Modifi
         status = when {
             !granted -> callbacks.permissionText
             cameraDead -> callbacks.cameraUnavailable
-            else -> status
+            else -> message ?: status
         },
         statusAction = if (!granted) callbacks.grantLabel else null,
         onStatusAction = { scope.launch { granted = callbacks.requestPermission() } },
