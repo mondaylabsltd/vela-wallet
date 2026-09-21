@@ -392,6 +392,18 @@ pub enum SignSubmitOutcome {
     Succeeded {
         result: String,
     },
+    /// The bundler accepted the op but its receipt did not arrive inside the
+    /// shell's wait (~120 s). The page is still answered — with the op hash,
+    /// since a dApp expects SOME hash — but nothing is known to have landed,
+    /// so the pending record is NOT closed here: the tx tracker (handed the
+    /// op at [`Event::OpSubmitted`]) settles it to confirmed/failed when the
+    /// receipt actually appears (issue 262: an un-reimbursable op sat in the
+    /// bundler forever while its record claimed "confirmed"). The core never
+    /// tries to tell a tx hash from an op hash — both are 32-byte hex — so
+    /// the shell must say which one it holds.
+    ReceiptPending {
+        user_op_hash: String,
+    },
     /// User dismissed the passkey sheet — never an error, never a response
     /// (`dapp-connection.tsx:808-812`).
     PasskeyCancelled,
@@ -2020,6 +2032,60 @@ fn on_submit(
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.record_id = Some(record.record_id.clone());
                     inner.stage = Stage::PersistingResult { result };
+                }
+                let command = request_op(model, SignOperation::PersistRecord { record }, false);
+                Command::all([command, render()])
+            }
+        }
+        SignSubmitOutcome::ReceiptPending { user_op_hash } => {
+            model.settle(&fl.id, SignSettledOutcome::Submitted);
+            let respond = respond_op(
+                &fl.transport_id,
+                &fl.id,
+                SignResponsePayload::Ok {
+                    result: Some(user_op_hash.clone()),
+                },
+            );
+            if fl.record_id.is_some() {
+                // The pending record from `OpSubmitted` stays pending — the
+                // tracker already holds it (`tracker_handoff`) and alone may
+                // close it. Answer the page, emit NO confirming patch.
+                let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
+                model.inflight = None;
+                if clears_sheet {
+                    model.clear_sheet();
+                }
+                ops_and_render(model, vec![respond])
+            } else {
+                // No `OpSubmitted` was seen: the durable record must still
+                // precede the answer (§4) — persisted PENDING under the op
+                // hash and handed to the tracker, then answered on the ack.
+                let (kind, _) = record_shape(&fl.method);
+                let record = SignRecord {
+                    record_id: record_id_for(&fl.method, now_ms),
+                    kind,
+                    method: fl.method.clone(),
+                    params_json: fl.params_json.clone(),
+                    result: String::new(),
+                    from: fl.address.clone(),
+                    chain_id: fl.chain_id,
+                    now_ms,
+                    status: SignRecordStatus::Pending,
+                    user_op_hash: user_op_hash.clone(),
+                    dapp_origin: fl.record_origin.clone(),
+                    intent: fl.intent.clone(),
+                };
+                model.tracker_handoff = Some(SignTrackerHandoff {
+                    user_op_hash: user_op_hash.clone(),
+                    record_ids: vec![record.record_id.clone()],
+                    chain_id: fl.chain_id,
+                });
+                if let Some(inner) = model.inflight.as_mut() {
+                    inner.op_hash = Some(user_op_hash.clone());
+                    inner.record_id = Some(record.record_id.clone());
+                    inner.stage = Stage::PersistingResult {
+                        result: user_op_hash,
+                    };
                 }
                 let command = request_op(model, SignOperation::PersistRecord { record }, false);
                 Command::all([command, render()])

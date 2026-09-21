@@ -63,7 +63,7 @@ class DappSignMachineTest {
         store.values["vela.activeAccountIndex"] = "0"
     }
 
-    private fun scriptRelay() {
+    private fun scriptRelay(receiptLands: Boolean = true) {
         port.always("eth_getCode") { FakeRelayPort.body("0x6080") }
         port.always("eth_call") { FakeRelayPort.body("0x" + "0".repeat(63) + "7") }
         port.always("eth_gasPrice") { FakeRelayPort.body("0x3b9aca00") }
@@ -80,11 +80,16 @@ class DappSignMachineTest {
         }
         port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.body("0xhash") }
         // The receipt: pending once, then landed — the answer is the TX hash.
-        port.answer(
-            "eth_getUserOperationReceipt",
-            FakeRelayPort.body(JSONObject.NULL),
-            FakeRelayPort.body(JSONObject().put("success", true).put("sender", safe).put("receipt", JSONObject().put("transactionHash", "0xtx").put("logs", JSONArray()))),
-        )
+        // Or (issue 262) it never lands: the op sits in the bundler.
+        if (receiptLands) {
+            port.answer(
+                "eth_getUserOperationReceipt",
+                FakeRelayPort.body(JSONObject.NULL),
+                FakeRelayPort.body(JSONObject().put("success", true).put("sender", safe).put("receipt", JSONObject().put("transactionHash", "0xtx").put("logs", JSONArray()))),
+            )
+        } else {
+            port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
@@ -98,7 +103,9 @@ class DappSignMachineTest {
         }
     }
 
-    private fun controller(): SigningController {
+    private val handoffs = java.util.Collections.synchronizedList(ArrayList<Pair<String, List<String>>>())
+
+    private fun controller(receiptWaitMs: Long = 10_000L): SigningController {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
         val accounts = StoreAccountPort(AccountStore(store))
@@ -107,7 +114,7 @@ class DappSignMachineTest {
             scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { fixtureSigner },
             knownChains = { listOf(1, 100) },
             wallet = SignAccountRef(address = safe, credential_id = credential),
-            receiptWaitMs = 10_000L, receiptPollMs = 100L,
+            receiptWaitMs = receiptWaitMs, receiptPollMs = 100L,
             ports = object : SigningController.Ports {
                 override fun respond(transportId: String, id: String, json: JSONObject) {
                     events += "respond"
@@ -123,6 +130,7 @@ class DappSignMachineTest {
                 override suspend fun switchAccount(address: String) = true
                 override fun nativeSymbol(chainId: Int) = "XDAI"
                 override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
+                    handoffs += userOpHash to recordIds
                     val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
                     events += if (stored.contains(userOpHash)) "track:persisted" else "track:NOT-PERSISTED"
                 }
@@ -166,6 +174,35 @@ class DappSignMachineTest {
         assertEquals(origin, row.getString("dappOrigin"))
         assertTrue(row.getString("to").equals(founder, ignoreCase = true))
         withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * Issue 262: the bundler accepted the op but no receipt came inside the
+     * wait. The page still gets an answer — the op hash — but the record is
+     * NOT flipped to confirmed with the op hash as its tx hash: it stays
+     * pending, and the tracker (handed the op and the record) settles it.
+     */
+    @Test
+    fun `a late receipt answers the op hash and leaves the record pending for the tracker`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false)
+        val c = controller(receiptWaitMs = 600L)
+        c.open(transfer())
+        withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet && it.request != null } }
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertEquals("the page gets the op hash when the receipt is late", "0xhash", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
+        withTimeout(10_000) { c.closed.first { it } }
+        // Give any (wrong) confirming patch time to land before looking.
+        delay(500)
+        val row = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals("0xhash", row.getString("userOpHash"))
+        assertEquals("nothing is known to have landed", "pending", row.getString("status"))
+        assertEquals("the op hash is never recorded as a tx hash", "", row.optString("txHash"))
+        val handoff = handoffs.singleOrNull()
+        assertEquals("the tracker holds the op", "0xhash", handoff?.first)
+        assertEquals("…and the very record it must settle", listOf(row.getString("id")), handoff?.second)
     }
 
     @Test

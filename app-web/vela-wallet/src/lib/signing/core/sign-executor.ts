@@ -46,7 +46,7 @@ import { buildSigningRecord } from '$lib/services/dapp-history';
 import { nativeSymbol } from '$lib/services/networks';
 import { saveTransaction, updateTransaction } from '$lib/services/records';
 import { serializeAssetSim } from '$lib/services/sim/tx-simulation';
-import { handleDAppRequest } from '$lib/services/dapp-submit';
+import { DAppReceiptPendingError, handleDAppRequest } from '$lib/services/dapp-submit';
 import type { SigningAccount } from '$lib/services/dapp-submit';
 
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
@@ -244,6 +244,15 @@ export function createSignExecutor(ports: SignShellPorts) {
 						now_ms: Date.now()
 					};
 				} catch (error) {
+					// Accepted, receipt late (issue 262): the page still gets the op hash,
+					// but the core must not confirm the record — the tracker settles it.
+					if (error instanceof DAppReceiptPendingError) {
+						return {
+							type: 'submit',
+							outcome: { type: 'receipt_pending', user_op_hash: error.userOpHash },
+							now_ms: Date.now()
+						};
+					}
 					return {
 						type: 'submit',
 						outcome: await classifySubmit(operation, error),

@@ -230,6 +230,20 @@ struct SignRequestReadingTests {
         #expect(text == keccak256(data: Data("\u{19}Ethereum Signed Message:\n5".utf8) + Data("hello".utf8)))
     }
 
+    /// **A late receipt is not a confirmation** (issue 262). The core hears
+    /// `receipt_pending` with the op hash and keeps the record pending; only
+    /// a receipt in time is `succeeded` with the tx hash.
+    @Test func aLateReceiptIsReportedPendingNeverSucceeded() {
+        let late = SignExecutor.afterReceiptWait(userOpHash: "0xop", receipt: nil)
+        #expect(late["type"] as? String == "receipt_pending")
+        #expect(late["user_op_hash"] as? String == "0xop")
+        #expect(late["result"] == nil)
+
+        let inTime = SignExecutor.afterReceiptWait(userOpHash: "0xop", receipt: "0xtx")
+        #expect(inTime["type"] as? String == "succeeded")
+        #expect(inTime["result"] as? String == "0xtx")
+    }
+
     /// A signature moves nothing, so its feed row claims no value and no
     /// symbol. A row with a value shows up in the feed as money.
     @Test func aSignatureRecordCarriesNoMoney() {
