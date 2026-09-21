@@ -104,7 +104,12 @@ data class SignAccountRef(val address: String, val credential_id: String)
 data class SignDappIdentity(val name: String, val url: String? = null)
 
 @Serializable
-data class SignQuotedFee(val amount: String, val recipient: String)
+data class SignQuotedFee(
+    val amount: String,
+    val recipient: String,
+    /** The speed the displayed fee was priced at (spec 069), copied from the same estimate. */
+    val tier: app.getvela.wallet.feature.send.core.FeeTier? = null,
+)
 
 @Serializable
 data class SignErrorNotice(val kind: SignErrorKind, val detail: String? = null)
@@ -207,6 +212,11 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("succeeded")
     data class Succeeded(val result: String) : SignSubmitOutcome()
+
+    /** Accepted, but the receipt did not arrive inside the wait: the page gets the op hash, the record stays pending (issue 262). */
+    @Serializable
+    @SerialName("receipt_pending")
+    data class ReceiptPending(val user_op_hash: String) : SignSubmitOutcome()
 
     @Serializable
     @SerialName("passkey_cancelled")

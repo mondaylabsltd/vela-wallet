@@ -144,6 +144,10 @@ pub struct FactRow {
     /// Renders the value in the mono face (addresses, hashes).
     pub mono: bool,
     pub copyable: bool,
+    /// One calm sentence under the row, saying why its value is what it is —
+    /// the confirm's speed row uses it for a speed taken because it was free
+    /// (issue 686), so the tier and its reason reach the last screen together.
+    pub note: Option<SharedString>,
 }
 
 /// The chip's tone, matching the other three clients' vocabulary.
@@ -404,6 +408,49 @@ pub struct FeeRow {
     pub label: SharedString,
     pub mark: TokenMark,
     pub value: SharedString,
+    /// The refresh control's accessible name (spec 068) — `None` draws none.
+    /// The fee is the one figure on the form that moves on its own, and until
+    /// 069 a person on the desktop could not re-read it.
+    pub refresh: Option<SharedString>,
+    /// A measurement is out: the control says so, so a tap is never
+    /// ambiguous.
+    pub refreshing: bool,
+    /// The quote's 30 s TTL elapsed (`FeeView.stale`) — calm wording, never
+    /// a fault. `None` keeps the line's room empty so nothing jumps.
+    pub stale_note: Option<SharedString>,
+}
+
+/// One option of the speed control (spec 068).
+#[derive(Clone)]
+pub struct FeeSpeedOption {
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    pub label: SharedString,
+    /// What that speed buys, one line under the name.
+    pub detail: SharedString,
+    /// This option's OWN fee, or the "…" / "—" standing in for it.
+    pub value: SharedString,
+    /// Its gas bid as a range, already formatted by the core over the set.
+    pub gas_price: Option<SharedString>,
+    pub selected: bool,
+}
+
+/// The speed control under the fee row, folded until opened (spec 068). Every
+/// decision in it is the `fee_speed` core's (spec 069).
+#[derive(Clone)]
+pub struct FeeSpeedModel {
+    pub label: SharedString,
+    /// The folded summary: the tier in force for THIS send.
+    pub value: SharedString,
+    pub open: bool,
+    pub once_note: SharedString,
+    /// Why the tier in force is the fastest when the default is slower.
+    pub free_note: Option<SharedString>,
+    /// This network has one speed: the options give way to it.
+    pub single_note: Option<SharedString>,
+    pub gas_price_label: SharedString,
+    /// Whether the options carry a gas-bid line at all.
+    pub gas_price_line: bool,
+    pub options: Vec<FeeSpeedOption>,
 }
 
 /// DSD2L and DSD2bL. Split mode is `!recipients.is_empty()`: the mode IS the
@@ -467,6 +514,9 @@ pub struct SendForm {
     /// Live only: what the core refused, and the way out.
     pub notice: Option<SendNotice>,
     pub fee: FeeRow,
+    /// The speed control (spec 068). `None` draws none — a surface with no
+    /// quote sessions behind it must not offer a choice it cannot honour.
+    pub speed: Option<Box<FeeSpeedModel>>,
     pub cta: SharedString,
     /// The core's `can_continue`, plus the pre-check's busy state. The mock's
     /// button is always armed.
@@ -649,6 +699,7 @@ fn fact(label: &SharedString, value: impl Into<SharedString>) -> FactRow {
         lead: FactLead::None,
         mono: false,
         copyable: false,
+        note: None,
     }
 }
 
@@ -854,6 +905,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             }),
             mono: received,
             copyable: true,
+            note: None,
         },
         FactRow {
             label: s.detail_chain.clone(),
@@ -861,6 +913,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             lead: FactLead::Token(mark(network.code, (network.color)())),
             mono: false,
             copyable: false,
+            note: None,
         },
     ];
     // Only an ERC-20 transfer has a contract. DA3L's native coin does not, and
@@ -874,6 +927,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             lead: FactLead::None,
             mono: true,
             copyable: true,
+            note: None,
         });
     }
     facts.push(fact(
@@ -890,6 +944,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         lead: FactLead::None,
         mono: true,
         copyable: true,
+        note: None,
     });
 
     TxDetail {
@@ -1036,6 +1091,21 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         } else {
             "0.0021 ETH · ≈$0.55".into()
         },
+        refresh: Some(s.fee_refresh.clone()),
+        refreshing: false,
+        stale_note: None,
+    };
+    // Folded, as every send starts: the word and the tier in force.
+    let speed = FeeSpeedModel {
+        label: s.fee_speed_label.clone(),
+        value: s.gas_tier_fast.clone(),
+        open: false,
+        once_note: s.fee_speed_once.clone(),
+        free_note: None,
+        single_note: None,
+        gas_price_label: s.gas_price_label.clone(),
+        gas_price_line: false,
+        options: Vec::new(),
     };
     let token = (
         mark("USDT", chain_ethereum()),
@@ -1095,6 +1165,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
             pick_contacts: None,
             notice: None,
             fee,
+            speed: Some(Box::new(speed.clone())),
             cta: s.continue_btn.clone(),
             cta_state: CtaState::Enabled,
         };
@@ -1119,6 +1190,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         pick_contacts: None,
         notice: None,
         fee,
+        speed: Some(Box::new(speed)),
         cta: s.continue_btn.clone(),
         cta_state: CtaState::Enabled,
     }
@@ -1242,6 +1314,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 lead: FactLead::Identicon(wallet::ADDRESS_FULL.into()),
                 mono: false,
                 copyable: false,
+                note: None,
             },
             FactRow {
                 label: s.to_label.clone(),
@@ -1249,6 +1322,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 lead: FactLead::Identicon(ALICE_FULL.into()),
                 mono: true,
                 copyable: false,
+                note: None,
             },
             FactRow {
                 label: s.detail_chain.clone(),
@@ -1256,6 +1330,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 lead: FactLead::Token(mark(NETWORKS[0].code, (NETWORKS[0].color)())),
                 mono: false,
                 copyable: false,
+                note: None,
             },
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),
         ],

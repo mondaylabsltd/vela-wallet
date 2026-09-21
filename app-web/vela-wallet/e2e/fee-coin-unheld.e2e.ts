@@ -112,6 +112,10 @@ test('a gas coin the account does not hold is refused, not signed', async ({ pag
 	});
 
 	await page.goto('/en/parallel');
+	// The button is in the server's HTML before the page hydrates; pressed then,
+	// it does nothing and the URL wait runs out the whole test (batch.e2e.ts).
+	// The fixture list fills on mount — a row in it means the handlers are on.
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	await page.waitForURL(/\/en\/wallet$/);
 	await seedNetworkOverrides(

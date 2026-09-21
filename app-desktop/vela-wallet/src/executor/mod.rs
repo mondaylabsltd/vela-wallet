@@ -45,6 +45,8 @@ pub mod dapp_rpc;
 pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;
+pub mod fee_signals;
+pub mod fee_tier_pref;
 pub mod format_prefs;
 pub mod gpui_http;
 pub mod identity;

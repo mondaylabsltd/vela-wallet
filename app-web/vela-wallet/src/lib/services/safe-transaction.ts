@@ -32,6 +32,9 @@ import {
 	encodeSetupData,
 	fromHex,
 	functionSelector,
+	bundlerQuoteCacheable,
+	feeSignalsCacheTtlMs,
+	gasSignalsCacheable,
 	keccak256,
 	minGasPriceWei,
 	parsePublicKey,
@@ -1110,7 +1113,9 @@ export interface RawGasSignals {
 //     reuses the inputs that failed it), and at the START of every submit and
 //     of `refreshGasPrice`, beside each `_gasPriceCache.delete` — so the
 //     submit, and the first quote after it, landed or not, measure again.
-const FEE_SIGNALS_CACHE_TTL = 15_000; // 15s — the same window as GAS_PRICE_CACHE_TTL
+// The window and what may be held are the core's (`feeSignalsCacheTtlMs`,
+// `gasSignalsCacheable`, `bundlerQuoteCacheable`), asked at use — the wasm is
+// not loaded when this module is.
 const _rawGasSignalsCache = new Map<
 	number,
 	{ at: number; wantTip: boolean; signals: RawGasSignals }
@@ -1167,7 +1172,7 @@ export async function fetchRawGasSignals(
 	wantTip: boolean
 ): Promise<RawGasSignals> {
 	const cached = _rawGasSignalsCache.get(chainId);
-	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) {
+	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < feeSignalsCacheTtlMs()) {
 		return { ...cached.signals };
 	}
 	const key = `${chainId}:${wantTip}`;
@@ -1216,11 +1221,12 @@ async function readRawGasSignals(
 	// A block that ANSWERED without `baseFeePerGas` is a real pre-London reading,
 	// not a failed leg; a block that did not answer is.
 	const blockAnswered = typeof blockRes?.result === 'object' && blockRes.result !== null;
-	const complete =
-		signals.ethGasPrice !== null &&
-		BigInt(signals.ethGasPrice) > 0n &&
-		blockAnswered &&
-		(!wantTip || signals.priorityFee !== null);
+	const complete = gasSignalsCacheable(
+		signals.ethGasPrice,
+		blockAnswered,
+		wantTip,
+		signals.priorityFee
+	);
 	return { signals, complete };
 }
 
@@ -1263,7 +1269,7 @@ export async function fetchRawBundlerQuote(
 	if (gasQuoteShouldZero(chainId)) return readRawBundlerQuote(chainId, tier);
 	const key = `${chainId}:${tier}`;
 	const cached = _rawBundlerQuoteCache.get(key);
-	if (cached && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) return { ...cached.quote };
+	if (cached && Date.now() - cached.at < feeSignalsCacheTtlMs()) return { ...cached.quote };
 	const pending = _rawBundlerQuoteRequests.get(key);
 	if (pending) return pending.then((quote) => (quote ? { ...quote } : null));
 	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
@@ -1276,7 +1282,7 @@ export async function fetchRawBundlerQuote(
 			// was in flight.
 			if (
 				quote &&
-				BigInt(quote.maxFeePerGas) > 0n &&
+				bundlerQuoteCacheable(quote.maxFeePerGas) &&
 				!gasQuoteShouldZero(chainId) &&
 				(_feeSignalsEpoch.get(chainId) ?? 0) === epoch
 			) {

@@ -83,7 +83,7 @@ class UserOpSpine(
     }
 
     /** The displayed fee, signed verbatim. */
-    data class Quoted(val amount: String, val recipient: String)
+    data class Quoted(val amount: String, val recipient: String, val tier: FeeTier? = null)
 
     sealed class Failure {
         data object PasskeyCancelled : Failure()
@@ -132,6 +132,9 @@ class UserOpSpine(
     suspend fun signMessage(chainId: Int, account: String, originalHash: ByteArray, signingStarted: () -> Unit = {}): String {
         val keys = accounts.keysOf(account)
         if (keys.isEmpty()) other("No passkey credential for the active account")
+        // A submit, and the first quote after it, landed or not, measure the
+        // chain again (issue 212).
+        relay.invalidateFeeSignals(chainId)
         val pinned = keys.first()
         val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
             .getOrElse { other(it.message ?: "The message could not be hashed") }
@@ -251,7 +254,8 @@ class UserOpSpine(
                 keys,
             )
         }.getOrElse { other(it.message ?: "Failed to create signature") }
-        return when (val answer = relay.sendUserOp(chainId, userOpRelayJson(signed, feeToken.takeIf { tempo }))) {
+        // The speed the displayed fee was priced at, named beside it (spec 069).
+        return when (val answer = relay.sendUserOp(chainId, userOpRelayJson(signed, feeToken.takeIf { tempo }), quoted.tier)) {
             is RelayClient.SubmitAnswer.Accepted -> answer.userOpHash
             is RelayClient.SubmitAnswer.Rejected -> {
                 val message = relayErrorMessage(answer.errorJson)

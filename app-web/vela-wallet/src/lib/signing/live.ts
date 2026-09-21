@@ -24,7 +24,17 @@ import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
-import { feeAmountText, feeLine, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
+import {
+	feeAmountText,
+	feeLine,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts
+} from '$lib/flows/fee-line';
+import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
+import type { FeeSpeedModel } from '$lib/flows/model';
+import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
+import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
 import { trimBalance } from '$lib/wallet/live';
 import { chainName } from '$lib/services/networks';
@@ -52,6 +62,12 @@ export interface SigningLiveInputs {
 	feeOpen?: boolean;
 	/** The display currency the fee's "≈" half is written in (issue 201). */
 	currency: CurrencyView;
+	/**
+	 * The speed control (spec 069), as the `fee_speed` core decided it — the
+	 * send form's, so the two surfaces choose a speed the same way. Absent
+	 * where there is no fee session behind the sheet.
+	 */
+	speed?: { view: FeeSpeedView; feeOptions(tier: FeeTier): FeeView['options'] };
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -301,6 +317,21 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	return blocks;
 }
 
+/**
+ * NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): for the
+ * moment between a speed being picked and its own figure landing, the fee in
+ * hand is the previous speed's. The row says "estimating", and the slide stays
+ * shut — the core's `confirm_fee_ready` is still true then, and would sign the
+ * speed the person just walked away from.
+ */
+function feeOfAnotherTier({ fee, speed }: SigningLiveInputs): boolean {
+	return (
+		fee.fee !== null &&
+		speed !== undefined &&
+		offeredTier(fee.fee.tier) !== offeredTier(speed.view.tier)
+	);
+}
+
 /** The fee, in the shape the drawn row renders. Off-chain requests have none. */
 function feeModel(inputs: SigningLiveInputs): FeeModel {
 	const { sign, fee, m } = inputs;
@@ -308,13 +339,17 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	if (kind === 'personal_sign' || kind === 'typed_data') {
 		return { kind: 'offchain', note: m.okNoNetworkFee };
 	}
-	if (!fee.fee) {
+	const speed = speedModel(inputs);
+	const ofAnotherTier = feeOfAnotherTier(inputs);
+	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
 		// mainnet transaction without ever being told what it costs — and the
 		// slide stays shut in both states, as it does on the phones.
-		if (fee.busy) return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating };
-		if (fee.failed) return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry };
+		if (fee.busy || ofAnotherTier) {
+			return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating, speed };
+		}
+		if (fee.failed) return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry, speed };
 		return { kind: 'hidden' };
 	}
 	// The send screens' own line, through the send screens' own formatter: the
@@ -362,7 +397,21 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
 			: undefined;
-	return { kind: 'onchain', label: m.feeLabel, value, selector, warning };
+	return { kind: 'onchain', label: m.feeLabel, value, selector, speed, warning };
+}
+
+/**
+ * The speed control under the fee (spec 069), through the builder the send
+ * form uses — each option's fee in this sheet's own fee line.
+ */
+function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
+	const speed = inputs.speed;
+	if (speed === undefined) return undefined;
+	return speedControlModel(speed.view, inputs.m.speed, (quote, tier) => {
+		const options = speed.feeOptions(tier);
+		const parts = feeParts(quote, options);
+		return feeLineParts(parts, feeOptionPriceUsd(parts.contract, options), inputs.currency);
+	});
 }
 
 function techModel(inputs: SigningLiveInputs): TechModel {
@@ -444,7 +493,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
 	// still be waiting for a cap; the fee may still be in flight.
-	const feeReady = feeModel(inputs).kind !== 'onchain' || fee.confirm_fee_ready;
+	const feeReady =
+		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
 	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
 
 	return {

@@ -24,6 +24,17 @@ import VelaCore
 /// Declared beside its user so adding a machine touches no shared file.
 extension NetworkAdminCore: CoreBridge {}
 extension DisplayCurrencyCore: CoreBridge {}
+extension FeeTierPrefCore: CoreBridge {}
+
+/// `fee_tier_pref`'s view (spec 069): the tier every send STARTS at — always a
+/// real one, the factory `fast` when nothing was chosen.
+struct FeeTierPrefViewWire: Decodable, Equatable {
+    let tier: String
+    /// `false` ⇒ the factory default is showing, not a choice.
+    let committed: Bool
+    /// The tiers Settings may offer, fastest first — never the dead `rapid`.
+    let offered: [String]
+}
 
 @MainActor
 @Observable
@@ -41,6 +52,10 @@ final class SettingsStore {
     /// and a caller should not have to know how many cores are behind it.
     private(set) var currency: CurrencyViewWire?
 
+    /// The default transaction speed (spec 069) — app-wide like the currency:
+    /// Settings shows it and every send starts at it.
+    private(set) var feeTier: FeeTierPrefViewWire?
+
     /// `true` once the core has read all four stores. Mutations sent before it
     /// are dropped by the core.
     var isLoaded: Bool { networkAdmin?.loaded == true }
@@ -49,6 +64,7 @@ final class SettingsStore {
     private let currencyExecutor: DisplayCurrencyExecutor
     private var core: CoreStore<NetViewWire>!
     private var currencyCore: CoreStore<CurrencyViewWire>!
+    private var feeTierCore: CoreStore<FeeTierPrefViewWire>!
 
     /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
     /// machine needs it because its first rate rung is Chainlink's fiat feeds
@@ -71,6 +87,26 @@ final class SettingsStore {
             onView: { [weak self] view in self?.currency = view },
             onFault: { print("[vela-wallet] display_currency fault: \($0)") }
         )
+        let feeTierExecutor = FeeTierExecutor(store: store)
+        self.feeTierCore = CoreStore(
+            bridge: FeeTierPrefCore(),
+            perform: { operation in feeTierExecutor.perform(operation) },
+            onView: { [weak self] view in self?.feeTier = view },
+            onFault: { print("[vela-wallet] fee_tier_pref fault: \($0)") }
+        )
+    }
+
+    /// Boot the default-speed machine. App-wide and idempotent, like the
+    /// currency: the send form's folded control shows THIS, not a hardcoded
+    /// tier, so it has to be read before anybody opens Settings.
+    func openFeeTier() {
+        feeTierCore.boot(CoreJSON.string(["type": "refresh"]))
+    }
+
+    /// A row of the speed sheet — and only that sheet: a pick on the send
+    /// screen is one-shot and never comes here.
+    func chooseFeeTier(_ tier: String) {
+        feeTierCore.dispatch(CoreJSON.string(["type": "user_chose", "tier": tier]))
     }
 
     /// USD → that currency, through the display machine's own waterfall.

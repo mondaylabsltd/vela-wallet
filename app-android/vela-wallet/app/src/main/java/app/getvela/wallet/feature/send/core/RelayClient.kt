@@ -14,8 +14,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import uniffi.vela_core_uniffi.bundlerQuoteCacheable
 import uniffi.vela_core_uniffi.entryPointAddress
+import uniffi.vela_core_uniffi.feeSignalsCacheTtlMs
 import uniffi.vela_core_uniffi.functionSelector
+import uniffi.vela_core_uniffi.gasSignalsCacheable
 
 /**
  * The relay (bundler) and the chain, as the send path talks to them —
@@ -175,14 +178,59 @@ class RelayClient(
 
     /** `pimlico_getUserOperationGasPrice`, one tier. */
     suspend fun bundlerQuote(chainId: Int, tier: FeeTier): FeeBundlerQuote? {
+        val key = "$chainId:${tierKey(tier)}"
+        synchronized(feeSignalCache) {
+            (feeSignalCache[key] as? Pair<*, *>)?.let { (quote, at) ->
+                if (quote is FeeBundlerQuote && now() - (at as Long) < feeSignalsTtlMs) return quote
+            }
+        }
+        val epoch = feeSignalEpoch(chainId)
+        val quote = readBundlerQuote(chainId, tier)
+        // Never a missing quote, nor a zero cap the core rejects as
+        // degenerate: "the relay did not answer" is not a measurement. The
+        // rule is the core's (`fee_policy::bundler_quote_cacheable`).
+        if (quote != null && bundlerQuoteCacheable(quote.max_fee_per_gas) && feeSignalEpoch(chainId) == epoch) {
+            synchronized(feeSignalCache) { feeSignalCache[key] = quote to now() }
+        }
+        return quote
+    }
+
+    private suspend fun readBundlerQuote(chainId: Int, tier: FeeTier): FeeBundlerQuote? {
         val body = bundlerCall(chainId, "pimlico_getUserOperationGasPrice", emptyList()) ?: return null
         if (body.has("error")) return null
         val row = body.optJSONObject("result")?.optJSONObject(tierKey(tier)) ?: return null
         return FeeBundlerQuote(
             max_fee_per_gas = decimalOfHex(row.opt("maxFeePerGas")) ?: return null,
+            // The tip this tier is signed with — what the core turns into the
+            // gas bid on screen (issue 684). Absent on a generic bundler.
+            max_priority_fee_per_gas = decimalOfHex(row.opt("maxPriorityFeePerGas")),
             network_fee_per_gas = decimalOfHex(row.opt("networkFeePerGas")),
             relayer_fee_per_gas = decimalOfHex(row.opt("relayerFeePerGas")),
         )
+    }
+
+    // -- the fee's inputs, held still (issue 212; Android's since spec 069) --
+    //
+    // The fee session re-samples on every quote run, and since 069 up to three
+    // sessions price one send at once, one per speed. Uncached, a recipient
+    // edit re-rolled the gas price, and three tiers priced on three readings
+    // could not be compared. A COMPLETE reading is held 15 s per chain — the
+    // web's `fetchRawGasSignals` window — and dropped by the refresh control,
+    // a failed quote and every submit ([invalidateFeeSignals]). The epoch
+    // stops a read that was in flight when somebody asked for a fresh one
+    // from landing its older answer in the cache.
+
+    private val feeSignalCache = HashMap<String, Pair<Any, Long>>()
+    private val feeSignalEpochs = HashMap<Int, Long>()
+
+    private fun feeSignalEpoch(chainId: Int): Long = synchronized(feeSignalCache) { feeSignalEpochs[chainId] ?: 0L }
+
+    /** Forget this chain's held readings, so the next quote run measures again. */
+    fun invalidateFeeSignals(chainId: Int) {
+        synchronized(feeSignalCache) {
+            feeSignalEpochs[chainId] = (feeSignalEpochs[chainId] ?: 0L) + 1
+            feeSignalCache.keys.removeAll { it.startsWith("$chainId:") }
+        }
     }
 
     sealed class EstimateAnswer {
@@ -226,12 +274,21 @@ class RelayClient(
      * `eth_sendUserOperation`, retried up to three times while the relay says
      * it is busy ("currently processing", "Retry later") — the web's loop.
      */
-    suspend fun sendUserOp(chainId: Int, opJson: String): SubmitAnswer {
+    /**
+     * `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
+     * about speed (spec 068; Android's since 069). The tier is a NAME, never a
+     * wei figure: the relay resolves it at submit time and clamps it between
+     * its inclusion floor and what the signed reimbursement funds. `null`
+     * sends the pre-068 two-element params exactly, and the dead `rapid` is
+     * never sent — a relay refuses an unknown name with -32602.
+     */
+    suspend fun sendUserOp(chainId: Int, opJson: String, tier: FeeTier? = null): SubmitAnswer {
         val op = JSONObject(opJson)
-        VelaLog.event("relay.submit", "sending", "sender" to op.optString("sender"), "nonce" to op.optString("nonce"))
+        VelaLog.event("relay.submit", "sending", "sender" to op.optString("sender"), "nonce" to op.optString("nonce"), "tier" to (tier?.let(::tierKey) ?: "-"))
+        val params = submitParams(op, tier)
         var attempt = 0
         while (true) {
-            val body = bundlerCall(chainId, "eth_sendUserOperation", listOf(op, entryPointAddress()))
+            val body = bundlerCall(chainId, "eth_sendUserOperation", params)
                 ?: return SubmitAnswer.Unreachable
             body.optString("result").takeIf { it.startsWith("0x") }?.let { return SubmitAnswer.Accepted(it) }
             val error = body.opt("error")
@@ -314,17 +371,37 @@ class RelayClient(
 
     data class GasSignals(val ethGasPrice: String?, val baseFee: String?, val priorityFee: String?)
 
-    /** The three raw gas signals, each `null` when unreadable; the core prices with what it has. */
+    /**
+     * The three raw gas signals, each `null` when unreadable; the core prices
+     * with what it has. Held 15 s per chain when the reading is COMPLETE —
+     * every leg that was asked for answered, and the price is positive — and
+     * never otherwise (see [invalidateFeeSignals]).
+     */
     suspend fun gasSignals(chainId: Int, wantTip: Boolean): GasSignals {
+        val key = "$chainId:gas:$wantTip"
+        synchronized(feeSignalCache) {
+            (feeSignalCache[key] as? Pair<*, *>)?.let { (signals, at) ->
+                if (signals is GasSignals && now() - (at as Long) < feeSignalsTtlMs) return signals
+            }
+        }
+        val epoch = feeSignalEpoch(chainId)
         val gasPrice = chainCall(chainId, "eth_gasPrice", emptyList())?.let { decimalOfHex(it.opt("result")) }
-        val baseFee = chainCall(chainId, "eth_getBlockByNumber", listOf("latest", false))
-            ?.optJSONObject("result")?.let { decimalOfHex(it.opt("baseFeePerGas")) }
+        val block = chainCall(chainId, "eth_getBlockByNumber", listOf("latest", false))?.optJSONObject("result")
+        val baseFee = block?.let { decimalOfHex(it.opt("baseFeePerGas")) }
         val tip = if (wantTip) {
             chainCall(chainId, "eth_maxPriorityFeePerGas", emptyList())?.let { decimalOfHex(it.opt("result")) }
         } else {
             null
         }
-        return GasSignals(gasPrice, baseFee, tip)
+        val signals = GasSignals(gasPrice, baseFee, tip)
+        // A block that ANSWERED without `baseFeePerGas` is a real pre-London
+        // reading; a block that did not answer is a failed leg. What may be
+        // held is the core's rule (`fee_policy::gas_signals_cacheable`).
+        val complete = gasSignalsCacheable(gasPrice, block != null, wantTip, tip)
+        if (complete && feeSignalEpoch(chainId) == epoch) {
+            synchronized(feeSignalCache) { feeSignalCache[key] = signals to now() }
+        }
+        return signals
     }
 
     /** `EntryPoint.getNonce(sender, 0)` as a hex QUANTITY; `null` when unreadable. */
@@ -349,6 +426,9 @@ class RelayClient(
         synchronized(infoCache) { infoCache.clear() }
     }
 
+    /** The core's fee-signal window (`fee_policy::FEE_SIGNALS_CACHE_TTL_MS`). */
+    private val feeSignalsTtlMs: Long by lazy { feeSignalsCacheTtlMs().toLong() }
+
     private val getNonceSelector: String by lazy {
         functionSelector("getNonce(address,uint192)").joinToString("") { "%02x".format(it) }
     }
@@ -356,6 +436,7 @@ class RelayClient(
     private companion object {
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
+
         const val SUBMIT_MAX_RETRIES = 3
         const val SUBMIT_RETRY_DELAY_MS = 3_000L
 
@@ -444,4 +525,22 @@ class PoolRelayPort(
             }
         }.getOrDefault(RestAnswer.Failed)
     }
+}
+
+/**
+ * The name a submission gives its speed, or `null` to name none. Only the
+ * three offered names ever reach the relay: `rapid` is dead (spec 068) and a
+ * relay refuses an unknown name before any handler runs.
+ */
+internal fun wireTierName(tier: FeeTier?): String? = when (tier) {
+    FeeTier.Fast -> "fast"
+    FeeTier.Standard -> "standard"
+    FeeTier.Slow -> "slow"
+    FeeTier.Rapid, null -> null
+}
+
+/** `eth_sendUserOperation`'s params: two elements, or three with a speed. */
+internal fun submitParams(op: JSONObject, tier: FeeTier?): List<Any> {
+    val name = wireTierName(tier)
+    return if (name == null) listOf(op, entryPointAddress()) else listOf(op, entryPointAddress(), name)
 }

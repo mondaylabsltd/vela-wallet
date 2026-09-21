@@ -641,37 +641,170 @@ struct SummaryLineView: View {
 
 /// The network-fee row (component 26), on every send form.
 ///
-/// A row and not a card: the fee is a fact about the transfer, and the only
-/// thing to DO with it is change which token pays it — which is what the
-/// chevron opens. The SPEC sheet is explicit that the tier picker does not
-/// live here: the fee is shown, not chosen.
+/// A row and not a card: the fee is a fact about the transfer. The row opens
+/// the fee-coin sheet; beside it — outside its own tap, so measuring again
+/// never opens the sheet — the refresh control (spec 068; iOS's since 069),
+/// and under it the stale line, whose room is kept so Continue never moves
+/// under a thumb. The speed control (`FeeSpeedControlView`) lives under that.
 struct FeeRowView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
 
     let fee: FeeRowModel
     var onOpen: () -> Void = {}
+    var onRefresh: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: onOpen) {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
             HStack(spacing: Tokens.Space.s8) {
-                Text(verbatim: fee.label)
-                    .typeRole(Typography.body.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                Spacer(minLength: Tokens.Space.s8)
-                InlineTokenMark(mark: fee.mark)
-                Text(verbatim: fee.value)
-                    .typeRole(Typography.body.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                    .lineLimit(1)
-                LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                    .foregroundStyle(theme.fgMuted)
+                Button(action: onOpen) {
+                    HStack(spacing: Tokens.Space.s8) {
+                        Text(verbatim: fee.label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                        Spacer(minLength: Tokens.Space.s8)
+                        InlineTokenMark(mark: fee.mark)
+                        Text(verbatim: fee.value)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgBase)
+                            .lineLimit(1)
+                        LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .padding(Tokens.Space.s12)
+                    .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(fee.openLabel)
+                if let refreshLabel = fee.refreshLabel {
+                    Button { onRefresh?() } label: {
+                        // Dimmed while a measurement is out — whoever started
+                        // it — so a second tap is never ambiguous.
+                        LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
+                            .foregroundStyle(fee.refreshing ? theme.fgSubtle : theme.fgMuted)
+                            .padding(Tokens.Space.s12)
+                            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(onRefresh == nil)
+                    .accessibilityLabel(refreshLabel)
+                }
             }
-            .padding(Tokens.Space.s12)
-            .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
-            .contentShape(Rectangle())
+            if fee.refreshLabel != nil {
+                // Calm and muted: an old figure is not a fault. Always the
+                // line's full height, so nothing jumps when it appears.
+                Text(verbatim: fee.staleNote ?? " ")
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+                    .padding(.horizontal, Tokens.Space.s12)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(fee.openLabel)
+    }
+}
+
+/// The speed control under the fee row (spec 068), folded until opened. Every
+/// decision in it is the `fee_speed` core's (spec 069).
+///
+/// Folded: the word and the tier in force — THEIR default, never a hardcoded
+/// one. Opened: the one-shot promise first (somebody about to change one
+/// payment needs to know every later one is untouched), then three options —
+/// name, its own fee, its gas bid, what it buys, a tick — or, on a network
+/// with one speed, that one statement instead.
+struct FeeSpeedControlView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let speed: FeeSpeedModel
+    var onToggle: () -> Void = {}
+    var onPick: (String) -> Void = { _ in }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+            Button(action: onToggle) {
+                HStack(spacing: Tokens.Space.s8) {
+                    Text(verbatim: speed.label)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                    Spacer(minLength: Tokens.Space.s8)
+                    Text(verbatim: speed.value)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .lineLimit(1)
+                    LucideIcon(.chevronDown, size: LucideIconSize.smallChevron)
+                        .foregroundStyle(theme.fgMuted)
+                        .rotationEffect(.degrees(speed.open ? 180 : 0))
+                }
+                .padding(.horizontal, Tokens.Space.s12)
+                .padding(.vertical, Tokens.Space.s8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(speed.open ? [.isSelected] : [])
+            // Folded AND open: the screen must never say "Fast" over a
+            // Settings row that says "Slow" without saying why.
+            if let free = speed.freeNote { note(free) }
+            if speed.open {
+                if let single = speed.singleNote {
+                    note(single)
+                } else {
+                    note(speed.onceNote)
+                    ForEach(speed.options) { option in
+                        Button { onPick(option.id) } label: { row(option) }
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(option.selected ? [.isSelected] : [])
+                    }
+                }
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(verbatim: text)
+            .typeRole(Typography.flowCaption.scaled(textScale))
+            .foregroundStyle(theme.fgSubtle)
+            .padding(.horizontal, Tokens.Space.s12)
+    }
+
+    private func row(_ option: FeeSpeedOptionModel) -> some View {
+        HStack(alignment: .top, spacing: Tokens.Space.s8) {
+            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                HStack(spacing: Tokens.Space.s8) {
+                    Text(verbatim: option.label)
+                        .typeRole((option.selected ? Typography.actionLabel : Typography.body).scaled(textScale))
+                        .foregroundStyle(option.selected ? theme.accentBase : theme.fgBase)
+                    Spacer(minLength: Tokens.Space.s8)
+                    Text(verbatim: option.value)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
+                        .lineLimit(1)
+                }
+                if speed.gasPriceLine {
+                    // Named, because an unnamed "3,244 wei" under a fee reads
+                    // as a second charge; held open empty while measuring.
+                    HStack {
+                        Spacer(minLength: 0)
+                        Text(verbatim: option.gasPrice.map { "\(speed.gasPriceLabel)  \($0)" } ?? " ")
+                            .typeRole(Typography.monoSmall.scaled(textScale))
+                            .foregroundStyle(theme.fgSubtle)
+                            .lineLimit(1)
+                    }
+                }
+                Text(verbatim: option.detail)
+                    .typeRole(Typography.flowCaption.scaled(textScale))
+                    .foregroundStyle(theme.fgSubtle)
+            }
+            LucideIcon(.check, size: LucideIconSize.checkmark)
+                .foregroundStyle(theme.accentBase)
+                .opacity(option.selected ? 1 : 0)
+        }
+        .padding(.horizontal, Tokens.Space.s12)
+        .padding(.vertical, Tokens.Space.s8)
+        .background(
+            RoundedRectangle(cornerRadius: Tokens.Radius.r12)
+                .fill(option.selected ? theme.bgRaised : Color.clear)
+        )
+        .contentShape(Rectangle())
     }
 }

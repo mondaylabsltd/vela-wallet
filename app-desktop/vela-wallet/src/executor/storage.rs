@@ -43,6 +43,9 @@ pub const KEY_NETWORK_CONFIG: &str = "vela.networkConfig";
 pub const KEY_RPC_PROVIDERS: &str = "vela.rpcProviders";
 pub const KEY_RPC_BANNED: &str = "vela.rpc.banned";
 pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
+/// The default transaction speed (spec 068, on the desktop since 069). A bare
+/// tier name — `fast` / `standard` / `slow` — judged by the core, never here.
+pub const KEY_FEE_TIER: &str = "vela.feeTier";
 
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
@@ -521,6 +524,7 @@ pub(crate) mod tests {
                 KEY_NETWORK_CONFIG,
                 KEY_RPC_PROVIDERS,
                 KEY_DISPLAY_CURRENCY,
+                KEY_FEE_TIER,
             ] {
                 assert!(
                     matches!(read_value(key), Ok(None)),

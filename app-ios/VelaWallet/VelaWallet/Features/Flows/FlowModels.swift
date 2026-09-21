@@ -120,6 +120,10 @@ struct FactRowModel: Identifiable {
     /// ELLIPSED, and copying `0x1234…abcd` gives somebody a string no chain
     /// has ever heard of. Android's `FactRow` has carried this field since 043.
     var copyValue: String?
+    /// One calm sentence under the row saying why its value is what it is —
+    /// the confirm's speed row uses it for a speed taken because it was free
+    /// (issue 686), so the tier and its reason reach the last screen together.
+    var note: String?
 }
 
 enum StatusTone {
@@ -420,6 +424,47 @@ struct FeeRowModel {
     let mark: TokenMarkModel
     let value: String
     let openLabel: String
+    /// The refresh control's accessible name (spec 068; iOS's since 069) —
+    /// `nil` draws none. The fee is the one figure on the form that moves on
+    /// its own, and a person could neither re-read it nor be told it went old.
+    var refreshLabel: String? = nil
+    /// A measurement is out, whoever started it: the control says so.
+    var refreshing = false
+    /// The quote's 30 s TTL ran out — calm, never a fault. Its line is kept.
+    var staleNote: String? = nil
+}
+
+/// One option of the speed control (spec 068).
+struct FeeSpeedOptionModel: Identifiable {
+    /// The wire tier — `fast` / `standard` / `slow`.
+    let id: String
+    /// The SPEED — 超快 / 标准 / 较慢 — never a number.
+    let label: String
+    /// What that speed buys, one line under the name.
+    let detail: String
+    /// This option's OWN fee, or the "…" / "—" standing in for it.
+    let value: String
+    /// Its gas bid as a range, already formatted by the core over the set.
+    let gasPrice: String?
+    let selected: Bool
+}
+
+/// The speed control under the fee row, folded until opened (spec 068). Every
+/// decision in it is the `fee_speed` core's (spec 069); this is only words.
+struct FeeSpeedModel {
+    let label: String
+    /// The folded summary: the tier in force for THIS send.
+    let value: String
+    let open: Bool
+    let onceNote: String
+    /// Why the tier in force is the fastest when the default is slower.
+    let freeNote: String?
+    /// This network has one speed: the options give way to it.
+    let singleNote: String?
+    let gasPriceLabel: String
+    /// Whether the options carry a gas-bid line at all.
+    let gasPriceLine: Bool
+    let options: [FeeSpeedOptionModel]
 }
 
 struct AmountFieldModel {
@@ -496,6 +541,8 @@ struct SendFormModel {
     var recipientActions: [RecipientActionModel] = []
     var summary: SummaryLineModel?
     let fee: FeeRowModel
+    /// The speed control (spec 068). `nil` draws none.
+    var speed: FeeSpeedModel? = nil
     let cta: String
     /// Split only: why `Continue` is dark — the FIRST unfinished row and the
     /// field it still needs, from the core's `split_row_issues`. Said only

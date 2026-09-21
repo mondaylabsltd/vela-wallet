@@ -191,6 +191,60 @@ pub const TEMPO_SPLIT_SAFETY_GAS: u128 = 20_000;
 pub const TEMPO_SPLIT_SAFETY_BPS: u128 = 300;
 
 // ---------------------------------------------------------------------------
+// The fee-signal cache (issue 212) — a SHELL cache with core rules
+// ---------------------------------------------------------------------------
+//
+// The chain's gas signals and the relay's gas quote are held per chain for a
+// short window, shared by every `fee_policy` session on the page — the tier
+// previews are sessions of their own (spec 069), and sharing the chain reads
+// is what keeps three rows from costing three round trips. So the cache
+// cannot live in one machine's model; each shell keeps it. What it may keep,
+// and for how long, is decided here, once, for all four.
+
+/// How long a chain's gas signals and the relay's gas quote stay good, per
+/// chain, in milliseconds.
+pub const FEE_SIGNALS_CACHE_TTL_MS: u32 = 15_000;
+
+/// A decimal wei string as an integer, or `None` for anything that is not
+/// plain ASCII digits: "nothing was published" and "the price is zero" are
+/// different facts, and only the second is a number.
+fn cache_wei(value: Option<&str>) -> Option<U256> {
+    let value = value?;
+    if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    U256::from_str_radix(value, 10).ok()
+}
+
+/// May this gas-signal read be held for [`FEE_SIGNALS_CACHE_TTL_MS`]? Only a
+/// REAL, COMPLETE measurement: a positive `eth_gasPrice` (without it this
+/// machine falls to its 5 gwei default — 100× on BSC), a block that ANSWERED
+/// (one without `baseFeePerGas` is a real pre-London reading; one that did not
+/// answer is a failed leg), and — where the tip was asked for — a tip (nearly
+/// the whole price on Gnosis; a tipless read under-prices it ~40×). One hiccup
+/// must not own the next fifteen seconds. Values are decimal wei, as
+/// [`RawGasSignals`] carries them.
+#[must_use]
+pub fn gas_signals_cacheable(
+    eth_gas_price: Option<&str>,
+    block_answered: bool,
+    want_tip: bool,
+    priority_fee: Option<&str>,
+) -> bool {
+    cache_wei(eth_gas_price).is_some_and(|price| !price.is_zero())
+        && block_answered
+        && (!want_tip || priority_fee.is_some())
+}
+
+/// May the relay's gas quote for one tier be held? Never a zero one — a
+/// degenerate quote this machine rejects, and pinning it would hold the
+/// fallback for fifteen seconds. (A missing quote is never offered at all.)
+#[must_use]
+pub fn bundler_quote_cacheable(max_fee_per_gas: &str) -> bool {
+    cache_wei(Some(max_fee_per_gas)).is_some_and(|fee| !fee.is_zero())
+}
+
+// ---------------------------------------------------------------------------
 // Money arithmetic — exact in 256 bits, narrowed once, never clamped midway
 // ---------------------------------------------------------------------------
 //

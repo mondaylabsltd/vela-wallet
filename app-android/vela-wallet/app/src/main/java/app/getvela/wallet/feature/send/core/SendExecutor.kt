@@ -268,7 +268,7 @@ class SendExecutor(
             account = op.account,
             calls = op.calls.map { UserOpCall(to = it.to, value = it.value, data = it.data) },
             gasFeeToken = op.gas_fee_token,
-            quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient) },
+            quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
             signingStarted = { ports.signingStarted() },
         )
     } catch (refused: UserOpSpine.Refused) {

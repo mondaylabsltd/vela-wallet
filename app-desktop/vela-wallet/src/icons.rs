@@ -66,6 +66,9 @@ pub enum Icon {
     Network,
     Server,
     Zap,
+    /// The default transaction speed's Settings page (spec 069) — lucide
+    /// `clock`, as the web's row draws it.
+    Clock,
     HardDrive,
     Info,
     LogOut,
@@ -206,6 +209,7 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         Icon::Zap => {
             r##"<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>"##
         }
+        Icon::Clock => r##"<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>"##,
         Icon::HardDrive => {
             r##"<path d="M10 16h.01"/><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><path d="M21.946 12.013H2.054"/><path d="M6 16h.01"/>"##
         }

@@ -79,6 +79,10 @@ test('Max says why it filled nothing when the fee outruns the balance', async ({
 	await stubRelay(page, RELAY, happyRelay('0x' + 'a1'.repeat(32), '0x' + 'b2'.repeat(32)));
 
 	await page.goto('/en/parallel');
+	// The button is in the server's HTML before the page hydrates; pressed then,
+	// it does nothing and the URL wait runs out the whole test (batch.e2e.ts).
+	// The fixture list fills on mount — a row in it means the handlers are on.
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	await page.waitForURL(/\/en\/wallet$/);
 

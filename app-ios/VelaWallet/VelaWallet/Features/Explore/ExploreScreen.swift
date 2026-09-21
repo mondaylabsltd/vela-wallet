@@ -35,6 +35,8 @@ struct ExploreScreen: View {
     /// Issue #262: the fee row's tap and a coin picked from its list.
     var onFee: () -> Void = {}
     var onFeePick: (String) -> Void = { _ in }
+    /// The live sheet's speed control (spec 069): `nil` folds, an id picks.
+    var onSpeed: (String?) -> Void = { _ in }
     /// The sheet went away without a tap. The core routes what that means by
     /// phase — a refusal before the commitment, a dismissal after it — so the
     /// shell reports the gesture and decides nothing.
@@ -215,7 +217,8 @@ struct ExploreScreen: View {
                     onAllowanceAmount: onAllowanceAmount,
                     onSignWith: onSignWith,
                     onFee: onFee,
-                    onFeePick: onFeePick
+                    onFeePick: onFeePick,
+                    onSpeed: onSpeed
                 )
                     .presentationDragIndicator(.visible)
                     .presentationDetents([.large])

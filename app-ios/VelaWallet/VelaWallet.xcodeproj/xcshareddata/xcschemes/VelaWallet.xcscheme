@@ -79,6 +79,10 @@
              macos-15 runner is minutes billed at ten times linux for a signal
              that flakes.
 
+           Spec 069's FeeSpeedDeviceTests is skipped for the same reason as
+           ParallelSpaceDeviceTests: it prices on real chains from inside the
+           parallel space.
+
            Run them with -only-testing against a real device, as their own
            file comments spell out.
 
@@ -126,6 +130,9 @@
                </Test>
                <Test
                   Identifier = "ParallelSpaceDeviceTests">
+               </Test>
+               <Test
+                  Identifier = "FeeSpeedDeviceTests">
                </Test>
                <Test
                   Identifier = "BrowserAcceptanceTests">

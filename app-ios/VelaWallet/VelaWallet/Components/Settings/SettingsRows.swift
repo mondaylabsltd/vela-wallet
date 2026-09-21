@@ -142,10 +142,17 @@ struct SelectRow: View {
                 }
                 // The chosen row is stated twice — accent text and a check —
                 // because the check alone disappears at the note's type size.
-                Text(row.label)
-                    .typeRole(row.mono ? Typography.mono : Typography.fieldLabel)
-                    .fontWeight(row.selected ? .semibold : .regular)
-                    .foregroundStyle(row.selected ? theme.accentBase : theme.fgBase)
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(row.label)
+                        .typeRole(row.mono ? Typography.mono : Typography.fieldLabel)
+                        .fontWeight(row.selected ? .semibold : .regular)
+                        .foregroundStyle(row.selected ? theme.accentBase : theme.fgBase)
+                    if let detail = row.detail {
+                        Text(detail)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(theme.fgSubtle)
+                    }
+                }
                 if let caption = row.caption {
                     Text(caption)
                         .typeRole(Typography.flowCaption)

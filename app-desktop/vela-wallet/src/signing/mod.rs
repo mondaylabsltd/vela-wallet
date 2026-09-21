@@ -160,6 +160,8 @@ pub struct SigningStrings {
     pub summary_deploy: SharedString,
     pub summary_safe: SharedString,
     pub fee_label: SharedString,
+    /// The fee row while a speed just picked is measured (spec 069).
+    pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -343,6 +345,7 @@ impl SigningStrings {
             summary_deploy: s("summaryDeploy"),
             summary_safe: s("safeSummary"),
             fee_label: loc.t("componentsUi.gas.networkFee"),
+            fee_estimating: loc.t("componentsUi.gas.estimating"),
             fee_token_title: s("feeTokenTitle"),
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),

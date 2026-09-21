@@ -3406,3 +3406,73 @@ fn tempo_never_measures() {
     assert_eq!(ops.len(), 1);
     assert!(matches!(ops[0], Op::EstimateUserOpGas { .. }));
 }
+
+// -- the fee-signal cache (issue 212): what a shell may hold -----------------
+
+mod fee_signal_cache {
+    use vela_core::app::fee_policy::{
+        bundler_quote_cacheable, gas_signals_cacheable, FEE_SIGNALS_CACHE_TTL_MS,
+    };
+
+    #[test]
+    fn the_window_is_fifteen_seconds() {
+        assert_eq!(FEE_SIGNALS_CACHE_TTL_MS, 15_000);
+    }
+
+    /// Only a complete, real reading is held — every leg that was asked for.
+    #[test]
+    fn a_complete_reading_is_held() {
+        assert!(gas_signals_cacheable(
+            Some("1000000000"),
+            true,
+            true,
+            Some("27773221947")
+        ));
+        // A block that answered without `baseFeePerGas` is a real pre-London
+        // reading; the tip was not asked for.
+        assert!(gas_signals_cacheable(Some("50000000"), true, false, None));
+    }
+
+    /// A zero or missing gas price would pin the 5 gwei default — 100× on BSC.
+    #[test]
+    fn no_price_or_a_zero_price_is_never_held() {
+        assert!(!gas_signals_cacheable(None, true, false, None));
+        assert!(!gas_signals_cacheable(Some("0"), true, false, None));
+        assert!(!gas_signals_cacheable(Some(""), true, false, None));
+        // Not decimal wei: a hex quantity the shell forgot to convert is no
+        // measurement at all, rather than a number read in the wrong base.
+        assert!(!gas_signals_cacheable(
+            Some("0x3b9aca00"),
+            true,
+            false,
+            None
+        ));
+    }
+
+    /// A block leg that did not answer is a failed read, not an old chain.
+    #[test]
+    fn a_block_that_did_not_answer_is_never_held() {
+        assert!(!gas_signals_cacheable(
+            Some("1000000000"),
+            false,
+            false,
+            None
+        ));
+    }
+
+    /// Gnosis: the tip is nearly the whole price, so a tipless read asked
+    /// with a tip under-prices ~40× and must not own the next 15 s.
+    #[test]
+    fn a_tip_asked_for_and_missing_is_never_held() {
+        assert!(!gas_signals_cacheable(Some("1000000007"), true, true, None));
+    }
+
+    /// A zero relay cap is degenerate — the core rejects it — and is not kept.
+    #[test]
+    fn the_relay_quote_is_held_only_when_it_is_a_real_cap() {
+        assert!(bundler_quote_cacheable("2000000000"));
+        assert!(!bundler_quote_cacheable("0"));
+        assert!(!bundler_quote_cacheable(""));
+        assert!(!bundler_quote_cacheable("0x77359400"));
+    }
+}

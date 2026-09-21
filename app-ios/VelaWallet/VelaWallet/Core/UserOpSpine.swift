@@ -49,6 +49,10 @@ final class UserOpSpine {
     struct Quoted {
         let amount: String
         let recipient: String
+        /// The speed the displayed fee was priced at, named on the wire beside
+        /// it (spec 069) — the core took it from the same estimate as `amount`.
+        /// `nil` names nothing: the pre-068 wire.
+        var tier: String? = nil
     }
 
     /// The account store, as the submit path reads it.
@@ -181,6 +185,9 @@ final class UserOpSpine {
         guard let pinned = keys.first else {
             throw other("No passkey credential for the active account")
         }
+        // A submit, and the first quote after it, landed or not, measure the
+        // chain again (issue 212).
+        relay.invalidateFeeSignals(chainId: chainId)
         let tempo = isChainWithoutNativeCoin(chainId: UInt32(chainId))
 
         guard let deployed = await relay.isDeployed(chainId: chainId, address: account) else {
@@ -305,7 +312,8 @@ final class UserOpSpine {
             throw other("The operation could not be encoded.")
         }
 
-        switch await relay.sendUserOp(chainId: chainId, opJson: signedJson) {
+        // The speed the displayed fee was priced at, named beside it (spec 069).
+        switch await relay.sendUserOp(chainId: chainId, opJson: signedJson, tier: quoted.tier) {
         case .accepted(let hash):
             return hash
         case .unreachable:
