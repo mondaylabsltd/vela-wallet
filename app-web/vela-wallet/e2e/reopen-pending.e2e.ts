@@ -17,7 +17,9 @@ import { denyOffOrigin, happyRelay, readKv, stubRelay } from './stub-chain';
 test.use({ viewport: { width: 390, height: 844 } });
 test.setTimeout(90_000);
 
-const RELAY = /vela-relay\.getvela\.app/;
+// The app asks the Cloudflare relay (`vela-relay-cf`, endpoints.ts since spec 060);
+// the older host is kept so a stub written against either still intercepts.
+const RELAY = /vela-relay(-cf)?\.getvela\.app/;
 const USER_OP_HASH = '0x' + 'c3'.repeat(32);
 const TX_HASH = '0x' + 'd4'.repeat(32);
 const SAFE = '0xD400866e00B055B20752a826CD5C89b811de130b';

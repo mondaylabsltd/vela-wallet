@@ -32,7 +32,9 @@ test.use({ viewport: { width: 1440, height: 900 } });
 test.setTimeout(120_000);
 
 const STUB = 'https://stub-rpc.test/rpc';
-const RELAY = /vela-relay\.getvela\.app/;
+// The app asks the Cloudflare relay (`vela-relay-cf`, endpoints.ts since spec 060);
+// the older host is kept so a stub written against either still intercepts.
+const RELAY = /vela-relay(-cf)?\.getvela\.app/;
 const ETH = 1_000_000_000_000_000_000n;
 const PRICE_8DP = 3000n * 100_000_000n;
 const RECIPIENT = '0x' + 'ab'.repeat(20);
