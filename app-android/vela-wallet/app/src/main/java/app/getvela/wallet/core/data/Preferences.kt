@@ -10,17 +10,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONObject
+import uniffi.vela_core_uniffi.prefsLocaleJson
+import uniffi.vela_core_uniffi.prefsMigrations
+import uniffi.vela_core_uniffi.prefsRead
 
 /**
  * The person's preferences that have no machine (spec 028's ruling, kept in
  * 047): language, the three format presets, the text scale, the avatar
- * style. Stored under the web's keys byte-for-byte (`vela.language` a bare
- * tag or `system`; `vela.localePrefs` one JSON object; `vela.avatarStyle` a
- * bare string), so a person's phone and browser would read the same record.
+ * style. The record format is the core's (`vela_core::prefs`, spec 072):
+ * `vela.language` a tag or `auto`, `vela.localePrefs` the three formats,
+ * `vela.textScale` and `vela.avatarStyle` bare strings — the same record on
+ * every Vela. This shell once wrote `system` and kept the text size inside
+ * `vela.localePrefs`; the core reads that and [load] rewrites it once.
  */
 data class PrefsView(
-    val language: String = "system",
+    /** `auto` follows the device's languages; otherwise a shipped tag. */
+    val language: String = Preferences.AUTO_LANGUAGE,
     val numberFormat: NumberFormatKey = NumberFormatKey.Auto,
     val dateFormat: DateFormatKey = DateFormatKey.Auto,
     val timeFormat: TimeFormatKey = TimeFormatKey.Auto,
@@ -41,17 +46,24 @@ class Preferences(
 
     fun load() {
         scope.launch {
-            val language = store.read(KEY_LANGUAGE)?.takeIf { it.isNotBlank() } ?: "system"
-            val prefs = runCatching { JSONObject(store.read(KEY_LOCALE_PREFS).orEmpty()) }.getOrNull()
-            val avatar = store.read(KEY_AVATAR_STYLE)?.takeIf { it == "initials" || it == "identicon" } ?: "identicon"
+            val entries = buildMap {
+                for (key in READ_KEYS) store.read(key)?.let { put(key, it) }
+            }
+            // An older build's spellings, rewritten once (safe every launch:
+            // nothing to do once the store agrees).
+            for (write in prefsMigrations(entries)) {
+                val value = write.value
+                if (value == null) store.remove(write.key) else store.write(write.key, value)
+            }
+            val read = prefsRead(entries)
             publish(
                 PrefsView(
-                    language = language,
-                    numberFormat = NumberFormatKey.of(prefs?.optString("numberFormat")),
-                    dateFormat = DateFormatKey.of(prefs?.optString("dateFormat")),
-                    timeFormat = TimeFormatKey.of(prefs?.optString("timeFormat")),
-                    textScale = TextScaleLevel.of(prefs?.optString("textScale")),
-                    avatarStyle = avatar,
+                    language = read.language,
+                    numberFormat = NumberFormatKey.of(read.numberFormat),
+                    dateFormat = DateFormatKey.of(read.dateFormat),
+                    timeFormat = TimeFormatKey.of(read.timeFormat),
+                    textScale = TextScaleLevel.of(read.textScale),
+                    avatarStyle = read.avatarStyle,
                     loaded = true,
                 ),
             )
@@ -66,7 +78,7 @@ class Preferences(
 
     fun setTimeFormat(key: TimeFormatKey) = update(_view.value.copy(timeFormat = key)) { writeLocalePrefs(it) }
 
-    fun setTextScale(level: TextScaleLevel) = update(_view.value.copy(textScale = level)) { writeLocalePrefs(it) }
+    fun setTextScale(level: TextScaleLevel) = update(_view.value.copy(textScale = level)) { store.write(KEY_TEXT_SCALE, level.wire) }
 
     fun setAvatarStyle(style: String) = update(_view.value.copy(avatarStyle = style)) { store.write(KEY_AVATAR_STYLE, style) }
 
@@ -76,15 +88,7 @@ class Preferences(
     }
 
     private suspend fun writeLocalePrefs(view: PrefsView) {
-        store.write(
-            KEY_LOCALE_PREFS,
-            JSONObject()
-                .put("numberFormat", view.numberFormat.wire)
-                .put("dateFormat", view.dateFormat.wire)
-                .put("timeFormat", view.timeFormat.wire)
-                .put("textScale", view.textScale.wire)
-                .toString(),
-        )
+        store.write(KEY_LOCALE_PREFS, prefsLocaleJson(view.numberFormat.wire, view.dateFormat.wire, view.timeFormat.wire))
     }
 
     private fun publish(view: PrefsView) {
@@ -98,5 +102,12 @@ class Preferences(
         const val KEY_LANGUAGE = "vela.language"
         const val KEY_LOCALE_PREFS = "vela.localePrefs"
         const val KEY_AVATAR_STYLE = "vela.avatarStyle"
+        const val KEY_TEXT_SCALE = "vela.textScale"
+
+        /** "Follow the device's languages" — the shared word (it was `system` here). */
+        const val AUTO_LANGUAGE = "auto"
+
+        /** What the core's codec reads, including the desktop's old `vela.formats`. */
+        private val READ_KEYS = listOf(KEY_LANGUAGE, KEY_LOCALE_PREFS, KEY_AVATAR_STYLE, KEY_TEXT_SCALE, "vela.formats")
     }
 }

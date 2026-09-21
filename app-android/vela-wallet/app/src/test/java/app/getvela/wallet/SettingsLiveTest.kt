@@ -533,9 +533,11 @@ class SettingsLiveTest {
         val add = SettingsLive.withWizard(base(), view, strings).addNetwork
 
         assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
-        assertEquals(listOf("EntryPoint", "Safe"), add.checks.map { it.label })
-        assertTrue(add.checks.all { it.ok })
+        // The core's contracts, then the signer precompile (the web's `checkSigner`).
+        assertEquals(listOf("EntryPoint", "Safe", "WebAuthn signer module"), add.checks.map { it.label })
+        assertTrue(add.checks.dropLast(1).all { it.ok })
         assertTrue(add.primary!!.isNotBlank())
+        assertNull("nothing to explain on a compatible chain", add.callout)
     }
 
     /** An incompatible chain is named as such, and cannot be added. */
@@ -557,8 +559,38 @@ class SettingsLiveTest {
         val add = SettingsLive.withWizard(base(), view, strings).addNetwork
 
         assertEquals(SettingsTone.Error, add.candidate!!.badge!!.tone)
-        assertEquals(false, add.checks.single().ok)
+        assertEquals(false, add.checks.first { it.label == "EntryPoint" }.ok)
         assertNull("a chain whose contracts are missing cannot be added", add.primary)
+        // Spec 072: it says why, offers the setup tool and a re-check.
+        assertTrue(add.callout!!.text.isNotBlank())
+        assertTrue(add.secondary!!.isNotBlank())
+        assertTrue(add.recheck!!.isNotBlank())
+    }
+
+    /**
+     * Spec 072: a chain that could not be CHECKED is not called incompatible
+     * (the core's invariant ③): a warning, Retry and re-check — never the
+     * setup tool, which is for chains really missing Vela's contracts.
+     */
+    @Test
+    fun aChainThatCouldNotBeCheckedIsNeverCalledIncompatible() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(1234, "Somewhere"),
+                compat = null,
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Warn, add.candidate!!.badge!!.tone)
+        assertEquals(strings.t("settingsModals.addNetwork.unableToVerify"), add.candidate!!.badge!!.label)
+        assertEquals(strings.t("settingsModals.addNetwork.retry"), add.primary)
+        assertNull(add.secondary)
+        assertTrue(add.recheck!!.isNotBlank())
+        assertTrue(add.checks.isEmpty())
     }
 
     /** A testnet says so, because sending real money to one loses it. */

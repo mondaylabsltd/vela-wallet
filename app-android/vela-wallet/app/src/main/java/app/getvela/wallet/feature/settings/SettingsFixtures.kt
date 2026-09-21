@@ -672,7 +672,7 @@ object SettingsFixtures {
             rows = buildList {
                 add(
                     SelectRowModel(
-                        id = "system",
+                        id = app.getvela.wallet.core.data.Preferences.AUTO_LANGUAGE,
                         label = s.t(I18nKeys.SettingsUi.LANGUAGE_FOLLOW_SYSTEM),
                         note = "${s.t(I18nKeys.SettingsUi.COMMON_SYSTEM)} · $label",
                         selected = true,
@@ -978,6 +978,14 @@ object SettingsFixtures {
             networksSubtitle = s.t(I18nKeys.SettingsUi.NETWORKS_SUBTITLE),
             networks = networks(s),
             addNetworkLabel = s.t(I18nKeys.SettingsUi.ADD_NETWORK_TITLE),
+            removeNetworkLabel = s.t("settingsModals.network.removeTitle"),
+            removeNetworkSheet = ConfirmSheetModel(
+                title = s.t("settingsModals.network.removeTitle"),
+                body = s.t("settingsModals.network.removeBody"),
+                confirm = s.t("settingsModals.network.removeConfirm"),
+                cancel = s.t("settingsModals.network.removeCancel"),
+                danger = true,
+            ),
             networkDetail = networkDetail(s, mismatch = state == SettingsScreenState.ST9B),
             addNetwork = addNetwork(s, addMode),
             rpcProviders = rpcProviders(s),

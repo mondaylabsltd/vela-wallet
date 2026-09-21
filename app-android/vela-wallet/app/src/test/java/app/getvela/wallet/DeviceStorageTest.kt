@@ -51,13 +51,23 @@ class DeviceStorageTest {
     }
 
     @Test
-    fun `erase sweeps everything but the keep-list and says what is left`() = runBlocking<Unit> {
-        val s = store()
-        val left = DeviceStorage.erase(s, keep = setOf("vela.accounts"))
+    fun `erase sweeps every erasable key, keeps the pending uploads, and says what is left`() = runBlocking<Unit> {
+        val s = store().apply { values["vela.pendingUploads"] = "[]"; values["vela.theme"] = "dark" }
+        val left = DeviceStorage.erase(s)
         assertTrue(left.isEmpty())
-        assertEquals(setOf("vela.accounts"), s.values.keys)
+        // The core's rule: the accounts go too; only the upload ledger stays.
+        assertEquals(setOf("vela.pendingUploads"), s.values.keys)
         val stubborn = store().apply { refuseWrites = true }
-        val leftovers = DeviceStorage.erase(stubborn, keep = emptySet())
+        val leftovers = DeviceStorage.erase(stubborn)
         assertEquals(8, leftovers.size)
+    }
+
+    /** Spec 072: the hidden balance is a preference — clearing the caches must not reveal balances. */
+    @Test
+    fun `clearing the caches leaves the hidden balance hidden`() = runBlocking<Unit> {
+        val s = store().apply { values["vela.balanceHidden"] = "1" }
+        assertTrue(DeviceStorage.clearCaches(s))
+        assertEquals("1", s.values["vela.balanceHidden"])
+        assertNull(DeviceStorage.itemOfKey("vela.balanceHidden"))
     }
 }

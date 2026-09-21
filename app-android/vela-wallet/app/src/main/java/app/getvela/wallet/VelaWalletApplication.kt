@@ -81,7 +81,11 @@ class AppContainer(private val app: Application) {
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
-    val themeRepository = ThemePreferenceRepository(app)
+    val themeRepository = ThemePreferenceRepository(
+        app,
+        VelaStore(app),
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+    )
 
     /** Spec 047 D9: online or not, from the platform. */
 
@@ -699,9 +703,9 @@ class AppContainer(private val app: Application) {
         }
     }
 
-    /** Spec 047: the language preference — a tag, or `system` (the OS's locales through the resolver). */
+    /** Spec 047: the language preference — a tag, or `auto` (the OS's locales through the resolver). */
     fun applyLanguage(choice: String) {
-        if (choice == "system" || choice.isBlank()) return applySystemLocale()
+        if (choice == Preferences.AUTO_LANGUAGE || choice == "system" || choice.isBlank()) return applySystemLocale()
         i18nExecutor.execute {
             runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
                 .onFailure { VelaLog.failure("i18n", "language preference failed", it) }

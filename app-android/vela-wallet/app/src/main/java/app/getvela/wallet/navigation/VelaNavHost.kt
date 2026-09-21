@@ -1795,9 +1795,12 @@ fun VelaNavHost(
                         onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
                         onErase = {
                             scope.launch {
-                                // The keep-list: the account records and the pending-upload
-                                // ledger, which sign-out's own path owns (028's one exception).
-                                val left = DeviceStorage.erase(VelaStore(context), keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"))
+                                // The core's rule (spec 072): every `vela.` key but the
+                                // pending-upload ledger, found by scanning — the accounts
+                                // too, so nothing of this wallet survives on the device.
+                                // Live pages hear their sites disconnected first.
+                                application.container.browser.revokeAll()
+                                val left = DeviceStorage.erase(VelaStore(context))
                                 if (left.isEmpty()) {
                                     eraseFailed = null
                                     application.container.session.signOut()
@@ -1820,7 +1823,10 @@ fun VelaNavHost(
                         },
                         onOverrideCommitted = { chainId -> settings.commitOverride(chainId) },
                         onCustomRpc = { settings.editCustomRpc(it) },
-                        onRecheckNetwork = { liveModel.addNetwork.query.toLongOrNull()?.let { settings.addNetworkByChainId(it) } },
+                        // Re-run the checks on the chain on screen, keeping the RPC the
+                        // person typed (the web's `recheck`) — never the scan path, which
+                        // adds without asking.
+                        onRecheckNetwork = { networks.wizard.chain_info?.chain_id?.let { settings.selectChain(it, keepCustomRpc = true) } },
                         onProviderTest = { id -> NetProviderId.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let { settings.testProvider(it) } },
                         onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
                         onOpenLink = { value ->
@@ -1922,6 +1928,17 @@ fun VelaNavHost(
                         },
                         onSignerUrlSave = settings::submitSignerUrl,
                         onSignerUrlReset = settings::resetSignerUrl,
+                        // Spec 072: the providers page loads the saved keys and
+                        // tests them; the endpoints page probes; the wizard starts
+                        // clean — the phone web's own open events.
+                        onPageShown = { shown ->
+                            when (shown) {
+                                SettingsPage.RpcProviders -> settings.openProviders()
+                                SettingsPage.Endpoints -> settings.openEndpoints()
+                                SettingsPage.AddNetwork -> settings.resetWizard()
+                                else -> Unit
+                            }
+                        },
                     ),
                 )
             }

@@ -25,6 +25,7 @@ import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
 import app.getvela.wallet.feature.settings.core.NetWizardPhase
 import app.getvela.wallet.feature.wallet.core.BalanceView
 
@@ -243,6 +244,11 @@ object SettingsLive {
         val wizard = view.wizard
         val info = wizard.chain_info
         val compat = wizard.compat
+        val checked = wizard.phase == NetWizardPhase.Checked
+        val stopped = wizard.phase == NetWizardPhase.Error
+        val inconclusive = wizard.error is NetWizardErrorKind.CheckFailed
+        val unverified = checked && (compat == null || compat.rpc_failure != null)
+        val compatible = checked && compat != null && compat.compatible && compat.rpc_failure == null
         return model.copy(
             addNetwork = model.addNetwork.copy(
                 query = wizard.query,
@@ -284,18 +290,14 @@ object SettingsLive {
                         // **No verdict until one was reached.** While the
                         // checks are running there is no pill: a chain drawn as
                         // compatible before anything was checked is the same
-                        // lie as a latency nobody measured.
-                        badge = compat?.let { result ->
-                            StatusPillModel(
-                                tone = if (result.compatible) SettingsTone.Ok else SettingsTone.Error,
-                                label = strings.t(
-                                    if (result.compatible) {
-                                        I18nKeys.SettingsUi.ADD_COMPATIBLE
-                                    } else {
-                                        I18nKeys.SettingsUi.ADD_INCOMPATIBLE
-                                    },
-                                ),
-                            )
+                        // lie as a latency nobody measured. And "we could not
+                        // check" is NEVER worded as "incompatible" (the core's
+                        // invariant ③, the web's `wizardModel`).
+                        badge = when {
+                            compatible -> StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.ADD_COMPATIBLE))
+                            unverified -> StatusPillModel(SettingsTone.Warn, strings.t("settingsModals.addNetwork.unableToVerify"))
+                            checked -> StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE))
+                            else -> null
                         },
                         tag = if (it.is_testnet) {
                             strings.t(I18nKeys.SettingsUi.ADD_TESTNET)
@@ -304,22 +306,21 @@ object SettingsLive {
                         },
                     )
                 },
-                // Each contract the core looked for, and whether it is there.
-                // The names are the core's; this only says found or not.
-                checks = compat?.contracts?.map { contract ->
-                    CheckItemModel(label = contract.name, ok = contract.deployed)
-                }.orEmpty(),
-                checksTitle = compat?.let {
+                // Each contract the core looked for, and the signer precompile:
+                // found or not. The names are the core's.
+                checks = compat?.let { result ->
+                    result.contracts.map { contract -> CheckItemModel(label = contract.name, ok = contract.deployed) } +
+                        CheckItemModel(label = strings.t(I18nKeys.SettingsUi.ADD_CHECK_SIGNER), ok = result.p256_available == true)
+                }.orEmpty().takeIf { checked && !unverified }.orEmpty(),
+                checksTitle = if (checked && !unverified && compat != null) {
                     strings.t(I18nKeys.SettingsUi.ADD_COMPATIBILITY_CHECK)
+                } else {
+                    null
                 },
                 // The person's own RPC for this chain, as the core holds it —
-                // so a keystroke round-trips (the ST1 base has no such field,
-                // and the compatible fixture's was a blank that never echoed).
-                // Offered where the web offers it: once checked, unless the
-                // chain was ruled incompatible.
-                customRpc = if (wizard.phase == NetWizardPhase.Checked &&
-                    (compat == null || compat.rpc_failure != null || compat.compatible)
-                ) {
+                // so a keystroke round-trips. Offered where the web offers it:
+                // once checked, unless the chain was ruled incompatible.
+                customRpc = if (compatible || unverified) {
                     UrlFieldModel(
                         id = "custom-rpc",
                         label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
@@ -329,12 +330,34 @@ object SettingsLive {
                 } else {
                     null
                 },
-                // Only offered when the core says this chain can be added.
-                // The button is what writes a network somebody's money will be
-                // read from, and it must not be reachable on a chain whose
-                // contracts are not deployed.
-                primary = if (wizard.can_add) {
-                    strings.t(I18nKeys.SettingsUi.ADD_BUTTON)
+                // Why the wizard stopped, or why this chain cannot be added —
+                // said, not just badged.
+                callout = when {
+                    stopped -> CalloutModel(
+                        CalloutTone.Warning,
+                        strings.t(if (inconclusive) "settingsModals.addNetwork.unableToVerify" else I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT),
+                    )
+                    checked && !compatible && !unverified -> CalloutModel(CalloutTone.Warning, strings.t(I18nKeys.SettingsUi.ADD_INCOMPATIBLE_HINT))
+                    else -> null
+                },
+                // Only offered when the core says this chain can be added — or,
+                // for a chain that could not be checked, Retry. The button that
+                // writes a network somebody's money will be read from must not
+                // be reachable on a chain whose contracts are not deployed.
+                primary = when {
+                    wizard.can_add -> strings.t(I18nKeys.SettingsUi.ADD_BUTTON)
+                    unverified -> strings.t("settingsModals.addNetwork.retry")
+                    else -> null
+                },
+                // The chain setup tool is for a chain that is really missing
+                // Vela's contracts — never for one that could not be reached.
+                secondary = if ((stopped && !inconclusive) || (checked && !compatible && !unverified)) {
+                    strings.t(I18nKeys.SettingsUi.ADD_CHAIN_TOOL)
+                } else {
+                    null
+                },
+                recheck = if (stopped || unverified || (checked && !compatible)) {
+                    strings.t(I18nKeys.SettingsUi.ADD_RECHECK_WITH_RPC)
                 } else {
                     null
                 },
@@ -532,7 +555,7 @@ object SettingsLive {
         theme: String,
     ): SettingsScreenModel {
         val endonym = { tag: String -> SettingsFixtures.LOCALE_ENDONYMS.firstOrNull { it.first == tag }?.second ?: tag }
-        val languageValue = if (prefs.language == "system") "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
+        val languageValue = if (prefs.language == app.getvela.wallet.core.data.Preferences.AUTO_LANGUAGE) "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
         val formats = Formats.current
         val numberSheet = formatSheet(model.numberSheet, NumberFormatKey.entries, { it.wire }, prefs.numberFormat.wire) {
             Formats(number = it, locale = formats.locale).example()
@@ -640,10 +663,11 @@ object SettingsLive {
         )
     }
 
-    internal fun bytesText(bytes: Long): Pair<String, String> = when {
-        bytes >= 1_000_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000_000)), 1, 1) to "MB"
-        bytes >= 1_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000)), 0, 0) to "KB"
-        else -> bytes.toString() to "B"
+    /** A byte count in 1024s — the core's, as every Vela writes it (this shell used 1000s) — in the person's number format. */
+    internal fun bytesText(bytes: Long): Pair<String, String> {
+        val display = uniffi.vela_core_uniffi.storageBytesDisplay(bytes.coerceAtLeast(0).toULong())
+        val digits = when (display.unit) { "B" -> 0; "KB" -> 0; else -> 1 }
+        return Formats.current.number(java.math.BigDecimal(display.value), digits, digits) to display.unit
     }
 
     /** About: the build's version and commit, the wallet's network count. */

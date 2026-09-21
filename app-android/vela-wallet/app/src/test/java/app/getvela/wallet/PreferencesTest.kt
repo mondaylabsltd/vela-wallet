@@ -40,8 +40,32 @@ class PreferencesTest {
         val prefs = Preferences(FakeStore(), kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined), { Locale.US }, {})
         prefs.load()
         val v = withTimeout(5_000) { prefs.view.first { it.loaded } }
-        assertEquals("system", v.language)
+        assertEquals("auto", v.language)
         assertEquals(NumberFormatKey.Auto, v.numberFormat)
         assertEquals("identicon", v.avatarStyle)
+    }
+
+    /**
+     * Spec 072: what this shell used to write — `system`, and the text size
+     * inside `vela.localePrefs` — reads as the shared record and is rewritten
+     * once, so every other Vela reads the same preferences.
+     */
+    @Test
+    fun `an older android record reads as the shared one and is rewritten`() = runBlocking<Unit> {
+        val store = FakeStore(
+            mapOf(
+                "vela.language" to "system",
+                "vela.localePrefs" to """{"numberFormat":"space_comma","dateFormat":"iso","timeFormat":"h24","textScale":"large"}""",
+            ),
+        )
+        val prefs = Preferences(store, kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined), { Locale.US }, {})
+        prefs.load()
+        val v = withTimeout(5_000) { prefs.view.first { it.loaded } }
+        assertEquals("auto", v.language)
+        assertEquals(app.getvela.wallet.core.format.TextScaleLevel.Large, v.textScale)
+        assertEquals(NumberFormatKey.SpaceComma, v.numberFormat)
+        assertEquals("auto", store.values["vela.language"])
+        assertEquals("large", store.values["vela.textScale"])
+        assertEquals(false, store.values["vela.localePrefs"]!!.contains("textScale"))
     }
 }

@@ -165,6 +165,8 @@ data class SettingsActions(
     /** Spec 071: the Clear Signer page, as typed, and back to the official one. */
     val onSignerUrlSave: (String) -> Unit = {},
     val onSignerUrlReset: () -> Unit = {},
+    /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
+    val onPageShown: (SettingsPage) -> Unit = {},
 )
 
 @Composable
@@ -177,6 +179,9 @@ fun SettingsRoute(
     // tapping owns it from then on.
     // Spec 048: keyed on the model's page too, so a page another route asked for (the add-token 原生代币 tab) wins over a remembered one.
     var page by rememberSaveable(model.state, model.page) { mutableStateOf(model.page) }
+    LaunchedEffect(page) { actions.onPageShown(page) }
+    // Spec 072: the network a trash tap asked about, until the sheet answers.
+    var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
     // The storage row waiting on an answer, and the warning its group carries
     // (spec 058): 清除 asks before it removes.
@@ -229,7 +234,12 @@ fun SettingsRoute(
         onSignOut = actions.onSignOut,
         onFieldEdited = actions.onFieldEdited,
         onFieldCommitted = actions.onFieldCommitted,
-        onRemoveNetwork = actions.onRemoveNetwork,
+        onRemoveNetwork = { id -> pendingRemoval = id; overlay = SettingsOverlay.RemoveNetwork },
+        onConfirmRemoveNetwork = {
+            pendingRemoval?.let(actions.onRemoveNetwork)
+            pendingRemoval = null
+            overlay = SettingsOverlay.None
+        },
         // Spec 048: a network row opens ITS detail page (the row only expanded the core's override before).
         onOpenNetwork = { id -> actions.onOpenNetwork(id); page = SettingsPage.NetworkDetail },
         onSearchNetwork = actions.onSearchNetwork,
@@ -307,6 +317,7 @@ fun SettingsScreen(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onConfirmRemoveNetwork: () -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
@@ -437,6 +448,7 @@ fun SettingsScreen(
                 onSheetSelect = onSheetSelect,
                 storageConfirm = storageConfirm,
                 onConfirmStorage = onConfirmStorage,
+                onConfirmRemoveNetwork = onConfirmRemoveNetwork,
                 onClearCaches = onClearCaches,
                 onErase = onErase,
                 onFeedbackSend = onFeedbackSend,
@@ -657,7 +669,7 @@ private fun SettingsPageBody(
             model.networks.forEach { row ->
                 VelaNetworkRow(
                     row = row,
-                    deleteLabel = model.addNetworkLabel,
+                    deleteLabel = model.removeNetworkLabel.ifEmpty { null },
                     onClick = onOpenNetwork,
                     onDelete = onRemoveNetwork,
                 )
@@ -1126,6 +1138,7 @@ private fun SettingsSheet(
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
+    onConfirmRemoveNetwork: () -> Unit = {},
     onClearCaches: () -> Unit = {},
     onErase: () -> Unit = {},
     onFeedbackSend: (String) -> Unit = {},
@@ -1203,6 +1216,11 @@ private fun SettingsSheet(
                 SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet) {
                     onSheetSelect(SettingsOverlay.TimeFormat, it)
                 }
+                SettingsOverlay.RemoveNetwork -> ConfirmSheetBody(
+                    model.removeNetworkSheet,
+                    onConfirm = onConfirmRemoveNetwork,
+                    onCancel = onDismiss,
+                )
                 SettingsOverlay.ClearStorageItem -> storageConfirm?.let { sheet ->
                     ConfirmSheetBody(sheet, onConfirm = onConfirmStorage, onCancel = onDismiss)
                 }

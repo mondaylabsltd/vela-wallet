@@ -275,7 +275,7 @@ class MainActivity : ComponentActivity() {
         // Spec 047: the stored language wins over the system once the preferences are read.
         lifecycleScope.launch {
             val prefs = container.preferences.view.first { it.loaded }
-            if (prefs.language != "system") container.applyLanguage(prefs.language) else container.applySystemLocale()
+            container.applyLanguage(prefs.language)
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
         intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }

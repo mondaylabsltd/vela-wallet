@@ -51,6 +51,9 @@ enum class SettingsOverlay {
 
     /** Spec 071: which Clear Signer page the wallet opens. */
     SignerPage,
+
+    /** Spec 072: removing a custom network asks first. */
+    RemoveNetwork,
 }
 
 /** Status-pill tone. `Neutral` is unset/idle, not failed. */
@@ -517,6 +520,9 @@ data class SettingsScreenModel(
     val networksSubtitle: String,
     val networks: List<NetworkRowModel>,
     val addNetworkLabel: String,
+    /** Spec 072: the trash icon's name, and the question it asks. */
+    val removeNetworkLabel: String = "",
+    val removeNetworkSheet: ConfirmSheetModel = ConfirmSheetModel(title = "", body = "", confirm = "", cancel = "", danger = true),
     val networkDetail: NetworkDetailModel,
     val addNetwork: AddNetworkModel,
     val rpcProviders: RpcProvidersModel,
