@@ -17,7 +17,9 @@ the apps themselves.
 
 This page lists every one of those pieces, what breaks without it, and how to
 run your own. It also covers the one piece you cannot replace — the domain your
-passkeys belong to — and what to do if getvela.app goes away.
+passkeys belong to — and what to do if getvela.app goes away. One limit up front:
+today the relay reads chain data from Vela's server, so sending with no Vela
+infrastructure at all means changing one address in the relay's code.
 
 <Callout type="info" title="Who this page is for">
 You should be comfortable with a terminal, Docker or Cloudflare Workers, and
@@ -32,7 +34,7 @@ funding an address on a chain. Nothing here is needed to use Vela day to day.
 | **Public-key index** | Registers a new wallet's keys on-chain; answers "which wallet is this key part of?" | `p256-index-v2.getvela.app` | Yes — run [p256-index](#index) | New wallets can't be created; sign-in falls back to reading the chain |
 | **Registry contract** | The permanent public record of each wallet's keys | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` on Gnosis | Not needed — nobody owns it; the wallet reads it directly | — |
 | **Chain data** | Network details, token lists, logos, clear-signing descriptors | `ethereum-data.getvela.app` | Yes — run [ethereum-data](#chain-data) | No token lists or logos; fewer transactions decoded; adding networks fails |
-| **Exchange rates** | Fiat values in your display currency | `vela-currency.getvela.app` | Yes — run [vela-currency](#exchange-rates) or any Frankfurter-compatible source | Balances shown in USD only |
+| **Exchange rates** | Fiat values in your display currency | `vela-currency.getvela.app` | Yes — run [vela-currency](#exchange-rates) or any Frankfurter-compatible source | The apps fall back to on-chain Chainlink rates where they can (desktop shows USD) |
 | **RPC nodes** | Reading balances, simulating transactions | Public endpoints per network | Yes — per network, in Settings → Networks | Vela fails over between endpoints |
 | **The apps** | The wallet itself | wallet.getvela.app, release builds | Yes — [build them](#web-app) | — |
 | **getvela.app** | The domain your passkeys belong to | — | **No** — see [below](#if-getvela-app-disappears) | — |
@@ -47,13 +49,18 @@ a phone by scanning a QR code.
 
 <span id="if-getvela-app-disappears"></span>
 
-A passkey belongs to the website it was created for. Vela's keys are created
-for `getvela.app`, and a browser or phone will only use them for `getvela.app`.
+A passkey belongs to the website it was created for. Vela's keys are created for
+`getvela.app`. Browsers offer them only to pages on getvela.app or its subdomains
+(or to origins getvela.app declares as related), and a phone's built-in passkeys
+work only in apps getvela.app vouches for. Outside the browser the rule is looser:
+Chrome lets an extension with permission for getvela.app use them, and a program
+on your computer can ask a security key or a phone for a getvela.app signature
+directly — which is how self-built apps work, and why software you run matters.
 Two things follow.
 
 **A copy of the web wallet on your own domain is a different wallet.** Served
-from `wallet.example.com`, the same code creates passkeys for `example.com` —
-new keys, and therefore a new address. It cannot sign for a wallet created at
+from `wallet.example.com`, the same code creates passkeys for
+`wallet.example.com` — new keys, and therefore a new address. It cannot sign for a wallet created at
 wallet.getvela.app. That copy is still useful: for a wallet you create there,
 or to run the whole stack yourself from scratch.
 
@@ -61,7 +68,7 @@ or to run the whole stack yourself from scratch.
 
 | Way in | Keys it can use | Where to get it |
 | --- | --- | --- |
-| The **Vela browser extension** (Chromium browsers: Chrome, Edge, Brave) | Any key the browser can reach: this device's passkey, a USB or NFC security key, a phone by QR | A release zip from [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), or [build it](#web-app) |
+| The **Vela browser extension** (Chromium browsers: Chrome, Edge, Brave) | Any key the browser can reach: this device's passkey, a USB security key (NFC where the computer supports it), a phone by QR | A release zip from [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), or [build it](#web-app) |
 | A **desktop or phone app you build yourself** | A phone by QR, and USB security keys | [Build it](#web-app) |
 | The **store and notarized desktop apps** | A phone by QR and security keys always; "this device" passkeys only while the operating system can still verify the app against getvela.app | GitHub releases (stores later) |
 
@@ -75,12 +82,14 @@ or security key because Vela talks to them directly; the phone's own passkey
 The [signing page](/docs/clear-signing-self-host) is not a way in on its own:
 it signs requests that another program sends it, and no Vela app sends them yet.
 
-<Callout type="warning" title="If the domain ever changed hands">
-Whoever controls getvela.app can serve a page that asks your keys for a
-signature, and the system prompt does not show what is being signed. This is
-how passkeys work everywhere, not a flaw specific to Vela. It is also why the
-extension and self-built apps above matter: they carry their own code, so they
-don't depend on what the domain serves.
+<Callout type="warning" title="Whoever controls the domain can ask for a signature">
+Any page served from getvela.app or one of its subdomains — or by whoever
+controls the domain in future — can ask your keys for a signature, and the system
+prompt shows "getvela.app", not the transaction. This is how passkeys work
+everywhere. Vela's website forbids its own pages from using passkeys for this
+reason. It is also why the extension and self-built apps matter: they carry their
+own code, although by default they still fetch descriptors and use services
+under getvela.app.
 </Callout>
 
 ## Point the wallet at your services
@@ -124,7 +133,8 @@ implement.
 **What you need**
 
 - Either Docker plus a Redis and an [Iggy](https://iggy.apache.org) server you
-  already run, or a Cloudflare account on **Workers Paid**.
+  already run, or a Cloudflare account on **Workers Paid** with Node.js and a Rust
+  toolchain (with the `wasm32-unknown-unknown` target) on your machine.
 - An `OPERATOR_SECRET` (hex, at least 32 bytes). It derives one treasury address
   and a pool of relayer addresses, the same on every chain. Keep it secret: it
   controls the relay's funds.
@@ -138,7 +148,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # in .env: VELA_RELAY_IGGY_URL, VELA_RELAY_REDIS_URL, OPERATOR_SECRET,
-# and VELA_RELAY_IMAGE set to a published release image
+# and VELA_RELAY_IMAGE set to a release image you trust (see docs/docker.md)
 docker compose pull relay
 docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
@@ -174,8 +184,9 @@ Then put `https://your-relay` in the **Vela relay** field.
 - A custom network you added before changing the relay keeps the relay address
   it was added with.
 - The relay reads each chain's details and stablecoin list from
-  `ethereum-data.getvela.app`. That address is fixed in the relay's code today;
-  replacing it means changing the relay.
+  `ethereum-data.getvela.app`. That address is fixed in the relay's code today
+  (`src/utils/rpc.rs` and `vela-relay-cf/src/arms/market.rs`); replacing it means
+  changing those two lines and building the relay yourself.
 
 ## Run your own public-key index
 
@@ -218,8 +229,10 @@ cargo run --release -p p256-index-server
 curl https://your-index/api/health   # "service":"webauthn-p256-publickey-registry","status":"ok"
 ```
 
-The source Dockerfile may not build as of this writing; building with Cargo
-does. The repository has no licence file yet.
+The server listens on plain HTTP (port 11256 by default); put a TLS proxy in
+front of it, since the wallet only accepts `https://` endpoints. The source
+Dockerfile may not build as of this writing; building with Cargo does. The
+repository has no licence file yet.
 
 **If no index answers at all**, existing wallets still work: on sign-in the app
 reads the registry contract on Gnosis (then Ethereum) through your RPC nodes. A
@@ -284,10 +297,12 @@ Apple and Google only let apps signed by Vela use `getvela.app` passkeys.
 
 ## Add a network Vela doesn't ship
 
-Vela runs on any EVM chain that has eleven standard contracts and the P-256
-precompile. [Chain setup](/chain-setup) tells you what a chain is missing and
-deploys what anyone can deploy; [networks & fees](/docs/networks-and-fees)
-explains the requirements.
+Vela runs on any EVM chain that has the P-256 precompile and the standard
+contracts it checks for. [Chain setup](/chain-setup) tells you what a chain is
+missing and deploys what anyone can deploy; [networks & fees](/docs/networks-and-fees)
+explains the requirements. One gap: a wallet with more than one key also needs
+Safe's passkey signer factory on that chain, which the check doesn't look for
+yet — without it, only the first key can sign there.
 
 ## What still points at Vela after all this
 

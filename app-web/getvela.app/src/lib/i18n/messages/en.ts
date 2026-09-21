@@ -157,10 +157,10 @@ export const en = {
 		meta: {
 			title: 'Vela Wallet — An Ethereum wallet you actually own',
 			description:
-				'An open-source Ethereum wallet you can run without us. Sign with passkeys or security keys — no seed phrase. Your account is an unmodified Safe, and every service behind it can be replaced.',
+				'An open-source Ethereum wallet you can run without us. Sign with passkeys or security keys — no seed phrase. Your account is an unmodified Safe, and every service behind it is open source.',
 			ogTitle: 'Vela Wallet — An Ethereum wallet you actually own',
 			ogDescription:
-				'Open-source Ethereum wallet on an unmodified Safe. Passkeys or security keys, no seed phrase, and services you can replace with your own.',
+				'Open-source Ethereum wallet on an unmodified Safe. Passkeys or security keys, no seed phrase, and open-source services you can run yourself.',
 			/** schema.org Organization description (FR-024). */
 			organization:
 				'An open-source, self-custodial Ethereum wallet built on an unmodified Safe, signed with passkeys or security keys, with no seed phrase.'
@@ -230,8 +230,8 @@ export const en = {
 					link: 'How Bybit lost $1.5B, and what Vela does about it'
 				},
 				{
-					term: 'Access to your wallet doesn’t depend on Vela staying online.',
-					link: 'What to run yourself, and what still works without getvela.app'
+					term: 'Everything Vela runs for your wallet is open source, and you can run it yourself.',
+					link: 'What to run, what still works without getvela.app, and what still depends on us'
 				}
 			]
 		},
@@ -259,9 +259,9 @@ export const en = {
 		 * a sentence cut in half.
 		 */
 		seal: {
-			label: 'wallets created on-chain',
+			label: 'wallets registered on-chain',
 			loading: 'Loading wallet count',
-			verify: 'Every wallet is on-chain — see the registry'
+			verify: 'Every wallet is registered on-chain — see the registry'
 		},
 
 		/**
@@ -302,7 +302,7 @@ export const en = {
 			items: [
 				{
 					title: 'Every transaction pays a relay fee on top of the gas',
-					body: 'A Vela transaction verifies your passkey signature on-chain and runs through ERC-4337, so it uses several times the gas of a plain transfer.\n\nThe relay pays that gas and charges a fee: three times the gas it reserves, which usually comes to several times the real on-chain cost, with a $0.01 minimum. The exact amount is shown before you sign and can’t change afterwards.\n\nYou can point the wallet at another relay or <a href="/docs/self-hosting#relay">run your own</a> — the fee then goes to whoever runs it.'
+					body: 'A Vela transaction verifies your passkey signature on-chain and runs through ERC-4337, so it uses several times the gas of a plain transfer.\n\nThe wallet reserves more gas than the transaction needs and charges three times that, at the higher of its own gas reading and the relay’s price for your speed — often ten times or more the real on-chain cost, more on your first send on a network, with a $0.01 minimum. The exact amount is shown before you sign and can’t change afterwards.\n\nYou can point the wallet at another relay or <a href="/docs/self-hosting#relay">run your own</a> — the fee then goes to whoever runs it.'
 				},
 				{
 					title: 'Every key is a way into your wallet',
@@ -369,6 +369,12 @@ export const en = {
 					base: 'Sign with another key you added or synced'
 				},
 				{
+					feature: 'Adding a key later',
+					vela: 'Not possible — keys are fixed at creation',
+					metamask: 'Not possible — one key per account',
+					base: 'Supported'
+				},
+				{
 					feature: 'Batched transactions',
 					vela: 'Supported',
 					metamask: 'Supported through its EIP-7702 smart account',
@@ -388,7 +394,7 @@ export const en = {
 				},
 				{
 					feature: 'Full self-hosting',
-					vela: 'Apps and every backend service; passkeys stay tied to getvela.app',
+					vela: 'Apps and backend services, with gaps the self-hosting guide lists; passkeys stay tied to getvela.app',
 					metamask: 'Client and RPC are yours to choose or run',
 					base: 'Not available'
 				},
@@ -490,15 +496,15 @@ export const en = {
 				},
 				{
 					q: 'What if my Apple or Google account is compromised?',
-					a: 'If someone gains access to your synced passkeys, they may be able to access your wallet.\n\nIf you do not want to rely on Apple or Google, use a USB/NFC security key instead.'
+					a: 'Whoever controls that account may be able to use a passkey synced through it and spend from your wallet — and a key can’t be removed. Move your funds to a new wallet made with keys that don’t depend on that account.\n\nTo avoid depending on Apple or Google from the start, create your wallet with hardware security keys.'
 				},
 				{
 					q: 'What can Vela do to my money, and what does it know about me?',
-					a: 'Vela cannot move or freeze your funds. Only your keys control the wallet.\n\nThere\u2019s no email or account. Your public keys, wallet name and address are public on-chain, and Vela\u2019s relay sees the transactions you send through it. Token issuers can still blocklist addresses.'
+					a: 'Vela holds no key and no role on your wallet, so it can\u2019t move or freeze your funds by itself. It does write the software that asks your keys to sign.\n\nThere\u2019s no email or account. Your public keys, the kind of authenticator behind each, your key labels, wallet name and address are public on-chain; Vela\u2019s services see your IP address and the transactions you send through them. Token issuers can still blocklist addresses.'
 				},
 				{
 					q: 'What if Vela shuts down or getvela.app goes offline?',
-					a: 'Your funds stay in your Safe on-chain, and every service Vela runs can be replaced with your own.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
+					a: 'Your funds stay in your Safe on-chain. Every service Vela runs is open source for anyone to run \u2014 the relay needs a code change to stop reading chain data from Vela\u2019s server.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
 				}
 			]
 		}
@@ -524,7 +530,7 @@ export const en = {
 		values: [
 			{
 				title: 'Self-custody, for real',
-				body: 'We cannot move, freeze or recover your funds. That is how the wallet is built, not a policy we could change.'
+				body: 'We hold no key and no role on your wallet, so we cannot move, freeze or recover your funds. What we do control is the software you sign with, which is why its code is public.'
 			},
 			{
 				title: 'No seed phrases',
@@ -563,7 +569,7 @@ export const en = {
 			},
 			{
 				title: 'Every app honouring your own services',
-				body: 'Today some apps ignore parts of Settings → Service Endpoints — the iPhone app entirely, and the web and desktop apps for the passkey index. They should all honour it, and the relay should be able to read chain data from your own server.'
+				body: 'Today some apps ignore parts of Settings → Service Endpoints — the iPhone app entirely, the web app when creating a wallet or signing in, and Android when looking up names. They should all honour it, and the relay should be able to read chain data from your own server.'
 			},
 			{
 				title: 'The independent signing page, connected',
@@ -613,7 +619,7 @@ export const en = {
 			},
 			{
 				title: 'Clear signing (ERC-7730)',
-				body: 'Transactions show what they do — amount, recipient, intent — instead of raw hex, and an unlimited token approval can’t be submitted.'
+				body: 'Transactions show what they do — amount, recipient, intent — instead of raw hex, and an approval at the “unlimited” level can’t be submitted until you reduce it.'
 			},
 			{
 				title: 'Vela is born',
@@ -643,7 +649,7 @@ export const en = {
 			web: {
 				title: 'Web',
 				blurb:
-					'Nothing to install and nothing to update. Open it, confirm with one of your keys, and your wallet is there — on any device with a recent browser. To connect to dApps, use the extension.',
+					'Nothing to install: it runs the latest version each time you open it. Confirm with one of your keys and your wallet is there — on any device with a recent browser. To connect to dApps, use the extension.',
 				action: 'Open the web wallet'
 			},
 			desktop: {
@@ -675,7 +681,7 @@ export const en = {
 		 * section already takes — you pay for convenience, not access.
 		 */
 		fundingNote:
-			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. The code is public, so you can always build it yourself instead — same app, no charge.',
+			'Store downloads are paid, and they are how a small independent team funds building Vela in the open. The code is public, so you can always build it yourself instead, for free — a self-built phone app signs with another phone or a security key rather than the phone’s own passkey.',
 		storeNote:
 			'Not on the stores yet. Until then, the desktop apps and the extension download from this page, ready to install. The phone apps do not: they come from the stores, or from the source.',
 		/**
@@ -747,7 +753,7 @@ export const en = {
 				'Check whether an EVM chain has everything Vela needs — the eleven contracts and the P-256 precompile — and deploy what is missing.'
 		},
 		heading: 'Set up a chain for Vela',
-		lede: 'Vela runs on any EVM chain that has eleven known contracts and one precompile. Enter a chain and this page will tell you which of those it has, which it lacks, and who can put them there.',
+		lede: 'Vela runs on any EVM chain that has eleven known contracts and one precompile. Enter a chain and this page will tell you which of those it has, which it lacks, and who can put them there. (A wallet with more than one key also needs Safe’s passkey signer factory, which this page doesn’t check yet.)',
 		input: {
 			label: 'Chain, by name, ID or symbol — or an RPC URL',
 			placeholder: 'e.g. Arc, 5042, USDC — or https://rpc.example.org',
@@ -770,7 +776,7 @@ export const en = {
 		verdict: {
 			ready: {
 				title: 'Vela works here',
-				body: 'Every contract Vela needs is deployed and the P-256 precompile answers. Add this chain in the wallet and it will work — same address as everywhere else.',
+				body: 'Every contract this page checks is deployed and the P-256 precompile answers. Add this chain in the wallet and it will work — same address as everywhere else. (For a wallet with more than one key, Safe’s passkey signer factory must also be on the chain; this page doesn’t check it yet.)',
 				action: 'How to add it in Vela'
 			},
 			needsSetup: {

@@ -67,6 +67,7 @@
 		{ vela: 'warn', metamask: '', base: 'yes' }, // sponsored gas
 		{ vela: 'yes', metamask: 'yes', base: 'warn' }, // custom networks
 		{ vela: 'yes', metamask: '', base: 'yes' }, // losing one key
+		{ vela: 'warn', metamask: 'warn', base: 'yes' }, // adding a key later
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // batched transactions
 		{ vela: 'yes', metamask: 'yes', base: 'yes' }, // decoded before signing
 		// The signing page exists but no app sends it requests yet (spec 080):

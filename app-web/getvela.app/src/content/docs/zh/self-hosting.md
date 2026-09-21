@@ -15,7 +15,8 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 
 这一页把这些部件逐一列出来：每样是做什么的、没有它会怎样、怎么换成你自己的。
 也讲清楚唯一无法替换的那一样——你的通行密钥所属的域名——以及 getvela.app
-不在了该怎么办。
+不在了该怎么办。先说一个限制：目前中继从 Vela 的服务器读取链数据，所以要完全不依赖
+Vela 的基础设施发送交易，需要改中继代码里的一个地址。
 
 <Callout type="info" title="这一页写给谁">
 你需要会用终端、会用 Docker 或 Cloudflare Workers，也会给链上地址充值。
@@ -30,7 +31,7 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 | **公钥索引** | 把新钱包的钥匙登记上链；回答“这把钥匙属于哪个钱包” | `p256-index-v2.getvela.app` | 能——运行 [p256-index](#index) | 无法创建新钱包；登录时改为直接读链 |
 | **注册表合约** | 每个钱包钥匙的永久公开记录 | Gnosis 上的 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` | 不需要换——它没有所有者，钱包直接读取 | — |
 | **链数据** | 网络信息、代币列表、图标、清晰签名描述文件 | `ethereum-data.getvela.app` | 能——运行 [ethereum-data](#chain-data) | 没有代币列表和图标；能解码的交易变少；无法添加网络 |
-| **汇率** | 按你选择的法币显示金额 | `vela-currency.getvela.app` | 能——运行 [vela-currency](#exchange-rates) 或任何兼容 Frankfurter 的服务 | 只能按美元显示 |
+| **汇率** | 按你选择的法币显示金额 | `vela-currency.getvela.app` | 能——运行 [vela-currency](#exchange-rates) 或任何兼容 Frankfurter 的服务 | App 会尽量改用链上的 Chainlink 汇率（桌面版显示美元） |
 | **RPC 节点** | 读取余额、模拟交易 | 各网络的公共节点 | 能——在“设置 → 网络”里按网络设置 | Vela 会在节点之间自动切换 |
 | **App** | 钱包本身 | wallet.getvela.app、发布版安装包 | 能——[自己编译](#web-app) | — |
 | **getvela.app** | 你的通行密钥所属的域名 | — | **不能**——见[下文](#if-getvela-app-disappears) | — |
@@ -43,11 +44,14 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 
 <span id="if-getvela-app-disappears"></span>
 
-通行密钥属于创建它的那个网站。Vela 的钥匙是为 `getvela.app` 创建的，浏览器和
-手机只会把它们用在 `getvela.app` 上。由此有两个结论。
+通行密钥属于创建它的那个网站。Vela 的钥匙是为 `getvela.app` 创建的。浏览器只会把它们提供给
+getvela.app 及其子域名上的页面（或 getvela.app 声明为相关的来源），手机自带的通行密钥也只在
+getvela.app 认可的 App 里可用。在浏览器之外，规则要宽松一些：Chrome 允许获得 getvela.app 权限的
+扩展使用它们，而你电脑上的程序可以直接向安全密钥或手机请求一个 getvela.app 签名——自编译 App 正是
+这样工作的，这也是为什么你运行什么软件很重要。由此有两个结论。
 
 **把网页钱包部署到你自己的域名上，得到的是另一个钱包。**同一份代码放在
-`wallet.example.com` 上，创建的是属于 `example.com` 的通行密钥——新的钥匙，
+`wallet.example.com` 上，创建的是属于 `wallet.example.com` 的通行密钥——新的钥匙，
 因此是新的地址。它无法给在 wallet.getvela.app 创建的钱包签名。这份副本仍然有用：
 用于在它上面新建的钱包，或者从零开始完整运行你自己的一套。
 
@@ -55,7 +59,7 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 
 | 方式 | 能用哪些钥匙 | 从哪里获得 |
 | --- | --- | --- |
-| **Vela 浏览器扩展**（Chromium 系浏览器：Chrome、Edge、Brave） | 浏览器能用到的任何钥匙：本设备的通行密钥、USB 或 NFC 安全密钥、扫码连接的手机 | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) 上的发布包，或[自己编译](#web-app) |
+| **Vela 浏览器扩展**（Chromium 系浏览器：Chrome、Edge、Brave） | 浏览器能用到的任何钥匙：本设备的通行密钥、USB 安全密钥（电脑支持时也可用 NFC）、扫码连接的手机 | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) 上的发布包，或[自己编译](#web-app) |
 | **你自己编译的桌面或手机 App** | 扫码连接的手机、USB 安全密钥 | [自己编译](#web-app) |
 | **商店版和经过公证的桌面版** | 扫码手机和安全密钥始终可用；“本设备”通行密钥只在操作系统还能把 App 与 getvela.app 对上时可用 | GitHub 发布页（之后上架商店） |
 
@@ -66,10 +70,11 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 [签名页](/zh/docs/clear-signing-self-host)本身不是一条独立的路：它只给别的程序发来的
 请求签名，而目前还没有任何 Vela App 会向它发送请求。
 
-<Callout type="warning" title="如果这个域名易主">
-谁控制了 getvela.app，谁就能放上一个页面来请求你的钥匙签名，而系统弹窗并不显示
-签的是什么。所有通行密钥都是这样工作的，并非 Vela 独有的缺陷。这也正是上面的扩展
-和自编译 App 重要的原因：它们自带代码，不依赖域名上放的是什么。
+<Callout type="warning" title="控制域名的人就能请求签名">
+getvela.app 或其任何子域名上的页面——或将来控制这个域名的人——都可以请求你的钥匙签名，而系统弹窗
+显示的是“getvela.app”，不是交易内容。所有通行密钥都是这样工作的。正因如此，Vela 的网站禁止自己的
+页面使用通行密钥。这也是扩展和自编译 App 重要的原因：它们自带代码，不过默认情况下仍会从
+getvela.app 下的服务获取描述文件、使用那里的服务。
 </Callout>
 
 ## 让钱包指向你的服务
@@ -109,7 +114,8 @@ Vela 中继、法币汇率。在你修改之前，字段显示的是 Vela 的默
 **你需要**
 
 - Docker，外加你已经在运行的 Redis 和 [Iggy](https://iggy.apache.org) 服务；或者一个
-  **Workers Paid** 付费套餐的 Cloudflare 账号。
+  **Workers Paid** 付费套餐的 Cloudflare 账号，并在本机装好 Node.js 和带
+  `wasm32-unknown-unknown` 目标的 Rust 工具链。
 - 一个 `OPERATOR_SECRET`（十六进制，至少 32 字节）。它派生出一个金库地址和一组
   中继地址，在每条链上都相同。务必保密：它控制着中继的资金。
 - 你要服务的每条链上都要有 gas：把该链的原生币（Tempo 上是 pathUSD）转到你的
@@ -122,7 +128,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # 在 .env 中填写 VELA_RELAY_IGGY_URL、VELA_RELAY_REDIS_URL、OPERATOR_SECRET，
-# 并把 VELA_RELAY_IMAGE 设为已发布的镜像
+# 并把 VELA_RELAY_IMAGE 设为你信任的发布镜像（见 docs/docker.md）
 docker compose pull relay
 docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
@@ -156,7 +162,8 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的金库地址，�
   （见[网络与手续费](/zh/docs/networks-and-fees)）。
 - 在更换中继之前添加的自定义网络，会继续使用添加时记录的中继地址。
 - 中继从 `ethereum-data.getvela.app` 读取每条链的信息和稳定币列表。这个地址目前
-  写死在中继的代码里；要换掉它，就得改中继。
+  写死在中继的代码里（`src/utils/rpc.rs` 和 `vela-relay-cf/src/arms/market.rs`）；要换掉它，
+  就得改这两行并自己编译中继。
 
 ## 运行你自己的公钥索引
 
@@ -195,7 +202,8 @@ cargo run --release -p p256-index-server
 curl https://your-index/api/health   # "service":"webauthn-p256-publickey-registry","status":"ok"
 ```
 
-截至本文撰写时，源码里的 Dockerfile 可能无法构建；用 Cargo 构建没有问题。这个仓库
+服务端监听的是普通 HTTP（默认端口 11256）；钱包只接受 `https://` 端点，所以要在前面加一个
+TLS 代理。截至本文撰写时，源码里的 Dockerfile 可能无法构建；用 Cargo 构建没有问题。这个仓库
 暂时还没有许可证文件。
 
 **如果完全没有索引可用**，已有的钱包照样能用：登录时 App 会通过你的 RPC 节点直接读取
@@ -256,9 +264,10 @@ README 里有每个 App 的编译步骤，这里是简版：
 
 ## 添加 Vela 没有内置的网络
 
-任何部署了 11 个标准合约并支持 P-256 预编译的 EVM 链都能运行 Vela。
+任何支持 P-256 预编译、并部署了它所检查的那些标准合约的 EVM 链都能运行 Vela。
 [链设置](/zh/chain-setup)会告诉你一条链缺什么，并部署任何人都能部署的那部分；
-[网络与手续费](/zh/docs/networks-and-fees)解释了具体要求。
+[网络与手续费](/zh/docs/networks-and-fees)解释了具体要求。有一个缺口：多把钥匙的钱包还需要那条链上有
+Safe 的通行密钥签名器工厂，而目前的检查还不会查它——没有它，在那条链上只有第一把钥匙能签名。
 
 ## 全部换掉之后，还剩哪些指向 Vela
 

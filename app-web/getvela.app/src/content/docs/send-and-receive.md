@@ -29,7 +29,7 @@ description: "How to receive and send with Vela — one address on every network
 3. **Review.** Vela shows what will happen, the fee, and the name it found for the
    recipient, if any.
 4. **Confirm** with one of your keys — Face ID, a fingerprint, a PIN, or a touch
-   on your security key.
+   and PIN on your security key.
 
 ### Sending to many, or sweeping
 
@@ -45,7 +45,9 @@ When you enter an address, Vela looks up a name for it: first in its own
 registry (the name of another Vela wallet), then in `.bnb`, `.arb`, `.g`,
 Basename and ENS reverse records, read directly from each chain. This goes one
 way — it names an address you've entered. Typing a name such as `alice.eth` does
-not look up an address. Your saved **contacts** show their names too.
+not look up an address. Your saved **contacts** show their names too. Treat a name
+as a hint, not proof: a reverse record or a Vela wallet name is chosen by whoever
+controls that address.
 
 ### Fee coin and speed
 
@@ -63,9 +65,9 @@ Vela keeps back enough for the fee. [How the fee is calculated](/docs/networks-a
    EntryPoint; your Safe checks the P-256 signature on-chain and executes.
 
 <Callout type="info" title="The relay can't change your transaction">
-The relay receives an operation that is already signed. It can delay it or
-decline it, but cannot change the recipient, the amount or the fee — any change
-invalidates your signature. It is open source, and you can
+The relay receives an operation that is already signed. It cannot change the
+recipient, the amount or the fee — any change invalidates your signature. It can
+delay or decline it, and it decides when it lands. It is open source, and you can
 [run your own](/docs/self-hosting#relay).
 </Callout>
 

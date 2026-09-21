@@ -46,8 +46,7 @@ screen describing a transaction and the bytes being signed are the same thing.**
 
 ## Why this is the general case, not a freak event
 
-Every signature you have ever produced in a web wallet rested on that
-assumption. The interface builds the payload, the interface renders the
+Most signatures produced in a web wallet rest on that assumption. The interface builds the payload, the interface renders the
 summary, and nothing independent checks that one matches the other. If the code
 serving that interface is replaced — by a compromised build pipeline, a hijacked
 CDN, a malicious dependency, a stolen deploy credential — the summary becomes
@@ -66,13 +65,16 @@ payload was a `delegatecall` that swapped an implementation address; that is
 precisely the shape of thing that should stop a signer dead, and hiding it
 behind a friendly summary is how it did not.
 
-Two limits to be exact about. A dApp cannot ask Vela for a `delegatecall` at
-all — the requests a page can make produce ordinary calls — so the Bybit payload
-itself could not arrive that way. But a page *can* ask for an ordinary call to
-your own account, for example to add an owner or change a module. Vela decodes
-such a call and shows it, like any other; it does not yet block it. And if Vela's
-own code were replaced, as `Safe{Wallet}`'s was, the decoding would be the
-attacker's too — which is what the next point is for.
+Two limits to be exact about. A dApp cannot ask Vela for a `delegatecall`
+directly — the requests a page can make produce ordinary calls — so the Bybit
+payload itself could not arrive that way. But a page *can* ask for a call from
+your Safe to itself: `enableModule`, `addOwnerWithThreshold`,
+`setFallbackHandler`, `setGuard`. Any one of those, signed once, hands over the
+account as completely as the Bybit payload did — an enabled module can then run a
+`delegatecall` of its own. Vela decodes such calls but does not block them yet;
+**reject any request whose target is your own wallet address.** And if Vela's own
+code were replaced, as `Safe{Wallet}`'s was, the decoding would be the attacker's
+too — which is what the next point is for.
 
 **An independent path that can check the interface.** Vela has built a
 zero-build, zero-dependency [signing page](/docs/clear-signing-self-host) that
@@ -93,15 +95,16 @@ takes a valid signature from one of your keys. The defences against being
 talked into giving one are the decoding above and the independent check.
 
 **A fresh check for every signature.** Every signature needs your key's own
-confirmation — Face ID, a fingerprint, a PIN, or a touch on a security key.
+confirmation — Face ID, a fingerprint, a PIN, or a touch and PIN on a security key.
 There is no long-lived session key, so there is no window in which something can
 sign on your behalf without you present.
 
 **Self-hosting as the backstop.** The apps and the backend services are open
 source. If you do not want to trust our build pipeline at all, build the
 extension or an app yourself and run the services you need — the
-[self-hosting guide](/docs/self-hosting) walks through it. That is the only
-answer to this class of attack that does not require trusting somebody.
+[self-hosting guide](/docs/self-hosting) walks through it. That takes our build
+pipeline out of the chain of trust; you still trust the code you build, so read
+it.
 
 ## What Vela does not claim
 

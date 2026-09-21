@@ -11,7 +11,7 @@ and you sign with **passkeys** — on your phone or computer, on another phone, 
 on a hardware security key.
 
 - **Your keys, up to seven.** Chosen when you create the wallet; any one of them
-  can sign. Vela never has them and cannot move or freeze your funds.
+  can sign. Vela never has them and holds no role on your wallet.
 - **24 networks, one address.** Plus any EVM network you add that meets the
   requirements.
 - **You read before you sign.** Transactions are decoded into plain language;

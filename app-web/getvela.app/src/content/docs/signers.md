@@ -1,6 +1,6 @@
 ---
 title: Signers & security keys
-description: "A Vela wallet can have up to seven signers — passkeys, a nearby phone, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created, and this page explains why that is not a limitation we forgot to lift."
+description: "A Vela wallet can have up to seven signers — passkeys, a nearby phone, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created; this page explains why, and what to do if a key is compromised."
 ---
 
 # Signers & security keys
@@ -54,9 +54,9 @@ Your wallet address is **derived** from its owner set. Vela computes it with
 before anything is deployed on-chain. That is what lets you receive funds at an
 address that does not exist yet.
 
-The consequence is arithmetic, not policy: **a different set of keys is a
-different address**. Adding an eighth signer later would not extend your wallet;
-it would compute a new wallet, at a new address, with none of your money in it.
+For the address, the consequence is arithmetic: **a different set of keys is a
+different address**. Adding another signer later would not extend your wallet; it
+would compute a new wallet, at a new address, with none of your money in it.
 
 So the question "can I add a key later?" has two honest answers:
 
@@ -65,8 +65,9 @@ So the question "can I add a key later?" has two honest answers:
 - **After you fund it**: the address is where your money is. Safe itself can
   change owners on a chain where your wallet is already deployed — but on every
   chain where it isn't deployed yet, the same address still stands for the
-  original keys, so the owner sets would drift apart from chain to chain. Vela
-  doesn't offer owner changes for that reason. Plan the key set at creation.
+  original keys, so the owner sets would drift apart from chain to chain. Keeping
+  them in step across chains is possible — some smart wallets do it — but Vela
+  hasn't built it, so it doesn't offer owner changes. Plan the key set at creation.
 
 ## What this actually protects you from
 
@@ -85,6 +86,14 @@ adding a second key adds a second way *in*, not a second lock. Anyone who
 obtains any one of your signers can sign alone. More keys means more resilience
 against loss and more surface against theft; that is the trade, and it is yours
 to make.
+
+## If a key may be compromised
+
+A key can't be removed. If one of your keys may be in someone else's hands — an
+unlocked phone that went missing, a passcode someone saw, an Apple or Google
+account you no longer control — **move everything to a new wallet** created with
+keys you trust. The old address stays spendable by that key on every network,
+including funds anyone sends to it later.
 
 ## Recovering, versus adding
 

@@ -8,8 +8,10 @@ description: "Short answers about custody, keys, recovery, networks, fees, what 
 ## Is Vela self-custodial?
 
 Yes. Your wallet is a Safe smart account controlled only by your keys, which stay
-in your devices, your password manager or your security keys. Vela cannot move,
-freeze or recover your funds.
+in your devices, your password manager or your security keys. Vela holds no key
+and no role on it, so it can't move, freeze or recover your funds by itself. It
+does write the software that asks your keys to sign — see the
+[threat model](/docs/whitepaper).
 
 ## Is there really no seed phrase?
 
@@ -19,8 +21,8 @@ type. See [how passkeys work](/docs/passkeys).
 ## What do I need to create a wallet?
 
 A device that supports passkeys (a recent phone or computer with Face ID,
-fingerprint or Windows Hello), or a USB/NFC security key. No email, no account,
-no starting balance. You can create the wallet with up to seven keys; they can't
+fingerprint or Windows Hello), or two hardware security keys. No email, no
+account, no starting balance. You can create the wallet with up to seven keys; they can't
 be added later. See [create your wallet](/docs/create-wallet).
 
 ## What happens if I lose my phone?
@@ -43,7 +45,7 @@ network. See [networks & fees](/docs/networks-and-fees).
   free. The iOS and Android apps will be a one-time purchase in the stores; you
   can also build any app from source for free.
 - **Each transaction:** a fee paid from your wallet to the relay that submits it.
-  It covers the gas plus the relay's margin and is usually several times the
+  It covers the gas plus the relay's margin and is often ten times or more the
   transaction's on-chain cost, with a minimum of about $0.01. The exact amount is
   on the confirm screen and is part of what you sign. There is no deposit and no
   subscription. [How the fee is calculated](/docs/networks-and-fees).
@@ -57,10 +59,11 @@ wallet.getvela.app doesn't connect to dApps. See [install](/docs/install#dapps).
 
 ## What can Vela see or do?
 
-Vela can't move your funds or read your keys. It does see what its services see:
-the index sees your public keys and wallet name when it registers a new wallet;
-the relay sees your address and the operations you submit; the chain-data service
-sees which tokens and contracts your app asks about. What becomes public on-chain
+Vela can't read your keys or move your funds by itself. Its services see your IP
+address and what the app asks them: the index sees your public keys and wallet
+name when it registers a new wallet, and the addresses you look up; the relay sees
+your address, the operations you submit and the RPC endpoint your app uses; the
+chain-data service sees which tokens and contracts your app asks about. What becomes public on-chain
 is listed on [create your wallet](/docs/create-wallet#what-is-public). The
 [privacy policy](/privacy) is the full, authoritative version.
 
@@ -82,7 +85,8 @@ EntryPoint — are audited. Vela's own code is not, and no audit is scheduled. S
 
 Your funds stay in your Safe on-chain. For an existing wallet, the Vela browser
 extension and apps you build yourself keep working without getvela.app, and every
-service can be replaced. The
+service is open source for someone else to run (the relay needs a code change to
+stop reading chain data from Vela's server). The
 [self-hosting guide](/docs/self-hosting#if-getvela-app-disappears) lists the
 paths and their limits.
 

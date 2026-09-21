@@ -5,8 +5,8 @@ description: "你的 Vela 钱包是一个未经修改的 Safe v1.4.1。通往你
 
 # 账户合约
 
-你的钱包不是某个 App 的私有数据结构。它是一个 **Safe v1.4.1** 智能账户——管理着远比 Vela
-将来可能经手的资金大得多的金库的，正是同一个合约——完全按 Safe 发布的样子部署，没有任何修改。
+你的钱包不是某个 App 的私有数据结构。它是一个 **Safe v1.4.1** 智能账户——许多大型链上金库用的也是这个合约——完全按 Safe 发布的样子部署，
+没有任何修改。
 
 ## 路径上没有我们的合约
 
@@ -15,9 +15,9 @@ description: "你的 Vela 钱包是一个未经修改的 Safe v1.4.1。通往你
 | 合约 | 在你钱包里的作用 | 作者 |
 | --- | --- | --- |
 | [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)（SafeL2，经由代理合约） | 账户本身：所有者、阈值、执行 | Safe |
-| [Safe 4337 模块 v0.3.0](https://github.com/safe-global/safe-modules/tree/main/modules/4337) | 让 EntryPoint 能操作这个 Safe；同时是它的 fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/main/modules/passkey) | 验证第一把钥匙的 P-256 签名 | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/main/modules/passkey) 及其创建的签名器 | 其余每把钥匙各对应一个小的签名器合约 | Safe |
+| [Safe 4337 模块 v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | 让 EntryPoint 能操作这个 Safe；同时是它的 fallback handler | Safe |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | 验证第一把钥匙的 P-256 签名 | Safe |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) 及其创建的签名器 | 其余每把钥匙各对应一个小的签名器合约 | Safe |
 | [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | 执行你签好名的操作 | ERC-4337 作者 |
 
 Vela 自己写的合约都不在这张表里：记录每个钱包的钥匙、让新设备能找到它的**公钥注册表**
@@ -36,30 +36,30 @@ Vela 在你的账户上没有任何特权：没有管理员密钥，没有升级
 
 ## 为什么“未经修改”这个词最要紧
 
-很多钱包说自己基于“一个 Safe”、Safe 的分叉，或受 Safe 启发的账户。分叉是顶着旧名声的新合约。
+很多钱包说自己基于“一个 Safe”、Safe 的分叉，或受 Safe 启发的账户。区别体现在三个方面。
 
-**审计覆盖的正是你在用的东西。**Safe 的审计报告针对的就是这些版本。分叉的审计针对的是分叉
-之前的代码；改动的那部分，没有人审过。
+**审计覆盖的正是你在用的东西。**Safe 的审计覆盖的就是这些版本，或者与它们只差少量有记录改动的早期
+版本（详见[审计页面](/zh/docs/security-audits)）。分叉的审计针对的是分叉之前的代码；改动的那部分，没有人审过。
 
 **整个生态把你的账户当作 Safe，因为它就是 Safe。**区块浏览器能解析它，Safe 的工具能读取它、
 为它构造交易。但要给这些交易*签名*，程序必须能向你的钥匙请求一个针对 `getvela.app`（你的
 通行密钥所属的域名）的签名——所以从别的域名提供服务的 Safe 官方网页 App 无法替你签名。
 哪些方式可以，见[自托管指南](/zh/docs/self-hosting#if-getvela-app-disappears)。
 
-**攻击面是所有人都在盯着的那一个。**定制的账户合约，基本只有作者自己在看。而这个合约，所有
-把钱放在 Safe 里的人都在看。
+**攻击面有很多人一起在盯着。**定制的账户合约，基本只有作者自己在看。Safe 的核心合约，所有把钱放在
+Safe 里的人都在看；4337 模块和通行密钥模块的关注者少一些，但确实有人在看。
 
 ## 代价
 
 采用标准不是没有成本的：
 
-- **Gas。**你的签名在链上验证，交易还要经过 EntryPoint。钱包部署之后，从 Vela 钱包做一次
-  简单转账大约消耗 14 万到 17 万 gas；普通账户转一笔 ETH 只要 2.1 万。gas 之外，中继还会收取
+- **Gas。**你的签名在链上验证，交易还要经过 EntryPoint。按我们 2026 年 9 月在 Gnosis 上的实测，
+  从已部署的 Vela 钱包做一次简单转账，链上大约消耗 14 万到 17 万 gas；普通账户转一笔 ETH 只要 2.1 万。gas 之外，中继还会收取
   手续费——见[网络与手续费](/zh/docs/networks-and-fees)。
 - **账户需要部署。**你的地址用 `CREATE2` 在链上尚无任何东西时就算好了，所以马上就能收款；
   在每条网络上的第一笔转出交易会支付部署合约的费用。
-- **不是每条链都符合条件。**通行密钥签名用 **RIP-7212** 预编译验证。没有它的网络，Vela
-  直接拒绝启用，而不是退回到更慢的验证方式。
+- **不是每条链都符合条件。**通行密钥签名用 **RIP-7212** 预编译验证，而它的地址是每个钱包初始化数据的
+  一部分，所以没有它的网络根本无法运行 Vela。
 - **Safe 的风险就是你的风险。**信任一个被广泛使用的合约，依然是在信任一个合约。Vela 没有在
   你资金的路径上再加一个自己的合约让你去信任。
 

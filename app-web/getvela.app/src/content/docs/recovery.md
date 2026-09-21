@@ -68,7 +68,8 @@ What makes that unlikely is having more than one way in:
 - **Create the wallet with more than one key**, for example your phone's passkey
   and a hardware security key kept somewhere safe. Keys can only be added when
   you create the wallet ([why](/docs/signers)). Remember that any single key can
-  sign on its own.
+  sign on its own — and can't be removed, so if one is ever compromised, move
+  your funds to a new wallet ([what to do](/docs/signers)).
 
 ## What Vela can and cannot do
 

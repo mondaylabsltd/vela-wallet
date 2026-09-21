@@ -115,9 +115,10 @@ them. So if one operation removes an owner, an operation signed by that owner an
 placed later in the same bundle still passes validation and runs. Safe
 acknowledged this and did not change v0.3.0.
 
-For Vela the exposure is small: the apps never change owners, and keys can't be
-removed from a Vela wallet anyway. It matters in principle, because it means
-removing a compromised key would not cut it off reliably within the same bundle.
+Vela's apps never build owner changes, so Vela itself never triggers this. It
+still matters: a dApp can ask your wallet to change its own owners (see "Gaps"
+below), and anyone removing a compromised key through other Safe tooling could not
+rely on it being cut off within the same bundle.
 
 ### Interception of a signed operation (EntryPoint before v0.9)
 
@@ -126,7 +127,8 @@ In February 2026, researchers
 griefing and censorship vector affecting every EntryPoint before v0.9, including
 v0.7. Someone who obtains a signed operation before it is mined can execute it
 inside a call they control and force the inner execution to revert: the operation
-fails but its fee is charged. It affects operations that call reentrancy-protected
+fails and has to be signed again. (With Vela's in-band fee the fee transfer reverts
+with it, so the relay rather than you absorbs the gas.) It affects operations that call reentrancy-protected
 contracts or can be made to revert by temporary state; simple transfers are not
 affected. Used against withdrawal flows repeatedly, it could keep funds
 unavailable for a while. It cannot forge a signature or redirect funds.
@@ -137,13 +139,37 @@ narrows the exposure rather than removing it. The fix exists only in EntryPoint
 v0.9 (November 2025); v0.7 cannot be patched. Migrating depends on Safe's 4337
 module supporting v0.9, and this page will say when it happens.
 
+### Gaps in Vela's own defences
+
+Not contract findings, but places where the wallet protects you less than you
+might assume. Each is tracked for a fix:
+
+- **Calls from your wallet to itself are not blocked.** A dApp can request
+  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` or `setGuard` on
+  your own Safe; any one of them, signed once, hands over the account. Vela decodes
+  these calls but does not stop them. Reject any request whose target is your own
+  address.
+- **The approval guard stops only "unlimited" amounts** (2^200 or more; 2^152 for
+  Permit2). A large finite approval, a signed permit, or an NFT
+  `setApprovalForAll` gets a caution, not a block.
+- **Fetched descriptors are not authenticated.** A descriptor from the chain-data
+  server is shown as "verified" if it matches the contract; it is only as
+  trustworthy as that server.
+- **The independent signing page is not connected** to any app yet.
+- **The network check doesn't look for Safe's passkey signer factory**, which keys
+  two to seven need; on a network added without it, only the first key can sign.
+- **The website loads a third-party analytics script** on the same domain as the
+  passkeys. The site forbids its pages from using passkeys (a Permissions-Policy
+  header), and keeps the script off the page that holds a key.
+
 ## What is not audited
 
 - **Vela's own contracts.** The
   [public-key registry](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)
   at `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` (Gnosis; the same address on
-  Ethereum and Base), its domain registry at
-  `0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf`, and the earlier index they
+  Ethereum and Base), the original registry deployment at
+  `0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf` (its address is part of every
+  registration's signature domain), and the earlier index they
   replaced (`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`, read-only history). They
   are unaudited. They hold no funds, have no owner and cannot be upgraded; they are
   a discovery layer, not an authorization layer. Spending power comes only from
@@ -155,7 +181,8 @@ module supporting v0.9, and this page will say when it happens.
   approvals or funds.
 - **The deterministic deployers** (Arachnid's CREATE2 proxy and Safe's singleton
   factory) — ecosystem-standard and stateless, without formal audits. Vela's
-  network check fails closed if they are missing or altered.
+  network check fails closed if they are missing; it checks that code exists at
+  the address, not that it matches byte for byte.
 - **Tempo.** One of the 24 built-in networks, with no native coin; Vela pays gas
   there in the pathUSD stablecoin. As of September 2026, Tempo's
   [security policy](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)

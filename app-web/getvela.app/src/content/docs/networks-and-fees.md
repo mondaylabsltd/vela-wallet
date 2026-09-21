@@ -48,7 +48,9 @@ The precompile is a hard requirement. Its address is part of how every Vela
 address is computed, so there is no fallback verifier and no way to deploy one
 later. If a chain has the precompile but is missing some of the contracts,
 [chain setup](/chain-setup) shows what is missing and deploys what anyone can
-deploy.
+deploy. One gap in the check: a wallet with more than one key also needs Safe's
+passkey signer factory on the network, which isn't checked yet; without it, only
+the first key can sign there.
 
 ## How a transaction is paid for
 
@@ -78,18 +80,18 @@ currency. It is calculated like this:
 - **Fee = 3 × reserved gas × gas price**, with a minimum of about $0.01. On Tempo
   the multiple is 2 and the fee is paid in pathUSD.
 
-Because the reserve is padded and the price includes headroom, **the fee is
-usually several times what the transaction actually costs on-chain**. The relay
-pays the real cost and keeps the rest; nothing is refunded. On cheap networks
-this is cents; on Ethereum mainnet, and for the first transaction that deploys
-your wallet, it can be much more. The exact amount is on the confirm screen
+Because the reserve is padded well above what the transaction will use and the
+price includes headroom, **the fee is often ten times or more what the
+transaction actually costs on-chain**, and more for the first transaction on a
+network. The relay pays the real cost and keeps the rest; nothing is refunded. On
+cheap networks this is cents; on Ethereum mainnet it can be a real amount. The exact amount is on the confirm screen
 before you sign.
 
 <Callout type="info" title="What you see is what you pay">
 The fee amount and the address it goes to are part of the operation you sign. A
 relay that changed either would invalidate your signature, so you pay exactly
-the amount shown — no more, even if gas rises before inclusion. A wallet quote
-that is more than three times the wallet's own gas reading is refused.
+the amount shown — no more, even if gas rises before inclusion. A relay's
+gas-price quote more than three times the wallet's own reading is refused.
 </Callout>
 
 ### What you can pay with
@@ -125,8 +127,10 @@ generic bundlers such as Pimlico or Alchemy don't implement. Whoever runs the
 relay you use receives the fee; the [self-hosting guide](/docs/self-hosting#relay)
 explains how to run one.
 
-The relay receives an operation that is already signed. It can delay it or
-refuse it; it cannot change the recipient, the amount, the fee or anything else.
+The relay receives an operation that is already signed. It cannot change the
+recipient, the amount, the fee or anything else. It can delay or refuse it, and it
+chooses when it lands — so for a swap it could, in principle, trade ahead of you
+within your slippage.
 
 ### When a relay runs out of gas
 
@@ -149,6 +153,7 @@ Vela reads balances and simulates transactions through a **pool of RPC
 endpoints** per network — the built-in ones, public fallbacks, and any provider
 keys or endpoints you add — and moves to the next one when an endpoint is slow
 or down. You can set your own endpoint per network under **Settings →
-Networks**.
+Networks**. (The Android app currently uses one endpoint per network, without
+failover, and the iPhone app doesn't let you change it yet.)
 
 Next: [how passkeys work](/docs/passkeys).

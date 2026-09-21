@@ -40,7 +40,7 @@ registered under `getvela.app`, and a browser will only offer them to a page
 whose relying party is `getvela.app`. That single rule decides which way of
 running your own copy is useful to you.
 
-**As a Chrome extension — the one to use with your existing wallet.** The
+**As a Chrome extension — the way to use it with your existing keys.** The
 extension's relying party is `getvela.app` regardless of where the folder came
 from, so your existing keys can sign in it, while the code is the folder you
 loaded and inspected.
@@ -51,7 +51,7 @@ loaded and inspected.
 3. **Load unpacked**, and pick the `app-web/clearsigning` folder.
 4. The toolbar icon opens the page in a tab.
 
-**As a page on your own domain, or on localhost.** Served over HTTP(S), the
+**As a page on your own domain, or on localhost.** Served over HTTPS (or from localhost), the
 page's relying party is its own hostname — so it can sign with keys registered
 under _that_ hostname, not with keys registered under `getvela.app`. That makes
 it the right way to try the whole ceremony end to end, to run the desktop flow,
@@ -77,7 +77,7 @@ around — with no origin, there is no relying party and nothing can be signed.
   refusal, not a signature.
 - **It checks the transaction is the one that was requested.** The call the
   site asked for has to actually be inside the operation being signed.
-- **It refuses an unlimited approval.** Not a warning — a refusal, with a
+- **It refuses an approval at the "unlimited" level.** Not a warning — a refusal, with a
   pointer to what to do instead.
 - **It says when it cannot read something,** instead of showing a friendly
   summary it cannot stand behind.

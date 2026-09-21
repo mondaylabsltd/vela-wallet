@@ -12,8 +12,8 @@ description: "What a passkey is, where the private key lives for each kind of ke
 The keys that control a Vela wallet are **passkeys**: WebAuthn credentials on
 the P-256 curve. Your device or security key creates each one, keeps the private
 key, and uses it only after you confirm with Face ID, a fingerprint, your device
-PIN, or a touch and PIN on a security key. No app, including Vela, can read the
-private key.
+PIN, or a touch and PIN on a security key. Vela never receives the private key;
+if a password manager syncs it, the manager holds it, encrypted, on your behalf.
 
 ## What a passkey is
 
@@ -32,13 +32,13 @@ Where the private key lives depends on the kind of key:
 A Vela wallet can use up to seven keys of any mix, chosen when you create it;
 [signers & security keys](/docs/signers) covers that choice.
 
-## Why there's nothing to phish
+## No secret to phish
 
 Phishing works by getting you to hand over a secret. A seed phrase is twelve
 words you can be talked into typing somewhere. A passkey has **no secret you can
 type**: there is nothing to reveal, nothing to paste, and a fake site cannot ask
-for it. And because a passkey is made for one website, your device will not use
-a `getvela.app` passkey for a page on any other domain.
+for it. And because a passkey is made for one website, your browser offers a
+`getvela.app` passkey only to pages on getvela.app and its subdomains.
 
 That removes a whole class of loss — the stolen recovery phrase — which is
 common in self-custody.
@@ -62,7 +62,8 @@ hardware security key that syncs nowhere.
 ## What signing feels like
 
 1. You confirm a transaction in Vela, after reading what it does.
-2. Your device or security key asks for Face ID, a fingerprint, your PIN, or a touch.
+2. Your device or security key asks for Face ID, a fingerprint, your PIN, or a
+   touch plus PIN.
 3. It signs, and only the signature comes back to the app.
 4. The app hands the signed operation to the relay, which submits it; your
    wallet contract checks the passkey signature on-chain before doing anything.

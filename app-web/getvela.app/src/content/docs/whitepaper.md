@@ -25,11 +25,15 @@ networks. Each wallet is an unmodified **Safe v1.4.1** account, operated through
 held by your devices, your password manager, or hardware security keys. There is
 no seed phrase.
 
-Vela, the company, never holds your keys and **cannot move, freeze or seize your
-funds**. The apps, the relay that submits transactions, and the supporting
-services are open source, and each service can be replaced with your own. What
-you trust reduces to audited contracts, the authenticators that hold your keys,
-the code of the app you sign with, and — for liveness only — a relay.
+Vela, the company, never holds your keys and has no role on your Safe, so it
+**cannot move, freeze or seize your funds** by itself. It does write and serve the
+software that asks your keys to sign — which is why the threat model below
+matters. The apps, the relay that submits transactions, and the supporting
+services are open source, and you can run your own copy of each; today the relay
+still reads chain data from Vela's server unless you change its code. What you
+trust, in short: the contracts, the authenticators that hold your keys, the code
+of the app you sign with, the domain your passkeys belong to, and the services you
+point the app at.
 
 ## Why Vela exists
 
@@ -38,8 +42,8 @@ the code of the app you sign with, and — for liveness only — a relay.
 - **Custodial wallets** remove the seed phrase by taking custody of the funds.
 - **Passkey wallets** that depend on one company's servers and closed code remove
   the seed phrase but leave you stranded if the company goes away.
-- **Blind signing** — approving opaque data you can't read — is normal across the
-  ecosystem and behind a large share of drained wallets.
+- **Blind signing** — approving opaque data you can't read — is still common, and
+  it is one of the ways wallets get drained.
 
 Vela aims for the convenience of a passkey with none of those dependencies: a
 standard account, open code, replaceable services, and transactions you can read
@@ -48,14 +52,14 @@ before you sign.
 ## Design principles
 
 1. **Self-custody, no exceptions.** Keys are created and held by your
-   authenticators. Vela's services only ever see public data and signed
-   operations.
+   authenticators. Vela's services never see them; what they do see is listed
+   under Privacy.
 2. **Standard contracts, unmodified.** No contract in the path to your funds was
    written by Vela.
 3. **Verify, don't trust.** The apps and services are public; the services can be
    self-hosted.
-4. **No blind signing by default.** Transactions are decoded before you sign;
-   what can't be decoded is labelled as such.
+4. **Decode before signing.** What can't be decoded carries an explicit
+   blind-signing warning.
 5. **Do less.** The wallet sends, receives and signs for dApps you choose.
 
 ## Architecture
@@ -76,7 +80,7 @@ EVM chain
   Safe passkey module verifies P-256 via the RIP-7212 precompile
 ```
 
-Supporting services, all replaceable: a **public-key index** that registers new
+Supporting services, all open source: a **public-key index** that registers new
 wallets in an on-chain registry and answers lookups, a **chain-data** directory,
 and an **exchange-rate** feed. See the [self-hosting guide](/docs/self-hosting).
 
@@ -104,15 +108,15 @@ sign alone (1-of-n). A key can be:
 - another phone, reached by scanning a QR code (the WebAuthn hybrid transport);
 - a hardware security key over USB or NFC, which syncs nowhere.
 
-Every signature needs the authenticator's own user verification — biometric, PIN
-or touch. There is no session key. Keys cannot be added, removed or replaced
+Every signature needs the authenticator's own user verification — a biometric or
+device PIN, or a security key's PIN and touch. There is no session key. Keys cannot be added, removed or replaced
 later: the address on every chain where the wallet is not yet deployed still
 stands for the founding set, so changing owners on one chain would make the
 account differ from chain to chain.
 
 Passkeys belong to a relying party — Vela's are created for **`getvela.app`**.
-That binding is what makes them phishing-resistant, and it is also a dependency
-this paper returns to below.
+Browsers offer them only to pages on getvela.app or its subdomains, which is what
+makes them phishing-resistant; it is also a dependency this paper returns to below.
 
 ### Signing flow
 
@@ -137,8 +141,9 @@ this paper returns to below.
   (the simulated estimates raised by half, with minimums), **priced at the higher
   of the wallet's own gas-price reading and the relay's price for the chosen
   speed**, with a minimum of about $0.01. On Tempo the multiple is two. Because of
-  the padding and the headroom in the price, the fee is usually several times the
-  operation's actual on-chain cost; the relay keeps the difference.
+  the padding and the headroom in the price, the fee is often ten times or more the
+  operation's actual on-chain cost, and more for the first transaction on a network;
+  the relay keeps the difference.
 - The fee is paid in the network's coin or in a USD stablecoin the relay accepts
   (pathUSD on Tempo, which has no native coin). There is **no paymaster**: nobody
   sponsors gas, and nobody can filter transactions through a sponsorship policy.
@@ -153,9 +158,10 @@ Calls and EIP-712 messages are decoded with **ERC-7730** descriptors — built i
 the app for common contracts, fetched from the chain-data service, or matched to
 standard token shapes — then, as a last resort, a public selector database,
 labelled best effort. Anything left gets an explicit blind-signing warning.
-Fetched descriptors are not cryptographically authenticated. An on-chain
-unlimited token approval cannot be submitted until you reduce it; signed permits
-are shown with a caution but not capped. Details:
+Fetched descriptors are not cryptographically authenticated. An on-chain approval
+at the "unlimited" level (2^200 or more) cannot be submitted until you reduce it;
+a large finite approval and signed permits are shown with a caution but not
+blocked. Details:
 [clear signing](/docs/clear-signing).
 
 ### Networks
@@ -164,14 +170,16 @@ Vela has 24 built-in networks — Ethereum, BNB Chain, Polygon, Arbitrum,
 Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc,
 X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink,
 Plume and XRPL EVM — and accepts any EVM network that has the eleven contracts
-it needs and the RIP-7212 precompile.
+it checks for and the RIP-7212 precompile. (Keys two to seven also need Safe's
+passkey signer factory on that network, which the check does not cover yet.)
 
 ## Security model
 
 **What Vela cannot do**
 
-- Move, spend or freeze your funds — only your keys authorize your Safe, and Vela
-  holds no role on it.
+- Move, spend or freeze your funds on its own — only your keys authorize your
+  Safe, and Vela holds no role on it. (What Vela can do is ship software that asks
+  you to sign; see the threats below.)
 - Change a transaction after you sign it — any change invalidates the signature.
 - Read your private keys — they stay in your authenticators.
 - Add a key to your wallet, or remove one.
@@ -185,37 +193,56 @@ self-custody gives you is that Vela is not a second party who can.
 
 - The **contracts**: Safe, its 4337 and passkey modules, EntryPoint v0.7, and the
   chain's RIP-7212 precompile.
+- The **domain**: any page served from getvela.app or one of its subdomains can ask
+  your keys for a signature.
 - The **authenticators** that hold your keys, and — for synced passkeys — the
   Apple, Google or password-manager account behind them.
 - **The code of the app you sign with.** It builds the transaction and shows you
   what it does. A compromised app can show one thing and ask you to sign another;
   the authenticator's prompt will not tell you the difference.
-- The **RPC endpoints** you read from (a pool with failover; you can set your own).
-- The **relay**, for liveness only: it can delay or refuse, not alter or steal.
+- The **RPC endpoints** you read from: a lying node can show wrong balances or a
+  wrong simulation preview. You can set your own.
+- The **chain-data and exchange-rate services**: they supply token lists,
+  descriptors, the fee-token list and the rates used to turn a fiat amount into a
+  token amount.
+- The **relay**: it can't change what you signed, but it can delay or refuse it,
+  choose when it lands (so it could front-run a swap within your slippage), and set
+  the gas price your fee is based on, up to three times the wallet's own reading.
 
 **Threats considered**
 
 - **Lost or stolen device** — a thief still needs to pass the authenticator's
-  check; another key restores access.
-- **Phishing** — a passkey cannot be typed into a fake site and is not offered to
-  other domains.
-- **Malicious dApp** — addressed by clear signing and the approval guard. A dApp
-  can request an ordinary call to your own account (for example, adding an
-  owner); Vela decodes it but does not yet block it.
-- **Compromised backend service** (relay, index, chain data, exchange rates) —
-  no signing power. The worst cases are refusing service, and — for the
-  chain-data service — serving misleading descriptors, which is why fetched
-  descriptors are not treated as authenticated and why the service can be
-  replaced.
+  check; another key restores access. But a key cannot be removed: if one may be in
+  someone else's hands, move your funds to a new wallet, because the old address
+  stays spendable by that key on every network.
+- **Phishing** — a passkey cannot be typed into a fake site, and browsers offer it
+  only to pages on getvela.app and its subdomains.
+- **Malicious dApp** — addressed by clear signing and the approval guard, with a
+  serious gap: a dApp can request a call from your Safe to itself —
+  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — and
+  any one of them, signed once, hands over the account as completely as the Bybit
+  payload did. Vela decodes these calls but does not block them yet. Reject any
+  request whose target is your own wallet address.
+- **Compromised backend service** (relay, index, chain data, exchange rates) — no
+  signing power, but real influence: refusing service, misleading descriptors or
+  token lists, wrong exchange rates that change how much a fiat amount sends, and
+  (for the relay) the timing and gas price above. Fetched descriptors are not
+  treated as authenticated, and each service can be replaced.
 - **Compromised app delivery** — a tampered web deployment, extension update or
   app build could present a malicious transaction for you to sign. This is the
-  [Bybit](/docs/bybit-attack) class of attack. Mitigations today: the
-  decoding and approval guard in the app itself, store and notarized builds, and
-  building the extension or apps from source yourself. An independent signing
-  page that does not share the app's code is built but not yet connected.
-- **Loss of the domain** — whoever controls `getvela.app` could serve pages that
-  request signatures from Vela passkeys. Apps with their own code (the extension,
-  self-built apps) do not depend on what the domain serves.
+  [Bybit](/docs/bybit-attack) class of attack. Mitigations today are limited: the
+  decoding and approval guard in the app itself, notarized macOS builds, and
+  building the extension or apps from source yourself (release packages carry
+  SHA-256 checksums, not signatures). An independent signing page that does not
+  share the app's code is built but not yet connected.
+- **Anything served from the domain** — any page on getvela.app or its
+  subdomains, including a script it loads, could request signatures from Vela
+  passkeys, and the prompt shows only "getvela.app". The website therefore forbids
+  its own pages from using passkeys, and keeps its analytics script off the page
+  that holds a key. If the domain changed hands, its new owner would also control
+  which apps may use the passkeys. The extension and self-built apps carry their
+  own code, though by default they still fetch descriptors and use services under
+  getvela.app.
 
 ## Recovery
 
@@ -238,7 +265,8 @@ Details: [recovery & sign-in](/docs/recovery).
 ## If Vela disappears
 
 Your funds stay in your Safe on-chain. The contracts don't depend on Vela, and
-every service Vela runs can be replaced. The one thing that cannot move is the
+every service Vela runs is open source for someone else to run — the relay needs
+a code change to stop reading chain data from Vela's server. The one thing that cannot move is the
 passkeys' relying party, `getvela.app`: a copy of the web wallet on another
 domain creates a different wallet. For existing wallets, the Vela browser
 extension (which can use `getvela.app` passkeys by permission) and apps you build
@@ -252,9 +280,11 @@ to support RIP-7212.
 No account, no email, no KYC. What becomes public is written to the registry when
 you create a wallet: each key's public key and credential ID, the authenticator
 model, your wallet name and key labels, the address, and the signed registration
-data. Vela's index sees that record before submitting it; Vela's relay sees your
-address and the operations you submit, and keeps them for a limited time to
-retry and diagnose. The website uses cookieless analytics. The
+data. Vela's index sees that record before submitting it, and the addresses you
+look up names for; Vela's relay sees your address, the operations you submit and
+the RPC endpoint your app uses (including any API key in its URL), and keeps
+operations for a limited time to retry and diagnose. Every service sees your IP
+address. The website uses cookieless analytics. The
 [privacy policy](/privacy) is the authoritative list.
 
 ## Open source
