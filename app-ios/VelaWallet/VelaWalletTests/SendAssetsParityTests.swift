@@ -313,6 +313,17 @@ struct SendAssetsParityTests {
 
     /// The web's `hasPriorInteraction`: only a send, a dApp transaction or a
     /// legacy row with no type is a prior send; case does not matter.
+    /// An EIP-7702-delegated EOA (`0xef0100 ++ impl`) is a person's wallet, not
+    /// a contract — the web's `isContractAddress`, as Android and desktop answer.
+    @Test func aDelegatedWalletIsNotAContract() {
+        #expect(!RelayClient.codeIsContract("0xef0100" + String(repeating: "ab", count: 20)))
+        #expect(!RelayClient.codeIsContract("0xEF0100" + String(repeating: "AB", count: 20)))
+        #expect(RelayClient.codeIsContract("0x6080604052"))
+        #expect(!RelayClient.codeIsContract("0x"))
+        // 24 bytes is not the designator: a contract.
+        #expect(RelayClient.codeIsContract("0xef0100" + String(repeating: "ab", count: 21)))
+    }
+
     @Test func firstTimeIsAnsweredFromTheWalletsOwnSends() {
         let to = "0xAbCdEf0000000000000000000000000000000001"
         #expect(SendExecutor.firstTime(to, records: []))
