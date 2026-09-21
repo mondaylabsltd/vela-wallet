@@ -334,6 +334,16 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
 
+/**
+ * Where each provider's API key is made. The panel sent every "Get key →" to
+ * drpc.org, Alchemy's and Ankr's included.
+ */
+export const PROVIDER_KEY_URLS = {
+	alchemy: 'https://dashboard.alchemy.com/',
+	drpc: 'https://drpc.org/',
+	ankr: 'https://www.ankr.com/rpc/'
+} as const;
+
 export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
 	return {
 		title: m.advanced.rpcProvidersTitle,
@@ -358,7 +368,8 @@ export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvide
 					test !== null && test.done
 						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
 						: undefined,
-				link: p.has_key ? undefined : `${m.rpcProviders.getKey} →`
+				link: p.has_key ? undefined : `${m.rpcProviders.getKey} →`,
+				linkUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider]
 			};
 		})
 	};

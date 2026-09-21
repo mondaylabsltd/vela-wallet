@@ -38,8 +38,8 @@
 			{#if provider.support !== undefined}
 				<p class="support">{provider.support}</p>
 			{/if}
-			{#if provider.link !== undefined}
-				<a class="link" href="https://drpc.org" target="_blank" rel="noreferrer noopener">
+			{#if provider.link !== undefined && provider.linkUrl !== undefined}
+				<a class="link" href={provider.linkUrl} target="_blank" rel="noreferrer noopener">
 					{provider.link}
 				</a>
 			{/if}
