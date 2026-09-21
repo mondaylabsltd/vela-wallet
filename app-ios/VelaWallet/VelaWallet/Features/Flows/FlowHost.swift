@@ -114,6 +114,8 @@ struct FlowHost: View {
     /// Split: a row was removed, or a row was added.
     var onRemoveRecipient: ((Int) -> Void)?
     var onAddRecipient: (() -> Void)?
+    /// Split: "Use X for the empty rows".
+    var onFillEmpty: ((String) -> Void)?
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
     /// a picture, where the CTA still just navigates.
     var onConfirm: (() -> Void)?
@@ -349,6 +351,7 @@ struct FlowHost: View {
                     },
                     amountText: sendAmount,
                     recipientText: sendRecipient,
+                    onFillEmpty: onFillEmpty,
                     rowText: sendRow,
                     warning: sendWarning,
                     ctaDisabled: sendCtaDisabled

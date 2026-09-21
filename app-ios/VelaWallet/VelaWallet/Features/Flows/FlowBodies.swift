@@ -642,6 +642,8 @@ struct SendFormBody: View {
     /// The two live fields. Absent everywhere the form is a picture.
     var amountText: Binding<String>?
     var recipientText: Binding<String>?
+    /// "Use X for the empty rows". Absent where the form is a picture.
+    var onFillEmpty: ((String) -> Void)?
     /// One binding pair per split row, by the core's row id. Absent in the
     /// gallery, where the rows are a picture of a list.
     var rowText: ((String) -> (address: Binding<String>, amount: Binding<String>))?
@@ -729,6 +731,23 @@ struct SendFormBody: View {
                     address: live?.address,
                     amount: live?.amount
                 )
+            }
+            // One amount into every row that has none (the web's `.fill`): a
+            // quiet underlined line under the rows, not a second button.
+            if let fill = model.fillEmpty, let onFillEmpty {
+                Button { VelaHaptic.select.play(); onFillEmpty(fill.amount) } label: {
+                    HStack(spacing: Tokens.Space.s8) {
+                        LucideIcon(.copy, size: LucideIconSize.rowGlyph)
+                        Text(verbatim: fill.label)
+                            .typeRole(Typography.label.scaled(textScale))
+                            .underline()
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(theme.fgBase)
+                    .padding(.vertical, Tokens.Space.s8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             if !model.recipientActions.isEmpty {
                 GhostPillRowView(items: model.recipientActions, onSelect: onRecipientAction)

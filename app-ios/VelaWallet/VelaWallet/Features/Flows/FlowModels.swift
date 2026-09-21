@@ -501,6 +501,15 @@ struct SendFormModel {
     /// field it still needs, from the core's `split_row_issues`. Said only
     /// while no refusal is (the warning wins).
     var hint: String?
+    /// Split only: "Use 0.5 ETH for the empty rows" — one typed figure into
+    /// every row that has none (the web's `model.fillEmpty`).
+    var fillEmpty: FillEmptyModel?
+}
+
+/// The words, and the figure exactly as it was typed.
+struct FillEmptyModel: Equatable {
+    let label: String
+    let amount: String
 }
 
 /// SD2e — the contact picker.

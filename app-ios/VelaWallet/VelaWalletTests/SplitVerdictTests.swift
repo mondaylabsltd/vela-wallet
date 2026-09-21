@@ -138,6 +138,38 @@ struct SplitVerdictTests {
         #expect(SendLive.form(busy, fee: nil, display: .usd, on: try drawnSplit(), loc: loc).hint == nil)
     }
 
+    /// **"Use X for the empty rows" (the web's `fillEmpty`)** is offered only
+    /// while a row is empty and another carries a figure the core accepts;
+    /// the figure is copied exactly as typed, into the empty rows only.
+    @Test func theEmptyRowsAreOfferedTheTypedFigure() throws {
+        let view = try splitView(
+            rows: [row("rcpt_1", Self.alice, "0.50"), row("rcpt_2", Self.bob, "")],
+            issues: [["id": "rcpt_2", "ordinal": 2, "address": "ok", "amount": "empty"]]
+        )
+        let fill = SendLive.form(view, fee: nil, display: .usd, on: try drawnSplit(), loc: loc).fillEmpty
+        #expect(fill == FillEmptyModel(label: "Use 0.5 xDAI for the empty rows", amount: "0.50"))
+
+        // No empty row, nothing to fill.
+        let full = try splitView(rows: [row("rcpt_1", Self.alice, "0.50"), row("rcpt_2", Self.bob, "1")])
+        #expect(SendLive.form(full, fee: nil, display: .usd, on: try drawnSplit(), loc: loc).fillEmpty == nil)
+
+        // A figure the core rejects is never the one that is copied.
+        let rejected = try splitView(
+            rows: [row("rcpt_1", Self.alice, "1,5"), row("rcpt_2", Self.bob, "")],
+            issues: [
+                ["id": "rcpt_1", "ordinal": 1, "address": "ok", "amount": "invalid"],
+                ["id": "rcpt_2", "ordinal": 2, "address": "ok", "amount": "empty"],
+            ]
+        )
+        #expect(SendLive.form(rejected, fee: nil, display: .usd, on: try drawnSplit(), loc: loc).fillEmpty == nil)
+
+        // The dispatch: only the empty rows take the figure; ids ride along.
+        let rows = SplitRows.drafts(from: view)
+        let filled = SplitRows.emptyFilled(rows, amount: "0.50")
+        #expect(filled[0] == rows[0])
+        #expect(filled[1].amount == "0.50" && filled[1].id == "rcpt_2")
+    }
+
     /// **The total says what is left, and says it is over — live.** The
     /// over-balance verdict is the same predicate Continue refuses on; it used
     /// to arrive only as an alert after the refusal. And a split does not take

@@ -403,7 +403,26 @@ enum SendLive {
             fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc),
             cta: live.cta,
             // While the pre-check is out the button is busy, not unfinished.
-            hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil
+            hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil,
+            fillEmpty: view.splitMode ? fillEmpty(view, issues: issues, symbol: symbol, loc: loc) : nil
+        )
+    }
+
+    /// "Use 0.5 ETH for the empty rows" (the web's `fillEmpty`): offered while
+    /// the core flags a row's amount as empty and another row has a figure the
+    /// core accepts. The figure is the first such row's, exactly as typed —
+    /// nothing is computed.
+    static func fillEmpty(
+        _ view: SendViewWire, issues: [SendSplitRowIssueWire], symbol: String, loc: Loc
+    ) -> FillEmptyModel? {
+        guard issues.contains(where: { $0.amount == .empty }) else { return nil }
+        let flagged = Dictionary(issues.map { ($0.id, $0.amount) }, uniquingKeysWith: { first, _ in first })
+        guard let source = view.recipients.first(where: { row in
+            !row.amount.trimmingCharacters(in: .whitespaces).isEmpty && (flagged[row.id] ?? .ok) == .ok
+        }) else { return nil }
+        return FillEmptyModel(
+            label: loc.t("send.splitFillEmpty", vars: ["amount": "\(trim(source.amount)) \(symbol)".trimmingCharacters(in: .whitespaces)]),
+            amount: source.amount
         )
     }
 
