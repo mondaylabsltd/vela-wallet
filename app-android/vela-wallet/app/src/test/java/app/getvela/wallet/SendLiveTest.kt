@@ -35,6 +35,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRecipientIdentity
+import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.send.core.SendMultiSpecView
@@ -223,6 +225,65 @@ class SendLiveTest {
         assertTrue(live.rows[0].selected)
         assertTrue(live.rows[1].fee.contains("0.0021") && live.rows[1].fee.contains("USDC"))
         assertTrue(live.rows[0].balanceLabel.contains("0.71697"))
+    }
+
+    /** Issue 211: a coin the core judged unable to pay is dimmed and says why, not drawn like the rest. */
+    @Test
+    fun `the fee sheet marks a coin that cannot pay`() {
+        val drawn = FlowFixtures.build(FlowState.SD2F, strings).sheet as FlowSheet.FeeToken
+        val fee = FeeView(
+            fee = fee(),
+            options = listOf(
+                FeeOptionView(symbol = "XDAI", contract = null, decimals = 18, balance = "716970000000000000", recipient = "0x2", usd_balance = "0.7", amount = "2100000000000000", selected = true),
+                FeeOptionView(symbol = "USDC", contract = "0x3333333333333333333333333333333333333333", decimals = 6, balance = "0", recipient = "0x2", usd_balance = "0", amount = "2100", insufficient = true),
+            ),
+        )
+        val live = SendLive.feeSheet(drawn.model, fee, ctx())
+        assertFalse(live.rows[0].insufficient)
+        assertTrue(live.rows[1].insufficient)
+        assertEquals(strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to "USDC")), live.rows[1].insufficientNote)
+    }
+
+    /** The web's `recipientNote`: "name · source", else the first-time tell, else nothing. */
+    @Test
+    fun `the recipient note names the source of the name`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val base = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient)
+        fun note(view: SendView) = SendLive.form(drawn.model, view, FeeView(), ctx()).recipient!!.note
+        assertEquals("alice.eth · ENS", note(base.copy(recipient_identity = SendRecipientIdentity(name = "alice.eth", source = "ENS"))))
+        assertEquals("Alice", note(base.copy(recipient_identity = SendRecipientIdentity(name = "Alice"))))
+        assertEquals(strings.t(I18nKeys.Flows.FIRST_TIME_SEND), note(base.copy(recipient_risk = SendRecipientRisk(first_time = true))))
+        assertNull(note(base))
+    }
+
+    /** Issue 209: a filter that hid every row is a different sentence from an empty account. */
+    @Test
+    fun `an empty pick says why it is empty`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        assertEquals(strings.t(I18nKeys.Flows.NO_TOKENS_WITH_BALANCE), SendLive.pick(drawn.model, SendView(), ctx()).empty)
+        val hidden = SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx(), classFilter = "stable")
+        assertTrue(hidden.rows.isEmpty())
+        assertEquals(strings.t(I18nKeys.Flows.NO_MATCHING_TOKENS), hidden.empty)
+    }
+
+    /** Issue 231: the web's `unitAdornment` — a sign leads, a code or a ticker follows, nothing defaults to "$". */
+    @Test
+    fun `the amount's unit sits on the figure`() {
+        assertEquals(null to "BNB", SendLive.unitAdornment(null, "BNB"))
+        assertEquals(null to null, SendLive.unitAdornment(null, ""))
+        assertEquals("$" to null, SendLive.unitAdornment("USD", "BNB"))
+        assertEquals("€" to null, SendLive.unitAdornment("EUR", "BNB"))
+        assertEquals(null to "PLN", SendLive.unitAdornment("PLN", "BNB"))
+        assertEquals(null to "XYZ", SendLive.unitAdornment("XYZ", "BNB"))
+        // The ⇄ row obeys the core's two flags, and the typed unit is the figure's.
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient, amount = "1", token_amount = "1")
+        val hidden = SendLive.form(drawn.model, view, FeeView(), ctx()).amount!!
+        assertFalse(hidden.denomShown)
+        assertEquals("XDAI", hidden.denomLabel)
+        val dimmed = SendLive.form(drawn.model, view.copy(denom_toggle_shown = true), FeeView(), ctx()).amount!!
+        assertTrue(dimmed.denomShown)
+        assertFalse(dimmed.denomEnabled)
     }
 
     @Test

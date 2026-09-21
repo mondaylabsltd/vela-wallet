@@ -6,6 +6,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.KeyboardOptions
@@ -58,6 +66,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaLeading
 import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
+import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -288,6 +297,11 @@ fun AmountInput(
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl5,
             textAlign = TextAlign.Center,
         )
+        // Issue 231: the unit ON the figure — a sign tight before it ("$4.00"),
+        // a ticker or code after it, quieter and smaller ("0.00075 BNB").
+        val units = remember(amount.unitPrefix, amount.unitSuffix, colors.fgMuted) {
+            amountUnits(amount.unitPrefix, amount.unitSuffix, colors.fgMuted)
+        }
         if (onValueChange != null && amount.raw != null) {
             // Local echo (spec 043, device-found): every keystroke goes to the
             // machine, but the field shows what was typed until the machine's
@@ -314,37 +328,82 @@ fun AmountInput(
                 textStyle = heroStyle,
                 cursorBrush = SolidColor(colors.accentBase),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                // The unit is drawn, never typed: the field's text stays the bare figure.
+                visualTransformation = units,
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.Center) {
-                        if (typed.isEmpty()) Text(text = "0", style = heroStyle.copy(color = colors.fgSubtle))
+                        if (typed.isEmpty()) Text(text = units.filter(AnnotatedString("0")).text, style = heroStyle.copy(color = colors.fgSubtle))
                         inner()
                     }
                 },
             )
         } else {
-            Text(text = amount.value, style = heroStyle, maxLines = 1)
+            Text(text = units.filter(AnnotatedString(amount.value)).text, style = heroStyle, maxLines = 1)
         }
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
-        Row(
-            modifier = Modifier.clickable(onClick = onDenom).padding(VelaSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (amount.denomShown) {
+            // Issue 197: shown only where the core offers the swap, and live
+            // only where pressing it would change something.
+            Row(
+                modifier = Modifier
+                    .clickable(enabled = amount.denomEnabled, onClick = onDenom)
+                    .alpha(if (amount.denomEnabled) 1f else VelaOpacity.disabled)
+                    .padding(VelaSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = amount.fiat,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.lg,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                Icon(
+                    imageVector = VelaIcons.ChevronsUpDown,
+                    contentDescription = amount.denomLabel,
+                    tint = colors.fgMuted,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+            }
+        } else if (amount.fiat.isNotEmpty()) {
             Text(
                 text = amount.fiat,
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.lg,
                 maxLines = 1,
-            )
-            Spacer(modifier = Modifier.width(VelaSpacing.xs))
-            Icon(
-                imageVector = VelaIcons.ChevronsUpDown,
-                contentDescription = amount.denomLabel,
-                tint = colors.fgMuted,
-                modifier = Modifier.size(VelaIconSize.sm),
+                modifier = Modifier.padding(VelaSpacing.xs),
             )
         }
+    }
+}
+
+/**
+ * The amount's unit as a transformation of what is typed: the sign before the
+ * digits, the ticker or code after them (set off by a space, smaller and
+ * lighter, as the web draws it). The caret maps through it, so the unit can be
+ * neither typed over nor deleted.
+ */
+private fun amountUnits(prefix: String?, suffix: String?, unitColor: Color): VisualTransformation {
+    if (prefix.isNullOrEmpty() && suffix.isNullOrEmpty()) return VisualTransformation.None
+    val lead = prefix.orEmpty()
+    val tail = suffix?.let { " $it" }.orEmpty()
+    return VisualTransformation { text ->
+        val drawn = buildAnnotatedString {
+            withStyle(SpanStyle(color = unitColor)) { append(lead) }
+            append(text)
+            withStyle(SpanStyle(color = unitColor, fontSize = VelaTextSize.xl3, fontWeight = VelaFontWeight.medium)) { append(tail) }
+        }
+        val length = text.length
+        TransformedText(
+            drawn,
+            object : OffsetMapping {
+                override fun originalToTransformed(offset: Int): Int = offset + lead.length
+                override fun transformedToOriginal(offset: Int): Int = (offset - lead.length).coerceIn(0, length)
+            },
+        )
     }
 }
 
