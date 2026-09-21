@@ -88,4 +88,26 @@ class ExploreLiveTest {
         assertNull(hidden.favorites)
         assertTrue(hidden.groups.isEmpty())
     }
+    /**
+     * Issue #273: the explore scanner opens web addresses only. A URL opens as
+     * read, a bare host the address bar would open gets its `https://`, and
+     * everything else — an address, a WalletConnect or payment link, words —
+     * is refused rather than guessed into a URL.
+     */
+    @Test
+    fun `a scanned code opens only when it is a web address`() {
+        assertEquals("https://app.uniswap.org/swap?x=1", ExploreLive.scannedUrl("  https://app.uniswap.org/swap?x=1 \n"))
+        assertEquals("http://192.168.1.2:8080/", ExploreLive.scannedUrl("http://192.168.1.2:8080/"))
+        assertEquals("https://Example.com/A", ExploreLive.scannedUrl("HTTPS://Example.com/A"))
+        assertEquals("https://app.uniswap.org", ExploreLive.scannedUrl("app.uniswap.org"))
+        assertEquals("https://example.com:8443/x", ExploreLive.scannedUrl("example.com:8443/x"))
+
+        assertNull(ExploreLive.scannedUrl("0x2222222222222222222222222222222222222222"))
+        assertNull(ExploreLive.scannedUrl("wc:7f6e504bfad60b48@2?relay-protocol=irn&symKey=5"))
+        assertNull(ExploreLive.scannedUrl("ethereum:0x2222222222222222222222222222222222222222@1"))
+        assertNull(ExploreLive.scannedUrl("velawallet://pay?a=1"))
+        assertNull(ExploreLive.scannedUrl("hello world"))
+        assertNull(ExploreLive.scannedUrl("localhost"))
+        assertNull(ExploreLive.scannedUrl(""))
+    }
 }

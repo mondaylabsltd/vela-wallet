@@ -469,6 +469,8 @@ object I18nKeys {
         const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
         const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
         const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"
+        /** A code read, but not one this surface can use (the web scanner's `unusable`). */
+        const val SCAN_INVALID_QR = "home.invalidQrTitle"
 
         // Activity.
         const val HISTORY_TITLE = "history.navTitle"

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.explore
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -101,6 +102,11 @@ fun ExploreScreen(
     live: ExploreCallbacks? = null,
     /** Spec 044: the core is asking whether this origin may connect; drawn as the connection sheet's not-yet-connected form. */
     consent: ConnectionModel? = null,
+    /**
+     * Issue #273: the live scanner, drawn in place of the tab while open. It
+     * hands back a web address to open (`onUrl`) or asks to be closed.
+     */
+    scanner: (@Composable (onUrl: (String) -> Unit, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -116,8 +122,15 @@ fun ExploreScreen(
     // this the switcher's Done, with only the start tab left, drew the demo
     // page — a fixture on a live route (device-found).
     val view = (viewOverride ?: model.view).let { if (live != null && it == ExploreView.Browsing && page == null) ExploreView.Start else it }
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = scanning) { scanning = false }
 
-    Column(
+    if (scanning && scanner != null) {
+        scanner(
+            { url -> scanning = false; onOpenUrl?.invoke(url); viewOverride = ExploreView.Browsing },
+            { scanning = false },
+        )
+    } else Column(
         modifier = modifier
             .fillMaxSize()
             .background(colors.bgBase),
@@ -173,6 +186,7 @@ fun ExploreScreen(
                     model = model,
                     hidden = hidden,
                     onOpenUrl = onOpenUrl?.let { open -> { text: String -> open(text); viewOverride = ExploreView.Browsing } },
+                    onScan = scanner?.let { { scanning = true } },
                     onBrowse = { viewOverride = ExploreView.Browsing },
                     onTabs = { viewOverride = ExploreView.Tabs },
                     onManageGroups = { sheet = model.groupManageSheet },
@@ -275,6 +289,7 @@ private fun StartPage(
     hidden: Set<String>,
     onBrowse: () -> Unit,
     onOpenUrl: ((String) -> Unit)? = null,
+    onScan: (() -> Unit)? = null,
     onTabs: () -> Unit,
     onManageGroups: () -> Unit,
     modifier: Modifier = Modifier,
@@ -334,6 +349,7 @@ private fun StartPage(
             placeholder = model.searchPlaceholder,
             scanLabel = model.scanLabel,
             onSubmit = { text -> if (onOpenUrl != null && text.isNotBlank()) onOpenUrl(text) else onBrowse() },
+            onScan = onScan,
         )
 
         model.empty?.let {

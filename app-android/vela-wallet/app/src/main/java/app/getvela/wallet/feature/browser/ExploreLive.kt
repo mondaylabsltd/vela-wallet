@@ -30,6 +30,25 @@ import app.getvela.wallet.feature.explore.TileModel
  * A site's `id` is the URL it opens — what a tap has to hand back.
  */
 object ExploreLive {
+    /**
+     * Issue #273: what a scanned code opens in the browser, or `null` when it
+     * is not a web address. `http(s)://` opens as read; a bare host
+     * (`app.uniswap.org`, `example.com:8080/x`) is what the search field would
+     * open, so it gets the address bar's `https://`. Anything else — an
+     * address, `ethereum:`/`wc:` links, words — is refused: the wallet does
+     * not connect by WalletConnect, and a code must not open as a guessed URL.
+     */
+    fun scannedUrl(text: String): String? {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty() || trimmed.any(Char::isWhitespace)) return null
+        val scheme = Regex("^(https?)://(.+)$", RegexOption.IGNORE_CASE).find(trimmed)
+        if (scheme != null) return "${scheme.groupValues[1].lowercase()}://${scheme.groupValues[2]}"
+        return if (BARE_HOST.matches(trimmed)) "https://$trimmed" else null
+    }
+
+    /** `host.tld[:port][/path|?query|#frag]` — dotted labels, a letter-led last label. */
+    private val BARE_HOST = Regex("^([A-Za-z0-9-]+\\.)+[A-Za-z][A-Za-z0-9-]*(:\\d+)?([/?#].*)?$")
+
     /** What the connection surfaces need to know about the wallet and the browser's chain. */
     data class Identity(
         val accountName: String = "",
