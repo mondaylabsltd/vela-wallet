@@ -41,6 +41,10 @@ class AmountTextTest {
         // A tiny balance as many screens print it: refused, never 1.57.
         assertNull(cleanAmountEdit("1.5e-7", ""))
         assertNull(cleanAmountEdit("0x10", "2"))
+        // A comma that is neither this preset's decimal mark nor grouping:
+        // 150 would be a hundred times somebody's 1,50.
+        assertNull(cleanAmountEdit("1,50", ""))
+        assertEquals("1500", cleanAmountEdit("1,500", ""))
     }
 
     @Test fun `a clean figure is left as typed`() {

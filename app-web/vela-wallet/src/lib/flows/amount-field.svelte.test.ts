@@ -61,6 +61,17 @@ describe('the custom allowance', () => {
 		expect(oncustom).toHaveBeenLastCalledWith('4.');
 	});
 
+	it("refuses a comma it cannot read — never 150 for somebody's 1,50", async () => {
+		// A decimal-point preset, and a figure pasted from a decimal-comma
+		// writer: dropped as grouping it was a cap a hundred times too high.
+		preferences.numberFormat = 'comma_dot';
+		const oncustom = vi.fn();
+		const input = editor('2', oncustom);
+		await type(input, '1,50', 'insertFromPaste');
+		expect(oncustom).not.toHaveBeenCalled();
+		expect(input.value).toBe('2');
+	});
+
 	it('refuses a paste that is not one figure, and keeps the cap it had', async () => {
 		const oncustom = vi.fn();
 		const input = editor('2', oncustom);

@@ -23,7 +23,10 @@
 //!
 //! - decimal-comma preset, no `.` yet → the `,` IS the decimal mark ("4,5" → "4.5");
 //! - a single typed `,`, no `.` yet → the same, under any preset (below);
-//! - otherwise → a `,` is grouping and is dropped ("1,234.5" → "1234.5").
+//! - otherwise → a `,` is grouping and is dropped ("1,234.5" → "1234.5") —
+//!   but under a decimal-point preset a figure with no `.` whose commas are
+//!   not grouping ("1,5", "1,50") has no safe reading when it arrives whole,
+//!   and is refused like any paste with no reading.
 //!
 //! A `,` is never blindly mapped to `.`: a pasted "1,234.56" would become
 //! "1.234.56", which reads as 1.234. A PASTED figure that is unmistakably
@@ -128,6 +131,19 @@ pub fn clean(
         text.chars().count() == before.chars().count() + 1 && text.replacen(',', "", 1) == before
     });
     let comma_is_decimal = (preset_comma || keystroke) && !text.contains('.');
+    // Under a decimal-point preset, a comma that arrived with other text (a
+    // paste, an autofill — not the one key) in a figure with no point is
+    // grouping only if it IS grouping ("1,234", "12,34,567"). "1,5" or
+    // "1,50" is somebody's decimal comma as likely as a slip, and neither
+    // reading is safe: dropped as grouping it is ten times the figure.
+    if !comma_is_decimal
+        && !keystroke
+        && text.contains(',')
+        && !text.contains('.')
+        && !grouping_only(&text)
+    {
+        return None;
+    }
     // Two decimal marks in a paste: there is no figure here to read.
     if pasted && comma_is_decimal && text.matches(',').count() > 1 {
         return None;
@@ -247,6 +263,21 @@ fn letter_between_digits(raw: &str) -> bool {
         }
         chars.get(i).is_some_and(char::is_ascii_digit)
     })
+}
+
+/// `^\d{1,3}(?:,\d{3})+$` or the Indian `^\d{1,2}(?:,\d{2})*,\d{3}$` — a
+/// whole number whose every comma is a thousands (or lakh) separator.
+fn grouping_only(text: &str) -> bool {
+    let groups: Vec<&str> = text.split(',').collect();
+    let digits = |g: &str| !g.is_empty() && g.bytes().all(|b| b.is_ascii_digit());
+    if groups.len() < 2 || !groups.iter().all(|g| digits(g)) {
+        return false;
+    }
+    let (first, rest) = (groups[0], &groups[1..]);
+    let western = first.len() <= 3 && rest.iter().all(|g| g.len() == 3);
+    let (last, middle) = rest.split_last().unwrap_or((&"", &[]));
+    let indian = first.len() <= 2 && last.len() == 3 && middle.iter().all(|g| g.len() == 2);
+    western || indian
 }
 
 /// `^\d{1,3}(?:G\d{3})+D\d+$` or `^\d{1,3}(?:G\d{3}){2,}$` — a figure grouped
@@ -445,6 +476,35 @@ mod tests {
         );
         // No previous text known: nothing is a keystroke.
         assert_eq!(clean("1.5e-7", DOT, Entry::Unknown, None), None);
+    }
+
+    #[test]
+    fn a_comma_that_is_neither_decimal_nor_grouping_is_refused() {
+        // Arriving whole under a decimal-point preset: 15 or 150 is ten
+        // times what a decimal-comma writer meant, 1.5 is a guess.
+        assert_eq!(clean("1,5", DOT, Entry::Typed, Some("")), None);
+        assert_eq!(pasted("1,50", DOT), None);
+        assert_eq!(clean("1,5", DOT, Entry::Unknown, Some("")), None);
+        // Real grouping still reads as grouping…
+        assert_eq!(clean("1,234", DOT, Entry::Typed, Some("")), s("1234"));
+        assert_eq!(typed("12,34,567", DOT), s("1234567"));
+        // …one typed comma is still the decimal mark…
+        assert_eq!(clean("1,", DOT, Entry::Typed, Some("1")), s("1."));
+        // …and where the person writes a decimal comma it is one.
+        assert_eq!(pasted("1,5", COMMA), s("1.5"));
+    }
+
+    #[test]
+    fn grouping_only_is_thousands_or_lakhs() {
+        assert!(grouping_only("1,234"));
+        assert!(grouping_only("1,234,567"));
+        assert!(grouping_only("12,34,567"));
+        assert!(!grouping_only("1,5"));
+        assert!(!grouping_only("1,50"));
+        assert!(!grouping_only("1234,567"));
+        assert!(!grouping_only("1,2345"));
+        assert!(!grouping_only(",5"));
+        assert!(!grouping_only("1,"));
     }
 
     #[test]
