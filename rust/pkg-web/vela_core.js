@@ -4025,6 +4025,48 @@ export function peggedNativeUsd(symbol) {
 }
 
 /**
+ * `{key: rawValue}` → `[{key, value | null}]`, the writes that bring an
+ * older spelling to the shared record.
+ * @param {string} entries_json
+ * @returns {string}
+ */
+export function prefsMigrations(entries_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(entries_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.prefsMigrations(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * `{key: rawValue}` → `{theme, language, avatarStyle, textScale,
+ * textScaleFactor, numberFormat, dateFormat, timeFormat}`.
+ * @param {string} entries_json
+ * @returns {string}
+ */
+export function prefsRead(entries_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(entries_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.prefsRead(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -4305,6 +4347,62 @@ export function signMessageHash(method, params_json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v3;
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsCacheKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsCacheKey(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function storageIsErasableKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageIsErasableKey(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * The row a key belongs to, or `undefined`.
+ * @param {string} key
+ * @returns {string | undefined}
+ */
+export function storageItemOfKey(key) {
+    const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.storageItemOfKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * `[{id, group}]`, in the order the page draws them.
+ * @returns {string}
+ */
+export function storageItems() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.storageItems();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**

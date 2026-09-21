@@ -2639,17 +2639,17 @@ fn provider_blurred(model: &mut Model, provider: NetProviderId) -> Command<NetEf
     model.provider_drafts.insert(provider, trimmed.clone());
 
     // `saveRpcProviders`: trim every entry, DROP empties — a cleared key
-    // fully removes the provider (invariant ⑦, storage.ts:323-335). Note
-    // that other providers' in-progress drafts persist too, verbatim
-    // (`persist(next)` writes the whole draft map).
-    let mut cleaned = NetProviderKeys::default();
+    // fully removes the provider (invariant ⑦, storage.ts:323-335). Other
+    // providers' in-progress drafts persist too, verbatim. A provider with NO
+    // draft keeps its saved key: rebuilding the map from drafts alone wiped
+    // every saved key the moment a shell that never seeded them (no
+    // `ProvidersOpened`) saw one field lose focus (spec 072, P0).
+    let mut cleaned = model.provider_keys.clone();
     for &id in &PROVIDER_ORDER {
-        let value = model
-            .provider_drafts
-            .get(&id)
-            .map(|k| k.trim().to_owned())
-            .unwrap_or_default();
-        cleaned.set(id, (!value.is_empty()).then_some(value));
+        if let Some(draft) = model.provider_drafts.get(&id) {
+            let value = draft.trim().to_owned();
+            cleaned.set(id, (!value.is_empty()).then_some(value));
+        }
     }
     model.provider_keys = cleaned;
 
@@ -3033,10 +3033,14 @@ fn wizard_view(model: &Model) -> NetWizardView {
 }
 
 fn provider_view(model: &Model, provider: NetProviderId) -> NetProviderView {
+    // The draft when one is being typed, else the SAVED key: a shell that
+    // never raised `ProvidersOpened` (spec 072: web's wide layout, Android)
+    // showed every saved key as "Not set".
     let key = model
         .provider_drafts
         .get(&provider)
         .cloned()
+        .or_else(|| model.provider_keys.get(provider).cloned())
         .unwrap_or_default();
     let test = model.provider_tests.get(&provider).map(|t| {
         let results: Vec<NetProviderNetRow> = t

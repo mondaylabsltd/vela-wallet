@@ -15,6 +15,7 @@ mod ctap_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
+mod settings_bridge;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 

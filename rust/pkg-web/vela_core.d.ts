@@ -889,6 +889,18 @@ export function passkeyProviderName(aaguid: string): string;
 export function peggedNativeUsd(symbol: string): number | undefined;
 
 /**
+ * `{key: rawValue}` → `[{key, value | null}]`, the writes that bring an
+ * older spelling to the shared record.
+ */
+export function prefsMigrations(entries_json: string): string;
+
+/**
+ * `{key: rawValue}` → `{theme, language, avatarStyle, textScale,
+ * textScaleFactor, numberFormat, dateFormat, timeFormat}`.
+ */
+export function prefsRead(entries_json: string): string;
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
@@ -969,6 +981,20 @@ export function sha256(data: Uint8Array): Uint8Array;
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  */
 export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
+
+export function storageIsCacheKey(key: string): boolean;
+
+export function storageIsErasableKey(key: string): boolean;
+
+/**
+ * The row a key belongs to, or `undefined`.
+ */
+export function storageItemOfKey(key: string): string | undefined;
+
+/**
+ * `[{id, group}]`, in the order the page draws them.
+ */
+export function storageItems(): string;
 
 export function toBase64Url(data: Uint8Array): string;
 
@@ -1176,6 +1202,8 @@ export interface InitOutput {
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly paymentrequestcore_view: (a: number) => [number, number, number, number];
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
+    readonly prefsMigrations: (a: number, b: number) => [number, number];
+    readonly prefsRead: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1212,6 +1240,10 @@ export interface InitOutput {
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
+    readonly storageIsCacheKey: (a: number, b: number) => number;
+    readonly storageIsErasableKey: (a: number, b: number) => number;
+    readonly storageItemOfKey: (a: number, b: number) => [number, number];
+    readonly storageItems: () => [number, number];
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];

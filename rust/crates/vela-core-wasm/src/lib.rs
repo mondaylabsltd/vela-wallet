@@ -21,6 +21,7 @@ use wasm_bindgen::prelude::*;
 mod bridge;
 mod clear_signer;
 mod onboarding;
+mod settings;
 mod wallet_state;
 
 // ---------------------------------------------------------------------------

@@ -1673,6 +1673,45 @@ fn a_provider_probe_must_report_the_target_chain_id() {
     assert!(!bnb.ok, "wrong reported id ⇒ unavailable");
 }
 
+/// Spec 072, P0: a shell that never raised `ProvidersOpened` (web's wide
+/// layout, Android) showed every saved key as "Not set", and the first field
+/// to lose focus rewrote the stored map from the drafts alone — deleting
+/// every key the person had saved. A saved key now shows, and survives a blur
+/// on ANOTHER provider.
+#[test]
+fn a_blur_without_opening_keeps_the_other_saved_keys() {
+    let mut sut = sut_with_alchemy_key();
+    let alchemy = sut
+        .view()
+        .providers
+        .iter()
+        .find(|p| p.provider == NetProviderId::Alchemy)
+        .cloned();
+    assert_eq!(
+        alchemy.map(|p| p.key),
+        Some("abc".to_owned()),
+        "the saved key is shown unopened"
+    );
+    sut.dispatch(Event::ProviderKeyEdited {
+        provider: NetProviderId::Ankr,
+        value: " ankr-key ".to_owned(),
+    });
+    let ops = sut.dispatch(Event::ProviderKeyBlurred {
+        provider: NetProviderId::Ankr,
+    });
+    assert_eq!(
+        ops.first(),
+        Some(&Op::WriteRpcProviders {
+            keys: NetProviderKeys {
+                alchemy: Some("abc".to_owned()),
+                ankr: Some("ankr-key".to_owned()),
+                ..Default::default()
+            }
+        }),
+        "the saved Alchemy key is written back beside the new one"
+    );
+}
+
 #[test]
 fn clearing_a_key_removes_the_provider_entirely() {
     let mut sut = sut_with_alchemy_key();
