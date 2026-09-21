@@ -60,7 +60,15 @@ final class BatchStore {
     /// The sheet opened on a token. A FULL reset — the core's rule, not a
     /// convenience: an old paste priced at an old rate would otherwise be
     /// waiting when somebody opens the sheet for a different coin.
-    func open(symbol: String, decimals: Int, balance: String, priceUsd: Double?, currencyCode: String) {
+    ///
+    /// `maxRecipients` is the send machine's `split_import_room` — the cap
+    /// less the rows already on the form. Opened at a flat sixty, the sheet's
+    /// "only the first N will be sent" was a promise the append then broke by
+    /// truncating past it (web #265).
+    func open(
+        symbol: String, decimals: Int, balance: String, priceUsd: Double?, currencyCode: String,
+        maxRecipients: Int = BatchStore.maxRecipients
+    ) {
         dispatch([
             "type": "open",
             "token": [
@@ -70,7 +78,7 @@ final class BatchStore {
                 "price_usd": priceUsd.map { $0 as Any } ?? NSNull(),
             ],
             "currency_code": currencyCode,
-            "max_recipients": Self.maxRecipients,
+            "max_recipients": maxRecipients,
         ])
     }
 

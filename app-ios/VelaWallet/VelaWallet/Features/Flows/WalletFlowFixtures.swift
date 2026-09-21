@@ -306,15 +306,19 @@ enum WalletFlowFixtures {
             searchPlaceholder: loc.t("assets.searchPlaceholder"),
             rows: empty ? [] : assets.map(row),
             addByAddress: loc.t("assets.addByAddress"),
-            empty: empty
-                ? AssetsEmptyModel(
-                    title: loc.t("assets.emptyTitle"),
-                    caption: loc.t("assets.emptySubtext"),
-                    cta: loc.t("addToken.navTitle"),
-                    hintTitle: loc.t("assets.notShowingTitle"),
-                    hintBody: loc.t("assets.notShowingBody")
-                )
-                : nil
+            empty: empty ? assetsEmpty(loc) : nil
+        )
+    }
+
+    /// T4's guided-empty body. Its own function because the live list needs
+    /// the same words on a T1 that turned out empty.
+    static func assetsEmpty(_ loc: Loc) -> AssetsEmptyModel {
+        AssetsEmptyModel(
+            title: loc.t("assets.emptyTitle"),
+            caption: loc.t("assets.emptySubtext"),
+            cta: loc.t("addToken.navTitle"),
+            hintTitle: loc.t("assets.notShowingTitle"),
+            hintBody: loc.t("assets.notShowingBody")
         )
     }
 

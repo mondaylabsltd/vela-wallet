@@ -469,6 +469,44 @@ class FlowLiveTest {
         assertEquals("Arbitrum", facts.getValue(strings.t(I18nKeys.Flows.ADD_LABEL_NETWORK)).value)
     }
 
+    /** Issue #266: the chosen network holds nothing while others do — say so, not a blank list. */
+    @Test
+    fun `a network with no holdings shows the empty state while others hold something`() {
+        val view = BalanceView(
+            tokens = listOf(
+                token("POL", "0.152784", 137, price = 0.097),
+                token("ETH", "0.002", 42161, price = 2500.0),
+            ),
+        )
+        val copy = FlowFixtures.assetsEmpty(strings)
+
+        val base = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 8453, emptyCopy = copy)
+        assertEquals(emptyList<Any>(), base.rows)
+        assertEquals(copy, base.empty)
+
+        // Each pick is its own list: Polygon, then Arbitrum, never the other's rows.
+        val polygon = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 137, emptyCopy = copy)
+        assertEquals(listOf("POL"), polygon.rows.map { it.ticker })
+        assertNull(polygon.empty)
+        val arbitrum = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"), chainFilter = 42161, emptyCopy = copy)
+        assertEquals(listOf("ETH"), arbitrum.rows.map { it.ticker })
+        assertNull(arbitrum.empty)
+    }
+
+    /** Still loading is not empty: the guided-empty body waits for the core to have looked. */
+    @Test
+    fun `an assets list still loading does not claim to be empty`() {
+        val live = FlowLive.assets(
+            assetsFixture(),
+            BalanceView(holdings_loading = true),
+            chainNames,
+            CurrencyView(code = "USD"),
+            emptyCopy = FlowFixtures.assetsEmpty(strings),
+        )
+
+        assertNull(live.empty)
+    }
+
     @Test
     fun `a token detail with no matching id renders nothing`() {
         val view = BalanceView(tokens = listOf(token("POL", "1", 137, price = 1.0)))

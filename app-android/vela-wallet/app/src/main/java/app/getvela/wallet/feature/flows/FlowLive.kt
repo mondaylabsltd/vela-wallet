@@ -339,16 +339,23 @@ object FlowLive {
         chainNames: Map<Int, String>,
         currency: CurrencyView,
         chainFilter: Int? = null,
+        emptyCopy: AssetsEmptyModel? = fallback.empty,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
         val rows = WalletLive.assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
+        // The web's rule (`liveAssets`): empty once the core has actually
+        // looked — never while the holdings are still loading — or when the
+        // chosen network holds nothing while others do (issue #266: that list
+        // used to be blank, with nothing saying why).
+        val settledEmpty = rows.isEmpty() && !view.balance_unknown && !view.holdings_loading
+        val filteredEmpty = rows.isEmpty() && view.tokens.isNotEmpty()
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             rows = rows,
             // The guided-empty body replaces the list; it must not sit under
             // one. A wallet that holds something is not an empty wallet.
-            empty = if (rows.isEmpty()) fallback.empty else null,
+            empty = if (settledEmpty || filteredEmpty) emptyCopy else null,
         )
     }
 

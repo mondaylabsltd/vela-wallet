@@ -8,8 +8,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
@@ -80,14 +81,21 @@ fun RemoteLogo(
 ) {
     if (urls.isEmpty()) { fallback(); return }
     val context = LocalContext.current
-    val bitmap by produceState(initialValue = urls.firstNotNullOfOrNull(LogoStore::cached), urls) {
-        if (value != null) return@produceState
+    // Keyed on the URLs, state included (issue #267). `produceState(initial, urls)`
+    // keeps its state across a key change and only restarts the producer — so a
+    // row re-used for another token (a network filter switched under a list)
+    // still held the previous token's bitmap, and the producer's "already have
+    // one" check kept it: BNB drawn with the ETH logo until something else
+    // recomposed the row. A new set of URLs starts from ITS cache or the glyph.
+    val state = remember(urls) { mutableStateOf(urls.firstNotNullOfOrNull(LogoStore::cached)) }
+    LaunchedEffect(urls) {
+        if (state.value != null) return@LaunchedEffect
         for (url in urls) {
             val loaded = LogoStore.load(context, url)
-            if (loaded != null) { value = loaded; return@produceState }
+            if (loaded != null) { state.value = loaded; return@LaunchedEffect }
         }
     }
-    val image = bitmap
+    val image = state.value
     if (image == null) {
         fallback()
     } else {

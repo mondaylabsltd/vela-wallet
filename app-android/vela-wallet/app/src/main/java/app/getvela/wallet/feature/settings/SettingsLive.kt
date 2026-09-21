@@ -21,6 +21,8 @@ import app.getvela.wallet.feature.settings.core.NetProbeHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetWizardPhase
+import app.getvela.wallet.feature.wallet.core.BalanceView
 
 /**
  * The live settings builders: what the core has ruled → the display models the
@@ -203,6 +205,23 @@ object SettingsLive {
                 checksTitle = compat?.let {
                     strings.t(I18nKeys.SettingsUi.ADD_COMPATIBILITY_CHECK)
                 },
+                // The person's own RPC for this chain, as the core holds it —
+                // so a keystroke round-trips (the ST1 base has no such field,
+                // and the compatible fixture's was a blank that never echoed).
+                // Offered where the web offers it: once checked, unless the
+                // chain was ruled incompatible.
+                customRpc = if (wizard.phase == NetWizardPhase.Checked &&
+                    (compat == null || compat.rpc_failure != null || compat.compatible)
+                ) {
+                    UrlFieldModel(
+                        id = "custom-rpc",
+                        label = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_TITLE),
+                        value = wizard.custom_rpc,
+                        placeholder = strings.t(I18nKeys.SettingsUi.ADD_CUSTOM_RPC_PLACEHOLDER),
+                    )
+                } else {
+                    null
+                },
                 // Only offered when the core says this chain can be added.
                 // The button is what writes a network somebody's money will be
                 // read from, and it must not be reachable on a chain whose
@@ -278,16 +297,44 @@ object SettingsLive {
                 providers = view.providers.mapIndexed { index, provider ->
                     val card = model.rpcProviders.providers.getOrNull(index)
                         ?: model.rpcProviders.providers.firstOrNull()
+                    val notSet = strings.t(I18nKeys.SettingsUi.PROVIDER_NOT_SET)
+                    val test = provider.test
                     card?.copy(
                         id = provider.provider.name,
                         name = providerName(provider.provider),
+                        // Whether a key is set is the core's `has_key`, not the
+                        // card's position: the fixture drew Alchemy connected
+                        // and "supports 12" on every device (the web's
+                        // `liveRpcProviders`).
+                        badge = if (provider.has_key) {
+                            StatusPillModel(SettingsTone.Ok, strings.t(I18nKeys.SettingsUi.PROVIDER_CONNECTED))
+                        } else {
+                            StatusPillModel(SettingsTone.Neutral, notSet)
+                        },
                         // The field's id is what the host maps back to a
                         // machine event, so it must be the core's own name for
                         // this provider rather than the fixture's label.
                         field = card.field.copy(
                             id = provider.provider.name,
                             value = provider.key,
+                            placeholder = if (provider.has_key) null else notSet,
                         ),
+                        action = strings.t(
+                            if (provider.has_key) I18nKeys.SettingsUi.PROVIDER_CHECK_KEY else I18nKeys.SettingsUi.PROVIDER_GET_KEY,
+                        ),
+                        // The test's own count, once it has finished — never a drawn one.
+                        support = if (test != null && test.done) {
+                            strings.t(
+                                I18nKeys.SettingsUi.PROVIDER_SUPPORTS,
+                                mapOf("count" to test.ok_count.toString(), "total" to test.total.toString()),
+                            )
+                        } else {
+                            null
+                        },
+                        link = if (provider.has_key) null else "${strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY)} →",
+                        // The link used to hand its own LABEL to the opener
+                        // ("https://Get key →"); each provider's key comes from its own site.
+                        linkUrl = if (provider.has_key) null else providerKeyUrl(provider.provider),
                     )
                 }.filterNotNull(),
             ),
@@ -495,7 +542,7 @@ object SettingsLive {
         )
     }
 
-    /** The RPC banner names the pool's failed chains; absent when none failed. */
+    /** The RPC banner names the chains that are down (the balance core's `banner_chain_ids` — never a rate-limited one); absent when none are. */
     fun withBanner(model: SettingsScreenModel, failedChains: List<Int>, chainNames: Map<Int, String>, strings: VelaStrings): SettingsScreenModel {
         if (failedChains.isEmpty()) return model.copy(rpcBanner = null)
         val drawn = model.rpcBanner ?: return model
@@ -509,6 +556,13 @@ object SettingsLive {
         )
     }
 
+    /** Where a provider's API key is made — the "Get key →" link's target. */
+    internal fun providerKeyUrl(provider: NetProviderId): String = when (provider) {
+        NetProviderId.Alchemy -> "https://dashboard.alchemy.com/"
+        NetProviderId.Drpc -> "https://drpc.org/"
+        NetProviderId.Ankr -> "https://www.ankr.com/rpc/"
+    }
+
     /**
      * Spec 048: the network detail page for THIS network — name, chain, the
      * RPC and explorer overrides as the core holds them. Before this the page
@@ -519,11 +573,110 @@ object SettingsLive {
         subtitle = strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to row.chain_id.toString())) + " · " + row.native_symbol,
         mark = ChainMarkModel(row.display_name.take(1).uppercase(), markColour(row.chain_id), Marks.chainLogoUrl(row.chain_id.toInt())),
         name = row.display_name,
-        rpc = fallback.rpc.copy(value = row.rpc_url, badge = null, tone = null),
-        explorer = fallback.explorer.copy(value = row.explorer_url),
-        callout = null,
+        note = strings.t(if (row.is_custom) I18nKeys.SettingsUi.NETWORK_CUSTOM else I18nKeys.SettingsUi.NETWORK_BUILTIN_NOTE),
+        // What the probes measured (the web's `liveNetworkDetail`): the header
+        // pill is the RPC's, quiet "online" until one answered — the fixture
+        // drew a latency nobody measured.
+        badge = healthPill(row.rpc_health, strings)
+            ?: StatusPillModel(SettingsTone.Neutral, strings.t(I18nKeys.SettingsUi.NETWORK_ONLINE)),
+        rpc = fallback.rpc.copy(
+            value = row.rpc_url,
+            badge = healthPill(row.rpc_health, strings),
+            tone = if (row.rpc_chain_mismatch != null) SettingsTone.Error else null,
+        ),
+        explorer = fallback.explorer.copy(value = row.explorer_url, badge = healthPill(row.explorer_health, strings)),
+        // An RPC that answers for another chain is the one fault a latency
+        // pill cannot show: it is fast, and it is wrong.
+        callout = row.rpc_chain_mismatch?.let { mismatch ->
+            CalloutModel(
+                CalloutTone.Danger,
+                strings.t(
+                    I18nKeys.SettingsUi.RPC_CHAIN_MISMATCH,
+                    mapOf("reported" to mismatch.reported_chain_id.toString(), "expected" to mismatch.expected_chain_id.toString()),
+                ),
+            )
+        },
         chainId = row.chain_id,
     )
+
+    /**
+     * SR3: the balance by network (the web's `liveBalanceDetail`) — the chains
+     * still being read and the chains that settled, from the same view the hero
+     * sums. A rate-limited chain is grey with no button, because it heals by
+     * itself; a chain the core puts in `banner_chain_ids` (failed MINUS
+     * rate-limited) is red with 立即重试. The fixture drew Polygon and Gnosis
+     * and two invented amounts on every device.
+     */
+    fun balanceDetail(
+        fallback: BalanceDetailModel,
+        view: BalanceView,
+        currency: CurrencyView,
+        chainNames: Map<Int, String>,
+        strings: VelaStrings,
+    ): BalanceDetailModel {
+        val money = WalletLive.Money.of(currency)
+        fun name(id: Int) = chainNames[id] ?: id.toString()
+        fun mark(id: Int) = name(id).let { ChainMarkModel(it.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)) }
+        val pending = view.rate_limited_chain_ids.distinct().map { id ->
+            BalanceDetailRowModel(
+                id = id.toString(),
+                mark = mark(id),
+                name = name(id),
+                status = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRYING),
+                tone = SettingsTone.Neutral,
+            )
+        }.toMutableList()
+        view.banner_chain_ids.filter { id -> pending.none { it.id == id.toString() } }.distinct().forEach { id ->
+            pending += BalanceDetailRowModel(
+                id = id.toString(),
+                mark = mark(id),
+                name = name(id),
+                status = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_FAILED),
+                tone = SettingsTone.Error,
+                action = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY),
+            )
+        }
+        // Per chain, what the hero counts: an unpriced holding adds nothing
+        // (the chain still settled, so it is listed).
+        val perChain = linkedMapOf<Int, Double>()
+        view.tokens.forEach { token ->
+            val usd = (token.balance.toDoubleOrNull() ?: Double.NaN) * (token.price_usd ?: 0.0)
+            if (usd.isFinite()) perChain[token.chain_id] = (perChain[token.chain_id] ?: 0.0) + usd
+        }
+        val done = perChain.entries
+            .filter { (id, _) -> pending.none { it.id == id.toString() } }
+            .sortedByDescending { it.value }
+            .map { (id, usd) ->
+                BalanceDetailRowModel(
+                    id = id.toString(),
+                    mark = mark(id),
+                    name = name(id),
+                    amount = if (view.hidden) MASK else money.fiat(usd),
+                )
+            }
+        val total = view.display_total_usd ?: view.cached_total_usd
+        return fallback.copy(
+            title = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_TITLE),
+            summary = strings.t(
+                I18nKeys.SettingsUi.BALANCE_DETAIL_TOTAL,
+                mapOf("amount" to if (view.hidden || total == null) MASK else money.fiat(total)),
+            ),
+            pending = pending,
+            done = done,
+            // The hero's "some tokens couldn't be priced" is answered here by name.
+            sectionUnpriced = strings.t(I18nKeys.Wallet.BALANCE_UNPRICED),
+            unpriced = view.unpriced_tokens.map { token ->
+                BalanceDetailRowModel(
+                    id = "${token.chain_id}:${token.token_address ?: token.symbol}",
+                    mark = mark(token.chain_id),
+                    name = token.symbol,
+                    status = "${name(token.chain_id)} · ${if (view.hidden) MASK else WalletLive.trimAmount(token.balance)}",
+                )
+            },
+        )
+    }
+
+    private const val MASK = "••••"
 
     /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
     fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(

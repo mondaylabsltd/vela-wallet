@@ -93,6 +93,11 @@
   </supports>
 
   <releases>
+    <release version="0.9.4" date="2026-09-21" type="development">
+      <description>
+        <p>Pre-release: A passkey says where it lives (cloud-synced or on this device); sign-in checks what an index tells it against the chain; the fee can be refreshed and a speed chosen, with the amount's unit shown; and fixes to sending, the receive code on Android, and the web layout.</p>
+      </description>
+    </release>
     <release version="0.9.3" date="2026-09-19" type="development">
       <description>
         <p>Pre-release: a wallet's founding record can be backed up to Ethereum; signing in with a USB security key no longer crashes; every waiting dialog can be cancelled; and About shows the real version and commit.</p>

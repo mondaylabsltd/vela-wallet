@@ -1,6 +1,6 @@
 # 066 — Calendar versioning: a Vela version says when, not how much
 
-**Status**: RULED and BUILT 2026-09-19. Takes effect with the next release, which is **26.9.0**.
+**Status**: RULED and BUILT 2026-09-19. Takes effect when the 0.9 line ends (0.9.4 was released under it on 2026-09-21, §4); the first calendar release is `YY.M.0` for the month it is cut.
 **Origin**: founder, 2026-09-19, after 0.9.0 – 0.9.3.
 **Touches**: `release.yml`'s gate, one script and its test, the runbook. No shell's code.
 
@@ -65,6 +65,11 @@ compiled, for a version that does not have its tag yet. It refuses, in words:
    Earth* (UTC−12 … UTC+14). Releasing `26.10.0` on the morning of October 1st in Shanghai —
    still September 30th in UTC — is right, and must not be refused by a server's clock;
 3. **a skipped or stale revision**: `.1` needs `.0` to exist; `.0` is refused once `.1` does.
+
+**One exception, ruled 2026-09-21** (「坚持发 0.9.4」): the 0.9 line may *finish*. `0.9.N` passes
+when it is the next revision after the last `v0.9.*` tag — and only while no calendar version
+has been released. Once `v26.*` exists, 0.x is below every version anyone holds and is refused.
+Four cases in the test cover it (next, skip, go back, after CalVer began).
 
 A re-run of a release that already has its tag skips this check — otherwise a run retried
 after midnight on the last day of a month would start failing for no reason the person

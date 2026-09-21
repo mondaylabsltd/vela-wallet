@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -40,6 +41,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
 import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
 import app.getvela.wallet.core.designsystem.tokens.VelaMonoFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
+import app.getvela.wallet.core.designsystem.tokens.VelaOpacity
 import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
@@ -421,7 +423,10 @@ fun FeeTokenRow(
                 if (row.selected) colors.bgRaised else androidx.compose.ui.graphics.Color.Transparent,
                 RoundedCornerShape(VelaRadius.lg),
             )
-            .clickable(onClick = onSelect)
+            // A coin that cannot cover the fee is drawn for context and
+            // answers to nothing (issue 211; the core refuses it anyway).
+            .clickable(enabled = !row.insufficient, onClick = onSelect)
+            .alpha(if (row.insufficient) VelaOpacity.disabled else 1f)
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -437,7 +442,7 @@ fun FeeTokenRow(
                 maxLines = 1,
             )
             Text(
-                text = row.balanceLabel,
+                text = row.insufficientNote?.takeIf { row.insufficient } ?: row.balanceLabel,
                 color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.sm,
