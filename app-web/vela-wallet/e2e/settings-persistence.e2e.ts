@@ -69,8 +69,12 @@ test('the networks page renders the CORE registry, not the fixture list', async 
 		})
 	).toBeVisible();
 	// The fixture list's staged custom network must NOT appear: the fixture
-	// canon has an 'X Layer' custom row; a fresh store has no customs.
-	await expect(page.getByText('X Layer')).toHaveCount(0);
+	// canon has a custom row, and a custom row is the one with a remove
+	// button; a fresh store has no customs. (Not by name: X Layer, the
+	// fixture's custom, is a built-in network in the registry now.)
+	await expect(
+		page.getByRole('button', { name: en('settingsModals.network.removeTitle'), exact: true })
+	).toHaveCount(0);
 });
 
 test('a fresh profile is sent back to Welcome (the guard holds)', async ({ page }) => {
