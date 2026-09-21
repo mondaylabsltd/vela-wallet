@@ -37,10 +37,12 @@ import uniffi.vela_core_uniffi.DappPermissionsCore
 class BrowserMachineTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val store = FakeStore()
-    private val answers = java.util.Collections.synchronizedList(ArrayList<Pair<String, JSONObject>>())
-    private val events = java.util.Collections.synchronizedList(ArrayList<JSONObject>())
-    private val forwarded = java.util.Collections.synchronizedList(ArrayList<String>())
-    private val records = java.util.Collections.synchronizedList(ArrayList<JSONObject>())
+    // Iterated by the test while the machines append on their own threads:
+    // `synchronizedList` does not protect iteration (a CME, now and then).
+    private val answers = java.util.concurrent.CopyOnWriteArrayList<Pair<String, JSONObject>>()
+    private val events = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
+    private val forwarded = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val records = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
     private val safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private val origin = "http://127.0.0.1:8137"
 

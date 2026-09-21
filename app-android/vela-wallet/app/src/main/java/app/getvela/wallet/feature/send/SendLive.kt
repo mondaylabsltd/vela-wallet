@@ -885,6 +885,8 @@ object SendLive {
             mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
             amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
+            // The core's own verdict, resolved on this page only (single recipient).
+            recipientTag = if (!split && view.recipient_risk?.first_time == true) s.t(I18nKeys.Flows.FIRST_TIME_SEND) else null,
             facts = listOf(
                 FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress, ctx.fromName.ifBlank { null })),
                 // SD3b (spec 038 #D2): a split names its count here and every
