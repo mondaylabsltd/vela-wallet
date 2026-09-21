@@ -221,7 +221,13 @@ object SendLive {
             unit = if (batch.unit == WireBatchUnit.Fiat) BatchUnit.Fiat else BatchUnit.Token,
             pasteValue = batch.raw_text,
             rateLabel = s.t(I18nKeys.Flows.BATCH_RATE_LABEL, mapOf("sym" to symbol)),
-            rateHint = s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol)),
+            // A token-denominated sheet converts nothing (the web's `unitHint`): it
+            // says so instead of explaining a rate the core ignores in that mode.
+            rateHint = if (batch.unit == WireBatchUnit.Fiat) {
+                s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol))
+            } else {
+                s.t(I18nKeys.Flows.BATCH_TOKEN_HINT, mapOf("sym" to symbol))
+            },
             rateValue = when (batch.rate_status) {
                 BatchRateStatus.Ok -> "${batch.rate_input} ${batch.fiat_code}"
                 BatchRateStatus.Loading -> s.t(I18nKeys.Flows.BATCH_RATE_LOADING)
@@ -241,7 +247,7 @@ object SendLive {
                         address = row.name ?: row.address,
                         // The core converted it; an unconvertible row carries no
                         // token amount, and the raw figure there would read as if it had.
-                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${row.token_amount} $symbol" else "—",
+                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${Formats.current.plain(row.token_amount)} $symbol" else "—",
                         note = when {
                             row.dup -> s.t(I18nKeys.Flows.BATCH_DUP)
                             !row.valid -> s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS)
