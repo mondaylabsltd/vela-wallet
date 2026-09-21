@@ -232,6 +232,9 @@ private fun FlowHostContent(
                     onDenom = { if (send != null) send.onDenom() },
                     onAmountChange = send?.onAmountChange,
                     onRecipientChange = send?.onRecipientChange,
+                    onRefreshFee = send?.onRefreshFee,
+                    onToggleSpeed = { send?.onToggleSpeed?.invoke() },
+                    onPickSpeed = { id -> send?.onPickSpeed?.invoke(id) },
                 )
             }
             is FlowBase.SendConfirm -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -471,6 +474,10 @@ class SendCallbacks(
     val onBatchRate: ((String) -> Unit)? = null,
     val onBatchRateReset: () -> Unit = {},
     val onBatchApply: () -> Unit = {},
+    // Spec 069 — the fee's refresh control and the speed control under it.
+    val onRefreshFee: (() -> Unit)? = null,
+    val onToggleSpeed: () -> Unit = {},
+    val onPickSpeed: (String) -> Unit = {},
     /** Issue #271: switch this import between adding to and replacing the rows on the form. */
     val onBatchMerge: () -> Unit = {},
 )

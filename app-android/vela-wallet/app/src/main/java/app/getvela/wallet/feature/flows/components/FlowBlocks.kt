@@ -80,6 +80,7 @@ import app.getvela.wallet.core.identicon.IdenticonImage
 import app.getvela.wallet.feature.flows.AddressCardModel
 import app.getvela.wallet.feature.flows.AmountFieldModel
 import app.getvela.wallet.feature.flows.FeeRowModel
+import app.getvela.wallet.feature.flows.FeeSpeedModel
 import app.getvela.wallet.feature.flows.ReceiptStage
 import app.getvela.wallet.feature.flows.RecipientActionModel
 import app.getvela.wallet.feature.flows.RecipientFieldModel
@@ -988,44 +989,192 @@ fun SummaryLine(summary: SummaryLineModel, modifier: Modifier = Modifier) {
 /**
  * The network-fee row (component 26), on every send form.
  *
- * A row and not a card: the fee is a fact about the transfer, and the only
- * thing to DO with it is change which token pays it — which is what the chevron
- * opens. The SPEC sheet is explicit that the tier picker does not live here:
- * the fee is shown, not chosen.
+ * A row and not a card: the fee is a fact about the transfer. The row opens
+ * the fee-coin sheet; beside it — outside its own click, so measuring again
+ * never opens the sheet — the refresh control (spec 068; Android's since 069),
+ * and under it the stale line, whose room is kept so Continue never moves
+ * under a thumb. The speed control ([FeeSpeedControl]) lives under that.
  */
 @Composable
-fun FeeRow(fee: FeeRowModel, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
+fun FeeRow(
+    fee: FeeRowModel,
+    modifier: Modifier = Modifier,
+    onOpen: () -> Unit = {},
+    onRefresh: (() -> Unit)? = null,
+) {
     val colors = VelaTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
-            .clickable(onClick = onOpen)
-            .padding(VelaSpacing.lg),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = fee.label,
-            color = colors.fgMuted,
-            fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.base,
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        TokenIcon(mark = fee.mark, inline = true)
-        Spacer(modifier = Modifier.width(VelaSpacing.sm))
-        Text(
-            text = fee.value,
-            color = colors.fgBase,
-            fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.base,
-            maxLines = 1,
-        )
-        Spacer(modifier = Modifier.width(VelaSpacing.sm))
-        Icon(
-            imageVector = VelaIcons.ChevronRight,
-            contentDescription = fee.openLabel,
-            tint = colors.fgMuted,
-            modifier = Modifier.size(VelaIconSize.sm),
-        )
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
+                    .clickable(onClick = onOpen)
+                    .padding(VelaSpacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = fee.label,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                TokenIcon(mark = fee.mark, inline = true)
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Text(
+                    text = fee.value,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Icon(
+                    imageVector = VelaIcons.ChevronRight,
+                    contentDescription = fee.openLabel,
+                    tint = colors.fgMuted,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+            }
+            if (fee.refreshLabel != null) {
+                Spacer(modifier = Modifier.width(VelaSpacing.md))
+                Box(
+                    modifier = Modifier
+                        .size(VelaSizing.hitTarget)
+                        .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
+                        .clickable(enabled = onRefresh != null) { onRefresh?.invoke() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Dimmed while a measurement is out — whoever started it —
+                    // so a second tap is never ambiguous.
+                    Icon(
+                        imageVector = VelaIcons.RefreshCw,
+                        contentDescription = fee.refreshLabel,
+                        tint = if (fee.refreshing) colors.fgSubtle else colors.fgMuted,
+                        modifier = Modifier.size(VelaIconSize.sm),
+                    )
+                }
+            }
+        }
+        if (fee.refreshLabel != null) {
+            // Calm and muted: an old figure is not a fault. Always the line's
+            // full height, so nothing jumps when it appears.
+            Text(
+                text = fee.staleNote ?: " ",
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.xs),
+            )
+        }
     }
+}
+
+/**
+ * The speed control under the fee row (spec 068), folded until opened. Every
+ * decision in it is the `fee_speed` core's (spec 069).
+ *
+ * Folded: the word and the tier in force — THEIR default, never a hardcoded
+ * one. Opened: the one-shot promise first (a person about to change one
+ * payment needs to know every later one is untouched), then three options —
+ * name, its own fee, its gas bid, what it buys, a tick — or, on a network with
+ * one speed, that one statement instead.
+ */
+@Composable
+fun FeeSpeedControl(
+    speed: FeeSpeedModel,
+    modifier: Modifier = Modifier,
+    onToggle: () -> Unit = {},
+    onPick: (String) -> Unit = {},
+) {
+    val colors = VelaTheme.colors
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = speed.label, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+            Spacer(modifier = Modifier.weight(1f))
+            Text(text = speed.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
+            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+            Icon(
+                imageVector = VelaIcons.ChevronDown,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier.size(VelaIconSize.sm).rotate(if (speed.open) 180f else 0f),
+            )
+        }
+        // Folded AND open: the screen must never say "Fast" over a Settings
+        // row that says "Slow" without saying why.
+        speed.freeNote?.let { SpeedNote(it) }
+        if (!speed.open) return@Column
+        val single = speed.singleNote
+        if (single != null) {
+            SpeedNote(single)
+            return@Column
+        }
+        SpeedNote(speed.onceNote)
+        speed.options.forEach { option ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (option.selected) colors.bgRaised else Color.Transparent,
+                        RoundedCornerShape(VelaRadius.md),
+                    )
+                    .clickable { onPick(option.id) }
+                    .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = option.label,
+                            color = if (option.selected) colors.accentBase else colors.fgBase,
+                            fontFamily = VelaFontFamily,
+                            fontWeight = if (option.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
+                            fontSize = VelaTextSize.base,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(text = option.value, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
+                    }
+                    if (speed.gasPriceLine) {
+                        // Named, because an unnamed "3,244 wei" under a fee reads
+                        // as a second charge; held open empty while measuring.
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Text(
+                                text = option.gasPrice?.let { "${speed.gasPriceLabel}  $it" } ?: " ",
+                                color = colors.fgSubtle,
+                                fontFamily = VelaMonoFontFamily,
+                                fontSize = VelaTextSize.sm,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    Text(text = option.detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+                }
+                Spacer(modifier = Modifier.width(VelaSpacing.md))
+                Box(modifier = Modifier.size(VelaIconSize.sm)) {
+                    if (option.selected) {
+                        Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedNote(text: String) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgSubtle,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.sm,
+        modifier = Modifier.padding(horizontal = VelaSpacing.lg).padding(bottom = VelaSpacing.sm),
+    )
 }

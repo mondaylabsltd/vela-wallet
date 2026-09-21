@@ -55,7 +55,7 @@ use serde::{Deserialize, Serialize};
 use super::fee_policy::{
     encode_erc20_transfer, from_base_units, max_native_sendable, reserve_fee_token,
     reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, MultiTokenSpec,
+    FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
 
@@ -608,6 +608,16 @@ pub struct SendQuotedFee {
     /// Base units as a decimal string.
     pub amount: String,
     pub recipient: String,
+    /// The speed this fee was priced at, named on the wire as
+    /// `eth_sendUserOperation`'s third parameter (spec 068's relay contract).
+    ///
+    /// Taken from the SAME estimate as the amount (spec 069), so the tier the
+    /// relay is told and the figure the person approved are one measurement
+    /// — no shell keeps a second copy of which speed this send is. `None`
+    /// names nothing (the pre-068 wire): no estimate, or the dead `rapid`,
+    /// which the relay refuses and nothing offers.
+    #[serde(default)]
+    pub tier: Option<FeeTier>,
 }
 
 /// One pending activity record (`useSendController.ts:1014-1034`). The shell
@@ -4001,6 +4011,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         Some(SendQuotedFee {
             amount: amount.to_string(),
             recipient,
+            tier: super::fee_speed::wire_tier(f.tier),
         })
     });
 

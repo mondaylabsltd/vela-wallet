@@ -394,6 +394,7 @@ struct SettingsScreen: View {
         case "about": page = .about
         case "language": overlay = .language
         case "currency": overlay = .currency
+        case SettingsFixtures.feeSpeedRow: overlay = .feeSpeed
         case "number-format": overlay = .numberFormat
         case "date-format": overlay = .dateFormat
         case "time-format": overlay = .timeFormat

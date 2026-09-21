@@ -238,6 +238,8 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
                 Some(user_op::QuotedFee {
                     amount: fee.amount.parse().ok()?,
                     recipient: fee.recipient.clone(),
+                    // The speed this fee was priced at (spec 069).
+                    tier: fee.tier,
                 })
             });
             let ctx = ctx.clone();
@@ -308,18 +310,23 @@ fn sign_and_submit(
         now_ms: now_ms(),
     });
 
-    match await_receipt(&user_op_hash, chain_id) {
-        // A dApp's `eth_sendTransaction` resolves to a TX hash. Handing back
-        // the userOpHash instead gives the site something it can look up
-        // forever and never find.
+    let receipt = await_receipt(&user_op_hash, chain_id);
+    after_receipt_wait(user_op_hash, receipt)
+}
+
+/// What the receipt wait means for the core.
+///
+/// A dApp's `eth_sendTransaction` resolves to a TX hash — handing back the
+/// userOpHash instead gives the site something it can look up forever and
+/// never find. When the wait runs out the op is submitted, NOT confirmed:
+/// the page is still answered with the op hash (a dApp left waiting cannot
+/// tell a slow chain from a lost transaction — the double-spend risk 027 D37
+/// names), but the core must hear it as `ReceiptPending` so the record stays
+/// pending until the tracker sees the receipt (issue 262).
+pub fn after_receipt_wait(user_op_hash: String, receipt: Option<String>) -> SignSubmitOutcome {
+    match receipt {
         Some(tx_hash) => SignSubmitOutcome::Succeeded { result: tx_hash },
-        // Submitted, not yet confirmed. The hash still answers the promise —
-        // a dApp left waiting cannot tell a slow chain from a lost
-        // transaction, and that ambiguity is the double-spend risk 027 D37
-        // names.
-        None => SignSubmitOutcome::Succeeded {
-            result: user_op_hash,
-        },
+        None => SignSubmitOutcome::ReceiptPending { user_op_hash },
     }
 }
 
@@ -611,6 +618,25 @@ mod tests {
             dapp_origin: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
         }
+    }
+
+    /// Issue 262: a receipt that is late is not a confirmation. The core hears
+    /// `ReceiptPending` (answer the page, keep the record pending); only a
+    /// receipt in time is `Succeeded` with the TX hash.
+    #[test]
+    fn a_late_receipt_is_reported_pending_never_succeeded() {
+        assert_eq!(
+            after_receipt_wait("0xop".to_owned(), None),
+            SignSubmitOutcome::ReceiptPending {
+                user_op_hash: "0xop".to_owned()
+            }
+        );
+        assert_eq!(
+            after_receipt_wait("0xop".to_owned(), Some("0xtx".to_owned())),
+            SignSubmitOutcome::Succeeded {
+                result: "0xtx".to_owned()
+            }
+        );
     }
 
     /// A dApp transaction lands in the store the feed and the tracker read.

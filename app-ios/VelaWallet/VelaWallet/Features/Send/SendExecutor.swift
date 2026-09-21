@@ -270,7 +270,7 @@ final class SendExecutor {
         if let estimate = settled.fee, settled.failed == nil {
             return CoreJSON.string([
                 "type": "fee_estimated",
-                "outcome": ["type": "ok", "estimate": Self.estimateWire(estimate)],
+                "outcome": ["type": "ok", "estimate": estimate.coreJSON],
             ])
         }
         return CoreJSON.string([
@@ -294,7 +294,9 @@ final class SendExecutor {
         let quoted = (operation["quoted_fee"] as? [String: Any]).map { fee in
             UserOpSpine.Quoted(
                 amount: fee["amount"] as? String ?? "",
-                recipient: fee["recipient"] as? String ?? ""
+                recipient: fee["recipient"] as? String ?? "",
+                // The speed this fee was priced at (spec 069).
+                tier: fee["tier"] as? String
             )
         }
         let task = Task<String, Error> { [spine, ports] in
@@ -408,41 +410,6 @@ final class SendExecutor {
         case .other(let message):
             return ["type": "other", "message": message.map { $0 as Any } ?? NSNull()]
         }
-    }
-
-    /// The fee estimate back out as the core's own wire shape.
-    ///
-    /// It came from `fee_policy` and goes to `send`, which is why it is a
-    /// re-encode rather than a computation: the two machines speak the same
-    /// `FeeEstimateView` and this shell must not reshape it on the way past.
-    private static func estimateWire(_ estimate: FeeEstimateWire) -> [String: Any] {
-        var asset: [String: Any]
-        switch estimate.feeAsset {
-        case .native:
-            asset = ["type": "native"]
-        case .erc20(let token, let decimals, let amount, let symbol):
-            asset = [
-                "type": "erc20", "token": token, "decimals": decimals, "amount": amount,
-                "symbol": symbol.map { $0 as Any } ?? NSNull(),
-            ]
-        }
-        return [
-            "chain_id": estimate.chainId,
-            "total_wei": estimate.totalWei,
-            "max_fee_per_gas": estimate.maxFeePerGas,
-            // The core re-derives what it needs; these four are carried so the
-            // shape round-trips rather than arriving short.
-            "network_fee_per_gas": "0",
-            "relayer_fee_per_gas": "0",
-            "bundler_gas_price": "0",
-            "in_band_gas_basis": "0",
-            "total_gas": estimate.totalGas,
-            "deployed": estimate.deployed,
-            "tier": "fast",
-            "quoted": estimate.quoted,
-            "fee_asset": asset,
-            "fee_recipient": estimate.feeRecipient.map { $0 as Any } ?? NSNull(),
-        ]
     }
 
     /// What the core hears when an arm threw: nothing was done.

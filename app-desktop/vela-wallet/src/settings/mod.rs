@@ -34,6 +34,11 @@ pub struct SettingsStrings {
     pub nav_rpc_providers: SharedString,
     pub nav_endpoints: SharedString,
     pub nav_storage: SharedString,
+    /// The default transaction speed (spec 069): the nav row, and the page's
+    /// title and the sentence under it.
+    pub nav_fee_speed: SharedString,
+    pub fee_speed_title: SharedString,
+    pub fee_speed_subtitle: SharedString,
     pub nav_about: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
@@ -243,6 +248,9 @@ impl SettingsStrings {
             nav_rpc_providers: s("settings.advanced.rpcProvidersTitle"),
             nav_endpoints: s("settings.advanced.endpointsTitle"),
             nav_storage: s("settings.storage.title"),
+            nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
+            fee_speed_title: s("settings.feeSpeed.title"),
+            fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),

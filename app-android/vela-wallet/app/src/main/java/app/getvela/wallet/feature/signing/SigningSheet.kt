@@ -62,6 +62,9 @@ fun SigningSheet(
     onSignWith: (String?) -> Unit = {},
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
+    /** Spec 069: the speed control under the fee. */
+    onToggleSpeed: () -> Unit = {},
+    onPickSpeed: (String) -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -69,7 +72,17 @@ fun SigningSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         modifier = modifier,
     ) {
-        SigningSheetContent(model = model, onConfirm = onConfirm, onChip = onChip, onCustomAmount = onCustomAmount, onSignWith = onSignWith, onFee = onFee, onFeePick = onFeePick)
+        SigningSheetContent(
+            model = model,
+            onConfirm = onConfirm,
+            onChip = onChip,
+            onCustomAmount = onCustomAmount,
+            onSignWith = onSignWith,
+            onFee = onFee,
+            onFeePick = onFeePick,
+            onToggleSpeed = onToggleSpeed,
+            onPickSpeed = onPickSpeed,
+        )
     }
 }
 
@@ -86,6 +99,8 @@ fun SigningSheetContent(
     /** Issue #262: the fee row's tap and its coin list's pick. */
     onFee: () -> Unit = {},
     onFeePick: (String) -> Unit = {},
+    onToggleSpeed: () -> Unit = {},
+    onPickSpeed: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -150,7 +165,13 @@ fun SigningSheetContent(
         )
 
         TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
-        SigningFee(model.fee, onFee = onFee, onPick = onFeePick)
+        SigningFee(
+            model.fee,
+            onFee = onFee,
+            onPick = onFeePick,
+            onToggleSpeed = onToggleSpeed,
+            onPickSpeed = onPickSpeed,
+        )
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
         SlideToConfirm(

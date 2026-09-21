@@ -20,8 +20,8 @@ use crate::theme::{self, Theme};
 use crate::wallet::components::{icon_img, identicon_avatar, token_icon_logos};
 
 use super::fixtures::{
-    FactLead, FactRow, FeeRow, FilterChip, NetworkRow, RecipientCard, StatusChip, StatusTone,
-    TokenMark,
+    FactLead, FactRow, FeeRow, FeeSpeedModel, FeeSpeedOption, FilterChip, NetworkRow,
+    RecipientCard, StatusChip, StatusTone, TokenMark,
 };
 
 /// The receive network-row chain badge, measured 40 in R1. Larger than the 32
@@ -219,7 +219,7 @@ pub fn fact_row(
         value_side = value_side.child(icon_img(icons, Icon::Copy, false, theme.fg_subtle, 13.));
     }
 
-    div()
+    let row = div()
         .flex()
         .items_center()
         .justify_between()
@@ -231,7 +231,19 @@ pub fn fact_row(
                 .text_color(theme.fg_subtle)
                 .child(fact.label.clone()),
         )
-        .child(value_side)
+        .child(value_side);
+    match &fact.note {
+        None => row,
+        // The reason sits under its row, in the row's own quiet voice — a
+        // fact about the value, not a warning about it.
+        Some(note) => div().flex().flex_col().child(row.pb(px(2.))).child(
+            div()
+                .pb(px(10.))
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(note.clone()),
+        ),
+    }
 }
 
 /// The small status pill.
@@ -594,9 +606,11 @@ fn encoded_qr_card(payload: &str, centre: Option<Div>, ink: gpui::Hsla, white: g
 
 /// The network-fee row.
 ///
-/// A row and not a card: the fee is a fact about the transfer, and the only
-/// thing to DO with it is change which token pays it. The SPEC sheet is
-/// explicit that the tier picker does not live here.
+/// A row and not a card: the fee is a fact about the transfer. Clicking it
+/// changes which token pays; the refresh control beside it (spec 068, on the
+/// desktop since 069) measures again, and sits OUTSIDE the row's own click so
+/// a refresh never opens the fee-coin sheet. The speed control lives under it
+/// ([`fee_speed`]), folded.
 pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
     div()
         .flex()
@@ -626,6 +640,165 @@ pub fn fee_row(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
             theme.fg_muted,
             12.,
         ))
+}
+
+/// The refresh control's face: the icon, dimmed while a measurement is out
+/// — whoever started it — so a second tap is never ambiguous.
+pub fn fee_refresh_icon(theme: &Theme, icons: &mut IconCache, fee: &FeeRow) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(32.))
+        .rounded(px(10.))
+        .bg(theme.bg_sunken)
+        .child(icon_img(
+            icons,
+            Icon::RefreshCw,
+            false,
+            if fee.refreshing {
+                theme.fg_subtle
+            } else {
+                theme.fg_muted
+            },
+            14.,
+        ))
+}
+
+/// The stale line under the fee row: calm, muted, and always drawn at its
+/// full height so Continue never moves under a pointer when it appears.
+pub fn fee_stale_line(theme: &Theme, fee: &FeeRow) -> Div {
+    div()
+        .min_h(px(16.))
+        .px(px(12.))
+        .text_size(theme::text_label())
+        .text_color(theme.fg_subtle)
+        .child(fee.stale_note.clone().unwrap_or_default())
+}
+
+/// The speed control's folded summary: the word, the tier in force, and the
+/// chevron that says it opens.
+pub fn fee_speed_summary(theme: &Theme, icons: &mut IconCache, speed: &FeeSpeedModel) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .px(px(12.))
+        .py(px(6.))
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(speed.label.clone()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .flex()
+                .justify_end()
+                .child(speed.value.clone()),
+        )
+        .child(icon_img(
+            icons,
+            if speed.open {
+                Icon::ChevronUp
+            } else {
+                Icon::ChevronDown
+            },
+            false,
+            theme.fg_muted,
+            12.,
+        ))
+}
+
+/// A one-line note under the summary — the free upgrade's reason, the
+/// one-shot promise, or the one-speed statement.
+pub fn fee_speed_note(theme: &Theme, text: &SharedString) -> Div {
+    div()
+        .px(px(12.))
+        .pb(px(4.))
+        .text_size(theme::text_label())
+        .text_color(theme.fg_subtle)
+        .child(text.clone())
+}
+
+/// One option, opened: its name and its own fee on the first line, its gas
+/// bid under the fee, and what the speed buys under both.
+pub fn fee_speed_option(
+    theme: &Theme,
+    icons: &mut IconCache,
+    speed: &FeeSpeedModel,
+    option: &FeeSpeedOption,
+) -> Div {
+    let mut body = div().flex().flex_col().gap(px(2.)).flex_1().min_w(px(0.));
+    body = body.child(
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(
+                div()
+                    .flex_1()
+                    .text_size(theme::text_row_sub())
+                    .text_color(if option.selected {
+                        theme.accent
+                    } else {
+                        theme.fg_base
+                    })
+                    .child(option.label.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(option.value.clone()),
+            ),
+    );
+    if speed.gas_price_line {
+        // Named, because an unnamed "3,244 wei" under a fee reads as a second
+        // charge; held open empty while the set is measuring, so the option
+        // does not lose a line and regain it.
+        body = body.child(
+            div()
+                .flex()
+                .justify_end()
+                .gap(px(6.))
+                .min_h(px(14.))
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .children(option.gas_price.as_ref().map(|gas| {
+                    div()
+                        .flex()
+                        .gap(px(6.))
+                        .child(speed.gas_price_label.clone())
+                        .child(div().font_family(theme::font_mono()).child(gas.clone()))
+                })),
+        );
+    }
+    body = body.child(
+        div()
+            .text_size(theme::text_label())
+            .text_color(theme.fg_subtle)
+            .child(option.detail.clone()),
+    );
+    div()
+        .flex()
+        .items_start()
+        .gap(px(8.))
+        .px(px(12.))
+        .py(px(8.))
+        .rounded(px(10.))
+        .when(option.selected, |row| row.bg(theme.bg_sunken))
+        .child(body)
+        .child(
+            div().w(px(14.)).pt(px(2.)).children(
+                option
+                    .selected
+                    .then(|| icon_img(icons, Icon::Check, false, theme.accent, 14.)),
+            ),
+        )
 }
 
 /// DSD2bL's split row: one of N people, what they get, and the way to drop them.

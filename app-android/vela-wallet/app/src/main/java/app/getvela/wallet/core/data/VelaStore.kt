@@ -68,6 +68,9 @@ interface KeyValueStore {
         const val CONTACTS_DISMISSED = "vela.contacts.dismissed"
         const val CONTACT_GROUPS = "vela.contactGroups"
         const val DISPLAY_CURRENCY = "vela.displayCurrency"
+
+        /** The default transaction speed (spec 068; Android's since 069). Survives sign-out. */
+        const val FEE_TIER = "vela.feeTier"
         const val CUSTOM_NETWORKS = "vela.customNetworks"
 
         /**

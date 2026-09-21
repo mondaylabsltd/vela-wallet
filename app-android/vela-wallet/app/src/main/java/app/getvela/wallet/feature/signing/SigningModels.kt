@@ -168,6 +168,8 @@ sealed interface FeeModel {
         /** Present only while the selector is open (cs33). */
         val selectorTitle: String? = null,
         val options: List<FeeTokenOption> = emptyList(),
+        /** The speed control under the fee (spec 069) — the send form's own. */
+        val speed: app.getvela.wallet.feature.flows.FeeSpeedModel? = null,
         /** The row answers a tap: a failed quote to retry, or more than one coin to choose from. */
         val tappable: Boolean = false,
         /** Issue #262: why the slide is shut — the paying coin is not there. */

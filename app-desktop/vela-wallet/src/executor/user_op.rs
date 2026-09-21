@@ -85,6 +85,10 @@ fn other(message: impl Into<String>) -> SubmitFailure {
 pub struct QuotedFee {
     pub amount: u128,
     pub recipient: String,
+    /// The speed the displayed fee was priced at, named on the wire beside
+    /// it (spec 069) — the core took it from the same estimate as `amount`.
+    /// `None` names nothing: the pre-068 wire.
+    pub tier: Option<FeeTier>,
 }
 
 /// The passkey ceremony, as this path sees it: a challenge in, an assertion
@@ -281,6 +285,9 @@ fn account_context(
 ) -> Result<(bool, String, Vec<u8>), SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
     chain::forget_gas_price(chain_id);
+    // …and the fee session's held readings (issue 212): a submit, and the
+    // first quote after it, landed or not, measure again.
+    crate::executor::fee_signals::invalidate(chain_id);
     let deployed = chain::is_deployed(safe, chain_id).map_err(other)?;
     let nonce = chain::nonce(safe, chain_id);
     // A deployed wallet MUST sign its real nonce; an undeployed one's IS 0.
@@ -391,6 +398,9 @@ fn fallback_fee(
     Ok(QuotedFee {
         amount,
         recipient: quote.recipient.clone(),
+        // Nothing was displayed, so no speed was chosen: the relay keeps its
+        // own pace, exactly as before spec 068.
+        tier: None,
     })
 }
 
@@ -475,7 +485,8 @@ fn submit_in_band(
     };
     op.call_data = batch(fee.amount, &fee.recipient)?;
 
-    sign_and_submit(op, chain_id, safe, keys, sign, &[])
+    // The displayed quote's speed, or none for the fallback nobody saw.
+    sign_and_submit(op, chain_id, safe, keys, sign, &[], fee.tier)
 }
 
 fn submit_tempo(
@@ -569,17 +580,32 @@ fn submit_tempo(
             ));
         }
     }
+    // The relay ignores a speed on Tempo (no priority fee to buy), but the
+    // name still travels with the fee it was shown beside, as on the web.
+    let tier = quoted_fee.as_ref().and_then(|fee| fee.tier);
     let reimbursement = usable(quoted_fee).map_or(calculated, |fee| fee.amount);
     op.call_data = batch(reimbursement)?;
     eprintln!(
         "[vela-wallet] tempo: feeToken={fee_token} reimbursement={reimbursement} calculated={calculated} realisticGas={realistic_gas} collector={collector}"
     );
 
-    sign_and_submit(op, chain_id, safe, keys, sign, &[("feeToken", fee_token)])
+    sign_and_submit(
+        op,
+        chain_id,
+        safe,
+        keys,
+        sign,
+        &[("feeToken", fee_token)],
+        tier,
+    )
 }
 
 /// The shared tail: hash, sign, envelope, submit (with the AA20 guard and
 /// the in-flight-hash recovery), bump the nonce.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the operation, its signer, and the two things the wire names beside it"
+)]
 fn sign_and_submit(
     mut op: UserOperation,
     chain_id: u32,
@@ -587,6 +613,7 @@ fn sign_and_submit(
     keys: &[WalletKey],
     sign: SignFn<'_>,
     extra: &[(&str, &str)],
+    tier: Option<FeeTier>,
 ) -> Result<String, SubmitFailure> {
     let safe_op_hash =
         calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
@@ -609,7 +636,7 @@ fn sign_and_submit(
         ));
     }
 
-    let hash = match relay::send_user_op(&op, chain_id, extra) {
+    let hash = match relay::send_user_op(&op, chain_id, extra, tier) {
         Ok(hash) => hash,
         Err(relay::SubmitError::Rejected(message)) => {
             // A previous op is still pending: poll ITS receipt instead of failing.
@@ -803,6 +830,7 @@ mod tests {
         let good = QuotedFee {
             amount: 1,
             recipient: "0x1111111111111111111111111111111111111111".to_owned(),
+            tier: None,
         };
         assert_eq!(usable(Some(good.clone())), Some(good.clone()));
         assert_eq!(

@@ -207,12 +207,21 @@ enum SendLive {
 
     // MARK: - SD2, the form
 
+    /// The speed control's inputs (spec 069): the `fee_speed` core's view, and
+    /// the fee session pricing each tier — whose fee-coin options format that
+    /// option's fee, as the fee row formats its own.
+    struct SpeedInputs {
+        let view: FeeSpeedViewWire
+        let feeView: (String) -> FeeViewWire?
+    }
+
     static func form(
         _ view: SendViewWire,
         fee: FeeViewWire?,
         display: WalletLive.Display,
         on model: SendFormModel,
-        loc: Loc
+        loc: Loc,
+        speed: SpeedInputs? = nil
     ) -> SendFormModel {
         var live = model
         let token = view.selectedToken
@@ -400,7 +409,8 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc),
+            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed),
+            speed: speed.map { speedModel($0, view: view, display: display, loc: loc) },
             cta: live.cta,
             // While the pre-check is out the button is busy, not unfinished.
             hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil,
@@ -511,10 +521,17 @@ enum SendLive {
 
     private static func feeRow(
         _ fallback: FeeRowModel, view: SendViewWire, fee: FeeViewWire?,
-        display: WalletLive.Display, loc: Loc
+        display: WalletLive.Display, loc: Loc, speed: SpeedInputs? = nil
     ) -> FeeRowModel {
         let busy = view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
-        let text = view.fee.map { feeLine($0, view: view, fee: fee, display: display) }
+        // NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): on
+        // the path where a pick re-measures, the estimate in hand still belongs
+        // to the speed just left — the send machine keeps it across a tier
+        // change — and "measuring" is the honest thing to say.
+        let ofAnotherTier = view.fee.map { estimate in
+            speed.map { offered(estimate.tier) != $0.view.tier } ?? false
+        } ?? false
+        let text = ofAnotherTier ? nil : view.fee.map { feeLine($0, view: view, fee: fee, display: display) }
         // With no estimate, the row says so — it does NOT fall back to the
         // drawing's value. The fixture's "0.0021 ETH · ≈$0.55" appeared on a
         // Gnosis send on the founder's iPhone while the quote was still in
@@ -531,8 +548,74 @@ enum SendLive {
                     color: chainColor(estimate.chainId)
                 )
             } ?? fallback.mark,
-            value: text ?? waiting,
-            openLabel: fallback.openLabel
+            value: ofAnotherTier ? loc.t("send.estimatingFee") : (text ?? waiting),
+            openLabel: fallback.openLabel,
+            refreshLabel: speed.map { _ in loc.t("send.feeRefresh") },
+            // A measurement is out — whoever started it — the same fact the
+            // "measuring" text reads, so the row is never settled and busy at once.
+            refreshing: busy,
+            // `FeeView.stale` had no visible consumer on iOS: the 30 s TTL ran
+            // out and nothing said so. Not while a fresh measurement is out, and
+            // not over a row with no figure of its own on it.
+            staleNote: (speed != nil && fee?.stale == true && !busy && text != nil)
+                ? loc.t("send.feeStale") : nil
+        )
+    }
+
+    /// A tier as one this build offers: the dead `rapid` reads as the factory
+    /// `fast`, the core's own answer for it.
+    static func offered(_ tier: String) -> String {
+        ["fast", "standard", "slow"].contains(tier) ? tier : "fast"
+    }
+
+    /// A tier's NAME — the speed itself, never a number.
+    static func tierName(_ tier: String, loc: Loc) -> String {
+        loc.t("send.gasTier.\(offered(tier))")
+    }
+
+    /// …and what it buys, the line under the name.
+    private static func tierHint(_ tier: String, loc: Loc) -> String {
+        switch offered(tier) {
+        case "standard": loc.t("send.gasTierHintStandard")
+        case "slow": loc.t("send.gasTierHintSlow")
+        default: loc.t("send.gasTierHintFast")
+        }
+    }
+
+    /// The folded speed control (spec 068), drawn from the `fee_speed` core's
+    /// view (spec 069). Every figure is that tier's OWN settled quote, echoed by
+    /// the core; only the words and the fee line are made here.
+    ///
+    /// The dApp signing sheet draws the same control (spec 069) and passes no
+    /// send view: each option is then written the way that sheet writes its
+    /// own fee row.
+    static func speedModel(
+        _ speed: SpeedInputs, view: SendViewWire?, display: WalletLive.Display, loc: Loc
+    ) -> FeeSpeedModel {
+        let core = speed.view
+        return FeeSpeedModel(
+            label: loc.t("send.feeSpeedLabel"),
+            // THEIR default (or their pick for this send), never a hardcoded one.
+            value: tierName(core.tier, loc: loc),
+            open: core.open,
+            onceNote: loc.t("send.feeSpeedOnce"),
+            freeNote: core.freeNote ? loc.t("send.feeSpeedFree") : nil,
+            singleNote: core.single ? loc.t("send.feeSpeedSingle") : nil,
+            gasPriceLabel: loc.t("send.gasPriceLabel"),
+            gasPriceLine: core.gasPriceLine,
+            options: core.options.map { option in
+                FeeSpeedOptionModel(
+                    id: option.tier,
+                    label: tierName(option.tier, loc: loc),
+                    detail: tierHint(option.tier, loc: loc),
+                    // "…" while this tier's own quote is out, "—" when there is
+                    // none to be had.
+                    value: option.fee.map { feeLine($0, view: view, fee: speed.feeView(option.tier), display: display) }
+                        ?? (option.measuring ? "…" : "—"),
+                    gasPrice: option.gasPrice,
+                    selected: option.selected
+                )
+            }
         )
     }
 
@@ -678,7 +761,8 @@ enum SendLive {
         display: WalletLive.Display,
         on model: SendConfirmModel,
         loc: Loc,
-        fee: FeeViewWire? = nil
+        fee: FeeViewWire? = nil,
+        speed: FeeSpeedViewWire? = nil
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
@@ -710,6 +794,17 @@ enum SendLive {
                         ? loc.t("send.estimatingFee") : "—")
             ),
         ]
+        // The speed, but only when it was CHOSEN for this send, or taken
+        // because it was free (spec 068 / issue 686): the last screen before a
+        // signature says so, and a free upgrade says why. A send at the stored
+        // default adds no row.
+        if let speed, speed.picked || speed.free {
+            facts.append(FactRowModel(
+                label: loc.t("send.feeSpeedLabel"),
+                value: tierName(speed.tier, loc: loc),
+                note: speed.picked ? nil : loc.t("send.feeSpeedFree")
+            ))
+        }
 
         // **The parts, from the core's own rows — never the drawing's.** The
         // drawn SD3b/SD3c carry "Alice 50 USDT" and a three-coin sweep, and a

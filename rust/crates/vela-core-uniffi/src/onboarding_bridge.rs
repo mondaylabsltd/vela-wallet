@@ -294,6 +294,21 @@ bridge_object!(
 );
 
 bridge_object!(
+    /// The default transaction speed (spec 068): the stored tier every send
+    /// starts at, the factory `fast` when nothing was chosen. Spec 069 brings
+    /// it to the native Settings screens.
+    FeeTierPrefCore,
+    vela_core::app::fee_tier_pref::FeeTierPref
+);
+
+bridge_object!(
+    /// The speed control of one send surface (spec 069): the tier in force,
+    /// the free upgrade, the one-speed statement and each tier's gas bid.
+    FeeSpeedCore,
+    vela_core::app::fee_speed::FeeSpeed
+);
+
+bridge_object!(
     /// Post-submit lifecycle: receipt and status polling, record patches,
     /// the confirmation notice. Owns the cadence; the shell supplies a clock.
     TxTrackerCore,

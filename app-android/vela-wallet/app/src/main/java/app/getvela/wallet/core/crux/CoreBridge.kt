@@ -7,6 +7,8 @@ import uniffi.vela_core_uniffi.CreateWalletCore
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.LoginCore
 import uniffi.vela_core_uniffi.FeePolicyCore
+import uniffi.vela_core_uniffi.FeeSpeedCore
+import uniffi.vela_core_uniffi.FeeTierPrefCore
 import uniffi.vela_core_uniffi.ManageTokensCore
 import uniffi.vela_core_uniffi.ApprovalGuardCore
 import uniffi.vela_core_uniffi.BatchImportCore
@@ -133,4 +135,11 @@ fun ReceiveWatchCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun PaymentRequestCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+// Spec 069: the default transaction speed, and the send screen's speed control.
+fun FeeTierPrefCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun FeeSpeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)

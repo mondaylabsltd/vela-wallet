@@ -22,7 +22,7 @@
  */
 
 import init, {
-	// The 24 machines, exactly as `vela-core-wasm` registers them
+	// The 25 machines, exactly as `vela-core-wasm` registers them
 	// (src/onboarding.rs + src/wallet_state.rs).
 	ActivityFeedCore,
 	bestNativeDexPrice,
@@ -42,6 +42,7 @@ import init, {
 	DisplayCurrencyCore,
 	ExtCacheCore,
 	FeePolicyCore,
+	FeeSpeedCore,
 	FeeTierPrefCore,
 	groupPublicKeyFromSeed,
 	identiconNormalizeSeed,
@@ -91,6 +92,7 @@ export {
 	DisplayCurrencyCore,
 	ExtCacheCore,
 	FeePolicyCore,
+	FeeSpeedCore,
 	FeeTierPrefCore,
 	LoginCore,
 	ManageTokensCore,

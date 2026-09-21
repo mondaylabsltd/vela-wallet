@@ -398,6 +398,26 @@ pub struct FlowStrings {
     pub first_time_tag: SharedString,
     pub fee_pending: SharedString,
 
+    // Send · the fee you can refresh, at a speed you can choose (spec 068, on
+    // the desktop since 069). `send.gasTier.rapid` is deliberately absent:
+    // the variant is dead, the relay refuses it, and this client must never
+    // be able to name it.
+    pub fee_refresh: SharedString,
+    pub fee_stale: SharedString,
+    pub fee_speed_label: SharedString,
+    pub fee_speed_once: SharedString,
+    pub fee_speed_free: SharedString,
+    pub fee_speed_single: SharedString,
+    pub gas_price_label: SharedString,
+    /// The three speeds' names — fast, standard, slow.
+    pub gas_tier_fast: SharedString,
+    pub gas_tier_standard: SharedString,
+    pub gas_tier_slow: SharedString,
+    /// …and what each one buys, the line under the name.
+    pub gas_tier_hint_fast: SharedString,
+    pub gas_tier_hint_standard: SharedString,
+    pub gas_tier_hint_slow: SharedString,
+
     // Send · the core's refusals, live (spec 032 phase 6). Every one of these
     // is a sentence the core computed and this client used to throw away: a
     // person over-typing their balance saw a button that would not move and
@@ -645,6 +665,20 @@ impl FlowStrings {
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             fee_pending: SharedString::from("…"),
+
+            fee_refresh: s("send.feeRefresh"),
+            fee_stale: s("send.feeStale"),
+            fee_speed_label: s("send.feeSpeedLabel"),
+            fee_speed_once: s("send.feeSpeedOnce"),
+            fee_speed_free: s("send.feeSpeedFree"),
+            fee_speed_single: s("send.feeSpeedSingle"),
+            gas_price_label: s("send.gasPriceLabel"),
+            gas_tier_fast: s("send.gasTier.fast"),
+            gas_tier_standard: s("send.gasTier.standard"),
+            gas_tier_slow: s("send.gasTier.slow"),
+            gas_tier_hint_fast: s("send.gasTierHintFast"),
+            gas_tier_hint_standard: s("send.gasTierHintStandard"),
+            gas_tier_hint_slow: s("send.gasTierHintSlow"),
 
             warn_not_enough_token: raw("send.warnNotEnoughToken"),
             warn_insufficient_for_gas: raw("send.warnInsufficientForGas"),

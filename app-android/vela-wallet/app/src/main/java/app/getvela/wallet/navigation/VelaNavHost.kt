@@ -12,6 +12,7 @@ import app.getvela.wallet.feature.flows.components.ChainFilterSheet
 import app.getvela.wallet.feature.flows.components.ChainFilterRow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.contacts.core.ContactGroupInput
 import app.getvela.wallet.feature.contacts.components.GroupMenuSheet
@@ -595,6 +596,7 @@ fun VelaNavHost(
                     val clearView by controller.clear.collectAsStateWithLifecycle()
                     val guardView by controller.guard.collectAsStateWithLifecycle()
                     val signFee by controller.fee.collectAsStateWithLifecycle()
+                    val signSpeed by controller.speed.collectAsStateWithLifecycle()
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     val signMethod by controller.signMethod.collectAsStateWithLifecycle()
@@ -619,7 +621,10 @@ fun VelaNavHost(
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
                             val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
                             app.getvela.wallet.feature.signing.SigningSheet(
-                                model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx, signSim),
+                                model = app.getvela.wallet.feature.signing.SigningLive.model(
+                                    drawn, request, signView, clearView, guardView, signFee, signCtx, signSim,
+                                    speed = SendLive.SpeedInputs(signSpeed, controller::feeViewOf),
+                                ),
                                 // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
                                 onDismiss = { controller.swipeDismissed() },
                                 onConfirm = { controller.approve() },
@@ -635,6 +640,8 @@ fun VelaNavHost(
                                 onSignWith = { controller.signWith(it) },
                                 onFee = { controller.feeTapped() },
                                 onFeePick = { id -> controller.pickFee(id.takeUnless { it == app.getvela.wallet.feature.signing.SigningLive.NATIVE_FEE_ID }) },
+                                onToggleSpeed = { controller.toggleSpeed() },
+                                onPickSpeed = { id -> FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(controller::pickSpeed) },
                             )
                         }
                     }
@@ -650,6 +657,8 @@ fun VelaNavHost(
                 val send = application.container.send
                 val sendView by send.send.collectAsStateWithLifecycle()
                 val feeView by send.fee.collectAsStateWithLifecycle()
+                // Spec 069: the speed control, as the `fee_speed` core decided it.
+                val speedView by send.speed.collectAsStateWithLifecycle()
                 val sendClosed by send.closed.collectAsStateWithLifecycle()
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
                 val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
@@ -738,7 +747,7 @@ fun VelaNavHost(
                     val explorers = remember(networks.networks) {
                         networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
+                    val flowModel = remember(liveState, sendView, feeView, speedView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -751,8 +760,10 @@ fun VelaNavHost(
                         VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                         val base = when (val base = drawn.base) {
                             is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking, sendView.multi_chain_id ?: chainFilter, classFilter))
-                            is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
-                            is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx, feeView))
+                            is FlowBase.SendForm -> FlowBase.SendForm(
+                                SendLive.form(base.model, sendView, feeView, ctx, SendLive.SpeedInputs(speedView, send::feeViewOf)),
+                            )
+                            is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx, feeView, speedView))
                             is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
                             else -> base
                         }
@@ -785,6 +796,11 @@ fun VelaNavHost(
                             }
                         },
                         send = SendCallbacks(
+                            onRefreshFee = { send.refreshFee() },
+                            onToggleSpeed = { send.toggleSpeed() },
+                            onPickSpeed = { id ->
+                                FeeTier.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let(send::pickSpeed)
+                            },
                             onSelectToken = { index ->
                                 val visible = SendLive.visibleTokens(sendView, sendView.multi_chain_id ?: chainFilter, classFilter)
                                 sendView.tokens.getOrNull(visible.getOrNull(index) ?: -1)?.let { token ->
@@ -1140,7 +1156,7 @@ fun VelaNavHost(
                         // own (spec 041); the fixture `model` only carries the
                         // labels the live builder cannot compute.
                         WalletScreen(
-                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
+                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames, chainFilter = chainFilter).let { home ->
                                 // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
                                 if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
                             },
@@ -1532,6 +1548,8 @@ fun VelaNavHost(
                 val settings = application.container.settings
                 val currency by settings.currency.collectAsStateWithLifecycle()
                 val networks by settings.networks.collectAsStateWithLifecycle()
+                // Spec 069: the default transaction speed.
+                val feeTier by settings.feeTier.collectAsStateWithLifecycle()
                 // Spec 047 US1: the rows read the device — preferences, the pool,
                 // the session, the store's own keys, the relay's treasury.
                 val scope = rememberCoroutineScope()
@@ -1561,6 +1579,7 @@ fun VelaNavHost(
                 val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
                 LaunchedEffect(Unit) {
                     settings.refreshCurrency()
+                    settings.refreshFeeTier()
                     settings.startNetworks()
                 }
                 LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
@@ -1594,6 +1613,7 @@ fun VelaNavHost(
                         m, prefs, i18nState.language, strings,
                         theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
                     )
+                    m = SettingsLive.withFeeTier(m, feeTier, strings)
                     storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
                     m = SettingsLive.withWalletKeys(m, walletKeys, backupCheck?.state, strings)
                     m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
@@ -1718,6 +1738,10 @@ fun VelaNavHost(
                             val prefsStore = application.container.preferences
                             when (sheet) {
                                 SettingsOverlay.Currency -> settings.chooseCurrency(id)
+                                SettingsOverlay.FeeSpeed ->
+                                    app.getvela.wallet.feature.send.core.FeeTier.entries
+                                        .firstOrNull { it.name.equals(id, ignoreCase = true) && it != app.getvela.wallet.feature.send.core.FeeTier.Rapid }
+                                        ?.let(settings::chooseFeeTier)
                                 SettingsOverlay.Language -> {
                                     prefsStore.setLanguage(id)
                                     application.container.applyLanguage(id)

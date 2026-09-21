@@ -391,6 +391,50 @@ final class BrowserAcceptanceTests: XCTestCase {
     }
     #endif
 
+    // MARK: - Spec 069: the dApp sheet chooses a speed
+
+    /// A page asks to send dust, and the sheet offers the send form's own
+    /// speed control under its fee: folded on the tier in force, opened onto
+    /// three speeds, a pick folding it onto the new one.
+    ///
+    /// **Nothing here spends.** The slide is never touched: the sheet is
+    /// swiped away, which is the refusal, and the page is answered 4001.
+    func testTheDappSheetOffersASpeedAndNeverSignsOneItLeft() throws {
+        let app = launchBrowsing()
+        XCTAssertTrue(app.staticTexts["PARALLEL SPACE"].waitForExistence(timeout: 30))
+        app.buttons["探索"].firstMatch.tap()
+        XCTAssertTrue(app.webViews.staticTexts["Vela test dApp"].waitForExistence(timeout: 30))
+        connect(app)
+
+        app.webViews.buttons["Send dust"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["发送"].waitForExistence(timeout: 30),
+                      "the signing sheet never opened")
+        let speed = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "速度")).firstMatch
+        XCTAssertTrue(speed.waitForExistence(timeout: 30),
+                      "the sheet has no speed control under its fee")
+        _ = XCTWaiter.wait(for: [expectation(description: "quote")], timeout: 8)
+        attach(app.screenshot(), named: "dapp-speed-folded")
+
+        speed.tap()
+        XCTAssertTrue(app.staticTexts["较慢"].waitForExistence(timeout: 10),
+                      "opening the control offered no speeds")
+        XCTAssertTrue(app.staticTexts["仅这一笔，下次仍用默认"].exists, "the one-shot promise is not said")
+        // Each option prices itself: give the previews their round trips.
+        _ = XCTWaiter.wait(for: [expectation(description: "previews")], timeout: 12)
+        attach(app.screenshot(), named: "dapp-speed-open")
+
+        app.staticTexts["较慢"].firstMatch.tap()
+        _ = XCTWaiter.wait(for: [expectation(description: "repriced")], timeout: 8)
+        XCTAssertFalse(app.staticTexts["仅这一笔，下次仍用默认"].exists, "a pick did not fold the control")
+        XCTAssertTrue(speed.label.contains("较慢"), "the control does not name the speed picked: \(speed.label)")
+        attach(app.screenshot(), named: "dapp-speed-picked-slow")
+
+        // Away, unsigned: the refusal.
+        app.swipeDown(velocity: .fast)
+        XCTAssertTrue(waitForVerdict(app, containing: "#verdict eth_sendTransaction err 4001", timeout: 30),
+                      "dismissing the sheet did not refuse the page")
+    }
+
     // MARK: - US5: an unlimited approval never leaves
 
     /// A site asks to spend everything, forever. The wallet does not let that

@@ -4,6 +4,7 @@ import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.Assertion
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.send.core.FeeTier
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.RestAnswer
 import app.getvela.wallet.feature.send.core.StoreAccountPort
@@ -63,14 +64,16 @@ class DappSignMachineTest {
         store.values["vela.activeAccountIndex"] = "0"
     }
 
-    private fun scriptRelay() {
+    private fun scriptRelay(receiptLands: Boolean = true) {
         port.always("eth_getCode") { FakeRelayPort.body("0x6080") }
         port.always("eth_call") { FakeRelayPort.body("0x" + "0".repeat(63) + "7") }
         port.always("eth_gasPrice") { FakeRelayPort.body("0x3b9aca00") }
         port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", "0x3b9aca00")) }
         port.always("eth_maxPriorityFeePerGas") { FakeRelayPort.body("0x5f5e100") }
         port.always("pimlico_getUserOperationGasPrice") {
-            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", "0x77359400").put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")))
+            // A row per speed (spec 069): the sheet can price any of them.
+            fun row(max: String) = JSONObject().put("maxFeePerGas", max).put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")
+            FakeRelayPort.body(JSONObject().put("fast", row("0x77359400")).put("standard", row("0x59682f00")).put("slow", row("0x4a817c80")))
         }
         port.always("vela_getInBandGasQuote") {
             FakeRelayPort.body(JSONArray().put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "native").put("balance", "0x9f3306a949ca000").put("decimals", 18).put("symbol", "XDAI").put("usdBalance", "0.71").put("usdPrice", "1")))
@@ -78,13 +81,23 @@ class DappSignMachineTest {
         port.always("eth_estimateUserOperationGas") {
             FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
         }
-        port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.body("0xhash") }
+        port.always("eth_sendUserOperation") { params ->
+            events += "relay.send"
+            // Spec 069: the speed the displayed fee was priced at, by name.
+            events += "relay.tier:${params.getOrNull(2) ?: "-"}"
+            FakeRelayPort.body("0xhash")
+        }
         // The receipt: pending once, then landed — the answer is the TX hash.
-        port.answer(
-            "eth_getUserOperationReceipt",
-            FakeRelayPort.body(JSONObject.NULL),
-            FakeRelayPort.body(JSONObject().put("success", true).put("sender", safe).put("receipt", JSONObject().put("transactionHash", "0xtx").put("logs", JSONArray()))),
-        )
+        // Or (issue 262) it never lands: the op sits in the bundler.
+        if (receiptLands) {
+            port.answer(
+                "eth_getUserOperationReceipt",
+                FakeRelayPort.body(JSONObject.NULL),
+                FakeRelayPort.body(JSONObject().put("success", true).put("sender", safe).put("receipt", JSONObject().put("transactionHash", "0xtx").put("logs", JSONArray()))),
+            )
+        } else {
+            port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
@@ -98,7 +111,9 @@ class DappSignMachineTest {
         }
     }
 
-    private fun controller(): SigningController {
+    private val handoffs = java.util.Collections.synchronizedList(ArrayList<Pair<String, List<String>>>())
+
+    private fun controller(receiptWaitMs: Long = 10_000L): SigningController {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
         val accounts = StoreAccountPort(AccountStore(store))
@@ -107,7 +122,7 @@ class DappSignMachineTest {
             scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { fixtureSigner },
             knownChains = { listOf(1, 100) },
             wallet = SignAccountRef(address = safe, credential_id = credential),
-            receiptWaitMs = 10_000L, receiptPollMs = 100L,
+            receiptWaitMs = receiptWaitMs, receiptPollMs = 100L,
             ports = object : SigningController.Ports {
                 override fun respond(transportId: String, id: String, json: JSONObject) {
                     events += "respond"
@@ -123,6 +138,7 @@ class DappSignMachineTest {
                 override suspend fun switchAccount(address: String) = true
                 override fun nativeSymbol(chainId: Int) = "XDAI"
                 override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
+                    handoffs += userOpHash to recordIds
                     val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
                     events += if (stored.contains(userOpHash)) "track:persisted" else "track:NOT-PERSISTED"
                 }
@@ -165,6 +181,59 @@ class DappSignMachineTest {
         assertEquals("0xtx", JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).getString("txHash"))
         assertEquals(origin, row.getString("dappOrigin"))
         assertTrue(row.getString("to").equals(founder, ignoreCase = true))
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * Issue 262: the bundler accepted the op but no receipt came inside the
+     * wait. The page still gets an answer — the op hash — but the record is
+     * NOT flipped to confirmed with the op hash as its tx hash: it stays
+     * pending, and the tracker (handed the op and the record) settles it.
+     */
+    @Test
+    fun `a late receipt answers the op hash and leaves the record pending for the tracker`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false)
+        val c = controller(receiptWaitMs = 600L)
+        c.open(transfer())
+        withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet && it.request != null } }
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertEquals("the page gets the op hash when the receipt is late", "0xhash", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
+        withTimeout(10_000) { c.closed.first { it } }
+        // Give any (wrong) confirming patch time to land before looking.
+        delay(500)
+        val row = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
+        assertEquals("0xhash", row.getString("userOpHash"))
+        assertEquals("nothing is known to have landed", "pending", row.getString("status"))
+        assertEquals("the op hash is never recorded as a tx hash", "", row.optString("txHash"))
+        val handoff = handoffs.singleOrNull()
+        assertEquals("the tracker holds the op", "0xhash", handoff?.first)
+        assertEquals("…and the very record it must settle", listOf(row.getString("id")), handoff?.second)
+    }
+
+    @Test
+    fun `a speed picked on the sheet is the speed priced, signed and named on the wire`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        // The stored default first — `fast` for everybody who never chose.
+        val first = withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        assertEquals(FeeTier.Fast, first.fee!!.tier)
+        assertEquals(FeeTier.Fast, c.speed.value.tier)
+        c.toggleSpeed()
+        c.pickSpeed(FeeTier.Slow)
+        assertTrue("a pick is one-shot, and says so", withTimeout(10_000) { c.speed.first { it.picked } }.tier == FeeTier.Slow)
+        // The sheet re-prices at the speed picked; the old figure never stands in.
+        // (Both speeds meet the $0.01 floor on this script, so only the NAME
+        // tells them apart — which is the thing the wire has to carry.)
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready && it.fee?.tier == FeeTier.Slow } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertTrue("the wire names the speed picked: $events", "relay.tier:slow" in events)
+        assertFalse("never the speed walked away from: $events", "relay.tier:fast" in events)
         withTimeout(10_000) { c.closed.first { it } }
     }
 

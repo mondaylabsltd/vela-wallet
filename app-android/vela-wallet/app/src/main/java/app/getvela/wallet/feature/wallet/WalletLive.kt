@@ -66,9 +66,17 @@ object WalletLive {
         strings: VelaStrings,
         chainNames: Map<Int, String>,
         now: Long = System.currentTimeMillis(),
+        /**
+         * The network filter the assets page, history and send picker share
+         * (spec 048). The home narrows its holdings to it as the web's does
+         * (`liveSections`); the feed arrives already narrowed by its machine,
+         * and the hero total stays the whole wallet's.
+         */
+        chainFilter: Int? = null,
     ): WalletHomeModel {
         val money = Money.of(currency)
         val rows = assetRows(view, chainNames, currency)
+            .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         val groups = activity(feed, strings, now)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames),
@@ -79,6 +87,9 @@ object WalletLive {
             assetsSection = fallback.assetsSection.copy(
                 mode = when {
                     rows.isNotEmpty() -> SectionMode.Rows
+                    // A network filtered down to nothing reads as the empty
+                    // state, not as a list still loading or a blank one.
+                    chainFilter != null && view.tokens.isNotEmpty() -> SectionMode.Empty
                     view.holdings_loading -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },

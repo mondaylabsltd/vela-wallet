@@ -18,6 +18,7 @@ pub mod page;
 /// off when that hop lands**: an allow marks callees live too (spec 032
 /// lesson 1).
 pub mod signing_host;
+pub mod speed_control;
 
 use gpui::SharedString;
 
