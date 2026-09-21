@@ -229,10 +229,10 @@ class BalanceMachineTest {
     }
 
     /**
-     * Settings' two readings of an unread chain, over the real core: a dead
-     * RPC earns the banner and SR3's red retry row; a 429 earns neither — it
-     * is a grey "retrying" line, because it heals by itself. The Android
-     * banner used to take the pool's raw failed list, rate-limited included.
+     * Two readings of an unread chain, over the real core: a dead RPC is in
+     * `banner_chain_ids` (the home's status line) and earns SR3's red retry
+     * row; a 429 earns neither — it is a grey "retrying" line, because it
+     * heals by itself.
      */
     @Test
     fun settingsBannersADeadChainAndOnlyGreysARateLimitedOne() {
@@ -256,8 +256,9 @@ class BalanceMachineTest {
             app.getvela.wallet.feature.settings.SettingsScreenState.SR1,
             strings,
         )
-        val banner = app.getvela.wallet.feature.settings.SettingsLive.withBanner(base, view.banner_chain_ids, names, strings).rpcBanner
-        assertEquals("only the dead chain earns the banner", listOf("Gnosis"), banner?.chips?.map { it.name })
+        // The settings page draws no banner (the web has none); the home's
+        // status line reads this list, and only the dead chain is on it.
+        assertEquals("only the dead chain earns the banner", listOf(100), view.banner_chain_ids)
 
         val detail = app.getvela.wallet.feature.settings.SettingsLive.balanceDetail(
             base.balanceDetail,

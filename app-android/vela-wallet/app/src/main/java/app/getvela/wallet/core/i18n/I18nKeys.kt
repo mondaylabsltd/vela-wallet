@@ -469,6 +469,8 @@ object I18nKeys {
         const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
         const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
         const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"
+        /** A code read, but not one this surface can use (the web scanner's `unusable`). */
+        const val SCAN_INVALID_QR = "home.invalidQrTitle"
 
         // Activity.
         const val HISTORY_TITLE = "history.navTitle"
@@ -557,6 +559,7 @@ object I18nKeys {
         const val RECIPIENT_LABEL = "send.recipientLabel"
         const val RECIPIENT_N = "send.recipientN"
         const val RECIPIENT_COUNT = "send.recipientCount_other"
+        const val RECIPIENT_COUNT_ONE = "send.recipientCount_one"
         const val ADD_RECIPIENT = "send.addRecipient"
         const val FROM_CONTACTS = "send.fromContacts"
         const val BATCH_IMPORT = "send.batchImport"
@@ -597,6 +600,9 @@ object I18nKeys {
         const val BATCH_RATE_HINT = "send.batchRateHint"
         const val BATCH_PARSED_COUNT = "send.batchParsedCount"
         const val BATCH_BAD_ADDRESS = "send.batchBadAddress"
+        const val BATCH_DUP = "send.batchDup"
+        const val BATCH_IMPORT_FAILED_TITLE = "send.batchImportFailedTitle"
+        const val BATCH_IMPORT_FAILED_BODY = "send.batchImportFailedBody"
         const val BATCH_REJECTED_ONE = "send.batchRejected_one"
         const val BATCH_APPLY_OTHER = "send.batchApply_other"
         const val BATCH_REJECTED_OTHER = "send.batchRejected_other"
@@ -761,6 +767,8 @@ object I18nKeys {
         const val NETWORK_ONLINE = "settings.networks.online"
         const val NETWORK_SLOW = "settings.networks.slow"
         const val NETWORK_OFFLINE = "settingsModals.health.offline"
+        const val HEALTH_HTTPS_REQUIRED = "settingsModals.health.httpsRequired"
+        const val HEALTH_INVALID = "settingsModals.health.invalid"
 
         /** The Ethereum backup row (spec 062). */
         const val BACKUP_TITLE = "settingsModals.backup.title"

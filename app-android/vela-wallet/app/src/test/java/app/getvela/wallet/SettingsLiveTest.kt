@@ -192,6 +192,45 @@ class SettingsLiveTest {
         assertEquals("https://default.example", field.placeholder)
     }
 
+    /** The web's `servicePill`: every `NetServiceHealth` worded, quiet while checking. */
+    @Test
+    fun anEndpointSaysWhatItsHealthCheckFound() {
+        fun endpoint(health: NetServiceHealth) = NetEndpointView(NetEndpointField.EthereumData, "", "https://d.example", health)
+        val view = NetView(
+            loaded = true,
+            endpoints = listOf(
+                endpoint(NetServiceHealth.Checking),
+                endpoint(NetServiceHealth.Ok(42)),
+                endpoint(NetServiceHealth.Ok(2_400)),
+                endpoint(NetServiceHealth.NotHttps),
+                endpoint(NetServiceHealth.Unreachable(http_status = 502)),
+                endpoint(NetServiceHealth.InvalidResponse(latency_ms = 10)),
+            ),
+        )
+        val pills = SettingsLive.withNetworks(base(), view, strings).endpoints.fields.map { it.badge }
+
+        assertNull("checking claims nothing", pills[0])
+        assertEquals(SettingsTone.Ok, pills[1]!!.tone)
+        assertTrue(pills[1]!!.label.endsWith("42ms"))
+        assertEquals(SettingsTone.Warn, pills[2]!!.tone)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.HEALTH_HTTPS_REQUIRED), pills[3]!!.tone to pills[3]!!.label)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE), pills[4]!!.tone to pills[4]!!.label)
+        assertEquals(SettingsTone.Error to strings.t(I18nKeys.SettingsUi.HEALTH_INVALID), pills[5]!!.tone to pills[5]!!.label)
+    }
+
+    /** The web's `liveNetworkRows`: a custom network's row wears its tag, not a health pill. */
+    @Test
+    fun aCustomNetworkRowCarriesNoHealthPill() {
+        val view = NetView(
+            loaded = true,
+            networks = listOf(row(1, "Ethereum", false, NetProbeHealth.Ok(42)), row(7777, "Seven", true, NetProbeHealth.Ok(42))),
+        )
+        val rows = SettingsLive.withNetworks(base(), view, strings).networks
+        assertTrue(rows[0].badge != null)
+        assertNull(rows[1].badge)
+        assertEquals(strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM), rows[1].tag)
+    }
+
     @Test
     fun aProviderKeyFieldCarriesItsProviderId() {
         val view = NetView(

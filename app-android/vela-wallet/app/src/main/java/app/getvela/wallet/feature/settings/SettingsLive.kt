@@ -18,6 +18,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyCatalog
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetProbeHealth
+import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetView
@@ -116,6 +117,23 @@ object SettingsLive {
             }
             NetProbeHealth.Error ->
                 StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))
+        }
+
+    /**
+     * A service endpoint's pill — every `NetServiceHealth` worded (the web's
+     * `servicePill`): quiet while checking, the latency once it answered,
+     * and why not when it did not.
+     */
+    internal fun servicePill(health: NetServiceHealth, strings: VelaStrings): StatusPillModel? =
+        when (health) {
+            NetServiceHealth.Checking -> null
+            is NetServiceHealth.Ok -> healthPill(NetProbeHealth.Ok(health.latency_ms), strings)
+            NetServiceHealth.NotHttps ->
+                StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.HEALTH_HTTPS_REQUIRED))
+            is NetServiceHealth.Unreachable ->
+                StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))
+            is NetServiceHealth.InvalidResponse ->
+                StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.HEALTH_INVALID))
         }
 
     /** A second is where the drawn design calls an endpoint slow. */
@@ -272,7 +290,10 @@ object SettingsLive {
                         I18nKeys.SettingsUi.CHAIN_ID,
                         mapOf("chainId" to row.chain_id.toString()),
                     ),
-                    badge = healthPill(row.rpc_health, strings),
+                    // A custom network's row carries its "custom" tag and no health
+                    // pill, as on the web (`liveNetworkRows`): the probe is shown on
+                    // its detail page.
+                    badge = if (row.is_custom) null else healthPill(row.rpc_health, strings),
                     tag = if (row.is_custom) {
                         strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM)
                     } else {
@@ -290,6 +311,7 @@ object SettingsLive {
                         // The default is the placeholder: an unset endpoint
                         // shows what it WOULD use, greyed, not an empty box.
                         placeholder = endpoint.default_value,
+                        badge = servicePill(endpoint.health, strings),
                     )
                 },
             ),
@@ -538,20 +560,6 @@ object SettingsLive {
                 name = chainName,
                 amountHint = strings.t(I18nKeys.SettingsUi.RELAYER_AMOUNT_HINT, mapOf("amount" to amount, "symbol" to (if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else symbol))),
                 addressDisplay = ExploreLive.shortAddress(status.address),
-            ),
-        )
-    }
-
-    /** The RPC banner names the chains that are down (the balance core's `banner_chain_ids` — never a rate-limited one); absent when none are. */
-    fun withBanner(model: SettingsScreenModel, failedChains: List<Int>, chainNames: Map<Int, String>, strings: VelaStrings): SettingsScreenModel {
-        if (failedChains.isEmpty()) return model.copy(rpcBanner = null)
-        val drawn = model.rpcBanner ?: return model
-        return model.copy(
-            rpcBanner = drawn.copy(
-                chips = failedChains.map { id ->
-                    val name = chainNames[id] ?: "chain-$id"
-                    RpcBannerChipModel(id = id.toString(), mark = ChainMarkModel(name.take(1).uppercase(), WalletLive.badge(id.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(id)), name = name, action = drawn.chips.firstOrNull()?.action.orEmpty())
-                },
             ),
         )
     }

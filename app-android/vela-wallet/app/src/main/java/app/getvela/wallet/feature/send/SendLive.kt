@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.flows.AmountFieldModel
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.core.BatchView
 import app.getvela.wallet.feature.send.core.BatchRateStatus
+import app.getvela.wallet.feature.send.core.BatchParseReason
 import app.getvela.wallet.feature.send.core.BATCH_MAX_RECIPIENTS
 import app.getvela.wallet.feature.flows.BatchUnit
 import app.getvela.wallet.feature.flows.BatchRowModel
@@ -204,6 +205,11 @@ object SendLive {
         val s = ctx.strings
         val symbol = view.selected_token?.symbol ?: ""
         val count = batch.recipient_count
+        // Lines READ — the ones that became rows and the ones the parser refused
+        // (the web's `seen`): the count above a list is the length of that list.
+        val seen = batch.preview.size + batch.errors.size
+        // Someone is already on the form (the core's own count, as `merge` reads it).
+        val formHasRows = view.split_import_room < BATCH_MAX_RECIPIENTS
         return fallback.copy(
             unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to batch.fiat_code)),
             unitToken = s.t(I18nKeys.Flows.BATCH_UNIT_TOKEN, mapOf("sym" to symbol)),
@@ -220,13 +226,55 @@ object SendLive {
             rateInput = batch.rate_input,
             rateEdited = batch.rate_edited,
             rateReset = s.t(I18nKeys.Flows.BATCH_RATE_RESET),
-            parsedLabel = s.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to count.toString())),
-            rows = batch.preview.map { row ->
-                BatchRowModel(
-                    ok = row.ok,
-                    address = row.name ?: row.address,
-                    conversion = if (row.token_amount.isNotEmpty()) "${row.token_amount} $symbol" else row.raw_amount,
+            parsedLabel = s.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to seen.toString())),
+            // The sheet's order (the web's `previewRows`): a refused line sits
+            // between the neighbours it has in the sheet, each with its reason.
+            rows = (
+                batch.preview.map { row ->
+                    row.line to BatchRowModel(
+                        ok = row.ok,
+                        address = row.name ?: row.address,
+                        // The core converted it; an unconvertible row carries no
+                        // token amount, and the raw figure there would read as if it had.
+                        conversion = if (row.token_amount.isNotEmpty() && row.token_amount != "0") "${row.token_amount} $symbol" else "—",
+                        note = when {
+                            row.dup -> s.t(I18nKeys.Flows.BATCH_DUP)
+                            !row.valid -> s.t(I18nKeys.Flows.BATCH_BAD_ADDRESS)
+                            else -> null
+                        },
+                    )
+                } + batch.errors.map { error ->
+                    error.line to BatchRowModel(
+                        ok = false,
+                        address = error.raw,
+                        conversion = "",
+                        note = s.t(if (error.reason == BatchParseReason.NoAddress) I18nKeys.Flows.BATCH_BAD_ADDRESS else I18nKeys.Flows.BAD_AMOUNT),
+                    )
+                }
+                ).sortedBy { it.first }.map { it.second },
+            // `file_error` outlives a paste in the core (only the next pick clears
+            // it), and an error about a file above a list that parsed is about nothing.
+            fileError = if (batch.file_error && seen == 0) {
+                "${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY)}"
+            } else {
+                null
+            },
+            total = if (count > 0) {
+                SummaryLineModel(
+                    label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(if (count == 1) I18nKeys.Flows.RECIPIENT_COUNT_ONE else I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to count.toString()))}",
+                    value = "${Formats.current.plain(batch.total_token)} $symbol".trim() +
+                        (batch.total_fiat?.let { " · ${Formats.current.plain(it)} ${batch.fiat_code}" } ?: ""),
+                    over = batch.over_balance,
+                    // Adding to people already on the form draws from what the form
+                    // has not given out yet (`split_remaining`), not the whole balance.
+                    remaining = if (formHasRows && !replaces && view.split_remaining != null) {
+                        s.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "${trim(view.split_remaining)} $symbol".trim()))
+                    } else {
+                        s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "${trim(view.selected_token?.balance ?: "0")} $symbol".trim()))
+                    },
                 )
+            } else {
+                null
             },
             rejectedText = if (batch.rejected > 0) {
                 s.t(if (batch.rejected == 1) I18nKeys.Flows.BATCH_REJECTED_ONE else I18nKeys.Flows.BATCH_REJECTED_OTHER, mapOf("count" to batch.rejected.toString()))
@@ -244,12 +292,12 @@ object SendLive {
             // with the way to choose the other (the web's `merge` line). Only when
             // there is someone on the form: the core's own count, read back from
             // the room it reports.
-            merge = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+            merge = if (formHasRows && batch.can_apply) {
                 s.t(if (replaces) I18nKeys.Flows.BATCH_REPLACES_ROWS else I18nKeys.Flows.BATCH_ADDS_TO_ROWS)
             } else {
                 null
             },
-            mergeAction = if (view.split_import_room < BATCH_MAX_RECIPIENTS && batch.can_apply) {
+            mergeAction = if (formHasRows && batch.can_apply) {
                 s.t(if (replaces) I18nKeys.Flows.BATCH_ADD_INSTEAD else I18nKeys.Flows.BATCH_REPLACE_INSTEAD)
             } else {
                 null

@@ -297,6 +297,38 @@ class FeedExecutorTest {
         assertTrue(feed.pendingRecords().isEmpty())
     }
 
+    /**
+     * The "first time sending to this address" tag's history (the web's
+     * `hasPriorInteraction`): only a send, a dApp transaction or a legacy
+     * row with no type counts, and the address is compared lower-cased.
+     */
+    @Test
+    fun `sent-to history counts sends, dapp txs and legacy rows only`() = runBlocking {
+        val to = "0x1111111111111111111111111111111111111111"
+        write(storedRow(id = "r", type = "receive"), storedRow(id = "m", type = "sign_message"))
+        assertTrue("a receive or a signature is not a send", !executor().hasSentTo(to))
+
+        write(storedRow(id = "s", type = "send").put("to", "0xABCDEF0000000000000000000000000000000001"))
+        assertTrue("case does not matter", executor().hasSentTo("0xabcdef0000000000000000000000000000000001"))
+
+        write(storedRow(id = "d", type = "dapp_tx"))
+        assertTrue(executor().hasSentTo(to))
+
+        write(storedRow(id = "l", type = null))
+        assertTrue("a legacy row with no type is a send", executor().hasSentTo(to))
+
+        write(storedRow(id = "c", type = "dappTx"))
+        assertTrue("the web counts `dapp_tx` only, not the camel spelling", !executor().hasSentTo(to))
+        assertTrue("another address is not this one", !executor().hasSentTo("0x2222222222222222222222222222222222222222"))
+    }
+
+    @Test
+    fun `an empty or unreadable store has sent to no one`() = runBlocking {
+        assertTrue(!executor().hasSentTo("0x1111111111111111111111111111111111111111"))
+        store.write(KeyValueStore.Keys.TRANSACTIONS, "not json")
+        assertTrue(!executor().hasSentTo("0x1111111111111111111111111111111111111111"))
+    }
+
     /** Storage that refuses is a refused write — the core must not hear `records_persisted`. */
     @Test
     fun `a refused write says so`() = runBlocking {

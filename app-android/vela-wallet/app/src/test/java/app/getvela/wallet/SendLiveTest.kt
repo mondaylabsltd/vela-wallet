@@ -45,6 +45,8 @@ import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.send.core.SendMultiSpecView
 import app.getvela.wallet.feature.flows.BatchUnit
 import app.getvela.wallet.feature.send.core.BatchPreviewRow
+import app.getvela.wallet.feature.send.core.BatchParseError
+import app.getvela.wallet.feature.send.core.BatchParseReason
 import app.getvela.wallet.feature.send.core.BatchRateStatus
 import app.getvela.wallet.feature.send.core.BatchRecipient
 import app.getvela.wallet.feature.send.core.BatchView
@@ -613,15 +615,79 @@ class SendLiveTest {
         assertEquals("0.78 GBP", priced.rateValue)
         assertEquals("0.78", priced.rateInput)
         assertTrue(priced.rateEdited)
-        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "1")), priced.parsedLabel)
+        // Lines READ, not rows kept (the web's `seen`).
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "2")), priced.parsedLabel)
         assertEquals(listOf(true, false), priced.rows.map { it.ok })
         assertEquals("Founder", priced.rows[0].address)
         assertEquals("0.001 XDAI", priced.rows[0].conversion)
-        assertEquals("5", priced.rows[1].conversion)
+        assertEquals("an unconverted row shows no figure, not the raw one", "—", priced.rows[1].conversion)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), priced.rows[1].note)
+        assertNull(priced.rows[0].note)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_REJECTED_ONE, mapOf("count" to "1")), priced.rejectedText)
         assertEquals(strings.t(I18nKeys.Flows.BATCH_APPLY_ONE, mapOf("count" to "1")), priced.cta)
         assertFalse(priced.ctaDisabled)
         assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
+    }
+
+    /**
+     * The import sheet says its reasons (the web's `liveBatchImport`): every
+     * refused line in sheet order with why, a duplicate marked, the file's
+     * failure while nothing parsed, and the total read against the balance —
+     * or against what is left when the import adds to rows already typed.
+     */
+    @Test
+    fun `the batch sheet names each refused line, the file error and the total`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true, show_batch_import = true)
+        val batch = BatchView(
+            opened = true, unit = WireBatchUnit.Token, fiat_code = "GBP", raw_text = "…", rate_status = BatchRateStatus.Ok,
+            preview = listOf(
+                BatchPreviewRow(line = 1, address = recipient, valid = true, raw_amount = "1", token_amount = "1", ok = true),
+                BatchPreviewRow(line = 4, address = recipient, valid = true, dup = true, raw_amount = "2", token_amount = "2", ok = false),
+            ),
+            errors = listOf(
+                BatchParseError(line = 2, raw = "0x12zz,5", reason = BatchParseReason.NoAddress),
+                BatchParseError(line = 3, raw = "$recipient,abc", reason = BatchParseReason.NoAmount),
+            ),
+            rejected = 3, recipient_count = 1, total_token = "1", total_fiat = "0.78", can_apply = true,
+        )
+        val live = SendLive.batchImport(drawn.model, batch, view, ctx())
+
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "4")), live.parsedLabel)
+        assertEquals("sheet order", listOf(recipient, "0x12zz,5", "$recipient,abc", recipient), live.rows.map { it.address })
+        assertEquals(
+            listOf(null, strings.t(I18nKeys.Flows.BATCH_BAD_ADDRESS), strings.t(I18nKeys.Flows.BAD_AMOUNT), strings.t(I18nKeys.Flows.BATCH_DUP)),
+            live.rows.map { it.note },
+        )
+        assertNull("a file error about a list that parsed is about nothing", live.fileError)
+
+        val total = live.total!!
+        assertEquals(
+            "${strings.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${strings.t(I18nKeys.Flows.RECIPIENT_COUNT_ONE, mapOf("count" to "1"))}",
+            total.label,
+        )
+        assertTrue(total.value.startsWith("1 XDAI"))
+        assertTrue("the fiat total rides beside it", total.value.endsWith("GBP"))
+        assertEquals(strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "0.71697 XDAI")), total.remaining)
+
+        // Adding to someone already on the form: what is LEFT, not the balance.
+        val typed = view.copy(split_import_room = 59, split_remaining = "2.25")
+        assertEquals(
+            strings.t(I18nKeys.Flows.SPLIT_REMAINING, mapOf("amount" to "2.25 XDAI")),
+            SendLive.batchImport(drawn.model, batch, typed, ctx()).total!!.remaining,
+        )
+        assertEquals(
+            "replacing them draws from the whole balance again",
+            strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to "0.71697 XDAI")),
+            SendLive.batchImport(drawn.model, batch, typed, ctx(), replaces = true).total!!.remaining,
+        )
+
+        val failed = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Token, file_error = true), view, ctx())
+        assertEquals(
+            "${strings.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${strings.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY)}",
+            failed.fileError,
+        )
+        assertNull("nobody parsed: no total", failed.total)
     }
 
     /** Issue #272: the refusal that dims the button reads as a warning, not as helper text. */

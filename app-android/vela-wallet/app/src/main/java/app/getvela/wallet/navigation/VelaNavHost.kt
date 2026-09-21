@@ -75,6 +75,7 @@ import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendCallbacks
 import app.getvela.wallet.MainActivity
 import app.getvela.wallet.feature.scan.ScanCallbacks
+import app.getvela.wallet.feature.scan.LiveScanSurface
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -1103,6 +1104,35 @@ fun VelaNavHost(
                                 onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
                             ),
                             consent = consentCard,
+                            // Issue #273: the scan icon reads a web address's code and opens
+                            // it here — the send scanner's surface, camera permission and
+                            // photo path. Any other code is refused in one line; WalletConnect
+                            // is not how this wallet connects.
+                            scanner = { onUrl, onClose ->
+                                var refusal by remember { mutableStateOf<String?>(null) }
+                                LiveScanSurface(
+                                    model = remember(strings) { FlowFixtures.scan(strings) },
+                                    callbacks = ScanCallbacks(
+                                        onDecoded = { text ->
+                                            val url = app.getvela.wallet.feature.browser.ExploreLive.scannedUrl(text)
+                                            if (url != null) {
+                                                onUrl(url)
+                                            } else {
+                                                refusal = strings.t(I18nKeys.Flows.SCAN_INVALID_QR)
+                                            }
+                                        },
+                                        onClose = onClose,
+                                        requestPermission = { mainActivity?.requestCameraPermission() ?: false },
+                                        pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
+                                        permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
+                                        grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                                        noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
+                                        cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
+                                        decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
+                                    ),
+                                    message = refusal,
+                                )
+                            },
                         )
                     } else {
                         // The holdings, the feed and the currency are this device's
@@ -1571,10 +1601,6 @@ fun VelaNavHost(
                         poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
                     )
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                    // A 429 heals by itself and never earns the "fix your RPC" banner: the
-                    // chains are the balance core's `banner_chain_ids`, not the pool's raw
-                    // failed list (which counts rate-limited chains too).
-                    m = SettingsLive.withBanner(m, balanceView.banner_chain_ids, chainNamesNow, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
