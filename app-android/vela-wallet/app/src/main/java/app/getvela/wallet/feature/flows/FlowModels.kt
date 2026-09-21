@@ -337,6 +337,8 @@ data class SendPickModel(
     val rows: List<AssetRowModel>,
     val selection: SendSelectionModel? = null,
     val cta: SendCtaModel,
+    /** Issue 209: what an empty list says — nothing held, or nothing matching. */
+    val empty: String? = null,
 )
 
 /** The token card at the top of the send form. */
@@ -395,6 +397,12 @@ data class AmountFieldModel(
     val denomLabel: String,
     /** Spec 043: the live figure as typed; `null` = a drawn, read-only field. */
     val raw: String? = null,
+    /** Issue 231: the figure's unit, drawn on it — "$" before, or "BNB" / "PLN" after. */
+    val unitPrefix: String? = null,
+    val unitSuffix: String? = null,
+    /** Issue 197: the ⇄ row exists only where the core offers it, and is live only where it would change something. */
+    val denomShown: Boolean = true,
+    val denomEnabled: Boolean = true,
 )
 
 @Immutable
@@ -487,6 +495,10 @@ data class FeeTokenRowModel(
     val balanceLabel: String,
     val fee: String,
     val selected: Boolean,
+    /** Issue 211: the core's verdict that this coin cannot pay — drawn dimmed, answers to nothing. */
+    val insufficient: Boolean = false,
+    /** What the row says instead of its balance when [insufficient]. */
+    val insufficientNote: String? = null,
 )
 
 @Immutable
@@ -529,6 +541,14 @@ data class BatchImportModel(
     val rateEdited: Boolean = false,
     val rateReset: String? = null,
     val note: String? = null,
+    /**
+     * The note is a refusal (over the balance, over the cap) — the reason the
+     * button is dim — and is drawn as one, not as helper text (issue #272).
+     */
+    val noteWarning: Boolean = false,
+    /** Issue #271: what applying does to the rows already on the form, and the way to choose the other. */
+    val merge: String? = null,
+    val mergeAction: String? = null,
 )
 
 /** SD3 — the confirmation. */

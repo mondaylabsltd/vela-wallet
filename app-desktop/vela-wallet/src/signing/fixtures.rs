@@ -127,6 +127,8 @@ pub struct FeeTokenOption {
     pub balance: SharedString,
     pub fee: SharedString,
     pub selected: bool,
+    /// The core's balance<fee gate: drawn for context, never pickable.
+    pub insufficient: bool,
 }
 
 pub enum FeeModel {
@@ -134,6 +136,9 @@ pub enum FeeModel {
         label: SharedString,
         value: SharedString,
         selector: Option<(SharedString, Vec<FeeTokenOption>)>,
+        /// Under the row, in the error colour: why the slide is shut when
+        /// the coin the fee was quoted in cannot pay it (issue #262).
+        warning: Option<SharedString>,
     },
     /// Off-chain signature: the ✓ line, in place of a fee row.
     OffChain(SharedString),
@@ -274,6 +279,7 @@ fn base(
             label: s.fee_label.clone(),
             value: "~0.0021 ETH ≈ $5.40".into(),
             selector: None,
+            warning: None,
         },
         signer_label: s.signing_account.clone(),
         signer_name: WALLET_NAME.into(),
@@ -877,6 +883,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 balance: format!("{} 0.0689", s.fee_balance).into(),
                                 fee: "~0.0021 ETH".into(),
                                 selected: true,
+                                insufficient: false,
                             },
                             FeeTokenOption {
                                 mark: usdc.clone(),
@@ -884,9 +891,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                                 balance: format!("{} 1,240.00", s.fee_balance).into(),
                                 fee: "~5.55 USDC".into(),
                                 selected: false,
+                                insufficient: false,
                             },
                         ],
                     )),
+                    warning: None,
                 };
             }
             m

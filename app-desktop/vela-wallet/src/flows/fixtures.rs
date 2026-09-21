@@ -260,6 +260,18 @@ pub struct HistoryGroup {
     pub rows: Vec<ActivityRowModel>,
 }
 
+/// DA1L — the history, in one of the web's three modes: still loading
+/// (skeleton rows), rows, or empty (one quiet line).
+#[derive(Clone)]
+pub struct HistoryPanel {
+    pub groups: Vec<HistoryGroup>,
+    /// Nothing to draw yet and the core has not ruled: skeleton rows.
+    pub loading: bool,
+    /// Nothing to draw and the core HAS ruled: the line that says so. `None`
+    /// draws nothing at all (a record that vanished under an open detail).
+    pub empty: Option<SharedString>,
+}
+
 #[derive(Clone)]
 pub struct TxDetail {
     pub title: SharedString,
@@ -495,6 +507,10 @@ pub struct BatchImport {
     pub notice: Option<SendNotice>,
     /// Live only: the "Auto" affordance once the rate was edited by hand.
     pub rate_reset: Option<SharedString>,
+    /// Live only: what the import does to the rows already on the form and
+    /// the way to choose the other — (sentence, action). `None` when the form
+    /// is empty or the import cannot apply (issue #265).
+    pub merge: Option<(SharedString, SharedString)>,
     /// The apply gate is the core's; the mock's button is always armed.
     pub cta_enabled: bool,
     pub cta: SharedString,
@@ -553,7 +569,7 @@ pub struct ScanModal {
 pub enum FlowBody {
     Receive(ReceiveList),
     ReceiveQr(ReceiveQr),
-    History(Vec<HistoryGroup>),
+    History(HistoryPanel),
     TxDetail(TxDetail),
     Assets(AssetsPanel),
     AddToken(AddToken),
@@ -1141,6 +1157,7 @@ fn batch_import(s: &FlowStrings) -> BatchImport {
         // Two of three rows parsed, so the button offers two — never three.
         notice: None,
         rate_reset: None,
+        merge: None,
         cta_enabled: true,
         cta: fill(&s.batch_apply, "count", "2").into(),
     }
@@ -1235,7 +1252,11 @@ pub fn body(panel: FlowPanel, s: &FlowStrings) -> FlowBody {
         FlowPanel::Dr2 => FlowBody::ReceiveQr(receive_qr(s, false)),
         FlowPanel::Dr3 => FlowBody::ReceiveQr(receive_qr(s, true)),
         FlowPanel::Ds1 => FlowBody::Scan(scan(s)),
-        FlowPanel::Da1 => FlowBody::History(history(s)),
+        FlowPanel::Da1 => FlowBody::History(HistoryPanel {
+            groups: history(s),
+            loading: false,
+            empty: None,
+        }),
         FlowPanel::Da2 => FlowBody::TxDetail(tx_detail(s, true)),
         FlowPanel::Da3 => FlowBody::TxDetail(tx_detail(s, false)),
         FlowPanel::Dt1 => FlowBody::Assets(assets_panel(s, false)),

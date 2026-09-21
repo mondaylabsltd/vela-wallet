@@ -809,6 +809,21 @@ fun SendPickBody(
                 onClick = { onSelect(entry.index) },
             )
         }
+        // Issue 209: a list with nothing in it says so rather than showing a blank panel.
+        if (shown.isEmpty()) {
+            model.empty?.let {
+                Text(
+                    text = it,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = VelaSpacing.lg),
+                )
+            }
+        }
         model.selection?.let {
             Text(
                 text = it.selectAll,
@@ -1173,6 +1188,7 @@ fun BatchImportBody(
     onPaste: ((String) -> Unit)? = null,
     onRate: ((String) -> Unit)? = null,
     onRateReset: () -> Unit = {},
+    onMerge: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1357,13 +1373,46 @@ fun BatchImportBody(
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         model.note?.let {
+            // A refusal is the reason the button below is dim: it reads as one
+            // (issue #272), not as the grey of the helper text around it.
             Text(
                 text = it,
-                color = colors.fgMuted,
+                color = if (model.noteWarning) colors.errorBase else colors.fgMuted,
                 fontFamily = VelaFontFamily,
+                fontWeight = if (model.noteWarning) VelaFontWeight.medium else null,
                 fontSize = VelaTextSize.sm,
                 modifier = Modifier.padding(bottom = VelaSpacing.md),
             )
+        }
+        model.merge?.let { merge ->
+            // Issue #271: what applying does to the rows already typed, said before it happens.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = VelaSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = merge,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.weight(1f),
+                )
+                model.mergeAction?.let { action ->
+                    Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                    Text(
+                        text = action,
+                        color = colors.accentBase,
+                        fontFamily = VelaFontFamily,
+                        fontWeight = VelaFontWeight.medium,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier
+                            .clickable(onClick = onMerge)
+                            .padding(vertical = VelaSpacing.xs),
+                    )
+                }
+            }
         }
         FlowCta(
             label = model.cta,

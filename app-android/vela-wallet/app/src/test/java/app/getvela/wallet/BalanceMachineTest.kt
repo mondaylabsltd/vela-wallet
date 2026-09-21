@@ -228,6 +228,51 @@ class BalanceMachineTest {
         assertTrue("the silent chain is named", view.failed_chain_ids.contains(100))
     }
 
+    /**
+     * Settings' two readings of an unread chain, over the real core: a dead
+     * RPC earns the banner and SR3's red retry row; a 429 earns neither — it
+     * is a grey "retrying" line, because it heals by itself. The Android
+     * banner used to take the pool's raw failed list, rate-limited included.
+     */
+    @Test
+    fun settingsBannersADeadChainAndOnlyGreysARateLimitedOne() {
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis"), row(137, "POL", "Polygon")),
+        ) { url, _ ->
+            when {
+                url.contains("chain-100") -> FakeRpcTransport.network()
+                url.contains("chain-137") -> FakeRpcTransport.httpError(429)
+                else -> FakeRpcTransport.body("0x14d1120d7b160000")
+            }
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        val view = h.host.settle { it.failed_chain_ids.containsAll(listOf(100, 137)) && it.rate_limited_chain_ids.contains(137) }
+
+        val strings = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
+            java.io.File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes()
+        }.apply { initialize("en") }
+        val names = mapOf(1 to "Ethereum", 100 to "Gnosis", 137 to "Polygon")
+        val base = app.getvela.wallet.feature.settings.SettingsFixtures.buildState(
+            app.getvela.wallet.feature.settings.SettingsScreenState.SR1,
+            strings,
+        )
+        val banner = app.getvela.wallet.feature.settings.SettingsLive.withBanner(base, view.banner_chain_ids, names, strings).rpcBanner
+        assertEquals("only the dead chain earns the banner", listOf("Gnosis"), banner?.chips?.map { it.name })
+
+        val detail = app.getvela.wallet.feature.settings.SettingsLive.balanceDetail(
+            base.balanceDetail,
+            view,
+            app.getvela.wallet.feature.settings.core.CurrencyView("USD", null, true),
+            names,
+            strings,
+        )
+        val polygon = detail.pending.single { it.name == "Polygon" }
+        val gnosis = detail.pending.single { it.name == "Gnosis" }
+        assertNull("a rate limit offers no retry", polygon.action)
+        assertTrue("a dead chain offers the retry", gnosis.action != null)
+        assertEquals(listOf("Ethereum"), detail.done.map { it.name })
+    }
+
     @Test
     fun anUnpricedHoldingIsNotCountedAsZeroDollars() {
         // Phase 4b has no price source, so every holding arrives unpriced. The

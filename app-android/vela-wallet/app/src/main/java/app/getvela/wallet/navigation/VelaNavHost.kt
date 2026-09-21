@@ -664,6 +664,7 @@ fun VelaNavHost(
                     generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
                 }
                 val batchView by send.batch.collectAsStateWithLifecycle()
+                val importReplaces by send.importReplaces.collectAsStateWithLifecycle()
                 val sendOpen = flows.top in SEND_STATES
                 LaunchedEffect(sendOpen, session.address) {
                     if (sendOpen && session.address.isNotEmpty()) {
@@ -742,7 +743,7 @@ fun VelaNavHost(
                     val explorers = remember(networks.networks) {
                         networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
+                    val flowModel = remember(liveState, sendView, feeView, batchView, importReplaces, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -763,7 +764,7 @@ fun VelaNavHost(
                         val sheet = when (val sheet = drawn.sheet) {
                             is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
                             is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
-                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx))
+                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx, importReplaces))
                             else -> sheet
                         }
                         drawn.copy(base = base, sheet = sheet)
@@ -800,8 +801,11 @@ fun VelaNavHost(
                             onFilter = { id -> classFilter = id; haptic(VelaHaptic.Select) },
                             onGroup = { index ->
                                 VelaLog.event("send", "group seed", "index" to index, "groups" to contactsBook.groups.size)
+                                // ADDED to whoever is already on the form, as on the web: a seed
+                                // replaced them, so a second group threw the first away (and a
+                                // typed recipient with it — the same loss as issue #271).
                                 contactsBook.groups.getOrNull(index)?.let { g ->
-                                    send.seedSplit(g.members.mapIndexed { k, member -> SendRecipientDraft(id = "group-${g.id}-$k", address = member.address, amount = "", name = member.name) })
+                                    send.appendSplit(g.members.mapIndexed { k, member -> SendRecipientDraft(id = "group-${g.id}-$k", address = member.address, amount = "", name = member.name) })
                                 }
                             },
                             onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
@@ -848,6 +852,7 @@ fun VelaNavHost(
                             onBatchRate = { text -> send.batchRate(text) },
                             onBatchRateReset = { send.batchResetRate() },
                             onBatchApply = { send.batchApply() },
+                            onBatchMerge = { send.toggleImportReplaces() },
                             // Spec 045 US1: the split's rows, by index on screen → id in the core.
                             onAddRecipient = { send.enterSplit() },
                             onRecipientAction = { action ->
@@ -916,6 +921,13 @@ fun VelaNavHost(
                         currency,
                         flows.selected,
                         manageTokens,
+                        // Issue #266: every input the builder reads is a key. Without the
+                        // filter, picking a network changed nothing until some OTHER key
+                        // happened to move — Polygon "worked" because its feed differed,
+                        // Base and every chain after it kept the previous list.
+                        chainFilter,
+                        chainNames,
+                        explorers,
                         // Spec 049: a figure baked into this model follows the presets.
                         Formats.current,
                     ) {
@@ -1491,6 +1503,9 @@ fun VelaNavHost(
                 val scope = rememberCoroutineScope()
                 val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
                 val poolView by application.container.pool.view.collectAsStateWithLifecycle()
+                // The balance core's view: SR3's per-chain detail, and which chains are
+                // really down (`banner_chain_ids` = failed MINUS rate-limited).
+                val balanceView by application.container.wallet.balances.collectAsStateWithLifecycle()
                 // Spec 048: the network whose detail page is open (its overrides are written for it).
                 var openNetworkId by rememberSaveable { mutableStateOf<String?>(null) }
                 val settingsHaptic = rememberVelaHaptic()
@@ -1553,7 +1568,11 @@ fun VelaNavHost(
                         poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
                     )
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                    m = SettingsLive.withBanner(m, poolView.failed_chains, chainNamesNow, strings)
+                    // A 429 heals by itself and never earns the "fix your RPC" banner: the
+                    // chains are the balance core's `banner_chain_ids`, not the pool's raw
+                    // failed list (which counts rate-limited chains too).
+                    m = SettingsLive.withBanner(m, balanceView.banner_chain_ids, chainNamesNow, strings)
+                    m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
@@ -1641,6 +1660,14 @@ fun VelaNavHost(
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                         },
                         onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
+                        // SR3's 立即重试 (the web's `onretry`): drop the chain's failure and read
+                        // now — the core's own retry is throttled like any other fetch.
+                        onBalanceRetry = { id ->
+                            id.toIntOrNull()?.let { chainId ->
+                                application.container.wallet.fixChainResolved(chainId)
+                                application.container.wallet.refresh(force = true)
+                            }
+                        },
                         onAccountSelect = { index -> settingsHaptic(VelaHaptic.Select); application.container.session.switchAccount(index) },
                         onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                         onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
@@ -1990,7 +2017,7 @@ private fun liveFlow(
         is FlowBase.History ->
             FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter, FlowFixtures.assetsEmpty(strings)))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {

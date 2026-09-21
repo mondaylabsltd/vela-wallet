@@ -30,23 +30,78 @@ enum FlowsLive {
 
     // MARK: - T1, the assets list
 
-    /// The person's own holdings, in the drawn list.
+    /// The person's own holdings, in the drawn list — narrowed to the chain
+    /// the pill has chosen, as the history is.
     static func assets(
         _ balance: BalanceViewWire,
         currency: CurrencyViewWire?,
+        selected: Int? = nil,
         on model: AssetsModel,
         loc: Loc
     ) -> AssetsModel {
-        let rows = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency))
+        let all = WalletLive.assetRows(balance, display: WalletLive.Display.from(currency))
+        let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
+        // Empty only once the core has actually looked — never while the
+        // fetch is still out (FR-008) — or when the chosen chain holds nothing
+        // while others do: a narrowed list with nothing in it is still an
+        // answer, and a blank screen is not one.
+        let settledEmpty = rows.isEmpty && !balance.balanceUnknown && !balance.holdingsLoading
+        let filteredEmpty = rows.isEmpty && !balance.tokens.isEmpty
         return AssetsModel(
-            header: model.header,
+            header: FlowHeaderModel(
+                title: model.header.title,
+                backLabel: model.header.backLabel,
+                action: model.header.action,
+                pill: pill(selected: selected, loc: loc, fallback: model.header.pill)
+            ),
             searchPlaceholder: model.searchPlaceholder,
             rows: rows,
             addByAddress: model.addByAddress,
-            // The drawn guided-empty body, for a wallet that genuinely holds
-            // nothing — and only once the core has ruled, never while the
-            // fetch is still out (FR-008).
-            empty: rows.isEmpty && !balance.balanceUnknown ? model.empty : nil
+            // The drawn guided-empty body. T1 is drawn full, so its words come
+            // from the same place T4's do rather than being absent.
+            empty: settledEmpty || filteredEmpty
+                ? (model.empty ?? WalletFlowFixtures.assetsEmpty(loc))
+                : nil
+        )
+    }
+
+    /// Which holdings the assets list shows, as indices into
+    /// `balance.tokens` — the list a tapped row is looked up in, so a tap on
+    /// a narrowed list names the token that was tapped.
+    static func visibleAssetIndices(_ balance: BalanceViewWire, selected: Int?) -> [Int] {
+        balance.tokens.indices.filter { selected == nil || balance.tokens[$0].chainId == selected }
+    }
+
+    /// The chain picker over the assets list: the chains this account HOLDS
+    /// something on, with how many — the web's `liveChainRows`. A filter
+    /// offering a chain with nothing on it is a dead end.
+    static func assetChainSheet(
+        _ balance: BalanceViewWire,
+        selected: Int?,
+        loc: Loc
+    ) -> ChainSheetModel {
+        var counts: [Int: Int] = [:]
+        for token in balance.tokens { counts[token.chainId, default: 0] += 1 }
+        var rows = [ChainRowModel(
+            name: loc.t("componentsUi.networkFilter.allNetworks"),
+            dot: .all,
+            count: balance.tokens.count,
+            selected: selected == nil,
+            chainId: nil
+        )]
+        for chain in ChainCatalog.chains {
+            guard let count = counts[chain.chainId] else { continue }
+            rows.append(ChainRowModel(
+                name: chain.displayName,
+                dot: .color(SettingsLive.mark(chainId: chain.chainId,
+                                              name: chain.displayName).color),
+                count: count,
+                selected: selected == chain.chainId,
+                chainId: chain.chainId
+            ))
+        }
+        return ChainSheetModel(
+            title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
         )
     }
 

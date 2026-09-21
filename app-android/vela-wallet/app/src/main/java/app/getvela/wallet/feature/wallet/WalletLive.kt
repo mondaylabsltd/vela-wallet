@@ -404,7 +404,7 @@ object WalletLive {
      * lives on the asset's own screen. Truncated rather than rounded, because a
      * rounded-up balance is a number the person does not have.
      */
-    private fun trimAmount(balance: String): String {
+    internal fun trimAmount(balance: String): String {
         val parsed = balance.toBigDecimalOrNull() ?: return balance
         // The decimal mark is the preset's; the grouping stays off (spec 049, the web's `trimBalance`).
         return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())

@@ -431,6 +431,12 @@ pub struct AssetDetailModel {
     pub sub: SharedString,
     pub facts: Vec<(SharedString, SharedString)>,
     pub activity: Vec<ActivityRowModel>,
+    /// The feed id behind each `activity` row, in drawn order — what a row
+    /// opens. Empty in the mock: its rows are nobody's transactions.
+    pub activity_ids: Vec<String>,
+    /// Where "view on explorer" leads (the web's `tokenExplorerURL`). `None`
+    /// for a chain with no explorer, and for the mock.
+    pub explorer_url: Option<SharedString>,
 }
 
 /// D3 as the mocks draw it.
@@ -444,6 +450,8 @@ pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
         sub: "$496.46 · BNB Chain".into(),
         facts: bnb_facts(s),
         activity: bnb_activity(s),
+        activity_ids: Vec::new(),
+        explorer_url: None,
     }
 }
 
