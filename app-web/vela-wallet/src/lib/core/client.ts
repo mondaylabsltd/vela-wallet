@@ -58,6 +58,8 @@ import init, {
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	prefsMigrations,
+	prefsRead,
 	ReceiveWatchCore,
 	registryBackupStep,
 	registryChainKeyPlan,
@@ -72,6 +74,10 @@ import init, {
 	SessionCore,
 	SignPrefCore,
 	SignRequestCore,
+	storageIsCacheKey,
+	storageIsErasableKey,
+	storageItemOfKey,
+	storageItems,
 	toHex,
 	TokenTrustCore,
 	TxTrackerCore,
@@ -124,6 +130,11 @@ export { passkeyDirectoryEntry, passkeyDirectoryUrl };
 export { registryBackupStep, registryNameStep, walletKeysStep };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
+// Settings' shared rules (spec 072): how every shell's preference spellings
+// read, and what each stored key IS — its storage row, whether "clear all
+// caches" takes it, whether an erase does. JSON in and out, like the machines.
+export { prefsMigrations, prefsRead };
+export { storageIsCacheKey, storageIsErasableKey, storageItemOfKey, storageItems };
 
 /**
  * The in-flight (or settled) initialization. Held as a promise rather than a

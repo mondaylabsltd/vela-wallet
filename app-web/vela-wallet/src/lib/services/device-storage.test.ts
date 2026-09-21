@@ -1,9 +1,12 @@
 /**
  * The storage page's accounting (spec 028 Phase 8): every key belongs to one
  * drawn row, "clear all caches" is exactly the cache group, and the wallet's
- * own keys are never a cache.
+ * own keys are never a cache. The rows are the core's catalog (spec 072), so
+ * these run over the real one.
  */
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, test } from 'vitest';
+import { storageItems } from '$lib/core/client';
 import {
 	clearAllCaches,
 	clearStorageItem,
@@ -11,7 +14,8 @@ import {
 	groupOfKey,
 	isCacheKey,
 	itemOfKey,
-	measureDeviceStorage
+	measureDeviceStorage,
+	STORAGE_ITEM_IDS
 } from './device-storage';
 
 // The kv store is IndexedDB; under node the local half is the whole store.
@@ -55,6 +59,22 @@ describe('classification', () => {
 		expect(itemOfKey('vela.ext.cache')).toBe('dapps');
 	});
 
+	test('the drawn rows are the catalog\'s, in its order', () => {
+		// The fixture draws these ids and the core files keys under them; a row
+		// one side renamed would draw a meta line nobody measures.
+		const rows = JSON.parse(storageItems()) as { id: string }[];
+		expect(rows.map((row) => row.id)).toEqual(STORAGE_ITEM_IDS);
+	});
+
+	test('"tokens and networks" is not the API keys or the endpoints (spec 072)', () => {
+		// The web's own table filed both under `custom`, so clearing custom
+		// tokens deleted a person's RPC provider keys and their self-hosted
+		// endpoints. They have their own pages, and their own reset.
+		expect(itemOfKey('vela.networkConfig')).toBe('custom');
+		expect(itemOfKey('vela.rpcProviders')).toBeNull();
+		expect(itemOfKey('vela.serviceEndpoints')).toBeNull();
+	});
+
 	test('the cache group is exactly what "clear all caches" sweeps', () => {
 		for (const key of [
 			'vela.balanceCache',
@@ -66,7 +86,15 @@ describe('classification', () => {
 		]) {
 			expect(isCacheKey(key), key).toBe(true);
 		}
-		for (const key of ['vela.contacts', 'vela.transactionHistory', 'vela.perm.x', 'vela.theme']) {
+		// `balanceHidden` is a preference: filed as a cache, "clear all caches"
+		// un-hid every balance (the phones did, spec 072).
+		for (const key of [
+			'vela.contacts',
+			'vela.transactionHistory',
+			'vela.perm.x',
+			'vela.theme',
+			'vela.balanceHidden'
+		]) {
 			expect(isCacheKey(key), key).toBe(false);
 		}
 	});
@@ -114,6 +142,17 @@ describe('measure and clear', () => {
 		expect(local.get('vela.accounts')).toBe('[1]');
 		expect(local.get('vela.contacts')).toBe('[2]');
 		expect(local.get('vela.perm.https://a.example')).toBe('{}');
+	});
+
+	test('clearing custom tokens and networks keeps the provider keys and endpoints', async () => {
+		local.set('vela.customTokens', '[1]');
+		local.set('vela.customNetworks', '[2]');
+		local.set('vela.rpcProviders', '{"alchemy":"k"}');
+		local.set('vela.serviceEndpoints', '{"ethereum_data":"https://data.example"}');
+		const removed = await clearStorageItem('custom');
+		expect([...removed].sort()).toEqual(['vela.customNetworks', 'vela.customTokens']);
+		expect(local.get('vela.rpcProviders')).toBe('{"alchemy":"k"}');
+		expect(local.get('vela.serviceEndpoints')).toBe('{"ethereum_data":"https://data.example"}');
 	});
 
 	test('a row clears only its own keys', async () => {

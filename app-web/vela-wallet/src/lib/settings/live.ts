@@ -16,10 +16,9 @@ import { moneyText, trimBalance } from '$lib/wallet/live';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
-	GROUP_OF_ITEM,
-	STORAGE_ITEM_IDS,
 	type DeviceStorageReport,
-	type StorageItemId
+	type StorageItemId,
+	type StorageItemReport
 } from '$lib/services/device-storage';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
@@ -1101,8 +1100,10 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 		cache: 'cache',
 		sessions: 'sessions'
 	};
-	const isItem = (id: string): id is StorageItemId =>
-		(STORAGE_ITEM_IDS as readonly string[]).includes(id);
+	// The report's rows are the catalog's, each with its group: a drawn row
+	// the catalog has no entry for keeps its drawn meta.
+	const measured = (id: string): StorageItemReport | undefined =>
+		report.items[id as StorageItemId];
 	return {
 		...model,
 		storage: {
@@ -1123,11 +1124,12 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 				// ever say "0 records" about a thing that cannot exist here.
 				items: group.items
 					.filter((item) => !WEB_HAS_NO[item.id as StorageItemId])
-					.map((item) =>
-						isItem(item.id) && GROUP_OF_ITEM[item.id] !== 'sessions'
-							? { ...item, meta: storageItemMeta(item.id, report, m) }
-							: item
-					)
+					.map((item) => {
+						const row = measured(item.id);
+						return row !== undefined && row.group !== 'sessions'
+							? { ...item, meta: storageItemMeta(item.id as StorageItemId, report, m) }
+							: item;
+					})
 			}))
 		}
 	};
