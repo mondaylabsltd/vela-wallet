@@ -15,10 +15,12 @@
 //! ## Who answers the dApp
 //!
 //! `SendResponse` is `SignAnswer::Screen` in the executor because only this
-//! layer knows the transport a request arrived on. Today there is one — the
-//! browser column — so the answer goes to `webview::deliver`. When there are
-//! two, the `transport_id` the core carries is what picks between them, and
-//! that id exists precisely so a response can never go to the wrong site.
+//! layer knows the transport a request arrived on. A site's answer does NOT
+//! go to the page from here: it is queued ([`SigningHost::take_answers`]) and
+//! the page hands it to the browser machine as `signing_answered`, which knows
+//! which document asked, whether it is still there, and which request waits
+//! in line behind this one (spec 070). The wallet's own requests ride
+//! [`WALLET_TRANSPORT`] and have no page to tell.
 
 use std::sync::Arc;
 
@@ -59,6 +61,11 @@ impl SpeedHost for SigningHost {
 /// page to go to; the column closing is the whole acknowledgement.
 pub const WALLET_TRANSPORT: &str = "wallet";
 
+/// The transport of a request the in-app browser forwarded. One browser, one
+/// transport; the id must be stable for the life of the column, because it is
+/// what `TransportDropped` names when the page that asked goes away.
+pub const BROWSER_TRANSPORT: &str = "browser";
+
 /// One dApp request, as the shell received it.
 pub struct IncomingRequest {
     pub id: String,
@@ -68,13 +75,35 @@ pub struct IncomingRequest {
     /// Read from the TRANSPORT, never from the page (`webview.rs`'s rule).
     pub origin: String,
     pub transport_id: String,
+    /// The SITE's chain, as the browser machine keeps it per origin.
     pub chain_id: u32,
+    /// The address the site was shown. The signer is pinned to it: a
+    /// mismatch is refused (4100) rather than signed by whichever account is
+    /// active. `None` for the wallet's own requests, which no site granted.
+    pub granted_address: Option<String>,
+}
+
+/// A site's answer, for the browser machine to deliver.
+pub struct TransportAnswer {
+    pub id: String,
+    pub payload: vela_core::app::sign_request::SignResponsePayload,
+    /// Set when the answer IS a user-operation hash, so the page's later
+    /// receipt lookups for it can be translated by the core.
+    pub user_op_hash: Option<String>,
 }
 
 pub struct SigningHost {
     /// The transport the request arrived on — [`WALLET_TRANSPORT`] is the
     /// wallet asking itself, which is not a site and is not headed like one.
     pub transport_id: String,
+    /// The request this column is for — what a `cancel_signing` names.
+    pub request_id: String,
+    /// The request has been answered. The column may still be showing (a
+    /// receipt, an error), but the request is over, so another may take the
+    /// column's place.
+    pub responded: bool,
+    /// Answers for a site, drained by the page.
+    answers: Vec<TransportAnswer>,
     /// "Sign with": this request's choice, and whether its list is open.
     pub sign_method: String,
     pub sign_with_open: bool,
@@ -157,6 +186,9 @@ impl SigningHost {
             sim: Vec::new(),
             sim_unavailable: false,
             transport_id: request.transport_id.clone(),
+            request_id: request.id.clone(),
+            responded: false,
+            answers: Vec::new(),
             sign_method: "auto".to_owned(),
             sign_with_open: false,
             fee_open: false,
@@ -233,7 +265,7 @@ impl SigningHost {
                 dedicated_transport: true,
                 per_request_chain: Some(request.chain_id),
                 dapp: None,
-                granted_address: None,
+                granted_address: request.granted_address.clone(),
                 requested_address: None,
                 request_ts_ms: None,
                 now_ms: now,
@@ -521,6 +553,39 @@ impl SigningHost {
         cx.notify();
     }
 
+    /// What the page takes away, exactly once.
+    pub fn take_answers(&mut self) -> Vec<TransportAnswer> {
+        std::mem::take(&mut self.answers)
+    }
+
+    /// The answer is the user operation this sheet submitted — the hash the
+    /// tracker was handed, or the one the core is still waiting on. A
+    /// transaction hash or a signature is not, and is not claimed to be.
+    fn user_op_hash_of(
+        &self,
+        payload: &vela_core::app::sign_request::SignResponsePayload,
+    ) -> Option<String> {
+        let vela_core::app::sign_request::SignResponsePayload::Ok {
+            result: Some(result),
+        } = payload
+        else {
+            return None;
+        };
+        let submitted = [
+            self.handed_off.as_deref(),
+            self.view.pending_op_hash.as_deref(),
+            self.view
+                .tracker_handoff
+                .as_ref()
+                .map(|handoff| handoff.user_op_hash.as_str()),
+        ];
+        submitted
+            .into_iter()
+            .flatten()
+            .any(|hash| hash.eq_ignore_ascii_case(result))
+            .then(|| result.clone())
+    }
+
     /// The one screen-owned operation: answering the site.
     fn answer_transport(&mut self, id: u64, operation: &SignOperation, cx: &mut Context<Self>) {
         if let SignOperation::SendResponse {
@@ -529,14 +594,16 @@ impl SigningHost {
             payload,
         } = operation
         {
+            self.responded = true;
             // The wallet's own requests (the Ethereum backup, spec 062) ride
             // their own transport: there is no page to tell.
-            #[cfg(not(target_os = "linux"))]
             if transport_id != WALLET_TRANSPORT {
-                crate::webview::respond(request_id, payload);
+                self.answers.push(TransportAnswer {
+                    id: request_id.clone(),
+                    payload: payload.clone(),
+                    user_op_hash: self.user_op_hash_of(payload),
+                });
             }
-            #[cfg(target_os = "linux")]
-            let _ = (transport_id, request_id, payload);
         }
         // Answered either way: the core sequences record-then-respond off this
         // acknowledgement, and withholding it would strand the request.

@@ -41,7 +41,7 @@ pub mod chainlink;
 pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;
-pub mod dapp_rpc;
+pub mod dapp_browser;
 pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;
