@@ -514,7 +514,13 @@ data class FeeTokenPickModel(
 enum class BatchUnit { Fiat, Token }
 
 @Immutable
-data class BatchRowModel(val ok: Boolean, val address: String, val conversion: String)
+data class BatchRowModel(
+    val ok: Boolean,
+    val address: String,
+    val conversion: String,
+    /** Why this line is not sent — a duplicate, a bad address, a refused line's reason. */
+    val note: String? = null,
+)
 
 @Immutable
 data class BatchImportModel(
@@ -549,6 +555,10 @@ data class BatchImportModel(
     /** Issue #271: what applying does to the rows already on the form, and the way to choose the other. */
     val merge: String? = null,
     val mergeAction: String? = null,
+    /** Live only: the file could not be read (`file_error`), said while nothing parsed. */
+    val fileError: String? = null,
+    /** Live only: "Total · N recipients", the sum, and the balance (or what is left) it is read against. */
+    val total: SummaryLineModel? = null,
 )
 
 /** SD3 — the confirmation. */

@@ -1256,6 +1256,18 @@ fun BatchImportBody(
                 modifier = Modifier.clickable(onClick = onTemplate),
             )
         }
+        model.fileError?.let {
+            Text(
+                text = it,
+                color = colors.errorBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = VelaSpacing.xs),
+            )
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         HairlineDivider()
         Row(
@@ -1346,21 +1358,33 @@ fun BatchImportBody(
                     modifier = Modifier.size(VelaIconSize.sm),
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
-                Text(
-                    text = row.address,
-                    color = colors.fgBase,
-                    fontFamily = VelaMonoFontFamily,
-                    fontSize = VelaTextSize.sm,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = row.conversion,
-                    color = colors.fgMuted,
-                    fontFamily = VelaFontFamily,
-                    fontSize = VelaTextSize.sm,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.address,
+                        color = colors.fgBase,
+                        fontFamily = VelaMonoFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // Why this line is not sent — named on the line itself.
+                    row.note?.let {
+                        Text(
+                            text = it,
+                            color = colors.errorBase,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.xs,
+                        )
+                    }
+                }
+                if (row.conversion.isNotEmpty()) {
+                    Text(
+                        text = row.conversion,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                    )
+                }
             }
         }
         model.rejectedText?.let {
@@ -1370,6 +1394,10 @@ fun BatchImportBody(
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.sm,
             )
+        }
+        model.total?.let { total ->
+            HairlineDivider()
+            SummaryLine(summary = total)
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         model.note?.let {
