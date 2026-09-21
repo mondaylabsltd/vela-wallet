@@ -10,3 +10,17 @@
 | D4 | Device storage | rows from the core catalog, sizes in 1024s ("30 条 · 21 KB") |
 | — | Erase | NOT run on this phone (it also holds a real wallet); covered by JVM tests (sweep, keep-list, verify) |
 | — | Provider keys, network removal | no saved keys / custom networks on the phone; covered by the core regression test and JVM |
+
+## Merge verification (2026-09-22, all shells on `072-settings-parity`)
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 1692 passed |
+| `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` | clean |
+| desktop `cargo test` / `cargo fmt --check` | 492 passed / clean |
+| iOS `xcodebuild test -only-testing:VelaWalletTests` (iPhone 17 Pro sim) | 718 passed |
+| Android `:app:testDebugUnitTest` | 640 passed |
+| web `vitest` | 1526 passed (incl. the extension package after `build:extension`) |
+| web e2e (chromium): add-network, settings-desktop, settings-persistence | 15 passed |
+| web e2e (chromium): accounts:174, home-truth:107/124, welcome-layout:187 | fail — the same four fail on `main` (dd482131); not this branch |
+| `build-web --check`, `gen-core-types --check`, i18n vectors | current |
