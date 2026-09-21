@@ -236,6 +236,16 @@ describe('liveRpcProviders', () => {
 			action: m.rpcProviders.getKey
 		});
 	});
+
+	it('an unset provider links to its OWN site, never another provider', () => {
+		const model = liveRpcProviders(VIEW, m);
+		const drpc = model.providers.find((p) => p.id === 'drpc');
+		expect(drpc?.linkUrl).toBe('https://drpc.org/');
+		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
+		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
+		expect(all.find((p) => p.id === 'alchemy')?.linkUrl).toBe('https://dashboard.alchemy.com/');
+		expect(model.providers.find((p) => p.id === 'alchemy')?.linkUrl).toBeUndefined();
+	});
 });
 
 describe('liveAccountsSheet', () => {

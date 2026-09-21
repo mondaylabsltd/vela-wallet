@@ -481,7 +481,8 @@ function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersMo
 				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
 				field: { id: 'drpc', label: '', value: '', placeholder: m.rpcProviders.notSet },
 				action: m.rpcProviders.getKey,
-				link: `${m.rpcProviders.getKey} →`
+				link: `${m.rpcProviders.getKey} →`,
+				linkUrl: 'https://drpc.org/'
 			},
 			{
 				id: 'ankr',
