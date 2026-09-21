@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { NumberFormatKey } from '$lib/services/preferences.svelte';
-import { gasPriceRangeTexts, gasPriceTexts, gasPriceWei } from './gas-price';
+import { gasPriceRangeTexts, gasPriceTexts } from './gas-price';
 
 /** The person's number preset is named, so no test depends on the machine's. */
 const EN: NumberFormatKey = 'comma_dot';
@@ -333,14 +333,7 @@ describe('gasPriceRangeTexts — the gas price as a range', () => {
 	});
 });
 
-describe('gasPriceWei', () => {
-	it('takes a decimal string from the core and refuses anything else', () => {
-		expect(gasPriceWei('270164477149')).toBe(270_164_477_149n);
-		expect(gasPriceWei('0')).toBe(0n);
-		expect(gasPriceWei(null)).toBeNull();
-		expect(gasPriceWei(undefined)).toBeNull();
-		expect(gasPriceWei('')).toBeNull();
-		expect(gasPriceWei('0x10')).toBeNull();
-		expect(gasPriceWei('12.5')).toBeNull();
-	});
-});
+// `gasPriceWei` — which strings are a gas price at all — moved into the core
+// with the rest of the speed rules (`fee_policy::gas_price_range_of`); its
+// vectors are `a_gas_price_is_decimal_wei_or_nothing` in
+// `rust/crates/vela-core/tests/app_fee_policy.rs`.

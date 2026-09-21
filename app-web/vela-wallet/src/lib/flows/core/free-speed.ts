@@ -2,15 +2,33 @@
  * The shell's half of taking a free speed (issue 686): WHICH tier to price
  * beside the one in force, and WHEN to swap them.
  *
- * Whether the fastest speed is free is decided in `speed-choice.ts`, from
- * settled numbers. This file is the wiring the wallet route runs that decision
- * through, kept out of the route so a browser test drives the very same steps
- * rather than a copy of them.
+ * Every one of those decisions is the core's since 2026-09-21 (`fee_policy`'s
+ * speed rules, through `feeSpeedRule`), so the native shells make the same
+ * ones. This file is the wiring the wallet route runs them through — it reads
+ * the shell's sessions into the core's terms and hands back the answer — kept
+ * out of the route so a browser test drives the very same steps rather than a
+ * copy of them.
  */
+import { feeSpeedRule } from '$lib/core/kernels';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { FASTEST_TIER, speedIsFree } from '../speed-choice';
+import type { FASTEST_TIER } from '../speed-choice';
+import { speedQuote } from '../speed-choice';
 import type { FeeQuote } from './fee-quote.svelte';
 import type { TierPreview } from './tier-preview.svelte';
+
+/**
+ * The tier this send runs at (`fee_policy::tier_in_force`): the one-shot pick,
+ * else the fastest while it is being taken for free (`freeFast`), else the
+ * person's stored default. An upgrade never applies to a default that already
+ * IS the fastest.
+ */
+export function tierInForce<T extends FeeTier>(
+	picked: T | null,
+	preferred: T,
+	freeFast: boolean
+): T | typeof FASTEST_TIER {
+	return feeSpeedRule<T>({ rule: 'tier_in_force', picked, preferred, free_fast: freeFast });
+}
 
 /**
  * The one tier a free upgrade is judged against, or `null` when there is no
@@ -35,8 +53,13 @@ export function freeSpeedPartner<T extends FeeTier>(
 	inForce: T,
 	onForm: boolean
 ): T | typeof FASTEST_TIER | null {
-	if (!onForm || picked !== null || preferred === FASTEST_TIER) return null;
-	return inForce === FASTEST_TIER ? preferred : FASTEST_TIER;
+	return feeSpeedRule<T | null>({
+		rule: 'free_speed_partner',
+		picked,
+		preferred,
+		in_force: inForce,
+		on_form: onForm
+	});
 }
 
 /**
@@ -60,8 +83,7 @@ export function pickInForce<T extends FeeTier>(
 	partner: T | null,
 	tapped: T
 ): T | null {
-	if (picked !== null) return picked;
-	return partner === null ? null : tapped;
+	return feeSpeedRule<T | null>({ rule: 'pick_in_force', picked, partner, tapped });
 }
 
 /**
@@ -75,8 +97,13 @@ export function previewTiers<T extends FeeTier>(
 	inForce: T,
 	partner: T | null
 ): T[] {
-	if (open) return offered.filter((tier) => tier !== inForce);
-	return partner === null ? [] : [partner];
+	return feeSpeedRule<T[]>({
+		rule: 'preview_tiers',
+		open,
+		offered: [...offered],
+		in_force: inForce,
+		partner
+	});
 }
 
 /**
@@ -97,7 +124,9 @@ export function previewTiers<T extends FeeTier>(
  *
  * Never while a measurement of the fee in force is out: it may be one the
  * `send` core is waiting on, and superseding it would make the core hear its
- * own question refused.
+ * own question refused. That — and "the partner's preview is still out" — is
+ * the shell's half, because `pending` (the account-context read before a
+ * dispatch) is the shell's; both reach the core as "no settled quote".
  */
 export function freeSpeedSwap(args: {
 	feeQuote: FeeQuote;
@@ -107,18 +136,26 @@ export function freeSpeedSwap(args: {
 	partner: FeeTier | null;
 }): boolean | null {
 	const { feeQuote, tierPreview, preferred, inForce, partner } = args;
+	// The reads keep the order they always had, and each "nothing to judge
+	// yet" returns early, not only because the core would answer `null`
+	// anyway: this runs in a tracked effect, and it must subscribe to exactly
+	// what it used to — no partner means not even the session in force is
+	// read. The core still re-checks every one of these. It is also what keeps the
+	// route's mount (before the core has loaded; `partner` is `null` until a
+	// send session exists) from calling into the core at all.
 	if (partner === null) return null;
 	if (feeQuote.pending || feeQuote.view.busy) return null;
-	const mine = feeQuote.view.fee;
+	const mine = speedQuote(feeQuote.view.fee);
 	const row = tierPreview.rows.find((candidate) => candidate.tier === partner);
 	if (!row || row.quote.pending || row.quote.view.busy) return null;
-	const theirs = row.quote.view.fee;
-	if (mine === null || mine.tier !== inForce || theirs === null || theirs.tier !== partner) {
-		return null;
-	}
-	const free = speedIsFree(preferred, [
-		{ tier: inForce, quote: mine },
-		{ tier: partner, quote: theirs }
-	]);
-	return free === (inForce === FASTEST_TIER) ? null : free;
+	const theirs = speedQuote(row.quote.view.fee);
+	if (mine === null || theirs === null) return null;
+	return feeSpeedRule<boolean | null>({
+		rule: 'free_speed_swap',
+		preferred,
+		in_force: inForce,
+		partner,
+		mine,
+		theirs
+	});
 }

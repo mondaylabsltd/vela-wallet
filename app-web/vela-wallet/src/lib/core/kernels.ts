@@ -12,6 +12,7 @@
  */
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
+import type { FeeSpeedRule } from './generated/FeeSpeedRule';
 
 export {
 	PROXY_CREATION_CODE,
@@ -635,4 +636,30 @@ export function minGasPriceWei(chainId: number): bigint {
  */
 export function peggedNativeUsd(symbol: string): number | null {
 	return wasm.peggedNativeUsd(symbol) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Speed rules (spec 068)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ask the core's speed rules one question (`fee_policy::answer_speed_rule`).
+ *
+ * The speed control's decisions — which tiers are previewed, whether the
+ * fastest is free, whether a network has one speed, how a set of gas prices is
+ * written, what the 15 s fee-signal cache may keep — were TypeScript until the
+ * owner's ruling of 2026-09-21 moved them into the core, so that Android, iOS
+ * and desktop read the same answers instead of writing their own. This is the
+ * web's one door to them; the callers (`speed-choice.ts`, `free-speed.ts`,
+ * `gas-price.ts`, `live-send.ts`, `safe-transaction.ts`) only marshal.
+ *
+ * JSON in and out, because the natives call the very same door over uniffi
+ * (`fee_speed_rule`) and one wire shape is one fewer thing to drift. The
+ * answer's type is the one the named rule documents in `FeeSpeedRule`.
+ *
+ * Callers `loadCore()` first, like every kernel here: each call site runs
+ * behind a surface the core already drives (a send session, a settled quote).
+ */
+export function feeSpeedRule<T>(rule: FeeSpeedRule): T {
+	return JSON.parse(wasm.feeSpeedRule(JSON.stringify(rule))) as T;
 }

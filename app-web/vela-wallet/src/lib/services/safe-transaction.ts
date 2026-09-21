@@ -32,6 +32,7 @@ import {
 	encodeSetupData,
 	fromHex,
 	functionSelector,
+	feeSpeedRule,
 	keccak256,
 	minGasPriceWei,
 	parsePublicKey,
@@ -1110,7 +1111,16 @@ export interface RawGasSignals {
 //     reuses the inputs that failed it), and at the START of every submit and
 //     of `refreshGasPrice`, beside each `_gasPriceCache.delete` — so the
 //     submit, and the first quote after it, landed or not, measure again.
-const FEE_SIGNALS_CACHE_TTL = 15_000; // 15s — the same window as GAS_PRICE_CACHE_TTL
+//
+// The window and what may be kept are the CORE's (`fee_policy`'s
+// `FEE_SIGNALS_CACHE_TTL_MS`, `gas_signals_cacheable` and
+// `bundler_quote_cacheable`, spec 068): the cache itself is transport — shared
+// by every fee session on the page, so it cannot live in one machine — but the
+// rules about it are money rules every shell must keep the same way.
+/** The fee-signal window, in ms (issue 212) — the core's number. */
+function feeSignalsCacheTtl(): number {
+	return feeSpeedRule<number>({ rule: 'fee_signals_cache_ttl_ms' });
+}
 const _rawGasSignalsCache = new Map<
 	number,
 	{ at: number; wantTip: boolean; signals: RawGasSignals }
@@ -1167,7 +1177,7 @@ export async function fetchRawGasSignals(
 	wantTip: boolean
 ): Promise<RawGasSignals> {
 	const cached = _rawGasSignalsCache.get(chainId);
-	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) {
+	if (cached && cached.wantTip === wantTip && Date.now() - cached.at < feeSignalsCacheTtl()) {
 		return { ...cached.signals };
 	}
 	const key = `${chainId}:${wantTip}`;
@@ -1216,11 +1226,13 @@ async function readRawGasSignals(
 	// A block that ANSWERED without `baseFeePerGas` is a real pre-London reading,
 	// not a failed leg; a block that did not answer is.
 	const blockAnswered = typeof blockRes?.result === 'object' && blockRes.result !== null;
-	const complete =
-		signals.ethGasPrice !== null &&
-		BigInt(signals.ethGasPrice) > 0n &&
-		blockAnswered &&
-		(!wantTip || signals.priorityFee !== null);
+	const complete = feeSpeedRule<boolean>({
+		rule: 'gas_signals_cacheable',
+		eth_gas_price: signals.ethGasPrice,
+		block_answered: blockAnswered,
+		want_tip: wantTip,
+		priority_fee: signals.priorityFee
+	});
 	return { signals, complete };
 }
 
@@ -1263,7 +1275,7 @@ export async function fetchRawBundlerQuote(
 	if (gasQuoteShouldZero(chainId)) return readRawBundlerQuote(chainId, tier);
 	const key = `${chainId}:${tier}`;
 	const cached = _rawBundlerQuoteCache.get(key);
-	if (cached && Date.now() - cached.at < FEE_SIGNALS_CACHE_TTL) return { ...cached.quote };
+	if (cached && Date.now() - cached.at < feeSignalsCacheTtl()) return { ...cached.quote };
 	const pending = _rawBundlerQuoteRequests.get(key);
 	if (pending) return pending.then((quote) => (quote ? { ...quote } : null));
 	const epoch = _feeSignalsEpoch.get(chainId) ?? 0;
@@ -1276,7 +1288,10 @@ export async function fetchRawBundlerQuote(
 			// was in flight.
 			if (
 				quote &&
-				BigInt(quote.maxFeePerGas) > 0n &&
+				feeSpeedRule<boolean>({
+					rule: 'bundler_quote_cacheable',
+					max_fee_per_gas: quote.maxFeePerGas
+				}) &&
 				!gasQuoteShouldZero(chainId) &&
 				(_feeSignalsEpoch.get(chainId) ?? 0) === epoch
 			) {
@@ -2786,8 +2801,8 @@ export function deriveChainGasPrice(signals: {
 	return { gasPrice, baseFee: baseFee > floor ? baseFee : floor, priorityFee, tipMeasured };
 }
 
+/** Held for the core's fee-signal window (`feeSignalsCacheTtl`, 15 s) — one number, not two. */
 const _gasPriceCache = new Map<number, ChainGasPrice & { at: number }>();
-const GAS_PRICE_CACHE_TTL = 15_000; // 15s
 
 /**
  * Fetch the on-chain network gas price (no tier markup — callers add that). Reads the
@@ -2803,7 +2818,7 @@ const GAS_PRICE_CACHE_TTL = 15_000; // 15s
  */
 async function getGasPrices(chainId: number): Promise<ChainGasPrice> {
 	const cached = _gasPriceCache.get(chainId);
-	if (cached && Date.now() - cached.at < GAS_PRICE_CACHE_TTL) {
+	if (cached && Date.now() - cached.at < feeSignalsCacheTtl()) {
 		return {
 			gasPrice: cached.gasPrice,
 			baseFee: cached.baseFee,

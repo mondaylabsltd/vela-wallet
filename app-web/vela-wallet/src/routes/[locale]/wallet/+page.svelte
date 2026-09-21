@@ -95,12 +95,12 @@
 	import { FeeQuote, IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
-	import { FASTEST_TIER } from '$lib/flows/speed-choice';
 	import {
 		freeSpeedPartner,
 		freeSpeedSwap,
 		pickInForce,
-		previewTiers
+		previewTiers,
+		tierInForce
 	} from '$lib/flows/core/free-speed';
 	import { feeKey } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
@@ -260,18 +260,28 @@
 	 * one line why the tier in force is not the one Settings names.
 	 */
 	let freeFast = $state(false);
+	/**
+	 * The tier this send runs at — the core's rule (`tierInForce`). The speed
+	 * rules are core kernels, and this page renders before the core has loaded,
+	 * so every one of them is asked only once a send session exists
+	 * (`sendView` is its first view). With no send there is nothing to decide:
+	 * `closeSend()` resets the pick and the upgrade, so the answer is the
+	 * stored default either way.
+	 */
 	const sendSpeedTier = $derived<OfferedTier>(
-		sendTier ?? (freeFast && preferredTier !== FASTEST_TIER ? FASTEST_TIER : preferredTier)
+		sendView === null ? preferredTier : tierInForce(sendTier, preferredTier, freeFast)
 	);
 	/**
 	 * The one tier a free upgrade is judged against (issue 686) — `null`, so no
 	 * extra quote at all, for anybody whose default is already the fastest, for
 	 * any send with a pick on it, and once the send has left its form (the
 	 * confirm must not change tier under the person reading it). See
-	 * `freeSpeedPartner`.
+	 * `freeSpeedPartner`. No send, no form: `null` without asking.
 	 */
 	const freePartner = $derived(
-		freeSpeedPartner(sendTier, preferredTier, sendSpeedTier, sendView?.stage === 'enter_details')
+		sendView === null
+			? null
+			: freeSpeedPartner(sendTier, preferredTier, sendSpeedTier, sendView.stage === 'enter_details')
 	);
 	/**
 	 * The OTHER tiers' figures: all of them while the control is open, and —
@@ -280,8 +290,13 @@
 	const tierPreview = new TierPreview();
 	$effect(() => {
 		const base = feeQuote.lastRequest;
-		const tiers = previewTiers(speedOpen, OFFERED_TIERS, sendSpeedTier, freePartner);
-		if (tiers.length === 0 || sendView === null || base === null) {
+		// No send or nothing priced yet: nothing to preview, and — before the
+		// first send — no core to ask (see `sendSpeedTier`).
+		const tiers =
+			sendView === null || base === null
+				? []
+				: previewTiers(speedOpen, OFFERED_TIERS, sendSpeedTier, freePartner);
+		if (tiers.length === 0 || base === null) {
 			tierPreview.hide();
 			return;
 		}
@@ -416,9 +431,13 @@
 	 */
 	let oneSpeedChains = $state<number[]>([]);
 	$effect(() => {
-		const verdict = speedSetVerdict(speedRows);
+		// The chain first: with no quote in force there is no verdict to have
+		// (its own row holds nothing), and — on a fresh page — no core loaded
+		// to ask (see `sendSpeedTier`). A quote in hand means the core ran.
 		const chain = feeInForce.fee?.chain_id;
-		if (verdict === null || chain === undefined) return;
+		if (chain === undefined) return;
+		const verdict = speedSetVerdict(speedRows);
+		if (verdict === null) return;
 		untrack(() => {
 			const known = oneSpeedChains.includes(chain);
 			if (verdict === 'one' && !known) oneSpeedChains = [...oneSpeedChains, chain];

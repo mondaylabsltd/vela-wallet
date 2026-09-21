@@ -2,7 +2,10 @@
  * What picking a speed actually buys on this network (issue 686).
  *
  * Two owner decisions, and they are two faces of one question, so they are
- * answered here, in one place, from the same numbers:
+ * answered in one place, from the same numbers — since 2026-09-21 that place
+ * is the core (`fee_policy`'s speed rules, reached through `feeSpeedRule`), so
+ * the native shells get the very same answers. This file only hands the core
+ * the settled quotes and returns its verdict:
  *
  * **A. When a faster speed costs no more, take it.** On a chain whose real
  * cost is under a cent, `fee_policy` clamps every tier to the $0.01 floor, yet
@@ -14,32 +17,29 @@
  * screen always wins (both are the route's to enforce; see {@link speedIsFree}).
  *
  * **B. When there is no speed to choose, say so.** Tempo's relay ignores the
- * tier outright (`fees.md` §5: `TempoSignRequest` carries no priority fee), so
- * there all three options are the same fee AND have no gas-price range to tell
- * them apart. Three rows offering a choice that does nothing is the complaint
- * the picker was reopened for. So when — and ONLY when — the tiers are
- * indistinguishable on everything the screen can show, the rows give way to
- * one statement. Equal fees alone are NOT that: the owner ruled against
- * collapsing a floor-clamped picker, because there the gas-price range still
- * differs and is exactly what makes the choice mean something.
+ * tier outright (`fees.md` §5), so there all three options are the same fee
+ * AND have no gas-price range to tell them apart. Equal fees alone are NOT
+ * that: the owner ruled against collapsing a floor-clamped picker, because
+ * there the gas-price range still differs and is exactly what makes the
+ * choice mean something.
  *
- * **Precedence: B before A.** If nothing tells the speeds apart, there is
- * nothing to upgrade to — a line saying "Fast costs no more, so this send goes
- * Fast" over a speed that buys nothing would be a small lie of its own. That
- * rule lives in {@link speedIsFree}, which asks {@link indistinguishable}
- * first, so the two decisions cannot drift apart.
+ * **Precedence: B before A**, decided inside the core so the two cannot drift.
  *
- * Decided from the NUMBERS, never from a list of chains: an unseen custom
- * network with no priority fee gets the same treatment the day it is added.
- * And only from SETTLED core amounts — never formatted strings, since two
- * different wei amounts can print alike, and never a row still measuring or
+ * Decided from the NUMBERS, never from a list of chains, and only from SETTLED
+ * core amounts — never formatted strings, and never a row still measuring or
  * failed, which is not evidence either way.
  */
+import { feeSpeedRule } from '$lib/core/kernels';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { gasPriceWei } from './gas-price';
+import type { SpeedEvidence as CoreSpeedEvidence } from '$lib/core/generated/SpeedEvidence';
+import type { SpeedQuote } from '$lib/core/generated/SpeedQuote';
 
-/** The fastest speed anybody is offered — what a free upgrade goes to. */
+/**
+ * The fastest speed anybody is offered — what a free upgrade goes to. A
+ * literal because modules read it at import time, before the core is loaded;
+ * `speed-rules-parity.test.ts` pins it to the core's `FASTEST_TIER`.
+ */
 export const FASTEST_TIER = 'fast' satisfies FeeTier;
 
 /**
@@ -53,25 +53,23 @@ export interface SpeedEvidence {
 }
 
 /**
- * Two quotes that charge the person exactly the same thing: the same chain,
- * the same wei, in the same coin (and, for a coin fee, the same token amount).
- * Compared as the core's own decimal strings, which are exact — nothing here
- * rounds or converts.
+ * The slice of a settled quote the speed rules read (`SpeedQuote`), and
+ * nothing else — so a surface's full view crosses as exactly what is judged.
  */
-function sameCharge(a: FeeEstimateView, b: FeeEstimateView): boolean {
-	return (
-		a.chain_id === b.chain_id &&
-		a.total_wei === b.total_wei &&
-		JSON.stringify(a.fee_asset) === JSON.stringify(b.fee_asset)
-	);
+export function speedQuote(quote: FeeEstimateView | null | undefined): SpeedQuote | null {
+	if (!quote) return null;
+	return {
+		tier: quote.tier,
+		chain_id: quote.chain_id,
+		total_wei: quote.total_wei,
+		fee_asset: quote.fee_asset,
+		effective_gas_price: quote.effective_gas_price ?? null,
+		max_gas_price: quote.max_gas_price ?? null
+	};
 }
 
-/**
- * Whether a quote carries a gas-price range the picker can draw (issue 684/
- * 685). The same test `live-send.ts` draws by: no parsable bid, no figure.
- */
-function hasGasPrice(quote: FeeEstimateView): boolean {
-	return gasPriceWei(quote.effective_gas_price) !== null;
+function evidence(rows: readonly SpeedEvidence[]): CoreSpeedEvidence[] {
+	return rows.map((row) => ({ tier: row.tier, quote: speedQuote(row.quote) }));
 }
 
 /**
@@ -80,11 +78,7 @@ function hasGasPrice(quote: FeeEstimateView): boolean {
  * rows (there is nothing to compare) and for any row without a settled quote.
  */
 export function indistinguishable(rows: readonly SpeedEvidence[]): boolean {
-	if (rows.length < 2) return false;
-	const quotes = rows.map((row) => row.quote);
-	const first = quotes[0];
-	if (first === null) return false;
-	return quotes.every((quote) => quote !== null && sameCharge(quote, first) && !hasGasPrice(quote));
+	return feeSpeedRule<boolean>({ rule: 'indistinguishable', rows: evidence(rows) });
 }
 
 /**
@@ -93,8 +87,7 @@ export function indistinguishable(rows: readonly SpeedEvidence[]): boolean {
  * early and never flickers in over a row that is about to differ.
  */
 export function oneSpeed(rows: readonly SpeedEvidence[], offered: readonly FeeTier[]): boolean {
-	if (!offered.every((tier) => rows.some((row) => row.tier === tier))) return false;
-	return indistinguishable(rows.filter((row) => offered.includes(row.tier)));
+	return feeSpeedRule<boolean>({ rule: 'one_speed', rows: evidence(rows), offered: [...offered] });
 }
 
 /**
@@ -108,14 +101,5 @@ export function oneSpeed(rows: readonly SpeedEvidence[], offered: readonly FeeTi
  * are not an upgrade.
  */
 export function speedIsFree(preferred: FeeTier, rows: readonly SpeedEvidence[]): boolean {
-	if (preferred === FASTEST_TIER) return false;
-	const mine = rows.find((row) => row.tier === preferred)?.quote ?? null;
-	const fastest = rows.find((row) => row.tier === FASTEST_TIER)?.quote ?? null;
-	if (mine === null || fastest === null) return false;
-	const pair: SpeedEvidence[] = [
-		{ tier: preferred, quote: mine },
-		{ tier: FASTEST_TIER, quote: fastest }
-	];
-	if (indistinguishable(pair)) return false;
-	return sameCharge(mine, fastest);
+	return feeSpeedRule<boolean>({ rule: 'speed_is_free', preferred, rows: evidence(rows) });
 }

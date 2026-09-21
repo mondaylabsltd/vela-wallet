@@ -55,6 +55,9 @@ const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/la
  */
 const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
 
+/** The one node suite that must meet an UNinitialized core (see `test.projects`). */
+const CORE_LOADER_TEST = 'src/lib/core/client.test.ts';
+
 /**
  * The version and commit every page of this build reports (spec 064 §3).
  *
@@ -153,7 +156,9 @@ export default defineConfig({
 						instances: [{ browser: 'chromium', headless: true }]
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
+					exclude: ['src/lib/server/**'],
+					// The speed rules are the core's (spec 068); see the file.
+					setupFiles: ['src/lib/core/test-setup.browser.ts']
 				}
 			},
 
@@ -163,7 +168,20 @@ export default defineConfig({
 					name: 'server',
 					environment: 'node',
 					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}', CORE_LOADER_TEST],
+					// The speed rules are the core's (spec 068); see the file.
+					setupFiles: ['src/lib/core/test-setup.server.ts']
+				}
+			},
+			{
+				// The runtime loader's own contract is about a module that has NOT
+				// been initialized yet (a failed load must not be cached), so it
+				// runs without the core the setup above puts in place.
+				extends: './vite.config.ts',
+				test: {
+					name: 'server-bare',
+					environment: 'node',
+					include: [CORE_LOADER_TEST]
 				}
 			}
 		]
