@@ -14,8 +14,10 @@
 import CryptoKit
 import Foundation
 import Network
+import SafariServices
 import SwiftUI
 import Testing
+import UIKit
 import VelaCore
 @testable import VelaWallet
 
@@ -322,6 +324,30 @@ struct ClearSignerChannelTests {
         #expect(await page.connect())
         #expect(await page.hello(origin: fixture.origin, token: channel.token)?["t"] as? String == "intent")
         page.close()
+        #expect(await channel.ending() == .outcome(.refused(refusal: .declined)))
+    }
+
+    /// Closing the tab: WebKit may keep a dismissed page's socket open, so
+    /// the app closes its own end — and the core still decides. A page that
+    /// never said hello changes nothing and the listener keeps waiting; one
+    /// that had the request was closed without signing.
+    @Test func closingTheTabEndsOnlyAPageThatHadTheRequest() async throws {
+        let fixture = ClearSignerFixture()
+        let digest = Data(repeating: 8, count: 32)
+        let channel = try channel(fixture, digest: digest)
+        let port = try #require(await channel.open())
+
+        let silent = RawPage(port: port)
+        #expect(await silent.connect())
+        #expect(await silent.upgrade(origin: fixture.origin)?.hasPrefix("HTTP/1.1 101") == true)
+        channel.pageClosed()
+        // Still open: the page the wallet opens next is heard and answered.
+        let page = RawPage(port: port)
+        #expect(await page.connect())
+        let intent = try #require(await page.hello(origin: fixture.origin, token: channel.token))
+        #expect(intent["t"] as? String == "intent")
+
+        channel.pageClosed()
         #expect(await channel.ending() == .outcome(.refused(refusal: .declined)))
     }
 
@@ -680,5 +706,63 @@ struct SignPrefTests {
         stored = "hybrid"
         controller.open(incoming)
         #expect(controller.signMethod == "hybrid")
+    }
+}
+
+// MARK: - The real page (opt-in)
+
+/// The shipped page, served where the device pass serves it (research R5):
+/// opened in the in-app tab over this app, it must reach the listener from
+/// its own origin, prove itself with the token and take the request. Closing
+/// the TAB then ends the ceremony as declined — which only a page that HAD the
+/// request can cause; a page that never connected leaves it waiting.
+///
+/// Opt-in, because it needs a server:
+/// `TEST_RUNNER_VELA_CLEAR_SIGNER_PAGE=http://localhost:8141/ xcodebuild test …`
+/// with `python3 -m http.server 8141` in `app-web/clearsigning`.
+@MainActor
+struct ClearSignerPageTests {
+    static let page = ProcessInfo.processInfo.environment["VELA_CLEAR_SIGNER_PAGE"]
+    /// Long enough to load the page, open the socket and draw the request —
+    /// and for a screenshot of it.
+    static let dwell = Double(ProcessInfo.processInfo.environment["VELA_CLEAR_SIGNER_DWELL"] ?? "") ?? 12
+
+    @Test(.enabled(if: page != nil))
+    func theServedPageConnectsFromItsOriginAndTakesTheRequest() async throws {
+        let page = try #require(Self.page)
+        let fixture = ClearSignerFixture()
+        let request = try fixture.messageRequest()
+        let host = ClearSigner(loc: Loc(overrideTag: "en", preferredLanguages: []), signerUrl: { page })
+        let signing = Task {
+            await host.sign(requestJson: request, digest: Data(repeating: 7, count: 32), keys: fixture.keys)
+        }
+        print("[clear-signer-e2e] page opening: \(page)")
+        try await Task.sleep(for: .seconds(Self.dwell))
+        print("[clear-signer-e2e] closing the tab")
+
+        // What the tab's close button does: the tab goes, and its delegate
+        // hears that the person finished with it.
+        let tab = try #require(Self.topmost as? SFSafariViewController, "the page is not on screen")
+        tab.dismiss(animated: false)
+        tab.delegate?.safariViewControllerDidFinish?(tab)
+        var gaveUp = false
+        let watchdog = Task {
+            try await Task.sleep(for: .seconds(15))
+            gaveUp = true
+            host.cancel()
+        }
+        let ending = await signing.value
+        watchdog.cancel()
+        #expect(!gaveUp, "the page never took the request")
+        #expect(ending == .outcome(.refused(refusal: .declined)))
+    }
+
+    private static var topmost: UIViewController? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .rootViewController?
+            .topmost
     }
 }

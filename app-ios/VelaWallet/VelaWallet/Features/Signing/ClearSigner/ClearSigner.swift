@@ -66,7 +66,7 @@ enum ClearSignerNotice: Equatable {
     }
 }
 
-final class ClearSigner: ClearSignerPort {
+final class ClearSigner: NSObject, ClearSignerPort, SFSafariViewControllerDelegate {
 
     private let loc: Loc
     /// The page Settings names (`sign_pref`); `nil` before it has said, which
@@ -80,6 +80,7 @@ final class ClearSigner: ClearSignerPort {
     init(loc: Loc, signerUrl: @escaping () -> String?) {
         self.loc = loc
         self.signerUrl = signerUrl
+        super.init()
     }
 
     func sign(requestJson: String, digest: Data, keys: [WalletKeyRecord]) async -> ClearSignerChannel.Ending {
@@ -156,10 +157,8 @@ final class ClearSigner: ClearSignerPort {
         let configuration = SFSafariViewController.Configuration()
         configuration.barCollapsingEnabled = false
         let page = SFSafariViewController(url: url, configuration: configuration)
-        // Closing the tab needs no handler: a page that had the request closes
-        // its socket and the core reads that as declined; one that never
-        // connected leaves the waiting sheet, with its two ways on.
         page.dismissButtonStyle = .close
+        page.delegate = self
         return page
     }
 
@@ -170,6 +169,15 @@ final class ClearSigner: ClearSignerPort {
         waitingSheet = nil
         launchUrl = nil
         sheet.presentingViewController?.dismiss(animated: true)
+    }
+
+    // MARK: - SFSafariViewControllerDelegate
+
+    /// The person closed the tab. A page that had the request was closed
+    /// without signing — the sheet goes back to "not signed" (spec US1); one
+    /// that never connected leaves the waiting sheet, with its two ways on.
+    func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
+        channel?.pageClosed()
     }
 
     /// The window's topmost controller — over the signing sheet, over Send.

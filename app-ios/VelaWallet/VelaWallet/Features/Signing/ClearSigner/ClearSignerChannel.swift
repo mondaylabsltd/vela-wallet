@@ -179,6 +179,15 @@ final class ClearSignerChannel {
         finish(.outcome(.refused(refusal: .declined)))
     }
 
+    /// The person closed the tab. WebKit does not always close a dismissed
+    /// page's socket, so this end closes every one it holds and the core says
+    /// what that means: declined for a page that had the request, nothing
+    /// for one that never proved itself — which leaves the listener, and
+    /// "open the page again", waiting.
+    func pageClosed() {
+        sockets.keys.forEach(socketEnded)
+    }
+
     // MARK: - Sockets
 
     private func accept(_ socket: NWConnection) {
