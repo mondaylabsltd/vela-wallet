@@ -542,20 +542,6 @@ object SettingsLive {
         )
     }
 
-    /** The RPC banner names the chains that are down (the balance core's `banner_chain_ids` — never a rate-limited one); absent when none are. */
-    fun withBanner(model: SettingsScreenModel, failedChains: List<Int>, chainNames: Map<Int, String>, strings: VelaStrings): SettingsScreenModel {
-        if (failedChains.isEmpty()) return model.copy(rpcBanner = null)
-        val drawn = model.rpcBanner ?: return model
-        return model.copy(
-            rpcBanner = drawn.copy(
-                chips = failedChains.map { id ->
-                    val name = chainNames[id] ?: "chain-$id"
-                    RpcBannerChipModel(id = id.toString(), mark = ChainMarkModel(name.take(1).uppercase(), WalletLive.badge(id.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(id)), name = name, action = drawn.chips.firstOrNull()?.action.orEmpty())
-                },
-            ),
-        )
-    }
-
     /** Where a provider's API key is made — the "Get key →" link's target. */
     internal fun providerKeyUrl(provider: NetProviderId): String = when (provider) {
         NetProviderId.Alchemy -> "https://dashboard.alchemy.com/"

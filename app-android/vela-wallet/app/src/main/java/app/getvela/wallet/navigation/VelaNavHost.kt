@@ -1601,10 +1601,6 @@ fun VelaNavHost(
                         poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
                     )
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                    // A 429 heals by itself and never earns the "fix your RPC" banner: the
-                    // chains are the balance core's `banner_chain_ids`, not the pool's raw
-                    // failed list (which counts rate-limited chains too).
-                    m = SettingsLive.withBanner(m, balanceView.banner_chain_ids, chainNamesNow, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
