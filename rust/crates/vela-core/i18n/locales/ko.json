@@ -55,6 +55,18 @@
       "title": "거래 속도",
       "subtitle": "Vela에서 시작하는 모든 보내기가 여기서 시작합니다. 보낼 때 한 건만 따로 바꿀 수도 있습니다."
     },
+    "signing": {
+      "title": "서명 방법",
+      "subtitle": "Vela에서 시작하는 모든 서명은 여기서 시작합니다. 한 번의 서명에 대해서는 다른 방법을 고를 수 있습니다.",
+      "pageTitle": "Clear Signer 페이지",
+      "pageSubtitle": "Clear Signer가 여는 페이지: 공식 페이지 또는 직접 배포한 의존성 없는 서명 페이지.",
+      "pageOfficial": "공식",
+      "pageInvalid": "웹 주소가 아닙니다.",
+      "pageInsecure": "https 페이지나 이 기기의 루프백 주소에 있는 페이지를 사용하세요. 브라우저는 그 밖의 곳에서는 서명하지 않습니다.",
+      "pageForeign": "패스키는 getvela.app에 속합니다. 다른 도메인의 페이지는 요청을 보여줄 수는 있어도 서명할 수는 없습니다.",
+      "pageReset": "공식 페이지 사용",
+      "pageSave": "저장"
+    },
     "advanced": {
       "networksTitle": "네트워크",
       "networksSubtitle": "RPC, 탐색기 및 Bundler URL",

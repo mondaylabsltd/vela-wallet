@@ -66,6 +66,7 @@ pub mod rpc_pool;
 pub mod send;
 pub mod session;
 pub mod shell;
+pub mod sign_pref;
 pub mod sign_request;
 pub mod token_trust;
 pub mod tx_tracker;

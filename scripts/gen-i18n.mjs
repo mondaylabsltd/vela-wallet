@@ -340,9 +340,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   link" confirms itself (`linkCopied`). Everything else the browser's fixes
 //   needed was already in the corpus (`connect.browser.loadFailed`, `.retry`,
 //   `.a11yInsecure`, `explore.disconnect`). No new branch.
-if (PATHS.length !== 1692) fail(`expected 1692 paths (1604 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1604) fail(`expected 1604 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
+// 1713 (spec 071, 2026-09-22): the Clear Signer — the fourth "Sign with".
+//   +10 flat `componentsUi.signing.clearSigner*` leaves (its name, the promise
+//   under it, waiting + the Local Network Access hint, closed / refused /
+//   mismatch / timeout, reopen, the desktop tab's "signed, close me") and the
+//   `settings.signing` branch with 10 leaves (the default "Sign with" row, the
+//   signer page row, its three refusals, reset, save). 1692 + 20 + 1 = 1713.
+if (PATHS.length !== 1713) fail(`expected 1713 paths (1624 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1624) fail(`expected 1624 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

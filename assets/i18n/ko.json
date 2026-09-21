@@ -55,6 +55,18 @@
    "title": "거래 속도",
    "subtitle": "Vela에서 시작하는 모든 보내기가 여기서 시작합니다. 보낼 때 한 건만 따로 바꿀 수도 있습니다."
   },
+  "signing": {
+   "title": "서명 방법",
+   "subtitle": "Vela에서 시작하는 모든 서명은 여기서 시작합니다. 한 번의 서명에 대해서는 다른 방법을 고를 수 있습니다.",
+   "pageTitle": "Clear Signer 페이지",
+   "pageSubtitle": "Clear Signer가 여는 페이지: 공식 페이지 또는 직접 배포한 의존성 없는 서명 페이지.",
+   "pageOfficial": "공식",
+   "pageInvalid": "웹 주소가 아닙니다.",
+   "pageInsecure": "https 페이지나 이 기기의 루프백 주소에 있는 페이지를 사용하세요. 브라우저는 그 밖의 곳에서는 서명하지 않습니다.",
+   "pageForeign": "패스키는 getvela.app에 속합니다. 다른 도메인의 페이지는 요청을 보여줄 수는 있어도 서명할 수는 없습니다.",
+   "pageReset": "공식 페이지 사용",
+   "pageSave": "저장"
+  },
   "advanced": {
    "networksTitle": "네트워크",
    "networksSubtitle": "RPC, 탐색기 및 Bundler URL",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "받는 사람",
    "copyValue": "복사",
    "signWith": "서명 방법",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "별도의 페이지에서 확인하고 서명합니다 — 보이는 그대로 서명됩니다.",
+   "clearSignerWaiting": "Clear Signer를 기다리는 중…",
+   "clearSignerWaitingHint": "열린 페이지에서 요청을 확인하고 그곳에서 서명하세요. 브라우저가 이 페이지가 이 기기의 다른 앱에 접근해도 되는지 물으면 허용하세요.",
+   "clearSignerClosed": "Clear Signer가 서명하지 않고 닫혔습니다.",
+   "clearSignerRefused": "Clear Signer가 이 요청에 서명하지 않았습니다. 이유는 해당 페이지에 나와 있습니다.",
+   "clearSignerMismatch": "Clear Signer의 응답이 이 요청과 일치하지 않아 아무것도 보내지 않았습니다.",
+   "clearSignerTimeout": "Clear Signer가 제시간에 응답하지 않았습니다.",
+   "clearSignerReopen": "페이지 다시 열기",
+   "clearSignerDoneTab": "서명했습니다. 이 탭을 닫고 Vela로 돌아가세요.",
    "viewOnExplorer": "탐색기에서 보기",
    "sendingToTokenContract": "토큰 자체 컨트랙트로 전송"
   },

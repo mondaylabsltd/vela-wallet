@@ -36,8 +36,10 @@ pub fn clear_signer_uses_wallet_passkeys(url: &str) -> bool {
 }
 
 /// `{method, params, origin, chainId, chainName?, nativeSymbol?, account,
-/// accountName?, credentialIdsHex, userOp?, feeLegIndex?}` → the page's
-/// `{intent, context}`.
+/// accountName?, credentialIdsHex, userOp?, calls?}` → the page's `{intent,
+/// context}`. As the phones' `clear_signer_request`: `calls` are the
+/// operation's legs before its fee leg (so the fee leg is `calls.length`),
+/// and an empty `method` — the wallet's own send — makes them the intent.
 #[wasm_bindgen(js_name = clearSignerRequest)]
 pub fn clear_signer_request(input_json: &str) -> Result<String, JsValue> {
     let input: Value =
@@ -60,27 +62,56 @@ pub fn clear_signer_request(input_json: &str) -> Result<String, JsValue> {
                 .collect()
         })
         .unwrap_or_default();
+    let calls = input
+        .get("calls")
+        .and_then(Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .map(|call| {
+                    let field =
+                        |name: &str| call.get(name).and_then(Value::as_str).unwrap_or_default();
+                    vela_core::user_op::to_multi_send_call(
+                        field("to"),
+                        field("value"),
+                        field("data"),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
+        .map_err(super::err)?
+        .unwrap_or_default();
+    let chain_id = input
+        .get("chainId")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    let account = text("account").unwrap_or_default();
+    let (method, params) = match text("method").filter(|m| !m.is_empty()) {
+        Some(method) => (
+            method,
+            input
+                .get("params")
+                .cloned()
+                .unwrap_or(Value::Array(Vec::new())),
+        ),
+        None => (
+            "wallet_sendCalls",
+            clear_signer::own_send_params(chain_id, account, &calls),
+        ),
+    };
     let built = clear_signer::request(&RequestInput {
-        method: text("method").unwrap_or_default(),
-        params: input
-            .get("params")
-            .cloned()
-            .unwrap_or(Value::Array(Vec::new())),
+        method,
+        params,
         origin: text("origin").unwrap_or_default(),
-        chain_id: input
-            .get("chainId")
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+        chain_id,
         chain_name: text("chainName"),
         native_symbol: text("nativeSymbol"),
-        account: text("account").unwrap_or_default(),
+        account,
         account_name: text("accountName"),
         credential_ids_hex: &ids,
         user_op: op.as_ref(),
-        fee_leg_index: input
-            .get("feeLegIndex")
-            .and_then(Value::as_u64)
-            .map(|i| i as usize),
+        fee_leg_index: (op.is_some() && !calls.is_empty()).then_some(calls.len()),
     });
     Ok(built.to_string())
 }

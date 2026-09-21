@@ -522,3 +522,19 @@ fn a_signer_address_is_https_or_this_devices_own_loopback() {
     assert!(!uses_wallet_passkeys("http://localhost:8140/"));
     assert!(!uses_wallet_passkeys("https://me.example/"));
 }
+
+#[test]
+fn the_loopback_callback_is_found_in_the_browsers_request() {
+    use vela_core::clear_signer::callback_query;
+    assert_eq!(
+        callback_query("GET /vela?t=tok&result=e30 HTTP/1.1\r\nHost: 127.0.0.1:5\r\n\r\n"),
+        Some("t=tok&result=e30")
+    );
+    assert_eq!(
+        callback_query("POST /vela?t=tok&error=user_rejected HTTP/1.1\r\n"),
+        Some("t=tok&error=user_rejected")
+    );
+    assert_eq!(callback_query("GET /favicon.ico HTTP/1.1\r\n"), None);
+    assert_eq!(callback_query("PUT /vela?t=x HTTP/1.1\r\n"), None);
+    assert_eq!(callback_query(""), None);
+}

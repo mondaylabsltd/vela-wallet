@@ -55,6 +55,18 @@
    "title": "Tốc độ giao dịch",
    "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
   },
+  "signing": {
+   "title": "Ký bằng",
+   "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
+   "pageTitle": "Trang Clear Signer",
+   "pageSubtitle": "Trang mà Clear Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+   "pageOfficial": "Chính thức",
+   "pageInvalid": "Đây không phải là địa chỉ web.",
+   "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
+   "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
+   "pageReset": "Dùng trang chính thức",
+   "pageSave": "Lưu"
+  },
   "advanced": {
    "networksTitle": "Mạng lưới",
    "networksSubtitle": "URL của RPC, Explorer và Bundler",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "Người nhận",
    "copyValue": "Sao chép",
    "signWith": "Ký bằng",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Kiểm tra và ký trên một trang riêng — thấy gì thì ký nấy.",
+   "clearSignerWaiting": "Đang chờ Clear Signer…",
+   "clearSignerWaitingHint": "Hãy kiểm tra yêu cầu trên trang vừa mở và ký ở đó. Nếu trình duyệt hỏi có cho phép trang truy cập các ứng dụng khác trên thiết bị này không, hãy cho phép.",
+   "clearSignerClosed": "Clear Signer đã đóng mà không ký.",
+   "clearSignerRefused": "Clear Signer không ký yêu cầu này. Trang của nó có ghi lý do.",
+   "clearSignerMismatch": "Phản hồi của Clear Signer không khớp với yêu cầu này nên không có gì được gửi đi.",
+   "clearSignerTimeout": "Clear Signer không phản hồi kịp.",
+   "clearSignerReopen": "Mở lại trang",
+   "clearSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
    "viewOnExplorer": "Xem trên explorer",
    "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
   },

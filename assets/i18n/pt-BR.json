@@ -55,6 +55,18 @@
    "title": "Velocidade da transação",
    "subtitle": "Cada envio que você começa no Vela parte daqui. Você ainda pode mudar um envio específico."
   },
+  "signing": {
+   "title": "Assinar com",
+   "subtitle": "Toda assinatura que você inicia no Vela começa aqui. Ainda dá para escolher outro jeito em uma só.",
+   "pageTitle": "Página do Clear Signer",
+   "pageSubtitle": "A página que o Clear Signer abre: a oficial ou a sua própria cópia da página sem dependências.",
+   "pageOfficial": "Oficial",
+   "pageInvalid": "Isso não é um endereço da web.",
+   "pageInsecure": "Use uma página https ou uma no loopback deste aparelho — o navegador não assina em nenhum outro lugar.",
+   "pageForeign": "Suas passkeys pertencem a getvela.app. Uma página em outro domínio pode mostrar uma solicitação, mas não consegue assiná-la.",
+   "pageReset": "Usar a página oficial",
+   "pageSave": "Salvar"
+  },
   "advanced": {
    "networksTitle": "Redes",
    "networksSubtitle": "URLs de RPC, Explorer e Bundler",
@@ -1342,6 +1354,16 @@
    "techIdentityRecipient": "Destinatário",
    "copyValue": "Copiar",
    "signWith": "Assinar com",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Confira e assine em uma página separada — o que você vê é o que você assina.",
+   "clearSignerWaiting": "Aguardando o Clear Signer…",
+   "clearSignerWaitingHint": "Confira a solicitação na página que abriu e assine por lá. Se o navegador perguntar se a página pode acessar outros apps deste aparelho, permita.",
+   "clearSignerClosed": "O Clear Signer foi fechado sem assinar.",
+   "clearSignerRefused": "O Clear Signer não quis assinar esta solicitação. A página dele explica o motivo.",
+   "clearSignerMismatch": "A resposta do Clear Signer não corresponde a esta solicitação, então nada foi enviado.",
+   "clearSignerTimeout": "O Clear Signer não respondeu a tempo.",
+   "clearSignerReopen": "Abrir a página de novo",
+   "clearSignerDoneTab": "Assinado. Você pode fechar esta aba e voltar ao Vela.",
    "viewOnExplorer": "Ver no explorador",
    "sendingToTokenContract": "Enviado ao contrato do próprio token"
   },

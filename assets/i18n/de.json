@@ -55,6 +55,18 @@
    "title": "Transaktionsgeschwindigkeit",
    "subtitle": "Jede Überweisung, die du in Vela startest, beginnt hier. Eine einzelne kannst du beim Senden trotzdem ändern."
   },
+  "signing": {
+   "title": "Signieren mit",
+   "subtitle": "Jede Signatur, die Sie in Vela beginnen, startet hier. Für eine einzelne können Sie trotzdem einen anderen Weg wählen.",
+   "pageTitle": "Clear-Signer-Seite",
+   "pageSubtitle": "Die Seite, die der Clear Signer öffnet: die offizielle oder Ihre eigene Kopie der abhängigkeitsfreien Seite.",
+   "pageOfficial": "Offiziell",
+   "pageInvalid": "Das ist keine Webadresse.",
+   "pageInsecure": "Verwenden Sie eine https-Seite oder eine Seite auf dem Loopback dieses Geräts — anderswo signiert ein Browser nicht.",
+   "pageForeign": "Ihre Passkeys gehören zu getvela.app. Eine Seite auf einer anderen Domain kann eine Anfrage anzeigen, aber nicht signieren.",
+   "pageReset": "Offizielle Seite verwenden",
+   "pageSave": "Speichern"
+  },
   "advanced": {
    "networksTitle": "Netzwerke",
    "networksSubtitle": "RPC-, Explorer- & Bundler-URLs",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "Empfänger",
    "copyValue": "Kopieren",
    "signWith": "Signieren mit",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Auf einer eigenen Seite prüfen und signieren — was Sie sehen, signieren Sie.",
+   "clearSignerWaiting": "Warten auf den Clear Signer…",
+   "clearSignerWaitingHint": "Prüfen Sie die Anfrage auf der geöffneten Seite und signieren Sie dort. Fragt der Browser, ob die Seite auf andere Apps auf diesem Gerät zugreifen darf, erlauben Sie es.",
+   "clearSignerClosed": "Der Clear Signer wurde ohne Signatur geschlossen.",
+   "clearSignerRefused": "Der Clear Signer hat diese Anfrage nicht signiert. Seine Seite nennt den Grund.",
+   "clearSignerMismatch": "Die Antwort des Clear Signers passt nicht zu dieser Anfrage, daher wurde nichts gesendet.",
+   "clearSignerTimeout": "Der Clear Signer hat nicht rechtzeitig geantwortet.",
+   "clearSignerReopen": "Seite erneut öffnen",
+   "clearSignerDoneTab": "Signiert. Sie können diesen Tab schließen und zu Vela zurückkehren.",
    "viewOnExplorer": "Im Explorer ansehen",
    "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet"
   },

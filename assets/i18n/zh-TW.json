@@ -55,6 +55,18 @@
    "title": "交易速度",
    "subtitle": "在 Vela 發起的每筆轉帳都從這裡開始。傳送時仍可單獨調整某一筆。"
   },
+  "signing": {
+   "title": "簽署方式",
+   "subtitle": "你在 Vela 發起的每次簽署都從這裡開始。單次簽署時仍可另選方式。",
+   "pageTitle": "清晰簽署器頁面",
+   "pageSubtitle": "清晰簽署器開啟的頁面：官方頁面，或你自行部署的零依賴簽署頁。",
+   "pageOfficial": "官方",
+   "pageInvalid": "這不是一個網址。",
+   "pageInsecure": "請使用 https 頁面，或這台裝置本機回環位址上的頁面——瀏覽器不會在其他地方簽署。",
+   "pageForeign": "你的通行密鑰屬於 getvela.app。其他網域上的頁面可以顯示請求，但無法簽署。",
+   "pageReset": "使用官方頁面",
+   "pageSave": "儲存"
+  },
   "advanced": {
    "networksTitle": "網路",
    "networksSubtitle": "RPC、區塊鏈瀏覽器與 Bundler 網址",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "接收方",
    "copyValue": "複製",
    "signWith": "簽署方式",
+   "clearSignerTitle": "清晰簽署器",
+   "clearSignerBody": "在獨立的頁面上核對並簽署——所見即所簽。",
+   "clearSignerWaiting": "正在等待清晰簽署器…",
+   "clearSignerWaitingHint": "請在開啟的頁面上核對這筆請求，並在那裡簽署。如果瀏覽器詢問是否允許該頁面存取這台裝置上的其他 App，請允許。",
+   "clearSignerClosed": "清晰簽署器已關閉，沒有簽署。",
+   "clearSignerRefused": "清晰簽署器拒絕簽署這筆請求，原因請見它的頁面。",
+   "clearSignerMismatch": "清晰簽署器的回覆與這筆請求不符，因此沒有送出任何東西。",
+   "clearSignerTimeout": "清晰簽署器沒有及時回應。",
+   "clearSignerReopen": "重新開啟頁面",
+   "clearSignerDoneTab": "已簽署。你可以關閉此分頁，回到 Vela。",
    "viewOnExplorer": "在區塊瀏覽器中查看",
    "sendingToTokenContract": "傳送到代幣自身合約"
   },

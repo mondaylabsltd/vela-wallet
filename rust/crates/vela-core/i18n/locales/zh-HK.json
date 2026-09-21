@@ -55,6 +55,18 @@
       "title": "交易速度",
       "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
     },
+    "signing": {
+      "title": "簽署方式",
+      "subtitle": "你喺 Vela 發起嘅每次簽署都由呢度開始。單次簽署時仍然可以另揀方式。",
+      "pageTitle": "清晰簽署器頁面",
+      "pageSubtitle": "清晰簽署器開啟嘅頁面：官方頁面，或者你自己部署嘅零依賴簽署頁。",
+      "pageOfficial": "官方",
+      "pageInvalid": "呢個唔係網址。",
+      "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",
+      "pageForeign": "你嘅通行密鑰屬於 getvela.app。其他網域上嘅頁面可以顯示請求，但無法簽署。",
+      "pageReset": "使用官方頁面",
+      "pageSave": "儲存"
+    },
     "advanced": {
       "networksTitle": "網絡",
       "networksSubtitle": "RPC、區塊鏈瀏覽器及 Bundler 網址",

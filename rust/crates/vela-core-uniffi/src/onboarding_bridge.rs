@@ -302,6 +302,13 @@ bridge_object!(
 );
 
 bridge_object!(
+    /// How this device signs by default (spec 071): the "Sign with" every
+    /// signing sheet starts at, and which Clear Signer page it opens.
+    SignPrefCore,
+    vela_core::app::sign_pref::SignPref
+);
+
+bridge_object!(
     /// The speed control of one send surface (spec 069): the tier in force,
     /// the free upgrade, the one-speed statement and each tier's gas bid.
     FeeSpeedCore,

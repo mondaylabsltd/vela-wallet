@@ -67,6 +67,9 @@ use vela_core::app::send::{Event as SendEvent, SendOperation, SendShellResult, S
 use vela_core::app::session::{
     Event as SessionEvent, SessionOperation, SessionShellResult, SessionView,
 };
+use vela_core::app::sign_pref::{
+    Event as SignPrefEvent, SignPrefOperation, SignPrefShellResult, SignPrefView,
+};
 use vela_core::app::sign_request::{Event as SignEvent, SignOperation, SignShellResult, SignView};
 use vela_core::app::token_trust::{
     Event as TrustEvent, TrustOperation, TrustShellResult, TrustView,
@@ -110,6 +113,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     FeeTierPrefOperation::export_all(&config)?;
     FeeTierPrefShellResult::export_all(&config)?;
     FeeTierPrefView::export_all(&config)?;
+    SignPrefEvent::export_all(&config)?;
+    SignPrefOperation::export_all(&config)?;
+    SignPrefShellResult::export_all(&config)?;
+    SignPrefView::export_all(&config)?;
     GuardEvent::export_all(&config)?;
     GuardOperation::export_all(&config)?;
     GuardShellResult::export_all(&config)?;

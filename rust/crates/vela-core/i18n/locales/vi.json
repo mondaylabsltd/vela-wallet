@@ -55,6 +55,18 @@
       "title": "Tốc độ giao dịch",
       "subtitle": "Mọi lượt gửi bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể đổi riêng từng lần gửi."
     },
+    "signing": {
+      "title": "Ký bằng",
+      "subtitle": "Mọi chữ ký bạn bắt đầu trong Vela đều bắt đầu từ đây. Bạn vẫn có thể chọn cách khác cho từng lần ký.",
+      "pageTitle": "Trang Clear Signer",
+      "pageSubtitle": "Trang mà Clear Signer mở: trang chính thức, hoặc bản sao trang không phụ thuộc do bạn tự triển khai.",
+      "pageOfficial": "Chính thức",
+      "pageInvalid": "Đây không phải là địa chỉ web.",
+      "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
+      "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
+      "pageReset": "Dùng trang chính thức",
+      "pageSave": "Lưu"
+    },
     "advanced": {
       "networksTitle": "Mạng lưới",
       "networksSubtitle": "URL của RPC, Explorer và Bundler",

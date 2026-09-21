@@ -3,7 +3,9 @@
 //! between the phone app and the page — so no shell builds, parses, frames or
 //! trusts any of it on its own.
 
-use crate::{op_of, CoreError, UserOpDraft, WalletKeyRecord, WebAuthnAssertion};
+use crate::{
+    inner_calls, op_of, CoreError, UserOpCall, UserOpDraft, WalletKeyRecord, WebAuthnAssertion,
+};
 use std::sync::{Arc, Mutex};
 
 use vela_core::clear_signer::{self, ClearSignerError, RequestInput};
@@ -11,12 +13,12 @@ use vela_core::clear_signer::{self, ClearSignerError, RequestInput};
 /// What the shell holds when it would sign.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ClearSignerInput {
-    /// The request's own method (`eth_sendTransaction`, `personal_sign`, …),
-    /// or one synthesised for the wallet's own send.
+    /// The request's own method (`eth_sendTransaction`, `personal_sign`, …);
+    /// EMPTY for the wallet's own send, whose intent is built from `calls`.
     pub method: String,
-    /// Its JSON-RPC params, verbatim.
+    /// Its JSON-RPC params, verbatim (ignored when `method` is empty).
     pub params_json: String,
-    /// The requesting site's origin, or the wallet's own.
+    /// The requesting site's origin; empty for the wallet's own send.
     pub origin: String,
     pub chain_id: u32,
     pub chain_name: Option<String>,
@@ -25,8 +27,11 @@ pub struct ClearSignerInput {
     pub account_name: Option<String>,
     /// The account's credential ids, hex.
     pub credential_ids_hex: Vec<String>,
-    /// The MultiSend leg that is the network fee (the wallet appends it last).
-    pub fee_leg_index: Option<u32>,
+    /// For a transaction: the calls the operation carries BEFORE its fee leg
+    /// (the wallet appends the fee last, so its index is `calls.len()`). With
+    /// an empty `method` — the wallet's own send, which no site asked for —
+    /// they are also the intent (`wallet_sendCalls`). Empty for a message.
+    pub calls: Vec<UserOpCall>,
 }
 
 /// The page's `{intent, context}` as JSON. `draft` is the ASSEMBLED
@@ -37,10 +42,21 @@ pub fn clear_signer_request(
     draft: Option<UserOpDraft>,
 ) -> Result<String, CoreError> {
     let op = draft.as_ref().map(op_of).transpose()?;
-    let params = serde_json::from_str(&input.params_json)
-        .map_err(|e| CoreError::Internal(format!("params_json: {e}")))?;
+    let (method, params) = if input.method.is_empty() {
+        let calls = inner_calls(&input.calls)?;
+        (
+            "wallet_sendCalls",
+            clear_signer::own_send_params(u64::from(input.chain_id), &input.account, &calls),
+        )
+    } else {
+        let params = serde_json::from_str(&input.params_json)
+            .map_err(|e| CoreError::Internal(format!("params_json: {e}")))?;
+        (input.method.as_str(), params)
+    };
+    // The wallet appends the fee leg after the calls, on every chain.
+    let fee_leg_index = (op.is_some() && !input.calls.is_empty()).then_some(input.calls.len());
     let built = clear_signer::request(&RequestInput {
-        method: &input.method,
+        method,
         params,
         origin: &input.origin,
         chain_id: u64::from(input.chain_id),
@@ -50,7 +66,7 @@ pub fn clear_signer_request(
         account_name: input.account_name.as_deref(),
         credential_ids_hex: &input.credential_ids_hex,
         user_op: op.as_ref(),
-        fee_leg_index: input.fee_leg_index.map(|i| i as usize),
+        fee_leg_index,
     });
     Ok(built.to_string())
 }

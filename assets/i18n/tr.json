@@ -55,6 +55,18 @@
    "title": "İşlem hızı",
    "subtitle": "Vela'da başlattığınız her gönderim burada başlar. Tek bir gönderim için yine de değiştirebilirsiniz."
   },
+  "signing": {
+   "title": "Şununla imzala",
+   "subtitle": "Vela'da başlattığınız her imza buradan başlar. Tek bir imza için yine de başka bir yol seçebilirsiniz.",
+   "pageTitle": "Clear Signer sayfası",
+   "pageSubtitle": "Clear Signer'ın açtığı sayfa: resmi sayfa ya da bağımlılıksız sayfanın kendi kopyanız.",
+   "pageOfficial": "Resmi",
+   "pageInvalid": "Bu bir web adresi değil.",
+   "pageInsecure": "https bir sayfa ya da bu cihazın kendi loopback adresindeki bir sayfa kullanın — tarayıcı başka hiçbir yerde imzalamaz.",
+   "pageForeign": "Geçiş anahtarlarınız getvela.app'e ait. Başka bir alan adındaki sayfa bir isteği gösterebilir ama imzalayamaz.",
+   "pageReset": "Resmi sayfayı kullan",
+   "pageSave": "Kaydet"
+  },
   "advanced": {
    "networksTitle": "Ağlar",
    "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "Alıcı",
    "copyValue": "Kopyala",
    "signWith": "Şununla imzala",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Ayrı bir sayfada kontrol edip imzalayın — ne görüyorsanız onu imzalarsınız.",
+   "clearSignerWaiting": "Clear Signer bekleniyor…",
+   "clearSignerWaitingHint": "Açılan sayfada isteği kontrol edin ve orada imzalayın. Tarayıcı, sayfanın bu cihazdaki diğer uygulamalara erişmesine izin verilip verilmeyeceğini sorarsa izin verin.",
+   "clearSignerClosed": "Clear Signer imzalamadan kapatıldı.",
+   "clearSignerRefused": "Clear Signer bu isteği imzalamadı. Nedeni kendi sayfasında yazıyor.",
+   "clearSignerMismatch": "Clear Signer'ın yanıtı bu istekle eşleşmiyor, bu yüzden hiçbir şey gönderilmedi.",
+   "clearSignerTimeout": "Clear Signer zamanında yanıt vermedi.",
+   "clearSignerReopen": "Sayfayı yeniden aç",
+   "clearSignerDoneTab": "İmzalandı. Bu sekmeyi kapatıp Vela'ya dönebilirsiniz.",
    "viewOnExplorer": "Gezginde görüntüle",
    "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor"
   },

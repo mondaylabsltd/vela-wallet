@@ -55,6 +55,18 @@
    "title": "Kecepatan transaksi",
    "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
   },
+  "signing": {
+   "title": "Tanda tangani dengan",
+   "subtitle": "Setiap tanda tangan yang Anda mulai di Vela berawal dari sini. Untuk satu tanda tangan, Anda tetap bisa memilih cara lain.",
+   "pageTitle": "Halaman Clear Signer",
+   "pageSubtitle": "Halaman yang dibuka Clear Signer: halaman resmi, atau salinan halaman tanpa dependensi milik Anda sendiri.",
+   "pageOfficial": "Resmi",
+   "pageInvalid": "Itu bukan alamat web.",
+   "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
+   "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
+   "pageReset": "Gunakan halaman resmi",
+   "pageSave": "Simpan"
+  },
   "advanced": {
    "networksTitle": "Jaringan",
    "networksSubtitle": "URL RPC, Explorer & Bundler",
@@ -1339,6 +1351,16 @@
    "techIdentityRecipient": "Penerima",
    "copyValue": "Salin",
    "signWith": "Tanda tangani dengan",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Periksa dan tanda tangani di halaman terpisah — yang Anda lihat adalah yang Anda tanda tangani.",
+   "clearSignerWaiting": "Menunggu Clear Signer…",
+   "clearSignerWaitingHint": "Periksa permintaan di halaman yang terbuka, lalu tanda tangani di sana. Jika browser bertanya apakah halaman boleh mengakses aplikasi lain di perangkat ini, izinkan.",
+   "clearSignerClosed": "Clear Signer ditutup tanpa menandatangani.",
+   "clearSignerRefused": "Clear Signer tidak mau menandatangani permintaan ini. Halamannya menjelaskan alasannya.",
+   "clearSignerMismatch": "Jawaban Clear Signer tidak cocok dengan permintaan ini, jadi tidak ada yang dikirim.",
+   "clearSignerTimeout": "Clear Signer tidak menjawab tepat waktu.",
+   "clearSignerReopen": "Buka halaman lagi",
+   "clearSignerDoneTab": "Sudah ditandatangani. Anda dapat menutup tab ini dan kembali ke Vela.",
    "viewOnExplorer": "Lihat di explorer",
    "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
   },

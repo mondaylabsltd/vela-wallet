@@ -241,6 +241,37 @@ pub fn request(input: &RequestInput<'_>) -> Value {
     })
 }
 
+/// The intent for the wallet's OWN send, which no site asked for: the calls
+/// the operation carries before its fee leg, as `wallet_sendCalls` (EIP-5792)
+/// — the shape the page checks an operation's legs against. Its origin is
+/// empty, which the page shows as the wallet itself.
+pub fn own_send_params(
+    chain_id: u64,
+    account: &str,
+    calls: &[crate::user_op::MultiSendCall],
+) -> Value {
+    let calls: Vec<Value> = calls
+        .iter()
+        .map(|call| {
+            let value = call
+                .value_hex
+                .trim_start_matches("0x")
+                .trim_start_matches("0X");
+            json!({
+                "to": call.to,
+                "value": format!("0x{}", if value.is_empty() { "0" } else { value }),
+                "data": crate::primitives::to_hex(&call.data, true),
+            })
+        })
+        .collect();
+    json!([{
+        "version": "1.0",
+        "chainId": format!("0x{chain_id:x}"),
+        "from": account,
+        "calls": calls,
+    }])
+}
+
 /// The operation in the page's field names (`lib/safeop.js`), gas figures as
 /// decimal strings (`BigInt` reads them), bytes as `0x` hex.
 fn user_op_json(op: &UserOperation) -> Value {
@@ -412,6 +443,25 @@ pub fn url_launch(base: &str, request: &Value, callback: &str, token: &str) -> S
         URL_SAFE_NO_PAD.encode(callback.as_bytes()),
         percent(token),
     )
+}
+
+/// The path the loopback callback is served on — `url_launch`'s `callback`
+/// is `http://127.0.0.1:<port>` + this.
+pub const CALLBACK_PATH: &str = "/vela";
+
+/// The query of a loopback callback request — `GET /vela?t=…&result=…` (the
+/// page navigating to it) or `POST /vela?t=…&error=…` (its beacon while the
+/// tab closes) — or `None` for anything else a browser asks a listener for
+/// (`/favicon.ico`).
+pub fn callback_query(request_head: &str) -> Option<&str> {
+    let mut parts = request_head.lines().next()?.split(' ');
+    let method = parts.next()?;
+    if method != "GET" && method != "POST" {
+        return None;
+    }
+    let target = parts.next()?;
+    let (path, query) = target.split_once('?').unwrap_or((target, ""));
+    (path == CALLBACK_PATH).then_some(query)
 }
 
 /// What the loopback callback carried: `?t=<token>&result=<b64url json>` or

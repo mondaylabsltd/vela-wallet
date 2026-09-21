@@ -55,6 +55,18 @@
    "title": "Transaction speed",
    "subtitle": "Every send you start in Vela begins here. You can still change a single one when you send it."
   },
+  "signing": {
+   "title": "Sign with",
+   "subtitle": "Every signature you start in Vela begins here. You can still choose another way for a single one.",
+   "pageTitle": "Clear Signer page",
+   "pageSubtitle": "The page the Clear Signer opens: the official one, or your own copy of the zero-dependency page.",
+   "pageOfficial": "Official",
+   "pageInvalid": "That is not a web address.",
+   "pageInsecure": "Use an https page, or one on this device's own loopback — a browser will not sign anywhere else.",
+   "pageForeign": "Your passkeys belong to getvela.app. A page on another domain can show a request but cannot sign it.",
+   "pageReset": "Use the official page",
+   "pageSave": "Save"
+  },
   "advanced": {
    "networksTitle": "Networks",
    "networksSubtitle": "RPC, Explorer & Bundler URLs",
@@ -1378,6 +1390,16 @@
    "techIdentityRecipient": "Recipient",
    "copyValue": "Copy",
    "signWith": "Sign with",
+   "clearSignerTitle": "Clear Signer",
+   "clearSignerBody": "Check and sign on a separate page — what you see is what you sign.",
+   "clearSignerWaiting": "Waiting for the Clear Signer…",
+   "clearSignerWaitingHint": "Check the request on the page that opened, and sign it there. If the browser asks to let the page reach other apps on this device, allow it.",
+   "clearSignerClosed": "The Clear Signer was closed without signing.",
+   "clearSignerRefused": "The Clear Signer would not sign this request. Its page says why.",
+   "clearSignerMismatch": "The Clear Signer's answer does not match this request, so nothing was sent.",
+   "clearSignerTimeout": "The Clear Signer did not answer in time.",
+   "clearSignerReopen": "Open the page again",
+   "clearSignerDoneTab": "Signed. You can close this tab and go back to Vela.",
    "viewOnExplorer": "View on explorer",
    "sendingToTokenContract": "Sent to the token’s own contract"
   },

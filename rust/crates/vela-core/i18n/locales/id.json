@@ -55,6 +55,18 @@
       "title": "Kecepatan transaksi",
       "subtitle": "Setiap pengiriman yang Anda mulai di Vela dimulai dari sini. Anda tetap bisa mengubahnya untuk satu pengiriman."
     },
+    "signing": {
+      "title": "Tanda tangani dengan",
+      "subtitle": "Setiap tanda tangan yang Anda mulai di Vela berawal dari sini. Untuk satu tanda tangan, Anda tetap bisa memilih cara lain.",
+      "pageTitle": "Halaman Clear Signer",
+      "pageSubtitle": "Halaman yang dibuka Clear Signer: halaman resmi, atau salinan halaman tanpa dependensi milik Anda sendiri.",
+      "pageOfficial": "Resmi",
+      "pageInvalid": "Itu bukan alamat web.",
+      "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
+      "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
+      "pageReset": "Gunakan halaman resmi",
+      "pageSave": "Simpan"
+    },
     "advanced": {
       "networksTitle": "Jaringan",
       "networksSubtitle": "URL RPC, Explorer & Bundler",

@@ -55,6 +55,18 @@
       "title": "Velocità delle transazioni",
       "subtitle": "Ogni invio che avvii in Vela parte da qui. Puoi comunque cambiarne uno singolo al momento dell'invio."
     },
+    "signing": {
+      "title": "Firma con",
+      "subtitle": "Ogni firma che avvii in Vela parte da qui. Per una singola puoi comunque scegliere un altro modo.",
+      "pageTitle": "Pagina del Clear Signer",
+      "pageSubtitle": "La pagina che apre il Clear Signer: quella ufficiale o la tua copia della pagina senza dipendenze.",
+      "pageOfficial": "Ufficiale",
+      "pageInvalid": "Questo non è un indirizzo web.",
+      "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
+      "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
+      "pageReset": "Usa la pagina ufficiale",
+      "pageSave": "Salva"
+    },
     "advanced": {
       "networksTitle": "Reti",
       "networksSubtitle": "URL di RPC, explorer e Bundler",
