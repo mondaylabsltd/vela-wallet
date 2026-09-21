@@ -89,6 +89,33 @@ struct SendRecipientDraftWire: Decodable, Equatable {
     let name: String?
 }
 
+/// A split row that pays an address an earlier row already pays (issue 203):
+/// the row's id and the 1-based position of the row it repeats. The core
+/// decides what a repeat is; the shell only says so.
+struct SendDuplicateRowWire: Decodable, Equatable {
+    let id: String
+    let firstOrdinal: Int
+}
+
+/// What one field of a split row still needs — the core's `SendRowFieldState`.
+enum SendRowFieldStateWire: String, Decodable, Equatable {
+    case ok
+    /// Nothing typed yet: unfinished, not wrong.
+    case empty
+    /// Something typed that is not an address / not a sendable amount.
+    case invalid
+}
+
+/// A split row `Continue` will not take, and which field is why
+/// (`split_row_issues`). Rows that are fine are not listed.
+struct SendSplitRowIssueWire: Decodable, Equatable {
+    let id: String
+    /// The number the row wears ("Recipient 2").
+    let ordinal: Int
+    let address: SendRowFieldStateWire
+    let amount: SendRowFieldStateWire
+}
+
 /// One ticked token, and what the core says will leave.
 struct SendMultiSpecWire: Decodable, Equatable {
     /// `nil` is the native coin.
@@ -262,6 +289,13 @@ struct SendViewWire: Decodable, Equatable {
 
     let splitMode: Bool
     let recipients: [SendRecipientDraftWire]
+    /// The core's verdicts on the split's rows: which repeat an earlier payee,
+    /// and which `Continue` will not take and why. The shell never re-derives
+    /// the address or amount rule to explain a row. Absent (a core built
+    /// before the fields existed) reads as none, as on the web.
+    let splitDuplicates: [SendDuplicateRowWire]?
+    let splitRowIssues: [SendSplitRowIssueWire]?
+
     let splitOverBalance: Bool
     /// The balance less the rows' sum, in token units — "how much is left to
     /// give out". `nil` while a row cannot be summed or the sum is over.

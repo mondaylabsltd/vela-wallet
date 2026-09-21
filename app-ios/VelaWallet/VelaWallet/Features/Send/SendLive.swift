@@ -244,13 +244,17 @@ enum SendLive {
         // unit. When the figure is already fiat the other unit is the token's,
         // which is `token_amount` — the very number the signed batch is built
         // from, so the two can never disagree.
+        let unit = unitAdornment(code: view.amountFiatCode, symbol: symbol)
         live.amount = model.amount.map { drawn in
             AmountFieldModel(
                 value: view.amount.isEmpty ? "0" : view.amount,
                 fiat: view.amountFiatCode != nil
                     ? "\(trim(view.tokenAmount)) \(symbol)"
                     : fiatLine(view, token: token, display: display),
-                denomLabel: view.amountFiatCode ?? display.code,
+                // What the figure is typed IN: its own code, or the token's
+                // symbol — never the display currency, which is not the unit
+                // of a figure typed in token units at all.
+                denomLabel: view.amountFiatCode ?? symbol,
                 // The core's three judgements about the ⇄ control, all of
                 // which this client was dropping (spec 056's dropped-judgement
                 // ruler). Absent, refused-with-a-reason and offered are three
@@ -264,7 +268,9 @@ enum SendLive {
                     ])
                 },
                 // A scanned or linked amount is not the person's to change.
-                locked: view.amountLocked
+                locked: view.amountLocked,
+                unitPrefix: unit.prefix,
+                unitSuffix: unit.suffix
             )
         }
 
@@ -329,13 +335,17 @@ enum SendLive {
         }
 
         // The split's rows, each with the core's verdict on it.
+        let issues = view.splitMode ? view.splitRowIssues ?? [] : []
         live.recipients = view.splitMode ? view.recipients.enumerated().map { index, row in
-            RecipientCardModel(
+            let issue = issues.first { $0.id == row.id }
+            return RecipientCardModel(
                 ordinal: loc.t("send.recipientN", vars: ["n": String(index + 1)]),
                 name: row.name ?? (row.address.isEmpty
                     ? loc.t("send.recipientPlaceholder")
                     : AddressText.short(row.address)),
-                identiconSeed: isAddress(row.address) ? row.address : "",
+                // Artwork is for an ADDRESS, and the core says when the field
+                // is not one yet — a half-typed "0x1234" draws nobody's face.
+                identiconSeed: !row.address.isEmpty && issue?.address != .invalid ? row.address : "",
                 amount: "\(trim(row.amount)) \(symbol)",
                 removeLabel: loc.t("send.removeRecipient"),
                 rowId: row.id,
@@ -357,7 +367,13 @@ enum SendLive {
                         : "send.recipientCount_other",
                     vars: ["count": String(view.recipients.count)]
                 ),
-                value: "\(trim(view.confirmAmount)) \(symbol)"
+                // A row that cannot be summed yet leaves the total blank — a
+                // dash, not a bare symbol with no figure in front of it.
+                value: view.confirmAmount.isEmpty ? "—" : "\(trim(view.confirmAmount)) \(symbol)",
+                over: view.splitOverBalance,
+                remaining: view.splitRemaining.map { left in
+                    loc.t("send.splitRemaining", vars: ["amount": "\(trim(left)) \(symbol)"])
+                }
             )
             : live.summary
 
@@ -385,29 +401,77 @@ enum SendLive {
             recipientActions: live.recipientActions,
             summary: live.summary,
             fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc),
-            cta: live.cta
+            cta: live.cta,
+            // While the pre-check is out the button is busy, not unfinished.
+            hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil
         )
     }
 
-    /// What is wrong with **this** row, in the core's vocabulary.
+    /// "Recipient 2 needs an amount." — the first unfinished row, and what it
+    /// still needs, from the core's list. The core says WHICH row; this only
+    /// picks the sentence.
+    static func splitHint(_ issues: [SendSplitRowIssueWire], loc: Loc) -> String? {
+        guard let first = issues.first else { return nil }
+        return loc.t(
+            first.address == .ok ? "send.splitNeedsAmount" : "send.splitNeedsAddress",
+            vars: ["n": String(first.ordinal)]
+        )
+    }
+
+    /// The unit drawn beside a figure being typed (issue 231, the web's
+    /// `unitAdornment`). `code` is the figure's OWN currency
+    /// (`amount_fiat_code`); `nil` means token units, and the unit is the
+    /// token's symbol. A currency with a symbol leads the figure, one the
+    /// catalog has no symbol for follows it as its code, a token always
+    /// follows. Nothing defaults to "$".
+    static func unitAdornment(code: String?, symbol: String) -> (prefix: String?, suffix: String?) {
+        guard let code else { return (nil, symbol.isEmpty ? nil : symbol) }
+        if let glyph = CurrencyCatalog.entry(code)?.glyph, !glyph.isEmpty {
+            return (glyph, nil)
+        }
+        return (nil, code)
+    }
+
+    /// What is wrong with **this** row, in the core's words.
     ///
     /// A list of six rows with one sentence underneath makes somebody count
-    /// rows to find the bad one. The core does not publish a per-row verdict
-    /// for the split, so the two facts it does publish are read here: an
-    /// address that is not one, and a row that repeats an earlier address.
-    /// Anything subtler stays the form's single warning.
+    /// rows to find the bad one. Every verdict here is the core's
+    /// (`split_row_issues`, `split_duplicates`) — the shell used to compare
+    /// addresses itself, a second rule to keep in step with the importer's,
+    /// and called a repeat "skipped" when the batch still pays it twice.
+    /// Only a field with something IN it can be wrong: an empty one is
+    /// unfinished, and the hint above Continue already says so.
     static func rowProblem(
         _ row: SendRecipientDraftWire, in view: SendViewWire, loc: Loc
     ) -> String? {
-        if !row.address.isEmpty, !isAddress(row.address) {
-            return loc.t("send.batchBadAddress")
+        let issue = view.splitRowIssues?.first { $0.id == row.id }
+        let notes = [
+            issue?.address == .invalid ? loc.t("send.batchBadAddress") : nil,
+            duplicateNote(view, id: row.id, loc: loc),
+            issue?.amount == .invalid ? loc.t("send.badAmount") : nil,
+        ].compactMap { $0 }
+        return notes.isEmpty ? nil : notes.joined(separator: " · ")
+    }
+
+    /// "Same address as recipient 2", for a row the core flagged as a repeat
+    /// of an earlier one. `nil` for every other row — including the FIRST
+    /// occurrence, which is not the mistake.
+    static func duplicateNote(_ view: SendViewWire, id: String, loc: Loc) -> String? {
+        (view.splitDuplicates ?? []).first { $0.id == id }.map { flagged in
+            loc.t("send.recipientDuplicate", vars: ["n": String(flagged.firstOrdinal)])
         }
-        let earlier = view.recipients.prefix { $0.id != row.id }
-        if !row.address.isEmpty,
-           earlier.contains(where: { $0.address.caseInsensitiveCompare(row.address) == .orderedSame }) {
-            return loc.t("send.batchDup")
+    }
+
+    /// The form's repeat warnings, said again on the page that signs: one line
+    /// per repeating row, "Recipient 3 · Same address as recipient 1".
+    static func confirmRepeatNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.splitMode else { return nil }
+        let lines = view.recipients.enumerated().compactMap { index, row in
+            duplicateNote(view, id: row.id, loc: loc).map { note in
+                "\(loc.t("send.recipientN", vars: ["n": String(index + 1)])) · \(note)"
+            }
         }
-        return nil
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     /// The ≈ line beside a token-denominated figure.
@@ -561,6 +625,13 @@ enum SendLive {
             ])
             return "\(body) \(most)"
         }
+        // A split has its own live verdict, `split_over_balance` — the same
+        // predicate Continue refuses on. It does not take `amount_warning`:
+        // that is derived from the single form's figure, which a split leaves
+        // behind, so it would judge a number no longer on the screen.
+        if view.splitMode {
+            return view.splitOverBalance ? loc.t("send.alertInsufficientBalanceBody") : nil
+        }
         return view.amountWarning.map { warningText($0, loc: loc) }
     }
 
@@ -697,6 +768,7 @@ enum SendLive {
             noticeSecondary: view.treasuryBootstrap != nil
                 ? loc.t("componentsUi.funding.cancel")
                 : nil,
+            repeatNote: confirmRepeatNote(view, loc: loc),
             cta: live.cta
         )
     }

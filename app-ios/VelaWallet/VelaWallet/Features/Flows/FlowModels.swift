@@ -398,9 +398,10 @@ struct RecipientCardModel: Identifiable {
     /// The core's row id, so an edit can say which row it edited. Empty in
     /// the fixtures, which have no machine behind them.
     var rowId: String = ""
-    /// The core's verdict on this row, if it has one — an empty amount, an
-    /// address that is not one, a duplicate. A row's problem belongs on the
-    /// row, not in a sentence at the bottom of a list of six.
+    /// The core's verdict on this row, if it has one — an address that is
+    /// not one, an amount that cannot be sent, a repeat of an earlier payee.
+    /// A row's problem belongs on the row, not in a sentence at the bottom of
+    /// a list of six.
     var problem: String?
 }
 
@@ -437,6 +438,12 @@ struct AmountFieldModel {
     /// to change. The field goes read-only rather than silently ignoring
     /// typing.
     var locked = false
+    /// The unit, on the figure itself (issue 231): a currency symbol leads
+    /// ("$4.00"), a code or a ticker follows ("4.00 PLN", "0.00075 BNB").
+    /// Keyed on the FIGURE's own unit, never the display currency. `nil` on
+    /// both is no adornment — the drawing, or a unit nobody can name.
+    var unitPrefix: String?
+    var unitSuffix: String?
 }
 
 struct RecipientFieldModel {
@@ -463,6 +470,11 @@ struct RecipientActionModel: Identifiable {
 struct SummaryLineModel {
     let label: String
     let value: String
+    /// The split's total is over the balance — the core's
+    /// `split_over_balance`, the same predicate `Continue` refuses on.
+    var over = false
+    /// "1.5 XDAI left" — the core's `split_remaining`, worded.
+    var remaining: String?
 }
 
 enum SendFormMode {
@@ -485,6 +497,10 @@ struct SendFormModel {
     var summary: SummaryLineModel?
     let fee: FeeRowModel
     let cta: String
+    /// Split only: why `Continue` is dark — the FIRST unfinished row and the
+    /// field it still needs, from the core's `split_row_issues`. Said only
+    /// while no refusal is (the warning wins).
+    var hint: String?
 }
 
 /// SD2e — the contact picker.
@@ -649,6 +665,10 @@ struct SendConfirmModel {
     /// looking at the page (spec 054 US4).
     var noticeAction: String?
     var noticeSecondary: String?
+    /// A split's repeated payees, said again on the page that signs (issue
+    /// 203): two lines paying one address are hardest to spot exactly here,
+    /// where the avatars are identical and the sum looks right.
+    var repeatNote: String?
     let cta: String
 }
 
