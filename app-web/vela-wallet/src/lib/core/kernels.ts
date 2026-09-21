@@ -746,3 +746,28 @@ export function gasSignalsCacheable(
 export function bundlerQuoteCacheable(maxFeePerGas: string): boolean {
 	return wasm.bundlerQuoteCacheable(maxFeePerGas);
 }
+
+/**
+ * Spec 073: an amount field's text as the core reads it — ASCII digits and one
+ * `.` — or `null` for a paste with no reading as one figure, which the field
+ * refuses whole (`l10n::amount_text` says why; issue 231). `preset` is the
+ * resolved number preset (`resolvedFormatKeys().number`); `previous` the
+ * field's text before this edit, which is how one keystroke is told from a
+ * paste or an autofill.
+ */
+export function amountTextClean(
+	raw: string,
+	preset: string,
+	pasted: boolean,
+	previous?: string
+): string | null {
+	return wasm.amountTextClean(raw, preset, previous, pasted) ?? null;
+}
+
+/**
+ * Where the caret belongs in `clean`, having been at `caret` in `raw`: after as
+ * many KEPT characters as stood before it (UTF-16 units, as `selectionStart`).
+ */
+export function amountTextCaret(raw: string, clean: string, caret: number): number {
+	return wasm.amountTextCaret(raw, clean, caret);
+}

@@ -1419,6 +1419,32 @@ pub fn i18n_text_direction(lng: &str) -> String {
     vela_core::l10n::text_direction(lng).as_str().to_owned()
 }
 
+/// An amount field's text as the core reads it, or `undefined` for a paste
+/// with no reading as one figure (spec 073; `l10n::amount_text`).
+#[wasm_bindgen(js_name = amountTextClean)]
+pub fn amount_text_clean(
+    raw: &str,
+    number: &str,
+    previous: Option<String>,
+    pasted: Option<bool>,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(
+        raw,
+        amount_text::preset_of(number),
+        amount_text::Entry::from_pasted(pasted),
+        previous.as_deref(),
+    )
+}
+
+/// Where the caret belongs in `clean`, having been at `caret` in `raw`
+/// (UTF-16 units, as `selectionStart` counts).
+#[wasm_bindgen(js_name = amountTextCaret)]
+pub fn amount_text_caret(raw: &str, clean: &str, caret: u32) -> u32 {
+    let at = vela_core::l10n::amount_text::caret_after_clean(raw, clean, caret as usize);
+    u32::try_from(at).unwrap_or(u32::MAX)
+}
+
 // ---------------------------------------------------------------------------
 // user_op — the second implementation the shell's assembly is checked against
 // (spec 028 Phase 8). The shell hands over the operation it built and the

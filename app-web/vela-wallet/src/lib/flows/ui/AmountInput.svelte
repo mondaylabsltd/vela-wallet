@@ -7,10 +7,10 @@
 	 * the person came to decide. The fiat line stays subordinate even when the
 	 * denominations swap — the amount being ENTERED leads, whichever it is.
 	 */
-	import { numberSeparators } from '$lib/services/locale-format';
+	import { amountTextCaret, amountTextClean } from '$lib/core/kernels';
+	import { resolvedFormatKeys } from '$lib/services/locale-format';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { caretAfterClean, cleanAmountText } from '../amount-text';
 
 	interface Props {
 		value: string;
@@ -88,12 +88,13 @@
 	});
 
 	/**
-	 * Made readable for the core before it is sent on — `amount-text.ts` says
-	 * why a decimal comma cannot be left to it.
+	 * Made readable for the core before it is sent on — the core's
+	 * `l10n::amount_text` says why a decimal comma cannot be left to the
+	 * machine, and every shell's amount field calls the same rule.
 	 */
 	function take(el: HTMLInputElement, pasted: boolean) {
 		const raw = el.value;
-		const clean = cleanAmountText(raw, numberSeparators().decimal, pasted, text);
+		const clean = amountTextClean(raw, resolvedFormatKeys().number, pasted, text);
 		if (clean === null) {
 			// A paste with no reading as ONE figure ("1.5e-7", "4.5.6"). The
 			// field keeps what it had and nothing is sent on: an amount of
@@ -109,7 +110,7 @@
 			const caret = el.selectionStart;
 			el.value = clean;
 			if (caret !== null) {
-				const at = caretAfterClean(raw, clean, caret);
+				const at = amountTextCaret(raw, clean, caret);
 				el.setSelectionRange(at, at);
 			}
 		}

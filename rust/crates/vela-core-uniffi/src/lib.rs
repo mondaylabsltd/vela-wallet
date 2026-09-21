@@ -936,6 +936,37 @@ pub fn i18n_text_direction(lng: String) -> String {
     vela_core::l10n::text_direction(&lng).as_str().to_owned()
 }
 
+// -- amount fields (spec 073) --------------------------------------------------
+
+/// An amount field's text as the core reads it — ASCII digits and one `.` —
+/// or `None` for a paste with no reading as one figure (the field keeps
+/// `previous`). `number` is the resolved preset key (`comma_dot`…);
+/// `previous` the field's text before this edit; `pasted` `None` when the
+/// shell cannot tell (a native field). `vela_core::l10n::amount_text` says why.
+#[uniffi::export]
+pub fn amount_text_clean(
+    raw: String,
+    number: String,
+    previous: Option<String>,
+    pasted: Option<bool>,
+) -> Option<String> {
+    use vela_core::l10n::amount_text;
+    amount_text::clean(
+        &raw,
+        amount_text::preset_of(&number),
+        amount_text::Entry::from_pasted(pasted),
+        previous.as_deref(),
+    )
+}
+
+/// Where the caret belongs in `clean`, having been at `caret` in `raw`
+/// (UTF-16 units).
+#[uniffi::export]
+pub fn amount_text_caret(raw: String, clean: String, caret: u32) -> u32 {
+    let at = vela_core::l10n::amount_text::caret_after_clean(&raw, &clean, caret as usize);
+    u32::try_from(at).unwrap_or(u32::MAX)
+}
+
 // -- registry proofs (spec 019) -----------------------------------------------
 //
 // Returned as JSON strings rather than as uniffi records, deliberately. Both
