@@ -332,6 +332,9 @@ object SettingsLive {
                             null
                         },
                         link = if (provider.has_key) null else "${strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY)} →",
+                        // The link used to hand its own LABEL to the opener
+                        // ("https://Get key →"); each provider's key comes from its own site.
+                        linkUrl = if (provider.has_key) null else providerKeyUrl(provider.provider),
                     )
                 }.filterNotNull(),
             ),
@@ -551,6 +554,13 @@ object SettingsLive {
                 },
             ),
         )
+    }
+
+    /** Where a provider's API key is made — the "Get key →" link's target. */
+    internal fun providerKeyUrl(provider: NetProviderId): String = when (provider) {
+        NetProviderId.Alchemy -> "https://dashboard.alchemy.com/"
+        NetProviderId.Drpc -> "https://drpc.org/"
+        NetProviderId.Ankr -> "https://www.ankr.com/rpc/"
     }
 
     /**

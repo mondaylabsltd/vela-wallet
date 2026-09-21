@@ -244,6 +244,8 @@ class SettingsLiveTest {
         assertEquals(notSet, cards[0].badge.label)
         assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY), cards[0].action)
         assertNull("no test ran, so no count", cards[0].support)
+        // The link goes to the provider's own site — it used to open its label ("https://Get key →").
+        assertEquals("https://dashboard.alchemy.com/", cards[0].linkUrl)
 
         assertEquals(SettingsTone.Ok, cards[1].badge.tone)
         assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_CHECK_KEY), cards[1].action)

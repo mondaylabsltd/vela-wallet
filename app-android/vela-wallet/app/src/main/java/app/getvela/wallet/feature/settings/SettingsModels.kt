@@ -256,6 +256,8 @@ data class ProviderCardModel(
     val action: String,
     val support: String? = null,
     val link: String? = null,
+    /** Where [link] goes: the provider's own sign-up page (the label is not a URL). */
+    val linkUrl: String? = null,
 )
 
 @Immutable

@@ -833,13 +833,13 @@ private fun SettingsPageBody(
                         modifier = Modifier.padding(top = VelaSpacing.md),
                     )
                 }
-                if (provider.link != null) {
+                if (provider.link != null && provider.linkUrl != null) {
                     Text(
                         text = provider.link,
                         color = colors.infoBase,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
-                        modifier = Modifier.clickable { onOpenLink(provider.link) }.padding(top = VelaSpacing.md),
+                        modifier = Modifier.clickable { onOpenLink(provider.linkUrl) }.padding(top = VelaSpacing.md),
                     )
                 }
                 Spacer(modifier = Modifier.height(VelaSpacing.xl4))
