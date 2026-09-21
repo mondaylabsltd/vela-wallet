@@ -38,6 +38,7 @@ import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.send.core.SendDuplicateRowView
 import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.SendSplitRowIssue
+import app.getvela.wallet.feature.send.core.SplitRows
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import app.getvela.wallet.feature.send.core.SendRecipientRisk
 import app.getvela.wallet.feature.flows.RecipientAction
@@ -517,6 +518,38 @@ class SendLiveTest {
         assertNull(overLive.summary!!.remaining)
         assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), overLive.warning)
         assertNull(overLive.hint)
+    }
+
+    /** The web's `fillEmpty`: offered only while it would do something, and never with a rejected figure. */
+    @Test
+    fun `the split form offers one amount for every empty row`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val offered = splitView.copy(
+            recipients = listOf(SendRecipientDraft("rcpt_1", recipient, "0.50"), SendRecipientDraft("rcpt_2", me, "")),
+            split_row_issues = listOf(SendSplitRowIssue("rcpt_2", 2, SendRowFieldState.Ok, SendRowFieldState.Empty)),
+        )
+        val fill = SendLive.form(drawn.model, offered, FeeView(), ctx()).fillEmpty
+        assertEquals("Use 0.5 XDAI for the empty rows", fill?.label)
+        // The figure goes in exactly as typed.
+        assertEquals("0.50", fill?.amount)
+        // No empty row, nothing to fill.
+        assertNull(SendLive.form(drawn.model, offered.copy(split_row_issues = emptyList()), FeeView(), ctx()).fillEmpty)
+        // A figure the core rejects is never the one that is copied.
+        val rejected = offered.copy(
+            recipients = listOf(SendRecipientDraft("rcpt_1", recipient, "1,5"), SendRecipientDraft("rcpt_2", me, "")),
+            split_row_issues = listOf(
+                SendSplitRowIssue("rcpt_1", 1, SendRowFieldState.Ok, SendRowFieldState.Invalid),
+                SendSplitRowIssue("rcpt_2", 2, SendRowFieldState.Ok, SendRowFieldState.Empty),
+            ),
+        )
+        assertNull(SendLive.form(drawn.model, rejected, FeeView(), ctx()).fillEmpty)
+        // A single form never offers it.
+        assertNull(SendLive.form(drawn.model, offered.copy(split_mode = false), FeeView(), ctx()).fillEmpty)
+        // The dispatch: only the empty rows take the figure; ids ride along.
+        val filled = SplitRows.emptyFilled(offered.recipients, "0.50")
+        assertEquals(listOf("0.50", "0.50"), filled.map { it.amount })
+        assertEquals(offered.recipients[0], filled[0])
+        assertEquals("rcpt_2", filled[1].id)
     }
 
     @Test

@@ -360,6 +360,9 @@ pub struct FlowStrings {
     /// Why ⇄ is dimmed: no rate for the display currency (#197).
     pub denom_toggle_no_rate: String,
     pub split_remaining: String,
+    /// "Use {{amount}} for the empty rows" — one typed figure into every
+    /// split row that has none (the web's `fillEmpty`).
+    pub split_fill_empty: String,
     /// The importer's skipped-duplicate line.
     pub batch_dup: SharedString,
     /// Add-token: a native coin that answers an ERC-20 interface (spec 060).
@@ -637,6 +640,7 @@ impl FlowStrings {
             bad_amount: s("send.badAmount"),
             denom_toggle_no_rate: raw("send.denomToggleNoRate"),
             split_remaining: raw("send.splitRemaining"),
+            split_fill_empty: raw("send.splitFillEmpty"),
             batch_dup: s("send.batchDup"),
             native_alias_title: s("addToken.nativeAliasTitle"),
             native_alias_message: s("addToken.nativeAliasMessage"),
@@ -764,6 +768,7 @@ mod tests {
             (&s.confirm_total_line, "{{fiat}}"),
             (&s.recipient_duplicate, "{{n}}"),
             (&s.split_remaining, "{{amount}}"),
+            (&s.split_fill_empty, "{{amount}}"),
             (&s.denom_toggle_no_rate, "{{code}}"),
         ] {
             assert!(template.contains(var), "`{template}` must carry {var}");

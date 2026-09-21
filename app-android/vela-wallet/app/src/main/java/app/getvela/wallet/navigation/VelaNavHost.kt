@@ -876,6 +876,7 @@ fun VelaNavHost(
                             onRemoveRecipient = { index -> sendView.recipients.getOrNull(index)?.let { send.splitRemove(it.id) } },
                             onRecipientAmount = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAmount(it.id, text) } },
                             onRecipientAddress = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAddress(it.id, text.trim()) } },
+                            onFillEmpty = { amount -> send.splitFillEmpty(amount) },
                             onReceiptCta = {
                                 // The receipt's one button: Cancel while the ceremony is up (the
                                 // core's checkpoint), Done or "keep running" otherwise.

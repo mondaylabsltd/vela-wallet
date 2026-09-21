@@ -30,6 +30,7 @@ import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.flows.BreakdownRowModel
 import app.getvela.wallet.feature.flows.SummaryLineModel
+import app.getvela.wallet.feature.flows.FillEmptyModel
 import app.getvela.wallet.feature.flows.RecipientCardModel
 import app.getvela.wallet.feature.flows.RecipientActionModel
 import app.getvela.wallet.feature.flows.RecipientAction
@@ -421,7 +422,35 @@ object SendLive {
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
             hint = splitHint(view, ctx),
+            fillEmpty = splitFillEmpty(view, symbol, ctx),
         )
+    }
+
+    /**
+     * "Use 0.5 ETH for the empty rows" (the web's `fillEmpty`): offered while
+     * the core flags a row's amount as empty and another row has a figure the
+     * core accepts. The figure is the first such row's, exactly as typed —
+     * nothing is computed; the label shows every digit it carries.
+     */
+    internal fun splitFillEmpty(view: SendView, symbol: String, ctx: Context): FillEmptyModel? {
+        if (!view.split_mode) return null
+        if (view.split_row_issues.none { it.amount == SendRowFieldState.Empty }) return null
+        val flagged = view.split_row_issues.associate { it.id to it.amount }
+        val source = view.recipients.firstOrNull { row ->
+            row.amount.isNotBlank() && (flagged[row.id] ?: SendRowFieldState.Ok) == SendRowFieldState.Ok
+        } ?: return null
+        return FillEmptyModel(
+            label = ctx.strings.t(I18nKeys.Flows.SPLIT_FILL_EMPTY, mapOf("amount" to "${exact(source.amount)} $symbol".trim())),
+            amount = source.amount,
+        )
+    }
+
+    /** The web's `exactAmount`: the person's decimal mark and every digit, trailing zeros dropped. */
+    private fun exact(amount: String): String {
+        if (!amount.contains('.')) return amount
+        val whole = amount.substringBefore('.')
+        val cut = amount.substringAfter('.').trimEnd('0')
+        return if (cut.isEmpty()) whole else Formats.current.plain("$whole.$cut")
     }
 
     /**

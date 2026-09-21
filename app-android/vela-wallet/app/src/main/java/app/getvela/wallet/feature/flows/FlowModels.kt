@@ -516,7 +516,13 @@ data class SendFormModel(
     val warning: String? = null,
     /** A split's dark Continue, explained: which recipient still needs what. */
     val hint: String? = null,
+    /** Split only: "Use 0.5 ETH for the empty rows" — one typed figure into every row that has none. */
+    val fillEmpty: FillEmptyModel? = null,
 )
+
+/** The web's `model.fillEmpty`: the words, and the figure exactly as it was typed. */
+@Immutable
+data class FillEmptyModel(val label: String, val amount: String)
 
 /** SD2e — the contact picker. */
 @Immutable

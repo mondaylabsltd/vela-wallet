@@ -68,6 +68,17 @@ enum SplitRows {
         rows.filter { $0.id != id }
     }
 
+    /// One amount into every row that has none (the web's `fillEmptyAmounts`):
+    /// a bulk edit of the drafts, like adding a row. Rows with a figure keep it.
+    static func emptyFilled(_ rows: [Draft], amount: String) -> [Draft] {
+        rows.map { row in
+            guard row.amount.trimmingCharacters(in: .whitespaces).isEmpty else { return row }
+            var next = row
+            next.amount = amount
+            return next
+        }
+    }
+
     /// Append an empty row. The core mints its id.
     static func appended(_ rows: [Draft]) -> [Draft] {
         rows + [Draft(id: "", address: "", amount: "", name: nil)]

@@ -1332,6 +1332,13 @@ struct RootView: View {
         send.recipientsChanged(SplitRows.appended(SplitRows.drafts(from: view)))
     }
 
+    /// "Use X for the empty rows": the figure into every row that has none,
+    /// as the whole list — the core then judges each row like any other.
+    private func fillEmptyRows(_ amount: String) {
+        guard let view = send.view else { return }
+        send.recipientsChanged(SplitRows.emptyFilled(SplitRows.drafts(from: view), amount: amount))
+    }
+
     private func removeSplitRow(at index: Int) {
         guard let view = send.view, view.recipients.indices.contains(index) else { return }
         let rows = SplitRows.drafts(from: view)
@@ -2227,6 +2234,7 @@ struct RootView: View {
                     onMax: { send.tapMax() },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
                     onAddRecipient: { addSplitRow() },
+                    onFillEmpty: { amount in fillEmptyRows(amount) },
                     onConfirm: { send.slideConfirm() },
                     onReceiptDone: {
                         // One button, two meanings, the core's rule: a prompt

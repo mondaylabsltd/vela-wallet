@@ -570,6 +570,7 @@ object I18nKeys {
         const val SPLIT_NEEDS_AMOUNT = "send.splitNeedsAmount"
         const val SPLIT_NEEDS_ADDRESS = "send.splitNeedsAddress"
         const val SPLIT_REMAINING = "send.splitRemaining"
+        const val SPLIT_FILL_EMPTY = "send.splitFillEmpty"
         const val RECIPIENT_DUPLICATE = "send.recipientDuplicate"
         const val BAD_AMOUNT = "send.badAmount"
         const val CONTINUE = "send.continueBtn"

@@ -19,6 +19,7 @@ import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.SendShellResult
 import app.getvela.wallet.feature.send.core.SendToken
 import app.getvela.wallet.feature.send.core.SendView
+import app.getvela.wallet.feature.send.core.SplitRows
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.WalletLive
 import java.io.File
@@ -155,6 +156,24 @@ class SendSplitVerdictsTest {
         val under = h.settle { !it.split_over_balance && it.split_remaining != null }
         assertEquals("0.41697", under.split_remaining)
         assertEquals("0.41697 XDAI left", SendLive.form(drawn.model, under, FeeView(), ctx()).summary?.remaining)
+    }
+
+    /** "Use X for the empty rows", end to end: the core flags the empty row, the offer copies the typed figure, the core accepts it. */
+    @Test
+    fun theEmptyRowsTakeTheTypedFigure() {
+        val h = splitWith(listOf(SendRecipientDraft("", PAYEE, "0.1"), SendRecipientDraft("", ME, "")))
+        // Past the two blank rows split mode opens with: the typed list, judged.
+        val gap = h.settle { view -> view.recipients.any { it.amount == "0.1" } && view.split_row_issues.any { it.amount == SendRowFieldState.Empty } }
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val fill = SendLive.form(drawn.model, gap, FeeView(), ctx()).fillEmpty
+        assertEquals("Use 0.1 XDAI for the empty rows", fill?.label)
+
+        h.send(SendEvent.RecipientsChanged(SplitRows.emptyFilled(gap.recipients, fill!!.amount)))
+        val filled = h.settle { view -> view.recipients.all { it.amount == "0.1" } }
+        assertEquals(gap.recipients.map { it.id }, filled.recipients.map { it.id })
+        assertTrue(filled.split_row_issues.isEmpty())
+        assertEquals("0.2", filled.confirm_amount)
+        assertNull(SendLive.form(drawn.model, filled, FeeView(), ctx()).fillEmpty)
     }
 
     private fun ctx() = SendLive.Context(

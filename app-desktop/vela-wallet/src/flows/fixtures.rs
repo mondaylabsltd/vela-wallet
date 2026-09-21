@@ -501,6 +501,9 @@ pub struct SendForm {
     /// the total then draws in the error ink.
     pub remaining: Option<SharedString>,
     pub summary_over: bool,
+    /// Live only, split: "Use 0.5 ETH for the empty rows" (the web's
+    /// `fillEmpty`) — offered while it would do something.
+    pub fill_empty: Option<SharedString>,
     /// Live only: the unit the figure is typed in — the fiat code while the
     /// person types money, the token otherwise (#231). `None` keeps the
     /// token's symbol as the field's label.
@@ -1160,6 +1163,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
             )),
             remaining: None,
             summary_over: false,
+            fill_empty: None,
             amount_unit: None,
             denom_toggle: None,
             pick_contacts: None,
@@ -1185,6 +1189,7 @@ fn send_form(s: &FlowStrings, split: bool) -> SendForm {
         summary: None,
         remaining: None,
         summary_over: false,
+        fill_empty: None,
         amount_unit: None,
         denom_toggle: None,
         pick_contacts: None,

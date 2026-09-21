@@ -346,6 +346,10 @@ class SendController(
 
     fun splitAdd() = dispatch(SendEvent.RecipientsChanged(SplitRows.appended(send.value.recipients)))
 
+    /** "Use X for the empty rows": one typed figure into every row that has none; the core judges each row. */
+    fun splitFillEmpty(amount: String) =
+        dispatch(SendEvent.RecipientsChanged(SplitRows.emptyFilled(send.value.recipients, amount)))
+
     /** A whole list at once — a group, a batch; ids minted by the core. */
     fun seedSplit(recipients: List<SendRecipientDraft>) = dispatch(SendEvent.SeedSplitRecipients(recipients))
 
