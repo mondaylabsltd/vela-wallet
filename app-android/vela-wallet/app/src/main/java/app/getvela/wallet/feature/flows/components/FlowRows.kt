@@ -340,6 +340,19 @@ fun RecipientCard(
                 if (recipient.name.isNotEmpty() && recipient.name != recipient.address) {
                     Text(text = recipient.name, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs, maxLines = 1)
                 }
+                // The core's word on this row: a wrong address outranks a
+                // repeat (a repeat is of a VALID address), then the amount.
+                (recipient.addressNote ?: recipient.duplicateNote)?.let { note ->
+                    Text(
+                        text = note,
+                        color = if (recipient.addressNote != null) colors.errorBase else colors.warningBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.xs,
+                    )
+                }
+                recipient.amountNote?.let { note ->
+                    Text(text = note, color = colors.errorBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs)
+                }
             } else {
                 Text(
                     text = recipient.name,

@@ -362,6 +362,12 @@ data class RecipientCardModel(
     val address: String = "",
     val amountValue: String? = null,
     val addressPlaceholder: String = "",
+    /** The core says the typed address is not one (`split_row_issues`). */
+    val addressNote: String? = null,
+    /** "Same address as recipient 2" — the core's repeat flag (issue 203). */
+    val duplicateNote: String? = null,
+    /** The core says the typed amount cannot be sent. */
+    val amountNote: String? = null,
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */
@@ -413,7 +419,14 @@ enum class RecipientAction { Add, Contacts, Import }
 data class RecipientActionModel(val id: RecipientAction, val label: String)
 
 @Immutable
-data class SummaryLineModel(val label: String, val value: String)
+data class SummaryLineModel(
+    val label: String,
+    val value: String,
+    /** The core's `split_over_balance`: the figure takes the refusal colour while the rows are typed. */
+    val over: Boolean = false,
+    /** "2.25 ETH left" (`split_remaining`), under the label. */
+    val remaining: String? = null,
+)
 
 enum class SendFormMode { Single, Split, Sweep }
 
@@ -438,6 +451,8 @@ data class SendFormModel(
     val ctaEnabled: Boolean = true,
     /** Spec 043 phase 5: the core's amount warning or same-asset fee ceiling, as a sentence. */
     val warning: String? = null,
+    /** A split's dark Continue, explained: which recipient still needs what. */
+    val hint: String? = null,
 )
 
 /** SD2e — the contact picker. */
@@ -569,7 +584,55 @@ data class SendReceiptModel(
     /** The single bottom button: "Close · keep running" or "Done". */
     val cta: String,
     val ctaAccent: Boolean,
+    /** Submitted only, and only where the chain has a typical time: the screen's clock runs off this. */
+    val eta: ReceiptEtaModel? = null,
 )
+
+/**
+ * The submitted receipt's wait (issue 199, the web's `SendReceiptModel.eta`):
+ * the sentences arrive resolved; only the number of seconds is the screen's,
+ * from its own clock against the relay's `submitted_at_ms` (the core is
+ * clockless).
+ */
+@Immutable
+data class ReceiptEtaModel(
+    val submittedAtMs: Double,
+    val typicalS: Int,
+    /** "Gnosis typically confirms in ~15s" — already filled. */
+    val typicalLine: String,
+    /** "~{{remaining}}s remaining" — inside the typical time. */
+    val remainingTemplate: String,
+    /** "{{elapsed}}s elapsed — almost there" — past it, where "almost" is true. */
+    val elapsedTemplate: String,
+    /** Past twice the typical time. */
+    val slowLine: String,
+) {
+    /** Whole seconds since the relay took the op, never negative. */
+    fun elapsedS(nowMs: Long): Int = maxOf(0, ((nowMs - submittedAtMs) / 1000.0).toInt())
+
+    /**
+     * The two lines under the title. Inside the typical time the second counts
+     * DOWN — "~9s remaining" is a promise with an end, "6s elapsed" is a
+     * stopwatch; "almost there" waits until it is true.
+     */
+    fun lines(elapsedS: Int): List<String> = listOf(
+        typicalLine,
+        when {
+            elapsedS < typicalS -> remainingTemplate.replace("{{remaining}}", (typicalS - elapsedS).toString())
+            elapsedS < typicalS * 2 -> elapsedTemplate.replace("{{elapsed}}", elapsedS.toString())
+            else -> slowLine
+        },
+    )
+
+    /**
+     * How much of the ring is drawn, 0–1. It eases toward full and never gets
+     * there: about 70% at the typical time, 86% at twice it, a ceiling of 92%
+     * after — so a three-minute wait is still visibly moving and a ten-second
+     * one does not sit at 100%. Only the confirmation closes it.
+     */
+    fun progress(elapsedS: Int): Float =
+        (0.92 * (1 - kotlin.math.exp(-1.4 * elapsedS / maxOf(1, typicalS).toDouble()))).toFloat()
+}
 
 /* ------------------------------------------------------------- the screens */
 

@@ -1,6 +1,11 @@
 package app.getvela.wallet.feature.flows.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -395,6 +400,14 @@ fun AmountHero(
  * moves between them: the person is watching this circle, and a circle that
  * jumps when the state changes reads as a new screen rather than as progress on
  * the one they were already looking at.
+ *
+ * Issue 199 (the web's `StatusHero`): the wait can run to minutes, and a still
+ * grey clock reads as a hang. So the submitted disc wears a ring OUTSIDE it
+ * that fills as the chain's usual time passes ([progress], the screen's clock
+ * and curve), and breathes while it does; `null` while submitted means "no
+ * estimate for this chain" and the ring circles instead of filling. The same
+ * ring closes and turns green on confirmation, so the tick arrives as the end
+ * of what the person was watching.
  */
 @Composable
 fun StatusHero(
@@ -402,6 +415,7 @@ fun StatusHero(
     title: String,
     captions: List<String>,
     modifier: Modifier = Modifier,
+    progress: Float? = null,
 ) {
     val colors = VelaTheme.colors
     val (disc, tint) = when (stage) {
@@ -416,9 +430,80 @@ fun StatusHero(
             .padding(top = VelaSpacing.xl6, bottom = VelaSpacing.xl3),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val ringed = stage == ReceiptStage.Submitted || stage == ReceiptStage.Confirmed
+        val drawn by animateFloatAsState(
+            targetValue = if (stage == ReceiptStage.Confirmed) 1f else (progress ?: 0.25f),
+            // One second per step, linear, because the screen ticks once a
+            // second: the arc is always mid-move. Confirmation closes it at the
+            // slow duration.
+            animationSpec = tween(
+                durationMillis = if (stage == ReceiptStage.Confirmed) VelaMotion.durationSlow else 1000,
+                easing = LinearEasing,
+            ),
+            label = "receiptRing",
+        )
+        val arcColor by animateColorAsState(
+            targetValue = if (stage == ReceiptStage.Confirmed) colors.successBase else colors.accentBase,
+            label = "receiptRingColor",
+        )
+        val wait = rememberInfiniteTransition(label = "receiptWait")
+        val roam by wait.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(animation = tween(durationMillis = 2400, easing = LinearEasing)),
+            label = "receiptRingRoam",
+        )
+        val breathe by wait.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.04f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1200),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "receiptDiscBreathe",
+        )
+        val trackColor = colors.borderBase
+        // The ring clears the disc by a gutter rather than outlining it; the
+        // disc keeps its one size inside.
+        Box(
+            modifier = Modifier.size(VelaSizing.statusHero + VelaSpacing.md * 2),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (ringed) {
+                Canvas(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .rotate(if (stage == ReceiptStage.Submitted && progress == null) roam else 0f),
+                ) {
+                    val stroke = VelaBorder.emphasis.toPx() * 1.25f
+                    val inset = stroke / 2f
+                    val arc = Size(size.width - stroke, size.height - stroke)
+                    if (stage != ReceiptStage.Confirmed) {
+                        drawArc(
+                            color = trackColor,
+                            startAngle = 0f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = Offset(inset, inset),
+                            size = arc,
+                            style = Stroke(width = stroke),
+                        )
+                    }
+                    drawArc(
+                        color = arcColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * drawn,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arc,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
+            }
         Box(
             modifier = Modifier
                 .size(VelaSizing.statusHero)
+                .scale(if (stage == ReceiptStage.Submitted) breathe else 1f)
                 .background(disc, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -444,7 +529,8 @@ fun StatusHero(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+        }
+        Spacer(modifier = Modifier.height(VelaSpacing.xl - VelaSpacing.md))
         Text(
             text = title,
             color = colors.fgBase,
@@ -798,16 +884,29 @@ fun SummaryLine(summary: SummaryLineModel, modifier: Modifier = Modifier) {
             .padding(vertical = VelaSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = summary.label,
-            color = colors.fgSubtle,
-            fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.sm,
-        )
+        Column {
+            Text(
+                text = summary.label,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+            )
+            // "2.25 ETH left" — under the label, where the eye starts the line.
+            summary.remaining?.let {
+                Text(
+                    text = it,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.xs,
+                )
+            }
+        }
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = summary.value,
-            color = colors.fgBase,
+            // Over the balance: the refusal colour while the rows are still
+            // being typed, not after Continue has been refused.
+            color = if (summary.over) colors.errorBase else colors.fgBase,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.base,

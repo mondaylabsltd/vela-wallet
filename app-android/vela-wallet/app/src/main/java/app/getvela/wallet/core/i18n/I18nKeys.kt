@@ -276,6 +276,8 @@ object I18nKeys {
         const val LIVE_INDICATOR = "home.liveIndicator"
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
+        /** "{{name}} RPC unavailable" — the hero's line for one unreachable chain (web `liveBalance`). */
+        const val RPC_UNAVAILABLE_SINGLE = "assets.rpcUnavailableSingle"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -562,6 +564,11 @@ object I18nKeys {
         const val RECIPIENT_PICK_ARIA = "send.recipientPickAria"
         const val SCAN_ARIA = "send.scanAria"
         const val SPLIT_TOTAL = "send.splitTotalLabel"
+        const val SPLIT_NEEDS_AMOUNT = "send.splitNeedsAmount"
+        const val SPLIT_NEEDS_ADDRESS = "send.splitNeedsAddress"
+        const val SPLIT_REMAINING = "send.splitRemaining"
+        const val RECIPIENT_DUPLICATE = "send.recipientDuplicate"
+        const val BAD_AMOUNT = "send.badAmount"
         const val CONTINUE = "send.continueBtn"
         const val NETWORK_FEE = "componentsUi.gas.networkFee"
 
@@ -621,6 +628,9 @@ object I18nKeys {
         const val TX_CONFIRMED_TITLE = "send.txConfirmedTitle"
         const val TX_WAITING_CONFIRM = "send.txWaitingConfirm"
         const val TX_TYPICAL_TIME = "send.txTypicalTime"
+        const val TX_REMAINING = "send.txRemaining"
+        const val TX_ELAPSED = "send.txElapsed"
+        const val TX_SLOW_CONFIRM = "send.txSlowConfirm"
         const val TX_HASH = "componentsTx.receipt.txHash"
         const val DONE = "componentsTx.receipt.done"
 
@@ -776,6 +786,7 @@ object I18nKeys {
         const val ADD_COMPATIBLE = "settingsModals.addNetwork.compatible"
         const val ADD_INCOMPATIBLE = "settingsModals.addNetwork.incompatible"
         const val ADD_COMPATIBILITY_CHECK = "settingsModals.addNetwork.compatibilityCheck"
+        const val ADD_CHECKING_COMPATIBILITY = "settingsModals.addNetwork.checkingCompatibility"
         const val ADD_CHECK_SAFE = "settingsModals.addNetwork.checkSafe"
         const val ADD_CHECK_SIGNER = "settingsModals.addNetwork.checkSigner"
         const val ADD_CHECK_REMAINING = "settingsModals.addNetwork.checkRemaining"
