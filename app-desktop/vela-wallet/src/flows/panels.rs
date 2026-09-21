@@ -2064,6 +2064,18 @@ fn send_confirm(
     }
     col = col.child(card);
 
+    // The first-time tell, under the facts it is about, in the warning colour.
+    if let Some(tag) = &model.recipient_tag {
+        col = col.child(
+            div()
+                .px(px(12.))
+                .text_size(theme::text_row_sub())
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(theme.warning_base)
+                .child(tag.clone()),
+        );
+    }
+
     if !model.breakdown.is_empty() {
         col = col.child(breakdown_list(theme, identicons, None, &model.breakdown));
     }

@@ -2161,6 +2161,13 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
         } else {
             Vec::new()
         },
+        // The core's own verdict, resolved on this page only (single recipient).
+        recipient_tag: (!send.split_mode
+            && send
+                .recipient_risk
+                .as_ref()
+                .is_some_and(|risk| risk.first_time == Some(true)))
+        .then(|| s.first_time_tag.clone()),
         notice,
         cta: s.confirm_send.clone(),
         // Signing and submitting are waits; `can_confirm` is the core's gate
@@ -2914,6 +2921,44 @@ mod tests {
             ..quote.clone()
         };
         assert_eq!(fee_line(Some(&dust), None, &fee, "en"), "0.000001 BNB");
+    }
+
+    /// Device-found: the core resolves `first_time` only while the confirm
+    /// page is up (`confirm_probes`), so the form's note never had it. The
+    /// page that signs says it — for one recipient, never a split.
+    #[test]
+    fn the_confirm_says_it_is_the_first_time_sending_here() {
+        use vela_core::app::send::{Send, SendRecipientRisk};
+        let s = strings();
+        let wallet = wallet_strings();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let tag = |send: &SendView| {
+            send_confirm(&SendInputs {
+                send,
+                fee: &fee,
+                s: &s,
+                wallet: &wallet,
+                locale: "en",
+                identity_name: "Golden",
+                identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            })
+            .recipient_tag
+        };
+        let mut send = CoreHost::<Send>::new().view();
+        send.recipient = format!("0x{}", "ab".repeat(20));
+        assert_eq!(tag(&send), None);
+        let risk = |first_time| {
+            Some(SendRecipientRisk {
+                is_contract: Some(false),
+                first_time: Some(first_time),
+            })
+        };
+        send.recipient_risk = risk(false);
+        assert_eq!(tag(&send), None);
+        send.recipient_risk = risk(true);
+        assert_eq!(tag(&send), Some(s.first_time_tag.clone()));
+        send.split_mode = true;
+        assert_eq!(tag(&send), None, "a split has no one recipient");
     }
 
     /// A receipt in each of the two states the core can hold one in.
