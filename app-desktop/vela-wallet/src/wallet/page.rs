@@ -552,6 +552,11 @@ pub struct WalletPage {
     crash: Option<crate::outcome::Prompt>,
     /// One per editable settings field, made on first use.
     endpoint_focuses: Vec<gpui::FocusHandle>,
+    /// The Clear Signer page as typed (spec 071), until it is saved — `None`
+    /// shows the page `sign_pref` holds. The core validates it on Save, not
+    /// per keystroke: half an address is not an error yet.
+    signer_page_draft: Option<String>,
+    signer_page_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -926,6 +931,8 @@ impl WalletPage {
             scan_preview: ScanPreview::default(),
             window_handle: crate::onboarding::native_window_handle(window),
             endpoint_focuses: Vec::new(),
+            signer_page_draft: None,
+            signer_page_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
@@ -5688,6 +5695,10 @@ impl WalletPage {
                 self.settings.fee_speed_title.clone(),
                 Some(self.settings.fee_speed_subtitle.clone()),
             ),
+            SettingsPage::Signing => (
+                self.settings.nav_signing.clone(),
+                Some(self.settings.signing_subtitle.clone()),
+            ),
             SettingsPage::Storage => (
                 self.settings.nav_storage.clone(),
                 Some(self.settings.storage_subtitle.clone()),
@@ -5766,6 +5777,7 @@ impl WalletPage {
             SettingsPage::RpcProviders => self.settings_providers(theme, window, cx),
             SettingsPage::Endpoints => self.settings_endpoints(theme, window, cx),
             SettingsPage::FeeSpeed => self.settings_fee_speed(theme, cx),
+            SettingsPage::Signing => self.settings_signing(theme, window, cx),
             SettingsPage::Storage => self.settings_storage(theme, cx),
             SettingsPage::About => self.settings_about(theme),
         };
@@ -7664,6 +7676,231 @@ impl WalletPage {
             );
         }
         div().flex().flex_col().max_w(px(560.)).child(list)
+    }
+
+    /// How this device signs by default (spec 071): the five ways in the
+    /// core's order, the stored one ticked — choosing commits and persists at
+    /// once (`sign_pref`) — and the Clear Signer's page under them. Every
+    /// signing sheet STARTS at the choice; none writes back to it.
+    fn settings_signing(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
+        use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
+        let view = resident::resident::<SignPref>(cx).read(cx).view();
+        let s = &self.settings;
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .p(px(4.))
+            .rounded(px(12.))
+            .bg(theme.bg_sunken);
+        for (index, method) in view.offered.iter().enumerate() {
+            let name = s
+                .sign_with_options
+                .iter()
+                .find(|(id, _)| id == method)
+                .map_or_else(
+                    || SharedString::from(method.clone()),
+                    |(_, title)| title.clone(),
+                );
+            // The one choice that is not a place a passkey is says what it is.
+            let line =
+                (method == vela_core::clear_signer::METHOD).then(|| s.clear_signer_body.clone());
+            let selected = *method == view.method;
+            let chosen = method.clone();
+            list = list.child(
+                div()
+                    .id(ElementId::from(("settings-sign-with", index)))
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .px(px(12.))
+                    .py(px(10.))
+                    .rounded(px(10.))
+                    .cursor_pointer()
+                    .when(selected, |row| row.bg(theme.bg_raised))
+                    .hover(|row| row.bg(theme.bg_raised))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        let method = chosen.clone();
+                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(SignPrefEvent::MethodChosen { method }, cx);
+                        });
+                        cx.notify();
+                    }))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(if selected {
+                                        theme.accent
+                                    } else {
+                                        theme.fg_base
+                                    })
+                                    .child(name),
+                            )
+                            .children(line.map(|line| {
+                                div()
+                                    .text_size(theme::text_row_sub())
+                                    .text_color(theme.fg_subtle)
+                                    .child(line)
+                            })),
+                    )
+                    .child(div().w(px(16.)).children(selected.then(|| {
+                        icon_img(&mut self.icons, Icon::Check, false, theme.accent, 16.)
+                    }))),
+            );
+        }
+
+        // The page. Its badge is where it is — "Official", or the host a
+        // person chose — and the field holds what they are typing until Save
+        // hands it to the core, which normalises it or says why not.
+        let s = &self.settings;
+        let badge = pill(
+            Tone::Neutral,
+            if view.signer_url_is_default {
+                s.signer_page_official.clone()
+            } else {
+                SharedString::from(page_host(&view.signer_url))
+            },
+        );
+        let refused = match view.signer_url_error.as_deref() {
+            Some("insecure") => Some(s.signer_page_insecure.clone()),
+            Some(_) => Some(s.signer_page_invalid.clone()),
+            None => None,
+        };
+        let (title, subtitle, foreign, save, reset) = (
+            s.signer_page_title.clone(),
+            s.signer_page_subtitle.clone(),
+            s.signer_page_foreign.clone(),
+            s.signer_page_save.clone(),
+            s.signer_page_reset.clone(),
+        );
+        let focus = self
+            .signer_page_focus
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone();
+        let typed = self
+            .signer_page_draft
+            .clone()
+            .unwrap_or_else(|| view.signer_url.clone());
+        let page = cx.entity();
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(editable_url_field(
+                "settings-signer-page",
+                theme,
+                Some(title),
+                &typed,
+                SharedString::from(vela_core::clear_signer::DEFAULT_SIGNER_URL),
+                Some(&badge),
+                Some(subtitle),
+                refused.is_some().then_some(Tone::Error),
+                &focus,
+                window,
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    page.update(cx, |page, cx| {
+                        page.signer_page_draft = Some(text);
+                        cx.notify();
+                    });
+                },
+            ));
+        if let Some(refused) = refused {
+            section = section.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(refused),
+            );
+        }
+        // A page elsewhere can show a request but not sign it: said beside
+        // the address rather than discovered at the worst moment (R5).
+        if !view.signer_uses_wallet_passkeys {
+            section = section.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.warning_base)
+                    .child(foreign),
+            );
+        }
+        // Drawn like the networks panel's header action: a settings panel has
+        // no primary CTA, and the accent means "this moves the money".
+        let mut actions = div().flex().items_center().gap(px(16.)).child(
+            div()
+                .id("settings-signer-page-save")
+                .h(px(36.))
+                .px(px(16.))
+                .rounded(px(10.))
+                .flex()
+                .flex_none()
+                .items_center()
+                .cursor_pointer()
+                .bg(theme.bg_raised)
+                .border_1()
+                .border_color(theme.divider)
+                .hover(|el| el.bg(theme.bg_sunken))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(save)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    let text = page
+                        .signer_page_draft
+                        .clone()
+                        .unwrap_or_else(|| typed.clone());
+                    let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(SignPrefEvent::SignerUrlSubmitted { text }, cx);
+                        pref.view().signer_url_error.is_none()
+                    });
+                    // Taken: the field shows the page as the core stored it.
+                    // Refused: what was typed stays, under its reason.
+                    if stored {
+                        page.signer_page_draft = None;
+                    }
+                    cx.notify();
+                })),
+        );
+        if !view.signer_url_is_default {
+            actions = actions.child(
+                div()
+                    .id("settings-signer-page-reset")
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(SignPrefEvent::SignerUrlReset, cx);
+                        });
+                        page.signer_page_draft = None;
+                        cx.notify();
+                    }))
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::RefreshCw,
+                        false,
+                        theme.accent,
+                        14.,
+                    ))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.accent)
+                            .child(reset),
+                    ),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(32.))
+            .max_w(px(560.))
+            .child(list)
+            .child(section.child(actions))
     }
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -12141,6 +12378,16 @@ impl Render for WalletPage {
     }
 }
 
+/// The host of a signer page address, for its badge — the address itself is
+/// already in the field under it.
+fn page_host(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    rest.split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -12246,15 +12493,29 @@ mod tests {
         assert_eq!(codes, crate::settings::fixtures::DESKTOP_STATES);
     }
 
+    /// The Clear Signer page's badge names where the page is; the address
+    /// itself is in the field under it.
+    #[test]
+    fn a_signer_page_badge_is_its_host() {
+        assert_eq!(
+            page_host("https://sign.example.com/vela/"),
+            "sign.example.com"
+        );
+        assert_eq!(page_host("http://localhost:8140/"), "localhost:8140");
+        assert_eq!(page_host("https://[::1]:9/?x#y"), "[::1]:9");
+    }
+
     /// The second-level nav is the phone's settings list with the rows
     /// collapsed to their titles — same ids, same order, so somebody who
     /// learned one knows the other.
     #[test]
     fn settings_nav_covers_every_panel() {
-        assert_eq!(SettingsPage::ALL.len(), 9);
+        assert_eq!(SettingsPage::ALL.len(), 10);
         assert_eq!(SettingsPage::ALL[0], SettingsPage::Account);
         assert_eq!(SettingsPage::ALL[6], SettingsPage::FeeSpeed);
-        assert_eq!(SettingsPage::ALL[8], SettingsPage::About);
+        // "Sign with" beside the speed (spec 071).
+        assert_eq!(SettingsPage::ALL[7], SettingsPage::Signing);
+        assert_eq!(SettingsPage::ALL[9], SettingsPage::About);
     }
 
     /// A latency under a second reads "45ms" in the ok tone; a slow one flips

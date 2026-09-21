@@ -39,6 +39,21 @@ pub struct SettingsStrings {
     pub nav_fee_speed: SharedString,
     pub fee_speed_title: SharedString,
     pub fee_speed_subtitle: SharedString,
+    /// "Sign with" (spec 071): the nav row is the page's title; the sentence
+    /// under it; the choices in the core's order with the Clear Signer's
+    /// line; and the Clear Signer page's section.
+    pub nav_signing: SharedString,
+    pub signing_subtitle: SharedString,
+    pub sign_with_options: Vec<(&'static str, SharedString)>,
+    pub clear_signer_body: SharedString,
+    pub signer_page_title: SharedString,
+    pub signer_page_subtitle: SharedString,
+    pub signer_page_official: SharedString,
+    pub signer_page_invalid: SharedString,
+    pub signer_page_insecure: SharedString,
+    pub signer_page_foreign: SharedString,
+    pub signer_page_reset: SharedString,
+    pub signer_page_save: SharedString,
     pub nav_about: SharedString,
     // account panel
     /// "Total {{amount}}" — the second half of the summary. The count template
@@ -251,6 +266,21 @@ impl SettingsStrings {
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
             fee_speed_title: s("settings.feeSpeed.title"),
             fee_speed_subtitle: s("settings.feeSpeed.subtitle"),
+            nav_signing: s("settings.signing.title"),
+            signing_subtitle: s("settings.signing.subtitle"),
+            sign_with_options: vela_core::wallet_keys::SIGN_METHODS
+                .iter()
+                .map(|method| (*method, s(crate::signing::sign_method_key(method))))
+                .collect(),
+            clear_signer_body: s("componentsUi.signing.clearSignerBody"),
+            signer_page_title: s("settings.signing.pageTitle"),
+            signer_page_subtitle: s("settings.signing.pageSubtitle"),
+            signer_page_official: s("settings.signing.pageOfficial"),
+            signer_page_invalid: s("settings.signing.pageInvalid"),
+            signer_page_insecure: s("settings.signing.pageInsecure"),
+            signer_page_foreign: s("settings.signing.pageForeign"),
+            signer_page_reset: s("settings.signing.pageReset"),
+            signer_page_save: s("settings.signing.pageSave"),
             nav_about: s("settings.about.title"),
             accounts_total: raw("settingsModals.account.total"),
             accounts_count: raw("home.switcherAccountCount"),
@@ -443,5 +473,31 @@ mod tests {
                 assert!(!value.is_empty(), "`{key}` resolved empty");
             }
         }
+    }
+
+    /// The "Sign with" page's words (spec 071), every one of them a key the
+    /// corpus already carries in fifteen languages — and its choices are the
+    /// core's five, in the core's order.
+    #[test]
+    fn the_sign_with_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.nav_signing, "settings.signing.title"),
+            (&s.signing_subtitle, "settings.signing.subtitle"),
+            (&s.clear_signer_body, "componentsUi.signing.clearSignerBody"),
+            (&s.signer_page_title, "settings.signing.pageTitle"),
+            (&s.signer_page_subtitle, "settings.signing.pageSubtitle"),
+            (&s.signer_page_official, "settings.signing.pageOfficial"),
+            (&s.signer_page_invalid, "settings.signing.pageInvalid"),
+            (&s.signer_page_insecure, "settings.signing.pageInsecure"),
+            (&s.signer_page_foreign, "settings.signing.pageForeign"),
+            (&s.signer_page_reset, "settings.signing.pageReset"),
+            (&s.signer_page_save, "settings.signing.pageSave"),
+        ] {
+            assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+            assert!(!value.is_empty(), "`{key}` resolved empty");
+        }
+        let ids: Vec<&str> = s.sign_with_options.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, vela_core::wallet_keys::SIGN_METHODS);
     }
 }
