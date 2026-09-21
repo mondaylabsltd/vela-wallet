@@ -38,3 +38,18 @@ rpId hash — research R5).
 | C5 | A virtual key that is NOT the wallet's | "…does not match this request, so nothing was sent" |
 | C6 | Settings: `http://192.168.1.4/` | "Use an https page…"; nothing stored |
 | C7 | A dApp's `personal_sign` through the Clear Signer | the page shows the message; the signature verifies on chain (EIP-1271) |
+
+### Evidence (2026-09-22, Xiaomi, Chrome 153)
+
+The phone's Chrome exposes no WebAuthn DevTools domain, so the device pass
+stands in for the authenticator INSIDE the page (`navigator.credentials.get`
+answered by WebCrypto with the parallel space's fixture key under rpId
+`localhost`); everything else is the shipped path.
+
+- C1–C3: a 0.001 xDAI send signed on the page landed — `UserOperationEvent`
+  success=1, tx `0xe3f7e00c6481e147d4769a8c6cbc1e37aac91a54bf9bc94bfae7119aa7117733`.
+- C4: closing the tab → back at confirm, "清晰签名器已关闭，没有签名。", nothing sent.
+- C5: a stranger's key → "清晰签名器的回复与这笔请求不符，什么都没有发出。", nothing sent.
+- C6: `http://192.168.1.4/` refused with the https/loopback sentence.
+- C7: the test dApp's `personal_sign` → the page showed EIP-191 → SafeMessage;
+  the Safe's `isValidSignature` answered `0x1626ba7e`.
