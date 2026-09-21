@@ -157,6 +157,71 @@ pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
         .collect())
 }
 
+/// Every key in the store, with its value as the RAW string the other shells
+/// keep (spec 072): a string as itself, anything else as its JSON text.
+///
+/// The shared rules — `prefs::read`, the storage catalog — are written against
+/// a key-value store of strings, which is what `localStorage`, `AsyncStorage`,
+/// `UserDefaults` and Android's store all are. This document holds JSON values
+/// instead, so this is the one place a value becomes the string those rules
+/// read. A corrupt document reads as empty, as everywhere else here.
+pub fn raw_entries() -> Result<Vec<(String, String)>> {
+    Ok(read_all()?
+        .into_iter()
+        .map(|(key, value)| {
+            let raw = match value {
+                Value::String(text) => text,
+                other => other.to_string(),
+            };
+            (key, raw)
+        })
+        .collect())
+}
+
+/// What a raw string is stored as: a JSON object or array as that value (the
+/// `vela.localePrefs` record), anything else as a string (`dark`, `auto`).
+#[must_use]
+pub fn stored_value(raw: &str) -> Value {
+    match serde_json::from_str::<Value>(raw) {
+        Ok(value @ (Value::Object(_) | Value::Array(_))) => value,
+        _ => Value::String(raw.to_owned()),
+    }
+}
+
+/// Apply writes and removals in ONE rewrite of the document: `Some` stores the
+/// raw value ([`stored_value`]), `None` removes the key. What the core's
+/// `prefs::migrations` answers is exactly this shape.
+pub fn apply_raw(writes: &[(String, Option<String>)]) -> Result<()> {
+    if writes.is_empty() {
+        return Ok(());
+    }
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    for (key, value) in writes {
+        match value {
+            Some(raw) => {
+                map.insert(key.clone(), stored_value(raw));
+            }
+            None => {
+                map.remove(key);
+            }
+        }
+    }
+    write_all(map)
+}
+
+/// Remove several keys in one rewrite — a storage row's clear, an erase.
+pub fn remove_values(keys: &[String]) -> Result<()> {
+    apply_raw(
+        &keys
+            .iter()
+            .map(|key| (key.clone(), None))
+            .collect::<Vec<_>>(),
+    )
+}
+
 /// What this wallet is actually using on disk, and how many records it holds.
 ///
 /// One JSON document, so the size is one `metadata` call and the record count
@@ -459,6 +524,48 @@ pub(crate) mod tests {
             // and counts as nothing.
             assert_eq!(records, 3);
             assert!(bytes > 0, "the file is on disk and has a size");
+        });
+    }
+
+    /// The raw view the shared rules read: a string as itself, a record as its
+    /// JSON text — and a raw value written back lands as the same JSON value,
+    /// so a record another shell reads is an object, not a quoted string.
+    #[test]
+    fn raw_entries_and_raw_writes_round_trip() {
+        with_temp_state("storage-raw", || {
+            if write_value("vela.theme", json!("dark")).is_err()
+                || write_value("vela.localePrefs", json!({ "numberFormat": "iso" })).is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let raw = raw_entries().unwrap_or_else(|error| unreachable!("{error}"));
+            assert!(raw.contains(&("vela.theme".to_owned(), "dark".to_owned())));
+            assert!(raw.contains(&(
+                "vela.localePrefs".to_owned(),
+                r#"{"numberFormat":"iso"}"#.to_owned()
+            )));
+
+            let writes = [
+                (
+                    "vela.localePrefs".to_owned(),
+                    Some(r#"{"numberFormat":"dot_comma"}"#.to_owned()),
+                ),
+                ("vela.textScale".to_owned(), Some("large".to_owned())),
+                ("vela.theme".to_owned(), None),
+            ];
+            if apply_raw(&writes).is_err() {
+                unreachable!("could not apply");
+            }
+            assert_eq!(
+                read_value("vela.localePrefs").ok().flatten(),
+                Some(json!({ "numberFormat": "dot_comma" })),
+                "a record is stored as a record"
+            );
+            assert_eq!(
+                read_value("vela.textScale").ok().flatten(),
+                Some(json!("large"))
+            );
+            assert!(matches!(read_value("vela.theme"), Ok(None)));
         });
     }
 

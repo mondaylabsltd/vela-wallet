@@ -267,6 +267,11 @@ fn main() {
         // through this: its default client answers nothing, which is why the
         // desktop drew lettermarks where every other shell draws logos.
         cx.set_http_client(crate::executor::gpui_http::AppHttpClient::shared());
+        // The person's preferences (spec 072), before anything is drawn: an
+        // older build's spellings are rewritten once, then the theme, the
+        // language, the text size and the avatar style are in force for the
+        // first frame rather than the second.
+        crate::executor::preferences::boot();
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

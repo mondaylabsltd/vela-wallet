@@ -61,6 +61,7 @@ pub mod payment_request;
 #[cfg(target_os = "macos")]
 mod platform_macos;
 pub mod pool;
+pub mod preferences;
 pub mod proxy;
 pub mod qr;
 pub mod receive_watch;
