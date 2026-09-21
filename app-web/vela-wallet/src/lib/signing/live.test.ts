@@ -240,6 +240,16 @@ describe('the speed under the fee', () => {
 		if (fee?.kind !== 'onchain') throw new Error('an on-chain fee');
 		expect(fee.value).toBe(m.feeEstimating);
 		expect(fee.speed?.value).toBe(m.speed.names.slow);
+		// …and the slide stays shut: the core's gate is still open on the old
+		// figure, which is exactly the speed the person just walked away from.
+		expect(model?.confirm.enabled).toBe(false);
+	});
+
+	it('opens the slide once the fee in hand is the tier in force', () => {
+		const model = buildSigningModel(
+			inputs({ speed: { view: speedView('fast'), feeOptions: () => [] } })
+		);
+		expect(model?.confirm.enabled).toBe(true);
 	});
 });
 

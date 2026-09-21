@@ -317,6 +317,21 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	return blocks;
 }
 
+/**
+ * NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): for the
+ * moment between a speed being picked and its own figure landing, the fee in
+ * hand is the previous speed's. The row says "estimating", and the slide stays
+ * shut — the core's `confirm_fee_ready` is still true then, and would sign the
+ * speed the person just walked away from.
+ */
+function feeOfAnotherTier({ fee, speed }: SigningLiveInputs): boolean {
+	return (
+		fee.fee !== null &&
+		speed !== undefined &&
+		offeredTier(fee.fee.tier) !== offeredTier(speed.view.tier)
+	);
+}
+
 /** The fee, in the shape the drawn row renders. Off-chain requests have none. */
 function feeModel(inputs: SigningLiveInputs): FeeModel {
 	const { sign, fee, m } = inputs;
@@ -325,13 +340,7 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		return { kind: 'offchain', note: m.okNoNetworkFee };
 	}
 	const speed = speedModel(inputs);
-	// NEVER ANOTHER TIER'S FIGURE WEARING THIS TIER'S NAME (issue 681): for the
-	// moment between a speed being picked and its own figure landing, the fee
-	// in hand is the previous speed's, and "estimating" is the honest thing.
-	const ofAnotherTier =
-		fee.fee !== null &&
-		inputs.speed !== undefined &&
-		offeredTier(fee.fee.tier) !== offeredTier(inputs.speed.view.tier);
+	const ofAnotherTier = feeOfAnotherTier(inputs);
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
@@ -476,7 +485,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
 	// still be waiting for a cap; the fee may still be in flight.
-	const feeReady = feeModel(inputs).kind !== 'onchain' || fee.confirm_fee_ready;
+	const feeReady =
+		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
 	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
 
 	return {
