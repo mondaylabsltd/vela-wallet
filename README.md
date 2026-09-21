@@ -2,7 +2,9 @@
 
 A self-custodial smart wallet for EVM networks.
 
-Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.
+Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage. Each wallet is an unmodified Safe v1.4.1 owned by one to seven passkeys or security keys, any one of which can sign.
+
+User-facing documentation, including the [self-hosting guide](https://getvela.app/docs/self-hosting), lives at [getvela.app/docs](https://getvela.app/docs).
 
 It is built as **one shared Rust core and one native shell per platform** — SwiftUI on **iOS**, Jetpack Compose on **Android**, SvelteKit on the **web**, gpui on **desktop**. The React Native / Expo app this repository started as was retired and deleted in spec [039](specs/039-retire-expo-tree/spec.md) on 2026-09-11; nothing in the tree depends on it any more.
 
@@ -12,11 +14,11 @@ It is built as **one shared Rust core and one native shell per platform** — Sw
 - **Smart contract wallet** — Built on [Safe](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) with ERC-4337 account abstraction. Your wallet is a Safe smart account.
 - **24 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM. Custom networks supported.
 - **Multi-chain portfolio** — Balances and fiat values across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
-- **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
+- **On-chain pricing** — token prices from DEX quotes (Uniswap V3, PancakeSwap, Aerodrome, SushiSwap), sanity-checked against Chainlink where a feed exists; no third-party price API. (The iOS shell currently prices native coins from Chainlink only and has no ERC-20 prices.)
 - **Deposit detection** — Balance monitoring that notices incoming transfers as they land.
-- **dApp connection** — The browser-extension build of the web shell injects an EIP-1193 / EIP-6963 provider into any page (spec [027](specs/027-web-extension-provider/spec.md)). The desktop and native shells sign what the core's clear-signing decoder can explain.
-- **Cross-device recovery** — Passkeys sync through the platform provider (iCloud Keychain, Google Password Manager); the wallet address is a function of every founding key, so any one key rebuilds it on a new device.
-- **Fully self-hostable** — All four backend services (chain data, passkey index, bundler, currency rates) are published on GitHub and can be self-deployed.
+- **dApp connection** — the same EIP-1193 / EIP-6963 provider (`app-web/vela-wallet/extension/inpage.js`) is injected by the Chrome extension (spec [027](specs/027-web-extension-provider/spec.md)) and by the built-in browsers of the desktop app (macOS, Windows), iOS and Android. The hosted web wallet and the Linux desktop build have no dApp transport; there is no WalletConnect.
+- **Cross-device recovery** — the wallet address is a function of every founding key, and the key set is published to an on-chain registry (Gnosis, optionally backed up to Ethereum) at creation, so any one key finds and rebuilds the wallet on a new device. A single-key wallet can also be rebuilt from two signatures with no registry.
+- **Self-hostable** — every backend service (relay, public-key index, chain data, exchange rates) is on GitHub and can be replaced in Settings; the passkeys' relying party (`getvela.app`) cannot, which the [self-hosting guide](https://getvela.app/docs/self-hosting) explains with the ways around it.
 
 ## Architecture
 
@@ -88,7 +90,7 @@ Two parity suites compare the Rust ports against the npm packages the corpus was
 
 - **Web**: the SvelteKit shell is the production web wallet build, deployed as the Cloudflare Worker `vela-wallet-web` (see [Build for Web](#build-for-web-cloudflare-workers) for which build the hostname currently serves).
 - **Desktop**: wired to the core end to end — onboarding, wallet, send, contacts, message signing, scanning, simulation (specs 030–038).
-- **iOS and Android**: the shells are built and take their translations, identicons and wire types from the core; wiring them to the core's machines is in progress on their own specs (04x for Android, 05x for iOS).
+- **iOS and Android**: wired to the core end to end (specs 040–049 for Android, 050–058 for iOS) and tested on real devices, including the in-app dApp browser. Not yet published in the App Store or Google Play.
 - **Retired**: the React Native / Expo app (spec 039). It could not run on a phone after PR #168 made the core facade wasm-only, and no store build of it ever shipped.
 
 Feature specs, plans and delivery reports live in [specs/](specs/), numbered in the order they landed.
@@ -141,9 +143,9 @@ Capabilities differ per shell and are documented where they were built: each she
 
 ### Web Notes
 
-- **Passkey rpId**: Uses the registrable domain (`getvela.app`) so passkeys work across subdomains and are consistent with the native shells. Local dev and preview hosts get their own rpId (`localhost` / the preview hostname) and therefore their own passkeys; the parallel space (`/[locale]/parallel`) is how a preview is exercised with a fixed key set instead.
+- **Passkey rpId**: `getvela.app` on `getvela.app` and its subdomains, in the extension, and during SSR, consistent with the native shells. **Any other host uses its own hostname** — local dev and preview hosts, and a self-hosted deployment on another domain, get their own passkeys and therefore a different wallet (`relyingPartyId()` in `src/lib/onboarding/core/passkey.ts`). The parallel space (`/[locale]/parallel`) is how a preview is exercised with a fixed key set instead.
 - **Local storage**: IndexedDB for wallet records, `localStorage` for the onboarding keys and the endpoint override. No cross-device sync — accounts are stored in the browser only; the passkey and the public-key index rebuild them elsewhere.
-- **dApps**: the same code builds a Chrome extension that injects the provider into pages (`app-web/vela-wallet/extension/`); the plain web app has no in-page dApp transport.
+- **dApps**: the same code builds a Chrome extension that injects the provider into pages (`app-web/vela-wallet/extension/`); the plain web app has no in-page dApp transport. The extension's `host_permissions` for `https://getvela.app/*` are what let it use `getvela.app` passkeys — the same wallet — and they are also the path to an existing wallet if the domain is ever gone.
 
 ### Desktop
 
@@ -200,79 +202,49 @@ pnpm preview    # wrangler dev of the built worker on :4173
 
 ## Self-Deploy Service Endpoints
 
-Vela Wallet relies on four backend endpoints. Default instances are provided, but you can deploy your own for full self-custody.
+The step-by-step guide for users is **[getvela.app/docs/self-hosting](https://getvela.app/docs/self-hosting)**; this section is the developer summary.
 
-Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
+The wallet uses four Vela-operated services by default. Each can be replaced in **Settings → Advanced → Service Endpoints** (desktop: Settings → Service Endpoints). Defaults are in `rust/crates/vela-core/src/app/network_admin.rs`.
 
+| Service | Default | Repository | `/api/health` `service` |
+| --- | --- | --- | --- |
+| **Relay** (ERC-4337 bundler with in-band settlement) | `https://vela-relay-cf.getvela.app` (+ `/{chainId}`) | [mondaylabsltd/vela-relay](https://github.com/mondaylabsltd/vela-relay) (MIT) | `vela-relay` |
+| **Public-key index** (registers wallets in the on-chain registry, answers lookups) | `https://p256-index-v2.getvela.app` | [mondaylabsltd/p256-index](https://github.com/mondaylabsltd/p256-index) (no licence file yet) | `webauthn-p256-publickey-registry` |
+| **Chain data** (networks, tokens, logos, ERC-7730 descriptors) | `https://ethereum-data.getvela.app` | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data) (MIT) | `ethereum-data` |
+| **Exchange rates** (USD-based) | `https://vela-currency.getvela.app/v2/rates?base=USD` | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (MIT) | checked by response shape |
 
-| Service                  | Description                                       | Repository                                                                                                                      |
-| -------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Chain Data Index**     | Network info, token data, chain logos             | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data)                                                         |
-| **Passkey Index**        | Public key storage for cross-device recovery      | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
-| **Bundler Service**      | ERC-4337 transaction bundler                      | [mondaylabsltd/vela-relay](https://github.com/mondaylabsltd/vela-relay)                                                           |
-| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (Frankfurter-compatible, ECB daily rates)              |
+The health check drives a badge; it does **not** gate the save (`network_admin.rs`: "Health badges never gate saves"). Any Frankfurter-compatible USD-based rate source works for exchange rates — keep `?base=USD` (see [docs/fiat-price.md](docs/fiat-price.md)).
 
-The first three are Vela services that each expose a `/api/health` endpoint. The wallet validates three checks before accepting a custom endpoint for them:
-
-1. **HTTPS** — only secure connections accepted
-2. **Reachable** — server responds within 10 seconds
-3. **Valid response** — `/api/health` returns the correct `service` identifier and `status: "ok"`
-
-The **Exchange-Rate Source** is any USD-based FX API — the default is `https://vela-currency.getvela.app/v2/rates?base=USD`, served by [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency), Vela's small Frankfurter-compatible service (ECB daily reference rates, dual-runtime Deno / Cloudflare Workers). It's validated by returning a parseable USD-based rate set (not `/api/health`). A self-hosted [Frankfurter](https://frankfurter.dev) instance works as a drop-in alternative. Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
+Known gaps, stated in the user guide too: the iOS Service Endpoints page is not wired to the core; the web shell's onboarding and desktop sessions that start signed in ignore a changed passkey index; Android's name lookups always use the default index; the relay reads chain metadata from `ethereum-data.getvela.app` (hard-coded in `vela-relay/src/utils/rpc.rs`); p256-index needs `P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf`, which its example config omits.
 
 ## Gas & Fee Model
 
-Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a **bundler** instead of being submitted directly by the user. This means:
+Transactions are ERC-4337 UserOperations submitted by a relay. The relay is paid **in band**: the operation declares zero EntryPoint fees and carries a transfer from the Safe to the relay's settlement address inside the MultiSend the passkey signs, so the user pays exactly the quoted amount and the relay rejects anything else.
 
-### How Gas Fees Work
+- **Amount** — `max(3 × padded gas limits × max(C, R), floor)` on standard networks (`INBAND_MARKUP` in `rust/crates/vela-core/src/app/fee_policy.rs`, shared by all shells): C is the wallet's own gas-price reading, R the relay's price for the chosen speed tier (default *fast*); the padded limits are the simulated verification and call gas ×1.5 with floors (300k / 2M verification for deployed / undeployed accounts). On Tempo (pathUSD gas) the multiple is 2. The minimum is about $0.01. A relay quote above 3 × C is refused. The result is usually several times the operation's actual on-chain cost; the relay keeps the difference.
+- **Fee asset** — the native coin, or a USD stablecoin from the chain's `stables` list when the relay can price the native coin; pathUSD on Tempo. No paymaster.
+- **No per-wallet deposit.** The old "gas relayer account" activation deposit no longer exists. When a relay's own treasury on a chain is empty, the send flow says so; on Vela-run networks the user can report it or voluntarily contribute (non-refundable, and it does not pay for the transaction).
+- **Max send** keeps back the fee amount for native-coin sends.
 
-Each transaction incurs a gas fee deducted from **your Safe wallet** — in the network's native token by default, or in a supported stablecoin where the bundler offers ERC-20 settlement (Tempo has no native coin, so gas there is always settled in USD stablecoins). The fee consists of:
-
-- **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
-- **Relayer service fee** — The total charge is a fixed multiple of the raw on-chain cost: currently **3× on standard networks** (`INBAND_MARKUP` in the web shell's `safe-transaction.ts`, mirrored by the desktop executor) and **2× on Tempo**, with minimums of 0.00001 native units or $0.01 in stablecoins. The bundler is the price authority for the gas price itself. The margin pays the relayer that fronts the gas and runs the infrastructure.
-
-The confirmation screen shows a single quoted total in the fee asset and in fiat. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown.
-
-### Gas Relayer Account
-
-Before your first transaction on a network, you need to fund a **dedicated gas relayer account** (bundler EOA). This is a one-time setup:
-
-- The deposit amount is based on the actual transaction gas requirement.
-- The deposit is **non-refundable** — it serves as the relayer's initial operating balance.
-- The relayer address **may change** due to service upgrades, requiring a new deposit.
-- After the initial deposit, the relayer is self-sustaining: it earns back gas costs from each transaction via EntryPoint refunds.
-
-### Max Send
-
-When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
+User-facing explanation: [getvela.app/docs/networks-and-fees](https://getvela.app/docs/networks-and-fees).
 
 ## Recipient Identity Resolution
 
-When sending tokens, the wallet resolves recipient addresses to human-readable names for verification. Resolution queries run in parallel across multiple name services, returning the first match by priority:
+The wallet names an address the user has entered (reverse lookup only — typing a name does not resolve an address). Order:
 
+1. **Vela registry** — the address's first owner on the shared WebAuthn signer → the public-key index → the registry contract on Gnosis, then Ethereum (`rust/crates/vela-core/src/registry_lookup.rs`).
+2. **Name services, read on-chain**: `.bnb` (BSC), `.arb` (Arbitrum), `.g` (Gravity), Basename (Base, ENSIP-19) and ENS (mainnet), in that priority.
 
-| Priority | Service       | Chain            | Registry            | Pattern          |
-| ---------- | --------------- | ------------------ | --------------------- | ------------------ |
-| 1        | Passkey Index | —               | Vela API            | walletRef lookup |
-| 2        | .bnb          | BSC (56)         | `0x08CEd32a...`     | Standard ENS     |
-| 3        | .arb          | Arbitrum (42161) | `0x4a067EE5...`     | Standard ENS     |
-| 4        | .g            | Gravity (1625)   | `0x5dC881dd...`     | Standard ENS     |
-| 5        | Basename      | Base (8453)      | `0xb9470442...`     | ENSIP-19         |
-| 6        | ENS           | Mainnet (1)      | `0x00000000000C...` | Standard ENS     |
-
-- **Standard ENS**: `namehash(addr.addr.reverse)` → `registry.resolver(node)` → `resolver.name(node)`
-- **ENSIP-19** (Basenames): `reverseRegistrar.node(addr)` → chain-specific reverse node → same flow
-- Only positive results are cached (locally, 24h TTL)
-- No third-party API dependencies — all queries use direct on-chain RPC calls
-
-The registry is `NAME_SERVICES` in the web shell's `recipient-identity.ts` (`app-web/vela-wallet/src/lib/services/`) and, for the desktop, in `app-desktop/vela-wallet/src/executor/identity.rs` — add a service to both.
+The name-service table lives in each shell (web `recipient-identity.ts`, desktop `executor/identity.rs`, iOS `RecipientIdentity.swift`, Android `IdentityResolver.kt`); only positive results are cached.
 
 ## Security Model
 
-- **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager) or by a security key. Vela Wallet never has access to the private key.
-- **Safe smart account** — Your wallet is a Safe proxy contract, audited and battle-tested with billions in TVL.
-- **On-device only** — Transaction construction, signing, and signature verification all happen locally. The bundler only receives the signed UserOperation.
-- **Passkey-scoped** — Each wallet is bound to its founding passkeys. Transactions require the authenticator's own verification (Face ID / fingerprint / PIN) every time.
+- **No private key access** — signing uses WebAuthn P-256 keys held by the user's passkey provider or security key; the apps only receive signatures.
+- **Unmodified Safe** — each wallet is a Safe v1.4.1 proxy with Safe's 4337 module and passkey signers (shared signer for the first key, factory-created signers for the rest), threshold 1. No Vela contract is in the funds path; Vela holds no role on the account.
+- **Keys fixed at creation** — one to seven keys, any one of which can sign alone; none can be added, removed or replaced later.
+- **Signed exactly** — the relay receives the operation to quote it and then the signed operation; it can delay or refuse, not modify.
+- **What the served code can do** — a tampered web deployment, extension update or app build could present a malicious transaction for signing; the passkey prompt does not show what is signed. See the threat model in the [whitepaper](https://getvela.app/docs/whitepaper).
+- **Audit status** — the Safe contracts, modules and EntryPoint are audited; Vela's own code is not, and no audit is scheduled. Details: [audits & known issues](https://getvela.app/docs/security-audits).
 
 ## License
 

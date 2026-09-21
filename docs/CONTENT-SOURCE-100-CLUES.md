@@ -16,6 +16,16 @@ nnmpmpnpsp
 
 ## ⚠️ Content-Accuracy Guardrails (read before writing anything)
 
+> **Superseded facts — spec 080, 2026-09-22.** The public site and docs at getvela.app were re-verified against the code and the service repositories. Where this document disagrees with [`specs/080-site-content-accuracy/claim-ledger.md`](../specs/080-site-content-accuracy/claim-ledger.md), **the claim ledger wins**. The corrections most likely to be reintroduced from the clues below:
+> - **24 built-in networks**, not 12 (clue 14 and elsewhere).
+> - **Keys**: one to seven per wallet, any one signs (1-of-n), fixed at creation; kinds are synced passkeys, another phone (QR), and hardware security keys. A single unsynced key needs a second. Not "a passkey in the secure enclave unlocked by your face".
+> - **Fees**: in-band payment to the relay = `3 × padded gas × max(wallet price, relay tier price)`, min ≈ $0.01 — usually several times the on-chain cost. **Not** "≈2× with a ~3× cap". **There is no gas-account / activation deposit any more.**
+> - **dApps**: injected provider (extension; built-in browsers on desktop macOS/Windows, iOS, Android). **WalletPair was dropped**; there is no WalletConnect.
+> - **Self-hosting**: the passkey rpId `getvela.app` cannot be replaced; a web copy on another domain is a different wallet. Existing wallets survive via the extension or self-built apps (phone QR / security key). Guide: `/docs/self-hosting`.
+> - **Licences**: wallet, relay, currency, ethereum-data MIT; **p256-index has no licence file** — not "all four MIT".
+> - **The signing page** (`app-web/clearsigning`) is built but not published and not yet connected to any app.
+> - **Audit**: also say Vela's *own* code (apps, services, registry contract) is unaudited, none scheduled. The 4337 module has an acknowledged, unfixed Certora Medium (M-01).
+
 These come straight from the codebase and override intuition. Violating them produces factually wrong content.
 
 - **The main repo `README.md` is STALE. Treat `getvela.app/` docs + `docs/store-submission/` as canonical.** The README still says **"8 EVM networks"**, a **"~60% markup (gasPrice × 1.6)"**, a **"one-time" gas deposit**, and **"DApp Connect over Bluetooth (BLE)"**. The current facts are **12 networks**, **~2× cost with a ~3× cap**, a **non-refundable + re-activatable** gas account, and **dApp Connect over a WalletPair WebSocket relay — Bluetooth was dropped entirely.**
