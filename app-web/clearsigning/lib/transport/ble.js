@@ -5,8 +5,9 @@
 // as a GATT peripheral. See PROTOCOL.md for the wire format; this is a faithful
 // implementation of sections 1–4 and nothing more.
 //
-// Zero dependencies: framing is hand-rolled, and every cryptographic operation
-// is WebCrypto (P-256 ECDH, HKDF-SHA256, AES-GCM).
+// Zero dependencies: framing is hand-rolled here; the handshake and the
+// AES-GCM session are lib/transport/secure.js, shared with the relay and pinned
+// against vela-core by samples/secure-vectors.mjs.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
@@ -35,21 +36,6 @@ window.VelaCS = window.VelaCS || {};
     var out = new Uint8Array(total);
     var at = 0;
     parts.forEach(function (p) { out.set(p, at); at += p.length; });
-    return out;
-  }
-
-  function b64url(bytes) {
-    var binary = '';
-    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-
-  function unb64url(text) {
-    var padded = text.replace(/-/g, '+').replace(/_/g, '/');
-    while (padded.length % 4) padded += '=';
-    var binary = atob(padded);
-    var out = new Uint8Array(binary.length);
-    for (var i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
     return out;
   }
 
@@ -113,56 +99,8 @@ window.VelaCS = window.VelaCS || {};
     if (entry.got === entry.total) {
       clearTimeout(entry.timer);
       delete this.pending[msgId];
-      this.onMessage(entry.flags, concat(entry.parts));
+      this.onMessage(entry.flags, concat(entry.parts), msgId);
     }
-  };
-
-  // --- crypto ----------------------------------------------------------------
-
-  function hkdf(secret, salt, info, length) {
-    return crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveBits']).then(function (key) {
-      return crypto.subtle.deriveBits(
-        { name: 'HKDF', hash: 'SHA-256', salt: salt, info: utf8(info) },
-        key,
-        length * 8,
-      );
-    }).then(function (bits) { return new Uint8Array(bits); });
-  }
-
-  function Session(config) {
-    this.key = config.key;          // CryptoKey, AES-GCM
-    this.code = config.code;        // six digits, shown on both screens
-    this.counters = { c2p: 0n, p2c: 0n };
-    this.lastSeen = 0;
-    this.outgoing = 0;
-  }
-
-  // IV = 4-byte direction tag ‖ 8-byte counter. Never reused: the counter only
-  // ever goes up, and each direction keeps its own.
-  Session.prototype.iv = function (direction) {
-    var counter = this.counters[direction] + 1n;
-    this.counters[direction] = counter;
-    var out = new Uint8Array(12);
-    out.set(utf8(direction === 'c2p' ? 'C2P.' : 'P2C.'), 0);
-    for (var i = 0; i < 8; i++) out[11 - i] = Number((counter >> BigInt(8 * i)) & 0xffn);
-    return out;
-  };
-
-  Session.prototype.seal = function (plaintext, msgId) {
-    var iv = this.iv('c2p');
-    var aad = utf8('vela-ble/1|c2p|' + msgId);
-    return crypto.subtle
-      .encrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, this.key, plaintext)
-      .then(function (ct) { return concat([iv, new Uint8Array(ct)]); });
-  };
-
-  Session.prototype.open = function (sealed, msgId) {
-    var iv = sealed.subarray(0, 12);
-    var body = sealed.subarray(12);
-    var aad = utf8('vela-ble/1|p2c|' + msgId);
-    return crypto.subtle
-      .decrypt({ name: 'AES-GCM', iv: iv, additionalData: aad }, this.key, body)
-      .then(function (plain) { return new Uint8Array(plain); });
   };
 
   // --- the channel -----------------------------------------------------------
@@ -173,8 +111,11 @@ window.VelaCS = window.VelaCS || {};
     this.c2p = c2p;
     this.p2c = p2c;
     this.chunk = DEFAULT_CHUNK;
-    this.session = null;
+    this.session = null;   // lib/transport/secure.js Session, after the handshake
     this.msgId = 0;
+    this.outgoing = 0;     // `n` of the last message sent
+    this.lastSeen = 0;     // `n` of the last message accepted
+    this.sending = Promise.resolve();
     this.handlers = [];
     this.errorHandlers = [];
     this.inbox = [];
@@ -214,9 +155,10 @@ window.VelaCS = window.VelaCS || {};
     this.errorHandlers.forEach(function (handler) { handler(error); });
   };
 
-  Channel.prototype.writeFrames = function (flags, payload) {
+  Channel.prototype.writeFrames = function (flags, payload, msgId) {
     var self = this;
-    var msgId = this.msgId = (this.msgId + 1) & 0xff;
+    if (msgId === undefined) msgId = (this.msgId + 1) & 0xff;
+    this.msgId = msgId;
     var pieces = split(payload, this.chunk);
     var index = 0;
 
@@ -250,15 +192,22 @@ window.VelaCS = window.VelaCS || {};
     return this.writeFrames(0, utf8(JSON.stringify(object)));
   };
 
+  // One message at a time: the msgId sealed into the AAD must be the one its
+  // frames carry, and the session's counters must reach the air in order.
   Channel.prototype.send = function (object) {
     var self = this;
     if (!this.session) return Promise.reject(new Error('no session: handshake first'));
     object.v = 1;
-    object.n = ++this.session.outgoing;
-    var msgId = (this.msgId + 1) & 0xff;
-    return this.session.seal(utf8(JSON.stringify(object)), msgId).then(function (sealed) {
-      return self.writeFrames(1, sealed);
+    object.n = ++this.outgoing;
+    var plaintext = utf8(JSON.stringify(object));
+    var run = this.sending.then(function () {
+      var msgId = (self.msgId + 1) & 0xff;
+      return self.session.seal(plaintext, msgId).then(function (sealed) {
+        return self.writeFrames(1, sealed, msgId);
+      });
     });
+    this.sending = run.catch(function () { /* the next message still goes */ });
+    return run;
   };
 
   Channel.prototype.disconnect = function () {
@@ -304,22 +253,26 @@ window.VelaCS = window.VelaCS || {};
   }
 
   function subscribe(channel) {
-    var reassembler = new Reassembler(function (flags, payload) {
+    var reassembler = new Reassembler(function (flags, payload, msgId) {
       if (!flags) {
         channel.deliver(JSON.parse(fromUtf8(payload)));
         return;
       }
+      if (!channel.session) {
+        channel.fail(new Error('an encrypted message arrived before the handshake'));
+        return;
+      }
       channel.session
-        .open(payload, channel.lastInboundId)
+        .open(payload, msgId)
         .then(function (plain) {
           var message = JSON.parse(fromUtf8(plain));
           // Replay guard: a counter that does not advance is a replayed frame.
           if (typeof message.n === 'number') {
-            if (message.n <= channel.session.lastSeen) {
+            if (message.n <= channel.lastSeen) {
               channel.fail(new Error('replayed message ' + message.n + ' dropped'));
               return;
             }
-            channel.session.lastSeen = message.n;
+            channel.lastSeen = message.n;
           }
           channel.deliver(message);
         })
@@ -329,7 +282,6 @@ window.VelaCS = window.VelaCS || {};
     channel.p2c.addEventListener('characteristicvaluechanged', function (event) {
       var view = event.target.value;
       var bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-      channel.lastInboundId = bytes[1];
       reassembler.accept(bytes);
     });
     return channel.p2c.startNotifications();
@@ -337,22 +289,11 @@ window.VelaCS = window.VelaCS || {};
 
   function handshake(channel, options) {
     var ours;
-    var nonce = crypto.getRandomValues(new Uint8Array(16));
-
-    return crypto.subtle
-      .generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits'])
-      .then(function (pair) {
-        ours = pair;
-        return crypto.subtle.exportKey('raw', pair.publicKey);
-      })
-      .then(function (raw) {
-        return channel.sendPlain({
-          v: 1,
-          t: 'hello',
-          role: 'signer',
-          pk: b64url(new Uint8Array(raw)),
-          nonce: b64url(nonce),
-        });
+    return ns.transport.secure
+      .handshake({ role: 'signer', secret: options.secret, nonce: options.nonce })
+      .then(function (handshake) {
+        ours = handshake;
+        return channel.sendPlain(handshake.hello());
       })
       .then(function () { return channel.next(options.timeoutMs || 30000); })
       .then(function (reply) {
@@ -360,31 +301,13 @@ window.VelaCS = window.VelaCS || {};
           throw new Error('peripheral did not answer the handshake');
         }
         channel.peer = { app: reply.app, role: reply.role };
-        return crypto.subtle
-          .importKey('raw', unb64url(reply.pk), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
-          .then(function (peerKey) {
-            return crypto.subtle.deriveBits({ name: 'ECDH', public: peerKey }, ours.privateKey, 256);
-          })
-          .then(function (shared) {
-            var salt = concat([nonce, unb64url(reply.nonce)]);
-            return Promise.all([
-              hkdf(new Uint8Array(shared), salt, 'vela-ble/1 key', 32),
-              hkdf(new Uint8Array(shared), salt, 'vela-ble/1 code', 4),
-            ]);
-          });
+        // BLE has no pairing link, so no `rk`: proximity plus the code.
+        return ours.complete(reply, 'ble');
       })
-      .then(function (derived) {
-        var code = ((derived[1][0] << 24 >>> 0) + (derived[1][1] << 16) + (derived[1][2] << 8) + derived[1][3]) % 1000000;
-        return crypto.subtle
-          .importKey('raw', derived[0], 'AES-GCM', false, ['encrypt', 'decrypt'])
-          .then(function (key) {
-            channel.session = new Session({
-              key: key,
-              code: String(code).padStart(6, '0'),
-            });
-            if (options.onCode) options.onCode(channel.session.code);
-            return channel;
-          });
+      .then(function (session) {
+        channel.session = session;
+        if (options.onCode) options.onCode(session.code);
+        return channel;
       });
   }
 
