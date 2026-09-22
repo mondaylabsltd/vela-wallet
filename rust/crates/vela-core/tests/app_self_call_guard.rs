@@ -12,8 +12,8 @@ use serde_json::{json, Value};
 use support::DomainDriver;
 use vela_core::app::self_call_guard::{detect_self_call, SelfCallFunction};
 use vela_core::app::sign_request::{
-    Event, SignAccountRef, SignDappIdentity, SignErrorKind, SignOperation as Op,
-    SignResponsePayload, SignRequest, SignSurface, CODE_INTERNAL,
+    Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind, SignOperation as Op,
+    SignRequest, SignResponsePayload, SignSurface, CODE_INTERNAL,
 };
 
 type Sut = DomainDriver<SignRequest>;
@@ -245,7 +245,7 @@ fn arrive(sut: &mut Sut, method: &str, params: &Value) -> Vec<Op> {
 }
 
 #[test]
-fn a_blocked_request_is_answered_and_cannot_be_signed() {
+fn a_blocked_request_explains_itself_before_it_answers() {
     let mut sut = boot();
     let ops = arrive(
         &mut sut,
@@ -253,15 +253,13 @@ fn a_blocked_request_is_answered_and_cannot_be_signed() {
         &tx(SAFE, &enable_module_calldata()),
     );
 
-    // The dApp is answered immediately — never left hanging.
-    let responded = ops.iter().any(|op| {
-        matches!(
-            op,
-            Op::SendResponse { payload: SignResponsePayload::Err { code, kind, .. }, .. }
-                if *code == CODE_INTERNAL && *kind == SignErrorKind::SelfCallBlocked
-        )
-    });
-    assert!(responded, "the request must be refused to the dApp");
+    // NOT answered yet: the window showing this sheet is the answer surface —
+    // the extension worker closes it the moment the request settles — so an
+    // immediate answer would take the explanation off the screen first.
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SendResponse { .. })),
+        "the answer waits for the person to close the sheet"
+    );
 
     let view = sut.view();
     assert_eq!(view.surface, SignSurface::Sheet, "the sheet explains it");
@@ -272,6 +270,40 @@ fn a_blocked_request_is_answered_and_cannot_be_signed() {
     assert_eq!(
         view.error.map(|e| e.kind),
         Some(SignErrorKind::SelfCallBlocked)
+    );
+
+    // Closing it answers the dApp — and says the WALLET refused, not the
+    // person, who was never offered the choice.
+    let ops = sut.dispatch(Event::RejectTapped);
+    let answered = ops.iter().any(|op| {
+        matches!(
+            op,
+            Op::SendResponse { payload: SignResponsePayload::Err { code, kind, .. }, .. }
+                if *code == CODE_INTERNAL && *kind == SignErrorKind::SelfCallBlocked
+        )
+    });
+    assert!(answered, "dismissal answers with the refusal, never 4001");
+}
+
+#[test]
+fn a_blocked_request_cannot_be_signed_even_if_the_shell_asks() {
+    let mut sut = boot();
+    arrive(
+        &mut sut,
+        "eth_sendTransaction",
+        &tx(SAFE, &add_owner_calldata()),
+    );
+    assert!(!sut.view().confirm_gate_open);
+
+    // A shell that ignores the gate gets the fail-closed answer from the
+    // submit chokepoint instead of a signature.
+    let ops = sut.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts::default(),
+    });
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::SignAndSubmit { .. })),
+        "nothing is ever signed for a refused request"
     );
 }
 

@@ -1119,6 +1119,9 @@ impl App for SignRequest {
         SignView {
             surface,
             confirm_gate_open: model.pending.is_some()
+                // Spec 081: a refused request is never signable, however the
+                // shell asks.
+                && model.blocked.is_none()
                 && model.inflight.is_none()
                 && model.funding.is_none()
                 && model.reconciled
@@ -1356,21 +1359,21 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         .ok()
         .and_then(|params| detect_self_call(&arrival.method, Some(&params), &signer));
     if let Some(block) = refusal {
+        // The sheet opens refused, and the answer waits for the dismissal.
+        //
+        // Answering here instead would be tidier for the page — but the window
+        // that shows this sheet IS the answer surface: the extension worker
+        // closes it the moment the request settles (`background.js`, "a window
+        // closed without a decision answers 4001"). An immediate answer
+        // therefore took the explanation off the screen before anyone could
+        // read it, which is the whole point of refusing visibly. So the
+        // request stays pending, unsignable, until the person closes it —
+        // exactly like every other request that waits for a decision.
         model.blocked = Some(blocked_view(&block));
         model.sign_error = Some(SignErrorNotice {
             kind: SignErrorKind::SelfCallBlocked,
             detail: Some(block.function.as_str().to_owned()),
         });
-        model.settle(&arrival.id, SignSettledOutcome::Rejected);
-        let op = respond_op(
-            &arrival.transport_id,
-            &arrival.id,
-            err_payload(
-                CODE_INTERNAL,
-                SignErrorKind::SelfCallBlocked,
-                Some(block.function.as_str().to_owned()),
-            ),
-        );
         model.pending = Some(Pending {
             id: arrival.id,
             method: arrival.method,
@@ -1380,9 +1383,9 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             dedicated_transport: arrival.dedicated_transport,
             per_request_chain: arrival.per_request_chain,
             dapp: arrival.dapp,
-            responded: true,
+            responded: false,
         });
-        commands.push(ops_and_render(model, vec![op]));
+        commands.push(render());
         return Command::all(commands);
     }
     model.blocked = None;
@@ -1830,11 +1833,25 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
     if pending.responded {
         return dismiss(model);
     }
-    let op = respond_op(
-        &pending.transport_id,
-        &pending.id,
-        err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
-    );
+    // Spec 081: the wallet refused this one, not the person — the dApp is told
+    // which, so a page cannot report "user rejected" for a decision the user
+    // was never offered.
+    let op = match model.blocked.as_ref() {
+        Some(blocked) => respond_op(
+            &pending.transport_id,
+            &pending.id,
+            err_payload(
+                CODE_INTERNAL,
+                SignErrorKind::SelfCallBlocked,
+                Some(blocked.function.clone()),
+            ),
+        ),
+        None => respond_op(
+            &pending.transport_id,
+            &pending.id,
+            err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
+        ),
+    };
     model.settle(&pending.id, SignSettledOutcome::Rejected);
     // BUG-2: a reject DURING the pre-check/sponsorship aborts the pipeline
     // before it can submit (`signCancelledRef`, `dapp-connection.tsx:701-709`).

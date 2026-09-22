@@ -547,13 +547,15 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		blocks: blocksFor(inputs),
 		tech: techModel(inputs),
 		techOpen: false,
-		fee: feeModel(inputs),
+		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
 		signer: {
 			label: m.signingAccount,
 			name: identity.name,
 			identiconSvg: identicon(identity.address),
 			address: identity.address
 		},
+		// Spec 081: refused — no fee, no slider, one way out.
+		dismissOnly: sign.blocked ? m.close : undefined,
 		confirm: {
 			hint: m.slideToConfirm,
 			/*

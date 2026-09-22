@@ -39,7 +39,17 @@ export type SignEffect = { id: number; operation: SignOperation };
  * the seam is the contract and not one implementation's shape.
  */
 export interface SignResponder {
-	sendResponse(id: string, result?: unknown, error?: { code: number; message: string }): void;
+	/**
+	 * `error.kind` is the core's own vocabulary, passed through because a
+	 * transport sometimes has to act on WHICH refusal this was — a window
+	 * showing a blocked request (spec 081) stays open to explain it, while every
+	 * other answer closes it.
+	 */
+	sendResponse(
+		id: string,
+		result?: unknown,
+		error?: { code: number; message: string; kind?: SignErrorKind }
+	): void;
 }
 
 export interface SignShellPorts {
