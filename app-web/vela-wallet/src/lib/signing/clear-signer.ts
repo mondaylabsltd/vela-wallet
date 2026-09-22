@@ -1,71 +1,45 @@
 /**
- * The Clear Signer, reached from the web wallet (spec 071, contract §4).
+ * Signing on the Clear Signer (spec 071 contract §4; 075 for the channels).
  *
  * The fourth "Sign with": instead of asking a passkey to sign a digest this
  * app computed and displayed, the request goes to a separate page — the
- * official one or the person's own copy — which decodes it from the
- * operation's own bytes, derives the digest itself, runs the passkey ceremony
- * and answers. The web's channel is `postMessage` to a page it `window.open`s:
- * the only channel where the BROWSER vouches for both origins.
+ * official one, the person's own copy, or the page a key lives behind — which
+ * decodes it from the operation's own bytes, derives the digest itself, runs
+ * the passkey ceremony and answers.
  *
- * ```text
- *   window.open(<page>sign.html?ch=post)
- *   page   → {vela:'ready'}                       from the page's origin, from that window
- *   wallet → {vela:'intent', id, intent, context} to that origin only
- *   page   → {vela:'result', id, result}          → the core's verdict (clearSignerVerify)
- *          | {vela:'error', id, code}             → declined, or the page refused
- *          | the window closes                    → declined
- *   5 minutes, nothing                            → timeout
- * ```
- *
- * What this module decides is only what the transport needs: who a message
- * is from (the exact origin AND the window this wallet opened) and whether it
- * answers THIS request (`id`). Whether the answer is a valid signature over
- * the digest this wallet computed, by one of this account's keys, is the
- * core's (`clearSignerVerify`) — the same verdict the phones and the desktop
- * reach, so nothing here parses a WebAuthn answer.
+ * HOW it is reached is `clear-signer-channel.ts`: `postMessage` to a window
+ * this wallet opened (same device), or the relay (another device). What this
+ * module adds is the signature's own half — which answer is a signature this
+ * wallet may use, and the sentence a refusal ends with — and it decides
+ * neither: the verdict is the core's (`clearSignerVerify`), the same verdict
+ * the phones and the desktop reach, so nothing here parses a WebAuthn answer.
  */
 
 import { clearSignerVerify, type ClearSignerKey, type ClearSignerRequest } from '$lib/core/kernels';
 import { PasskeyError, type Assertion } from '$lib/onboarding/core/passkey';
+import {
+	CLEAR_SIGNER_TIMEOUT_MS,
+	openPostMessageChannel,
+	signerPageUrl,
+	type ClearSignerChannel,
+	type ClearSignerHost
+} from './clear-signer-channel';
 
-/** The whole ceremony, as on every shell (contract §2–4). */
-export const CLEAR_SIGNER_TIMEOUT_MS = 5 * 60_000;
-
-/** How often a popup is checked for having been closed. */
-const CLOSED_POLL_MS = 500;
-
-/** One window, reused: "open the page again" brings back the same one. */
-const WINDOW_NAME = 'vela-clear-signer';
-const WINDOW_FEATURES = 'popup,width=460,height=760';
-
-/**
- * `<base>sign.html?ch=post` — built the way the core's `sign_page` builds
- * every channel's address: a base that already names a page keeps it, one
- * ending in `/` gets `sign.html`, anything else `/sign.html`.
- */
-export function signerPageUrl(base: string): string {
-	const trimmed = base.trim();
-	const page = trimmed.endsWith('.html')
-		? trimmed
-		: trimmed.endsWith('/')
-			? `${trimmed}sign.html`
-			: `${trimmed}/sign.html`;
-	return `${page}?ch=post`;
-}
+export { CLEAR_SIGNER_TIMEOUT_MS, signerPageUrl };
+export type { ClearSignerHost };
 
 /**
  * How a ceremony ended. `refused.code` is the core's (`wrong_challenge`,
- * `foreign_key`, `bad_signature`, `not_verified`, `malformed`, …) or this
+ * `foreign_key`, `bad_signature`, `not_verified`, `malformed`, …) or the
  * channel's own: `declined` (the person closed the page, or it said
  * `user_rejected`), `refused` (the page's rules said no — `detail` is its
- * code) and `timeout`.
+ * code), `timeout` and `relay_down`.
  */
 export type ClearSignerOutcome =
 	{ kind: 'accepted'; assertion: Assertion } | { kind: 'refused'; code: string; detail: string };
 
-/** Which sentence a refusal is shown with (contract §5). */
-export type ClearSignerNotice = 'closed' | 'refused' | 'mismatch' | 'timeout';
+/** Which sentence a refusal is shown with (contract §5, plus 075's relay). */
+export type ClearSignerNotice = 'closed' | 'refused' | 'mismatch' | 'timeout' | 'relay';
 
 export function noticeOf(code: string): ClearSignerNotice {
 	switch (code) {
@@ -75,6 +49,8 @@ export function noticeOf(code: string): ClearSignerNotice {
 			return 'refused';
 		case 'timeout':
 			return 'timeout';
+		case 'relay_down':
+			return 'relay';
 		default:
 			// wrong_challenge, foreign_key, bad_signature, not_verified,
 			// wrong_token, malformed: whatever came back is not a signature this
@@ -118,11 +94,35 @@ function assertionOf(accepted: {
 	};
 }
 
-/** What the channel needs of the browser — `window`, or a test's stand-in. */
-export interface ClearSignerHost {
-	open(url: string, target: string, features: string): Window | null;
-	addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
-	removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+/**
+ * Put one signing request on an OPEN channel and judge what comes back.
+ *
+ * The channel is not ended here: a flow may carry more than one request, and
+ * only its owner knows whether this was the last.
+ */
+export async function signOnChannel(
+	channel: ClearSignerChannel,
+	request: ClearSignerRequest,
+	digest: Uint8Array,
+	keys: ClearSignerKey[]
+): Promise<ClearSignerOutcome> {
+	const reply = await channel.ask({ intent: request.intent, context: request.context });
+	if (reply.kind === 'refused') return reply;
+	let verdict;
+	try {
+		verdict = clearSignerVerify(reply.payload.result, digest, keys);
+	} catch (error) {
+		// The core could not even read the question (never the page's answer —
+		// that is refused, not thrown). Still an outcome, never a ceremony left
+		// waiting for its timeout.
+		return {
+			kind: 'refused',
+			code: 'malformed',
+			detail: error instanceof Error ? error.message : String(error)
+		};
+	}
+	if ('accepted' in verdict) return { kind: 'accepted', assertion: assertionOf(verdict.accepted) };
+	return { kind: 'refused', code: verdict.refused.code, detail: verdict.refused.detail };
 }
 
 export interface ClearSignerCeremony {
@@ -152,106 +152,26 @@ export interface ClearSignerOptions {
 	timeoutMs?: number;
 }
 
-/** Open the Clear Signer for one request and wait for its answer. */
+/**
+ * Open the Clear Signer on THIS device for one signature and wait for its
+ * answer. The page is let go as soon as the request is settled — one
+ * signature is a flow of one.
+ */
 export function openClearSigner(options: ClearSignerOptions): ClearSignerCeremony {
-	const host: ClearSignerHost = options.host ?? window;
-	const url = signerPageUrl(options.signerUrl);
-	const origin = new URL(url).origin;
-	const id = crypto.randomUUID();
-
-	let popup: Window | null = null;
-	let settled = false;
-	let closedSeen = false;
-	let settle: (outcome: ClearSignerOutcome) => void = () => {};
-	const outcome = new Promise<ClearSignerOutcome>((resolve) => {
-		settle = (value) => {
-			if (settled) return;
-			settled = true;
-			host.removeEventListener('message', onMessage);
-			clearInterval(poll);
-			clearTimeout(timer);
-			// The page has nothing left to do; the person goes back to where they
-			// signed from, as the phones bring the app back over the tab.
-			try {
-				if (popup && !popup.closed) popup.close();
-			} catch {
-				/* a window we cannot close is the browser's to keep */
-			}
-			resolve(value);
-		};
+	const channel = openPostMessageChannel({
+		signerUrl: options.signerUrl,
+		host: options.host,
+		timeoutMs: options.timeoutMs
 	});
-	const refused = (code: string, detail = '') => settle({ kind: 'refused', code, detail });
-
-	function onMessage(event: MessageEvent): void {
-		if (settled) return;
-		// Both, never one: the origin says WHICH SITE is speaking, the source
-		// says it is the window this wallet opened — not another tab of the
-		// same site, and not a frame it embeds.
-		if (event.origin !== origin || popup === null || event.source !== popup) return;
-		const data = event.data as { vela?: unknown; id?: unknown; result?: unknown; code?: unknown };
-		if (!data || typeof data !== 'object') return;
-		if (data.vela === 'ready') {
-			// Every `ready` gets the intent: a page that reloaded has forgotten it.
-			popup.postMessage(
-				{ vela: 'intent', id, intent: options.request.intent, context: options.request.context },
-				origin
-			);
-			return;
+	const outcome = signOnChannel(channel, options.request, options.digest, options.keys).then(
+		(settled) => {
+			channel.end();
+			return settled;
 		}
-		if (data.id !== id) return;
-		if (data.vela === 'result') {
-			let verdict;
-			try {
-				verdict = clearSignerVerify(data.result, options.digest, options.keys);
-			} catch (error) {
-				// The core could not even read the question (never the page's
-				// answer — that is refused, not thrown). Still an outcome, never
-				// a ceremony left waiting for its timeout.
-				refused('malformed', error instanceof Error ? error.message : String(error));
-				return;
-			}
-			if ('accepted' in verdict) {
-				settle({ kind: 'accepted', assertion: assertionOf(verdict.accepted) });
-			} else {
-				refused(verdict.refused.code, verdict.refused.detail);
-			}
-		} else if (data.vela === 'error') {
-			// The page's own vocabulary (PROTOCOL.md): `user_rejected` is the
-			// person, anything else is the page's rules refusing.
-			const code = typeof data.code === 'string' ? data.code : '';
-			if (code === '' || code === 'user_rejected') refused('declined');
-			else refused('refused', code);
-		}
-	}
-
-	function open(): void {
-		popup = host.open(url, WINDOW_NAME, WINDOW_FEATURES);
-		closedSeen = false;
-	}
-
-	host.addEventListener('message', onMessage);
-	const poll = setInterval(() => {
-		if (popup === null || !popup.closed) {
-			closedSeen = false;
-			return;
-		}
-		// One more tick first: an answer posted as the page closed may still be
-		// queued behind this check, and it must win over "closed".
-		if (closedSeen) refused('declined');
-		closedSeen = true;
-	}, CLOSED_POLL_MS);
-	const timer = setTimeout(() => refused('timeout'), options.timeoutMs ?? CLEAR_SIGNER_TIMEOUT_MS);
-	open();
-
+	);
 	return {
 		outcome,
-		reopen() {
-			if (settled) return;
-			if (popup !== null && !popup.closed) popup.focus();
-			else open();
-		},
-		cancel() {
-			refused('declined');
-		}
+		reopen: () => channel.reopen(),
+		cancel: () => channel.cancel()
 	};
 }
