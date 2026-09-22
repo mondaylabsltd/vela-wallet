@@ -52,10 +52,17 @@ final class ScriptedAccounts: UserOpSpine.AccountPort {
         WalletKeyRecord(credentialId: "cred-0", publicKeyHex: "04" + String(repeating: "11", count: 64)),
     ]
 
+    /// Spec 075: what `sign_route` is asked about — `nil` keeps the default
+    /// ("nothing known", so the ceremony routes as it always did).
+    var routesJson: String?
+    var accountName: String?
+
     func keys(of address: String) async -> [WalletKeyRecord] { keyList }
     func routing(of address: String) async -> (transports: String, method: KeyMethod) {
         ("internal", .platform)
     }
+    func keyRoutesJson(of address: String) async -> String { routesJson ?? "[]" }
+    func name(of address: String) async -> String? { accountName }
 }
 
 /// The seam spec 052 FR-009 counts. It never produces a usable assertion —

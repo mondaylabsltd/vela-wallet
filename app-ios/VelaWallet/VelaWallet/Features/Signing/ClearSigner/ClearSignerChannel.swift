@@ -33,66 +33,133 @@
 //  at most one signature, and one queue is what keeps this bookkeeping free of
 //  locks under the target's MainActor default.
 //
+//  ## A session, not a ceremony (spec 075)
+//
+//  A flow opens the page ONCE and puts its requests to it in turn — create
+//  then the member proof, a sign-in then recovery's two proofs. After an
+//  answer the core's conversation stays open for `send(_:)`, and `end()`
+//  says `bye` and closes. That is why an answer no longer tears the listener
+//  down: only a timeout, a cancel, or `end()` do.
+//
 
 import Foundation
 import Network
 import VelaCore
 
-final class ClearSignerChannel {
+/// One request of a session: a passkey ceremony (spec 075) or a signature
+/// (071). Both ride the same channels; only who judges the answer differs,
+/// and that judge is the core's.
+enum ClearSignerAsk {
+    /// `request` is `clearSignerCeremonyRequest`'s, `operationJson` the
+    /// machine operation's own wire JSON, `memberChallenge` the registry
+    /// challenge the WALLET fetched (a member proof only).
+    case ceremony(request: String, operationJson: String, memberChallenge: Data?)
+    /// `request` is `clearSignerRequest`'s; the answer must sign `digest`
+    /// with one of `keys`.
+    case signature(request: String, digest: Data, keys: [WalletKeyRecord])
+}
 
-    /// How one ceremony ended.
+/// A page that is holding this flow's session: the loopback tab on this
+/// device (`ClearSignerChannel`), or the relay to another device
+/// (`ClearSignerRelayConversation`).
+protocol ClearSignerConversation: AnyObject {
+    /// Opens whatever has to be opened and puts the FIRST request. `nil` when
+    /// nothing could be opened.
+    func begin(_ ask: ClearSignerAsk) async -> ClearSignerChannel.Ending
+    /// The session's next request, once the last one has its answer.
+    func send(_ ask: ClearSignerAsk) async -> ClearSignerChannel.Ending
+    /// The flow is over — `bye`, then close.
+    func end()
+}
+
+final class ClearSignerChannel: ClearSignerConversation {
+
+    /// How one REQUEST of a session ended.
     enum Ending: Equatable {
-        /// The core's verdict: an answer it verified, or why there is none —
-        /// `declined` for a page that went away holding the request, and for
-        /// a cancel.
+        /// The core's verdict on a signature: an answer it verified, or why
+        /// there is none — `declined` for a page that went away holding the
+        /// request, and for a cancel.
         case outcome(ClearSignerOutcome)
+        /// Spec 075: the core's verdict on a passkey ceremony.
+        case ceremony(ClearSignerCeremonyOutcome)
         /// Nobody answered in time. The core has no clock; this is the shell's.
         case timedOut
         /// The loopback listener could not be opened, or broke under us.
         case unavailable
+
+        /// Every ending as a refusal, for a caller that only needs to know
+        /// that nothing was signed. `nil` when something was.
+        var refusal: ClearSignerRefusal? {
+            switch self {
+            case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted): nil
+            case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)): refusal
+            case .timedOut: nil
+            case .unavailable: .malformed(detail: "the Clear Signer could not be opened")
+            }
+        }
     }
 
-    /// The contract's five minutes.
+    /// The contract's five minutes — idle, so a session of several requests
+    /// is not cut off halfway (contract §1.5).
     static let defaultTimeout: TimeInterval = 5 * 60
 
     let signerUrl: String
     /// 128 random bits, base64url: the page's proof that this wallet opened
     /// it for this request. It travels in the URL fragment, never to a server.
     let token: String
-    /// The request's id on the wire.
-    let id: String
+    /// The CURRENT request's id on the wire.
+    private(set) var id: String
 
-    private let requestJson: String
-    private let digest: Data
-    private let keys: [WalletKeyRecord]
+    /// The session's opening request — replayed to a page that reconnects
+    /// before anything has been answered ("open the page again").
+    private let first: ClearSignerAsk
     private let timeout: TimeInterval
 
     private var listener: NWListener?
     private(set) var port: UInt16?
     /// Every open socket and the conversation it is having.
     private var sockets: [ObjectIdentifier: (socket: NWConnection, conversation: ClearSignerConnection)] = [:]
-    private var ended: Ending?
+    /// The socket that answered: the session lives on it, and a later
+    /// request goes there and nowhere else.
+    private var active: ObjectIdentifier?
+    /// Terminal: a timeout, a cancel, or a listener that broke. Answered to
+    /// every later caller.
+    private var terminal: Ending?
+    /// The channel has been shut down (`end()`), with no terminal verdict.
+    private var closed = false
+    /// Verdicts nobody was waiting for yet — a page that closed while the
+    /// flow was between requests.
+    private var pendingEndings: [Ending] = []
     private var waiting: [CheckedContinuation<Ending, Never>] = []
     /// `open()`'s caller, until the listener is ready or failed.
     private var binding: CheckedContinuation<UInt16?, Never>?
     private var deadline: DispatchWorkItem?
 
-    /// `requestJson` is `clearSignerRequest`'s; `digest` what the passkey
-    /// must sign; `keys` the account's founding keys.
     init(
+        signerUrl: String,
+        first: ClearSignerAsk,
+        timeout: TimeInterval = ClearSignerChannel.defaultTimeout
+    ) {
+        self.signerUrl = signerUrl
+        self.first = first
+        self.timeout = timeout
+        self.token = Self.freshToken()
+        self.id = UUID().uuidString.lowercased()
+    }
+
+    /// The 071 door: one signature, one page visit.
+    convenience init(
         signerUrl: String,
         requestJson: String,
         digest: Data,
         keys: [WalletKeyRecord],
         timeout: TimeInterval = ClearSignerChannel.defaultTimeout
     ) {
-        self.signerUrl = signerUrl
-        self.requestJson = requestJson
-        self.digest = digest
-        self.keys = keys
-        self.timeout = timeout
-        self.token = Self.freshToken()
-        self.id = UUID().uuidString.lowercased()
+        self.init(
+            signerUrl: signerUrl,
+            first: .signature(request: requestJson, digest: digest, keys: keys),
+            timeout: timeout
+        )
     }
 
     /// The page, told where to connect and how to prove itself. `nil` until
@@ -108,7 +175,7 @@ final class ClearSignerChannel {
     /// `unavailable`). The five minutes start here.
     func open() async -> UInt16? {
         if let port { return port }
-        guard ended == nil else { return nil }
+        guard !stopped else { return nil }
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         guard let listener = try? NWListener(using: parameters) else {
@@ -127,17 +194,28 @@ final class ClearSignerChannel {
             binding = continuation
             listener.start(queue: .main)
         }
-        guard let bound, ended == nil else {
+        guard let bound, !stopped else {
             finish(.unavailable)
             return nil
         }
         port = bound
+        armDeadline()
+        return bound
+    }
+
+    /// Whether anything more can happen here.
+    private var stopped: Bool { closed || terminal != nil }
+
+    /// The idle clock, restarted. A session of several requests is cut off
+    /// only when nothing has moved for the whole window (contract §1.5).
+    private func armDeadline() {
+        deadline?.cancel()
+        guard !stopped else { return }
         let deadline = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.finish(.timedOut) }
         }
         self.deadline = deadline
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
-        return bound
     }
 
     private func listenerChanged(_ state: NWListener.State) {
@@ -156,15 +234,15 @@ final class ClearSignerChannel {
         }
     }
 
-    /// Waits for the ceremony's end. A cancelled task cancels the ceremony —
-    /// the send screen's cancel is a `Task` cancel, and it must not leave a
-    /// listener behind.
+    /// Waits for the CURRENT request's verdict. A cancelled task cancels the
+    /// ceremony — the send screen's cancel is a `Task` cancel, and it must
+    /// not leave a listener behind.
     func ending() async -> Ending {
-        if let ended { return ended }
+        if let next = take() { return next }
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                if let ended {
-                    continuation.resume(returning: ended)
+                if let next = take() {
+                    continuation.resume(returning: next)
                 } else {
                     waiting.append(continuation)
                 }
@@ -172,6 +250,69 @@ final class ClearSignerChannel {
         } onCancel: {
             Task { @MainActor [weak self] in self?.cancel() }
         }
+    }
+
+    /// The verdict already in hand, if there is one.
+    private func take() -> Ending? {
+        if !pendingEndings.isEmpty { return pendingEndings.removeFirst() }
+        if let terminal { return terminal }
+        return closed ? .unavailable : nil
+    }
+
+    // MARK: - A session of several requests (spec 075)
+
+    /// Opens the listener and waits for the first request's verdict. The page
+    /// itself is opened by whoever owns the tab — this only has to be running
+    /// before it is.
+    func begin(_ ask: ClearSignerAsk) async -> Ending {
+        guard await open() != nil else { return .unavailable }
+        return await ending()
+    }
+
+    /// The session's next request, on the socket that answered the last one.
+    func send(_ ask: ClearSignerAsk) async -> Ending {
+        guard !stopped, let key = active, let held = sockets[key] else { return .unavailable }
+        let next = UUID().uuidString.lowercased()
+        let step: ClearSignerStep
+        do {
+            switch ask {
+            case .ceremony(let request, let operationJson, let memberChallenge):
+                step = try held.conversation.sendCeremony(
+                    id: next, requestJson: request, operationJson: operationJson,
+                    expectedMemberChallenge: memberChallenge
+                )
+            case .signature(let request, let digest, let keys):
+                step = try held.conversation.sendSignature(
+                    id: next, requestJson: request, digest: digest, keys: keys
+                )
+            }
+        } catch {
+            return .unavailable
+        }
+        // An empty step is the core saying "not now" — the last request has
+        // no answer yet, or the conversation is over.
+        guard !step.write.isEmpty else { return .unavailable }
+        id = next
+        write(step.write, to: held.socket, thenClose: step.close)
+        armDeadline()
+        return await ending()
+    }
+
+    /// The flow is done: `bye` on the wire, then everything closes. The page
+    /// leaves its waiting screen for its done screen.
+    func end() {
+        guard !stopped else { return }
+        if let key = active, let held = sockets.removeValue(forKey: key) {
+            let step = held.conversation.end()
+            // Written and THEN closed by the completion, so the `bye` lands.
+            write(step.write, to: held.socket, thenClose: true)
+        }
+        active = nil
+        closed = true
+        shutDown()
+        let waiters = waiting
+        waiting.removeAll()
+        waiters.forEach { $0.resume(returning: .unavailable) }
     }
 
     /// The waiting sheet's cancel: the person declined (contract §2).
@@ -190,13 +331,30 @@ final class ClearSignerChannel {
 
     // MARK: - Sockets
 
-    private func accept(_ socket: NWConnection) {
-        guard ended == nil,
-              let conversation = try? ClearSignerConnection(
+    /// A fresh conversation holding the session's opening request.
+    ///
+    /// Only while nothing has been answered: once a socket has the session,
+    /// a second one replaying the first request would put the same ceremony
+    /// twice. "Open the page again" is exactly the before case.
+    private func opening() -> ClearSignerConnection? {
+        guard active == nil else { return nil }
+        switch first {
+        case .signature(let request, let digest, let keys):
+            return try? ClearSignerConnection(
                 signerUrl: signerUrl, token: token, id: id,
-                requestJson: requestJson, digest: digest, keys: keys
-              )
-        else {
+                requestJson: request, digest: digest, keys: keys
+            )
+        case .ceremony(let request, let operationJson, let memberChallenge):
+            return try? ClearSignerConnection.newCeremony(
+                signerUrl: signerUrl, token: token, id: id,
+                requestJson: request, operationJson: operationJson,
+                expectedMemberChallenge: memberChallenge
+            )
+        }
+    }
+
+    private func accept(_ socket: NWConnection) {
+        guard !stopped, let conversation = opening() else {
             socket.cancel()
             return
         }
@@ -221,17 +379,30 @@ final class ClearSignerChannel {
     }
 
     private func received(_ data: Data?, isComplete: Bool, on socket: NWConnection, key: ObjectIdentifier) {
-        guard ended == nil, let conversation = sockets[key]?.conversation else { return }
+        guard !stopped, let conversation = sockets[key]?.conversation else { return }
         if let data, !data.isEmpty {
             let step = conversation.feed(bytes: data)
             if step.close {
                 // Its last word is said: the socket closes once the write
                 // lands, and its end is no longer news to anybody.
                 sockets[key] = nil
+                if active == key { active = nil }
             }
             write(step.write, to: socket, thenClose: step.close)
-            if let outcome = step.outcome {
-                finish(.outcome(outcome))
+            // An answer no longer ends the channel (spec 075): the session
+            // stays on this socket for the flow's next request — which means
+            // this end must KEEP READING it. Returning here is what left the
+            // second request of a session unanswered until the idle clock.
+            if let verdict = step.outcome.map(Ending.outcome) ?? step.ceremony.map(Ending.ceremony) {
+                if !step.close {
+                    active = key
+                    // Every other socket is a stranger now, and a stranger
+                    // holding the port would be given the opening request.
+                    sockets.keys.filter { $0 != key }.forEach(drop)
+                }
+                deliver(verdict)
+                if step.close || sockets[key] == nil { return }
+                receive(on: socket, key: key)
                 return
             }
             if step.close { return }
@@ -241,6 +412,12 @@ final class ClearSignerChannel {
             return
         }
         receive(on: socket, key: key)
+    }
+
+    /// Close a socket without asking its conversation what that means — it is
+    /// not the one holding the session.
+    private func drop(_ key: ObjectIdentifier) {
+        sockets.removeValue(forKey: key)?.socket.cancel()
     }
 
     private func write(_ bytes: Data, to socket: NWConnection, thenClose close: Bool) {
@@ -259,22 +436,42 @@ final class ClearSignerChannel {
     private func socketEnded(_ key: ObjectIdentifier) {
         guard let (socket, conversation) = sockets.removeValue(forKey: key) else { return }
         socket.cancel()
+        if active == key { active = nil }
         if let refusal = conversation.closed() {
-            finish(.outcome(.refused(refusal: refusal)))
+            deliver(.outcome(.refused(refusal: refusal)))
         }
     }
 
-    /// The first ending wins; the listener and every socket close with it.
+    /// One request's verdict, to whoever is waiting for it — or kept for the
+    /// caller that has not asked yet.
+    private func deliver(_ ending: Ending) {
+        guard !stopped else { return }
+        armDeadline()
+        if waiting.isEmpty {
+            pendingEndings.append(ending)
+        } else {
+            waiting.removeFirst().resume(returning: ending)
+        }
+    }
+
+    /// A terminal ending: the first one wins, and the listener and every
+    /// socket close with it.
     private func finish(_ ending: Ending) {
-        guard ended == nil else { return }
-        ended = ending
-        deadline?.cancel()
-        listener?.cancel()
-        sockets.values.forEach { $0.socket.cancel() }
-        sockets.removeAll()
+        guard !stopped else { return }
+        terminal = ending
+        shutDown()
         let waiters = waiting
         waiting.removeAll()
         waiters.forEach { $0.resume(returning: ending) }
+    }
+
+    private func shutDown() {
+        deadline?.cancel()
+        deadline = nil
+        listener?.cancel()
+        sockets.values.forEach { $0.socket.cancel() }
+        sockets.removeAll()
+        active = nil
     }
 
     // MARK: - The token
