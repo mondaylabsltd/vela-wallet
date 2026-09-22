@@ -118,6 +118,17 @@ pub fn pair_card(
     match &pairing.code {
         // Both ends are there: the only thing left is the person's eyes.
         Some(code) => {
+            // The code stays on the card after it is confirmed (PROTOCOL.md
+            // §7.5: it is drawn on every card of the session), and the line
+            // under it becomes the one thing the person now needs to know —
+            // that the request is on its way. Without this the confirmed
+            // sheet was a greyed button and nothing else, which reads as
+            // something having gone wrong.
+            let line = if pairing.confirmed {
+                loc.t("componentsUi.signing.clearSignerWaiting")
+            } else {
+                loc.t_text("componentsUi.signing.clearSignerCode", "code", code)
+            };
             sheet = sheet
                 .child(
                     div()
@@ -126,24 +137,23 @@ pub fn pair_card(
                         .text_color(theme.fg_base)
                         .child(gpui::SharedString::from(code.clone())),
                 )
-                .child(body(
-                    theme,
-                    loc.t_text("componentsUi.signing.clearSignerCode", "code", code),
-                ))
+                .child(body(theme, line))
                 .child(
                     div()
                         .w_full()
                         .flex()
                         .flex_col()
                         .gap(px(FLOW_GAP_SM))
-                        .child(vela_button_opts(
-                            "clear-signer-code-confirm",
-                            ButtonVariant::Primary,
-                            loc.t("componentsUi.signing.clearSignerCodeConfirm"),
-                            !pairing.confirmed,
-                            theme,
-                            on_confirm,
-                        ))
+                        .children((!pairing.confirmed).then(|| {
+                            vela_button_opts(
+                                "clear-signer-code-confirm",
+                                ButtonVariant::Primary,
+                                loc.t("componentsUi.signing.clearSignerCodeConfirm"),
+                                true,
+                                theme,
+                                on_confirm,
+                            )
+                        }))
                         .child(vela_button(
                             "clear-signer-pair-cancel",
                             ButtonVariant::Secondary,
@@ -315,35 +325,107 @@ pub fn ended_card(
 mod tests {
     use super::*;
 
-    /// Every ending has its own sentence in every build, and the waiting
-    /// sheet's words resolve — a key echoed on this card is the person told
-    /// nothing at the one moment something went wrong.
+    /// Every ending has its own sentence in every build — a key echoed on
+    /// this card is the person told nothing at the one moment something went
+    /// wrong, and two endings sharing a sentence is the person told the wrong
+    /// thing. Spec 075's fifth ending (an unreachable relay) is in the set.
     #[test]
-    fn every_ending_and_the_wait_have_words() {
+    fn every_ending_has_its_own_sentence() {
         let loc = Loc::from_env();
         let mut said: Vec<String> = [
             Refusal::Closed,
             Refusal::Refused,
             Refusal::Mismatch,
             Refusal::TimedOut,
+            Refusal::Unreachable,
         ]
         .into_iter()
         .map(|refusal| {
             let words = loc.t(refusal.key()).to_string();
             assert_ne!(words, refusal.key(), "{refusal:?} echoed its key");
+            assert!(!words.is_empty(), "{refusal:?} resolved empty");
             words
         })
         .collect();
+        let endings = said.len();
         said.sort();
         said.dedup();
-        assert_eq!(said.len(), 4, "two endings share one sentence");
+        assert_eq!(said.len(), endings, "two endings share one sentence");
+    }
+
+    /// Every word these four cards can show resolves, in whatever language
+    /// this build starts in. A card whose title is a dotted key is a person
+    /// stuck at the one screen they cannot get past — and the pairing sheet's
+    /// are the least likely to be seen during development, because reaching
+    /// them needs a second device.
+    #[test]
+    fn every_card_has_its_words() {
+        let loc = Loc::from_env();
         for key in [
+            // The wait (071).
             "componentsUi.signing.clearSignerWaiting",
             "componentsUi.signing.clearSignerWaitingHint",
             "componentsUi.signing.clearSignerReopen",
             "componentsUi.signing.clearSignerTitle",
+            // Where it is (075).
+            "componentsUi.signing.clearSignerWhere",
+            "componentsUi.signing.clearSignerThisDevice",
+            "componentsUi.signing.clearSignerOtherDevice",
+            // The pairing, and the code (075).
+            "componentsUi.signing.clearSignerPair",
+            "componentsUi.signing.clearSignerPairHint",
+            "componentsUi.signing.clearSignerPairWaiting",
+            "componentsUi.signing.clearSignerCodeConfirm",
+            "componentsUi.signing.clearSignerCopyLink",
+            "common.cancel",
+            "common.done",
         ] {
-            assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed");
+            let said = loc.t(key);
+            assert_ne!(said.as_ref(), key, "`{key}` echoed");
+            assert!(!said.is_empty(), "`{key}` resolved empty");
         }
+        // The code's sentence carries the digits, and a template that lost its
+        // placeholder would show the person a sentence with no code in it.
+        let template = loc.t("componentsUi.signing.clearSignerCode");
+        assert!(template.contains("{{code}}"), "{template}");
+        let filled = loc.t_text("componentsUi.signing.clearSignerCode", "code", "082567");
+        assert!(filled.contains("082567"), "{filled}");
+        assert!(!filled.contains("{{code}}"), "{filled}");
+    }
+
+    /// The two rows of the "where is it?" question are DIFFERENT places. One
+    /// sentence for both would be a choice nobody can make.
+    #[test]
+    fn the_two_places_do_not_read_the_same() {
+        let loc = Loc::from_env();
+        assert_ne!(
+            loc.t("componentsUi.signing.clearSignerThisDevice"),
+            loc.t("componentsUi.signing.clearSignerOtherDevice")
+        );
+    }
+
+    /// A pairing link draws a QR. The relay link is long — a page URL, a
+    /// percent-encoded relay address, a room and a fingerprint — and a version
+    /// that could not hold it would leave the sheet with the copy button and
+    /// nothing to scan.
+    #[test]
+    fn a_real_pairing_link_still_fits_in_a_qr() {
+        let link = vela_core::clear_signer::relay_link(
+            vela_core::clear_signer::DEFAULT_SIGNER_URL,
+            vela_core::clear_signer::DEFAULT_RELAY_URL,
+            "AAECAwQFBgcICQoLDA0ODw",
+            "b8ZqkEhhccpptRK-GF1mpw",
+        );
+        let code = QrCode::new(link.as_bytes())
+            .unwrap_or_else(|error| unreachable!("the pairing link will not fit a QR: {error}"));
+        // The module has to stay big enough for a phone camera: the card is
+        // `PAIR_QR` wide however many modules there are.
+        #[allow(clippy::cast_precision_loss, reason = "at most 177 modules a side")]
+        let module = PAIR_QR / code.width() as f32;
+        assert!(
+            module >= 2.0,
+            "{} modules is too fine to scan",
+            code.width()
+        );
     }
 }

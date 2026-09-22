@@ -909,7 +909,7 @@ impl OnboardingPage {
         if !self.signin_methods_open {
             return None;
         }
-        let on_pick: std::sync::Arc<dyn Fn(vela_core::app::KeyMethod, &mut Window, &mut App)> = {
+        let on_pick: hardware::PickMethod = {
             let page = cx.entity();
             std::sync::Arc::new(move |method, _window, cx| {
                 page.update(cx, |page, cx| page.sign_in(method, cx));

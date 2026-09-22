@@ -33,9 +33,15 @@
 //! listener per page visit. The core's [`ws::Connection`] refuses any upgrade
 //! whose `Origin` is not the signer page's, and then any `hello` that does not
 //! carry this visit's one-time token: such a connection is closed and has no
-//! outcome, so a stray program or a spent tab cannot end a flow. Connections
-//! are read without blocking, so one that never finishes its handshake cannot
-//! hold the real answer up behind it.
+//! outcome, so a stray program on this machine cannot end a flow.
+//!
+//! The token belongs to the VISIT, not to a request — which is what makes
+//! "Open the page again" work, and means an earlier tab of the same visit can
+//! still answer. That is deliberate; what it must not do is cost the person
+//! their signature, so an answer always beats a close in the same breath
+//! ([`keep_best`]) and the tab in front of them is never the one hung up on
+//! ([`Loopback::accept`]). Connections are read without blocking, so one that
+//! never finishes its handshake cannot hold the real answer up behind it.
 //!
 //! ## What the screen sees
 //!
@@ -72,9 +78,12 @@ use crate::executor::passkey::{self, PasskeyFailure};
 pub const TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// How often a wait looks at the socket, the clock and the screen's buttons.
 pub(crate) const POLL: Duration = Duration::from_millis(50);
-/// Connections held open at once on one visit's listener. Past this a
-/// connection is noise, accepted and dropped.
+/// Connections held open at once on one visit's listener. Past this the
+/// oldest is hung up on — see [`Loopback::accept`].
 const CANDIDATES: usize = 4;
+/// How long one write to a socket on this machine may take before it counts
+/// as gone.
+const WRITE_DEADLINE: Duration = Duration::from_secs(1);
 
 // ---------------------------------------------------------------------------
 // What the person is told
@@ -177,6 +186,9 @@ struct State {
     /// How the last attempt ended without an answer, until the person has read
     /// it.
     ended: Option<Refusal>,
+    /// An attempt owns this channel's surfaces from the moment it asks where
+    /// the signer is until it is done.
+    claimed: bool,
 }
 
 /// What one screen and its Clear Signer attempts say to each other.
@@ -350,9 +362,21 @@ impl Channel {
     /// ceremony TAKES its visit out of here for as long as it is using the
     /// line (see [`Self::take_flow`]): there is never a moment when this
     /// thread and that one could both be writing one socket.
+    ///
+    /// **And safe to call from the main thread**, because saying goodbye is
+    /// socket I/O — a `bye` and a close frame, over TLS on the relay — and
+    /// every caller but the ceremony itself is a `Drop` on the thread that
+    /// draws the window. It goes on a thread of its own, which is allowed to
+    /// outlive this call by the second or two a dead peer costs.
     pub fn end_flow(&self) {
-        if let Some(mut open) = self.take_flow() {
-            open.line.end();
+        let Some(mut open) = self.take_flow() else {
+            return;
+        };
+        let farewell = std::thread::Builder::new()
+            .name("clear-signer-bye".to_owned())
+            .spawn(move || open.line.end());
+        if let Err(error) = farewell {
+            eprintln!("[vela-wallet] clear signer: could not say goodbye: {error}");
         }
     }
 
@@ -383,6 +407,33 @@ impl Channel {
     }
 
     // -- the attempt's half ---------------------------------------------------
+
+    /// Take this channel's surfaces for one attempt, or `None` when another
+    /// already has them.
+    ///
+    /// **One screen, one attempt.** `pairing`, `waiting` and the confirmed
+    /// code are one slot each, and they have to be: they are what one person
+    /// is looking at. Two attempts sharing them is one attempt's six digits
+    /// painted on the other's card, and one press of "the codes match"
+    /// releasing both — the second having sent its intents to whoever joined
+    /// its room without anybody ever having compared anything. A channel
+    /// belongs to one screen, so this cannot happen in any flow this app
+    /// offers; it is refused rather than left to be true by luck.
+    fn claim(&self) -> Option<Claim<'_>> {
+        let taken = self.with(|state| std::mem::replace(&mut state.claimed, true));
+        if taken {
+            eprintln!(
+                "[vela-wallet] clear signer: a second attempt asked for a screen \
+                 one already has"
+            );
+            return None;
+        }
+        Some(Claim(self))
+    }
+
+    fn release(&self) {
+        self.with(|state| state.claimed = false);
+    }
 
     /// Ask the person where their Clear Signer is, and block until they say.
     ///
@@ -518,6 +569,27 @@ pub trait Line: Send {
     fn end(&mut self);
 }
 
+/// One attempt's hold on a channel's surfaces, released when it ends however
+/// it ends.
+struct Claim<'a>(&'a Channel);
+
+impl Drop for Claim<'_> {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
+/// A second attempt on one screen: refused rather than allowed to scribble
+/// over the first one's card. Reported as a cancelled passkey, like every
+/// other way an attempt can come to nothing, so the request stays open to be
+/// answered once the first one is out of the way.
+fn busy() -> PasskeyFailure {
+    PasskeyFailure {
+        kind: FailureKind::Cancelled,
+        message: None,
+    }
+}
+
 /// Open a line to `page`, asking the person where their Clear Signer is first.
 ///
 /// Every refusal is told to the screen and answered as a cancelled passkey —
@@ -622,17 +694,29 @@ impl Loopback {
         })
     }
 
-    /// Take every connection waiting, up to the cap. A connection arriving
-    /// when nothing is being asked for is not this visit's and is dropped.
+    /// Take every connection waiting. A connection arriving when nothing is
+    /// being asked for is not this visit's and is dropped.
+    ///
+    /// **Past the cap the OLDEST goes, not the newest.** Refusing the newest
+    /// was the wrong way round: nothing in this list has answered (a wire that
+    /// answers ends the request), so the newest is the likeliest to be the tab
+    /// the person is looking at. A person who presses "Open the page again"
+    /// four times — the natural thing to do when nothing seems to happen —
+    /// would have filled every slot with abandoned tabs and had the fifth, the
+    /// live one, hung up on.
     fn accept(&mut self) {
         while let Ok((stream, _)) = self.listener.accept() {
             let Some((id, request)) = self.pending.clone() else {
                 let _ = stream.shutdown(Shutdown::Both);
                 continue;
             };
-            if self.wires.len() >= CANDIDATES || stream.set_nonblocking(true).is_err() {
+            if stream.set_nonblocking(true).is_err() {
                 let _ = stream.shutdown(Shutdown::Both);
                 continue;
+            }
+            while self.wires.len() >= CANDIDATES {
+                let stale = self.wires.remove(0);
+                let _ = stale.stream.shutdown(Shutdown::Both);
             }
             self.wires.push(Wire {
                 stream,
@@ -651,7 +735,7 @@ impl Loopback {
                 match wire.stream.read(&mut buffer) {
                     Ok(0) => {
                         if let Some(error) = wire.conn.closed() {
-                            settled = Some((index, Err(error)));
+                            keep_best(&mut settled, index, Err(error));
                         }
                         dead.push(index);
                         break;
@@ -662,7 +746,7 @@ impl Loopback {
                             dead.push(index);
                         }
                         if let Some(outcome) = step.outcome {
-                            settled = Some((index, outcome));
+                            keep_best(&mut settled, index, outcome);
                         }
                         if step.close {
                             break;
@@ -671,7 +755,7 @@ impl Loopback {
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => break,
                     Err(_) => {
                         if let Some(error) = wire.conn.closed() {
-                            settled = Some((index, Err(error)));
+                            keep_best(&mut settled, index, Err(error));
                         }
                         dead.push(index);
                         break;
@@ -685,9 +769,7 @@ impl Loopback {
             Some((index, outcome)) => {
                 let kept = self.wires.swap_remove(index);
                 self.wires.clear();
-                if !matches!(outcome, Err(ClearSignerError::Declined)) || !kept.closed() {
-                    self.wires.push(kept);
-                }
+                self.wires.push(kept);
                 self.pending = None;
                 Some(outcome)
             }
@@ -708,11 +790,27 @@ impl Loopback {
     }
 }
 
-impl Wire {
-    /// The socket is gone, so this wire cannot carry the session's next
-    /// request.
-    fn closed(&self) -> bool {
-        self.stream.peer_addr().is_err()
+/// Which of two verdicts in one pump is this request's.
+///
+/// **An answer beats a refusal, whatever order they arrive in.** Two wires
+/// exist exactly when the person pressed "Open the page again", and both were
+/// handed the same request — so the tab they signed on can answer in the same
+/// 50 ms in which the tab they abandoned closes. A single slot, overwritten,
+/// threw the signature away and told them they had closed the page. For a
+/// create that is a passkey minted in the browser and then dropped.
+///
+/// Between two of a kind the first wins: whoever got there is the answer.
+fn keep_best(
+    settled: &mut Option<(usize, Result<Value, ClearSignerError>)>,
+    index: usize,
+    outcome: Result<Value, ClearSignerError>,
+) {
+    let better = matches!(
+        (settled.as_ref(), &outcome),
+        (None, _) | (Some((_, Err(_))), Ok(_))
+    );
+    if better {
+        *settled = Some((index, outcome));
     }
 }
 
@@ -722,8 +820,10 @@ fn write_all(stream: &mut TcpStream, bytes: &[u8]) -> bool {
         return true;
     }
     // The socket is non-blocking for reads; a short write on a loopback
-    // socket carrying a few kilobytes is rare but not impossible.
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // socket carrying a few kilobytes is rare but not impossible. A second is
+    // already an eternity for a write to this machine — and `end` walks every
+    // wire, so a longer wait would be paid several times over on a teardown.
+    let deadline = Instant::now() + WRITE_DEADLINE;
     let mut at = 0;
     while at < bytes.len() {
         match stream.write(&bytes[at..]) {
@@ -755,6 +855,12 @@ impl Line for Loopback {
         channel: &Channel,
         deadline: Instant,
     ) -> Result<Value, Refusal> {
+        // Asked before a byte goes out: a person who pressed Cancel in the
+        // breath before this would otherwise get a passkey prompt on the page
+        // for a request the wallet has already given up on.
+        if channel.stopped() {
+            return Err(Refusal::Closed);
+        }
         // A session already up takes the next request on the same socket; the
         // page leaves its done card for the new one without being reopened.
         if let Some(wire) = self.wires.first_mut() {
@@ -896,6 +1002,9 @@ pub fn sign(
     channel: &Channel,
 ) -> Result<Assertion, PasskeyFailure> {
     let deadline = Instant::now() + TIMEOUT;
+    let Some(_claim) = channel.claim() else {
+        return Err(busy());
+    };
     let mut line = open_line(page, channel, deadline)?;
     let id = line.next_id();
     let answered = line.ask(&id, request, channel, deadline);
@@ -983,17 +1092,39 @@ pub fn run_ceremony(
     ))
 }
 
-/// Which page this operation's key lives behind: the one the ceremony that
-/// found it recorded, or the person's own page from Settings.
+/// Which page this operation's key lives behind.
+///
+/// **What a key records is an ORIGIN, not a page** — `verify_registration`
+/// stamps `origin_of(signer_origin)`, because an origin is what decides the
+/// rpId and therefore which keys the page can reach at all. A launch URL needs
+/// more than that: a page served under a path (`http://localhost:8140/
+/// clearsigning/`, the shape the core's own tests pin) would be launched at
+/// `<origin>/sign.html` and 404.
+///
+/// So the person's page from Settings wins whenever it is the SAME origin —
+/// which is every ordinary case, including a self-hosted one they configured.
+/// A key recorded behind some other origin is launched from that origin and
+/// nothing else is known about it; see this module's note in the report.
 fn signer_page_for(operation: &ShellOperation) -> String {
     let named = match operation {
         ShellOperation::SignProof { signer_origin, .. }
         | ShellOperation::SignMemberProof { signer_origin, .. } => signer_origin.clone(),
         _ => None,
     };
-    named
-        .filter(|origin| !origin.is_empty())
-        .unwrap_or_else(signer_url)
+    let settings = signer_url();
+    match named.filter(|origin| !origin.is_empty()) {
+        None => settings,
+        Some(origin) if same_page(&origin, &settings) => settings,
+        Some(origin) => origin,
+    }
+}
+
+/// Two addresses that reach the same page, as the channel judges it: the
+/// WebSocket handshake accepts one `Origin` and the core's verifier compares
+/// one origin, so that is the identity a page visit has.
+fn same_page(one: &str, other: &str) -> bool {
+    let origin = ws::origin_of(one);
+    !origin.is_empty() && origin == ws::origin_of(other)
 }
 
 fn ceremony_on_flow(
@@ -1006,10 +1137,20 @@ fn ceremony_on_flow(
     last: bool,
 ) -> Result<Answer, PasskeyFailure> {
     let deadline = Instant::now() + TIMEOUT;
+    let Some(_claim) = channel.claim() else {
+        return Err(busy());
+    };
     // The flow's visit, when it is a visit to this same page; otherwise a new
     // one, and the old one is told goodbye rather than left open.
     let mut open = channel.take_flow();
-    if open.as_ref().is_some_and(|flow| flow.page != page)
+    // A visit is to an ORIGIN: `Flow.page` was built from the Settings URL and
+    // `page` may have come from a key's recorded origin, so comparing the two
+    // strings would have found them different on every second ceremony of
+    // every real flow — and torn the page down between a create and its
+    // member proof, which is the one thing this whole channel exists to avoid.
+    if open
+        .as_ref()
+        .is_some_and(|flow| !same_page(&flow.page, page))
         && let Some(mut stale) = open.take()
     {
         stale.line.end();
@@ -1763,22 +1904,202 @@ pub(crate) mod tests {
 
     /// Which page a proof goes to: the one the key was found behind, and the
     /// person's own page from Settings for everything else.
+    ///
+    /// **A recorded `signer_origin` is an origin, and a launch URL is not.**
+    /// A key found behind the page Settings names is launched from that page,
+    /// PATH AND ALL — an origin alone would send a self-hosted page under a
+    /// path to `<origin>/sign.html`, which is a 404 and a five-minute wait.
     #[test]
     fn a_proof_goes_to_the_page_its_key_lives_behind() {
         use vela_core::app::KeyMethod;
         use vela_core::app::shell::ProofPurpose;
-        let behind = ShellOperation::SignProof {
+        let proof = |origin: Option<&str>| ShellOperation::SignProof {
             credential_id: "aabb".to_owned(),
             transports: String::new(),
             method: KeyMethod::ClearSigner,
             purpose: ProofPurpose::Verify,
-            signer_origin: Some("https://sign.example.test".to_owned()),
+            signer_origin: origin.map(str::to_owned),
         };
-        assert_eq!(signer_page_for(&behind), "https://sign.example.test");
+        // A key behind somebody else's page: all this side knows is the origin.
+        assert_eq!(
+            signer_page_for(&proof(Some("https://sign.example.test"))),
+            "https://sign.example.test"
+        );
+        // A key behind the page Settings names — the ordinary case — is
+        // launched from the Settings URL, which is the one with the path.
+        assert_eq!(
+            signer_page_for(&proof(Some("https://sign.getvela.app"))),
+            signer_url()
+        );
+        assert_eq!(signer_page_for(&proof(None)), signer_url());
         let anywhere = ShellOperation::AuthenticatePasskey {
             method: KeyMethod::ClearSigner,
         };
         assert_eq!(signer_page_for(&anywhere), signer_url());
+    }
+
+    /// **A signature is not thrown away because another tab closed.**
+    ///
+    /// "Open the page again" leaves the old tab holding its socket, and both
+    /// tabs were handed the same request. The person signs on the new one and
+    /// closes the old one — two verdicts inside one 50 ms pump — and a single
+    /// slot, overwritten, kept the close: the request came back "you closed
+    /// the page" with a real signature already discarded.
+    #[test]
+    fn an_answer_beats_a_close_that_lands_in_the_same_breath() {
+        let (channel, _changed) = Channel::new();
+        let answered = here(&channel);
+        let signing = signing_key(7);
+        let ceremony = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        let url = page_of_channel(&channel);
+        let (port, token) = launch_of(&url);
+
+        // The tab the person abandoned, and the one they went back to. Both
+        // said hello with this visit's token, so both hold the request.
+        let mut abandoned = FakePage::connect(port, &token, "https://sign.getvela.app");
+        abandoned
+            .next()
+            .unwrap_or_else(|| unreachable!("no intent"));
+        let mut signed_on = FakePage::connect(port, &token, "https://sign.getvela.app");
+        let intent = signed_on
+            .next()
+            .unwrap_or_else(|| unreachable!("no intent"));
+
+        // The signature, then the abandoned tab going, close enough together
+        // that one pump sees both.
+        signed_on.say(&json!({
+            "v": 1, "t": "result", "n": 1, "id": intent["id"],
+            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
+        }));
+        abandoned.hang_up();
+
+        let assertion = ceremony
+            .join()
+            .unwrap_or_else(|_| unreachable!("the attempt panicked"))
+            .unwrap_or_else(|failure| unreachable!("the signature was thrown away: {failure:?}"));
+        assert_eq!(assertion.credential_id, "112233");
+        assert_eq!(channel.ended(), None);
+        let _ = answered.join();
+    }
+
+    /// **The tab in front of the person is the one that gets the socket.**
+    ///
+    /// Pressing "Open the page again" is what somebody does when nothing seems
+    /// to happen, and doing it past the cap used to hang up on the newest tab
+    /// — the live one — while four abandoned ones held every slot. The oldest
+    /// goes instead.
+    #[test]
+    fn opening_the_page_again_and_again_does_not_lock_the_visit() {
+        let (channel, _changed) = Channel::new();
+        let answered = here(&channel);
+        let signing = signing_key(7);
+        let ceremony = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || sign(&json!({}), PAGE, &DIGEST, &keys(), &channel))
+        };
+        let url = page_of_channel(&channel);
+        let (port, token) = launch_of(&url);
+
+        // More tabs than the cap. Every one but the last is abandoned unread,
+        // which is exactly what the person leaves behind each time they press
+        // the button again.
+        let mut tabs: Vec<FakePage> = (0..CANDIDATES + 2)
+            .map(|_| FakePage::connect(port, &token, "https://sign.getvela.app"))
+            .collect();
+        // The last one — the one the person is actually looking at — still
+        // has its socket, and its request.
+        let live = tabs.last_mut().unwrap_or_else(|| unreachable!("a tab"));
+        let intent = live
+            .next()
+            .unwrap_or_else(|| unreachable!("the newest tab was hung up on"));
+        live.say(&json!({
+            "v": 1, "t": "result", "n": 1, "id": intent["id"],
+            "result": page_result(&signing, &CREDENTIAL, &DIGEST),
+        }));
+        assert!(
+            ceremony
+                .join()
+                .unwrap_or_else(|_| unreachable!("panicked"))
+                .is_ok()
+        );
+        let _ = answered.join();
+    }
+
+    /// **A self-hosted page under a path.** The core records an ORIGIN on a
+    /// key, because an origin is what decides the rpId; a launch URL needs the
+    /// path too. `http://localhost:8140/clearsigning/` — the shape the core's
+    /// own tests pin — records as `http://localhost:8140`, and launching from
+    /// that alone asks for `/sign.html` at a server that serves the page at
+    /// `/clearsigning/sign.html`: a 404, then a five-minute wait with nothing
+    /// to say. The person's own page wins whenever it is the same origin, and
+    /// the visit the create opened is the visit the member proof rides on.
+    #[test]
+    fn a_self_hosted_page_under_a_path_keeps_its_path() {
+        use vela_core::app::KeyMethod;
+        use vela_core::app::shell::ProofPurpose;
+        crate::executor::storage::tests::with_temp_state("clear-signer-hosted-path", || {
+            const HOSTED: &str = "http://localhost:8140/clearsigning/";
+            let _ = crate::executor::storage::write_value(
+                crate::executor::storage::KEY_CLEAR_SIGNER_URL,
+                Value::String(HOSTED.to_owned()),
+            );
+            assert_eq!(
+                signer_url(),
+                HOSTED,
+                "Settings holds the page with its path"
+            );
+
+            let proof = ShellOperation::SignProof {
+                credential_id: "aabb".to_owned(),
+                transports: String::new(),
+                method: KeyMethod::ClearSigner,
+                purpose: ProofPurpose::Verify,
+                // What a key minted on that page actually records.
+                signer_origin: Some("http://localhost:8140".to_owned()),
+            };
+            let page = signer_page_for(&proof);
+            assert_eq!(page, HOSTED, "the path was dropped");
+
+            let loopback = Loopback::open(&page).unwrap_or_else(|e| unreachable!("{e}"));
+            assert!(
+                loopback
+                    .url
+                    .starts_with("http://localhost:8140/clearsigning/sign.html?ch=ws#p="),
+                "the launch URL is a 404: {}",
+                loopback.url
+            );
+            // And it is the SAME visit the create opened, so nothing is torn
+            // down between the two ceremonies.
+            assert!(same_page(HOSTED, "http://localhost:8140"));
+        });
+    }
+
+    /// One page visit is one ORIGIN. The create's launch URL and the origin
+    /// its key records differ by a trailing slash, and a flow that compared
+    /// them as strings would open a second tab — and, cross-device, a second
+    /// QR and a second code — between a create and its member proof.
+    #[test]
+    fn a_visit_is_the_same_visit_however_its_address_was_written() {
+        assert!(same_page(
+            "https://sign.getvela.app/",
+            "https://sign.getvela.app"
+        ));
+        assert!(same_page(
+            "http://localhost:8140/clearsigning/",
+            "http://localhost:8140"
+        ));
+        assert!(same_page(
+            "https://Sign.GetVela.app:443/sign.html?x#y",
+            "https://sign.getvela.app"
+        ));
+        assert!(!same_page(
+            "https://sign.getvela.app",
+            "https://sign.example.test"
+        ));
+        assert!(!same_page("not a url", "not a url"));
     }
 
     // -- the ceremonies ------------------------------------------------------
@@ -1872,7 +2193,11 @@ pub(crate) mod tests {
             transports: String::new(),
             method: KeyMethod::ClearSigner,
             group_public_key_hex: "04aa".to_owned(),
-            signer_origin: None,
+            // What the create RECORDED — an origin, with no trailing slash,
+            // because that is what `verify_registration` stamps. The visit
+            // was opened from `https://sign.getvela.app/`, and comparing the
+            // two as strings used to tear the page down right here.
+            signer_origin: Some("https://sign.getvela.app".to_owned()),
         };
 
         let flow = {

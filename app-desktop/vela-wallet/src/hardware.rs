@@ -210,11 +210,16 @@ pub fn method_available(method: KeyMethod) -> bool {
     method != KeyMethod::Platform || crate::executor::passkey::platform_supported()
 }
 
+/// What a screen does when the person picks a way to sign in. An `Arc` rather
+/// than a closure per row: the card draws four rows from one handler, and
+/// gpui's own listeners are not `Clone`.
+pub type PickMethod = std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>;
+
 pub fn signin_method_card(
     theme: &Theme,
     loc: &Loc,
     icons: &RefCell<PasskeyIconCache>,
-    on_pick: std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>,
+    on_pick: PickMethod,
     on_dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
     // The row's mark (spec 038, #190): the founder's set, with "this device"

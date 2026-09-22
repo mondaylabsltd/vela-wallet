@@ -24,7 +24,7 @@
 
 use std::io;
 use std::net::TcpStream;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use tungstenite::stream::MaybeTlsStream;
@@ -41,6 +41,10 @@ use crate::executor::passkey;
 const APP: &str = concat!("vela-desktop/", env!("CARGO_PKG_VERSION"));
 
 type Socket = WebSocket<MaybeTlsStream<TcpStream>>;
+
+/// How long a write may take before the socket counts as gone. A frame is a
+/// few kilobytes; anything slower than this is a relay that stopped reading.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The randomness one pairing needs, all of it the shell's — the core holds
 /// none (`secure.rs`). A test pins it to the shared vectors.
@@ -79,7 +83,7 @@ pub struct Relay {
     session: Session,
     /// The request id, so an answer can be matched to its question.
     seq: u64,
-    /// `n` on what we send — monotonic per relay.md §2.5.
+    /// The highest `n` this side has sent.
     sent: u64,
     /// The highest `n` accepted from the page. One that does not increase is
     /// dropped: the seal already refuses a replay, and this refuses a reorder
@@ -179,6 +183,20 @@ pub fn open(
     })
 }
 
+impl Relay {
+    /// The next `n`, as PROTOCOL.md §4 defines it: **the larger of the highest
+    /// this side has sent and the highest it has received, plus one.**
+    ///
+    /// Not `sent + 1`. The sequence belongs to the SESSION, not to a
+    /// direction — intent 1, result 2, intent 3 — and a peer that enforces
+    /// that (the wallet's own `seen` check does) would drop a second intent
+    /// numbered 2. On a create over the relay that is the member proof
+    /// silently never arriving, and a five-minute wait with nothing to say.
+    fn next_n(&mut self) {
+        self.sent = self.sent.max(self.seen) + 1;
+    }
+}
+
 impl Line for Relay {
     fn next_id(&mut self) -> String {
         self.seq += 1;
@@ -192,7 +210,13 @@ impl Line for Relay {
         channel: &Channel,
         deadline: Instant,
     ) -> Result<Value, Refusal> {
-        self.sent += 1;
+        // The person may have stopped waiting in the moment before this: a
+        // request sent now would raise a passkey prompt on the page for
+        // something this wallet has already given up on.
+        if channel.stopped() {
+            return Err(Refusal::Closed);
+        }
+        self.next_n();
         let intent = json!({
             "v": 1,
             "t": "intent",
@@ -210,12 +234,15 @@ impl Line for Relay {
                 Message::Binary(bytes) => bytes,
                 // The relay's own frames are text and have a `relay` key; the
                 // page sends nothing else in the clear after the handshake.
-                Message::Text(text) => {
-                    if relay_said_left(&text) {
-                        return Err(Refusal::Closed);
-                    }
-                    continue;
-                }
+                // The relay's own frames are the only text after the
+                // handshake. `left` is the page going; `joined` is it coming
+                // BACK, which per §7.5 means new keys, a new nonce and a new
+                // code — this session cannot be spoken on any more, and
+                // waiting out five minutes would say nothing.
+                Message::Text(text) => match relay_frame(&text) {
+                    Some("left" | "joined") => return Err(Refusal::Closed),
+                    _ => continue,
+                },
                 _ => continue,
             };
             let Ok(plain) = self.session.open(&sealed, Tail::Counter) else {
@@ -246,7 +273,7 @@ impl Line for Relay {
     }
 
     fn end(&mut self) {
-        self.sent += 1;
+        self.next_n();
         let bye = json!({ "v": 1, "t": "bye", "n": self.sent, "reason": "done" });
         let sealed = self.session.seal(bye.to_string().as_bytes(), Tail::Counter);
         let _ = self.socket.send(Message::binary(sealed));
@@ -263,13 +290,20 @@ impl Line for Relay {
 /// Read with a short timeout, so every wait can look at the clock and at the
 /// person's "Cancel" between frames.
 fn set_poll_timeout(socket: &mut Socket) {
-    let timeout = Some(POLL);
+    let read = Some(POLL);
+    // A WRITE timeout too, and a generous one: `end` writes the `bye` on
+    // whatever thread is tearing the session down, and a relay that has
+    // stopped reading would otherwise hold that thread for as long as the
+    // OS's own TCP timeout — minutes.
+    let write = Some(WRITE_TIMEOUT);
     match socket.get_mut() {
         MaybeTlsStream::Plain(stream) => {
-            let _ = stream.set_read_timeout(timeout);
+            let _ = stream.set_read_timeout(read);
+            let _ = stream.set_write_timeout(write);
         }
         MaybeTlsStream::Rustls(stream) => {
-            let _ = stream.sock.set_read_timeout(timeout);
+            let _ = stream.sock.set_read_timeout(read);
+            let _ = stream.sock.set_write_timeout(write);
         }
         _ => {}
     }
@@ -364,16 +398,20 @@ fn closed_by(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> Refusal {
     }
 }
 
+/// What the RELAY said, when a text frame is its own. An end's own JSON never
+/// carries a `relay` key (relay.md §1), so this is how the two are told apart.
+fn relay_frame(text: &str) -> Option<&'static str> {
+    let frame: Value = serde_json::from_str(text).ok()?;
+    match frame.get("relay").and_then(Value::as_str) {
+        Some("joined") => Some("joined"),
+        Some("left") => Some("left"),
+        Some(_) => Some("other"),
+        None => None,
+    }
+}
+
 fn relay_said_left(text: &str) -> bool {
-    serde_json::from_str::<Value>(text)
-        .ok()
-        .and_then(|frame| {
-            frame
-                .get("relay")
-                .and_then(Value::as_str)
-                .map(|what| what == "left")
-        })
-        .unwrap_or(false)
+    relay_frame(text) == Some("left")
 }
 
 #[cfg(test)]
@@ -383,7 +421,6 @@ mod tests {
     use std::io::{Read as _, Write as _};
     use std::net::{Ipv4Addr, TcpListener};
     use std::sync::Arc;
-    use std::time::Duration;
 
     use vela_core::primitives::{from_hex, to_hex};
 
