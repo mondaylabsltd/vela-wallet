@@ -127,7 +127,7 @@ gh attestation verify VelaWallet-Setup-0.9.4-x64.exe --repo mondaylabsltd/vela-w
 
 **macOS is the exception, and is documented as one.** The images are built, signed, notarized and attached by hand on the founder's Mac (spec 063 §3a), so no workflow can honestly claim to have built them; Apple's notarization is their proof, and `xcrun stapler validate` and `spctl -a -t open --context context:primary-signature -v` are how you ask for it. `macos-attest.yml` (`workflow_dispatch`, a tag) then downloads the images **as published**, repeats both checks, and attests those exact bytes — so a `.dmg` verifies like everything else, with `--signer-workflow …/macos-attest.yml`.
 
-**Attestation is not code signing.** It says the file is the one this repository published; it is not a certificate the operating system knows, so the Windows SmartScreen prompt stays exactly as described above.
+**Attestation is not code signing.** It says the file is the one this repository published; it is not a certificate the operating system knows, so the Windows SmartScreen prompt stays exactly as described above — permanently. Buying an OV/EV certificate is a decision taken and declined (founder, 2026-09-23): it silences a warning rather than proving anything, and the attestation proves the thing the warning is about.
 
 ### A phone app you built yourself
 

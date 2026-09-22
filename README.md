@@ -165,9 +165,11 @@ spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-a
 ```
 
 **Windows** — the installer is not code-signed, and an attestation does not
-change that: SmartScreen still says "Windows protected your PC" once (**More
-info → Run anyway**). Verifying the attestation is what actually tells you the
-file is ours; the prompt is about a certificate we have not bought.
+change that: SmartScreen says "Windows protected your PC" once (**More info →
+Run anyway**). That prompt is permanent. We decided against buying a
+code-signing certificate: it removes a warning without making the file any more
+genuine, and what actually tells you the file is ours is the attestation above,
+which you can check yourself and we cannot forge.
 
 Attestations begin with the first release built after this landed; earlier
 packages have their checksums only.
