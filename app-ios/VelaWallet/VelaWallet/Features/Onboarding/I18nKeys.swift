@@ -184,14 +184,16 @@ enum I18nKeys {
         static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
         static let relayDown = "componentsUi.signing.clearSignerRelayDown"
 
-        /// Spec 075 T041, the nearby route. These two borrow `connect.dapp.*`
-        /// — true sentences, but generic ones, and they are the wrong
-        /// namespace for this surface. The catalogs live in the core, so the
-        /// iOS branch cannot add the right words; `ClearSignerBle.swift`'s
-        /// header lists the four `componentsUi.signing.*` keys this route
-        /// still needs.
-        static let nearbyDevice = "connect.dapp.connectBleTitle"
-        static let nearbyWaiting = "connect.dapp.waiting"
+        /// Spec 075 T041, the nearby route. `nearbyHint` carries the
+        /// foreground rule (PROTOCOL.md §1) rather than having a line of its
+        /// own: it is one fact, and it has to be read before the route is
+        /// chosen, not after the page has failed to find the phone.
+        static let nearby = "componentsUi.signing.clearSignerNearby"
+        static let nearbyHint = "componentsUi.signing.clearSignerNearbyHint"
+        /// Takes `name` — what the advert is carrying.
+        static let nearbyName = "componentsUi.signing.clearSignerNearbyName"
+        static let bluetoothNeeded = "componentsUi.signing.clearSignerBluetoothNeeded"
+        static let bluetoothOff = "componentsUi.signing.clearSignerBluetoothOff"
     }
 
     enum Settings {
@@ -232,7 +234,8 @@ enum I18nKeys {
         ClearSigner.thisDevice, ClearSigner.otherDevice,
         ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
         ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
-        ClearSigner.relayDown, ClearSigner.nearbyDevice, ClearSigner.nearbyWaiting,
+        ClearSigner.relayDown, ClearSigner.nearby, ClearSigner.nearbyHint,
+        ClearSigner.nearbyName, ClearSigner.bluetoothNeeded, ClearSigner.bluetoothOff,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,

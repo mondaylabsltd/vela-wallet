@@ -123,21 +123,18 @@ struct ClearSignerSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             // What Bluetooth is missing, named rather than left as a route
-            // that silently does nothing.
+            // that silently does nothing. A radio that is merely switched off
+            // is not a refused permission, and the two get different lines.
             if case .bleTrouble(let trouble) = model.stage {
-                Text(loc.t(trouble.titleKey))
-                    .typeRole(Typography.rowTitle)
+                Text(loc.t(trouble.bodyKey))
+                    .typeRole(Typography.flowCaption)
                     .foregroundStyle(theme.errorBase)
-                if let body = trouble.bodyKey {
-                    Text(loc.t(body))
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.errorBase)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("clear-signer-ble-trouble")
             }
             choice(loc.t(I18nKeys.ClearSigner.thisDevice)) { model.pick(.thisDevice) }
             choice(loc.t(I18nKeys.ClearSigner.otherDevice)) { model.pick(.otherDevice) }
-            choice(loc.t(I18nKeys.ClearSigner.nearbyDevice)) { model.pick(.nearby) }
+            choice(loc.t(I18nKeys.ClearSigner.nearby)) { model.pick(.nearby) }
         }
     }
 
@@ -148,22 +145,31 @@ struct ClearSignerSheet: View {
     /// beside the spinner.
     private var nearby: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
-            Text(loc.t(I18nKeys.ClearSigner.nearbyDevice))
+            Text(loc.t(I18nKeys.ClearSigner.nearby))
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
-            Text(model.localName)
+            // The name the advert is carrying, in the sentence that tells the
+            // person what to do with it: their job here is to find this phone
+            // in the browser's device list.
+            Text(loc.t(I18nKeys.ClearSigner.nearbyName, vars: ["name": model.localName]))
                 .typeRole(Typography.rowTitle)
                 .foregroundStyle(theme.fgBase)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("clear-signer-local-name")
+            // "Keep Vela open while you sign" — and backgrounded, this phone
+            // drops out of the computer's chooser altogether (PROTOCOL.md §1).
+            // Nothing can be shown while the app is away, so the same line
+            // turns red on the way back, which is exactly when somebody asks
+            // why nothing came up.
+            Text(loc.t(I18nKeys.ClearSigner.nearbyHint))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(model.offScreen ? theme.errorBase : theme.fgSubtle)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Tokens.Space.s8) {
                 ProgressView()
-                Text(loc.t(I18nKeys.ClearSigner.nearbyWaiting))
+                Text(loc.t(I18nKeys.ClearSigner.pairWaiting))
                     .typeRole(Typography.flowCaption)
-                    // Backgrounded, this phone drops out of the computer's
-                    // chooser entirely (PROTOCOL.md §1). Nothing can be shown
-                    // while the app is away, so it is shown on the way back —
-                    // which is exactly when somebody asks why nothing came up.
-                    .foregroundStyle(model.offScreen ? theme.errorBase : theme.fgMuted)
+                    .foregroundStyle(theme.fgMuted)
             }
         }
     }

@@ -53,29 +53,19 @@
 //  A simulator has no usable BLE peripheral stack. So `CBPeripheralManager`
 //  sits behind `ClearSignerBleRadio`, and the delegate callbacks that carry
 //  un-constructible CoreBluetooth types (`CBATTRequest`, `CBCentral`) are
-//  one-line adapters onto `received(_:nowMs:)` and `subscribed(mtu:)`, which
+//  one-line adapters onto `received(_:nowMs:)` and
+//  `subscribed(maximumUpdateValueLength:)`, which
 //  take plain values a test can build.
 //
-//  ## Words this surface still owes the person
+//  ## The MTU, and why the default chunk is not it
 //
-//  The catalogs are the core's (`rust/crates/vela-core/i18n/locales`), so this
-//  branch cannot add to them. Four sentences have no key in any locale and
-//  are therefore not on screen yet — each one belongs beside
-//  `componentsUi.signing.clearSignerRelayDown`:
-//
-//    clearSignerNearby        "Nearby, over Bluetooth"
-//    clearSignerNearbyHint    "Open the Clear Signer on a computer in this room
-//                              and pick <name> from its device list."
-//    clearSignerForeground    "Keep Vela on screen — the computer can only see
-//                              this phone while Vela is open."
-//    clearSignerBleOff        "Bluetooth is switched off." / "…cannot be used
-//                              on this device."
-//
-//  Until they exist the choice row and the advert screen borrow
-//  `connect.dapp.connectBleTitle` and `connect.dapp.waiting`, which are true
-//  but generic, and the foreground state is shown by colour rather than by a
-//  sentence. `notAuthorized` is complete: `connect.dapp.blePerm*` says exactly
-//  the right thing.
+//  `DEFAULT_CHUNK` (244) is what the PAGE writes with, and an oversized write
+//  from a central is split into a long write by the OS. A peripheral's notify
+//  cannot be split: `updateValue` truncates at the link's maximum, and a
+//  truncated frame is a message that never completes. So this end calls the
+//  core's `fitToMtu` the moment a central subscribes rather than trusting the
+//  default — `subscribed(maximumUpdateValueLength:)`, which is also where
+//  CoreBluetooth's units are converted to the ATT MTU the core asks for.
 //
 
 import CoreBluetooth
@@ -139,19 +129,17 @@ enum ClearSignerBleTrouble: Equatable {
     /// The service or the advertisement would not come up.
     case unavailable
 
-    /// What the card says. `notAuthorized` is the one the catalog already has
-    /// exact words for — `connect.dapp.blePerm*`, "Permission Required" /
-    /// "Bluetooth permission is needed." The other three have no sentence in
-    /// any locale yet (see this file's header), so they show the channel's own
-    /// name with the two other routes under it rather than a line that says
-    /// the wrong thing: a person whose Bluetooth is merely switched off must
-    /// not be told they refused a permission.
-    var titleKey: String {
-        self == .notAuthorized ? "connect.dapp.blePermTitle" : "connect.dapp.connectBleTitle"
-    }
+    /// What the card says. A person whose Bluetooth is merely switched off
+    /// must not be told they refused a permission — they would go looking for
+    /// a settings screen with nothing in it to change — so the two cases keep
+    /// their own sentence, and the permission one says WHY it is wanted rather
+    /// than only that it is missing.
+    var titleKey: String { I18nKeys.ClearSigner.nearby }
 
-    var bodyKey: String? {
-        self == .notAuthorized ? "connect.dapp.blePermBody" : nil
+    var bodyKey: String {
+        self == .notAuthorized
+            ? I18nKeys.ClearSigner.bluetoothNeeded
+            : I18nKeys.ClearSigner.bluetoothOff
     }
 }
 
@@ -426,16 +414,18 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
         return .success
     }
 
-    /// A central subscribed to `p2c`. Its MTU is the only honest measure of
-    /// how big a frame may be, and `halve()` is the core's way down to it.
-    func subscribed(mtu: Int) {
-        while Int(framer.chunk()) + Self.header > mtu, framer.halve() {}
+    /// A central subscribed to `p2c`, and the link's size is finally known.
+    ///
+    /// CoreBluetooth reports the NOTIFICATION capacity — the ATT MTU less the
+    /// opcode and the handle — and the core's `fitToMtu` takes the MTU itself,
+    /// so the three bytes go back on here. This conversion is the whole reason
+    /// the method is named in CoreBluetooth's units: getting it wrong by three
+    /// makes `updateValue` truncate the last frame, and a truncated frame is a
+    /// message that never completes and is swept ten seconds later.
+    func subscribed(maximumUpdateValueLength: Int) {
+        _ = framer.fitToMtu(mtu: UInt32(clamping: maximumUpdateValueLength + 3))
         pump()
     }
-
-    /// The six-byte header the core frames behind (PROTOCOL.md §2). Only the
-    /// MTU arithmetic above needs it; no header is built here.
-    private static let header = 6
 
     private func handle(_ message: ClearSignerBleMessage) {
         guard message.sealed else { return hello(message) }
@@ -606,7 +596,9 @@ final class ClearSignerBleConversation: NSObject, ClearSignerConversation, CBPer
         _ peripheral: CBPeripheralManager, central: CBCentral,
         didSubscribeTo characteristic: CBCharacteristic
     ) {
-        MainActor.assumeIsolated { self.subscribed(mtu: central.maximumUpdateValueLength) }
+        MainActor.assumeIsolated {
+            self.subscribed(maximumUpdateValueLength: central.maximumUpdateValueLength)
+        }
     }
 
     nonisolated func peripheralManager(

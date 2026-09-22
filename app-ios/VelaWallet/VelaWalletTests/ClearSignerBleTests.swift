@@ -51,8 +51,10 @@ final class StubBleRadio: ClearSignerBleRadio {
     /// Whether the stub answers `add`/`startAdvertising` with the callbacks a
     /// real controller would. A test that wants a failure drives them itself.
     var automatic = true
-    /// What `central.maximumUpdateValueLength` would say.
-    var mtu = 185
+    /// What `central.maximumUpdateValueLength` would say — the NOTIFICATION
+    /// capacity, which is the ATT MTU less the opcode and handle. 185 is the
+    /// ATT MTU 188 that a Mac and an iPhone commonly settle on.
+    var maximumUpdateValueLength = 185
     /// Frames the "page" writes as soon as it has subscribed.
     var script: [Data] = []
     /// How many notifications the controller takes before it reports its queue
@@ -76,7 +78,7 @@ final class StubBleRadio: ClearSignerBleRadio {
         adverts.append(advertisementData ?? [:])
         guard automatic else { return }
         conversation?.advertisingStarted(error: nil)
-        conversation?.subscribed(mtu: mtu)
+        conversation?.subscribed(maximumUpdateValueLength: maximumUpdateValueLength)
         for frame in script {
             conversation?.received([ClearSignerBleWrite(value: frame)])
         }
@@ -358,29 +360,40 @@ struct ClearSignerBlePeripheralTests {
         _ = await pairing
     }
 
-    /// The chunk follows the link's MTU down, through the core's `halve()` and
-    /// no further than its floor: the ATT default of 23 leaves 20 bytes, and
-    /// halving past that would only stall. A frame that did not fit the link
-    /// would be TRUNCATED by the controller rather than refused, so this is
-    /// not a nicety.
-    @Test func theChunkFollowsTheMtuDownThroughTheCoresLadder() async throws {
+    /// The chunk is sized to the link by the CORE's `fitToMtu`, and the three
+    /// bytes between CoreBluetooth's units and the core's are put back before
+    /// it is asked. A frame that did not fit would be TRUNCATED by the
+    /// controller rather than refused — a message that never completes and is
+    /// swept ten seconds later — so the off-by-three is the whole point.
+    @Test func theChunkIsSizedToTheLinkByTheCore() async throws {
         let vector = try #require(BleVector.ble)
-        // The ladder the core walks: 244, 122, 61, 30, 20 and no further.
-        for (mtu, expected) in [(512, 244), (185, 122), (67, 61), (27, 20), (23, 20)] {
+        // (what CoreBluetooth reports, the ATT MTU it implies, the chunk).
+        for (capacity, attMtu, expected) in [
+            (509, 512, 244),   // clamped at the default
+            (244, 247, 238),   // the MTU the page's 244 was written for
+            (182, 185, 176),
+            (64, 67, 58),
+            (20, 23, 20),      // the floor
+        ] {
             let radio = StubBleRadio()
-            radio.mtu = mtu
+            radio.maximumUpdateValueLength = capacity
             radio.script = frames(msgId: 1, payload: Data(vector.signerHello.utf8), sealed: false)
             let conversation = try #require(make(radio: radio, vector: vector))
             #expect(await conversation.advertise() == vector.code)
 
-            // What we sent, re-cut by a core framer walked down the same
-            // ladder. Identical frames means the peripheral used that chunk.
-            let ours = try #require(radio.messages().first).payload
             let framer = ClearSignerFramer()
-            while Int(framer.chunk()) + 6 > mtu, framer.halve() {}
-            #expect(Int(framer.chunk()) == expected, "the ladder does not land where it should at \(mtu)")
+            #expect(Int(framer.fitToMtu(mtu: UInt32(attMtu))) == expected,
+                    "the core does not size an MTU of \(attMtu) the way this expects")
+            // What we sent, re-cut at that chunk: identical frames mean the
+            // peripheral asked the core the same question we just did.
+            let ours = try #require(radio.messages().first).payload
             #expect(radio.notified == framer.frames(msgId: 1, payload: ours, sealed: false),
-                    "the hello was not cut to the link at mtu \(mtu)")
+                    "the hello was not cut to a link of \(capacity)")
+            // And, above the floor, every frame actually fits the link.
+            if expected > 20 {
+                #expect(radio.notified.allSatisfy { $0.count <= capacity },
+                        "a frame would have been truncated on a link of \(capacity)")
+            }
         }
     }
 
@@ -427,7 +440,7 @@ struct ClearSignerBlePeripheralTests {
         async let pairing = conversation.advertise()
         await Task.yield()
         conversation.serviceAdded(error: nil)
-        conversation.subscribed(mtu: 27)
+        conversation.subscribed(maximumUpdateValueLength: 20)
         let repeated = pieces.removeFirst()
         conversation.received([ClearSignerBleWrite(value: repeated)])
         // The same frame again is not a second frame.
@@ -457,7 +470,7 @@ struct ClearSignerBlePeripheralTests {
         async let pairing = conversation.advertise()
         await Task.yield()
         conversation.serviceAdded(error: nil)
-        conversation.subscribed(mtu: 27)
+        conversation.subscribed(maximumUpdateValueLength: 20)
 
         // Everything but the last frame arrives…
         for frame in pieces.dropLast() {
@@ -643,7 +656,7 @@ struct ClearSignerBlePeripheralTests {
         let radio = StubBleRadio()
         // At this size the hello alone is a dozen frames, and the controller
         // takes only the first.
-        radio.mtu = 27
+        radio.maximumUpdateValueLength = 20
         radio.acceptsBeforeFull = 1
         radio.script = frames(msgId: 1, payload: Data(vector.signerHello.utf8), sealed: false)
         let conversation = try #require(make(radio: radio, vector: vector))
@@ -661,9 +674,9 @@ struct ClearSignerBlePeripheralTests {
 
     // MARK: When the radio cannot carry a session
 
-    /// A refused permission is a card that names what is missing, not a
-    /// spinner. `notAuthorized` is the one case the catalogs already have
-    /// exact words for, and the sheet shows those two keys.
+    /// A refused permission is a card that names what is missing — and WHY it
+    /// is wanted — rather than a spinner, or a bare "permission needed" that
+    /// leaves a person guessing what it is for.
     @Test func aRefusedPermissionNamesWhatIsMissing() async throws {
         let radio = StubBleRadio(state: .unauthorized)
         let conversation = try #require(make(radio: radio))
@@ -673,18 +686,17 @@ struct ClearSignerBlePeripheralTests {
 
         let loc = Loc(overrideTag: "en", preferredLanguages: [])
         let trouble = ClearSignerBleTrouble.notAuthorized
-        let title = loc.t(trouble.titleKey)
-        let body = loc.t(try #require(trouble.bodyKey))
-        #expect(title != trouble.titleKey, "the card's title has no sentence behind it")
-        #expect(body != trouble.bodyKey, "the card's body has no sentence behind it")
-        #expect(title.lowercased().contains("permission"))
+        let body = loc.t(trouble.bodyKey)
+        #expect(body != trouble.bodyKey, "the card's sentence has nothing behind it")
         #expect(body.lowercased().contains("bluetooth"))
+        #expect(body.lowercased().contains("permission"))
     }
 
     /// Bluetooth switched off, and a device with no peripheral role at all,
-    /// are each their own answer — never "you refused a permission", which
-    /// would send somebody to a settings screen with nothing in it to change.
+    /// get their OWN sentence — never "you refused a permission", which would
+    /// send somebody to a settings screen with nothing in it to change.
     @Test func theOtherWaysTheRadioCannotCarryASessionAreDistinct() async throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
         for (state, expected) in [
             (CBManagerState.poweredOff, ClearSignerBleTrouble.poweredOff),
             (.unsupported, .unsupported),
@@ -692,9 +704,36 @@ struct ClearSignerBlePeripheralTests {
             let conversation = try #require(make(radio: StubBleRadio(state: state)))
             #expect(await conversation.advertise() == nil)
             #expect(conversation.trouble == expected)
-            #expect(conversation.trouble?.bodyKey == nil,
+            let body = loc.t(expected.bodyKey)
+            #expect(body != expected.bodyKey, "\(expected) has no sentence behind it")
+            #expect(body != loc.t(ClearSignerBleTrouble.notAuthorized.bodyKey),
                     "\(expected) borrowed the permission sentence, which is not true of it")
         }
+    }
+
+    /// Every sentence this route puts on screen resolves — a missing key
+    /// renders as the key itself (`Loc`, FR-005), which on a sheet somebody is
+    /// mid-ceremony on would be worse than a wrong word. The hint carries the
+    /// foreground rule (PROTOCOL.md §1), so that is asserted rather than
+    /// assumed: it is the one sentence that keeps a person from thinking the
+    /// channel is broken when they switch apps.
+    @Test func everySentenceOnTheNearbyRouteHasWordsBehindIt() throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        for key in [
+            I18nKeys.ClearSigner.nearby,
+            I18nKeys.ClearSigner.nearbyHint,
+            I18nKeys.ClearSigner.bluetoothNeeded,
+            I18nKeys.ClearSigner.bluetoothOff,
+        ] {
+            #expect(loc.t(key) != key, "\(key) has no sentence behind it")
+        }
+        #expect(loc.t(I18nKeys.ClearSigner.nearbyHint).lowercased().contains("keep vela open"),
+                "the hint no longer says the app must stay on screen")
+        // The name is interpolated, not concatenated: a person matches what is
+        // on this screen against a row in the browser's chooser.
+        let named = loc.t(I18nKeys.ClearSigner.nearbyName, vars: ["name": "Vela · iPhone"])
+        #expect(named.contains("Vela · iPhone"))
+        #expect(!named.contains("{{"), "the name was never substituted")
     }
 
     /// An advertisement that will not start is reported rather than waited on.
