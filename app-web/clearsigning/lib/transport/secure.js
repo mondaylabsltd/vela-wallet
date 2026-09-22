@@ -7,7 +7,7 @@
 // message from one channel can never be replayed into the other.
 //
 // Byte-identical to vela-core's `clear_signer::secure` (Rust), and pinned
-// against it by `rust/crates/vela-core/tests/vectors/secure-session.json`
+// against it by `rust/crates/vela-core/tests/clear-signer/secure-session.json`
 // (samples/secure-vectors.mjs). Nothing here knows about frames or sockets:
 // BLE adds its framing around it, the relay sends each sealed message as one
 // binary WebSocket frame.

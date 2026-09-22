@@ -1,7 +1,7 @@
 // lib/transport/secure.js against vela-core's own session, byte for byte.
 //
 // The vectors are written by the Rust side (`clear_signer::secure`,
-// rust/crates/vela-core/tests/vectors/secure-session.json): fixed secrets and
+// rust/crates/vela-core/tests/clear-signer/secure-session.json): fixed secrets and
 // nonces for both ends, the code and `rk` they must agree on, and four sealed
 // messages per case. With the same secrets and nonces injected, the page's
 // session must reproduce every one of them — and refuse what Rust refuses.
@@ -13,7 +13,7 @@
 import { spawn } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,13 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const repo = join(root, '..', '..');
-const VECTORS = join(repo, 'rust/crates/vela-core/tests/vectors/secure-session.json');
+// Where vela-core keeps them; the first spelling is where they lived before the
+// conformance corpus (tests/vectors/) was reserved for the shared suites.
+const VECTORS = [
+  'rust/crates/vela-core/tests/clear-signer/secure-session.json',
+  'rust/crates/vela-core/tests/vectors/secure-session.json',
+].map((path) => join(repo, path)).find((path) => existsSync(path));
+if (!VECTORS) throw new Error('no secure-session.json under rust/crates/vela-core/tests/');
 const CDP = 9391;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
