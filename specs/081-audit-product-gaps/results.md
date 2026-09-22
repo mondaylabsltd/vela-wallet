@@ -346,6 +346,14 @@ The stub now answers `true`, deliberately, not `false`: the bool means "was the 
 
 Swept for more of the same: `clear_browsing_data` is the **only** `webview::` call this branch added, and every other `webview::` name used outside a `cfg` block is already in the stub.
 
+## …and a third: `cargo fmt` invalidated the committed wasm
+
+`rust` failed on `build-web.mjs --check` — "the committed artifact was NOT built from the current Rust source". Correct, and my fault twice over: `rust/pkg-web`'s fingerprint is taken over the Rust **source bytes**, so running `cargo fmt` moved it exactly as a real code change would. I reformatted and pushed without rebuilding.
+
+Rebuilt and synced; `verify-web.mjs` replays 47,443 conformance cases through the shipped artifact and is green. `quickstart.md` now says the coupling out loud, next to the fmt gate: **reformat first, then rebuild** — the stale-artifact check is the one that catches you last.
+
+Three CI failures in a row, all of them the same shape: gates that exist, that I did not run, in an order that matters.
+
 ## One more parity tail, from the Android device run
 
 Android and iOS hide the Technical details card under a refusal; web was still putting the raw `params_json` of the very request the wallet refused behind a disclosure. `techModel` is now refusal-aware on web too — the one shell that had stayed lax about it.

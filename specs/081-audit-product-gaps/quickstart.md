@@ -11,10 +11,19 @@ exactly what happened to this feature's first push. Every `.rs` written or
 edited by hand needs it, and the toolchain is pinned (1.97.1), so a different
 rustfmt is a different answer.
 
+`cargo fmt` changes the Rust SOURCE BYTES, and `rust/pkg-web`'s fingerprint is
+taken over them — so formatting invalidates the committed wasm artifact exactly
+as a real code change would. Reformat first, then rebuild, or `rust` fails on
+`build-web.mjs --check` having passed everything else.
+
 ```bash
 # formatting, in BOTH Rust workspaces — the gate this feature forgot
 cd rust && cargo fmt --all --check
 cd app-desktop/vela-wallet && cargo fmt --all --check
+
+# …and if either of those CHANGED anything, the committed wasm is now stale:
+cd scripts && pnpm build:wasm && cd ../app-web/vela-wallet && npm run sync:wasm
+cd ../.. && node rust/scripts/build-web.mjs --check
 
 # core + conformance replay (Kotlin, Swift, shipped wasm)
 cd rust && cargo test --workspace --features vela-core/i18n-all && cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
