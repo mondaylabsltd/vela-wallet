@@ -22,16 +22,36 @@
 import SwiftUI
 import VelaCore
 
+/// What a button on the sheet answered. Three routes and a confirmation, so
+/// a Bool no longer says it: "on this device" and "the codes match" were the
+/// same `true` until the nearby route made a third choice possible.
+enum ClearSignerPick: Equatable {
+    /// The loopback page, in a tab over this sheet.
+    case thisDevice
+    /// A page on another device, through the relay.
+    case otherDevice
+    /// A page on a computer in this room, over BLE (spec 075 T041).
+    case nearby
+    /// The two screens show the same six digits.
+    case agreed
+}
+
 /// What the Clear Signer's sheet is showing.
 @Observable
 final class ClearSignerSheetModel {
     enum Stage: Equatable {
-        /// This device, or another one (`clearSignerWhere`).
+        /// This device, another one, or nearby (`clearSignerWhere`).
         case choosing
         /// The relay could not be reached: the line, and the choice again.
         case relayDown
+        /// Bluetooth cannot carry a session: what is missing, and the choice
+        /// again.
+        case bleTrouble(ClearSignerBleTrouble)
         /// The QR and the link, while the other device is opened.
         case pairing
+        /// Advertising, while somebody picks this phone out of the page's
+        /// device chooser.
+        case nearby
         /// The six digits both screens must show, and the confirm button.
         case code(String)
         /// The page has the request.
@@ -41,8 +61,14 @@ final class ClearSignerSheetModel {
     var stage: Stage = .choosing
     /// The pairing link — the QR's payload and what "copy link" copies.
     var link: String = ""
-    /// `true` for this device.
-    var pick: (Bool) -> Void = { _ in }
+    /// What the page's device chooser shows this phone as.
+    var localName: String = ""
+    /// The app went off screen during a nearby session, so the advert lost
+    /// its local name and the computer stopped seeing this phone
+    /// (PROTOCOL.md §1). Shown on the way back, which is when it is asked.
+    var offScreen = false
+    /// Which of the three routes, or that the codes match.
+    var pick: (ClearSignerPick) -> Void = { _ in }
     var confirmCode: () -> Void = {}
     var copyLink: () -> Void = {}
     /// Only while a page is open on this device.
@@ -60,10 +86,12 @@ struct ClearSignerSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
             switch model.stage {
-            case .choosing, .relayDown:
+            case .choosing, .relayDown, .bleTrouble:
                 where_
             case .pairing:
                 pairing
+            case .nearby:
+                nearby
             case .code(let code):
                 codeCheck(code)
             case .waiting:
@@ -94,8 +122,55 @@ struct ClearSignerSheet: View {
                     .foregroundStyle(theme.errorBase)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            choice(loc.t(I18nKeys.ClearSigner.thisDevice)) { model.pick(true) }
-            choice(loc.t(I18nKeys.ClearSigner.otherDevice)) { model.pick(false) }
+            // What Bluetooth is missing, named rather than left as a route
+            // that silently does nothing. A radio that is merely switched off
+            // is not a refused permission, and the two get different lines.
+            if case .bleTrouble(let trouble) = model.stage {
+                Text(loc.t(trouble.bodyKey))
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.errorBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("clear-signer-ble-trouble")
+            }
+            choice(loc.t(I18nKeys.ClearSigner.thisDevice)) { model.pick(.thisDevice) }
+            choice(loc.t(I18nKeys.ClearSigner.otherDevice)) { model.pick(.otherDevice) }
+            choice(loc.t(I18nKeys.ClearSigner.nearby)) { model.pick(.nearby) }
+        }
+    }
+
+    // MARK: - Nearby, over Bluetooth
+
+    /// Advertising. The person's job here is to find this phone in the page's
+    /// device chooser, so the local name it is advertising under is on screen
+    /// beside the spinner.
+    private var nearby: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            Text(loc.t(I18nKeys.ClearSigner.nearby))
+                .typeRole(Typography.title)
+                .foregroundStyle(theme.fgBase)
+            // The name the advert is carrying, in the sentence that tells the
+            // person what to do with it: their job here is to find this phone
+            // in the browser's device list.
+            Text(loc.t(I18nKeys.ClearSigner.nearbyName, vars: ["name": model.localName]))
+                .typeRole(Typography.rowTitle)
+                .foregroundStyle(theme.fgBase)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("clear-signer-local-name")
+            // "Keep Vela open while you sign" — and backgrounded, this phone
+            // drops out of the computer's chooser altogether (PROTOCOL.md §1).
+            // Nothing can be shown while the app is away, so the same line
+            // turns red on the way back, which is exactly when somebody asks
+            // why nothing came up.
+            Text(loc.t(I18nKeys.ClearSigner.nearbyHint))
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(model.offScreen ? theme.errorBase : theme.fgSubtle)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Tokens.Space.s8) {
+                ProgressView()
+                Text(loc.t(I18nKeys.ClearSigner.pairWaiting))
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgMuted)
+            }
         }
     }
 

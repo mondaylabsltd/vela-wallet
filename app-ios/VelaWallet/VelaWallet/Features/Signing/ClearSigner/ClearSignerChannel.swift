@@ -74,6 +74,94 @@ protocol ClearSignerConversation: AnyObject {
     func end()
 }
 
+/// The envelope work the SEALED channels share (PROTOCOL.md §4): the request
+/// that goes out, the verdict that comes back, and the page's refusal codes in
+/// the core's vocabulary.
+///
+/// The relay (`ClearSignerRelayConversation`) and the BLE peripheral
+/// (`ClearSignerBleConversation`) run the same core session; the only thing
+/// that differs between them is what carries the bytes — a WebSocket frame or
+/// a GATT notification. So the JSON lives here once rather than twice, where
+/// one copy could start shaping `n` or `id` differently from the other and
+/// only one of the two channels would drift from the page.
+///
+/// The loopback channel does NOT use this: there the core's
+/// `ClearSignerConnection` writes the whole envelope itself.
+enum ClearSignerAnswer {
+
+    /// `{v,t:"intent",n,id,intent,context}` — the request the core built,
+    /// unwrapped into the session's envelope.
+    static func intent(_ ask: ClearSignerAsk, id: String, n: UInt64) -> Data? {
+        let requestJson = switch ask {
+        case .ceremony(let request, _, _): request
+        case .signature(let request, _, _): request
+        }
+        guard let request = json(requestJson) else { return nil }
+        var message: [String: Any] = ["v": 1, "t": "intent", "n": n, "id": id]
+        message["intent"] = request["intent"] ?? NSNull()
+        message["context"] = request["context"] ?? NSNull()
+        return body(message)
+    }
+
+    /// The core's verdict on one answer; `nil` for a message that is not one.
+    static func verdict(
+        _ message: [String: Any], ask: ClearSignerAsk, signerUrl: String
+    ) -> ClearSignerChannel.Ending? {
+        switch message["t"] as? String {
+        case "bye":
+            // The page hung up holding the request: closed without signing.
+            return ClearSignerChannel.declined(for: ask)
+        case "error":
+            switch ask {
+            case .ceremony(_, let operationJson, let memberChallenge):
+                // The core reads an `error` envelope itself, so the page's own
+                // code reaches the machine unedited.
+                return .ceremony(clearSignerVerifyCeremony(
+                    operationJson: operationJson, answerJson: body(message).map(text) ?? "{}",
+                    signerOrigin: signerUrl, expectedMemberChallenge: memberChallenge
+                ))
+            case .signature:
+                return ClearSignerChannel.refused(
+                    refusal(code: message["code"] as? String ?? ""), for: ask
+                )
+            }
+        case "result":
+            switch ask {
+            case .ceremony(_, let operationJson, let memberChallenge):
+                return .ceremony(clearSignerVerifyCeremony(
+                    operationJson: operationJson, answerJson: body(message).map(text) ?? "{}",
+                    signerOrigin: signerUrl, expectedMemberChallenge: memberChallenge
+                ))
+            case .signature(_, let digest, let keys):
+                guard let result = message["result"] as? [String: Any],
+                      let json = body(result).map(text)
+                else { return ClearSignerChannel.refused(.malformed(detail: "no result"), for: ask) }
+                return .outcome(clearSignerVerify(resultJson: json, digest: digest, keys: keys))
+            }
+        default:
+            return nil
+        }
+    }
+
+    /// The page's `code`, in the core's vocabulary — `clear_signer::refusal`,
+    /// which the bindings do not export on its own. A signing answer is the
+    /// only place a shell needs it: a ceremony's `error` envelope goes to
+    /// `clearSignerVerifyCeremony`, which reads the code itself.
+    static func refusal(code: String) -> ClearSignerRefusal {
+        code.isEmpty || code == "user_rejected" ? .declined : .pageRefused(code: code)
+    }
+
+    static func json(_ text: String) -> [String: Any]? {
+        (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+    }
+
+    static func body(_ object: Any) -> Data? {
+        try? JSONSerialization.data(withJSONObject: object)
+    }
+
+    static func text(_ data: Data) -> String { String(decoding: data, as: UTF8.self) }
+}
+
 final class ClearSignerChannel: ClearSignerConversation {
 
     /// How one REQUEST of a session ended.

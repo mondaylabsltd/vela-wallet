@@ -183,6 +183,21 @@ enum I18nKeys {
         static let code = "componentsUi.signing.clearSignerCode"
         static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
         static let relayDown = "componentsUi.signing.clearSignerRelayDown"
+
+        /// Spec 075 T041, the nearby route. `nearbyHint` carries the
+        /// foreground rule (PROTOCOL.md §1) rather than having a line of its
+        /// own: it is one fact, and it has to be read before the route is
+        /// chosen, not after the page has failed to find the phone.
+        static let nearby = "componentsUi.signing.clearSignerNearby"
+        static let nearbyHint = "componentsUi.signing.clearSignerNearbyHint"
+        /// Takes `name` — what the advert is carrying.
+        static let nearbyName = "componentsUi.signing.clearSignerNearbyName"
+        static let bluetoothNeeded = "componentsUi.signing.clearSignerBluetoothNeeded"
+        /// The radio is off — the one state where "turn it on" is useful.
+        static let bluetoothOff = "componentsUi.signing.clearSignerBluetoothOff"
+        /// No peripheral role here, or it would not come up: names the other
+        /// two routes instead of advice that cannot work.
+        static let bluetoothUnsupported = "componentsUi.signing.clearSignerBluetoothUnsupported"
     }
 
     enum Settings {
@@ -223,7 +238,9 @@ enum I18nKeys {
         ClearSigner.thisDevice, ClearSigner.otherDevice,
         ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
         ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
-        ClearSigner.relayDown,
+        ClearSigner.relayDown, ClearSigner.nearby, ClearSigner.nearbyHint,
+        ClearSigner.nearbyName, ClearSigner.bluetoothNeeded, ClearSigner.bluetoothOff,
+        ClearSigner.bluetoothUnsupported,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
