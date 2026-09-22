@@ -616,9 +616,23 @@ impl ClearSignerFramer {
         })
     }
 
-    /// Payload bytes per frame, as it stands (244 until a write is refused).
+    /// Payload bytes per frame, as it stands.
     pub fn chunk(&self) -> u32 {
         u32::try_from(lock(&self.inner).chunk()).unwrap_or(u32::MAX)
+    }
+
+    /// The six-byte frame header, for a shell doing its own MTU arithmetic.
+    /// Prefer [`Self::fit_to_mtu`], which does it here.
+    pub fn header(&self) -> u32 {
+        u32::try_from(clear_signer::ble::HEADER).unwrap_or(u32::MAX)
+    }
+
+    /// Size the chunk for the negotiated ATT MTU, returning what it became.
+    /// A peripheral calls this when the central subscribes: a notify cannot
+    /// be split, so an oversized frame is truncated rather than delivered.
+    pub fn fit_to_mtu(&self, mtu: u32) -> u32 {
+        let fitted = lock(&self.inner).fit_to_mtu(mtu as usize);
+        u32::try_from(fitted).unwrap_or(u32::MAX)
     }
 
     /// The id for the next message. Take it BEFORE sealing: the frames and

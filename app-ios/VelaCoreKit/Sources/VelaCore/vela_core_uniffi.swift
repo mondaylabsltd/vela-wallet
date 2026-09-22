@@ -2327,9 +2327,16 @@ public func FfiConverterTypeClearSignerConnection_lower(_ value: ClearSignerConn
 public protocol ClearSignerFramerProtocol: AnyObject, Sendable {
     
     /**
-     * Payload bytes per frame, as it stands (244 until a write is refused).
+     * Payload bytes per frame, as it stands.
      */
     func chunk()  -> UInt32
+    
+    /**
+     * Size the chunk for the negotiated ATT MTU, returning what it became.
+     * A peripheral calls this when the central subscribes: a notify cannot
+     * be split, so an oversized frame is truncated rather than delivered.
+     */
+    func fitToMtu(mtu: UInt32)  -> UInt32
     
     /**
      * The frames for one message, in order. `sealed` sets the flag bit that
@@ -2342,6 +2349,12 @@ public protocol ClearSignerFramerProtocol: AnyObject, Sendable {
      * nothing left to give up — report the failure instead of looping.
      */
     func halve()  -> Bool
+    
+    /**
+     * The six-byte frame header, for a shell doing its own MTU arithmetic.
+     * Prefer [`Self::fit_to_mtu`], which does it here.
+     */
+    func header()  -> UInt32
     
     /**
      * The id for the next message. Take it BEFORE sealing: the frames and
@@ -2416,13 +2429,28 @@ public convenience init() {
 
     
     /**
-     * Payload bytes per frame, as it stands (244 until a write is refused).
+     * Payload bytes per frame, as it stands.
      */
 open func chunk() -> UInt32  {
     return try!  FfiConverterUInt32.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_clearsignerframer_chunk(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Size the chunk for the negotiated ATT MTU, returning what it became.
+     * A peripheral calls this when the central subscribes: a notify cannot
+     * be split, so an oversized frame is truncated rather than delivered.
+     */
+open func fitToMtu(mtu: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_fit_to_mtu(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(mtu),uniffiCallStatus
     )
 })
 }
@@ -2451,6 +2479,19 @@ open func halve() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_clearsignerframer_halve(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The six-byte frame header, for a shell doing its own MTU arithmetic.
+     * Prefer [`Self::fit_to_mtu`], which does it here.
+     */
+open func header() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_header(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -13912,13 +13953,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerconnection_send_signature() != 44764) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_chunk() != 24969) {
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_chunk() != 59172) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_fit_to_mtu() != 15787) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_frames() != 19504) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_halve() != 36759) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_header() != 35702) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_next_id() != 35232) {
