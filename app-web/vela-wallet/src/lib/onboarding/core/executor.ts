@@ -14,6 +14,11 @@
 
 import * as Passkey from './passkey';
 import { PasskeyError } from './passkey';
+import {
+	clearSignerCeremonyOf,
+	endCeremonyFlow,
+	runClearSignerCeremony
+} from './clear-signer-ceremony';
 import * as Registry from './registry';
 import { RegistryError } from './registry';
 import * as Storage from './storage';
@@ -45,6 +50,12 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 		signal: AbortSignal
 	): Promise<ShellResult> {
 		const operation = effect.operation;
+		// Spec 075: the Clear Signer is a passkey route. A ceremony that named
+		// it goes to the page — its own request, its own card — instead of the
+		// browser's sheet, and what comes back is reported here exactly as a
+		// platform ceremony's is. Every other operation is untouched.
+		const ceremony = clearSignerCeremonyOf(operation);
+		if (ceremony !== null) return runClearSignerCeremony(ceremony);
 		switch (operation.type) {
 			case 'check_passkey_support':
 				return { type: 'passkey_support', supported: Passkey.passkeySupported() };
@@ -190,6 +201,8 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				};
 
 			case 'complete_onboarding':
+				// The flow is over: a Clear Signer page kept open for it is let go.
+				endCeremonyFlow();
 				await deps.complete(operation.mode);
 				return { type: 'onboarding_completed' };
 

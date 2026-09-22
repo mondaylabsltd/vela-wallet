@@ -133,7 +133,13 @@ describe('the rows and sheets', () => {
 	it('sit next to "Transaction speed", in the advanced block', () => {
 		const ids = rows(buildMobileState('st1b', m, IDENTICON)).map((row) => row.id);
 		const speed = ids.indexOf('fee-speed');
-		expect(ids.slice(speed, speed + 3)).toEqual(['fee-speed', 'sign-with', 'clear-signer-page']);
+		expect(ids.slice(speed, speed + 4)).toEqual([
+			'fee-speed',
+			'sign-with',
+			'clear-signer-page',
+			// Spec 075: how the Clear Signer is reached on another device.
+			'clear-signer-relay'
+		]);
 	});
 
 	it('name the method in force and the official page, and tick the method in the sheet', () => {
@@ -189,6 +195,37 @@ describe('the rows and sheets', () => {
 		expect(said('insecure').field.tone).toBe('error');
 	});
 
+	it('the relay row (spec 075): official by default, the host and a reset when it is not', () => {
+		const official = withLiveSigning(buildMobileState('st1', m, IDENTICON), view({}), m);
+		expect(rows(official).find((r) => r.id === 'clear-signer-relay')?.value).toBe(
+			m.signing.relayOfficial
+		);
+		expect(official.relayPage.title).toBe(m.signing.relayTitle);
+		expect(official.relayPage.subtitle).toBe(m.signing.relaySubtitle);
+		expect(official.relayPage.field.value).toBe('wss://relay.getvela.app');
+		expect(official.relayPage.reset).toBeUndefined();
+		// A relay sees nothing but ciphertext: there is no rpId line to draw.
+		expect(official.relayPage.foreign).toBeUndefined();
+
+		const own = withLiveSigning(
+			buildMobileState('st1', m, IDENTICON),
+			view({ relay_url: 'ws://127.0.0.1:8787', relay_url_is_default: false }),
+			m
+		);
+		expect(rows(own).find((r) => r.id === 'clear-signer-relay')?.value).toBe('127.0.0.1:8787');
+		expect(own.relayPage.field.value).toBe('ws://127.0.0.1:8787');
+		expect(own.relayPage.reset).toBe(m.signing.relayReset);
+	});
+
+	it('the relay’s own refusals are worded under its field', () => {
+		const said = (error: string) =>
+			withLiveSigning(buildMobileState('st1', m, IDENTICON), view({ relay_url_error: error }), m)
+				.relayPage;
+		expect(said('invalid').error).toBe(m.signing.relayInvalid);
+		expect(said('insecure').error).toBe(m.signing.relayInsecure);
+		expect(said('insecure').field.tone).toBe('error');
+	});
+
 	it('the desktop reads the same rows, and the same page', () => {
 		const phone = withLiveSigning(
 			buildMobileState('st1', m, IDENTICON),
@@ -207,5 +244,8 @@ describe('the rows and sheets', () => {
 			'security_key'
 		]);
 		expect(desktop.signing.page.reset).toBe(m.signing.pageReset);
+		// Spec 075: and the relay section, the same body as the phone's sheet.
+		expect(desktop.signing.relay.title).toBe(m.signing.relayTitle);
+		expect(desktop.signing.relay.field.value).toBe('wss://relay.getvela.app');
 	});
 });

@@ -312,6 +312,14 @@
 			case 'signer-page-reset':
 				signPreference.resetSignerUrl();
 				return;
+			// Spec 075: the relay a cross-device pairing goes through. Same core,
+			// same rules — wss anywhere, ws only on this machine's loopback.
+			case 'relay-page':
+				signPreference.submitRelayUrl(event.text);
+				return;
+			case 'relay-page-reset':
+				signPreference.resetRelayUrl();
+				return;
 			case 'erase':
 				void erase();
 				return;

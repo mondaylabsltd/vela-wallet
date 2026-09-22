@@ -144,6 +144,7 @@
 		'fee-speed': 'fee-speed',
 		'sign-with': 'sign-with',
 		'clear-signer-page': 'signer-page',
+		'clear-signer-relay': 'relay-page',
 		feedback: 'feedback'
 	};
 
@@ -227,6 +228,8 @@
 				return model.signWithSheet.title;
 			case 'signer-page':
 				return model.signerPage.title;
+			case 'relay-page':
+				return model.relayPage.title;
 			case 'clear-caches':
 				return model.clearCachesSheet.title;
 			// The row being cleared or removed names it: "localhost:8814",
@@ -267,6 +270,8 @@
 				return model.signWithSheet.subtitle;
 			case 'signer-page':
 				return model.signerPage.subtitle;
+			case 'relay-page':
+				return model.relayPage.subtitle;
 			case 'feedback':
 				return model.feedback.subtitle;
 			default:
@@ -522,6 +527,14 @@
 						page={model.signerPage}
 						onsave={(text) => onprefevent?.({ kind: 'signer-page', text })}
 						onreset={() => onprefevent?.({ kind: 'signer-page-reset' })}
+					/>
+				{:else if overlay === 'relay-page'}
+					<!-- Spec 075: the same body, for the relay a pairing with another
+					     device goes through. Same rules, same core, same shape. -->
+					<SignerPageBody
+						page={model.relayPage}
+						onsave={(text) => onprefevent?.({ kind: 'relay-page', text })}
+						onreset={() => onprefevent?.({ kind: 'relay-page-reset' })}
 					/>
 				{:else if overlay === 'clear-storage-item' && pending}
 					<ConfirmSheet

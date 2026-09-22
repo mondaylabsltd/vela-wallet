@@ -41,9 +41,10 @@ import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
+import { encodeQr } from '$lib/wallet/qr';
 import type { SignMethod } from '$lib/onboarding/core/passkey';
 import type { ClearSignerNotice } from './clear-signer';
-import type { SigningMessages } from './messages';
+import type { ClearSignerWords, SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -595,15 +596,61 @@ export function signWithModel(input: {
 }
 
 /**
- * The Clear Signer's sheet (spec 071): waiting on its page — the hint, open
- * it again, cancel — or the one sentence its ending gets (contract §5), until
- * the person closes it. `null` when there is nothing to say: no page open, or
- * the person cancelled and already knows.
+ * The Clear Signer's sheet (spec 071, extended by 075) — one sheet, four
+ * moments, in the order they happen:
+ *
+ * 1. **where is it?** this device, or another one (075: it is a passkey route,
+ *    and a route can be somewhere else);
+ * 2. **pairing** with that other device: the link as a code to scan, and the
+ *    six digits to compare once it arrives — nothing is sent before the person
+ *    says they match;
+ * 3. **waiting** on the page: the hint, open it again, cancel;
+ * 4. the one **sentence** its ending gets (contract §5), until it is closed.
+ *
+ * `null` when there is nothing to say: nothing open, or the person cancelled
+ * and already knows.
  */
 export function clearSignerModel(
-	state: { waiting: boolean; notice: ClearSignerNotice | null },
-	m: SigningMessages
+	state: {
+		asking?: boolean;
+		pairing?: { link: string; code: string | null } | null;
+		waiting: boolean;
+		notice: ClearSignerNotice | null;
+	},
+	m: ClearSignerWords
 ): ClearSignerModel | null {
+	if (state.asking === true) {
+		return {
+			waiting: false,
+			title: m.clearSignerWhere,
+			where: { thisDevice: m.clearSignerThisDevice, otherDevice: m.clearSignerOtherDevice },
+			dismiss: m.clearSignerCancel
+		};
+	}
+	const pairing = state.pairing ?? null;
+	if (pairing !== null) {
+		return {
+			// Waiting on the OTHER DEVICE's person, not on a page here: the sheet
+			// says what to do with the code, and only then that it is waiting.
+			waiting: false,
+			title: pairing.code === null ? m.clearSignerPair : m.clearSignerWaiting,
+			pair: {
+				hint: m.clearSignerPairHint,
+				link: pairing.link,
+				qr: encodeQr(pairing.link),
+				copy: m.clearSignerCopyLink,
+				waiting: m.clearSignerPairWaiting
+			},
+			code:
+				pairing.code === null
+					? undefined
+					: {
+							text: fill(m.clearSignerCode, { code: pairing.code }),
+							confirm: m.clearSignerCodeConfirm
+						},
+			dismiss: m.clearSignerCancel
+		};
+	}
 	if (state.waiting) {
 		return {
 			waiting: true,
@@ -618,7 +665,8 @@ export function clearSignerModel(
 		closed: m.clearSignerClosed,
 		refused: m.clearSignerRefused,
 		mismatch: m.clearSignerMismatch,
-		timeout: m.clearSignerTimeout
+		timeout: m.clearSignerTimeout,
+		relay: m.clearSignerRelayDown
 	};
 	return { waiting: false, title: endings[state.notice], dismiss: m.close };
 }

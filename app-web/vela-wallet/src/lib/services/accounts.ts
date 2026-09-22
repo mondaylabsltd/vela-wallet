@@ -36,7 +36,8 @@ export function findAccountByCredentialId(id: string): SignerAccount | undefined
 	const wanted = id.toLowerCase();
 	const hit = loadAccounts().find(
 		(a) =>
-			a.id.toLowerCase() === wanted || (a.keys ?? []).some((k) => k.credential_id.toLowerCase() === wanted)
+			a.id.toLowerCase() === wanted ||
+			(a.keys ?? []).some((k) => k.credential_id.toLowerCase() === wanted)
 	);
 	return hit ? toSignerAccount(hit) : undefined;
 }

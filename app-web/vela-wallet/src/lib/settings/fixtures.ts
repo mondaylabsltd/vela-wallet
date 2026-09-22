@@ -342,6 +342,17 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: m.signing.pageOfficial,
 					trailing: 'chevron'
 				},
+				// Spec 075: how the Clear Signer is reached when it is on
+				// ANOTHER device. The relay only ever passes on ciphertext,
+				// which is why naming one's own is a preference and not a fork.
+				{
+					id: 'clear-signer-relay',
+					// A server the person can point elsewhere, as the RPC row is.
+					icon: 'server',
+					title: m.signing.relayTitle,
+					value: m.signing.relayOfficial,
+					trailing: 'chevron'
+				},
 				{
 					id: 'storage',
 					icon: 'hard-drive',
@@ -778,6 +789,8 @@ function feeSpeedSheet(m: SettingsMessages): SelectSheetModel {
 
 /** The official Clear Signer page (`clear_signer::DEFAULT_SIGNER_URL`). */
 const OFFICIAL_SIGNER_URL = 'https://sign.getvela.app/';
+/** Spec 075: the official relay, as `clear_signer::DEFAULT_RELAY_URL` names it. */
+const OFFICIAL_RELAY_URL = 'wss://relay.getvela.app';
 
 /**
  * The default "Sign with" (spec 071): the five the core offers, in its order,
@@ -800,6 +813,21 @@ function signWithSheet(m: SettingsMessages): SelectSheetModel {
 				detail: m.signing.clearSignerBody
 			}
 		]
+	};
+}
+
+/** The relay, official — what a device that never chose pairs through. */
+function relayPage(m: SettingsMessages): SignerPageModel {
+	return {
+		title: m.signing.relayTitle,
+		subtitle: m.signing.relaySubtitle,
+		field: {
+			id: 'relay-url',
+			label: m.signing.relayTitle,
+			value: OFFICIAL_RELAY_URL,
+			placeholder: OFFICIAL_RELAY_URL
+		},
+		save: m.signing.pageSave
 	};
 }
 
@@ -1147,6 +1175,7 @@ export function buildMobileState(
 		feeSpeedSheet: feeSpeedSheet(m),
 		signWithSheet: signWithSheet(m),
 		signerPage: signerPage(m),
+		relayPage: relayPage(m),
 		numberSheet: formatSheet(
 			m,
 			m.localization.numberTitle,
@@ -1313,7 +1342,8 @@ export function buildDesktopState(
 					value: m.signing.methods.auto
 				}
 			],
-			page: signerPage(m)
+			page: signerPage(m),
+			relay: relayPage(m)
 		},
 		networks: {
 			title: m.advanced.networksTitle,

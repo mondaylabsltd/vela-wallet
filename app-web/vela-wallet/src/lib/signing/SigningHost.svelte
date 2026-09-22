@@ -316,7 +316,11 @@
 	<ClearSignerSheet
 		model={clearSigner}
 		onreopen={() => clearSignerSession.reopen()}
+		onwhere={(where) => clearSignerSession.answerWhere(where)}
+		onconfirmcode={() => clearSignerSession.confirmCode()}
 		ondismiss={() =>
-			clearSigner?.waiting ? clearSignerSession.cancel() : clearSignerSession.dismiss()}
+			clearSigner?.waiting || clearSigner?.where !== undefined || clearSigner?.pair !== undefined
+				? clearSignerSession.cancel()
+				: clearSignerSession.dismiss()}
 	/>
 {/if}

@@ -387,7 +387,14 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			pageInsecure: k('settings.signing.pageInsecure'),
 			pageForeign: k('settings.signing.pageForeign'),
 			pageReset: k('settings.signing.pageReset'),
-			pageSave: k('settings.signing.pageSave')
+			pageSave: k('settings.signing.pageSave'),
+			// Spec 075: the relay row, beside the page row.
+			relayTitle: k('settings.signing.relayTitle'),
+			relaySubtitle: k('settings.signing.relaySubtitle'),
+			relayOfficial: k('settings.signing.relayOfficial'),
+			relayInvalid: k('settings.signing.relayInvalid'),
+			relayInsecure: k('settings.signing.relayInsecure'),
+			relayReset: k('settings.signing.relayReset')
 		},
 		networks: {
 			count: k('settings.networks.count'),
@@ -916,6 +923,17 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		clearSignerRefused: k('componentsUi.signing.clearSignerRefused'),
 		clearSignerMismatch: k('componentsUi.signing.clearSignerMismatch'),
 		clearSignerTimeout: k('componentsUi.signing.clearSignerTimeout'),
+		// Spec 075: where the signer is, and the pairing across devices.
+		clearSignerWhere: k('componentsUi.signing.clearSignerWhere'),
+		clearSignerThisDevice: k('componentsUi.signing.clearSignerThisDevice'),
+		clearSignerOtherDevice: k('componentsUi.signing.clearSignerOtherDevice'),
+		clearSignerPair: k('componentsUi.signing.clearSignerPair'),
+		clearSignerPairHint: k('componentsUi.signing.clearSignerPairHint'),
+		clearSignerPairWaiting: k('componentsUi.signing.clearSignerPairWaiting'),
+		clearSignerCopyLink: k('componentsUi.signing.clearSignerCopyLink'),
+		clearSignerCode: k('componentsUi.signing.clearSignerCode'),
+		clearSignerCodeConfirm: k('componentsUi.signing.clearSignerCodeConfirm'),
+		clearSignerRelayDown: k('componentsUi.signing.clearSignerRelayDown'),
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

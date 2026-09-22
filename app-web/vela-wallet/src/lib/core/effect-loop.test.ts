@@ -22,7 +22,8 @@ function refusingCore(): EffectCore<View, string, Effect, Result> & { resolved: 
 		},
 		resolve(_id, result) {
 			resolved.push(result);
-			if (result.type === 'accounts_loaded') throw new Error('invalid result from shell: missing field');
+			if (result.type === 'accounts_loaded')
+				throw new Error('invalid result from shell: missing field');
 			stage = result.type;
 			return done();
 		}

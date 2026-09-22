@@ -12,6 +12,8 @@
  */
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
+import type { Assertion as AssertionWire } from '$lib/onboarding/generated/Assertion';
+import type { Registration as RegistrationWire } from '$lib/onboarding/generated/Registration';
 
 export {
 	PROXY_CREATION_CODE,
@@ -690,6 +692,94 @@ export function clearSignerDefaultUrl(): string {
 /** Whether a page at `url` can use this wallet's passkeys (they are `getvela.app` keys). */
 export function clearSignerUsesWalletPasskeys(url: string): boolean {
 	return wasm.clearSignerUsesWalletPasskeys(url);
+}
+
+// ---------------------------------------------------------------------------
+// The Clear Signer across devices (spec 075, contracts/relay.md) — the room,
+// its address and the pairing link are the core's; the session inside the room
+// is `$lib/signing/relay/secure-session.ts`, because the Rust one does not fit
+// in this wasm module.
+// ---------------------------------------------------------------------------
+
+/** The official relay, `wss://relay.getvela.app`. */
+export function clearSignerDefaultRelay(): string {
+	return wasm.clearSignerDefaultRelay();
+}
+
+/** A relay address normalised (wss anywhere, ws on loopback), or `undefined`. */
+export function clearSignerRelayUrl(input: string): string | undefined {
+	return wasm.clearSignerRelayUrl(input);
+}
+
+/** A room id — 22 base64url characters — from 16 random bytes. */
+export function clearSignerRelayRoom(random: Uint8Array): string | undefined {
+	return wasm.clearSignerRelayRoom(random);
+}
+
+/** The requester's socket address for a room. */
+export function clearSignerRelayRoomUrl(relay: string, room: string): string {
+	return wasm.clearSignerRelayRoomUrl(relay, room);
+}
+
+/** The pairing link the wallet shows as a QR: the page, the relay, the room, `rk`. */
+export function clearSignerRelayLink(
+	signerUrl: string,
+	relay: string,
+	room: string,
+	rk: string
+): string {
+	return wasm.clearSignerRelayLink(signerUrl, relay, room, rk);
+}
+
+// ---------------------------------------------------------------------------
+// The Clear Signer as a passkey route (spec 075): the key ceremonies, not a
+// signature. The request is built from the machine operation's own wire JSON,
+// and the answer is judged back into the machine's own `Registration` /
+// `Assertion`.
+// ---------------------------------------------------------------------------
+
+/**
+ * The page request for a passkey operation with `method = clear_signer`, or
+ * `undefined` for any other operation. `operationJson` is the operation
+ * exactly as the executor received it.
+ */
+export function clearSignerCeremonyRequest(
+	operationJson: string,
+	id: string,
+	walletName: string,
+	registry: string
+): ClearSignerRequest | undefined {
+	const built = wasm.clearSignerCeremonyRequest(operationJson, id, walletName, registry);
+	return built === undefined ? undefined : (JSON.parse(built) as ClearSignerRequest);
+}
+
+/** What the core made of a ceremony's answer — the machine's own wire shapes. */
+export type ClearSignerCeremonyVerdict =
+	| { registration: RegistrationWire }
+	| { assertion: AssertionWire }
+	| { refused: { code: string; detail: string } };
+
+/**
+ * A ceremony's answer judged against the operation that asked for it: the
+ * signed origin, user verification, and a challenge the page derived itself
+ * (or, for a member proof, the one the WALLET fetched from the registry).
+ */
+export function clearSignerVerifyCeremony(
+	operationJson: string,
+	answer: unknown,
+	signerOrigin: string,
+	expectedMemberChallenge?: Uint8Array
+): ClearSignerCeremonyVerdict {
+	return JSON.parse(
+		translated(() =>
+			wasm.clearSignerVerifyCeremony(
+				operationJson,
+				JSON.stringify(answer ?? null),
+				signerOrigin,
+				expectedMemberChallenge ?? null
+			)
+		)
+	) as ClearSignerCeremonyVerdict;
 }
 
 // ---------------------------------------------------------------------------

@@ -180,6 +180,8 @@ export interface FeeTokenOption {
 }
 
 import type { FeeSpeedModel } from '$lib/flows/model';
+/** Spec 075: the pairing link, drawn as the receive screen draws an address. */
+import type { QrCode } from '$lib/wallet/qr';
 
 export type FeeModel =
 	| {
@@ -277,4 +279,21 @@ export interface ClearSignerModel {
 	reopen?: string;
 	/** Cancel while waiting; close after. */
 	dismiss: string;
+	/**
+	 * Spec 075 — WHERE the person's Clear Signer is: on this device (a window
+	 * this wallet opens) or on another one (the relay). Asked before anything
+	 * opens, because the two are different places, not different settings.
+	 */
+	where?: { thisDevice: string; otherDevice: string };
+	/**
+	 * Spec 075 — pairing with another device: the link as a code to scan and as
+	 * text to copy, and the line that says this side is waiting.
+	 */
+	pair?: { hint: string; link: string; qr: QrCode; copy: string; waiting: string };
+	/**
+	 * Spec 075 — the six digits both screens show. The person confirms them
+	 * HERE, and only then is anything sent: it is the one thing standing
+	 * between this wallet and a page that is not the one they opened.
+	 */
+	code?: { text: string; confirm: string };
 }

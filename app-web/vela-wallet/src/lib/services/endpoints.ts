@@ -41,6 +41,7 @@ export function getPasskeyIndexURL(): string {
 
 export function getAaguidDirectoryURL(): string {
 	return (
-		loadServiceEndpoints().aaguidDirectoryURL?.trim() || DEFAULT_SERVICE_ENDPOINTS.aaguidDirectoryURL
+		loadServiceEndpoints().aaguidDirectoryURL?.trim() ||
+		DEFAULT_SERVICE_ENDPOINTS.aaguidDirectoryURL
 	);
 }

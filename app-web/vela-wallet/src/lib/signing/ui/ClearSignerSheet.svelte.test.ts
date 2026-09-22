@@ -22,7 +22,17 @@ const m = {
 	clearSignerRefused: 'The Clear Signer would not sign this request. Its page says why.',
 	clearSignerMismatch:
 		'The Clear Signer’s answer does not match this request, so nothing was sent.',
-	clearSignerTimeout: 'The Clear Signer did not answer in time.'
+	clearSignerTimeout: 'The Clear Signer did not answer in time.',
+	clearSignerWhere: 'Where is your Clear Signer?',
+	clearSignerThisDevice: 'On this device',
+	clearSignerOtherDevice: 'On another device',
+	clearSignerPair: 'Open the Clear Signer on your other device',
+	clearSignerPairHint: 'Scan this code with the device that has your passkey.',
+	clearSignerPairWaiting: 'Waiting for the other device…',
+	clearSignerCopyLink: 'Copy link',
+	clearSignerCode: 'Check that the other device shows the same code: {{code}}',
+	clearSignerCodeConfirm: 'The codes match',
+	clearSignerRelayDown: 'The relay could not be reached.'
 } as SigningMessages;
 
 async function drawn(model: NonNullable<ReturnType<typeof clearSignerModel>>) {
@@ -31,7 +41,9 @@ async function drawn(model: NonNullable<ReturnType<typeof clearSignerModel>>) {
 		props: {
 			model,
 			onreopen: () => taps.push('reopen'),
-			ondismiss: () => taps.push('dismiss')
+			ondismiss: () => taps.push('dismiss'),
+			onwhere: (where: string) => taps.push(`where:${where}`),
+			onconfirmcode: () => taps.push('confirm')
 		}
 	});
 	await tick();
@@ -74,5 +86,65 @@ describe('the Clear Signer’s sheet', () => {
 		expect(view.text).toContain(m.clearSignerRefused);
 		expect(view.text).not.toContain(m.clearSignerWaitingHint);
 		expect(view.labels).toEqual([m.close]);
+	});
+
+	it('a relay that could not be reached says so, and points back to this device', async () => {
+		const view = await drawn(clearSignerModel({ waiting: false, notice: 'relay' }, m)!);
+		expect(view.text).toContain(m.clearSignerRelayDown);
+	});
+});
+
+describe('spec 075: where the signer is', () => {
+	it('asks first, and the answer is the person’s own tap', async () => {
+		const view = await drawn(
+			clearSignerModel({ asking: true, pairing: null, waiting: false, notice: null }, m)!
+		);
+		expect(view.text).toContain(m.clearSignerWhere);
+		expect(view.labels).toEqual([
+			m.clearSignerThisDevice,
+			m.clearSignerOtherDevice,
+			m.clearSignerCancel
+		]);
+		view.press(m.clearSignerOtherDevice);
+		expect(view.taps).toEqual(['where:other_device']);
+	});
+
+	it('pairing: a real code to scan, the link to copy, and the wait', async () => {
+		const link =
+			'https://sign.getvela.app/sign.html?ch=relay#relay=wss%3A%2F%2Fr.example&room=AAAAAAAAAAAAAAAAAAAAAA&rk=BBBBBBBBBBBBBBBBBBBBBB&v=1';
+		const model = clearSignerModel(
+			{ asking: false, pairing: { link, code: null }, waiting: false, notice: null },
+			m
+		)!;
+		// The code encodes the LINK — the receive screen's own encoder, not a pattern.
+		expect(model.pair?.qr.modules).toBeGreaterThan(20);
+		expect(model.pair?.qr.path.length).toBeGreaterThan(100);
+		const view = await drawn(model);
+		expect(view.text).toContain(m.clearSignerPair);
+		expect(view.text).toContain(link);
+		expect(view.text).toContain(m.clearSignerPairWaiting);
+		expect(view.labels).toEqual([m.clearSignerCopyLink, m.clearSignerCancel]);
+	});
+
+	it('the six digits, and the confirm that is the only way anything is sent', async () => {
+		const model = clearSignerModel(
+			{
+				asking: false,
+				pairing: { link: 'https://sign.getvela.app/sign.html?ch=relay#v=1', code: '082567' },
+				waiting: false,
+				notice: null
+			},
+			m
+		)!;
+		const view = await drawn(model);
+		expect(view.text).toContain('082567');
+		expect(view.text).not.toContain(m.clearSignerPairWaiting);
+		expect(view.labels).toEqual([
+			m.clearSignerCopyLink,
+			m.clearSignerCodeConfirm,
+			m.clearSignerCancel
+		]);
+		view.press(m.clearSignerCodeConfirm);
+		expect(view.taps).toEqual(['confirm']);
 	});
 });

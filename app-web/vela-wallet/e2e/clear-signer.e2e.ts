@@ -22,6 +22,7 @@ import { webcrypto } from 'node:crypto';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { en } from './live-helpers';
 import { denyOffOrigin, readKv, stubJsonRpc, stubRelay, happyRelay } from './stub-chain';
+import { answerWhere } from './clear-signer-helpers';
 
 test.use({ viewport: { width: 390, height: 844 } });
 test.setTimeout(120_000);
@@ -174,13 +175,22 @@ async function fire(page: Page, method: string, params: unknown[]): Promise<void
 	);
 }
 
-/** Slide (the keyboard path of the same control) and catch the page it opens. */
+/**
+ * Slide (the keyboard path of the same control), answer WHERE the signer is,
+ * and catch the page it opens.
+ *
+ * Spec 075: the Clear Signer is a passkey route, and a route can be on another
+ * device — so every request asks first. The tap is also the user activation a
+ * popup needs, which the swipe may have spent by the time the operation was
+ * assembled.
+ */
 async function slideToClearSigner(page: Page, context: BrowserContext): Promise<Page> {
 	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
 	await slider.waitFor({ state: 'visible', timeout: 30_000 });
 	const popup = context.waitForEvent('page', { timeout: 30_000 });
 	await slider.focus();
 	await slider.press('Enter');
+	await answerWhere(page, 'this');
 	return popup;
 }
 
@@ -303,4 +313,72 @@ test('an answer by a key that is not this wallet’s is refused before anything 
 		timeout: 20_000
 	});
 	expect(await answerOf(page)).toBeNull();
+});
+
+/**
+ * Spec 075: a key that lives behind a page is signed THERE, with no Settings
+ * involved.
+ *
+ * `auto` is the factory default — "do what you always did" — and what this
+ * wallet always did was open the browser's own passkey sheet. For a key minted
+ * on a Clear Signer page that sheet can see nothing at all, so `auto` must
+ * follow the key to its page instead. The account record's `signer_origin` is
+ * the only thing that says where, which is why it has to survive every rewrite.
+ */
+test('a key that lives behind the page is signed there by `auto`, with nothing set in Settings', async ({
+	page,
+	context
+}) => {
+	const key = await passkey();
+	await denyOffOrigin(page);
+	await stubJsonRpc(page, /stub-rpc\.test\/rpc\/(\d+)/, (method) => {
+		if (method === 'eth_chainId') return '0x1';
+		if (method === 'eth_blockNumber') return '0x10';
+		if (method === 'eth_getCode') return '0x6080';
+		return undefined;
+	});
+	await stubRelay(page, RELAY, happyRelay('0x' + '11'.repeat(32), '0x' + '22'.repeat(32)));
+	await page.addInitScript(
+		(seed) => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+			localStorage.setItem(
+				'vela.accounts',
+				JSON.stringify([
+					{
+						id: seed.credentialHex,
+						name: 'Behind a page',
+						address: seed.safe,
+						public_key_hex: seed.publicKeyHex,
+						created_at_iso: '2026-01-01T00:00:00.000Z',
+						keys: [
+							{
+								credential_id: seed.credentialHex,
+								public_key_hex: seed.publicKeyHex,
+								name: 'Behind a page',
+								transports: '',
+								signer_origin: seed.origin
+							}
+						]
+					}
+				])
+			);
+			localStorage.setItem('vela.activeAccountIndex', '0');
+		},
+		{ ...key, safe: SAFE, origin: signerUrl.replace(/\/$/, '') }
+	);
+
+	await page.goto('/en/wallet');
+	await expect(page.getByText('Behind a page').first()).toBeVisible();
+	// Nothing was chosen anywhere: the preference is the factory's `auto`.
+	expect(await readKv(page, 'vela.signMethod')).toBeNull();
+	await fire(page, 'personal_sign', ['0x68656c6c6f', SAFE]);
+
+	const popup = await slideToClearSigner(page, context);
+	// The key's OWN page, and it is the one Settings never named.
+	expect(popup.url()).toBe(`${signerUrl}sign.html?ch=post`);
+	await holdPasskey(popup, key);
+	await signOnPage(popup);
+
+	await expect.poll(() => answerOf(page), { timeout: 30_000 }).toMatch(/^0x[0-9a-f]{200,}$/);
 });

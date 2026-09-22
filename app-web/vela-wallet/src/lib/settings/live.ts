@@ -583,6 +583,7 @@ export function withLiveSigning(
 	const rows = liveSignWithRows(model.signWithSheet.rows, view);
 	const method = rows.find((row) => row.selected)?.label ?? rows[0]?.label ?? '';
 	const page = view.signer_url_is_default ? m.signing.pageOfficial : hostOf(view.signer_url);
+	const relay = view.relay_url_is_default ? m.signing.relayOfficial : hostOf(view.relay_url);
 	return {
 		...model,
 		sections: model.sections.map((section) => ({
@@ -592,11 +593,14 @@ export function withLiveSigning(
 					? { ...row, value: method }
 					: row.id === 'clear-signer-page'
 						? { ...row, value: page }
-						: row
+						: row.id === 'clear-signer-relay'
+							? { ...row, value: relay }
+							: row
 			)
 		})),
 		signWithSheet: { ...model.signWithSheet, rows },
-		signerPage: liveSignerPage(model.signerPage, view, m)
+		signerPage: liveSignerPage(model.signerPage, view, m),
+		relayPage: liveRelayPage(model.relayPage, view, m)
 	};
 }
 
@@ -614,7 +618,8 @@ export function withLiveSigningDesktop(
 		signing: {
 			...model.signing,
 			rows: model.signing.rows.map((row) => ({ ...row, value: label, options: rows })),
-			page: liveSignerPage(model.signing.page, view, m)
+			page: liveSignerPage(model.signing.page, view, m),
+			relay: liveRelayPage(model.signing.relay, view, m)
 		}
 	};
 }
@@ -643,6 +648,33 @@ export function liveSignerPage(
 		reset: view.signer_url_is_default ? undefined : m.signing.pageReset,
 		error,
 		foreign: view.signer_uses_wallet_passkeys ? undefined : m.signing.pageForeign
+	};
+}
+
+/**
+ * Spec 075: the relay row, shaped exactly as the page row — the address in
+ * force, the field to type another over it, and the core's word on the last
+ * one submitted (`wss://` anywhere, `ws://` only on this machine's loopback).
+ * There is no "foreign" line: a relay sees nothing but ciphertext, so where
+ * it runs cannot cost anybody their keys.
+ */
+export function liveRelayPage(
+	page: SignerPageModel,
+	view: SignPrefView,
+	m: SettingsMessages
+): SignerPageModel {
+	const error =
+		view.relay_url_error === 'invalid'
+			? m.signing.relayInvalid
+			: view.relay_url_error === 'insecure'
+				? m.signing.relayInsecure
+				: undefined;
+	return {
+		...page,
+		field: { ...page.field, value: view.relay_url, tone: error ? 'error' : 'default' },
+		reset: view.relay_url_is_default ? undefined : m.signing.relayReset,
+		error,
+		foreign: undefined
 	};
 }
 
