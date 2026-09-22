@@ -23,7 +23,9 @@ import { loadAccounts } from '$lib/onboarding/core/storage';
 import { chainName, nativeSymbol } from '$lib/services/networks';
 import type { OperationToSign } from '$lib/services/safe-transaction';
 import { signPreference } from '$lib/settings/core/sign-pref.svelte';
+import type { AccountKey } from '$lib/onboarding/generated/AccountKey';
 import { clearSignerSession } from './core/clear-signer.svelte';
+import { signRoute, type DeviceKey } from './sign-route';
 
 export interface ChallengeSigner {
 	/** The Safe the signature is for. */
@@ -54,13 +56,18 @@ export async function signChallenge(
 	// read from the store, not the factory's.
 	await signPreference.settled();
 	const method = getSignMethod() ?? (signPreference.view.method as SignMethod);
-	if (method !== 'clear_signer') {
+	const account = loadAccounts().find(
+		(record) => record.address.toLowerCase() === signer.account.toLowerCase()
+	);
+	// Spec 075: WHERE the key lives has the last word. A key minted or found
+	// through a Clear Signer page is signed there — by `auto`, and even when
+	// another route was chosen, because no platform sheet can see it.
+	const route = signRoute(deviceKeysOf(account, signer), method);
+	if (route === null || route.method !== 'clear_signer') {
 		return signWithAny(toHex(challenge), signer.credentials, method);
 	}
 	const { chainId } = signer.request;
-	const name = loadAccounts().find(
-		(account) => account.address.toLowerCase() === signer.account.toLowerCase()
-	)?.name;
+	const name = account?.name;
 	return clearSignerSession.sign(
 		{
 			method: signer.request.method,
@@ -76,8 +83,32 @@ export async function signChallenge(
 			calls: operation?.calls
 		},
 		challenge,
-		signer.keys
+		signer.keys,
+		route.signerOrigin
 	);
+}
+
+/**
+ * The account's keys as the route reads them — credential, transports and the
+ * page a key lives behind. A record with no `keys` array is the legacy
+ * single-key shape, and its one credential is the request's own allow-list.
+ */
+function deviceKeysOf(
+	account: { keys?: AccountKey[] } | undefined,
+	signer: ChallengeSigner
+): DeviceKey[] {
+	const keys = account?.keys ?? [];
+	if (keys.length > 0) {
+		return keys.map((key) => ({
+			credential_id: key.credential_id,
+			transports: key.transports,
+			signer_origin: key.signer_origin
+		}));
+	}
+	return signer.credentials.map((credential) => ({
+		credential_id: credential.id,
+		transports: credential.transports ?? ''
+	}));
 }
 
 /** Abort whatever is signing: the passkey ceremony, or the wait on the Clear Signer. */

@@ -183,6 +183,23 @@ export interface SigningMessages {
 	clearSignerRefused: string;
 	clearSignerMismatch: string;
 	clearSignerTimeout: string;
+	/**
+	 * Spec 075: the Clear Signer is a passkey route, so the sheet first asks
+	 * WHERE it is, and pairing with another device has words of its own — the
+	 * link to scan or copy, the wait, and the six digits the person confirms
+	 * here before anything is sent.
+	 */
+	clearSignerWhere: string;
+	clearSignerThisDevice: string;
+	clearSignerOtherDevice: string;
+	clearSignerPair: string;
+	clearSignerPairHint: string;
+	clearSignerPairWaiting: string;
+	clearSignerCopyLink: string;
+	/** `{{code}}` — the six digits. */
+	clearSignerCode: string;
+	clearSignerCodeConfirm: string;
+	clearSignerRelayDown: string;
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;

@@ -14,6 +14,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const store = vi.hoisted(() => new Map<string, string>());
 const passkeys = vi.hoisted(() => ({ signWithAny: vi.fn() }));
+/** The account record this device holds — a test may give its key a page. */
+const accounts = vi.hoisted(() => ({ list: [] as Record<string, unknown>[] }));
 
 vi.mock('$lib/core/client', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/core/client')>()),
@@ -26,7 +28,7 @@ vi.mock('$lib/services/storage', () => ({
 	removeItem: async (key: string) => void store.delete(key)
 }));
 vi.mock('$lib/onboarding/core/storage', () => ({
-	loadAccounts: () => [{ address: SAFE.toLowerCase(), name: 'Savings' }]
+	loadAccounts: () => accounts.list
 }));
 vi.mock('$lib/onboarding/core/passkey', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/onboarding/core/passkey')>()),
@@ -77,21 +79,30 @@ const DAPP_TX = {
 	chainId: 100
 };
 
-/** Start a signature and wait for the page to be opened and handed the intent. */
+/**
+ * Start a signature, answer "where is your Clear Signer?" with this device,
+ * and wait for the page to be opened and handed the intent (spec 075: every
+ * Clear Signer request asks where first, and that tap is also the user
+ * activation a popup needs).
+ */
 async function opened(
 	request: ChallengeSigner['request'],
-	operation?: typeof OPERATION
+	operation?: typeof OPERATION,
+	origin = 'http://127.0.0.1:8137'
 ): Promise<{ page: ReturnType<typeof fakeBrowser>; signing: Promise<unknown> }> {
-	const page = fakeBrowser({ origin: 'http://127.0.0.1:8137' });
+	const page = fakeBrowser({ origin });
 	clearSignerSession.host = page.host;
 	const signing = signChallenge(DIGEST, signer(request), operation);
 	signing.catch(() => {});
+	await vi.waitFor(() => expect(clearSignerSession.view.asking).toBe(true));
+	clearSignerSession.answerWhere('this_device');
 	await vi.waitFor(() => expect(page.opened).toHaveLength(1));
 	page.say({ vela: 'ready', v: 1 });
 	return { page, signing };
 }
 
 beforeAll(async () => {
+	accounts.list = [{ address: SAFE.toLowerCase(), name: 'Savings' }];
 	// What Settings stored on this device: the Clear Signer, on a page of the
 	// person's own (normalised by the core when it reads it back).
 	store.set('vela.signMethod', 'clear_signer');
@@ -102,6 +113,7 @@ beforeAll(async () => {
 afterEach(() => {
 	setSignMethod(null);
 	passkeys.signWithAny.mockReset();
+	accounts.list = [{ address: SAFE.toLowerCase(), name: 'Savings' }];
 	clearSignerSession.dismiss();
 });
 
@@ -138,7 +150,7 @@ describe('the Clear Signer', () => {
 		expect(assertion.credentialId).toBe('112233');
 		expect(assertion.signatureHex.startsWith('30')).toBe(true);
 		expect(passkeys.signWithAny).not.toHaveBeenCalled();
-		expect(clearSignerSession.view).toEqual({ waiting: false, notice: null });
+		expect(clearSignerSession.view).toMatchObject({ waiting: false, notice: null });
 	});
 
 	it('the wallet’s own send: no method, no site — its calls are the intent', async () => {
@@ -175,7 +187,7 @@ describe('the Clear Signer', () => {
 		// The kind every pipeline already reads as "nothing signed, still open".
 		expect((error as PasskeyError).kind).toBe('cancelled');
 		expect((error as ClearSignerRefusedError).code).toBe('wrong_challenge');
-		expect(clearSignerSession.view).toEqual({ waiting: false, notice: 'mismatch' });
+		expect(clearSignerSession.view).toMatchObject({ waiting: false, notice: 'mismatch' });
 	});
 
 	it('the page closed: declined, and said so', async () => {
@@ -189,7 +201,45 @@ describe('the Clear Signer', () => {
 		const { signing } = await opened(DAPP_TX, OPERATION);
 		cancelChallenge();
 		await expect(signing).rejects.toMatchObject({ code: 'declined' });
-		expect(clearSignerSession.view).toEqual({ waiting: false, notice: null });
+		expect(clearSignerSession.view).toMatchObject({ waiting: false, notice: null });
+	});
+
+	it('backing out of the question signs nothing, and says nothing either', async () => {
+		const page = fakeBrowser({ origin: 'http://127.0.0.1:8137' });
+		clearSignerSession.host = page.host;
+		const signing = signChallenge(DIGEST, signer(DAPP_TX), OPERATION);
+		signing.catch(() => {});
+		await vi.waitFor(() => expect(clearSignerSession.view.asking).toBe(true));
+		cancelChallenge();
+		await expect(signing).rejects.toMatchObject({ code: 'declined' });
+		expect(page.opened).toEqual([]);
+		expect(clearSignerSession.view).toMatchObject({ asking: false, notice: null });
+	});
+});
+
+describe('a key that lives behind a page (spec 075)', () => {
+	it('is signed on ITS page, not the one Settings names — even on `auto`', async () => {
+		accounts.list = [
+			{
+				address: SAFE.toLowerCase(),
+				name: 'Savings',
+				keys: [
+					{
+						credential_id: OWNER.key.credentialId,
+						public_key_hex: OWNER.key.publicKeyHex,
+						name: 'Savings',
+						transports: '',
+						signer_origin: 'http://localhost:8199'
+					}
+				]
+			}
+		];
+		setSignMethod('auto');
+		const { page, signing } = await opened(DAPP_TX, OPERATION, 'http://localhost:8199');
+		expect(page.opened).toEqual(['http://localhost:8199/sign.html?ch=post']);
+		page.say({ vela: 'result', id: page.id(), result: answer(OWNER, DIGEST) });
+		await expect(signing).resolves.toMatchObject({ credentialId: '112233' });
+		expect(passkeys.signWithAny).not.toHaveBeenCalled();
 	});
 });
 
