@@ -104,8 +104,14 @@ function patchGlue(js) {
 }
 
 /**
- * A fingerprint of the SOURCE the artifact was built from: every Rust file in
- * the workspace plus the manifests and the lockfile.
+ * A fingerprint of the SOURCE the artifact was built from: every Rust file of
+ * the crates this module is COMPILED FROM — `vela-core` and `vela-core-wasm`
+ * — plus the workspace manifests and the lockfile.
+ *
+ * Narrowed from "every crate in the workspace" (spec 075): the workspace also
+ * holds the uniffi shell, the dev fixtures and the relay, none of which the
+ * wasm links. Hashing those renamed this 4 MB asset — and demanded a rebuild
+ * and a commit of it — every time a relay file changed.
  *
  * This is what `--check` compares, instead of the wasm bytes. The wasm is NOT
  * reproducible across machines and demanding that it be was a mistake:
@@ -121,7 +127,10 @@ function patchGlue(js) {
  * reproducible anywhere, because it only hashes text this repo controls.
  */
 function sourceFingerprint() {
-  const roots = [join(RUST_DIR, 'crates')];
+  const roots = [
+    join(RUST_DIR, 'crates', 'vela-core'),
+    join(RUST_DIR, 'crates', 'vela-core-wasm'),
+  ];
   const files = [];
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
