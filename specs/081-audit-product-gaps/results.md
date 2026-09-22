@@ -328,6 +328,14 @@ Eight commits on `081-audit-product-gaps`, merged **after** the two service PRs 
 
 `gen-passkey-providers.mjs --check` had been failing on `main` for anyone who ran it: the generator emitted one-line tuples, `cargo fmt` wrapped the long ones, and the comparison then called a byte-identical catalog stale. Regenerating to silence it produced a 198-line diff that changed nothing but whitespace. The generator now runs `rustfmt` on its own output, so the check means what it says.
 
+## CI caught what my own sweep did not: `cargo fmt`
+
+The first push failed both Rust jobs — `rust` and `desktop` — on `cargo fmt --all --check`, and nothing else. Nineteen files, all of them Rust I had written or edited by hand across the feature; the code compiled, clippy was clean and every test passed. My standing-gate sweep ran `cargo test` and `cargo clippy` in both workspaces and never ran `cargo fmt --check`, which CI runs **before** either of them.
+
+It is the same shape as the `gen-passkey-providers.mjs` problem this feature fixed an hour earlier — generated or hand-written Rust that nobody put through rustfmt — and I did not notice I was standing in it. `quickstart.md`'s standing gates now list `cargo fmt --all --check` first, in both workspaces, with the toolchain pin (1.97.1) called out: a different rustfmt is a different answer.
+
+Fixed by running it, not by reformatting by hand. All 48 workspace suites and the desktop's 443 still pass afterwards, and `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` — the exact command CI uses, which my sweep had also been running without the feature flag — is clean.
+
 ## Still open in this feature
 
 Everything else in [tasks.md](tasks.md): descriptor provenance, network readiness, forward-verified names, the iOS endpoints page and index-per-call, `X-Rpc-Url`, release provenance, the dormant routes, feedback, erase, and the two service-repo PRs. The docs sync (FR-020) lands with each gap as it closes.

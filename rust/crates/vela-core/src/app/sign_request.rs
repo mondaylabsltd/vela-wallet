@@ -62,8 +62,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::approval_guard::enforce_no_unlimited;
-use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
+use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;

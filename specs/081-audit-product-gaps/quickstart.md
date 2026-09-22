@@ -4,16 +4,27 @@ Two questions per fix: does it work, and did it break anything. Automated where 
 
 ## Standing gates (run before every PR is called done)
 
+`cargo fmt --all --check` is FIRST, and is not optional. CI runs it before it
+runs anything else, and a branch whose code is perfect and whose formatting is
+hand-made fails both Rust jobs having compiled and tested clean — which is
+exactly what happened to this feature's first push. Every `.rs` written or
+edited by hand needs it, and the toolchain is pinned (1.97.1), so a different
+rustfmt is a different answer.
+
 ```bash
+# formatting, in BOTH Rust workspaces — the gate this feature forgot
+cd rust && cargo fmt --all --check
+cd app-desktop/vela-wallet && cargo fmt --all --check
+
 # core + conformance replay (Kotlin, Swift, shipped wasm)
-cd rust && cargo test --workspace --features vela-core/i18n-all && cargo clippy --workspace --all-targets -- -D warnings
+cd rust && cargo test --workspace --features vela-core/i18n-all && cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
 
 # web wallet + site
 cd app-web/vela-wallet && pnpm check && pnpm test
 cd app-web/getvela.app  && bun run check && bunx vitest run && bun run i18n:status --gate && bun run build
 
-# desktop
-cd app-desktop/vela-wallet && cargo test && cargo clippy --all-targets -- -D warnings
+# desktop (CI's clippy here carries no -D warnings; 56 pre-existing ones)
+cd app-desktop/vela-wallet && cargo test && cargo clippy --all-targets
 
 # Android / iOS
 cd app-android/vela-wallet && ./gradlew :app:testDebugUnitTest

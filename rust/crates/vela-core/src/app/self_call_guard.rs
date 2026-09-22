@@ -117,7 +117,9 @@ fn blocked_function(selector: &str) -> Option<SelfCallFunction> {
 }
 
 fn same_address(a: &str, b: &str) -> bool {
-    a.trim().trim_start_matches("0x").eq_ignore_ascii_case(b.trim().trim_start_matches("0x"))
+    a.trim()
+        .trim_start_matches("0x")
+        .eq_ignore_ascii_case(b.trim().trim_start_matches("0x"))
 }
 
 /// Raw bytes of a `0x…` string; odd or non-hex input yields what parsed, which
@@ -341,14 +343,11 @@ pub fn detect_self_call(method: &str, params: Option<&Value>, safe: &str) -> Opt
 /// EIP-1271. No dApp has a legitimate reason to ask, so all of them are
 /// refused.
 fn detect_safe_tx_typed_data(params: &Value) -> Option<SelfCallBlock> {
-    let payload = params
-        .as_array()?
-        .iter()
-        .find_map(|entry| match entry {
-            Value::String(raw) => serde_json::from_str::<Value>(raw).ok(),
-            Value::Object(_) => Some(entry.clone()),
-            _ => None,
-        })?;
+    let payload = params.as_array()?.iter().find_map(|entry| match entry {
+        Value::String(raw) => serde_json::from_str::<Value>(raw).ok(),
+        Value::Object(_) => Some(entry.clone()),
+        _ => None,
+    })?;
 
     (payload.get("primaryType").and_then(Value::as_str) == Some("SafeTx")).then(|| SelfCallBlock {
         function: SelfCallFunction::SafeTxTypedData,

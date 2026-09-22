@@ -194,19 +194,13 @@ fn a_resolver_that_answers_the_zero_address_is_a_mismatch() {
 #[test]
 fn an_rpc_that_does_not_answer_leaves_the_name_unverified() {
     let (registry_silent, _) = run(MINE, "alice.eth", |_id, _to, _data| None);
-    assert_eq!(
-        verdict(&registry_silent),
-        (ForwardState::Unavailable, None)
-    );
+    assert_eq!(verdict(&registry_silent), (ForwardState::Unavailable, None));
 
     let (resolver_silent, _) = run(MINE, "alice.eth", |id, _to, _data| match id {
         "resolver:0" => Some(address_word(RESOLVER)),
         _ => None,
     });
-    assert_eq!(
-        verdict(&resolver_silent),
-        (ForwardState::Unavailable, None)
-    );
+    assert_eq!(verdict(&resolver_silent), (ForwardState::Unavailable, None));
 }
 
 /// ENSIP-10: most Basenames and every wildcard subdomain have no resolver at
@@ -228,7 +222,10 @@ fn a_wildcard_name_is_verified_through_its_ancestors_resolver() {
     );
     let resolve_call = &asked[2];
     assert_eq!(resolve_call.1, RESOLVER);
-    assert!(resolve_call.2.starts_with("0x9061b923"), "resolve(bytes,bytes)");
+    assert!(
+        resolve_call.2.starts_with("0x9061b923"),
+        "resolve(bytes,bytes)"
+    );
     // The DNS-encoded name is in the calldata: 05 "alice" 04 "base" 03 "eth" 00.
     assert!(
         resolve_call.2.contains("05616c69636504626173650365746800"),

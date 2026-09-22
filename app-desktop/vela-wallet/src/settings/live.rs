@@ -329,16 +329,18 @@ pub fn compat_checks(
     if let Some(available) = compat.p256_available {
         rows.push((s.check_signer.clone(), available));
     }
-    let others = || {
-        core_contracts()
-            .filter(|c| !c.name.contains("EntryPoint") && !c.name.contains("Safe"))
-    };
+    let others =
+        || core_contracts().filter(|c| !c.name.contains("EntryPoint") && !c.name.contains("Safe"));
     // The multi-key pair gets its OWN row rather than being folded into the
     // aggregates above — the callout beside the list says what it means, but a
     // list in which nothing is crossed while a warning sits under it reads as
     // a warning about nothing (measured on the live dialog, spec 081 FR-009).
     // A product name, like EntryPoint's: translating it would make the row lie.
-    let multi_key: Vec<_> = compat.contracts.iter().filter(|c| c.multi_key_only).collect();
+    let multi_key: Vec<_> = compat
+        .contracts
+        .iter()
+        .filter(|c| c.multi_key_only)
+        .collect();
     if !multi_key.is_empty() {
         rows.push((
             SharedString::from("Safe Passkey Signer"),

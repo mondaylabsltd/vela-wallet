@@ -263,12 +263,7 @@ fn addr_request(id: String, chain_id: u32, resolver: &str, name: &str) -> Lookup
 
 /// `eth_call` for ENSIP-10 `resolver.resolve(dnsEncode(name), addr(node))` —
 /// two dynamic `bytes` arguments, so two offsets then the two payloads.
-fn resolve_request(
-    id: String,
-    chain_id: u32,
-    resolver: &str,
-    name: &str,
-) -> Option<LookupRequest> {
+fn resolve_request(id: String, chain_id: u32, resolver: &str, name: &str) -> Option<LookupRequest> {
     let dns = dns_encode(name)?;
     let inner = format!("{SEL_ADDR}{}", namehash(name));
     let dns_len = dns.len();
@@ -344,7 +339,10 @@ fn address_word(hex: &str) -> Said<String> {
 /// The address inside the `bytes` an ENSIP-10 `resolve` call returns: a dynamic
 /// return, so offset, length, then the inner `addr` word.
 fn address_in_resolve_return(hex: &str) -> Said<String> {
-    let Some(offset) = hex.get(..64).and_then(|w| usize::from_str_radix(w, 16).ok()) else {
+    let Some(offset) = hex
+        .get(..64)
+        .and_then(|w| usize::from_str_radix(w, 16).ok())
+    else {
         return Said::Silent;
     };
     let Some(length) = offset

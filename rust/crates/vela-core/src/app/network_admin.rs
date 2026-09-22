@@ -126,7 +126,11 @@ pub const REQUIRED_CONTRACTS: [(&str, &str, bool); 12] = [
         "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
         false,
     ),
-    ("Safe L2", "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762", false),
+    (
+        "Safe L2",
+        "0x29fcB43b46531BcA003ddC8FCB67FFE91900C762",
+        false,
+    ),
     (
         "Safe Proxy Factory",
         "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67",
@@ -2035,7 +2039,10 @@ fn wizard_code(
         if *p256 == P256Probe::AwaitingCode {
             *p256 = P256Probe::Done(is_code_deployed(code.as_deref()));
         }
-    } else if let Some(index) = REQUIRED_CONTRACTS.iter().position(|(_, a, _)| *a == address) {
+    } else if let Some(index) = REQUIRED_CONTRACTS
+        .iter()
+        .position(|(_, a, _)| *a == address)
+    {
         if let Some(slot) = deployed.get_mut(index) {
             if slot.is_none() {
                 *slot = Some(is_code_deployed(code.as_deref()));
@@ -2097,12 +2104,14 @@ fn maybe_finish_contracts(model: &mut Model) -> Command<NetEffect, Event> {
     let contracts: Vec<NetContractStatus> = REQUIRED_CONTRACTS
         .iter()
         .zip(deployed.iter())
-        .map(|((name, address, multi_key_only), status)| NetContractStatus {
-            name: (*name).to_owned(),
-            address: (*address).to_owned(),
-            deployed: status.unwrap_or(false),
-            multi_key_only: *multi_key_only,
-        })
+        .map(
+            |((name, address, multi_key_only), status)| NetContractStatus {
+                name: (*name).to_owned(),
+                address: (*address).to_owned(),
+                deployed: status.unwrap_or(false),
+                multi_key_only: *multi_key_only,
+            },
+        )
         .collect();
     // Invariant ②, split by spec 081: a one-key wallet needs the ten common
     // contracts and the P256 precompile; a multi-key wallet needs the signer

@@ -153,10 +153,7 @@ fn a_batch_leg_is_blocked_and_names_its_position() {
 
 #[test]
 fn a_self_call_nested_in_multisend_is_blocked() {
-    let inner = multi_send_calldata(&[
-        leg(0, OTHER, "0x"),
-        leg(0, SAFE, &add_owner_calldata()),
-    ]);
+    let inner = multi_send_calldata(&[leg(0, OTHER, "0x"), leg(0, SAFE, &add_owner_calldata())]);
     let block =
         detect_self_call("eth_sendTransaction", Some(&tx(OTHER, &inner)), SAFE).expect("blocked");
     assert_eq!(block.function, SelfCallFunction::AddOwner);
@@ -335,8 +332,7 @@ fn a_blocked_request_cannot_be_signed_even_if_the_shell_asks() {
         opts: SignApproveOpts::default(),
     });
     assert!(
-        !ops.iter()
-            .any(|op| matches!(op, Op::SignAndSubmit { .. })),
+        !ops.iter().any(|op| matches!(op, Op::SignAndSubmit { .. })),
         "nothing is ever signed for a refused request"
     );
 }

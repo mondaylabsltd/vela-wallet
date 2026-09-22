@@ -335,7 +335,9 @@ impl SigningStrings {
             error_network: loc.t("send.lock.netNotFound"),
             error_unlimited: a("unlimitedDisabled"),
             blocked_title: s("selfCallBlockedTitle"),
-            blocked_body: loc.t("componentsUi.signing.selfCallBlockedBody").to_string(),
+            blocked_body: loc
+                .t("componentsUi.signing.selfCallBlockedBody")
+                .to_string(),
             blocked_leg_body: loc
                 .t("componentsUi.signing.selfCallBlockedLegBody")
                 .to_string(),

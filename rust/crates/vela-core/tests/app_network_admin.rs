@@ -19,15 +19,15 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::network_admin::{
-    build_provider_rpc_url, clean_endpoint_value, explorer_base_url, is_builtin_chain,
-    is_code_deployed, is_localhost_http, p256_call_indicates_support, provider_chain_ids,
-    rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField, NetHealthBody,
-    NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth, NetProviderId,
-    NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceHealth, NetShellResult as Res,
-    default_endpoint, NetServiceEndpoints, NetStoredEndpoints, NetWizardErrorKind, NetWizardPhase,
-    NetworkAdmin, BUILTIN_CHAINS,
-    DEFAULT_BUNDLER_SERVICE_URL, DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL,
-    DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE, REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
+    build_provider_rpc_url, clean_endpoint_value, default_endpoint, explorer_base_url,
+    is_builtin_chain, is_code_deployed, is_localhost_http, p256_call_indicates_support,
+    provider_chain_ids, rank_search, Event, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
+    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
+    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
+    NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
+    NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
+    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL, P256_PRECOMPILE,
+    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 
 type Sut = DomainDriver<NetworkAdmin>;
@@ -675,7 +675,10 @@ fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
                 "a field holding {blank:?} is a field nobody set"
             );
         }
-        assert_eq!(with("https://mine.example").effective(field), "https://mine.example");
+        assert_eq!(
+            with("https://mine.example").effective(field),
+            "https://mine.example"
+        );
     }
 }
 
