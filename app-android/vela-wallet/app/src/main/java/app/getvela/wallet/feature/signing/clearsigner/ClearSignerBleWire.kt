@@ -62,6 +62,9 @@ class ClearSignerBleWire(
     private val envelopes = ClearSignerEnvelopes()
     private val ids = random
 
+    /** The core's six bytes, so [msgIdOf] never guesses at a short frame. */
+    private val headerSize = framer.header().toInt()
+
     init {
         val secret = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(16).also(random::nextBytes)
@@ -258,9 +261,30 @@ class ClearSignerBleWire(
         VelaLog.event("clearsigner.ble", "the link was sized", "mtu" to mtu.toString(), "chunk" to fitted.toString())
     }
 
+    /**
+     * Which message this frame belongs to — **for the log and nothing else.**
+     *
+     * Behaviour never reads this: the frame goes to the core's reassembler
+     * whole and the core decides everything. But a line that says only "frame
+     * in, 250 bytes" cannot tell the next radio pass WHICH message lost its
+     * tail, and that is the question the tail-drop bug is diagnosed by. The
+     * header's second byte is the `msgId` (PROTOCOL §2), and the size to guard
+     * the read against is the core's own.
+     *
+     * If this ever needs to be more than a diagnostic, it stops being the
+     * shell's business: ask the core for a parser rather than growing one here.
+     */
+    private fun msgIdOf(frame: ByteArray): String =
+        if (frame.size >= headerSize) (frame[1].toInt() and 0xff).toString() else "?"
+
     /** One frame into the core's reassembler; non-null when a message is whole. */
     private fun take(frame: ByteArray): ClearSignerBleMessage? {
-        VelaLog.event("clearsigner.ble", "frame in", "bytes" to frame.size.toString())
+        VelaLog.event(
+            "clearsigner.ble",
+            "frame in",
+            "bytes" to frame.size.toString(),
+            "msgId" to msgIdOf(frame),
+        )
         val message = runCatching { reassembler.accept(frame, now().toULong()) }.getOrElse { error ->
             VelaLog.failure("clearsigner.ble", "a frame could not be taken", error)
             null

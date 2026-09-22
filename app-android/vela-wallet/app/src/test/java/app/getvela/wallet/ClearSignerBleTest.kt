@@ -102,6 +102,8 @@ class ClearSignerBleTest {
         "componentsUi.signing.clearSignerNearbyName",
         "componentsUi.signing.clearSignerBluetoothNeeded",
         "componentsUi.signing.clearSignerBluetoothOff",
+        "componentsUi.signing.clearSignerBluetoothUnsupported",
+        "componentsUi.signing.clearSignerNearbyLost",
         "componentsUi.scanner.grantPermission",
     )
 
@@ -170,7 +172,17 @@ class ClearSignerBleTest {
             assertEquals("$name: frame count", expected.length(), frames.size)
             for (f in frames.indices) {
                 assertEquals("$name[$f]", expected.getString(f), hex(frames[f]))
+                // The wire's `frame in` log line reads the header's second
+                // byte so the next radio pass can see WHICH message lost its
+                // tail. Nothing depends on it but the log — and this is what
+                // keeps the log honest if §2 ever moves the field.
+                assertEquals(
+                    "$name[$f]: the msgId is the header's second byte",
+                    msgId,
+                    (frames[f][1].toInt() and 0xff).toUByte(),
+                )
             }
+            assertEquals("$name: the header is six bytes", 6u, framer.header())
 
             val reassembler = ClearSignerReassembler()
             var whole: ClearSignerBleMessage? = null

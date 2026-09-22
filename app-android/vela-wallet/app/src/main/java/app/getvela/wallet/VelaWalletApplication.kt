@@ -325,13 +325,7 @@ class AppContainer(private val app: Application) {
                     bluetoothOff = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothOff"),
                     bluetoothUnsupported =
                         i18nRuntime.t("componentsUi.signing.clearSignerBluetoothUnsupported"),
-                    // TODO(075 T043): the corpus owes this route one more line
-                    // — the page was paired and then the link dropped, which
-                    // is neither "cannot pair this way" nor a permission. Until
-                    // `clearSignerNearbyLost` lands, the unsupported sentence
-                    // is the nearest true thing: it names Bluetooth and offers
-                    // the other two routes, rather than blaming the relay.
-                    nearbyLost = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothUnsupported"),
+                    nearbyLost = i18nRuntime.t("componentsUi.signing.clearSignerNearbyLost"),
                 )
             },
             // Spec 075 T040: the phone advertises as a GATT peripheral for a

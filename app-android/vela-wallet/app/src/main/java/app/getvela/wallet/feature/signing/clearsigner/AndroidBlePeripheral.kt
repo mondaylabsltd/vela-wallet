@@ -85,8 +85,17 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
     override fun start(events: BlePeripheralEvents): Boolean {
         // One peripheral, one session. `events` is a single field, and a
         // second wire attaching over the first would take delivery of frames
-        // the first is still waiting for — which is exactly how an answer goes
-        // missing while both ends believe they are talking (T043).
+        // the first is still waiting for.
+        //
+        // This is NOT what the T043 radio pass turned out to be, and the
+        // hypothesis is worth writing down so nobody derives it twice: a
+        // peripheral outliving its wire — or two GATT servers advertising the
+        // same service uuid — would have broken the HELLO as well, since the
+        // page discovers the service once and writes everything to it. The
+        // pass had a working handshake and a working request; only the answer
+        // went missing, which is a length problem, not an identity one (see
+        // `sweep` in ClearSignerBleWire). These guards are here because the
+        // lifecycle was genuinely loose, not because it was the culprit.
         if (started || stopped) {
             VelaLog.event("clearsigner.ble", "a second start on a used peripheral was refused")
             return false
