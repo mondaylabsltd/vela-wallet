@@ -6760,6 +6760,10 @@ impl WalletPage {
             s.keys_provider_generic.clone(),
             s.keys_provider_security_key.clone(),
         );
+        // Spec 075: the fourth place a key can live, in the "Sign with"
+        // sheet's own words — the caption for a key behind a page, and the
+        // label on the line naming which page.
+        let clear_signer = clear_signer_words(s);
         let user_verified = s.keys_user_verified.clone();
         let labels = (
             s.keys_public_key.clone(),
@@ -6834,15 +6838,7 @@ impl WalletPage {
                     } else {
                         key.name.clone()
                     };
-                    let holder = if key.provider_name.is_empty() {
-                        match key.method.as_str() {
-                            "security_key" => lines.2.clone(),
-                            "hybrid" => lines.1.clone(),
-                            _ => lines.0.clone(),
-                        }
-                    } else {
-                        gpui::SharedString::from(key.provider_name.clone())
-                    };
+                    let holder = key_holder(key, &lines, &clear_signer);
                     let body = key.public_key_hex.trim_start_matches("04");
                     let fingerprint = (body.len() >= 8)
                         .then(|| format!("{}…{}", &body[..4], &body[body.len() - 4..]));
@@ -6946,7 +6942,13 @@ impl WalletPage {
                     .filter(|part| !part.is_empty())
                     .collect::<Vec<_>>()
                     .join(" · ");
+                    // Spec 075: WHICH page, first, because where a key lives is
+                    // the one fact about it a person cannot look up elsewhere.
+                    // Empty for every other key, and an empty value is dropped
+                    // below — so no ordinary row grows a line.
+                    let signer_page = key_page(key);
                     let details: Vec<(gpui::SharedString, String, bool, bool)> = [
+                        (clear_signer.clone(), signer_page.clone(), false, true),
                         (
                             labels.0.clone(),
                             if key.public_key_hex.is_empty() {
@@ -6970,7 +6972,11 @@ impl WalletPage {
                     .into_iter()
                     .filter(|(_, value, _, _)| !value.is_empty())
                     .collect();
-                    let expandable = !key.credential_id.is_empty();
+                    // A row with no credential id came from the device alone and
+                    // has nothing worth opening — unless it lives behind a
+                    // page, which is exactly the row whose whereabouts a person
+                    // wants to check when the registry is unreachable.
+                    let expandable = !key.credential_id.is_empty() || !signer_page.is_empty();
                     let is_open = self.keys_open.contains(&index);
                     let mut stateful = row.id(("settings-key-row", index));
                     if expandable {
@@ -13181,9 +13187,168 @@ fn page_host(url: &str) -> String {
         .to_owned()
 }
 
+/// The Clear Signer's caption, taken out of the list the "Sign with" sheet and
+/// the Settings page both draw from.
+///
+/// Not a key of its own: the corpus's paths are pinned, and one way of signing
+/// named twice is the drift spec 075 was raised over. The core always offers
+/// the route (`wallet_keys::SIGN_METHODS`), which
+/// `settings::tests::the_sign_with_words_resolve` pins, so the search finds it.
+fn clear_signer_words(s: &SettingsStrings) -> SharedString {
+    s.sign_with_options
+        .iter()
+        .find(|(method, _)| *method == vela_core::clear_signer::METHOD)
+        .map(|(_, words)| words.clone())
+        .unwrap_or_default()
+}
+
+/// Who is holding a key, for the line under its name in the keys list.
+///
+/// `lines` is the fallback trio in the core's method order — built-in passkey,
+/// phone or tablet, security key — used when no catalog can name the vault.
+///
+/// Spec 075: a key minted on a Clear Signer page ran its ceremony in a browser,
+/// so the authenticator reports `platform` and the AAGUID catalog names
+/// whatever vault answered on the page's own side. Both of those describe the
+/// side of the page this wallet cannot reach, and the Android device pass of
+/// 2026-09-22 found the result: a key made on the page, captioned as this
+/// machine's built-in passkey — the opposite of where the key is. So the page
+/// outranks both the report and the vault's name. The core decides it
+/// (`WalletKeyRow::method` is `clear_signer` exactly when the row carries a
+/// `signer_origin`); this only says it.
+fn key_holder(
+    key: &vela_core::wallet_keys::WalletKeyRow,
+    lines: &(SharedString, SharedString, SharedString),
+    clear_signer: &SharedString,
+) -> SharedString {
+    if key.method == vela_core::clear_signer::METHOD {
+        return clear_signer.clone();
+    }
+    if !key.provider_name.is_empty() {
+        return SharedString::from(key.provider_name.clone());
+    }
+    match key.method.as_str() {
+        "security_key" => lines.2.clone(),
+        "hybrid" => lines.1.clone(),
+        _ => lines.0.clone(),
+    }
+}
+
+/// Which page a key lives behind, for its details; empty when it lives behind
+/// none.
+///
+/// "A Clear Signer" is no answer to "where is my key" for a person who has used
+/// two of them, so the row that says the route names the deployment as well.
+fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
+    key.signer_origin
+        .clone()
+        .filter(|origin| !origin.is_empty())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A key minted on a Clear Signer page is captioned as the page, and says
+    /// which page** (spec 075, the Android device pass of 2026-09-22).
+    ///
+    /// The pass found such a key drawn as the phone's built-in passkey, because
+    /// a page runs its ceremony in a browser and the authenticator therefore
+    /// reports `platform` — the far side of the page, the one side this wallet
+    /// cannot reach. The row is built here from the account record's own keys,
+    /// so the whole chain is walked: a `DeviceKey` carrying the origin the
+    /// record stored, through the core's row builder, to the two lines a person
+    /// reads. And the caption is the "Sign with" sheet's own words, so the keys
+    /// list and the picker never name one route two ways.
+    #[test]
+    fn a_key_behind_a_page_is_captioned_as_the_clear_signer() {
+        let loc = Loc::from_env();
+        let s = SettingsStrings::resolve(&loc);
+        let lines = (
+            s.keys_provider_platform.clone(),
+            s.keys_provider_generic.clone(),
+            s.keys_provider_security_key.clone(),
+        );
+        let clear_signer = super::clear_signer_words(&s);
+        assert!(
+            !clear_signer.is_empty(),
+            "the Clear Signer's caption went missing from the sheet's list"
+        );
+        assert_eq!(
+            Some(clear_signer.clone()),
+            SigningStrings::resolve(&loc)
+                .sign_with_options
+                .iter()
+                .find(|(method, _)| *method == vela_core::clear_signer::METHOD)
+                .map(|(_, words)| words.clone()),
+            "the keys list and the sheet disagree about what this route is called"
+        );
+
+        // As `ensure_backup_check` builds them: one key behind a page, one on
+        // the end of a cable.
+        let page = "https://sign.example.test";
+        let device = [
+            vela_core::wallet_keys::DeviceKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04".to_owned() + &"ab".repeat(64),
+                name: "Behind the page".to_owned(),
+                transports: String::new(),
+                signer_origin: Some(page.to_owned()),
+            },
+            vela_core::wallet_keys::DeviceKey {
+                credential_id: "cred1".to_owned(),
+                public_key_hex: "04".to_owned() + &"cd".repeat(64),
+                name: "On the desk".to_owned(),
+                transports: "usb".to_owned(),
+                signer_origin: None,
+            },
+        ];
+        let rows = match vela_core::wallet_keys::step("", &device, &[]) {
+            vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
+            vela_core::wallet_keys::KeysStep::Ask { .. } => {
+                unreachable!("asked with no address, so nobody can be asked")
+            }
+        };
+        assert_eq!(rows.len(), 2);
+
+        // The key behind the page: captioned as the route, naming the page.
+        assert_eq!(rows[0].method, vela_core::clear_signer::METHOD);
+        assert_eq!(
+            super::key_holder(&rows[0], &lines, &clear_signer),
+            clear_signer
+        );
+        assert_ne!(
+            super::key_holder(&rows[0], &lines, &clear_signer),
+            lines.0,
+            "the page's key is drawn as this device's built-in passkey"
+        );
+        assert_eq!(super::key_page(&rows[0]), page);
+
+        // Even when a catalog names the vault that answered: that vault is on
+        // the far side of the page, and where the key lives is the page.
+        let named = vela_core::wallet_keys::WalletKeyRow {
+            provider_name: "Apple Passwords".to_owned(),
+            ..rows[0].clone()
+        };
+        assert_eq!(
+            super::key_holder(&named, &lines, &clear_signer),
+            clear_signer
+        );
+
+        // And an ordinary key is untouched: the USB key still reads as one, and
+        // its details grow no page line.
+        assert_eq!(super::key_holder(&rows[1], &lines, &clear_signer), lines.2);
+        assert!(super::key_page(&rows[1]).is_empty());
+        let vaulted = vela_core::wallet_keys::WalletKeyRow {
+            provider_name: "1Password".to_owned(),
+            ..rows[1].clone()
+        };
+        assert_eq!(
+            super::key_holder(&vaulted, &lines, &clear_signer).as_ref(),
+            "1Password"
+        );
+    }
 
     /// **The Ethereum key backup gets the Clear Signer too** (spec 075: "创建/
     /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
