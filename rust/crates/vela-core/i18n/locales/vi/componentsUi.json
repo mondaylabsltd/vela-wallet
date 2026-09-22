@@ -212,6 +212,7 @@
       "clearSignerNearbyName": "Chọn \"{{name}}\" trong danh sách thiết bị của trình duyệt trên thiết bị kia.",
       "clearSignerBluetoothNeeded": "Vela cần quyền Bluetooth để trang ký có thể tìm thấy thiết bị này.",
       "clearSignerBluetoothOff": "Hãy bật Bluetooth để ghép nối theo cách này.",
+      "clearSignerBluetoothUnsupported": "Thiết bị này không ghép nối được theo cách này. Hãy dùng Clear Signer trên thiết bị này, hoặc một thiết bị khác.",
       "clearSignerPair": "Mở Clear Signer trên thiết bị kia của bạn",
       "clearSignerPairHint": "Quét mã này bằng thiết bị có khóa truy cập của bạn, hoặc mở liên kết trên thiết bị đó.",
       "clearSignerPairWaiting": "Đang chờ thiết bị kia…",

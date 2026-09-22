@@ -60,6 +60,20 @@
         android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!--
+      BLUETOOTH_ADVERTISE (spec 075 T040, the Clear Signer over BLE).
+
+      The other direction from the caBLE scan above: here the phone is the
+      PERIPHERAL. A Clear Signer page open in a nearby Chrome is the central —
+      a browser can only ever be one — so the wallet advertises the Vela
+      service uuid and the page's chooser filters on it. API 31+ gates that
+      behind its own runtime permission, asked when the person picks the
+      Bluetooth row and never at launch; BLUETOOTH_CONNECT (already requested
+      above) covers talking to whatever connects. On API ≤30 the legacy
+      BLUETOOTH / BLUETOOTH_ADMIN pair below covers both, at install time, and
+      advertising needs no location permission — only scanning does.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

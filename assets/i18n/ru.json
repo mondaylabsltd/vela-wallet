@@ -1383,6 +1383,7 @@
    "clearSignerNearbyName": "Выберите «{{name}}» в списке устройств браузера на другом устройстве.",
    "clearSignerBluetoothNeeded": "Vela нужно разрешение на Bluetooth, чтобы страница подписи нашла это устройство.",
    "clearSignerBluetoothOff": "Включите Bluetooth, чтобы связать устройства этим способом.",
+   "clearSignerBluetoothUnsupported": "Это устройство не поддерживает такой способ связи. Используйте Clear Signer на этом устройстве или на другом.",
    "clearSignerPair": "Откройте Clear Signer на другом устройстве",
    "clearSignerPairHint": "Отсканируйте этот код устройством, на котором хранится ваш ключ доступа, или откройте ссылку на нём.",
    "clearSignerPairWaiting": "Ожидание другого устройства…",

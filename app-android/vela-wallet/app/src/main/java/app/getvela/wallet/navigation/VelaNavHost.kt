@@ -2023,9 +2023,10 @@ fun VelaNavHost(
         // six digits — every one of them BEFORE anything is sent.
         ClearSignerSheets(
             state = clearSignerSheet,
-            onWhere = clearSignerHost::chooseWhere,
+            onWhere = { route -> clearSignerHost.chooseWhere(route) },
             onConfirmCode = clearSignerHost::confirmCode,
             onCancel = clearSignerHost::cancel,
+            onGrantBluetooth = clearSignerHost::retryBluetooth,
         )
     }
     // The scan method's "Location needs to be on" explainer (API ≤30) — ABOVE

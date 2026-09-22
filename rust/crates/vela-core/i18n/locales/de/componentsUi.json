@@ -212,6 +212,7 @@
       "clearSignerNearbyName": "Wähle auf deinem anderen Gerät „{{name}}\" in der Geräteliste des Browsers.",
       "clearSignerBluetoothNeeded": "Vela braucht die Bluetooth-Berechtigung, damit die Signaturseite dieses Gerät finden kann.",
       "clearSignerBluetoothOff": "Schalte Bluetooth ein, um dich auf diesem Weg zu verbinden.",
+      "clearSignerBluetoothUnsupported": "Dieses Gerät kann sich nicht auf diesem Weg verbinden. Nutze den Clear Signer auf diesem Gerät oder auf einem anderen.",
       "clearSignerPair": "Öffne den Clear Signer auf deinem anderen Gerät",
       "clearSignerPairHint": "Scanne diesen Code mit dem Gerät, auf dem dein Passkey liegt, oder öffne den Link dort.",
       "clearSignerPairWaiting": "Warte auf das andere Gerät…",

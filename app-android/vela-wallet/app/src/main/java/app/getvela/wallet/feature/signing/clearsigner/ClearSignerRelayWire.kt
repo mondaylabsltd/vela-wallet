@@ -5,15 +5,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.ClearSignerHandshake
-import uniffi.vela_core_uniffi.ClearSignerOutcome
-import uniffi.vela_core_uniffi.ClearSignerRefusal
 import uniffi.vela_core_uniffi.ClearSignerSession
 import uniffi.vela_core_uniffi.clearSignerKeyFingerprint
 import uniffi.vela_core_uniffi.clearSignerRelayLink
 import uniffi.vela_core_uniffi.clearSignerRelayRoom
 import uniffi.vela_core_uniffi.clearSignerRelayRoomUrl
-import uniffi.vela_core_uniffi.clearSignerVerify
-import uniffi.vela_core_uniffi.clearSignerVerifyCeremony
 import java.security.SecureRandom
 
 /**
@@ -98,17 +94,17 @@ class ClearSignerRelayWire(
     private var gone = false
 
     /** The session's sequence: own sent and peer received, as PROTOCOL §4 says. */
-    private var counter = 0L
+    private val envelopes = ClearSignerEnvelopes()
 
     override suspend fun ask(ask: ClearSignerAsk): ClearSignerAnswer {
         if (over) return ClearSignerAnswer.Cancelled
         if (session == null) pair()?.let { return it }
         val live = session ?: return ClearSignerAnswer.Cancelled
         val id = nextId()
-        val envelope = intentEnvelope(id, ask.requestJson)
+        val envelope = envelopes.intent(id, ask.requestJson)
         if (!seal(live, envelope)) return ClearSignerAnswer.Cancelled
         val answer = awaitAnswer(live, id) ?: return timedOutOrCancelled()
-        return judge(ask, answer)
+        return judgeClearSignerAnswer(ask, answer, signerUrl)
     }
 
     override fun cancel() {
@@ -121,7 +117,7 @@ class ClearSignerRelayWire(
     override fun end() {
         if (over) return
         over = true
-        session?.let { live -> runCatching { seal(live, byeEnvelope()) } }
+        session?.let { live -> runCatching { seal(live, envelopes.bye()) } }
         runCatching { socket?.close() }
         socket = null
         cancelled = true
@@ -241,9 +237,8 @@ class ClearSignerRelayWire(
                     }
                     val message = runCatching { JSONObject(String(opened, Charsets.UTF_8)) }
                         .getOrNull() ?: continue
-                    val n = message.optLong("n", 0)
-                    if (n <= counter) continue // PROTOCOL §4: `n` only ever rises.
-                    counter = n
+                    // PROTOCOL §4: `n` only ever rises.
+                    if (!envelopes.accept(message.optLong("n", 0))) continue
                     when (message.optString("t")) {
                         "bye" -> {
                             gone = true
@@ -266,67 +261,6 @@ class ClearSignerRelayWire(
      */
     private fun timedOutOrCancelled(): ClearSignerAnswer =
         if (cancelled || gone || over) ClearSignerAnswer.Cancelled else ClearSignerAnswer.TimedOut
-
-    // -- envelopes and verdicts -----------------------------------------------
-
-    /** `{v:1,t:"intent",n,id,intent,context}` around the core's own request. */
-    private fun intentEnvelope(id: String, requestJson: String): String {
-        val request = runCatching { JSONObject(requestJson) }.getOrElse { JSONObject() }
-        counter += 1
-        return JSONObject()
-            .put("v", 1)
-            .put("t", "intent")
-            .put("n", counter)
-            .put("id", id)
-            .put("intent", request.opt("intent") ?: JSONObject())
-            .put("context", request.opt("context") ?: JSONObject())
-            .toString()
-    }
-
-    private fun byeEnvelope(): String {
-        counter += 1
-        return JSONObject().put("v", 1).put("t", "bye").put("n", counter).put("reason", "done").toString()
-    }
-
-    /**
-     * The core judges, never this class: a signature against the digest and
-     * the wallet's keys, a ceremony against the operation's own rules and the
-     * page's origin.
-     */
-    private fun judge(ask: ClearSignerAsk, answer: JSONObject): ClearSignerAnswer = when (ask) {
-        is ClearSignerAsk.Signature -> {
-            if (answer.optString("t") == "error") {
-                ClearSignerAnswer.Signed(ClearSignerOutcome.Refused(refusalOf(answer.optString("code"))))
-            } else {
-                val result = answer.optJSONObject("result")
-                if (result == null) {
-                    ClearSignerAnswer.Signed(
-                        ClearSignerOutcome.Refused(ClearSignerRefusal.Malformed("no result")),
-                    )
-                } else {
-                    ClearSignerAnswer.Signed(
-                        clearSignerVerify(result.toString(), ask.digest, ask.keys),
-                    )
-                }
-            }
-        }
-        is ClearSignerAsk.Ceremony -> ClearSignerAnswer.Ceremonial(
-            clearSignerVerifyCeremony(
-                ask.operationJson,
-                answer.toString(),
-                signerUrl,
-                ask.expectedMemberChallenge,
-            ),
-        )
-    }
-
-    /** `clear_signer::refusal` — the person, or the page's own rules. */
-    private fun refusalOf(code: String): ClearSignerRefusal =
-        if (code.isEmpty() || code == "user_rejected") {
-            ClearSignerRefusal.Declined
-        } else {
-            ClearSignerRefusal.PageRefused(code)
-        }
 
     private fun nextId(): String =
         ByteArray(8).also(random::nextBytes).joinToString("") { "%02x".format(it) }

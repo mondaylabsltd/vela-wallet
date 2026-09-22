@@ -361,8 +361,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   can be unavailable (permission refused, radio off). The peripherals
 //   shipped borrowing the dApp flow's "Bluetooth permission is needed", which
 //   never said which device to pick. No new branch.
-if (PATHS.length !== 1738) fail(`expected 1738 paths (1649 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1649) fail(`expected 1649 leaf paths, got ${leafSet.size}`);
+// 1739 (spec 075, 2026-09-22): +1 `clearSignerBluetoothUnsupported`. A device
+//   with no peripheral role at all was being told to switch Bluetooth on,
+//   which cannot help it (iOS, T041: `unsupported` and `unavailable` had
+//   nowhere else to go).
+if (PATHS.length !== 1739) fail(`expected 1739 paths (1650 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1650) fail(`expected 1650 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
