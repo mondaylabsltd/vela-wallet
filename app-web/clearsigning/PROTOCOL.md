@@ -1,21 +1,30 @@
 # Vela 签名通道协议 v1
 
-一份签名意图怎么从请求方到达签名页，签名怎么回去。四种通道，**一种意图格式**。
+一份请求怎么从请求方到达签名页，答复怎么回去。六种通道，**一种请求格式**。
 
-没有服务器。没有中继。跨设备走 BLE。
+请求有两类：**签名意图**（dApp 的 EIP-1193 请求、钱包自己的转账，第 4、8 节）和
+**钥匙仪式**（创建、登录、证明，第 10 节）。清晰签名器是和「这台设备 / 手机或平板 /
+USB 安全密钥」平级的一条 passkey 通道（创始人，2026-09-22）。
+
+~~没有服务器。没有中继。跨设备走 BLE。~~ —— **已被创始人推翻（2026-09-22）**：跨设备走
+**中继**（WebSocket，第 7.5 节）或 **BLE**。中继是瞎的：它只转发两端加密好的字节
+（`specs/075-clear-signer-channel/contracts/relay.md`）。
 
 ---
 
 ## 0. 通道选择
 
-| 请求方 | 签名方 | 通道 | 来源可验证 |
-| --- | --- | --- | --- |
-| 同浏览器的网页 dApp | 本页 | `window.postMessage` | ✅ 浏览器背书 |
-| 同浏览器的网页 dApp | Chrome 扩展 | `externally_connectable` | ✅ 浏览器背书 |
-| 同机桌面 App | 本页 / 扩展 | URL 片段 + 回环回调 | ❌ 自述 |
-| **跨设备的 App（手机或另一台电脑）** | **Chrome（扩展页或签名页）** | **BLE GATT** | ❌ 自述，但**邻近可证** |
+| 请求方 | 签名方 | 通道 | 来源可验证 | 一个会话几个请求 |
+| --- | --- | --- | --- | --- |
+| 同浏览器的网页钱包 / dApp | 本页 | `window.postMessage`（7.1） | ✅ 浏览器背书 | 多个 |
+| 同浏览器的网页 dApp | Chrome 扩展 | `externally_connectable`（7.3） | ✅ 浏览器背书 | 一个 |
+| 同机的 Android / iOS / 桌面 App | 本页 | 回环 WebSocket（7.4） | ❌ 自述；一次性 token 证明「是打开本页的那个 App」 | 多个 |
+| 同机桌面 App（旧） | 本页 / 扩展 | URL 片段 + 回环回调（7.2） | ❌ 自述 | 一个 |
+| **任何一端，跨设备** | **另一台设备上的本页** | **中继**（7.5） | ❌ 自述；`rk` + 六位码证明「是那个钱包」 | 多个 |
+| 原生 App，跨设备 | 附近的 Chrome | **BLE GATT**（1–4） | ❌ 自述，但**邻近可证** | 多个 |
 
-同机的桌面 App 不要用 BLE：蓝牙控制器一般扫不到本机自己发出的广播，而回环回调更快也更可靠。
+同机的 App 不要用 BLE：蓝牙控制器一般扫不到本机自己发出的广播。桌面 App 正从 URL 片段
++ 回调迁到回环 WebSocket（和手机同一套 Rust 会话）。
 
 浏览器只能当 **central**，而且 Web Bluetooth 只在文档里可用（service worker 里没有）。
 所以 BLE 通道成立的前提永远是：**一端是我们的原生 App（peripheral），另一端是打开着的 Chrome 页面（central）**。
@@ -66,8 +75,14 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
 
 ## 3. 握手：ECDH + 数字比对
 
-没有服务器就没有 TLS。BLE 自身的链路加密在各家实现上参差不齐，所以**我们自己加密**，
+BLE 自身的链路加密在各家实现上参差不齐，中继又不该看见任何东西，所以**我们自己加密**，
 用的全是浏览器内建的 WebCrypto（P-256 ECDH + HKDF + AES-GCM），零依赖。
+
+BLE 和中继跑**同一份会话代码**：页面这边是 `lib/transport/secure.js`，钱包那边是
+vela-core 的 `clear_signer::secure`（Rust）。**标签是参数**：BLE 用 `vela-ble/1`，
+中继用 `vela-relay/1`（下文写作 `<label>`）。两边由
+`rust/crates/vela-core/tests/clear-signer/secure-session.json` 的向量钉死
+（`node samples/secure-vectors.mjs`，Node 与 Chrome 各跑一遍）。
 
 1. 中心端连上后，明文（`flags=0`）写出：
 
@@ -86,8 +101,8 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
    ```
    shared = ECDH(自己的私钥, 对方公钥)                    // 32 字节
    salt   = nonce(中心端) ‖ nonce(外设)
-   key    = HKDF-SHA256(shared, salt, "vela-ble/1 key",  32)
-   code   = HKDF-SHA256(shared, salt, "vela-ble/1 code",  4)
+   key    = HKDF-SHA256(shared, salt, "<label> key",  32)
+   code   = HKDF-SHA256(shared, salt, "<label> code",  4)
    ```
 
 4. **比对码** = `code` 前 4 字节按 big-endian 取模 `1000000`，补足 6 位十进制。
@@ -99,9 +114,14 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
 5. 之后所有帧 `flags=1`，载荷是 `12 字节 IV ‖ AES-GCM 密文`：
 
    ```
-   IV  = 4 字节方向标签 ‖ 8 字节计数器（big-endian，每方向各自递增，绝不重用）
-   AAD = "vela-ble/1|" ‖ 方向("c2p"/"p2c") ‖ "|" ‖ msgId
+   IV  = 4 字节方向标签（"C2P." / "P2C."）‖ 8 字节计数器（big-endian，每方向各自从 1 递增，绝不重用）
+   AAD = "<label>|" ‖ 方向("c2p"/"p2c") ‖ "|" ‖ 尾巴
+         尾巴：BLE 是这条消息帧的 msgId；中继是 IV 里的计数器（十进制）
    ```
+
+   `c2p` 是签名页 → 钱包，`p2c` 是钱包 → 签名页（BLE 的叫法：页面是 central）。
+   **打开时**：IV 的方向标签必须是对方的，计数器必须大于已打开过的每一个 ——
+   重放、乱序、自己方向的消息一律拒绝、不解密（与 Rust 一致）。
 
    明文是 UTF-8 的 JSON（第 4 节）。每条消息带 `n`（单调递增序号），
    收到不递增的 `n` 一律丢弃 —— 防重放。
@@ -136,13 +156,22 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
 ```
 
 `code` 取值：`user_rejected`（用户没滑）、`expired`（超过 `expires`）、
-`unsupported`（方法不认识）、`refused`（本页规则拒签，例如无限额授权）。
+`unsupported`（方法不认识）、`refused`（本页规则拒签，例如无限额授权、自带挑战码）、
+`unavailable`（本页需要的服务没应答，例如成员证明时的注册表）。
 
-**任意方向：心跳/挂断**
+钥匙仪式的答复形状不同（第 10.3 节）：字段直接放在信封顶层，不包在 `result` 里。
+
+**`n` 怎么取**：发送方取「自己发过的最大 `n` 与收到过的最大 `n`」中较大者加一。
+这样每一方自己的序号递增，整个会话的序号也递增（intent 1、result 2、intent 3……，
+与 Rust 向量一致）；接收方只看对方的 `n` 是否递增。
+
+**任意方向：挂断**
 
 ```json
 {"v":1,"t":"bye","n":9,"reason":"done"}
 ```
+
+钱包发 `bye` = 会话正常结束。页面空闲 5 分钟也会发 `bye`（`reason:"idle"`）后断开。
 
 ---
 
@@ -164,7 +193,7 @@ BLE 一次写不了几百字节，而一个批量意图可以有几 KB。每条�
 
 | 端 | 角色 | 状态 |
 | --- | --- | --- |
-| Chrome 扩展页 / 签名页 | central | `lib/transport/ble.js` —— 已实现，`samples/ble-loopback.mjs` 10/10 通过 |
+| Chrome 扩展页 / 签名页 | central | `lib/transport/ble.js`（分帧）+ `lib/transport/secure.js`（会话）—— 已实现，`samples/ble-loopback.mjs` 10/10 通过 |
 | 桌面 App（Rust） | peripheral | 待做 |
 | iOS App（CoreBluetooth `CBPeripheralManager`） | peripheral | 待做 |
 | Android App（`BluetoothGattServer`） | peripheral | 待做 |
@@ -203,6 +232,10 @@ dApp `window.open` 打开 `https://sign.getvela.app/sign.html?ch=post`，然后�
 **意图不要放在 URL 里**：先开空页面再 post，既没有长度上限，又能拿到浏览器填的
 `event.origin`。两边都必须核对对方 origin —— 参考 `samples/dapp-sim.js`。
 
+**一个会话多个请求**（第 11 节）：第一条 intent 必须来自 `window.opener`，之后只听这个窗口、
+这个 origin；答完一个继续等下一个，直到对方发 `{vela:'bye'}`、关窗或空闲 5 分钟。
+参考 `samples/wallet-sim.js`。
+
 ### 7.2 URL 片段 + 回环回调（同机原生 App，无服务器）
 
 App 用系统能力打开浏览器：
@@ -211,7 +244,8 @@ App 用系统能力打开浏览器：
 https://sign.getvela.app/sign.html?ch=url#i=<base64url(JSON)>&cb=<base64url(回调URL)>&t=<一次性token>&z=1
 ```
 
-`i` 是 `{"intent":{…},"context":{…}}`；`z=1` 表示先经过 `deflate-raw`
+这条通道**任何网页都能打开**，所以它从来不算「钱包通道」：从这里来的创建钥匙、成员证明
+一律拒绝（第 10.2 节）。`i` 是 `{"intent":{…},"context":{…}}`；`z=1` 表示先经过 `deflate-raw`
 （浏览器内建 `DecompressionStream`，仍是零依赖，十六进制 calldata 通常压到三分之一）。
 片段整体建议压在 8KB 内。
 
@@ -251,6 +285,56 @@ port.onMessage.addListener(m => { /* { vela:'result', result } | { vela:'error',
 > Chrome 不允许 `externally_connectable.matches` 写全通配，所以第三方 dApp
 > 不能直接连扩展 —— 它先到我们的 https 页面（7.1），再由那一页转交。
 
+钥匙仪式的答复经扩展转回时，端口上收到的是 `{vela:'result', …字段}`（第 10.3 节）。
+
+### 7.4 回环 WebSocket（同机 App，071 起；075 起一个会话多个请求）
+
+App 在 `127.0.0.1` 上监听，用自己的浏览器标签页（Custom Tab / SFSafariViewController）打开：
+
+```
+https://sign.getvela.app/sign.html?ch=ws#p=<port>&t=<一次性token>
+```
+
+```
+页面 → 升级请求，Origin = 签名页的 origin（别的 origin 在握手时就被拒）
+页面 → {v:1, t:"hello", token}                  token 不对 → App 关掉，继续等
+App  → {v:1, t:"intent", id, intent, context}
+页面 → {v:1, t:"result", n, id, result:{…}}      签名意图（071 的形状）
+     | {v:1, t:"result", n, id, registration|assertion, origin}   钥匙仪式（第 10.3 节）
+     | {v:1, t:"error",  n, id, code}
+App  → 下一条 {t:"intent"}（新 id，同一个 socket）…
+App  → {v:1, t:"bye", reason:"done"} + 关闭帧        会话结束
+```
+
+不带 `bye` 直接关掉 socket 也算会话结束；请求还没答时关掉 = 那一个请求作废。
+片段在页面加载后立刻抹掉。可运行参考：`samples/test-kit.mjs` 的 `loopbackWallet`。
+
+### 7.5 中继（跨设备，075）
+
+钱包生成房间号和一把静态 P-256 密钥，显示二维码 + 可复制的链接：
+
+```
+https://sign.getvela.app/sign.html?ch=relay#relay=<wss URL，percent 编码>&room=<22 位 base64url>&rk=<22 位 base64url>&v=1
+```
+
+- `rk = b64url(SHA-256(钱包公钥)[0..16])`。
+- 页面从片段读出（片段不发给任何服务器，读完立刻抹掉），连 `<relay>/v1/rooms/<room>?role=signer`。
+- 中继 URL 只接受 `wss:`，或本机回环上的 `ws:`。
+- 中继发来 `{"v":1,"relay":"joined"}` 后，页面发明文 hello（文本帧），钱包回 hello；
+  **钱包公钥哈希对不上 `rk` → 页面拒绝**：不算比对码、不发任何加密帧、离开房间
+  （这挡住中继或猜到房间号的人冒充钱包）。
+- 对上了 → 双方显示同一个**六位码**，人在钱包上确认后钱包才发请求（这挡住冒充页面的人，
+  对「创建钥匙」尤其要紧：冒充的页面会塞给钱包一把别人的钥匙）。
+- 之后每条消息是一个二进制帧 `IV(12) ‖ AES-GCM`（第 3 节，`vela-relay/1`，AAD 尾巴是计数器），
+  没有 BLE 分帧。明文 JSON 与第 4 节相同。
+- 钱包掉线（`{"relay":"left"}`）：屏幕上那个请求作废（不再能确认，也不会答复），页面等它回来；
+  再次 `joined` 时从头握手（新密钥、新 nonce、新比对码，`rk` 再查一遍）。
+- 比对码画在等待卡和会话里的**每一张卡**上。
+- 中继关闭码：4408 过期/空闲、4409 角色已占、4400/1009 请求不对 —— 页面各有说法。
+
+参考：`lib/transport/relay.js`；房间规则的模拟实现 `samples/mock-relay.mjs`（真中继是 Rust，
+`vela-relay`，Docker 与 Cloudflare Worker 两种部署）。
+
 ---
 
 ## 8. 摘要从哪来
@@ -264,6 +348,7 @@ port.onMessage.addListener(m => { /* { vela:'result', result } | { vela:'error',
 | `eth_signTypedData*` | EIP-712：`keccak(0x1901 ‖ domainSeparator ‖ hashStruct)` | 已实现，对上 EIP 原文例子 |
 | `eth_sign` | 载荷本身就是摘要 | **拒签**（那就是盲签） |
 | `eth_sendTransaction` / `wallet_sendCalls` | Safe 4337 的 SafeOp 哈希 | 已实现，与 vela-core 的 wasm 逐字节一致 |
+| 钥匙仪式（第 10 节） | 本页自己生成或自己取来核对的挑战码 | 已实现；请求方带挑战码 = 拒签 |
 
 **消息类还有一层**：Safe 不验裸的 EIP-191/712 哈希，EIP-1271 验的是把它包进
 `SafeMessage(bytes)`、用 **Safe 自己的域**再算一遍的结果。所以 `context` 给了
@@ -324,4 +409,75 @@ EntryPoint / 4337 模块地址若不是 Vela 的那两个，会挂一条 danger 
 | **收款方的名字** | —— | **不显示**：这是最容易被投毒的一项 |
 | 预渲染的费用字符串 | —— | **不使用** |
 | 请求方给的摘要 | —— | **不使用** |
+
+---
+
+## 10. 钥匙仪式：创建、登录、证明（075）
+
+请求仍是 `{id, intent:{method, params, origin:""}, context}`，所以通道不需要新信封。
+`context.walletName` 是钱包的名字（显示在卡上，它是人认出自己钱包的方式；不可读或超长则不显示）。
+
+### 10.1 四种请求，以及每种怎么守住「只签自己推导的」
+
+| `intent.method` | `params[0]` | 本页签的挑战码 |
+| --- | --- | --- |
+| `vela_createPasskey` | `{name, excludeCredentialIds}` | 本页生成的 32 个随机字节。注册本来就不证明任何挑战码，别人的字节没有理由进来 |
+| `vela_signIn` | `{}` | UTF-8 `vela-signin-<毫秒>-<16 位十六进制>`：本页的时钟 + 8 个随机字节 |
+| `vela_proof` | `{credentialId?, purpose}`，`purpose` = `verify` / `recover_first` / `recover_second` | UTF-8 `vela-verify-<毫秒>` / `vela-recover-<毫秒>`（各端原生流程的同一格式） |
+| `vela_memberProof` | `{credentialId, publicKey, attestation, groupPublicKey, registry}` | 本页**自己**请求注册表，并且**自己算出**同一个挑战码：`keccak256(abi.encode(chainId, registry, rpId, publicKey, keccak256(abi.encode(groupPublicKey, attestation))))`，`chainId` 与 `registry`（`domainRegistry`）来自注册表的 `GET /api/health`；`POST {registry}/api/challenge {rpId, groupPublicKey, publicKey, attestation?}` 答的必须正是这 32 字节（以及同一个 `binding`），否则拒签 |
+
+- 文本挑战码永远不是 32 字节，Safe 不会把它当操作哈希。成员挑战码是 32 字节，但它是对卡上
+  显示的输入、按固定 ABI 布局算的 keccak —— 没人能挑出一组输入让它等于某个 SafeOp 或 EIP-191 哈希。
+  这个推导与线上注册表逐字节对过（`samples/member-challenge-vectors.json`）。
+- 默认注册表 `https://p256-index-v2.getvela.app`；`registry` 只接受 https，或本机回环上的 http。
+- **请求方想自带挑战码 = 拒签**：`params[0]` 里有 `challenge` / `digest` / `hash` / `message`，
+  或 `params` 不止一个，或 `context` 里有 `challenge` / `digest`。在任何 passkey 提示、任何注册表
+  请求之前就拒。
+- 所有仪式 `userVerification: 'required'`；创建：ES256、可发现凭据、`attestation: 'direct'`
+  （保留 AAGUID 给注册表的 20 字节 attestation）、`user.id = UTF-8(name ‖ 0x00 ‖ uuid v4)`
+  （和各端一致，登录时钱包能从 user handle 读回名字；名字超过 27 字节时改用 16 个随机字节）。
+- 指名了 `credentialId` 的仪式，若回答的是别的钥匙，签名丢弃、不回传。
+
+### 10.2 谁可以请求
+
+**创建钥匙**和**成员证明**只接受 Vela 钱包发来的请求（成员证明会把一把钥匙写进公开的注册表，
+和创建同样要紧）：
+
+- App 通道：回环 WebSocket（一次性 token）、中继（`rk` + 比对码）、BLE（邻近 + 比对码）；
+- 或浏览器背书的 origin（postMessage、扩展端口）是 `https://getvela.app` / `https://*.getvela.app`，
+  或本机回环（开发与测试时网页钱包跑在这里）。
+
+URL 片段不算：任何网页都能用它打开本页。请求方在 `context` 里写的 `channel` / `requester` /
+`originVerified` 一律被通道自己的事实覆盖。登录和证明对其他请求方也显示，但挂一条
+「这不是 Vela 钱包发来的请求，请求方会知道你挑了哪把 passkey」。
+
+### 10.3 答复（字段放在信封顶层）
+
+```
+创建:  {v:1, t:"result", n, id, registration:{credentialId, attestationObject, clientDataJSON, authenticatorAttachment, transports}, origin}
+仪式:  {v:1, t:"result", n, id, assertion:{credentialId, signatureDer, authenticatorData, clientDataJSON, userHandle, authenticatorAttachment}, origin}
+postMessage:  {vela:"result", id, registration|assertion, origin}
+```
+
+- `credentialId`：base64url，无填充（和签名答复一样）。
+- 其他字节字段：**小写十六进制，不带 `0x`** —— `attestationObject`、`clientDataJSON`、
+  `authenticatorData`、`signatureDer`（WebAuthn 原样返回的 DER，不是 r‖s）、`userHandle`（没有时为 `null`）。
+- `transports`：`getTransports()` 用逗号连接（如 `internal,hybrid`），或 `""`。
+- `authenticatorAttachment`：`platform` / `cross-platform`，或 `""`。
+- `origin`：本页的 origin，仅供参考；钱包核对的是 clientDataJSON 里的 origin。
+
+钱包（vela-core 的 `verify_registration` / `verify_ceremony`）在使用前核对每个答复：类型、origin、
+挑战码的格式（成员证明要和钱包自己取来的相等）、指名的钥匙。
+
+## 11. 会话：一个通道，多个请求（075）
+
+回环 WebSocket、postMessage、中继、BLE 上，一个会话按顺序承载多个请求（创建 → 成员证明；
+恢复第 1 步 → 第 2 步），钱包每个流程只打开本页一次：
+
+- 答完一个请求，页面回到平静的「等待钱包」，继续等下一个 `intent`；
+- 结束于：钱包的 `bye`、通道关闭、或空闲 5 分钟（页面发 `bye`，`reason:"idle"`）。
+  卡还在屏幕上、等人看的时候不算空闲；
+- 会话里被本页规则拒掉的请求**立刻**答 `refused`，理由留在屏幕上直到下一个请求；
+  一次性通道（URL 片段、扩展）仍是「关掉页面才发拒绝」；
+- 关掉页面时屏幕上若有未答的请求，照旧答 `user_rejected`（或 `refused`）。
 
