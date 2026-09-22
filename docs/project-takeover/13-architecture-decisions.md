@@ -255,7 +255,7 @@ clear-signing 重建期确立(memory: project_clear_signing_rebuild,分支 feat/
 ## ADR-009 Web 免费 + 商店付费 + bundler relayer 费:商业模型对架构的约束
 
 **背景**
-商业模型(01 号文档"用户与商业模型";08 号文档 A3):Web 版免费;iOS/Android 商店版付费下载(定价未定,创始人决策中);叠加自营 bundler relayer 费(约 2×/3× gas 上限加价)。收入核心用户 = 多链活跃转账者(memory: project_marketing_icp——"active multichain transactor = revenue core ≠ acquisition 入口")。单人团队,无融资叙事。
+商业模型(01 号文档"用户与商业模型";08 号文档 A3):Web 版免费;iOS/Android 商店版付费下载(定价未定,创始人决策中);叠加自营中继手续费(预留 gas × 3 × 所选速度价格,签名前显示;2026-09-22 更正,原"约 2×"不对)。收入核心用户 = 多链活跃转账者(memory: project_marketing_icp——"active multichain transactor = revenue core ≠ acquisition 入口")。单人团队,无融资叙事。
 
 **决策**
 把商业模型显式当作架构约束对待,而非营销层面的事。它决定了以下技术形态:

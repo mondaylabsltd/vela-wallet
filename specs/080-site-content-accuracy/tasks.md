@@ -115,6 +115,18 @@ checked against [claim-ledger.md](claim-ledger.md).
 - [x] T094 Write `specs/080-site-content-accuracy/results.md`: what changed, verification, the SC-004 click table, product gaps for follow-up (research D9), open items for the founder
 - [x] T095 Commit by area with explicit paths, push `080-site-content-accuracy`, open the PR
 
+## Phase 10: Founder follow-up (2026-09-22)
+
+Founder asked: fee copy must follow the code; don't lead with "ten times or more" — lead with "shown before you sign, paid to the relay, relay replaceable"; make "access doesn't depend on Vela staying online" true instead of retracting it; hero subtitle about the passkey's private key; fact #3 stated positively; fact #4 less wordy.
+
+- [x] T100 vela-relay: chain directory configurable (`VELA_RELAY_CHAIN_DIRECTORY_URL`, one core rule for both shells, default unchanged) — vela-relay PR #12
+- [x] T101 [P] en + zh: fees page (`#fee` anchor, "Who gets it"), FAQ, whitepaper, terms, landing trade-off #1 — no multiple of the on-chain cost
+- [x] T102 [P] en + zh: self-hosting guide, whitepaper, FAQ, landing FAQ, roadmap — relay chain directory via the setting; "What still points at Vela" loses the relay line
+- [x] T103 [P] en + zh: hero subtitle (private key), fact #3 (what you see is what you sign), fact #4 (059 string restored, links to `#if-getvela-app-disappears`)
+- [x] T104 [P] Claim ledger (C-fee-1, C-selfhost-2, new C-access-1, C-sign-1, C-clear-2), README, CONTENT-SOURCE, marketing essay + leads, requirements G05/README/GUIDE, manual-test and takeover notes
+- [ ] T105 13 locales carry T101–T103 (parallel agents, same brief) + review notes
+- [ ] T106 Gates (check, vitest, i18n stamp + status --gate, build, crawl), commit, push, PR #304 note: merge vela-relay#12 first
+
 ## Dependencies & execution order
 
 - Phase 1 → Phase 2 → Phases 3–7 → Phase 8 → Phase 9.

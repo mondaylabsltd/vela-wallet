@@ -43,7 +43,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 - **Audit posture:** Safe contracts are independently audited; **Vela's own integration is not, and none is scheduled.** Never write "audit planned."
 - **No token, ever.** No airdrop, no farming.
 - **Alpha, stated honestly** — no scary "tolerate bugs" banners (trust > disclaimers).
-- **Fees:** ≈2× raw on-chain cost, refused above ~3× (`MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n`). The README's "60% markup / 8 networks" is stale — it's **12 networks**.
+- **Fees:** `3 × padded gas limits × max(wallet gas reading, relay price for the chosen speed)`, minimum ≈ $0.01 (Tempo: ×2, pathUSD), paid in band to the relay and shown as **one** exact amount before signing; a relay quote above 3× the wallet's own reading is refused. Not "≈2×". **24 built-in networks** (spec 080 claim ledger).
 - **`deployer-api.ts` is a mock.** Production bundler facts come from `bundler-service.ts`.
 
 ---

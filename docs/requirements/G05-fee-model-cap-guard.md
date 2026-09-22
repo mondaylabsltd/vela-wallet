@@ -1,5 +1,7 @@
 # G05 · Fee Model (≈2× Cost, ~3× Cap Guard)
 
+> **Superseded, 2026-09-22 (spec 080).** The "≈2×" and the split display below no longer describe the code. The fee is `3 × padded gas limits × max(wallet gas reading, relay price for the chosen speed)`, minimum ≈ $0.01 (Tempo: ×2, pathUSD), paid in band to the relay and shown as **one** exact amount before signing (`INBAND_MARKUP = 3` in `rust/crates/vela-core/src/app/fee_policy.rs`). The ~3× quote guard (`MAX_QUOTE_VS_CHAIN_MULTIPLE = 3`) still stands. Canonical wording: `specs/080-site-content-accuracy/claim-ledger.md` C-fee-1.
+
 | | |
 |---|---|
 | **Epic** | G — Transaction Engine (ERC-4337) |

@@ -88,8 +88,9 @@ Every question is one click from the docs home ("Find an answer"):
   "removes the upgrade primitive", the signing page as a fallback, "all services
   MIT", "unlimited approvals are blocked", "access doesn't depend on Vela".
 - The landing hero fact #4 (a 059-approved string) was reworded to what is true.
-- The fee is described by its formula and as "often ten times or more" the
-  on-chain cost.
+- The fee is described by its formula. *(Superseded 2026-09-22 by the founder:
+  no multiple of the on-chain cost; lead with "shown before you sign, paid to the
+  relay, relay replaceable" — see "Follow-up" below.)*
 - zh-HK moved to written Hong Kong Chinese, matching the app's zh-HK.
 - The 13 AI-reviewed locales stay `drafted` in `review.json` with a pointer to
   their review; `reviewed` is reserved for a native reading.
@@ -100,11 +101,10 @@ Every question is one click from the docs home ("Find an answer"):
 
 See audit-report.md "For the founder" and "Not fixed here". The most important:
 
-1. **Fee narrative vs code** — the marketing essay says "about twice"; the code
-   charges 3 × padded gas × fast-tier price. One of them should change.
+1. ~~**Fee narrative vs code**~~ — resolved 2026-09-22: the code wins; marketing
+   copy corrected.
 2. **Product gaps the docs now disclose**: iOS Service Endpoints page not wired;
-   web onboarding ignores a custom passkey index; relay hard-codes the chain-data
-   host; no guard on self-calls (`enableModule`, `addOwner…`); network check omits
+   web onboarding ignores a custom passkey index; no guard on self-calls (`enableModule`, `addOwner…`); network check omits
    the signer factory; fetched descriptors labelled "verified"; `X-Rpc-Url` leaks
    provider keys to the relay.
 3. **Legal review** of the rewritten terms and privacy policy.
@@ -113,3 +113,14 @@ See audit-report.md "For the founder" and "Not fixed here". The most important:
    (e.g. es-MX "billetera", fr "clé d'accès", zh-TW 通行密鑰 vs 密碼金鑰).
 5. **Landing nav**: spec 059 fixed it at two links; a "Docs" link would help
    expert readers. Not changed.
+
+## Follow-up, 2026-09-22 (founder)
+
+| Ask | Done |
+| --- | --- |
+| Marketing fee copy must follow the code | `why-we-charge.md` + leads #17/#18/#22 corrected (also: no "Apple Pay chip / key never leaves it", web wallet doesn't connect dApps, real licences); G05/requirements/manual-test/takeover notes carry the formula |
+| Don't lead with "ten times or more" | every surface now says: exact fee shown before you sign, paid to the relay (Vela's by default), switch relays or run your own; formula stays on the fees page (`#fee`) |
+| "Access doesn't depend on Vela staying online" — make it true | vela-relay PR #12: `VELA_RELAY_CHAIN_DIRECTORY_URL` (both shells, default unchanged); site restores the 059 fact #4 and drops every "relay needs a code change" line. **Merge vela-relay#12 before this PR is published** |
+| Hero subtitle | "Signing is done on your device. Your passkey's private key never goes to Vela." / 签名在你的设备上完成。通行密钥的私钥绝不会交给 Vela。 (C-sign-1) |
+| Fact #3 positive | "What you see is what you sign: Vela decodes the exact transaction before you approve it." — not "a signing channel": the independent signing page is unpublished (C-clear-2) |
+| Fact #4 wordy | 059 string restored; link → `/docs/self-hosting#if-getvela-app-disappears` |

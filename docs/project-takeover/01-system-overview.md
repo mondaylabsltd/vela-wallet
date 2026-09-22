@@ -9,7 +9,7 @@ Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约�
 ## 用户与商业模型
 
 - 目标用户:多链活跃转账者(见 `docs/marketing/100-marketing-leads.md`)
-- 收入:**Web 版免费**;**iOS/Android 商店版付费下载($39.99 买断,见 `docs/marketing/`)**;叠加 bundler relayer 费(约 2×/3× gas 上限加价)
+- 收入:**Web 版免费**;**iOS/Android 商店版付费下载($39.99 买断,见 `docs/marketing/`)**;叠加中继手续费(预留 gas × 3 × 所选速度价格,签名前显示;2026-09-22 按 spec 080 更正,原"约 2×"不对)
 - 团队:单人创始人(开发/运维/发布同一人)
 
 ## 技术栈

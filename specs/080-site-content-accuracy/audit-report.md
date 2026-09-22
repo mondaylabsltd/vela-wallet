@@ -76,7 +76,7 @@ references in research.md §3b and the reports.
 
 1. iOS Settings → Service Endpoints shows fixture data and saves nothing (event field mismatch).
 2. Web onboarding ignores a custom passkey index (`setRegistryUrl` never called); desktop ignores it in sessions that start signed in; Android name lookups always use the default.
-3. The relay hard-codes `ethereum-data.getvela.app` (`vela-relay/src/utils/rpc.rs:15`).
+3. ~~The relay hard-codes `ethereum-data.getvela.app` (`vela-relay/src/utils/rpc.rs:15`).~~ **Fixed 2026-09-22** — `VELA_RELAY_CHAIN_DIRECTORY_URL` (vela-relay PR #12); landing fact #4 restored on that basis.
 4. p256-index: no LICENSE; `P256_INDEX_DOMAIN_REGISTRY` undocumented; source Dockerfile misses `p256-replay`. vela-relay source Dockerfile misses workspace members.
 5. No guard on dApp-requested calls to the account itself (addOwner / enableModule / setFallbackHandler) — decoded, not blocked.
 6. Fetched ERC-7730 descriptors are labelled "verified" without authentication.
@@ -93,7 +93,7 @@ references in research.md §3b and the reports.
 
 ## For the founder
 
-- **Fee narrative vs code.** `docs/marketing/why-we-charge.md` promises "about twice the raw on-chain cost"; the code charges `3 × padded gas × fast-tier price`. The site now describes the code. One of the two should change — `estimateInBandBasisGas` (unpadded basis) exists in the web shell and is never called.
+- **Fee narrative vs code.** *Resolved 2026-09-22:* the founder chose the code. The marketing essay and leads now state `3 × reserved gas × the price for your speed`, and every surface leads with "exact amount shown before you sign; paid to the relay (Vela's by default); switch relays or run your own" instead of a multiple of the on-chain cost (claim ledger C-fee-1).
 - **Legal review** of the rewritten terms (statutory carve-out, governing law, store-purchase clause) and privacy policy (controller scope, ICO reference).
 - **Analytics operator.** The policy names Rybbit at `tj.appsdata.org`; it no longer claims "self-hosted" because the repo can't confirm who runs that host.
 - **Landing nav.** Spec 059 fixed it at two links (Why, FAQ). Docs are reachable from the fact rows and the footer only; a "Docs" link would help the expert reader. Not changed — a founder ruling.
