@@ -167,6 +167,24 @@ pub struct OnboardingPage {
     watching: bool,
 }
 
+/// The screen going away ends everything it was waiting on.
+///
+/// The ceremony channel's `close` releases a PIN wait and stops a caBLE scan;
+/// spec 075 added a third thing to it — a Clear Signer page visit, which holds
+/// a bound loopback port (or a relay room) and leaves a browser tab saying
+/// "waiting for the wallet" in front of an app that is no longer asking for
+/// anything.
+///
+/// `leave_create` and the idle tick both do this on the paths they cover. This
+/// is for the path neither can: onboarding FINISHING, where the wallet page
+/// replaces this entity and the poll's `page.update` fails before it can run
+/// once more.
+impl Drop for OnboardingPage {
+    fn drop(&mut self) {
+        self.channel.close();
+    }
+}
+
 impl OnboardingPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let loc = Loc::from_env();
