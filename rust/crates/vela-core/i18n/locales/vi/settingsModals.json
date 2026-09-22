@@ -41,7 +41,7 @@
       "bundlerHint": "Cần điểm cuối tương thích với Vela Relay",
       "fiatLabel": "TỶ GIÁ FIAT",
       "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
-      "resetToDefaults": "Khôi phục mặc định",
+      "resetToDefaults": "Đặt lại cả bốn về mặc định",
       "selfHostGuide": "Hướng dẫn tự triển khai →"
     },
     "addNetwork": {
@@ -69,7 +69,7 @@
       "compatible": "Tương thích",
       "incompatible": "Không tương thích",
       "checkSafe": "Hợp đồng Safe L2",
-      "checkSigner": "Mô-đun ký WebAuthn",
+      "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} hợp đồng còn lại"
     },
     "treasury": {

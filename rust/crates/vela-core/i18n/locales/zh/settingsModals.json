@@ -41,7 +41,7 @@
       "bundlerHint": "需要兼容 Vela Relay 的节点",
       "fiatLabel": "法币汇率",
       "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
-      "resetToDefaults": "恢复默认",
+      "resetToDefaults": "四项全部恢复默认",
       "selfHostGuide": "自行部署指南 →"
     },
     "addNetwork": {
@@ -69,7 +69,7 @@
       "compatible": "兼容",
       "incompatible": "不兼容",
       "checkSafe": "Safe L2 合约",
-      "checkSigner": "WebAuthn 签名模块",
+      "checkSigner": "P-256 预编译",
       "checkRemaining": "其余 {{count}} 项合约"
     },
     "treasury": {

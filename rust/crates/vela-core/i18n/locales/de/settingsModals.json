@@ -41,7 +41,7 @@
       "bundlerHint": "Ein Vela-Relay-kompatibler Endpunkt ist erforderlich",
       "fiatLabel": "FIAT-KURSE",
       "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
-      "resetToDefaults": "Auf Standard zurücksetzen",
+      "resetToDefaults": "Alle vier zurücksetzen",
       "selfHostGuide": "Anleitung zum Selbst-Hosten →"
     },
     "addNetwork": {
@@ -69,7 +69,7 @@
       "compatible": "Kompatibel",
       "incompatible": "Nicht kompatibel",
       "checkSafe": "Safe-L2-Verträge",
-      "checkSigner": "WebAuthn-Signaturmodul",
+      "checkSigner": "P-256-Precompile",
       "checkRemaining": "{{count}} weitere Verträge"
     },
     "treasury": {

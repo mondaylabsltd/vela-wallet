@@ -41,7 +41,7 @@
       "bundlerHint": "Un point d'accès compatible Vela Relay est requis",
       "fiatLabel": "TAUX FIAT",
       "fiatHint": "Taux de change en USD qui alimentent la liste des devises — remplaçable pour une couverture plus large.",
-      "resetToDefaults": "Réinitialiser par défaut",
+      "resetToDefaults": "Réinitialiser les quatre",
       "selfHostGuide": "Guide d’auto-hébergement →"
     },
     "addNetwork": {
@@ -69,7 +69,7 @@
       "compatible": "Compatible",
       "incompatible": "Incompatible",
       "checkSafe": "Contrats Safe L2",
-      "checkSigner": "Module de signature WebAuthn",
+      "checkSigner": "Précompilé P-256",
       "checkRemaining": "{{count}} autres contrats"
     },
     "treasury": {

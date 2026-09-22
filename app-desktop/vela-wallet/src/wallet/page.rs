@@ -6837,17 +6837,43 @@ impl WalletPage {
         };
 
         let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
-        let scale_control = text_scale(theme, 7, 3);
         let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
-        let avatar_control = segmented(theme, &mut self.icons, &avatars, 1);
 
-        div()
+        // Two of these four rows can only lie in a real session, so a real
+        // session does not draw them (found on the live German panel, 081
+        // follow-up).
+        //
+        // `segmented` and `text_scale` take no handler — the whole panel is
+        // drawn, not wired ("spec 023 is UI only", `text_scale`'s own doc).
+        // Language and theme survive that, because both REPORT something true:
+        // the locale this window resolved, and the appearance it is actually
+        // in. The other two assert a choice that does not exist — the size
+        // thumb sits on stop four of seven for no reason, and the avatar
+        // segment claims "identicon" when the desktop has no avatar-style
+        // setting at all to be on either side of.
+        //
+        // They stay on the design surface, which is what they are: a drawing.
+        // Wiring them is a spec, not a line here — a live text scale means a
+        // multiplier through all 29 `theme::text_*` sizes, and every fixed
+        // `px` row height in this shell becomes a clipping risk that has to be
+        // seen at fifteen locales times seven stops before it ships.
+        let design_surface = self.identity.is_none();
+        let mut col = div()
             .flex()
             .flex_col()
-            .child(form_row(theme, language, language_control))
-            .child(form_row(theme, scale_label, scale_control))
-            .child(form_row(theme, theme_label, theme_control))
-            .child(form_row(theme, avatar_label, avatar_control))
+            .child(form_row(theme, language, language_control));
+        if design_surface {
+            col = col.child(form_row(theme, scale_label, text_scale(theme, 7, 3)));
+        }
+        col = col.child(form_row(theme, theme_label, theme_control));
+        if design_surface {
+            col = col.child(form_row(
+                theme,
+                avatar_label,
+                segmented(theme, &mut self.icons, &avatars, 1),
+            ));
+        }
+        col
     }
 
     /// What the 货币 row shows — the core's committed currency for a real

@@ -1559,7 +1559,7 @@
    "bundlerHint": "É necessário um endpoint compatível com o Vela Relay",
    "fiatLabel": "COTAÇÕES FIAT",
    "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
-   "resetToDefaults": "Restaurar padrões",
+   "resetToDefaults": "Restaurar os quatro",
    "selfHostGuide": "Guia de auto-hospedagem →"
   },
   "addNetwork": {
@@ -1587,7 +1587,7 @@
    "compatible": "Compatível",
    "incompatible": "Incompatível",
    "checkSafe": "Contratos Safe L2",
-   "checkSigner": "Módulo de assinatura WebAuthn",
+   "checkSigner": "Pré-compilado P-256",
    "checkRemaining": "outros {{count}} contratos"
   },
   "treasury": {

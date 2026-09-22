@@ -1559,7 +1559,7 @@
    "bundlerHint": "Se requiere un endpoint compatible con Vela Relay",
    "fiatLabel": "TIPOS DE CAMBIO FIAT",
    "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
-   "resetToDefaults": "Restablecer a los valores predeterminados",
+   "resetToDefaults": "Restablecer los cuatro",
    "selfHostGuide": "Guía de autoalojamiento →"
   },
   "addNetwork": {
@@ -1587,7 +1587,7 @@
    "compatible": "Compatible",
    "incompatible": "Incompatible",
    "checkSafe": "Contratos Safe L2",
-   "checkSigner": "Módulo de firma WebAuthn",
+   "checkSigner": "Precompilado P-256",
    "checkRemaining": "otros {{count}} contratos"
   },
   "treasury": {
