@@ -178,11 +178,14 @@ class ClearSignerSession {
 			return { reply: { kind: 'refused', code: 'declined', detail: '' }, signerOrigin: '' };
 		}
 		this.#cancelled = false;
+		// The page THIS request went to, read before the wait: a later request
+		// may open another page, and the core must judge the answer against the
+		// origin that actually saw it.
+		const origin = this.#origin;
 		// While the pairing code is up the person is not waiting on the page
 		// yet; every other moment is a wait.
 		this.view = { ...this.view, waiting: this.view.pairing === null, notice: null };
 		const reply = await channel.ask(request);
-		const origin = this.#origin;
 		if (this.#channel !== channel) {
 			// Superseded: the next request owns the sheet now.
 			return {
