@@ -41,7 +41,7 @@
       "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
       "fiatLabel": "KURS FIAT",
       "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-      "resetToDefaults": "Setel Ulang ke Bawaan",
+      "resetToDefaults": "Kembalikan keempatnya ke default",
       "selfHostGuide": "Panduan self-hosting →"
     },
     "addNetwork": {
@@ -69,7 +69,7 @@
       "compatible": "Kompatibel",
       "incompatible": "Tidak kompatibel",
       "checkSafe": "Kontrak Safe L2",
-      "checkSigner": "Modul penanda tangan WebAuthn",
+      "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} kontrak lainnya"
     },
     "treasury": {

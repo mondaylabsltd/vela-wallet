@@ -1562,7 +1562,7 @@
    "bundlerHint": "Требуется эндпоинт, совместимый с Vela Relay",
    "fiatLabel": "КУРСЫ ВАЛЮТ",
    "fiatHint": "Курсы валют на основе USD, формирующие список валют — можно заменить для более широкого охвата.",
-   "resetToDefaults": "Сбросить к стандартным",
+   "resetToDefaults": "Сбросить все четыре",
    "selfHostGuide": "Руководство по self-hosting →"
   },
   "addNetwork": {
@@ -1590,7 +1590,7 @@
    "compatible": "Совместима",
    "incompatible": "Несовместима",
    "checkSafe": "Контракты Safe L2",
-   "checkSigner": "Модуль подписи WebAuthn",
+   "checkSigner": "Прекомпайл P-256",
    "checkRemaining": "ещё контрактов: {{count}}"
   },
   "treasury": {

@@ -6806,7 +6806,16 @@ impl WalletPage {
     fn settings_appearance(&mut self, theme: &Theme) -> Div {
         let s = &self.settings;
         let language = s.language.clone();
-        let language_value = gpui::SharedString::from(format!("简体中文 · {}", s.note_system));
+        // The locale this window is ACTUALLY in. This line was the mock's
+        // literal — it told a German reader their language was 简体中文, in a
+        // panel whose whole job is to say what the app is set to. The endonym
+        // comes from the core beside `SUPPORTED`, so the fifteen names are one
+        // list rather than one per client.
+        let language_value = gpui::SharedString::from(format!(
+            "{} · {}",
+            vela_core::i18n::resolve::endonym(&self.locale),
+            s.note_system
+        ));
         let scale_label = s.text_scale.clone();
         let theme_label = s.theme_title.clone();
         let avatar_label = s.avatar_title.clone();
@@ -6828,17 +6837,43 @@ impl WalletPage {
         };
 
         let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
-        let scale_control = text_scale(theme, 7, 3);
         let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
-        let avatar_control = segmented(theme, &mut self.icons, &avatars, 1);
 
-        div()
+        // Two of these four rows can only lie in a real session, so a real
+        // session does not draw them (found on the live German panel, 081
+        // follow-up).
+        //
+        // `segmented` and `text_scale` take no handler — the whole panel is
+        // drawn, not wired ("spec 023 is UI only", `text_scale`'s own doc).
+        // Language and theme survive that, because both REPORT something true:
+        // the locale this window resolved, and the appearance it is actually
+        // in. The other two assert a choice that does not exist — the size
+        // thumb sits on stop four of seven for no reason, and the avatar
+        // segment claims "identicon" when the desktop has no avatar-style
+        // setting at all to be on either side of.
+        //
+        // They stay on the design surface, which is what they are: a drawing.
+        // Wiring them is a spec, not a line here — a live text scale means a
+        // multiplier through all 29 `theme::text_*` sizes, and every fixed
+        // `px` row height in this shell becomes a clipping risk that has to be
+        // seen at fifteen locales times seven stops before it ships.
+        let design_surface = self.identity.is_none();
+        let mut col = div()
             .flex()
             .flex_col()
-            .child(form_row(theme, language, language_control))
-            .child(form_row(theme, scale_label, scale_control))
-            .child(form_row(theme, theme_label, theme_control))
-            .child(form_row(theme, avatar_label, avatar_control))
+            .child(form_row(theme, language, language_control));
+        if design_surface {
+            col = col.child(form_row(theme, scale_label, text_scale(theme, 7, 3)));
+        }
+        col = col.child(form_row(theme, theme_label, theme_control));
+        if design_surface {
+            col = col.child(form_row(
+                theme,
+                avatar_label,
+                segmented(theme, &mut self.icons, &avatars, 1),
+            ));
+        }
+        col
     }
 
     /// What the 货币 row shows — the core's committed currency for a real
@@ -7881,6 +7916,23 @@ impl WalletPage {
                 )),
         );
 
+        // The body scrolls, the header does not — the same shape `hardware.rs`
+        // gives the wallet picker, and for the same reason.
+        //
+        // The card had no height cap and nothing to scroll: its height was
+        // whatever its content was. At the window's 1280x800 minimum the
+        // add-network verdict already reached within a few points of both
+        // window edges in English, and German — one of fifteen locales, at the
+        // smallest of six text scales — was tighter still. One more checklist
+        // row, one step up in text scale, or a longer language and the CTA sits
+        // below the window with no way to reach it.
+        //
+        // Measured off the window rather than a constant, because the constant
+        // would be wrong on every other window size: the card keeps 48px of
+        // breathing room top and bottom, and the header, the two 28px paddings
+        // and the 20px gap come off before the body gets what is left.
+        let chrome = 28. + 32. + 20. + 28.;
+        let body_max = (f32::from(window.viewport_size().height) - 96. - chrome).max(200.);
         let card = div()
             .w(px(SETTINGS_DIALOG_W))
             .flex()
@@ -7892,7 +7944,15 @@ impl WalletPage {
             .border_1()
             .border_color(theme.border_card)
             .child(header)
-            .child(body);
+            .child(
+                div()
+                    .id("settings-dialog-body")
+                    .w_full()
+                    .max_h(px(body_max))
+                    .min_h(px(0.))
+                    .overflow_y_scroll()
+                    .child(body),
+            );
 
         Some(
             div()
@@ -7904,6 +7964,14 @@ impl WalletPage {
                 .justify_center()
                 .bg(theme.bg_base.opacity(0.55))
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                // The wheel stops at the modal too. Once the body became a
+                // scroll region, a notch over the dialog scrolled the settings
+                // list behind the scrim as well — measured at ~7,700 changed
+                // background pixels for one notch, with rows visibly moving
+                // under a dialog that is supposed to have taken over. The body
+                // is a child and handles the event first; this only stops what
+                // is left from reaching the page.
+                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                 .child(card)
                 .into_any_element(),
         )
@@ -8092,6 +8160,60 @@ impl WalletPage {
                             crate::settings::components::CalloutTone::Warning,
                             self.settings.single_key_only.clone(),
                         ));
+                    }
+                    // Spec 081: an INCOMPATIBLE verdict needs somewhere to go.
+                    // The web has offered both of these since it was wired;
+                    // desktop drew the red rows, then the custom-RPC field,
+                    // and then nothing — so a person could type the RPC that
+                    // would have changed the answer and have no way to ask
+                    // again. The re-check keeps what they typed, for the same
+                    // reason the retry below does.
+                    if !compat.compatible {
+                        let chain_id = compat.chain_id;
+                        col = col.child(
+                            div()
+                                .id("wizard-recheck-rpc")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .h(px(CONTACTS_BUTTON_H))
+                                .rounded(px(12.))
+                                .cursor_pointer()
+                                .border_1()
+                                .border_color(theme.outline_strong)
+                                .text_size(theme::text_row_title())
+                                .text_color(theme.fg_base)
+                                .child(self.settings.recheck_with_rpc.clone())
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    resident::resident::<NetworkAdmin>(cx).update(
+                                        cx,
+                                        |resident, cx| {
+                                            resident.dispatch(
+                                                NetEvent::ChainSelected {
+                                                    chain_id,
+                                                    keep_custom_rpc: true,
+                                                },
+                                                cx,
+                                            );
+                                        },
+                                    );
+                                    cx.notify();
+                                })),
+                        );
+                        col = col.child(
+                            div()
+                                .id("wizard-chain-setup-tool")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.info_base)
+                                .child(self.settings.open_chain_setup_tool.clone())
+                                .on_click(|_, _, cx| {
+                                    cx.open_url(crate::onboarding_flow::CHAIN_SETUP_URL);
+                                }),
+                        );
                     }
                 }
                 // The probe could not reach a verdict. A retry, never a

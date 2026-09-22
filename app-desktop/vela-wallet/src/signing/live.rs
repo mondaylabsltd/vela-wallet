@@ -368,10 +368,7 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             tone: Tone::Neutral,
         },
         Block::Sentence {
-            text: SharedString::from(crate::signing::fill(
-                &s.funding_lead,
-                &[("symbol", &data.native_symbol)],
-            )),
+            text: s.funding_lead.clone(),
             tone: Tone::Neutral,
         },
     ];
@@ -407,6 +404,14 @@ pub fn funding_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
             ),
         ],
         tone: Tone::Neutral,
+    });
+
+    // Whose money this is, and that it does not come back. Under the card
+    // rather than above it: the address and the amount are what a person acts
+    // on, and this is what they need to know before they do.
+    out.push(Block::Warning {
+        tone: Tone::Caution,
+        text: s.funding_disclaimer.clone(),
     });
 
     if funding.presentation == SignFundingPresentation::Confirming {

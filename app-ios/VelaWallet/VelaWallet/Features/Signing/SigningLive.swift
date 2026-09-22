@@ -251,11 +251,18 @@ enum SigningLive {
             return blocks
         }
 
-        if let funding = sign.funding {
-            blocks.append(.warning(
-                tone: .caution,
-                text: loc.t("componentsUi.funding.lead", vars: ["symbol": funding.data.nativeSymbol])
-            ))
+        // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON THIS
+        // CHAIN. The `componentsUi.funding.*` line it used to show — "your
+        // transactions run on a small fee reserve… later transactions top it
+        // back up" — describes the retired per-wallet deposit, and was false
+        // about whose money this is. The second line is the one the surface
+        // never had: it is non-refundable and it goes to the bundler operator,
+        // not to Vela.
+        if sign.funding != nil {
+            blocks.append(.warning(tone: .caution, text: loc.t("componentsUi.treasuryBootstrap.lead")))
+            blocks.append(
+                .warning(tone: .caution, text: loc.t("componentsUi.treasuryBootstrap.disclaimer"))
+            )
         }
         if let error = sign.error {
             let text: String = switch error.kind {

@@ -1556,7 +1556,7 @@
    "bundlerHint": "Vela Relay uyumlu bir uç nokta gereklidir",
    "fiatLabel": "FİAT KURLARI",
    "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
-   "resetToDefaults": "Varsayılanlara Sıfırla",
+   "resetToDefaults": "Dördünü de varsayılana döndür",
    "selfHostGuide": "Kendin barındırma kılavuzu →"
   },
   "addNetwork": {
@@ -1584,7 +1584,7 @@
    "compatible": "Uyumlu",
    "incompatible": "Uyumsuz",
    "checkSafe": "Safe L2 sözleşmeleri",
-   "checkSigner": "WebAuthn imza modülü",
+   "checkSigner": "P-256 ön derlemesi",
    "checkRemaining": "diğer {{count}} sözleşme"
   },
   "treasury": {
