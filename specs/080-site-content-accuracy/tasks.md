@@ -124,8 +124,8 @@ Founder asked: fee copy must follow the code; don't lead with "ten times or more
 - [x] T102 [P] en + zh: self-hosting guide, whitepaper, FAQ, landing FAQ, roadmap — relay chain directory via the setting; "What still points at Vela" loses the relay line
 - [x] T103 [P] en + zh: hero subtitle (private key), fact #3 (what you see is what you sign), fact #4 (059 string restored, links to `#if-getvela-app-disappears`)
 - [x] T104 [P] Claim ledger (C-fee-1, C-selfhost-2, new C-access-1, C-sign-1, C-clear-2), README, CONTENT-SOURCE, marketing essay + leads, requirements G05/README/GUIDE, manual-test and takeover notes
-- [ ] T105 13 locales carry T101–T103 (parallel agents, same brief) + review notes
-- [ ] T106 Gates (check, vitest, i18n stamp + status --gate, build, crawl), commit, push, PR #304 note: merge vela-relay#12 first
+- [x] T105 13 locales carry T101–T103 (parallel agents, same brief) + review notes
+- [x] T106 Gates (check, vitest, i18n stamp + status --gate, build, crawl), commit, push, PR #304 note: merge vela-relay#12 first
 
 ## Dependencies & execution order
 
