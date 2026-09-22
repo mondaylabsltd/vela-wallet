@@ -75,21 +75,21 @@ Recorded so the docs can stay honest until they are fixed; each has file
 references in research.md §3b and the reports.
 
 1. iOS Settings → Service Endpoints shows fixture data and saves nothing (event field mismatch).
-2. Web onboarding ignores a custom passkey index (`setRegistryUrl` never called); desktop ignores it in sessions that start signed in; Android name lookups always use the default.
+2. ~~Web onboarding ignores a custom passkey index (`setRegistryUrl` never called); desktop ignores it in sessions that start signed in; Android name lookups always use the default.~~ **Fixed 2026-09-22** (spec 081 FR-002): one rule in the core (`NetServiceEndpoints::effective`), read per call on web and Android, applied at boot and on save on desktop, re-applied per flow on iOS.
 3. ~~The relay hard-codes `ethereum-data.getvela.app` (`vela-relay/src/utils/rpc.rs:15`).~~ **Fixed 2026-09-22** — `VELA_RELAY_CHAIN_DIRECTORY_URL` (vela-relay PR #12); landing fact #4 restored on that basis.
-4. p256-index: no LICENSE; `P256_INDEX_DOMAIN_REGISTRY` undocumented; source Dockerfile misses `p256-replay`. vela-relay source Dockerfile misses workspace members.
-5. No guard on dApp-requested calls to the account itself (addOwner / enableModule / setFallbackHandler) — decoded, not blocked.
+4. ~~p256-index: no LICENSE; `P256_INDEX_DOMAIN_REGISTRY` undocumented; source Dockerfile misses `p256-replay`. vela-relay source Dockerfile misses workspace members.~~ **Fixed 2026-09-22** — MIT licence added; p256-index PR #8 and vela-relay PR #13, both verified by a real `docker build` from a clean clone.
+5. ~~No guard on dApp-requested calls to the account itself (addOwner / enableModule / setFallbackHandler) — decoded, not blocked.~~ **Fixed 2026-09-22** (spec 081 FR-005/006): refused in `vela-core/src/app/self_call_guard.rs`, including inside batches and `MultiSend`, any `delegatecall` leg, and `SafeTx` typed data.
 6. Fetched ERC-7730 descriptors are labelled "verified" without authentication.
-7. `X-Rpc-Url` sends the user's top RPC URL (possibly with a provider API key) to the relay, and the relay reads a different header name anyway.
-8. Desktop "Erase this device" has no handler; iOS erase leaves browser data; desktop shows the old "fee reserve" copy for the treasury top-up; desktop "Self-hosting guide →" is plain text; the web one links to the repo root (should link `/docs/self-hosting`).
-9. Web feedback "Send" does nothing; the site's `/api/bug-report` has no caller.
+7. ~~`X-Rpc-Url` sends the user's top RPC URL (possibly with a provider API key) to the relay, and the relay reads a different header name anyway.~~ **Fixed 2026-09-22** (spec 081 FR-007): removed from all four shells.
+8. **Mostly fixed 2026-09-22** (spec 081 FR-004/FR-017): desktop erase has a handler and sweeps `vela.` plus the webview's browsing data; iOS erase sweeps every key, `WKWebsiteDataStore`, the logo caches, and signs out confirmed; both self-hosting links open `https://getvela.app/docs/self-hosting`. **Still open**: the desktop treasury top-up's old "fee reserve" copy.
+9. ~~Web feedback "Send" does nothing; the site's `/api/bug-report` has no caller.~~ **Fixed 2026-09-22** (spec 081 FR-016): `services/bug-report.ts` posts to the site endpoint with a prefilled-issue fallback, the row is reachable on phone and desktop, and a test asserts the payload carries no address, balance, endpoint URL or raw `vela.*` value.
 10. The site loads a third-party-origin analytics script on the same origin as `/chain-setup`, which keeps a funded deployer key in localStorage.
-11. Five dormant site API routes (`/api/wallet`, `/api/transactions`, `/api/nft`, `/api/bundler`, `/api/proxy`) forward wallet addresses to Alchemy/Pimlico with no caller.
-12. The iOS app has no privacy manifest (App Store blocker per the privacy report).
-13. The network admission check (vela-core `network_admin.rs:97-133`, mirrored by the site's chain-setup page) omits SafeWebAuthnSignerFactory and its singleton, and checks CompatibilityFallbackHandler, which wallets don't use.
+11. ~~Five dormant site API routes (`/api/wallet`, `/api/transactions`, `/api/nft`, `/api/bundler`, `/api/proxy`) forward wallet addresses to Alchemy/Pimlico with no caller.~~ **Fixed 2026-09-22** (spec 081 FR-015): deleted after a repo-wide no-caller proof, with the dead helpers in `server/net.ts`.
+12. ~~The iOS app has no privacy manifest (App Store blocker per the privacy report).~~ **Fixed 2026-09-22** (spec 081 FR-014): `PrivacyInfo.xcprivacy` declaring what the archived binary actually imports, with a CI gate that re-derives it with `nm -u`.
+13. ~~The network admission check (vela-core `network_admin.rs:97-133`, mirrored by the site's chain-setup page) omits SafeWebAuthnSignerFactory and its singleton, and checks CompatibilityFallbackHandler, which wallets don't use.~~ **Fixed 2026-09-22** (spec 081 FR-009): twelve contracts, two of them marked multi-key-only, and a second verdict `multi_key_ready` that every shell now says out loud.
 14. Reverse-record names are shown without forward verification in every shell.
 15. Release packages carry SHA-256 checksums in the same GitHub release, no signatures; the Windows installer is unsigned; v0.9.4 has no notarized macOS build.
-16. The app's own copy (vela-core corpus: onboarding "12+ networks") and the extension manifest ("12+ networks") understate the network count — not false, but stale.
+16. ~~The app's own copy (vela-core corpus: onboarding "12+ networks") and the extension manifest ("12+ networks") understate the network count — not false, but stale.~~ **Fixed 2026-09-22** (spec 081 FR-011): 24, counted from `chains.ts`, in four corpus keys × 15 locales, the extension manifest and the three Linux packaging blurbs.
 
 ## For the founder
 
