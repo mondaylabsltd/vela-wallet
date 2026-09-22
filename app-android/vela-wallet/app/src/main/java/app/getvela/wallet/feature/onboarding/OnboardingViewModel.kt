@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.crux.CoreDriver
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.HybridCeremony
@@ -326,6 +328,14 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         )
         createDriver = driver
         driver.dispatch(event("start"))
+        // Spec 075: WHICH Clear Signer page Settings names decides whether that
+        // route can mint a key this set would accept — a key made on a page
+        // belongs to that page's domain, and a wallet's keys all belong to one.
+        // The core cannot read the store, so the shell tells it.
+        viewModelScope.launch {
+            val page = VelaStore(getApplication()).read(KeyValueStore.Keys.CLEAR_SIGNER_URL).orEmpty()
+            send(driver, JSONObject().put("type", "signer_page_changed").put("url", page))
+        }
     }
 
     fun nameChanged(name: String) =

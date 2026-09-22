@@ -295,7 +295,11 @@ struct KeysScreen: View {
                     // first key's method is the person's choice too, and an
                     // empty list with a collapsed "+" is a puzzle, not a step.
                     if (pickerOpen || view.keys.isEmpty) && view.canAddKey {
-                        AddMethodPicker(loc: loc) { method in
+                        AddMethodPicker(
+                            loc: loc,
+                            allowed: view.addMethods,
+                            blocked: view.addBlocked
+                        ) { method in
                             pickerOpen = false
                             onAddKey(method)
                         }
@@ -408,18 +412,21 @@ private struct KeyRow: View {
     }
 }
 
-/// The three ways to mint a founding key.
+/// The four ways to mint a founding key.
 ///
 /// Unlike the browser, this client OWNS the picker, so the person's selection
 /// here is honoured at the ceremony rather than merely recorded.
 ///
-/// `Hybrid` is rendered present-and-explained rather than hidden: the design
-/// draws it, the core models it, and a later feature adds the transport. An
-/// absent row would read as "this wallet cannot do that"; a disabled row with
-/// its reason reads as "not yet", which is the truth.
+/// A route the core has ruled out is rendered present-and-explained rather than
+/// hidden: an absent row would read as "this wallet cannot do that", while a
+/// dimmed row with a sentence under the list says what this wallet's keys
+/// belong to — and, when the configured Clear Signer page is what does not fit,
+/// which page to change (spec 075).
 private struct AddMethodPicker: View {
     @Environment(\.theme) private var theme
     let loc: Loc
+    let allowed: [KeyMethod]
+    let blocked: AddBlocked?
     let onPick: (KeyMethod) -> Void
 
     var body: some View {
@@ -430,9 +437,11 @@ private struct AddMethodPicker: View {
                 .padding(.vertical, Tokens.Space.s8)
 
             ForEach(KeyMethod.allCases, id: \.self) { method in
-                // All three routes are live now: platform, scan (our caBLE
-                // initiator, BLE-only capable), and a security key.
-                let available = true
+                // All four routes are live — platform, scan (our caBLE
+                // initiator, BLE-only capable), a security key and the Clear
+                // Signer — but only those that would mint for THIS set's
+                // relying party can add to it.
+                let available = allowed.contains(method)
                 let copy = methodCopy(method)
                 Button { onPick(method) } label: {
                     HStack {
@@ -440,7 +449,7 @@ private struct AddMethodPicker: View {
                             Text(loc.t(copy.title))
                                 .typeRole(Typography.rowTitle)
                                 .foregroundStyle(theme.fgBase)
-                            Text(loc.t(available ? copy.body : I18nKeys.Create.methodHybridUnavailable))
+                            Text(loc.t(copy.body))
                                 .typeRole(Typography.flowCaption)
                                 .foregroundStyle(theme.fgMuted)
                                 .multilineTextAlignment(.leading)
@@ -455,7 +464,37 @@ private struct AddMethodPicker: View {
                 .disabled(!available)
                 .opacity(available ? 1 : Tokens.Opacity.disabled)
             }
+
+            // Two paragraphs, never one joined string: what this wallet's keys
+            // belong to is always the reason; naming the configured page is
+            // only sometimes true, and it is the half a person can act on.
+            // Joining them would also put a space after a full stop that
+            // already ends a line in Chinese (device-found, 2026-09-23).
+            if let blocked {
+                reason(loc.t(
+                    I18nKeys.Create.methodBlockedHint,
+                    vars: ["party": blocked.relyingParty]
+                ))
+                if let page = blocked.page {
+                    reason(loc.t(
+                        I18nKeys.Create.methodBlockedSigner,
+                        vars: [
+                            "page": page,
+                            "pageParty": blocked.pageRelyingParty ?? "",
+                            "party": blocked.relyingParty,
+                        ]
+                    ))
+                }
+            }
         }
+    }
+
+    private func reason(_ text: String) -> some View {
+        Text(text)
+            .typeRole(Typography.flowCaption)
+            .foregroundStyle(theme.fgMuted)
+            .multilineTextAlignment(.leading)
+            .padding(.top, Tokens.Space.s8)
     }
 }
 

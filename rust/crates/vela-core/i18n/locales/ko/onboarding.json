@@ -169,6 +169,8 @@
 			"keysSubtitleFull": "최대 7개에 도달했습니다.",
 			"keysTitle": "패스키 추가",
 			"keysTitleBlocked": "생성하려면 하나 더 필요합니다",
+			"methodBlockedHint": "이 지갑의 키는 모두 {{party}}에 속합니다.",
+			"methodBlockedSigner": "Clear Signer 페이지가 {{page}}이고 그 키는 {{pageParty}}에 속합니다. 설정에서 {{party}} 페이지로 바꾸면 추가할 수 있습니다.",
 			"methodHybridBody": "코드를 스캔해 근처 기기에서 생성",
 			"methodHybridTitle": "휴대폰 또는 태블릿",
 			"methodHybridUnavailable": "곧 지원",

@@ -766,6 +766,8 @@
    "keysSubtitleFull": "已達上限 7 把。",
    "keysTitle": "新增通行密鑰",
    "keysTitleBlocked": "再加一把才能建立",
+   "methodBlockedHint": "這個錢包的鑰匙都屬於 {{party}}。",
+   "methodBlockedSigner": "你的清晰簽署器頁面是 {{page}}，它的鑰匙屬於 {{pageParty}}。在設定裡換成 {{party}} 的頁面才能新增。",
    "methodHybridBody": "掃碼，用附近裝置建立",
    "methodHybridTitle": "手機或平板",
    "methodHybridUnavailable": "即將支援",

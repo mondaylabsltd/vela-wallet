@@ -74,6 +74,10 @@ function view(over: Partial<CreateView> = {}): CreateView {
 		can_add_key: false,
 		can_finish: false,
 		needs_second_key: false,
+		// An empty set has committed to no relying party, so every route is
+		// still open and there is nothing to explain (spec 075).
+		add_methods: ['platform', 'hybrid', 'security_key', 'clear_signer'],
+		add_blocked: null,
 		...over
 	};
 }
@@ -170,6 +174,49 @@ export const CREATE_FIXTURES: CreateFixture[] = [
 			],
 			can_add_key: true,
 			can_finish: true
+		})
+	},
+	// Spec 075: a wallet's keys all belong to one relying party, so both ways
+	// the picker narrows. The sentence under the list is the only thing that
+	// tells a person what to do about it.
+	{
+		code: 'K6',
+		label: 'Keys · the signer page is somewhere else',
+		view: view({
+			stage: 'add_keys',
+			name: 'Everyday wallet',
+			keys: [key({ synced: false })],
+			can_add_key: true,
+			needs_second_key: true,
+			add_methods: ['platform', 'hybrid', 'security_key'],
+			add_blocked: {
+				relying_party: 'getvela.app',
+				page: 'http://localhost:8140/sign.html',
+				page_relying_party: 'localhost'
+			}
+		})
+	},
+	{
+		code: 'K7',
+		label: "Keys · a page's own set",
+		view: view({
+			stage: 'add_keys',
+			name: 'Everyday wallet',
+			// A page's key reports `platform` too, but the vault holding it is
+			// not this device's and the row must not claim one.
+			keys: [
+				key({
+					method: 'clear_signer',
+					kind: 'clear_signer',
+					synced: false,
+					aaguid: '',
+					provider_name: ''
+				})
+			],
+			can_add_key: true,
+			needs_second_key: true,
+			add_methods: ['clear_signer'],
+			add_blocked: { relying_party: 'sign.example.com', page: null, page_relying_party: null }
 		})
 	},
 	{

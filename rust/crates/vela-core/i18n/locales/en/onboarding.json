@@ -169,6 +169,8 @@
 			"keysSubtitleFull": "You've reached the limit of 7.",
 			"keysTitle": "Add passkeys",
 			"keysTitleBlocked": "One more key before you can create",
+			"methodBlockedHint": "This wallet's keys all belong to {{party}}.",
+			"methodBlockedSigner": "Your Clear Signer page is {{page}}, whose keys belong to {{pageParty}}. Change it in Settings to add one here.",
 			"methodHybridBody": "Scan a code and create it on a nearby device",
 			"methodHybridTitle": "Phone or tablet",
 			"methodHybridUnavailable": "Coming soon",

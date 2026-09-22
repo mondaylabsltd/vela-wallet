@@ -179,6 +179,14 @@ final class OnboardingModel {
     /// signing with something else.
     var clearSigner: ClearSignerCeremonyPort?
 
+    /// The Clear Signer page Settings names, attached by the host (spec 075).
+    ///
+    /// A key minted on that page belongs to ITS domain, and a wallet's keys all
+    /// belong to one relying party — so which page is configured decides
+    /// whether that route can add to the set being assembled. The core cannot
+    /// read the setting; this is how it learns.
+    var signerPage: (() -> String?)?
+
     private let session: SessionController
     private let store: AccountStore
     private let registry: RegistryClient
@@ -233,6 +241,7 @@ final class OnboardingModel {
         )
         create = driver
         driver.dispatch(Self.event("start"))
+        driver.dispatch(Self.event("signer_page_changed", ["url": signerPage?() ?? ""]))
     }
 
     func toggleAck(_ index: Int) { create?.dispatch(Self.event("ack_toggled", ["index": index])) }

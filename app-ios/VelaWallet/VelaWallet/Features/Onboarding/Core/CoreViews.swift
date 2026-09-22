@@ -99,6 +99,19 @@ struct CreateKeyRow: Decodable, Equatable, Identifiable {
     var id: String { "\(name)-\(aaguid)-\(method.rawValue)" }
 }
 
+/// `AddBlocked` — why a key route is not on offer (spec 075).
+///
+/// A wallet's keys all belong to ONE relying party, because the registry files
+/// a unit under one `rpId`. Once the first key is minted, a route that would
+/// mint for a different party cannot add to the set — and the row says so,
+/// naming both sides, because the Clear Signer's page is a setting the person
+/// can change.
+struct AddBlocked: Decodable, Equatable {
+    let relyingParty: String
+    let page: String?
+    let pageRelyingParty: String?
+}
+
 /// `CreateView`.
 struct CreateView: Decodable, Equatable {
     let stage: CreateStage
@@ -118,6 +131,10 @@ struct CreateView: Decodable, Equatable {
     let canGoBack: Bool
     let address: String?
     let syncErrorDetail: String?
+    /// Spec 075: the routes that may still mint a key for THIS set.
+    let addMethods: [KeyMethod]
+    /// Why the others may not, when some may not.
+    let addBlocked: AddBlocked?
 }
 
 /// `LoginView` — two booleans, and it stays that way (data-model §4).

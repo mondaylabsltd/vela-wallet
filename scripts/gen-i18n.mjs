@@ -369,8 +369,15 @@ for (let i = 1; i < PATHS.length; i++) {
 //   worked and then dropped was borrowing "this device cannot pair this way",
 //   which is false and sends the person looking for the wrong problem (found
 //   on the radio, T043).
-if (PATHS.length !== 1740) fail(`expected 1740 paths (1651 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1651) fail(`expected 1651 leaf paths, got ${leafSet.size}`);
+// 1742 (spec 075, 2026-09-23): +2 `onboarding.create.methodBlocked{Hint,
+//   Signer}`. A wallet's keys all belong to ONE relying party, because the
+//   registry files a unit under one `rpId` — so once the first key is minted
+//   the routes that would mint for a different party are off. They used to be
+//   offered and failed at the publish, with nothing said (owner, 2026-09-23).
+//   Two strings, not three: a dimmed row keeps its own caption, and the third
+//   would have said "off" where the dimming already does (SC-005 budget).
+if (PATHS.length !== 1742) fail(`expected 1742 paths (1653 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1653) fail(`expected 1653 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

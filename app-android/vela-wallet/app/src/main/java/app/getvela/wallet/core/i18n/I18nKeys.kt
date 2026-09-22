@@ -128,6 +128,8 @@ object I18nKeys {
         const val METHOD_HYBRID_TITLE = "onboarding.create.methodHybridTitle"
         const val METHOD_HYBRID_BODY = "onboarding.create.methodHybridBody"
         const val METHOD_HYBRID_UNAVAILABLE = "onboarding.create.methodHybridUnavailable"
+        const val METHOD_BLOCKED_HINT = "onboarding.create.methodBlockedHint"
+        const val METHOD_BLOCKED_SIGNER = "onboarding.create.methodBlockedSigner"
         const val METHOD_SECURITY_KEY_TITLE = "onboarding.create.methodSecurityKeyTitle"
         const val METHOD_SECURITY_KEY_BODY = "onboarding.create.methodSecurityKeyBody"
         const val PROVIDER_PLATFORM = "onboarding.create.providerPlatform"

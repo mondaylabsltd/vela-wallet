@@ -171,3 +171,28 @@ the page's own code.
   **Fixed on Android** (`8f0888e5`): re-read on entry, never mid-flow, so one
   wallet is still never asked of two registries. Worth checking on the other
   three shells.
+
+- **F-5 · a route that cannot add to this set was still offered.** Found by the
+  owner, 2026-09-23: with a first key on `getvela.app` (this device) and the
+  Clear Signer page set to `http://localhost:8140`, the Clear Signer row was
+  still live. A fourth key was minted there, and the failure surfaced only at
+  the publish — the person was already holding a passkey no unit would accept.
+  The rule shipped as "a `getvela.app` set takes every route", which is true of
+  the OFFICIAL page and false of the page Settings names. **Fixed:**
+  `methods_for(drafts, signer_page)` now asks where the Clear Signer WOULD mint
+  (`registry_rp_id` of the configured page) and offers it only when that equals
+  the set's committed party; `Event::SignerPageChanged` is how a shell reports
+  the setting, and `add_blocked` carries the two facts a sentence needs. All
+  four shells dim the row and print it
+  (`onboarding.create.methodBlocked{Hint,Signer}`, 15 locales). Pinned by
+  `a_signer_page_on_another_domain_is_off_for_a_getvela_set` and by the
+  narrowed-picker case in `add-method-picker.svelte.test.ts`; the gallery of
+  each shell gained `keys · signer page elsewhere` and `keys · a page's own set`.
+- **F-2's tail on the CREATE screen (Android).** The wallet-keys list took the
+  core's `kind`; the founding-key list never did — the Kotlin `CreateKeyRow`
+  mirror had no such field, so a key minted on a page was drawn with this
+  device's vault ("Apple Passwords", 设备绑定) on the one screen where the
+  person is deciding what the set is made of. Fixed with the rest of F-5: the
+  mirror carries `kind` (defaulting to `method`), and the row's mark, provider
+  line and glyph all read it. The gallery fixtures stopped lending a page's key
+  an AAGUID at the same time, in all three shells.

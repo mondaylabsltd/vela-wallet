@@ -766,6 +766,8 @@
    "keysSubtitleFull": "上限の 7 本に達しました。",
    "keysTitle": "パスキーを追加",
    "keysTitleBlocked": "作成にはもう 1 本必要です",
+   "methodBlockedHint": "このウォレットの鍵はすべて {{party}} のものです。",
+   "methodBlockedSigner": "Clear Signer のページは {{page}} で、その鍵は {{pageParty}} のものです。設定で {{party}} のページに変えると追加できます。",
    "methodHybridBody": "コードを読み取り、近くの端末で作成",
    "methodHybridTitle": "スマホまたはタブレット",
    "methodHybridUnavailable": "近日対応",

@@ -45,6 +45,8 @@ class FlowFixturesTest {
             "name · draft waiting" to Screen.Name,
             "keys · one, needs a second" to Screen.Keys,
             "keys · two, ready" to Screen.Keys,
+            "keys · signer page elsewhere" to Screen.Keys,
+            "keys · a page's own set" to Screen.Keys,
             "keys · unconfirmed row" to Screen.Keys,
             "keys · at the cap" to Screen.Keys,
             "progress · verify" to Screen.Progress,

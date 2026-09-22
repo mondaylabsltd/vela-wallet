@@ -766,6 +766,8 @@
    "keysSubtitleFull": "Das Limit von 7 ist erreicht.",
    "keysTitle": "Passkeys hinzufügen",
    "keysTitleBlocked": "Noch ein Schlüssel, dann kannst du erstellen",
+   "methodBlockedHint": "Die Schlüssel dieser Wallet gehören alle zu {{party}}.",
+   "methodBlockedSigner": "Deine Clear-Signer-Seite ist {{page}}, ihre Schlüssel gehören zu {{pageParty}}. Stelle in den Einstellungen {{party}} ein, um hier einen hinzuzufügen.",
    "methodHybridBody": "Code scannen und auf einem Gerät in der Nähe erstellen",
    "methodHybridTitle": "Handy oder Tablet",
    "methodHybridUnavailable": "Demnächst",

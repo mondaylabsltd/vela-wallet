@@ -68,6 +68,45 @@ pub const ACK_COUNT: usize = 3;
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
+/// The reason some methods are missing, when some are.
+fn blocked_reason(drafts: &[Draft], signer_page: &str) -> Option<AddBlocked> {
+    let committed = committed_relying_party(drafts)?;
+    if methods_for(drafts, signer_page).len() == 4 {
+        return None;
+    }
+    let page_rp = crate::clear_signer::registry_rp_id(Some(signer_page))
+        .unwrap_or_else(|| "getvela.app".to_owned());
+    let page_differs = page_rp != committed;
+    Some(AddBlocked {
+        relying_party: committed,
+        page: page_differs.then(|| {
+            if signer_page.trim().is_empty() {
+                crate::clear_signer::DEFAULT_SIGNER_URL.to_owned()
+            } else {
+                signer_page.to_owned()
+            }
+        }),
+        page_relying_party: page_differs.then_some(page_rp),
+    })
+}
+
+/// Why a key method is not on offer (spec 075). Carries the two facts the
+/// sentence needs, so the words live in the shells' catalogues and the
+/// judgement lives here.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct AddBlocked {
+    /// The relying party every key in this wallet belongs to.
+    pub relying_party: String,
+    /// The Clear Signer page Settings names, when it is the thing that does
+    /// not fit — a key minted there would belong to `page_relying_party`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+    /// That page's relying party, when it differs from the wallet's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_relying_party: Option<String>,
+}
+
 /// The relying party this key set has committed to, or `None` while it is
 /// empty (ruling, 2026-09-23).
 ///
@@ -89,17 +128,41 @@ fn committed_relying_party(drafts: &[Draft]) -> Option<String> {
 /// the Clear Signer, because that page is the only thing that can mint another
 /// key of that domain. Offering the rest would let a person mint a key that
 /// can never join this wallet's unit, which is only discovered at the publish.
-fn methods_for(drafts: &[Draft]) -> Vec<KeyMethod> {
-    const EVERY: [KeyMethod; 4] = [
+fn methods_for(drafts: &[Draft], signer_page: &str) -> Vec<KeyMethod> {
+    const OWN: [KeyMethod; 3] = [
         KeyMethod::Platform,
         KeyMethod::Hybrid,
         KeyMethod::SecurityKey,
-        KeyMethod::ClearSigner,
     ];
-    match committed_relying_party(drafts).as_deref() {
-        None | Some("getvela.app") => EVERY.to_vec(),
-        Some(_) => vec![KeyMethod::ClearSigner],
+    // Where the Clear Signer would mint: the page Settings names. The official
+    // one is a `getvela.app` page, so a key from it joins a set of the app's
+    // own keys; somebody's own deployment mints for its own domain, and that
+    // key can only ever join a set of ITS keys.
+    let page_rp = crate::clear_signer::registry_rp_id(Some(signer_page))
+        .unwrap_or_else(|| "getvela.app".to_owned());
+    let mut allowed: Vec<KeyMethod> = Vec::new();
+    match committed_relying_party(drafts) {
+        // Nothing minted yet: any route may start the set, and whatever it
+        // picks is what the rest must match.
+        None => {
+            allowed.extend(OWN);
+            allowed.push(KeyMethod::ClearSigner);
+        }
+        Some(committed) => {
+            if committed == "getvela.app" {
+                allowed.extend(OWN);
+            }
+            // …and the page only when it would mint for the same party. This
+            // is the case the owner hit on 2026-09-23: a set of `getvela.app`
+            // keys, a signer page on `localhost`, and the Clear Signer still
+            // offered — so a key was minted that nothing would accept, and the
+            // wallet only said so at the publish.
+            if page_rp == committed {
+                allowed.push(KeyMethod::ClearSigner);
+            }
+        }
     }
+    allowed
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +190,12 @@ pub enum Event {
         name: String,
         #[serde(default)]
         method: KeyMethod,
+    },
+    /// The Clear Signer page Settings names, so this machine can tell whether
+    /// that route would mint a key this set can accept. Sent on entry and
+    /// whenever the preference changes; empty means the official page.
+    SignerPageChanged {
+        url: String,
     },
     /// Drop a not-yet-published draft key. Index 0 (the wallet's pinned first
     /// key) is only removable via `StartOver`.
@@ -315,6 +384,10 @@ impl Stage {
 pub struct Model {
     name: String,
     acks: [bool; ACK_COUNT],
+    /// The Clear Signer page Settings names — empty means the official one.
+    /// It decides whether that route can mint a key THIS set accepts, which
+    /// depends on the page's domain rather than on the route (spec 075).
+    signer_page: String,
     /// Founding-order draft keys; `drafts[0]` is the pinned first key.
     drafts: Vec<Draft>,
     /// The label of the registration currently in flight, claimed by the
@@ -452,10 +525,15 @@ pub struct CreateView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_signer_origin: Option<String>,
     /// Which methods may still mint a key for this set. Every method while the
-    /// set is empty or belongs to `getvela.app` (the app's own authenticators
-    /// and the official page are all that relying party); only the Clear
-    /// Signer once the set belongs to somebody's own deployment.
+    /// set is empty; afterwards only those that would mint for the relying
+    /// party it committed to — which for the Clear Signer depends on the page
+    /// Settings names, not on the route.
     pub add_methods: Vec<KeyMethod>,
+    /// Why the others are not offered, when some are missing. A sentence a
+    /// person can act on: what this wallet's keys belong to, and what the
+    /// route they just reached for would have made instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub add_blocked: Option<AddBlocked>,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
     /// The sole drafted key is NOT a synced passkey: one lost device would
@@ -496,6 +574,10 @@ impl App for CreateWallet {
             }
             Event::Submit => submit(model),
             Event::AddKey { name, method } => add_key(model, name, method),
+            Event::SignerPageChanged { url } => {
+                model.signer_page = url;
+                render()
+            }
             Event::RemoveKey { index } => remove_key(model, index),
             Event::KeyNameChanged { index, name } => key_name_changed(model, index, name),
             Event::ConfirmKey { index } => confirm_key(model, index),
@@ -628,7 +710,8 @@ impl App for CreateWallet {
                 .first()
                 .and_then(|draft| draft.signer_origin.clone())
                 .filter(|origin| !origin.is_empty()),
-            add_methods: methods_for(&model.drafts),
+            add_methods: methods_for(&model.drafts, &model.signer_page),
+            add_blocked: blocked_reason(&model.drafts, &model.signer_page),
             can_finish: at_key_list
                 && has_draft
                 && model.drafts.iter().all(|draft| draft.proof.is_some())
@@ -693,7 +776,7 @@ fn add_key(model: &mut Model, label: String, method: KeyMethod) -> Command<Effec
     // shell that asks anyway would otherwise mint a passkey that can never
     // join this wallet's unit — the person would keep a key they cannot use
     // and learn about it minutes later, after the registry refused the set.
-    if !methods_for(&model.drafts).contains(&method) {
+    if !methods_for(&model.drafts, &model.signer_page).contains(&method) {
         return Command::done();
     }
     // Key 1's label and provider display name ARE the wallet name (N=1 stays

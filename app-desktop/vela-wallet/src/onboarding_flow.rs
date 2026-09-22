@@ -935,10 +935,19 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
     // The routes, their words and which of them can run here are
     // `hardware`'s — the same list the sign-in chooser reads, so the two
     // cannot come to disagree about what a passkey route is.
+    // Two different "cannot": this MACHINE has no such authenticator, and this
+    // SET cannot take a key from that route — every key in a wallet belongs to
+    // one relying party (spec 075), so a route that would mint for another is
+    // off until the set is empty again, which it never is.
+    let fits_the_set = |method: KeyMethod| host.view.add_methods.contains(&method);
     let entry = |method: KeyMethod| {
-        let available = crate::hardware::method_available(method);
+        let here = crate::hardware::method_available(method);
+        let available = here && fits_the_set(method);
         let (title_key, body_key) = crate::hardware::method_words(method);
-        let body = loc.t(if available {
+        // A route this MACHINE cannot run says what is missing; a route this
+        // SET cannot take keeps its own caption, because the sentence under the
+        // list already says what the set belongs to.
+        let body = loc.t(if here {
             body_key
         } else {
             "onboarding.create.securityKeyRequiredBody"
@@ -1000,6 +1009,32 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
     for method in crate::hardware::CREATE_ROUTES {
         list = list.child(entry(method));
+    }
+    // Two paragraphs, never one joined string: what this wallet's keys belong
+    // to is always the reason; naming the configured page is only sometimes
+    // true, and it is the half a person can act on. Joining them would also put
+    // a space after a full stop that already ends a line in Chinese
+    // (device-found, 2026-09-23).
+    if let Some(blocked) = host.view.add_blocked.as_ref() {
+        let hint = loc.t_texts(
+            "onboarding.create.methodBlockedHint",
+            &[("party", blocked.relying_party.as_str())],
+        );
+        list = list.child(div().pt(px(FLOW_GAP_SM)).child(caption(theme, hint)));
+        if let Some(page) = blocked.page.as_deref() {
+            let signer = loc.t_texts(
+                "onboarding.create.methodBlockedSigner",
+                &[
+                    ("page", page),
+                    (
+                        "pageParty",
+                        blocked.page_relying_party.as_deref().unwrap_or_default(),
+                    ),
+                    ("party", blocked.relying_party.as_str()),
+                ],
+            );
+            list = list.child(div().pt(px(FLOW_GAP_SM)).child(caption(theme, signer)));
+        }
     }
     list
 }
@@ -1394,6 +1429,10 @@ mod tests {
             can_add_key: true,
             can_finish: false,
             needs_second_key: false,
+            key_relying_party: None,
+            key_signer_origin: None,
+            add_methods: crate::hardware::CREATE_ROUTES.to_vec(),
+            add_blocked: None,
         }
     }
 

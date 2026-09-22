@@ -766,6 +766,8 @@
    "keysSubtitleFull": "Đã đạt giới hạn 7 khoá.",
    "keysTitle": "Thêm passkey",
    "keysTitleBlocked": "Cần thêm một khoá nữa mới tạo được",
+   "methodBlockedHint": "Mọi khoá của ví này đều thuộc {{party}}.",
+   "methodBlockedSigner": "Trang Clear Signer của bạn là {{page}}, khoá của nó thuộc {{pageParty}}. Đổi sang trang {{party}} trong Cài đặt để thêm ở đây.",
    "methodHybridBody": "Quét mã và tạo trên thiết bị gần đó",
    "methodHybridTitle": "Điện thoại hoặc máy tính bảng",
    "methodHybridUnavailable": "Sắp có",

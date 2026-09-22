@@ -701,6 +701,11 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
         proof: support::member_proof("k1"),
     });
 
+    // Settings still points at this deployment, as it must have to mint key 1.
+    own.dispatch(Event::SignerPageChanged {
+        url: "http://localhost:8140/sign.html".to_owned(),
+    });
+
     let view = own.view();
     assert_eq!(view.key_relying_party.as_deref(), Some("localhost"));
     assert_eq!(
@@ -712,6 +717,29 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
         vec![KeyMethod::ClearSigner],
         "only the page that minted the first key can mint another of its domain"
     );
+    let blocked = view.add_blocked.expect("the other three are off, and why");
+    assert_eq!(blocked.relying_party, "localhost");
+    assert_eq!(
+        (blocked.page, blocked.page_relying_party),
+        (None, None),
+        "the page is not the problem here — it is the only route that fits"
+    );
+
+    // Point Settings somewhere else and NOTHING fits: a key from that page
+    // would belong to getvela.app, and this wallet's belong to localhost.
+    own.dispatch(Event::SignerPageChanged {
+        url: "https://sign.getvela.app/".to_owned(),
+    });
+    let view = own.view();
+    assert!(
+        view.add_methods.is_empty(),
+        "no route can mint a key this wallet accepts: {:?}",
+        view.add_methods
+    );
+    let blocked = view.add_blocked.expect("and the reason names both sides");
+    assert_eq!(blocked.relying_party, "localhost");
+    assert_eq!(blocked.page.as_deref(), Some("https://sign.getvela.app/"));
+    assert_eq!(blocked.page_relying_party.as_deref(), Some("getvela.app"));
 
     // And the machine refuses the others even if a shell asks anyway: minting
     // one would leave a passkey that can never join this wallet.
@@ -722,6 +750,50 @@ fn the_first_key_decides_where_the_rest_may_come_from() {
     });
     assert!(asked.is_empty(), "no ceremony is started: {asked:?}");
     assert_eq!(own.view().keys.len(), before, "and no draft appears");
+}
+
+/// Spec 075, the owner's report of 2026-09-23: a `getvela.app` set plus a
+/// signer page on somebody else's domain must not offer the Clear Signer.
+///
+/// This was the shipped gap. The rule read "a set of `getvela.app` keys takes
+/// every route", which is true of the OFFICIAL page and false of the page
+/// Settings actually names — so a person with a local signer page minted a
+/// fourth key that no unit would accept, and heard about it only when the
+/// publish failed, holding a passkey with nowhere to go.
+#[test]
+fn a_signer_page_on_another_domain_is_off_for_a_getvela_set() {
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::SignerPageChanged {
+        url: "http://localhost:8140/sign.html?ch=ble".to_owned(),
+    });
+
+    let view = sut.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("getvela.app"));
+    assert_eq!(
+        view.add_methods,
+        vec![
+            KeyMethod::Platform,
+            KeyMethod::Hybrid,
+            KeyMethod::SecurityKey
+        ],
+        "this device, a nearby one and a fob all mint for getvela.app; that page does not"
+    );
+    let blocked = view.add_blocked.expect("and the row says why");
+    assert_eq!(blocked.relying_party, "getvela.app");
+    assert_eq!(
+        blocked.page.as_deref(),
+        Some("http://localhost:8140/sign.html?ch=ble"),
+        "the sentence names the page the person configured, so they can change it"
+    );
+    assert_eq!(blocked.page_relying_party.as_deref(), Some("localhost"));
+
+    // The official page is a getvela.app page, so it coexists with the three.
+    sut.dispatch(Event::SignerPageChanged {
+        url: vela_core::clear_signer::DEFAULT_SIGNER_URL.to_owned(),
+    });
+    let view = sut.view();
+    assert_eq!(view.add_methods.len(), 4, "all four mint for getvela.app");
+    assert!(view.add_blocked.is_none(), "nothing to explain");
 }
 
 /// The creation-time confirmation must run on the route that MINTED the key.

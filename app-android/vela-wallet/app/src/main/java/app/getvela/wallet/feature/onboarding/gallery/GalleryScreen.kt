@@ -177,6 +177,8 @@ fun GalleryScreen(initialDarkTheme: Boolean) {
                             canFinish = view.canFinish,
                             needsSecondKey = view.needsSecondKey,
                             busy = view.busy,
+                            addMethods = view.addMethods,
+                            addBlocked = view.addBlocked,
                             onAddKey = {},
                             onConfirmKey = {},
                             onRemoveKey = {},

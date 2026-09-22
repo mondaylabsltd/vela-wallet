@@ -321,6 +321,10 @@ struct RootView: View {
         )
         spine.clearSigner = clearSigner
         onboarding.clearSigner = clearSigner
+        // Spec 075: the founding-key picker needs the page's DOMAIN, not the
+        // page — a key minted there belongs to it, and a wallet's keys all
+        // belong to one relying party.
+        onboarding.signerPage = { [settingsStore] in settingsStore.signPref?.signerUrl }
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its

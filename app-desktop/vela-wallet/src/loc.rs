@@ -95,6 +95,25 @@ impl Loc {
             .into()
     }
 
+    /// `t` with SEVERAL text variables.
+    ///
+    /// [`Self::t_text`]'s reason for existing — text variables name hardware,
+    /// and only one at a time — stopped being the whole truth in spec 075: the
+    /// sentence under a narrowed key picker names a page, that page's relying
+    /// party and the wallet's, and they are three facts of one sentence. Still
+    /// no `count` option, so this stays pure text substitution.
+    pub fn t_texts(&self, key: &str, vars: &[(&str, &str)]) -> SharedString {
+        let vars: Vec<(&str, Var<'_>)> = vars.iter().map(|(k, v)| (*k, Var::Str(v))).collect();
+        let opts = Options {
+            vars: &vars,
+            ..Options::default()
+        };
+        self.engine
+            .t(key, &opts)
+            .unwrap_or_else(|_| key.to_owned())
+            .into()
+    }
+
     /// The BCP-47 tag actually resolved (used only for logging).
     pub fn language(&self) -> &str {
         self.engine.language()
@@ -181,7 +200,7 @@ mod tests {
     /// Var-bearing keys (`{{seconds}}` …) resolve with the placeholder left in
     /// place under default options — still a non-echo, non-empty value, which
     /// is all this sweep asserts about them.
-    const FLOW_KEYS: [&str; 120] = [
+    const FLOW_KEYS: [&str; 122] = [
         "common.cancel",
         "onboarding.create.keyUnreadableTitle",
         "onboarding.create.keyUnreadableBody",
@@ -252,6 +271,8 @@ mod tests {
         "onboarding.create.keysSubtitleFull",
         "onboarding.create.keysTitle",
         "onboarding.create.keysTitleBlocked",
+        "onboarding.create.methodBlockedHint",
+        "onboarding.create.methodBlockedSigner",
         "onboarding.create.methodHybridTitle",
         "onboarding.create.methodHybridUnavailable",
         "onboarding.create.methodPlatformTitle",

@@ -42,6 +42,8 @@ struct FlowFixturesTests {
             "name · draft waiting": .name,
             "keys · one, needs a second": .keys,
             "keys · two, ready": .keys,
+            "keys · signer page elsewhere": .keys,
+            "keys · a page's own set": .keys,
             "keys · unconfirmed row": .keys,
             "keys · at the cap": .keys,
             "progress · verify": .progress,

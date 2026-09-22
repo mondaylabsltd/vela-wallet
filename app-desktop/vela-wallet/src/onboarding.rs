@@ -312,6 +312,16 @@ impl OnboardingPage {
             .create
             .dispatch(vela_core::app::create_wallet::Event::Start);
         self.pump_create(pending, cx);
+        // Spec 075: which Clear Signer page Settings names decides whether that
+        // route can mint a key THIS set accepts — a key made on a page belongs
+        // to that page's domain, and a wallet's keys all belong to one relying
+        // party. The core cannot read the store.
+        let pending = self
+            .create
+            .dispatch(vela_core::app::create_wallet::Event::SignerPageChanged {
+                url: crate::executor::clear_signer::signer_url(),
+            });
+        self.pump_create(pending, cx);
         cx.notify();
     }
 

@@ -136,6 +136,27 @@ view (`add_methods`), at the event (`add_key` refuses the rest), and at the
 publish (`registry_unit_rp_id` refuses a mixed set rather than writing a unit
 nobody can prove).
 
+**Which routes those are depends on a SETTING, not on the route.** A key minted
+through this device, a nearby device or a security key belongs to `getvela.app`;
+a key minted on a Clear Signer page belongs to that page's domain — which is
+whatever Settings names. So the four routes coexist exactly when the configured
+page is a `getvela.app` page (the official `sign.getvela.app` is), and otherwise
+the set's first key decides which single side stays open:
+
+| First key minted by | The page Settings names | Offered afterwards |
+| --- | --- | --- |
+| any of the three, or a `getvela.app` page | a `getvela.app` page | all four |
+| any of the three | somebody's own domain | the three |
+| a page on `my.example.com` | `my.example.com` | the Clear Signer |
+| a page on `my.example.com` | a `getvela.app` page | none — the setting has to change first |
+
+The last row is why a ruled-out route is drawn dimmed with a sentence rather
+than hidden: the person has to be told to point Settings back at their own page,
+and a row that vanished cannot say so. The core reports the two facts the
+sentence needs (`add_blocked`: the set's relying party, and the configured page
+with its own), and the shell owns the words
+(`onboarding.create.methodBlocked{Hint,Signer}`).
+
 **The cost, which the create flow has to say out loud.** WebAuthn binds a
 credential to its `rpId`, so a self-hosted page makes the domain the custody
 boundary: if it lapses, is taken at the registrar, or has its DNS moved, those

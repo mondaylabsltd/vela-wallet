@@ -169,6 +169,8 @@
 			"keysSubtitleFull": "已达上限 7 把。",
 			"keysTitle": "添加通行密钥",
 			"keysTitleBlocked": "再加一把才能创建",
+			"methodBlockedHint": "这个钱包的钥匙都属于 {{party}}。",
+			"methodBlockedSigner": "你的清晰签名器页面是 {{page}}，它的钥匙属于 {{pageParty}}。在设置里换成 {{party}} 的页面才能添加。",
 			"methodHybridBody": "扫码，用附近设备创建",
 			"methodHybridTitle": "手机或平板",
 			"methodHybridUnavailable": "即将支持",

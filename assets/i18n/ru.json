@@ -772,6 +772,8 @@
    "keysSubtitleFull": "Достигнут предел в 7 ключей.",
    "keysTitle": "Добавьте passkey",
    "keysTitleBlocked": "Нужен ещё один ключ, чтобы создать",
+   "methodBlockedHint": "Все ключи этого кошелька принадлежат {{party}}.",
+   "methodBlockedSigner": "Ваша страница Clear Signer — {{page}}, её ключи принадлежат {{pageParty}}. Укажите в настройках страницу {{party}}, чтобы добавить ключ здесь.",
    "methodHybridBody": "Отсканируйте код и создайте на устройстве рядом",
    "methodHybridTitle": "Телефон или планшет",
    "methodHybridUnavailable": "Скоро",

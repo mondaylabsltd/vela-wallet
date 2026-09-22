@@ -766,6 +766,8 @@
    "keysSubtitleFull": "Sudah mencapai batas 7 kunci.",
    "keysTitle": "Tambah passkey",
    "keysTitleBlocked": "Perlu satu kunci lagi untuk membuat",
+   "methodBlockedHint": "Semua kunci dompet ini milik {{party}}.",
+   "methodBlockedSigner": "Halaman Clear Signer kamu {{page}}, kuncinya milik {{pageParty}}. Ganti ke halaman {{party}} di Pengaturan untuk menambah di sini.",
    "methodHybridBody": "Pindai kode dan buat di perangkat terdekat",
    "methodHybridTitle": "Ponsel atau tablet",
    "methodHybridUnavailable": "Segera hadir",

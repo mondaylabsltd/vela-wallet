@@ -16,6 +16,7 @@
 	import { isDarkTheme } from '$lib/theme.svelte';
 	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+	import type { AddBlocked } from '$lib/onboarding/generated/AddBlocked';
 
 	interface Props {
 		keys: CreateKeyRow[];
@@ -24,6 +25,10 @@
 		needsSecondKey: boolean;
 		busy: boolean;
 		maxKeys: number;
+		/** Spec 075: the routes that may still mint a key for THIS set. */
+		addMethods?: KeyMethod[];
+		/** Why the others may not, when some may not. */
+		addBlocked?: AddBlocked | null;
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onAddKey: (method: KeyMethod) => void;
 		onConfirmKey: (index: number) => void;
@@ -38,6 +43,8 @@
 		needsSecondKey,
 		busy,
 		maxKeys,
+		addMethods,
+		addBlocked = null,
 		strings,
 		onAddKey,
 		onConfirmKey,
@@ -171,7 +178,13 @@
 					: strings('onboarding.create.addKeyBtn')}
 			</span>
 		</button>
-		<AddMethodPicker open={pickerShown} {strings} onPick={pick} />
+		<AddMethodPicker
+			open={pickerShown}
+			allowed={addMethods}
+			blocked={addBlocked}
+			{strings}
+			onPick={pick}
+		/>
 	</div>
 
 	<div class="spacer"></div>

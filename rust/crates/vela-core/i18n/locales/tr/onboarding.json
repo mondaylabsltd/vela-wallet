@@ -169,6 +169,8 @@
 			"keysSubtitleFull": "7 anahtar sınırına ulaşıldı.",
 			"keysTitle": "Passkey ekleyin",
 			"keysTitleBlocked": "Oluşturmak için bir anahtar daha gerekli",
+			"methodBlockedHint": "Bu cüzdanın anahtarlarının tümü {{party}} alanına ait.",
+			"methodBlockedSigner": "Clear Signer sayfan {{page}}, anahtarları {{pageParty}} alanına ait. Buradan eklemek için Ayarlar'da {{party}} sayfasını seç.",
 			"methodHybridBody": "Kodu tarayın, yakındaki cihazda oluşturun",
 			"methodHybridTitle": "Telefon veya tablet",
 			"methodHybridUnavailable": "Yakında",

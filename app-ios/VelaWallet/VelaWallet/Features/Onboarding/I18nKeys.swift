@@ -83,6 +83,8 @@ enum I18nKeys {
         static let methodHybridTitle = "onboarding.create.methodHybridTitle"
         static let methodHybridBody = "onboarding.create.methodHybridBody"
         static let methodHybridUnavailable = "onboarding.create.methodHybridUnavailable"
+        static let methodBlockedHint = "onboarding.create.methodBlockedHint"
+        static let methodBlockedSigner = "onboarding.create.methodBlockedSigner"
         static let methodSecurityKeyTitle = "onboarding.create.methodSecurityKeyTitle"
         static let methodSecurityKeyBody = "onboarding.create.methodSecurityKeyBody"
         static let providerPlatform = "onboarding.create.providerPlatform"
@@ -233,6 +235,7 @@ enum I18nKeys {
         Create.methodPlatformTitle, Create.methodPlatformBody,
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
         Create.methodSecurityKeyTitle, Create.methodSecurityKeyBody,
+        Create.methodBlockedHint, Create.methodBlockedSigner,
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
         ClearSigner.title, ClearSigner.body, ClearSigner.whereIsIt,
         ClearSigner.thisDevice, ClearSigner.otherDevice,

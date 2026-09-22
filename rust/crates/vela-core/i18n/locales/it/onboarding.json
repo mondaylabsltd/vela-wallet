@@ -169,6 +169,8 @@
 			"keysSubtitleFull": "Hai raggiunto il limite di 7.",
 			"keysTitle": "Aggiungi passkey",
 			"keysTitleBlocked": "Serve un'altra chiave per creare",
+			"methodBlockedHint": "Le chiavi di questo portafoglio appartengono tutte a {{party}}.",
+			"methodBlockedSigner": "La tua pagina Clear Signer è {{page}}, le sue chiavi sono di {{pageParty}}. Nelle impostazioni passa a {{party}} per aggiungerne una qui.",
 			"methodHybridBody": "Scansiona un codice e creala su un dispositivo vicino",
 			"methodHybridTitle": "Telefono o tablet",
 			"methodHybridUnavailable": "Prossimamente",

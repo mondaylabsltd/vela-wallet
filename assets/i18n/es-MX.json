@@ -769,6 +769,8 @@
    "keysSubtitleFull": "Alcanzaste el límite de 7.",
    "keysTitle": "Añade passkeys",
    "keysTitleBlocked": "Falta una llave más para crear",
+   "methodBlockedHint": "Las llaves de esta cartera pertenecen a {{party}}.",
+   "methodBlockedSigner": "Tu página del Clear Signer es {{page}}, y sus llaves pertenecen a {{pageParty}}. Cámbiala en Ajustes a {{party}} para agregar una aquí.",
    "methodHybridBody": "Escanea un código y créala en un dispositivo cercano",
    "methodHybridTitle": "Teléfono o tablet",
    "methodHybridUnavailable": "Muy pronto",
