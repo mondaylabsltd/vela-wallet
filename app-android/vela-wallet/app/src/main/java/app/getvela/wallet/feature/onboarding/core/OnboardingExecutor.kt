@@ -188,11 +188,23 @@ class OnboardingExecutor(
                 // it exists before the rest of the set does), sign against
                 // exactly this credential, assemble the proof in the core. The
                 // publish later replays it without another prompt.
+                // The rpId is the KEY's, not this app's. A key minted on a
+                // Clear Signer page belongs to that page's domain — a browser
+                // lets a page mint passkeys for nothing else — so asking the
+                // registry under `getvela.app` for a key that lives on
+                // `localhost` returns a challenge the page could not have
+                // derived, and the wallet then refuses its own key's proof
+                // ("the Clear Signer's answer does not match this request").
+                // Found on the phone 2026-09-22 and again over BLE the next
+                // day; the rule is the core's so no shell reads it differently.
+                val keyRpId = uniffi.vela_core_uniffi.clearSignerRegistryRpId(
+                    operation.optString("signer_origin").ifEmpty { null },
+                ) ?: passkey.relyingPartyId
                 val challenge = registry.memberChallenge(
                     groupPublicKey = operation.optString("group_public_key_hex"),
                     publicKey = operation.optString("public_key_hex"),
                     attestation = operation.optString("attestation_hex"),
-                    rpId = passkey.relyingPartyId,
+                    rpId = keyRpId,
                 )
                 val memberWire = operation.optString("method")
                 // The route that minted this key confirms it — a key created
@@ -349,11 +361,27 @@ class OnboardingExecutor(
         }
 
         val metadataHex = operation.optString("metadata_hex")
+        // One relying party for the whole unit (ruling, 2026-09-23). The
+        // contract stores a single `rpId` per unit and every member's proof
+        // carries `sha256(rpId)` from its OWN authenticator, so a set spread
+        // across sites could never be proved. The core decides it, and refuses
+        // a mixed set here rather than writing a unit nobody can prove.
+        val unitRpId = try {
+            uniffi.vela_core_uniffi.clearSignerUnitRpId(
+                members.map { it.signerOrigin.ifEmpty { null } },
+                passkey.relyingPartyId,
+            )
+        } catch (error: Exception) {
+            throw RegistryFailure(
+                error.message ?: "these keys belong to different sites",
+                network = false,
+            )
+        }
         val challenge = registry.groupChallenge(
             metadataHex = metadataHex,
             groupPublicKey = groupPublicKey,
             members = members,
-            rpId = passkey.relyingPartyId,
+            rpId = unitRpId,
         )
 
         val proven = members.map { member ->
@@ -400,9 +428,12 @@ class OnboardingExecutor(
             }
         }
 
-        // The group key silently closes over the content hash.
+        // The group key silently closes over the content hash — under the
+        // unit's own relying party, the one the challenge was taken under and
+        // the one the contract will store. Three places, one value: the
+        // group proof's authenticator data, the challenge, and the write.
         val group = JSONObject(
-            registryBuildGroupProof(seedHex, passkey.relyingPartyId, challenge.groupChallenge),
+            registryBuildGroupProof(seedHex, unitRpId, challenge.groupChallenge),
         )
 
         val ack = registry.registerGroup(
@@ -410,7 +441,7 @@ class OnboardingExecutor(
             groupPublicKey = groupPublicKey,
             groupProof = group.getJSONObject("proof"),
             members = proven,
-            rpId = passkey.relyingPartyId,
+            rpId = unitRpId,
         )
 
         // `done` up front means the identical group was already on-chain —

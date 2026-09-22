@@ -109,6 +109,77 @@ pub fn uses_wallet_passkeys(url: &str) -> bool {
         && (host == "getvela.app" || host.ends_with(".getvela.app"))
 }
 
+/// The relying party a key behind `signer_origin` belongs to — the rpId the
+/// REGISTRY must be asked for that key's member challenge.
+///
+/// A page can only ever mint a passkey for its own domain (the browser
+/// enforces it, and that rule is what makes a passkey belong to a site at
+/// all). So a key created on `https://sign.getvela.app` is a `getvela.app`
+/// key, and one created on a self-hosted page at `http://localhost:8140` is a
+/// `localhost` key — whatever rpId the WALLET uses for its own ceremonies.
+///
+/// Asking the registry under the wallet's own rpId instead produced a
+/// challenge the page could not have derived, and the wallet then refused its
+/// own key's proof: "the Clear Signer's answer does not match this request"
+/// (found on the phone, 2026-09-22, and again over BLE the next day). The
+/// page is right and the wallet was asking the wrong question.
+///
+/// `None` when the key lives on an authenticator this device reaches itself:
+/// then the wallet's own rpId is the answer, as it always was.
+#[must_use]
+pub fn registry_rp_id(signer_origin: Option<&str>) -> Option<String> {
+    let origin = signer_origin?.trim();
+    if origin.is_empty() {
+        return None;
+    }
+    let rest = origin.split_once("://").map_or(origin, |(_, rest)| rest);
+    let host = host_of(rest.split(['/', '?', '#']).next().unwrap_or_default());
+    if host.is_empty() {
+        return None;
+    }
+    // The official page is a subdomain of the wallet's own relying party, and
+    // a passkey made there belongs to the parent — `signer.js` resolves it the
+    // same way, and the two must agree or nothing matches.
+    if host == "getvela.app" || host.ends_with(".getvela.app") {
+        return Some("getvela.app".to_owned());
+    }
+    Some(host)
+}
+
+/// The relying party a whole registry unit belongs to — or why the key set
+/// cannot be published at all.
+///
+/// The contract stores ONE `rpId` per unit (`Unit { rpId, … }`, and it is
+/// inside the `contentHash` the group proof signs), and each member's proof
+/// carries `sha256(rpId)` inside authenticator data its OWN authenticator
+/// produced. A key that belongs to another relying party therefore cannot
+/// produce a proof this unit will accept — not by convention, by WebAuthn.
+///
+/// So a wallet's keys must share one relying party (ruling, 2026-09-23). A set
+/// that does not is refused HERE, loudly, rather than published as a unit
+/// nobody can ever prove membership of.
+///
+/// `member_origins` is each member's `signer_origin` in founding order — a key
+/// on an authenticator this device reaches itself has none, and belongs to the
+/// wallet's own relying party.
+pub fn registry_unit_rp_id(
+    member_origins: &[Option<String>],
+    wallet_rp_id: &str,
+) -> Result<String, Vec<String>> {
+    let mut seen: Vec<String> = Vec::new();
+    for origin in member_origins {
+        let rp = registry_rp_id(origin.as_deref()).unwrap_or_else(|| wallet_rp_id.to_owned());
+        if !seen.contains(&rp) {
+            seen.push(rp);
+        }
+    }
+    match seen.len() {
+        0 => Ok(wallet_rp_id.to_owned()),
+        1 => Ok(seen.remove(0)),
+        _ => Err(seen),
+    }
+}
+
 fn host_of(authority: &str) -> String {
     let authority = authority.to_ascii_lowercase();
     if let Some(v6) = authority.strip_prefix('[') {
@@ -640,4 +711,81 @@ fn unpercent(text: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// The rpId the registry must be asked for a key that lives behind a page:
+    /// the page's own domain, because that is the only one it could have
+    /// minted the key for.
+    #[test]
+    fn a_key_behind_a_page_belongs_to_that_pages_domain() {
+        assert_eq!(
+            registry_rp_id(None),
+            None,
+            "an ordinary key: the wallet's own"
+        );
+        assert_eq!(registry_rp_id(Some("")), None);
+        assert_eq!(
+            registry_rp_id(Some("https://sign.getvela.app")).as_deref(),
+            Some("getvela.app"),
+            "the official page is a subdomain; signer.js resolves it to the parent too"
+        );
+        assert_eq!(
+            registry_rp_id(Some("https://getvela.app/sign.html")).as_deref(),
+            Some("getvela.app")
+        );
+        assert_eq!(
+            registry_rp_id(Some("http://localhost:8140")).as_deref(),
+            Some("localhost"),
+            "a self-hosted page: its own host, the port dropped"
+        );
+        assert_eq!(
+            registry_rp_id(Some("https://sign.example.com/x?y#z")).as_deref(),
+            Some("sign.example.com"),
+            "not a getvela.app suffix: no promotion to a parent"
+        );
+        assert_eq!(
+            registry_rp_id(Some("https://notgetvela.app")).as_deref(),
+            Some("notgetvela.app"),
+            "a lookalike is not a subdomain"
+        );
+    }
+
+    /// A unit carries one relying party, and every member's proof is signed
+    /// under its own. A set that disagrees cannot be proved, so it is refused
+    /// before it is written rather than after (ruling, 2026-09-23).
+    #[test]
+    fn a_unit_takes_one_relying_party_or_none() {
+        let app = "getvela.app";
+        // Keys on authenticators this device reaches: the wallet's own.
+        assert_eq!(registry_unit_rp_id(&[None, None], app).as_deref(), Ok(app));
+        assert_eq!(registry_unit_rp_id(&[], app).as_deref(), Ok(app));
+        // The official page resolves to the same relying party, so a page key
+        // and a platform key CAN share a unit — which is what makes the
+        // shipped flow work.
+        assert_eq!(
+            registry_unit_rp_id(&[Some("https://sign.getvela.app".to_owned()), None], app)
+                .as_deref(),
+            Ok(app)
+        );
+        // A self-hosted page: the whole set is that domain's.
+        assert_eq!(
+            registry_unit_rp_id(
+                &[
+                    Some("http://localhost:8140".to_owned()),
+                    Some("http://localhost:8140/sign.html".to_owned())
+                ],
+                app
+            )
+            .as_deref(),
+            Ok("localhost")
+        );
+        // Mixed: refused, and it says which relying parties it found.
+        let mixed = registry_unit_rp_id(&[Some("http://localhost:8140".to_owned()), None], app);
+        assert_eq!(mixed, Err(vec!["localhost".to_owned(), app.to_owned()]));
+    }
 }

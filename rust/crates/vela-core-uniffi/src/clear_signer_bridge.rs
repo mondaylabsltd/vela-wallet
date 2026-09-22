@@ -600,6 +600,32 @@ pub fn clear_signer_ble_uuids() -> Vec<String> {
     ]
 }
 
+/// The rpId the registry must be asked for a key that lives behind a page —
+/// the page's own domain, since that is the only one it could have minted the
+/// key for. `None` when the key is on an authenticator this device reaches
+/// itself: the wallet's own rpId, as before.
+#[uniffi::export]
+pub fn clear_signer_registry_rp_id(signer_origin: Option<String>) -> Option<String> {
+    clear_signer::registry_rp_id(signer_origin.as_deref())
+}
+
+/// The relying party a whole unit belongs to, or the several it found — a
+/// wallet's keys must share one, because the contract stores one `rpId` per
+/// unit and every member proves membership under its own authenticator's.
+/// A mixed set can never be proved, so it is refused before it is written.
+#[uniffi::export]
+pub fn clear_signer_unit_rp_id(
+    member_origins: Vec<Option<String>>,
+    wallet_rp_id: String,
+) -> Result<String, CoreError> {
+    clear_signer::registry_unit_rp_id(&member_origins, &wallet_rp_id).map_err(|found| {
+        CoreError::Internal(format!(
+            "these keys belong to different sites ({}), and a wallet's keys must share one",
+            found.join(", ")
+        ))
+    })
+}
+
 /// Which message a frame belongs to, for a shell's log line. `None` when it is
 /// too short to be a frame. No peripheral reads inside a frame itself.
 #[uniffi::export]

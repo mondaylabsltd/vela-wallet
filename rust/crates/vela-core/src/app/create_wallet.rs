@@ -68,6 +68,40 @@ pub const ACK_COUNT: usize = 3;
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
+/// The relying party this key set has committed to, or `None` while it is
+/// empty (ruling, 2026-09-23).
+///
+/// A key minted on a Clear Signer page belongs to that page's domain; every
+/// other route mints a key of the wallet's own relying party, and so does the
+/// official page. The first key decides, because the registry stores ONE
+/// `rpId` per unit and a member can only ever prove membership under its own.
+fn committed_relying_party(drafts: &[Draft]) -> Option<String> {
+    let first = drafts.first()?;
+    Some(
+        crate::clear_signer::registry_rp_id(first.signer_origin.as_deref())
+            .unwrap_or_else(|| "getvela.app".to_owned()),
+    )
+}
+
+/// Which methods may still mint a key for this set.
+///
+/// Everything, until the set belongs to somebody's own deployment — then only
+/// the Clear Signer, because that page is the only thing that can mint another
+/// key of that domain. Offering the rest would let a person mint a key that
+/// can never join this wallet's unit, which is only discovered at the publish.
+fn methods_for(drafts: &[Draft]) -> Vec<KeyMethod> {
+    const EVERY: [KeyMethod; 4] = [
+        KeyMethod::Platform,
+        KeyMethod::Hybrid,
+        KeyMethod::SecurityKey,
+        KeyMethod::ClearSigner,
+    ];
+    match committed_relying_party(drafts).as_deref() {
+        None | Some("getvela.app") => EVERY.to_vec(),
+        Some(_) => vec![KeyMethod::ClearSigner],
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
@@ -404,6 +438,24 @@ pub struct CreateView {
     pub keys: Vec<CreateKeyRow>,
     /// May one more key be added (below the cap, nothing in flight)?
     pub can_add_key: bool,
+    /// Spec 075 (ruling, 2026-09-23): the relying party this key set has
+    /// committed to, once its first key exists.
+    ///
+    /// The registry stores ONE `rpId` per unit and every member's proof
+    /// carries `sha256(rpId)` from its own authenticator, so a set spread over
+    /// two sites can never be proved. The first key therefore decides where
+    /// the rest must come from. `None` before there is a key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_relying_party: Option<String>,
+    /// The page that relying party lives on, when it is a Clear Signer page —
+    /// so a shell can say WHICH page the remaining keys must be minted on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_signer_origin: Option<String>,
+    /// Which methods may still mint a key for this set. Every method while the
+    /// set is empty or belongs to `getvela.app` (the app's own authenticators
+    /// and the official page are all that relying party); only the Clear
+    /// Signer once the set belongs to somebody's own deployment.
+    pub add_methods: Vec<KeyMethod>,
     /// May the key set be frozen and published (≥1 key, nothing in flight)?
     pub can_finish: bool,
     /// The sole drafted key is NOT a synced passkey: one lost device would
@@ -570,6 +622,13 @@ impl App for CreateWallet {
                 })
                 .collect(),
             can_add_key: at_key_list && model.drafts.len() < crate::safe::MAX_MULTI_KEYS,
+            key_relying_party: committed_relying_party(&model.drafts),
+            key_signer_origin: model
+                .drafts
+                .first()
+                .and_then(|draft| draft.signer_origin.clone())
+                .filter(|origin| !origin.is_empty()),
+            add_methods: methods_for(&model.drafts),
             can_finish: at_key_list
                 && has_draft
                 && model.drafts.iter().all(|draft| draft.proof.is_some())
@@ -627,6 +686,14 @@ fn passkey_display_name(wallet: &str, label: &str) -> String {
 
 fn add_key(model: &mut Model, label: String, method: KeyMethod) -> Command<Effect, Event> {
     if model.stage != Stage::AddKeys || model.drafts.len() >= crate::safe::MAX_MULTI_KEYS {
+        return Command::done();
+    }
+    // A method this set cannot use is refused HERE, not at the publish
+    // (ruling, 2026-09-23). The view already offers only `add_methods`, and a
+    // shell that asks anyway would otherwise mint a passkey that can never
+    // join this wallet's unit — the person would keep a key they cannot use
+    // and learn about it minutes later, after the registry refused the set.
+    if !methods_for(&model.drafts).contains(&method) {
         return Command::done();
     }
     // Key 1's label and provider display name ARE the wallet name (N=1 stays

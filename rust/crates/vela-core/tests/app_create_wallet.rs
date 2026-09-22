@@ -650,6 +650,80 @@ fn a_key_minted_on_the_page_is_drawn_as_living_there() {
     );
 }
 
+/// Spec 075, ruling 2026-09-23: a wallet's keys must share one relying party.
+///
+/// The registry stores ONE `rpId` per unit and every member's proof carries
+/// `sha256(rpId)` from its own authenticator, so a set spread over two sites
+/// can never be proved. The first key decides, and the rest of the choices
+/// narrow to match — refused here rather than discovered at the publish, when
+/// the person would already be holding a passkey they cannot use.
+#[test]
+fn the_first_key_decides_where_the_rest_may_come_from() {
+    // A key on somebody's own deployment: only that page may mint the rest.
+    let mut sut = registered("Ann");
+    sut.dispatch(Event::AddKey {
+        name: "Page".to_owned(),
+        method: KeyMethod::ClearSigner,
+    });
+    let mut registration = support::registration("credential-2");
+    registration.signer_origin = Some("http://localhost:8140".to_owned());
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration,
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k2"),
+    });
+
+    // …but this set's FIRST key was minted by the helper on the platform, so
+    // the set belongs to getvela.app and every route is still open.
+    let view = sut.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("getvela.app"));
+    assert_eq!(view.add_methods.len(), 4, "nothing is ruled out yet");
+
+    // A set whose FIRST key lives behind somebody's own page is different:
+    // build one from the form up, with that origin on key 1.
+    let mut own = filled("Ann");
+    own.dispatch(Event::Submit);
+    own.resolve(ShellResult::PasskeySupport { supported: true });
+    own.resolve(group_key_generated());
+    own.dispatch(Event::AddKey {
+        name: String::new(),
+        method: KeyMethod::ClearSigner,
+    });
+    let mut first = support::registration(CRED);
+    first.signer_origin = Some("http://localhost:8140".to_owned());
+    own.resolve(ShellResult::PasskeyRegistered {
+        registration: first,
+        now_iso: NOW.to_owned(),
+    });
+    own.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k1"),
+    });
+
+    let view = own.view();
+    assert_eq!(view.key_relying_party.as_deref(), Some("localhost"));
+    assert_eq!(
+        view.key_signer_origin.as_deref(),
+        Some("http://localhost:8140")
+    );
+    assert_eq!(
+        view.add_methods,
+        vec![KeyMethod::ClearSigner],
+        "only the page that minted the first key can mint another of its domain"
+    );
+
+    // And the machine refuses the others even if a shell asks anyway: minting
+    // one would leave a passkey that can never join this wallet.
+    let before = own.view().keys.len();
+    let asked = own.dispatch(Event::AddKey {
+        name: "Second".to_owned(),
+        method: KeyMethod::Platform,
+    });
+    assert!(asked.is_empty(), "no ceremony is started: {asked:?}");
+    assert_eq!(own.view().keys.len(), before, "and no draft appears");
+}
+
 /// The creation-time confirmation must run on the route that MINTED the key.
 ///
 /// `SignMemberProof` is a `get()` against the credential the previous step just

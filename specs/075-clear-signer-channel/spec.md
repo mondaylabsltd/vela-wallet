@@ -115,3 +115,39 @@ ceremony that made or found the key.
   - a relay requester whose key does not match the link.
 
   Hostile-intent tests cover each refusal.
+
+## Why a self-hosted page, and what it costs (ruling, 2026-09-23)
+
+The Clear Signer earns three things, and the third is the one the design has
+to protect:
+
+1. **The passkeys live under a domain the person controls.** Not Vela's.
+2. **A signer with no supply chain.** Zero dependencies: what is served is what
+   was written, and it is short enough to read.
+3. **The deployment is the person's own**, so nothing Vela ships can reach it.
+
+The registry's unit is what makes (1) whole rather than half-true. The contract
+stores ONE `rpId` per unit and every member's proof carries `sha256(rpId)` from
+its own authenticator, so a wallet's keys must share one relying party. If they
+could span two, half of a "self-hosted" wallet would still be `getvela.app`
+keys, and whoever controls that domain could recover through them. So: the
+first key decides, and the rest must come from the same place — enforced in the
+view (`add_methods`), at the event (`add_key` refuses the rest), and at the
+publish (`registry_unit_rp_id` refuses a mixed set rather than writing a unit
+nobody can prove).
+
+**The cost, which the create flow has to say out loud.** WebAuthn binds a
+credential to its `rpId`, so a self-hosted page makes the domain the custody
+boundary: if it lapses, is taken at the registrar, or has its DNS moved, those
+passkeys cannot be used by any other page — the credentials still exist in the
+person's password manager, and nothing can reach them. Self-hosting moves the
+trust from Vela to the person's own DNS and renewal discipline. That is a
+reasonable trade for somebody who wants it and a trap for somebody who does
+not know they made it.
+
+**What (2) and (3) do not yet buy.** The wallet checks the ORIGIN an answer
+came from, never the page's content, so a tampered deployment is
+indistinguishable from a good one. Zero dependencies removes the supply chain;
+it does not prove that what is being served today is what was reviewed. A
+content hash the wallet remembers ("I know this version") would close it — not
+in 075.
