@@ -397,18 +397,25 @@ enum SettingsLive {
             case .securityKey: k.keysProviderSecurityKey
             case .hybrid: k.keysProviderGeneric
             case .platform: k.keysProviderPlatform
-            // Spec 075: `wallet_keys` still reports only the three places an
-            // authenticator can be, so this arm is unreachable today — named
-            // rather than defaulted, so the day the row learns about a key
-            // behind a page the compiler says so here.
+            // Spec 075: the core now says `clear_signer` for a key that lives
+            // behind a Clear Signer page, and where a key lives is the page.
+            // The same sentence the "Sign with" chooser offers the route under,
+            // so a person meets one thing whether creating, spending or looking.
             case .clearSigner: I18nKeys.ClearSigner.title
             }
+            // The vault's name outranks the generic line — EXCEPT behind a page.
+            // A Clear Signer key's AAGUID is the authenticator on the page's far
+            // side, which this wallet can reach no other way: naming that vault
+            // points past the page exactly as "this device" did (found by the
+            // Android device pass, 2026-09-22).
+            let holder = row.key.method == .clearSigner || row.key.providerName.isEmpty
+                ? loc.t(line) : row.key.providerName
             return WalletKeyRowModel(
                 id: index,
                 name: row.key.name.isEmpty
                     ? loc.t(k.keysKeyN).replacingOccurrences(of: "{{n}}", with: String(index + 1))
                     : row.key.name,
-                holder: row.key.providerName.isEmpty ? loc.t(line) : row.key.providerName,
+                holder: holder,
                 fingerprint: body.count >= 8 ? "\(body.prefix(4))…\(body.suffix(4))".lowercased() : "",
                 pills: [
                     row.userVerified == true ? KeyPillModel(text: loc.t(k.keysUserVerified), tone: .verified) : nil,
@@ -422,6 +429,13 @@ enum SettingsLive {
                     KeyDetailModel(
                         label: loc.t(k.keysTransport),
                         value: [row.key.authenticatorAttachment, row.key.transports].filter { !$0.isEmpty }.joined(separator: " · "),
+                        mono: false, copy: false
+                    ),
+                    // WHICH page (spec 075). The caption says the route; only
+                    // this says the place. Dropped by the filter below for every
+                    // key that lives behind no page.
+                    KeyDetailModel(
+                        label: loc.t(I18nKeys.ClearSigner.title), value: row.signerOrigin,
                         mono: false, copy: false
                     ),
                     KeyDetailModel(label: loc.t(k.keysAttestation), value: row.attestationHex, mono: true, copy: false),
