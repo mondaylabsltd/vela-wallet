@@ -886,6 +886,14 @@ fn registry_publish_op(
             // this member live (one prompt) — recovery has no creation-time
             // proof to replay.
             proof: None,
+            // …and that live signature must reach the page this key lives
+            // behind, if it lives behind one (spec 075).
+            signer_origin: account
+                .keys
+                .iter()
+                .find(|key| key.credential_id == account.id)
+                .or_else(|| account.keys.first())
+                .and_then(|key| key.signer_origin.clone()),
         }],
         group_seed_hex: String::new(),
         group_public_key_hex: String::new(),

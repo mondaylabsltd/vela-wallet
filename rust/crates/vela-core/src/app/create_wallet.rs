@@ -1171,6 +1171,7 @@ fn registry_publish_op(
                 authenticator_attachment: key.authenticator_attachment.clone(),
                 transports: key.transports.clone(),
                 proof: key.proof.clone(),
+                signer_origin: key.signer_origin.clone(),
             })
             .collect(),
         group_seed_hex,

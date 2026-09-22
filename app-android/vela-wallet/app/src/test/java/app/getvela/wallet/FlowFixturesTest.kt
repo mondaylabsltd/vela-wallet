@@ -142,18 +142,49 @@ class FlowFixturesTest {
         }
     }
 
-    /** Every semantic variant the core emits has copy. Exhaustive by enum. */
+    /**
+     * Every semantic variant the core emits has copy. Exhaustive by enum.
+     *
+     * The Clear Signer's words live in the SIGNING corpus, not the create one
+     * (spec 075): it is the same option the signing sheet and Settings offer,
+     * and one route reading two ways in three places is how a person stops
+     * believing they are the same thing.
+     */
     @Test
     fun everySemanticVariantHasCopy() {
         StatusKey.entries.forEach { assertTrue(statusKeyToI18n(it).startsWith("onboarding.")) }
         app.getvela.wallet.feature.onboarding.core.SubmitLabel.entries.forEach {
             assertTrue(submitLabelToI18n(it).startsWith("onboarding."))
         }
-        KeyMethod.entries.forEach {
-            assertTrue(providerLineFor(it).startsWith("onboarding."))
-            val (title, body) = methodCopy(it)
-            assertTrue(title.startsWith("onboarding."))
-            assertTrue(body.startsWith("onboarding."))
+        KeyMethod.entries.forEach { method ->
+            val home = if (method == KeyMethod.ClearSigner) "componentsUi.signing." else "onboarding."
+            assertTrue(providerLineFor(method).startsWith(home))
+            val (title, body) = methodCopy(method)
+            assertTrue("$method title", title.startsWith(home))
+            assertTrue("$method body", body.startsWith(home))
+        }
+    }
+
+    /**
+     * Spec 075: the fourth route, everywhere the three appear.
+     *
+     * The create key picker, "add another key" and the sign-in sheet all draw
+     * `KeyMethod.entries` — so this list IS what each of them shows, and a
+     * route added to the core appears in all three or in none.
+     */
+    @Test
+    fun everyChooserOffersTheFourRoutes() {
+        assertEquals(
+            listOf("platform", "hybrid", "security_key", "clear_signer"),
+            KeyMethod.entries.map { it.wire },
+        )
+        assertEquals(KeyMethod.ClearSigner, KeyMethod.of("clear_signer"))
+        // The sign-in sheet reuses the create picker's words, method for method.
+        KeyMethod.entries.forEach { method ->
+            assertEquals(
+                methodCopy(method),
+                app.getvela.wallet.feature.onboarding.flow.signInMethodCopy(method),
+            )
         }
     }
 

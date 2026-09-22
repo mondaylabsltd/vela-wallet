@@ -312,8 +312,13 @@ class AppContainer(private val app: Application) {
                     refused = i18nRuntime.t("componentsUi.signing.clearSignerRefused"),
                     mismatch = i18nRuntime.t("componentsUi.signing.clearSignerMismatch"),
                     timeout = i18nRuntime.t("componentsUi.signing.clearSignerTimeout"),
+                    relayDown = i18nRuntime.t("componentsUi.signing.clearSignerRelayDown"),
                 )
             },
+            // Spec 075: the relay a cross-device pairing goes through, and how
+            // this app names itself to the page.
+            relayUrl = { settings.signPref.value.relay_url },
+            appName = "vela-android/" + BuildConfig.VERSION_NAME,
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 ClearSignerLabels(

@@ -1,0 +1,156 @@
+package app.getvela.wallet
+
+import app.getvela.wallet.feature.onboarding.core.AccountStore
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.send.core.RelayClient
+import app.getvela.wallet.feature.send.core.StoreAccountPort
+import app.getvela.wallet.feature.send.core.UserOpSpine
+import app.getvela.wallet.feature.signing.core.SigningController
+import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import uniffi.vela_core_uniffi.WalletKeyRecord
+import uniffi.vela_core_uniffi.signRoute
+
+/**
+ * Spec 075: a key that lives behind a Clear Signer page signs through it.
+ *
+ * Two facts, and the seam between them:
+ *
+ * - the account record round-trips `signer_origin` — a rewrite that dropped it
+ *   would make the key forget where it lives, and the wallet would ask the
+ *   system's passkey sheet for a credential no provider on this phone holds;
+ * - `UserOpSpine.routeFor` consults the core for EVERY choice including
+ *   `auto`, so such a key is routed to its own page rather than to a sheet
+ *   that has never heard of it.
+ */
+class ClearSignerRouteTest {
+
+    private val address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+    private val credential = "aabbcc"
+    private val publicKey = "04" + "11".repeat(64)
+    private val origin = "https://sign.example.test"
+
+    private fun record(signerOrigin: String?): JSONObject = JSONObject()
+        .put("id", credential)
+        .put("address", address)
+        .put("public_key_hex", publicKey)
+        .put(
+            "keys",
+            JSONArray().put(
+                JSONObject()
+                    .put("credential_id", credential)
+                    .put("public_key_hex", publicKey)
+                    .put("name", "Key 1")
+                    .put("transports", "internal")
+                    .apply { if (signerOrigin != null) put("signer_origin", signerOrigin) },
+            ),
+        )
+
+    private fun portWith(signerOrigin: String?): StoreAccountPort {
+        val store = FakeStore()
+        val accounts = AccountStore(store)
+        runBlocking { accounts.saveAccount(record(signerOrigin)) }
+        return StoreAccountPort(accounts)
+    }
+
+    private fun spine(port: StoreAccountPort, method: String) = UserOpSpine(
+        relay = RelayClient(FakeRelayPort(), builtinBase = { "https://builtin.test" }, retryDelayMs = 0),
+        accounts = port,
+        signer = { error("no ceremony in this test") },
+        signMethod = { method },
+    )
+
+    @Test
+    fun `an account record keeps signer_origin through a save and a reload`() {
+        val store = FakeStore()
+        val accounts = AccountStore(store)
+        runBlocking {
+            accounts.saveAccount(record(origin))
+            // The same id again: an upsert REPLACES, and a replacement that
+            // reshaped the record would lose the field silently.
+            accounts.saveAccount(record(origin))
+            val reloaded = accounts.loadAccounts()
+            assertEquals(1, reloaded.length())
+            val key = reloaded.getJSONObject(0).getJSONArray("keys").getJSONObject(0)
+            assertEquals(origin, key.getString("signer_origin"))
+        }
+    }
+
+    @Test
+    fun `the routes the core is given carry signer_origin`() {
+        val routes = runBlocking { JSONArray(portWith(origin).keyRoutesJson(address)) }
+        assertEquals(1, routes.length())
+        assertEquals(origin, routes.getJSONObject(0).getString("signer_origin"))
+        // A key that lives nowhere in particular carries an empty one, which
+        // the core reads as "not behind a page".
+        val plain = runBlocking { JSONArray(portWith(null).keyRoutesJson(address)) }
+        assertEquals("", plain.getJSONObject(0).getString("signer_origin"))
+    }
+
+    @Test
+    fun `auto follows a key that lives behind a page, to that page`() {
+        val port = portWith(origin)
+        val route = runBlocking {
+            spine(port, "auto").routeFor(address, WalletKeyRecord(credential, publicKey))
+        }
+        assertEquals(KeyMethod.ClearSigner, route.method)
+        assertEquals(origin, route.signerOrigin)
+        assertEquals(credential, route.credentialId)
+    }
+
+    @Test
+    fun `auto leaves an ordinary key on the route it always had`() {
+        val port = portWith(null)
+        val route = runBlocking {
+            spine(port, "auto").routeFor(address, WalletKeyRecord(credential, publicKey))
+        }
+        assertEquals(KeyMethod.Platform, route.method)
+        assertEquals("", route.signerOrigin)
+    }
+
+    @Test
+    fun `the Clear Signer chosen by hand opens the person's own page when no key names one`() {
+        val port = portWith(null)
+        val route = runBlocking {
+            spine(port, "clear_signer").routeFor(address, WalletKeyRecord(credential, publicKey))
+        }
+        assertEquals(KeyMethod.ClearSigner, route.method)
+        // Empty: the Settings page, not some other key's.
+        assertEquals("", route.signerOrigin)
+    }
+
+    @Test
+    fun `a key behind somebody else's page is not routed to the platform sheet`() {
+        // The core's rule (contract §1.2): a key minted on a self-hosted page
+        // is reachable only through that page, the way a security key's key is
+        // only in that key. Asking for "this device" must not send the
+        // ceremony to a provider that cannot possibly hold it.
+        val keys = JSONArray().put(
+            JSONObject()
+                .put("credential_id", credential)
+                .put("transports", "internal")
+                .put("signer_origin", origin),
+        ).toString()
+        val picked = JSONObject(signRoute(keys, "platform") ?: error("the core routes this key"))
+        assertEquals("clear_signer", picked.getString("method"))
+        assertEquals(origin, picked.getString("signer_origin"))
+    }
+
+    @Test
+    fun `the signing sheet's five routes are the core's, in the core's order`() {
+        assertEquals(
+            listOf("auto", "platform", "hybrid", "security_key", "clear_signer"),
+            SigningController.SIGN_METHODS,
+        )
+        assertTrue(
+            "every named route but `auto` is a KeyMethod the shell can run",
+            SigningController.SIGN_METHODS.drop(1).all { wire ->
+                KeyMethod.entries.any { it.wire == wire }
+            },
+        )
+    }
+}

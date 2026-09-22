@@ -444,6 +444,12 @@ pub struct RegistryPublishMember {
     /// on the login re-publish, whose executor signs the member live.
     #[serde(default)]
     pub proof: Option<crate::registry_proof::RegistryProof>,
+    /// Spec 075: the Clear Signer page this member lives behind, when it does.
+    /// The re-publish signs a member with no replayable proof LIVE, and that
+    /// signature has to reach the page holding the key — not whichever page
+    /// Settings names (Android, 075 phase C, found this missing).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
 }
 
 /// One founding member of a registry group (Unit), as fetched back from the

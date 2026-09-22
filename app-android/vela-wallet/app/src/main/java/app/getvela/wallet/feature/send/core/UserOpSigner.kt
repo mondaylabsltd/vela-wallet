@@ -60,7 +60,17 @@ class PasskeyUserOpSigner(private val passkey: PasskeyExecutor) : UserOpSigner {
  * `Cancelled`; every other refusal is one carrying the sentence to show.
  */
 interface ClearSigner {
-    suspend fun sign(requestJson: String, digest: ByteArray, keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>): Assertion
+    /**
+     * [signerOrigin] is spec 075: a key minted or found through the Clear
+     * Signer lives behind ONE page, and that is the page to open — empty means
+     * the person's own page from Settings.
+     */
+    suspend fun sign(
+        requestJson: String,
+        digest: ByteArray,
+        keys: List<uniffi.vela_core_uniffi.WalletKeyRecord>,
+        signerOrigin: String = "",
+    ): Assertion
 
     /**
      * What the page is told beside the request: the chain's name and coin
