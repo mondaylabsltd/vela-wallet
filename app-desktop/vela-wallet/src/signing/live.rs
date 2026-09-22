@@ -14,8 +14,9 @@ use gpui::SharedString;
 
 use vela_core::app::approval_guard::{GuardAmountError, GuardEditorMode, GuardSurface, GuardView};
 use vela_core::app::clear_signing::{
-    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearRisk, ClearSignField,
-    ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
+    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
+    ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
+    UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
@@ -585,6 +586,34 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         });
     }
 
+    // Spec 081: the core refused the request outright — it would have changed
+    // who controls the account. This is the whole story of the sheet, so it is
+    // said first and in the danger tone; `confirm_gate_open` is already false.
+    if let Some(blocked) = sign.blocked.as_ref() {
+        out.push(Block::Intent {
+            text: s.blocked_title.clone(),
+            tone: Tone::Danger,
+        });
+        let text = if blocked.function == "SafeTx" {
+            s.blocked_safe_tx.to_string()
+        } else if let Some(index) = blocked.leg_index {
+            crate::signing::fill(
+                &s.blocked_leg_body,
+                &[
+                    ("index", &index.to_string()),
+                    ("function", &blocked.function),
+                ],
+            )
+        } else {
+            crate::signing::fill(&s.blocked_body, &[("function", &blocked.function)])
+        };
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: SharedString::from(text),
+        });
+        return out;
+    }
+
     if let Some(error) = sign.error.as_ref() {
         // The two the person can act on get their own sentence; the rest share
         // the send flow's, because a wallet should not have two ways of saying
@@ -855,10 +884,24 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
     }
     if result.partial {
         // The descriptor declared more fields than resolved. Saying nothing
-        // would present an incomplete reading as a complete one.
+        // would present an incomplete reading as a complete one — and saying
+        // it with `warn_verified_abi`, as this did until spec 081, said there
+        // was no descriptor for this contract when there plainly was one.
         out.push(Block::Warning {
             tone: Tone::Caution,
-            text: s.warn_verified_abi.clone(),
+            text: s.warn_partial.clone(),
+        });
+    }
+    if result.provenance == ClearProvenance::Fetched {
+        // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
+        // from a base URL the person can edit — and nothing signed the
+        // answer. The other values say nothing here: built in and pinned are
+        // what "verified" means, a token-standard shape is the standard doing
+        // its job, the 4-byte database has its own line above, and a
+        // deployment claims nothing to doubt.
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_descriptor_fetched.clone(),
         });
     }
     if result.fields.iter().any(|field| field.unverified) {
@@ -1151,6 +1194,7 @@ mod tests {
             risk: ClearRisk::Normal,
             contract_address: None,
             verified: true,
+            provenance: ClearProvenance::BuiltIn,
             sign_type: ClearSignType::Transaction,
             partial: false,
             best_effort: false,
@@ -1788,6 +1832,41 @@ mod tests {
             (Tone::Danger, s.warn_token_to_contract.clone())
         );
         assert_eq!(warnings[1].0, Tone::Caution);
+    }
+
+    /// Spec 081 FR-008: each state says the sentence that is TRUE of it.
+    /// An incomplete decode said "no ERC-7730 descriptor for this contract",
+    /// which is the opposite of what happened, and a fetched descriptor said
+    /// nothing at all about never having been authenticated.
+    #[test]
+    fn an_incomplete_decode_and_a_fetched_one_say_what_they_are() {
+        let s = strings();
+        let said = |mutate: &dyn Fn(&mut ClearSignResult)| {
+            let mut result = result(vec![field("To", "0xbbb")]);
+            mutate(&mut result);
+            blocks(&view(result), &RequestFacts::default(), &s)
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Warning { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(said(&|r| r.partial = true), vec![s.warn_partial.clone()]);
+        assert_eq!(
+            said(&|r| r.provenance = ClearProvenance::Fetched),
+            vec![s.warn_descriptor_fetched.clone()]
+        );
+        // Built in, pinned, a token standard, a deployment: nothing to say.
+        for provenance in [
+            ClearProvenance::BuiltIn,
+            ClearProvenance::PinnedMatch,
+            ClearProvenance::Standard,
+            ClearProvenance::None,
+        ] {
+            assert!(said(&|r| r.provenance = provenance).is_empty());
+        }
     }
 
     /// A pristine machine — nothing presented at all — draws nothing.

@@ -1,7 +1,7 @@
 ---
 title: Inviare e ricevere
 description: "Come ricevere e inviare con Vela — un solo indirizzo su ogni rete, invii a una o a più persone, come vengono trovati i nomi dei destinatari, cosa confermi e come il relay sposta i tuoi fondi."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -50,9 +50,15 @@ proprio registro (il nome di un altro wallet Vela), poi nei record inversi `.bnb
 `.arb`, `.g`, Basename ed ENS, letti direttamente da ciascuna chain. Funziona in
 una sola direzione: dà un nome a un indirizzo che hai inserito. Se scrivi un nome
 come `alice.eth`, Vela non cerca l'indirizzo corrispondente. Anche i tuoi
-**contatti** salvati mostrano il loro nome. Considera un nome un indizio, non una
-prova: un record inverso o il nome di un wallet Vela lo sceglie chi controlla
-quell'indirizzo.
+**contatti** salvati mostrano il loro nome.
+
+Un nome che viene da quei record inversi si mostra solo se **risolve in avanti
+verso lo stesso indirizzo**. Chiunque può impostare il proprio record inverso su
+una stringa qualsiasi, quindi il record da solo non dimostra nulla; il wallet
+chiede al servizio dei nomi a quale indirizzo punta quel nome, e mostra il nome
+solo quando i due coincidono. Se il controllo non si può fare — un endpoint che
+non risponde, un resolver che fallisce — vedi l'indirizzo e nessun nome, mai uno
+non controllato.
 
 ### Moneta della commissione e velocità
 

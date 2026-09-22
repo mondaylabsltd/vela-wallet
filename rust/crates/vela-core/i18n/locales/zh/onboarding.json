@@ -7,7 +7,7 @@
 			"desktopTagline": "您的密钥，您的资产",
 			"featureNoMnemonicTitle": "不用助记词",
 			"featureNoMnemonicBody": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。",
-			"featureOneAddressTitle": "一个地址，12+ 网络",
+			"featureOneAddressTitle": "一个地址，24 条网络",
 			"featureOneAddressBody": "同一个地址在所有支持的网络通用，也可以自己添加网络。",
 			"featureOpenSourceTitle": "全部开源，可自建",
 			"featureOpenSourceBody": "App 与后端服务都开源，你可以部署完全属于自己的一套。",
@@ -30,12 +30,12 @@
 			"custodyTitle": "钥匙在你自己手里",
 			"custodyBody": "通行密钥存在你自己手上：设备的密码管理器，或一把硬件安全密钥。Vela 接触不到，也没法替你花钱。",
 			"chainsTitle": "一个地址，走遍链上",
-			"chainsBody": "同一个地址在 12+ 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
+			"chainsBody": "同一个地址在 24 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — 通行密钥钱包",
-				"description": "无助记词的通行密钥钱包：一个地址通用 12+ 网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
+				"description": "无助记词的通行密钥钱包：一个地址通用 24 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
 			},
 			"tagline": "您的密钥，您的资产",
 			"passkeyIndexLink": "设置通行密钥索引服务",
@@ -45,7 +45,7 @@
 					"description": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。"
 				},
 				"oneAddress": {
-					"title": "一个地址，12+ 网络",
+					"title": "一个地址，24 条网络",
 					"description": "同一个地址在所有支持的网络通用，也可以自己添加网络。"
 				},
 				"openSource": {

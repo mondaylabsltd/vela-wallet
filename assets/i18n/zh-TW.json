@@ -95,7 +95,7 @@
    "subtitle": "刪除 Vela 留在這台裝置上的一切",
    "desc": "Vela 存在這台裝置上的所有內容都會被刪除。沒有備份，也無法復原。",
    "loses": "會失去：交易紀錄、聯絡人與群組、瀏覽紀錄、dApp 授權、自訂代幣與網路、RPC 與端點設定，以及所有偏好設定。",
-   "keeps": "不會失去錢包本身。你的通行密鑰仍保存在 Face ID／指紋中——選擇「我已經有錢包了」就能找回同一個地址，只是紀錄已清空。",
+   "keeps": "錢包不會不見。抹除碰不到你的通行密鑰——它們由你的通行密鑰提供方保管（Face ID / 指紋、密碼管理器，或你的安全金鑰），不在這個應用裡。選擇「我已經有錢包了」，同一個地址就會回來，只是沒有歷史記錄。",
    "confirm": "全部清除",
    "cancel": "取消",
    "failed": "清除沒有完成。這台裝置上仍留有資料，你也還在登入狀態——請再試一次。"
@@ -586,7 +586,7 @@
    "desktopTagline": "您的金鑰，您的資產",
    "featureNoMnemonicTitle": "不用助記詞",
    "featureNoMnemonicBody": "用裝置上的通行密鑰建立與登入，沒有 12 個單字要抄寫和保管。",
-   "featureOneAddressTitle": "一個地址，12+ 網路",
+   "featureOneAddressTitle": "一個地址，24 條網路",
    "featureOneAddressBody": "同一個地址在所有支援的網路上都通用，也可以自行新增網路。",
    "featureOpenSourceTitle": "全部開源，可自行架設",
    "featureOpenSourceBody": "App 與後端服務都開源，您可以架設完全屬於自己的一套。",
@@ -609,12 +609,12 @@
    "custodyTitle": "鑰匙在你自己手上",
    "custodyBody": "通行密鑰存在你自己手上：裝置的密碼管理程式，或一把硬體安全金鑰。Vela 碰不到，也沒辦法替你花錢。",
    "chainsTitle": "一個地址，走遍鏈上",
-   "chainsBody": "同一個地址在 12+ 條網路上通用，手續費可以用穩定幣付，不用先幫每條鏈準備一份原生幣。"
+   "chainsBody": "同一個地址在 24 條網路上通用，手續費可以用穩定幣付，不用先幫每條鏈準備一份原生幣。"
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — 通行密鑰錢包",
-    "description": "免助記詞的通行密鑰錢包：一個地址通用 12+ 個網路，基於經過審計的 Safe v1.4.1 合約，支援以穩定幣支付 gas，全面開源、可自行架設。"
+    "description": "免助記詞的通行密鑰錢包：一個地址通用 24 個網路，基於經過審計的 Safe v1.4.1 合約，支援以穩定幣支付 gas，全面開源、可自行架設。"
    },
    "tagline": "您的金鑰，您的資產",
    "passkeyIndexLink": "設定通行密鑰索引服務",
@@ -624,7 +624,7 @@
      "description": "使用裝置上的通行密鑰建立與登入，不必抄寫和保管 12 個單字。"
     },
     "oneAddress": {
-     "title": "一個地址，12+ 網路",
+     "title": "一個地址，24 條網路",
      "description": "同一個地址可在所有支援的網路使用，也可以自行新增網路。"
     },
     "openSource": {
@@ -1210,6 +1210,7 @@
    "valueLabel": "金額",
    "signingFor": "簽署對象",
    "bestEffortWarning": "根據函式簽章解析得出 — 並非經過驗證的描述檔，請仔細核對細節。",
+   "descriptorFetchedWarning": "此描述來自 Vela 的描述檔服務，未經任何認證 — 批准前請核對細節。",
    "simWillSucceed": "模擬通過 — 預計可成功",
    "simWillFail": "這筆交易預計會失敗 — 但仍會扣除 gas。",
    "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",
@@ -1340,7 +1341,11 @@
    "copyValue": "複製",
    "signWith": "簽署方式",
    "viewOnExplorer": "在區塊瀏覽器中查看",
-   "sendingToTokenContract": "傳送到代幣自身合約"
+   "sendingToTokenContract": "傳送到代幣自身合約",
+   "selfCallBlockedTitle": "Vela 不會簽這筆請求",
+   "selfCallBlockedBody": "這筆請求會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交到別人手上，所以 Vela 拒絕了它。什麼都沒有簽。",
+   "selfCallBlockedLegBody": "這筆請求的第 {{index}} 步會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交到別人手上，所以 Vela 拒絕了整筆請求。什麼都沒有簽。",
+   "selfCallBlockedSafeTx": "這筆請求要你的鑰匙授權一筆之後才執行的 Safe 交易。Vela 拒絕了它——這樣的簽章可以在你不在場時被使用。什麼都沒有簽。"
   },
   "currency": {
    "title": "顯示貨幣",
@@ -1570,6 +1575,7 @@
    "retry": "重試",
    "addNetworkBtn": "新增網路",
    "incompatibleHint": "此鏈上尚未部署部分必要合約。\n請使用 Vela Wallet 鏈設定工具部署，再回來重新檢查。",
+   "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
    "openChainSetupTool": "開啟鏈設定工具",
    "recheck": "重新檢查",
    "chainIdLabel": "Chain ID：{{chainId}}",

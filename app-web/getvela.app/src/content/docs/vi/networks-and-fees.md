@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
 description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ bạn, không phụ thuộc vào chuỗi.
 ## Thêm mạng khác
 
 Bạn có thể thêm bất kỳ mạng EVM nào trong **Cài đặt → Mạng lưới**, miễn là mạng đó có
-đủ những gì một ví Vela cần: mười một hợp đồng tiêu chuẩn (EntryPoint v0.7 của
+đủ những gì một ví Vela cần: mười hai hợp đồng tiêu chuẩn (EntryPoint v0.7 của
 ERC-4337, các hợp đồng Safe v1.4.1, mô-đun 4337 và mô-đun passkey của Safe, MultiSend,
 Multicall3 và hai bộ triển khai tất định) và precompile **EIP-7951 / RIP-7212** xác minh chữ ký
 passkey tại địa chỉ `0x100`. Ví kiểm tra tất cả những thứ đó, bao gồm cả một lần kiểm
@@ -50,9 +50,11 @@ Precompile là yêu cầu bắt buộc. Địa chỉ của nó là một phần 
 Vela, nên không có bộ xác minh dự phòng và cũng không có cách nào triển khai bù về sau.
 Nếu một chuỗi có precompile nhưng thiếu một số hợp đồng, trang
 [thiết lập chuỗi](/vi/chain-setup) cho biết thiếu những gì và triển khai những hợp đồng
-mà ai cũng triển khai được. Có một chỗ hở trong bước kiểm tra: ví có nhiều hơn một khóa
-còn cần hợp đồng factory tạo bộ ký passkey của Safe trên mạng đó, thứ hiện chưa được
-kiểm tra; nếu thiếu nó, chỉ khóa đầu tiên ký được trên mạng đó.
+mà ai cũng triển khai được. Hai trong số mười hai hợp đồng mà nó kiểm tra — hợp đồng
+factory tạo bộ ký passkey của Safe và mã bộ ký mà factory đó triển khai — chỉ quan
+trọng với ví giữ nhiều hơn một khóa, và phần kiểm tra nói rõ điều đó cho từng hợp đồng:
+thiếu chúng thì ví một khóa vẫn chạy bình thường, còn ví có địa chỉ sinh ra từ hai đến
+bảy khóa thì hoàn toàn không triển khai được trên mạng đó.
 
 ## Một giao dịch được trả phí thế nào
 

@@ -58,10 +58,18 @@ enum LogoStore {
         return nil
     }
 
-    /// Tests and the erase-device path: forget everything held in memory.
+    /// Tests and the erase-device path: forget everything, memory and disk.
+    ///
+    /// The `URLCache` matters as much as the `NSCache` (spec 081 FR-017): this
+    /// session keeps 32 MB of logo bytes under `vela-logos` in the app's cache
+    /// directory precisely so a relaunch draws yesterday's logos, which means
+    /// it SURVIVES the thing an erase is for. The chain and token logos a
+    /// person's wallet fetched are a readable list of what they hold, so a
+    /// sweep that cleared memory and left the disk was leaving the inventory.
     static func forgetAll() {
         cache.removeAllObjects()
         misses.removeAll()
+        session.configuration.urlCache?.removeAllCachedResponses()
     }
 }
 

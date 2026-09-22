@@ -90,7 +90,7 @@ jobs:
         working-directory: rust
         run: |
           cargo build --release -p vela-core-uniffi
-          cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+          cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
             --library target/release/libvela_core_uniffi.so \
             --language kotlin --out-dir bindings/kotlin --no-format
       - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)

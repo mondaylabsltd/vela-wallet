@@ -2,7 +2,7 @@
  * What a chain must have before Vela can run on it.
  *
  * This is the WALLET's own admission bar, not a list invented for this page:
- * the eleven addresses and their order are `REQUIRED_CONTRACTS` in
+ * the twelve addresses and their order are `REQUIRED_CONTRACTS` in
  * `rust/crates/vela-core/src/app/network_admin.rs`, and the P-256 probe is the
  * wallet's `P256_PRECOMPILE` / `VALID_P256_CALL`. `required-contracts.test.ts`
  * reads that Rust file off disk and fails the moment the two drift, so this
@@ -20,7 +20,9 @@ export type DeployMethod =
 	/** Only its owner can deploy it (the Safe singleton factory: Safe signs per chain). */
 	| 'external'
 	/** CREATE2 through one of the two factories. Any funded account can do it. */
-	| 'create2';
+	| 'create2'
+	/** No step of its own: another contract's constructor deploys it. */
+	| 'with-factory';
 
 export type Factory = 'arachnid' | 'safeSingletonFactory';
 
@@ -33,6 +35,14 @@ export interface RequiredContract {
 	method: DeployMethod;
 	/** For `create2`: which factory's calldata this is. */
 	factory?: Factory;
+	/** For `with-factory`: the key whose deployment brings this one along. */
+	arrivesWith?: string;
+	/**
+	 * Only a wallet holding more than one passkey needs this contract. A chain
+	 * without it still runs a one-key wallet completely; it just cannot deploy
+	 * a wallet whose address was derived from two to seven keys.
+	 */
+	multiKeyOnly?: true;
 	/** One line a person can act on. */
 	what: string;
 }
@@ -112,20 +122,30 @@ export const REQUIRED_CONTRACTS: readonly RequiredContract[] = [
 		what: 'Verifies passkey signatures for the account.'
 	},
 	{
-		key: 'fallbackHandler',
-		name: 'Fallback Handler',
-		address: '0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99',
-		method: 'create2',
-		factory: 'safeSingletonFactory',
-		what: 'Lets the account answer token and signature standards.'
-	},
-	{
 		key: 'multiSend',
 		name: 'MultiSend',
 		address: '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526',
 		method: 'create2',
 		factory: 'safeSingletonFactory',
 		what: 'Batches several calls into one operation.'
+	},
+	{
+		key: 'safePasskeySignerFactory',
+		name: 'Safe Passkey Signer Factory',
+		address: '0x1d31F259eE307358a26dFb23EB365939E8641195',
+		method: 'create2',
+		factory: 'safeSingletonFactory',
+		multiKeyOnly: true,
+		what: 'Only for a wallet with more than one passkey: it makes the signer contract for each key beyond the first. Deploying it also brings the singleton below.'
+	},
+	{
+		key: 'safePasskeySignerSingleton',
+		name: 'Safe Passkey Signer Singleton',
+		address: '0x4E27b51350e6c2083EE19011120F50DAfEc5CA50',
+		method: 'with-factory',
+		arrivesWith: 'safePasskeySignerFactory',
+		multiKeyOnly: true,
+		what: 'The code every per-key signer runs. The factory’s constructor deploys it, so it needs no step of its own.'
 	}
 ] as const;
 
@@ -138,7 +158,7 @@ export function requiredContract(key: string): RequiredContract {
 /**
  * EIP-7951 / RIP-7212 — the P-256 precompile at `0x100`.
  *
- * This one is different in kind from the eleven above. Its address is baked
+ * This one is different in kind from the twelve above. Its address is baked
  * into every Vela address: the account's setup calldata names `0x100` as the
  * signature verifier, and the address is derived from that calldata. A chain
  * without the precompile cannot be fixed by deploying anything — swapping in a

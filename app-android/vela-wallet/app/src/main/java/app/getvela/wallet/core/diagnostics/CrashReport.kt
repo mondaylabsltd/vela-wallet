@@ -11,7 +11,8 @@ import org.json.JSONObject
  * A core fault (`onFault`) records the same shape without dying.
  */
 object CrashReport {
-    private const val FILE = "vela_crash"
+    /** The preferences file's name — reported by the erase when it survives. */
+    const val FILE = "vela_crash"
     private const val KEY = "report"
 
     class Record(val atMs: Long, val thread: String, val message: String, val stack: String, val version: String, val fatal: Boolean)
@@ -40,6 +41,25 @@ object CrashReport {
     fun clear(context: Context) {
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().remove(KEY).commit()
     }
+
+    /**
+     * The whole file, for the erase (spec 081 FR-017).
+     *
+     * [clear] removes the ONE key the sheet has shown; this removes the store.
+     * The difference is the point: a crash record is a stack trace from the
+     * person's own session, and 抹除此设备 that left it behind would be telling
+     * them nothing of theirs is here while their last failure still is. Whole
+     * store, so a field added to this file later goes without an edit here.
+     *
+     * @return false when the platform refused the commit.
+     */
+    fun eraseAll(context: Context): Boolean = runCatching {
+        context.applicationContext
+            .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+    }.getOrDefault(false)
 
     private fun write(context: Context, record: Record) {
         val json = JSONObject()

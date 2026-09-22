@@ -14,7 +14,12 @@
 	import type { SettingsPrefEvent } from './pref-events';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
-	import type { SettingsDesktopModel, SettingsOverlayId, SettingsPageId } from './model';
+	import type {
+		FeedbackResult,
+		SettingsDesktopModel,
+		SettingsOverlayId,
+		SettingsPageId
+	} from './model';
 	import type { SidebarModel } from '$lib/wallet/model';
 	import Button from '$lib/ui/Button.svelte';
 	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
@@ -22,8 +27,10 @@
 	import KeysBlock from './ui/KeysBlock.svelte';
 	import AccountsSheetBody from './ui/AccountsSheetBody.svelte';
 	import AddNetworkPanel from './ui/AddNetworkPanel.svelte';
+	import Callout from './ui/Callout.svelte';
 	import DangerCard from './ui/DangerCard.svelte';
 	import Dialog from './ui/Dialog.svelte';
+	import FeedbackBody from './ui/FeedbackBody.svelte';
 	import Dropdown from './ui/Dropdown.svelte';
 	import EndpointsPanel from './ui/EndpointsPanel.svelte';
 	import FormRow from './ui/FormRow.svelte';
@@ -67,6 +74,18 @@
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
+		/**
+		 * 抹除此设备 was confirmed (spec 081 FR-017).
+		 *
+		 * The wide layout drew the same danger card the phone does and handed
+		 * it no handler at all, so the one irreversible control on the screen
+		 * was a picture of itself — the exact defect the erase contract names.
+		 */
+		onerase?: () => void;
+		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
+		onfeedbacksend?: (report: { what: string; steps: string }) => void;
+		feedbackSending?: boolean;
+		feedbackResult?: FeedbackResult;
 	}
 
 	let {
@@ -83,7 +102,11 @@
 		onaccountsopen,
 		onethereumbackup,
 		onstorageclear,
-		onclearcaches
+		onclearcaches,
+		onerase,
+		onfeedbacksend,
+		feedbackSending = false,
+		feedbackResult
 	}: Props = $props();
 
 	let page = $state<SettingsPageId>(untrack(() => model.page));
@@ -115,6 +138,8 @@
 				return { title: model.endpoints.title, description: undefined };
 			case 'storage':
 				return { title: model.storage.title, description: model.storage.subtitle };
+			case 'feedback':
+				return { title: model.feedback.title, description: model.feedback.subtitle };
 			case 'about':
 				return { title: model.about.title, description: undefined };
 			default:
@@ -209,10 +234,13 @@
 				</button>
 				<p class="sign-out-note">{model.account.signOutNote}</p>
 
+				<!-- Spec 081 FR-017: the card asks, the dialog confirms, the route
+				     erases. It was drawn with no handler from the first day. -->
 				<DangerCard
 					title={model.account.erase.title}
 					subtitle={model.account.erase.subtitle}
 					action={model.account.erase.action}
+					onselect={() => (overlay = 'erase-device')}
 				/>
 			{:else if page === 'appearance'}
 				<FormRow label={model.appearance.language.label}>
@@ -324,6 +352,16 @@
 					onclear={onstorageclear}
 					onclearcaches={() => (overlay = 'clear-caches')}
 				/>
+			{:else if page === 'feedback'}
+				<!-- Spec 081 FR-016: the phone's sheet body, as a panel. Same
+				     component, so the preview lines and the consent note cannot
+				     say one thing on a laptop and another on a phone. -->
+				<FeedbackBody
+					panel={model.feedback}
+					onsend={onfeedbacksend}
+					sending={feedbackSending}
+					result={feedbackResult}
+				/>
 			{:else if page === 'about'}
 				<AboutPanel panel={model.about} layout="inline" />
 			{/if}
@@ -385,6 +423,33 @@
 					}}
 				>
 					{model.clearCachesSheet.confirm}
+				</Button>
+			</div>
+		</Dialog>
+	{:else if overlay === 'erase-device'}
+		<!-- Spec 081 FR-017. Everything the phone's sheet says, in the desktop's
+		     container: what is lost, and — the note — that the passkey is NOT,
+		     because it lives with the person's passkey provider and not here.
+		     The dialog does NOT close on confirm: a failed erase has to say so
+		     where the person is looking, and a success leaves this page. -->
+		<Dialog
+			title={model.eraseSheet.title}
+			closeLabel={model.closeLabel}
+			onclose={() => (overlay = 'none')}
+		>
+			<p class="dialog-body">{model.eraseSheet.body}</p>
+			{#if model.eraseSheet.note !== undefined}
+				<p class="dialog-note">{model.eraseSheet.note}</p>
+			{/if}
+			{#if model.eraseSheet.callout !== undefined}
+				<div class="dialog-callout"><Callout callout={model.eraseSheet.callout} /></div>
+			{/if}
+			<div class="dialog-actions">
+				<Button variant="danger" shape="rounded" onclick={() => onerase?.()}>
+					{model.eraseSheet.confirm}
+				</Button>
+				<Button variant="secondary" shape="rounded" onclick={() => (overlay = 'none')}>
+					{model.eraseSheet.cancel}
 				</Button>
 			</div>
 		</Dialog>
@@ -499,8 +564,20 @@
 		color: var(--color-fg-muted);
 	}
 
+	.dialog-note {
+		margin: calc(var(--space-xl) * -1) 0 var(--space-xl);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-subtle);
+	}
+
+	.dialog-callout {
+		margin-bottom: var(--space-xl);
+	}
+
 	.dialog-actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--space-lg);
 	}
 </style>

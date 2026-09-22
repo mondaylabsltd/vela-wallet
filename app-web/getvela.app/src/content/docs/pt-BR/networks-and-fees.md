@@ -1,7 +1,7 @@
 ---
 title: Redes e taxas
 description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ calculado a partir das suas chaves, não da rede.
 ## Adicionar outra rede
 
 Você pode adicionar qualquer rede EVM em **Configurações → Redes**, desde que ela
-tenha o que uma carteira Vela precisa: onze contratos padrão (o EntryPoint v0.7 do
+tenha o que uma carteira Vela precisa: doze contratos padrão (o EntryPoint v0.7 do
 ERC-4337, os contratos do Safe v1.4.1, os módulos 4337 e de passkey da Safe,
 MultiSend, Multicall3 e dois implantadores determinísticos) e o pré-compilado
 **EIP-7951 / RIP-7212**, que verifica assinaturas de passkey no endereço `0x100`.
@@ -52,10 +52,12 @@ O pré-compilado é indispensável. O endereço dele faz parte de como todo
 endereço da Vela é calculado, então não existe verificador alternativo nem como
 implantar um depois. Se uma rede tem o pré-compilado, mas faltam alguns dos
 contratos, a [configuração de rede](/pt-BR/chain-setup) mostra o que falta e
-implanta o que qualquer pessoa pode implantar. Uma lacuna na verificação: uma
-carteira com mais de uma chave também precisa da fábrica de signatários de passkey
-da Safe na rede, e isso ainda não é verificado; sem ela, só a primeira chave
-consegue assinar ali.
+implanta o que qualquer pessoa pode implantar. Dois dos doze contratos que ela
+verifica — a fábrica de signatários de passkey da Safe e o código de signatário que
+essa fábrica implanta — só importam para uma carteira com mais de uma chave, e a
+verificação diz isso contrato a contrato: sem eles, uma carteira de chave única
+funciona normalmente, enquanto uma carteira cujo endereço veio de duas a sete chaves
+não pode ser implantada naquela rede de jeito nenhum.
 
 ## Como uma transação é paga
 

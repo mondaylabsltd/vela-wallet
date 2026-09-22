@@ -7,7 +7,7 @@
 			"desktopTagline": "Anahtarlarınız, varlıklarınız",
 			"featureNoMnemonicTitle": "Kurtarma ifadesi gerekmez",
 			"featureNoMnemonicBody": "Cihazınızdaki geçiş anahtarıyla cüzdan oluşturup giriş yapın — yazıp saklamanız gereken 12 kelime yok.",
-			"featureOneAddressTitle": "Tek adres, 12+ ağ",
+			"featureOneAddressTitle": "Tek adres, 24 ağ",
 			"featureOneAddressBody": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağlarınızı da ekleyebilirsiniz.",
 			"featureOpenSourceTitle": "Açık kaynak, kendiniz barındırın",
 			"featureOpenSourceBody": "Uygulama ve arka uç servisleri açık kaynak — tamamen size ait bir kurulum çalıştırabilirsiniz.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "Anahtarlar sizde kalır",
 			"custodyBody": "Geçiş anahtarlarınız sizde durur: cihazın parola yöneticisinde ya da bir donanım güvenlik anahtarında. Vela onlara ne dokunabilir ne de sizin yerinize harcayabilir.",
 			"chainsTitle": "Tek adres, tüm ağlar",
-			"chainsBody": "Aynı adres 12+ ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
+			"chainsBody": "Aynı adres 24 ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — geçiş anahtarlı cüzdan",
-				"description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 12+ ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
+				"description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 24 ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
 			},
 			"tagline": "Anahtarlarınız, varlıklarınız",
 			"passkeyIndexLink": "Geçiş anahtarı dizin hizmetini ayarla",
@@ -45,7 +45,7 @@
 					"description": "Cihazınızdaki geçiş anahtarıyla oluşturun ve giriş yapın — yazıp saklamanız gereken 12 kelime yok."
 				},
 				"oneAddress": {
-					"title": "Tek adres, 12+ ağ",
+					"title": "Tek adres, 24 ağ",
 					"description": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağınızı da ekleyebilirsiniz."
 				},
 				"openSource": {

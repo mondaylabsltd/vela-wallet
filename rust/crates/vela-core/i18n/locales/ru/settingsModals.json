@@ -60,6 +60,7 @@
       "retry": "Повторить",
       "addNetworkBtn": "Добавить сеть",
       "incompatibleHint": "Некоторые необходимые контракты ещё не развёрнуты в этой сети.\nРазверните их с помощью инструмента Vela Wallet Chain Setup, затем вернитесь и перепроверьте.",
+      "singleKeyOnly": "Кошелёк с несколькими passkey нельзя создать в этой сети: фабрика подписантов passkey от Safe здесь не развёрнута.\nКошелёк с одним passkey работает как обычно.",
       "openChainSetupTool": "Открыть Chain Setup Tool",
       "recheck": "Перепроверить",
       "chainIdLabel": "ID сети: {{chainId}}",

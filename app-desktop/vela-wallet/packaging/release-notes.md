@@ -2,6 +2,14 @@
 
 Every package on this page has been built from the tagged source and is meant to be usable as downloaded. `SHA256SUMS*` files list the checksum of each one.
 
+Every package also carries **build provenance**: the workflow run that produced it signed a statement naming the file, the commit and the run. A checksum says two files are the same; this says where the file came from. With the [GitHub CLI](https://cli.github.com):
+
+```
+gh attestation verify <file> --repo mondaylabsltd/vela-wallet
+```
+
+The macOS images are signed with our Developer ID and notarized by Apple (`xcrun stapler validate`, `spctl -a -t open --context context:primary-signature -v`) and attested from the published file afterwards. Provenance is not code signing: it does not remove the Windows prompt below.
+
 **Windows** — `VelaWallet-Setup-<version>-x64.exe` for most PCs, `-arm64.exe` for Snapdragon / Surface Pro X class machines.
 The installer is not code-signed, so Windows SmartScreen stops it once with *"Windows protected your PC"*. Click **More info**, then **Run anyway**. This is expected for this release; it is the same file the checksum describes.
 

@@ -86,6 +86,7 @@
       "close": "닫기",
       "valueLabel": "값",
       "bestEffortWarning": "함수 시그니처로 디코딩한 정보입니다 — 검증된 디스크립터가 아닙니다. 세부 정보를 신중히 검토하세요.",
+      "descriptorFetchedWarning": "이 설명은 Vela의 디스크립터 서비스에서 받은 것이며 인증되지 않았습니다 — 승인하기 전에 세부 정보를 확인하세요.",
       "simWillSucceed": "시뮬레이션 통과 — 성공할 것으로 보입니다",
       "simWillFail": "이 거래는 실패할 것으로 보입니다 — 그래도 가스는 지불됩니다.",
       "simWillFailReason": "실패할 것으로 보입니다: {{reason}} — 그래도 가스는 지불됩니다.",
@@ -193,7 +194,11 @@
       "copyValue": "복사",
       "signWith": "서명 방법",
       "viewOnExplorer": "탐색기에서 보기",
-      "sendingToTokenContract": "토큰 자체 컨트랙트로 전송"
+      "sendingToTokenContract": "토큰 자체 컨트랙트로 전송",
+      "selfCallBlockedTitle": "Vela는 이 요청에 서명하지 않습니다",
+      "selfCallBlockedBody": "이 요청은 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다.",
+      "selfCallBlockedLegBody": "이 요청의 {{index}}번째 단계가 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 요청 전체를 거부했습니다. 아무것도 서명하지 않았습니다.",
+      "selfCallBlockedSafeTx": "이 요청은 나중에 실행될 Safe 트랜잭션을 승인하도록 키에 요구합니다. 그런 서명은 사용자가 없어도 사용될 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다."
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

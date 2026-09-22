@@ -329,12 +329,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
 //   puts one amount in every empty row. Everything ELSE those issues needed was
 //   already here, in all fifteen locales, unread. No new branch.
-// 1687 (merge of the two above, 2026-09-21): spec 068 and issue 686 added
-//   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
-//   leaf and no branch. The two sets share no path, so they simply add:
-//   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
-if (PATHS.length !== 1687) fail(`expected 1687 paths (1599 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1599) fail(`expected 1599 leaf paths, got ${leafSet.size}`);
+// 1691 (spec 081, 2026-09-22): the self-call guard's blocked sheet needs four
+//   leaves under the existing `componentsUi.signing` branch —
+//   `selfCallBlockedTitle`, `...Body`, `...LegBody` (the batch wording, with
+//   the 1-based step) and `...SafeTx` (the typed-data case, which names no
+//   function). No new branch: 1687 + 4 = 1691 = 1603 leaf + 88 branch.
+// 1692 (spec 081, FR-009): + `settingsModals.addNetwork.singleKeyOnly`. The
+//   network check now asks for Safe's passkey signer factory too, which only a
+//   wallet with more than one key needs — so a chain can be genuinely usable
+//   and still refuse such a wallet. One sentence for that state; without it a
+//   person reads "Compatible" beside two red crosses. 1691 + 1 = 1692.
+// 1693 (spec 081, FR-008): + `componentsUi.signing.descriptorFetchedWarning`.
+//   A descriptor fetched from the chain-data service was shown as "verified"
+//   with nothing having authenticated it. Now only a built-in descriptor — or
+//   a fetched one byte-equal to the built-in copy — earns that word, and this
+//   is the sentence the other case needs. 1692 + 1 = 1693.
+if (PATHS.length !== 1693) fail(`expected 1693 paths (1605 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1605) fail(`expected 1605 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

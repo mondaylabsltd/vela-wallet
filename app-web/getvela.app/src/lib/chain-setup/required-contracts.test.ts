@@ -25,16 +25,22 @@ function coreSource(): string {
 	);
 }
 
-function parseRequired(src: string): { name: string; address: string }[] {
+interface WalletContract {
+	name: string;
+	address: string;
+	multiKeyOnly: boolean;
+}
+
+function parseRequired(src: string): WalletContract[] {
 	const block = src.match(
-		/pub const REQUIRED_CONTRACTS: \[\(&str, &str\); (\d+)\] = \[([\s\S]*?)\n\];/
+		/pub const REQUIRED_CONTRACTS: \[\(&str, &str, bool\); (\d+)\] = \[([\s\S]*?)\n\];/
 	);
 	expect(block, 'REQUIRED_CONTRACTS not found in network_admin.rs').not.toBeNull();
-	const pairs = [...block![2].matchAll(/\(\s*"([^"]+)",\s*"(0x[0-9a-fA-F]{40})",?\s*\)/g)].map(
-		(m) => ({ name: m[1], address: m[2] })
-	);
-	expect(pairs).toHaveLength(Number(block![1]));
-	return pairs;
+	const rows = [
+		...block![2].matchAll(/\(\s*"([^"]+)",\s*"(0x[0-9a-fA-F]{40})",\s*(true|false),?\s*\)/g)
+	].map((m) => ({ name: m[1], address: m[2], multiKeyOnly: m[3] === 'true' }));
+	expect(rows).toHaveLength(Number(block![1]));
+	return rows;
 }
 
 describe('the admission bar is the wallet’s, in the wallet’s order', () => {
@@ -42,7 +48,38 @@ describe('the admission bar is the wallet’s, in the wallet’s order', () => {
 
 	it('lists exactly the contracts network_admin.rs requires', () => {
 		const wallet = parseRequired(src);
-		expect(REQUIRED_CONTRACTS.map((c) => ({ name: c.name, address: c.address }))).toEqual(wallet);
+		expect(
+			REQUIRED_CONTRACTS.map((c) => ({
+				name: c.name,
+				address: c.address,
+				multiKeyOnly: c.multiKeyOnly === true
+			}))
+		).toEqual(wallet);
+	});
+
+	it('marks the same two contracts as multi-key-only as the wallet does', () => {
+		// The wallet's third field. A chain missing these runs a one-key wallet
+		// and refuses a wallet made from two to seven keys — the page must not
+		// blur the two, in either direction.
+		const walletOnly = parseRequired(src)
+			.filter((c) => c.multiKeyOnly)
+			.map((c) => c.name);
+		expect(walletOnly).toEqual(['Safe Passkey Signer Factory', 'Safe Passkey Signer Singleton']);
+		expect(REQUIRED_CONTRACTS.filter((c) => c.multiKeyOnly).map((c) => c.name)).toEqual(walletOnly);
+	});
+
+	it('gives every contract a deployment route, and the singleton none of its own', () => {
+		// `with-factory` is not a gap in the data: Safe's factory deploys the
+		// singleton in its own constructor, so a "Deploy" button for it would be
+		// a button for something nobody can do.
+		for (const c of REQUIRED_CONTRACTS) {
+			if (c.method === 'with-factory') {
+				expect(c.arrivesWith, `${c.key} must say what brings it`).toBeDefined();
+				expect(REQUIRED_CONTRACTS.some((o) => o.key === c.arrivesWith)).toBe(true);
+			} else {
+				expect(c.arrivesWith).toBeUndefined();
+			}
+		}
 	});
 
 	it('probes the precompile the wallet probes, with the wallet’s vector', () => {

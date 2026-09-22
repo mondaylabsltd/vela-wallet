@@ -95,7 +95,7 @@
    "subtitle": "Löscht alles, was Vela hier gespeichert hat",
    "desc": "Alles, was Vela auf diesem Gerät gespeichert hat, wird gelöscht. Es gibt keine Sicherung und kein Zurück.",
    "loses": "Sie verlieren: Transaktionsverlauf, Kontakte und Gruppen, Browserverlauf, dApp-Berechtigungen, eigene Token und Netzwerke, RPC- und Endpunkt-Einstellungen sowie sämtliche Präferenzen.",
-   "keeps": "Die Wallet verlieren Sie nicht. Ihr Passkey bleibt in Face ID / Fingerabdruck — wählen Sie „Ich habe bereits eine Wallet“, und dieselbe Adresse kommt zurück, nur ohne Verlauf.",
+   "keeps": "Die Wallet verlieren Sie nicht. Das Löschen kommt an Ihre Passkeys nicht heran — sie liegen bei Ihrem Passkey-Anbieter (Face ID / Fingerabdruck, einem Passwortmanager oder einem Sicherheitsschlüssel), nicht in dieser App. Wählen Sie „Ich habe bereits eine Wallet“, und dieselbe Adresse kommt zurück, nur ohne Verlauf.",
    "confirm": "Alles löschen",
    "cancel": "Abbrechen",
    "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."
@@ -586,7 +586,7 @@
    "desktopTagline": "Ihre Schlüssel, Ihr Vermögen",
    "featureNoMnemonicTitle": "Keine Seed-Phrase",
    "featureNoMnemonicBody": "Erstellen Sie Ihre Wallet und melden Sie sich per Passkey auf Ihrem Gerät an — keine 12 Wörter, die Sie abschreiben und verwahren müssen.",
-   "featureOneAddressTitle": "Eine Adresse, 12+ Netzwerke",
+   "featureOneAddressTitle": "Eine Adresse, 24 Netzwerke",
    "featureOneAddressBody": "Dieselbe Adresse funktioniert auf allen unterstützten Netzwerken, und Sie können eigene hinzufügen.",
    "featureOpenSourceTitle": "Open Source, selbst hostbar",
    "featureOpenSourceBody": "App und Backend-Dienste sind Open Source — Sie können einen komplett eigenen Stack betreiben.",
@@ -609,12 +609,12 @@
    "custodyTitle": "Die Schlüssel bleiben bei dir",
    "custodyBody": "Deine Passkeys bleiben, wo du sie aufbewahrst: im Passwortmanager des Geräts oder auf einem Hardware-Sicherheitsschlüssel. Vela kommt nicht daran und kann nichts für dich ausgeben.",
    "chainsTitle": "Eine Adresse, alle Chains",
-   "chainsBody": "Dieselbe Adresse gilt in 12+ Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
+   "chainsBody": "Dieselbe Adresse gilt in 24 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — die Passkey-Wallet",
-    "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für über 12 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
+    "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 24 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
    },
    "tagline": "Ihre Schlüssel, Ihre Vermögenswerte",
    "passkeyIndexLink": "Passkey-Indexdienst einrichten",
@@ -624,7 +624,7 @@
      "description": "Erstellen und anmelden mit dem Passkey Ihres Geräts — keine 12 Wörter zum Abschreiben und Verwahren."
     },
     "oneAddress": {
-     "title": "Eine Adresse, 12+ Netzwerke",
+     "title": "Eine Adresse, 24 Netzwerke",
      "description": "Dieselbe Adresse gilt in allen unterstützten Netzwerken, eigene Netzwerke lassen sich hinzufügen."
     },
     "openSource": {
@@ -1233,6 +1233,7 @@
    "close": "Schließen",
    "valueLabel": "Wert",
    "bestEffortWarning": "Aus der Funktionssignatur dekodiert — kein verifizierter Deskriptor. Prüfen Sie die Details sorgfältig.",
+   "descriptorFetchedWarning": "Diese Beschreibung stammt von Velas Deskriptor-Dienst und wurde von niemandem authentifiziert — prüfen Sie die Details vor dem Genehmigen.",
    "simWillSucceed": "Simulation bestanden — sollte erfolgreich sein",
    "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
    "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
@@ -1340,7 +1341,11 @@
    "copyValue": "Kopieren",
    "signWith": "Signieren mit",
    "viewOnExplorer": "Im Explorer ansehen",
-   "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet"
+   "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet",
+   "selfCallBlockedTitle": "Vela signiert diese Anfrage nicht",
+   "selfCallBlockedBody": "Diese Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela sie ab. Es wurde nichts signiert.",
+   "selfCallBlockedLegBody": "Schritt {{index}} dieser Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela die ganze Anfrage ab. Es wurde nichts signiert.",
+   "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert."
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",
@@ -1570,6 +1575,7 @@
    "retry": "Erneut versuchen",
    "addNetworkBtn": "Netzwerk hinzufügen",
    "incompatibleHint": "Einige erforderliche Contracts sind auf dieser Chain noch nicht bereitgestellt.\nNutzen Sie das Vela-Wallet-Chain-Setup-Tool, um sie bereitzustellen, und prüfen Sie dann erneut.",
+   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
    "openChainSetupTool": "Chain-Setup-Tool öffnen",
    "recheck": "Erneut prüfen",
    "chainIdLabel": "Chain-ID: {{chainId}}",

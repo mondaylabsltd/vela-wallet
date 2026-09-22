@@ -39,9 +39,14 @@
 		<span>{panel.reset}</span>
 	</button>
 	{#if panel.guide !== undefined}
+		<!--
+			Spec 081 FR-004: this said "Self-hosting guide →" and opened the
+			repository root — a person looking for how to run these services
+			landed on a source tree. The guide is a page, and this is it.
+		-->
 		<a
 			class="guide"
-			href="https://github.com/mondaylabsltd/vela-wallet"
+			href="https://getvela.app/docs/self-hosting"
 			target="_blank"
 			rel="noreferrer noopener">{panel.guide}</a
 		>

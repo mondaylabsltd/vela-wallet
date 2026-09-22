@@ -37,7 +37,7 @@ computed from your keys, not from the chain.
 ## Adding another network
 
 You can add any EVM network under **Settings → Networks**, provided it has what
-a Vela wallet needs: eleven standard contracts (the ERC-4337 EntryPoint v0.7,
+a Vela wallet needs: twelve standard contracts (the ERC-4337 EntryPoint v0.7,
 the Safe v1.4.1 contracts, Safe's 4337 and passkey modules, MultiSend,
 Multicall3 and two deterministic deployers) and the **EIP-7951 / RIP-7212** precompile that
 verifies passkey signatures at address `0x100`. The wallet checks all of them,
@@ -50,9 +50,11 @@ The precompile is a hard requirement. Its address is part of how every Vela
 address is computed, so there is no fallback verifier and no way to deploy one
 later. If a chain has the precompile but is missing some of the contracts,
 [chain setup](/chain-setup) shows what is missing and deploys what anyone can
-deploy. One gap in the check: a wallet with more than one key also needs Safe's
-passkey signer factory on the network, which isn't checked yet; without it, only
-the first key can sign there.
+deploy. Two of the twelve contracts it checks — Safe's passkey signer factory
+and the signer code that factory deploys — matter only to a wallet holding more
+than one key, and the check says so per contract: without them a one-key wallet
+works normally, while a wallet whose address came from two to seven keys cannot
+be deployed on that network at all.
 
 ## How a transaction is paid for
 

@@ -1,7 +1,7 @@
 ---
 title: Gửi & nhận
 description: "Cách nhận và gửi bằng Vela — một địa chỉ trên mọi mạng, gửi cho một hay nhiều người, tên người nhận lấy từ đâu, bạn xác nhận những gì, và relay chuyển tiền của bạn ra sao."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -46,8 +46,14 @@ Khi bạn nhập một địa chỉ, Vela tra tên cho nó: trước hết trong
 Vela (tên của một ví Vela khác), sau đó trong bản ghi ngược của `.bnb`, `.arb`, `.g`,
 Basename và ENS, đọc trực tiếp từ từng chuỗi. Việc tra chỉ đi một chiều — nó đặt tên
 cho địa chỉ bạn đã nhập. Gõ một cái tên như `alice.eth` sẽ không tra ra địa chỉ.
-**Danh bạ** bạn đã lưu cũng hiện tên. Hãy coi tên là gợi ý, không phải bằng chứng: bản
-ghi ngược hay tên ví Vela là do chính người kiểm soát địa chỉ đó đặt.
+**Danh bạ** bạn đã lưu cũng hiện tên.
+
+Tên lấy từ những bản ghi ngược đó chỉ được hiện nếu nó **phân giải xuôi trở lại đúng địa
+chỉ ấy**. Ai cũng có thể đặt bản ghi ngược của mình thành bất kỳ chuỗi ký tự nào, nên
+riêng bản ghi ấy không chứng minh được gì; ví hỏi dịch vụ tên xem cái tên đó trỏ tới địa
+chỉ nào, và chỉ hiện tên khi hai bên khớp nhau. Nếu không kiểm tra được — điểm cuối
+không trả lời, resolver lỗi — bạn sẽ thấy địa chỉ và không có tên, chứ không bao giờ
+thấy một cái tên chưa được kiểm tra.
 
 ### Token trả phí và tốc độ
 

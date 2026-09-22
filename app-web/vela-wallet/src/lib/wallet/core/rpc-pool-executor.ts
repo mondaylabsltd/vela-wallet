@@ -3,7 +3,7 @@
  *
  * Ported from src/services/wallet-state-core/rpc-pool-executor.ts @ c13e89d4
  * (spec 025). Execution here, meaning in Rust: this file performs the fetch,
- * applies the timeout, sets `X-Rpc-Url`, reads the clock, draws the jitter
+ * applies the timeout, reads the clock, draws the jitter
  * and writes the ban map — and never decides what any of it means. Which
  * endpoint next, ban vs cool-down vs deliver, 401 vs 429, permanent vs
  * transient vs range cap, how many passes: all the core's.
@@ -187,7 +187,8 @@ export function createRpcPoolExecutor(registry: RpcPoolCallRegistry): RpcPoolExe
 							operation.url,
 							operation.method,
 							held.params,
-							operation.x_rpc_url ? { 'X-Rpc-Url': operation.x_rpc_url } : undefined,
+							// Spec 081 FR-007: never forward the user's RPC endpoint.
+							undefined,
 							operation.timeout_ms
 						)
 					: // The caller is already gone. Report the endpoint as failing so

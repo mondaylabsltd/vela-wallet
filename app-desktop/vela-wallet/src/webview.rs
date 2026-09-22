@@ -289,6 +289,32 @@ pub fn reload() {
     });
 }
 
+/// Forget every site this window has browsed (spec 081 FR-017).
+///
+/// The wallet's own records live in one JSON document, but the in-app browser
+/// is a real web view on the platform's DEFAULT data store: cookies,
+/// localStorage, IndexedDB, service workers and the HTTP cache for every dApp
+/// the person opened, kept by WKWebView / WebView2 / WebKitGTK and reachable
+/// from nothing in `executor::storage`. An erase that swept the document and
+/// left that behind would leave the person still signed in to the exchanges
+/// and dApps they visited, on a machine they had just been told was wiped.
+///
+/// Returns whether the platform was actually asked. `false` means there is no
+/// web view in this process — the browser column was never opened — and there
+/// is no portable way to reach the platform's store without one; the caller
+/// logs that rather than claiming a clear it did not make. It is deliberately
+/// NOT part of the erase's verification, which is over the state document:
+/// a browser that was never opened this session has nothing on screen to
+/// contradict, and failing the whole erase over an absent web view would tell
+/// people their wallet records survived when they did not.
+pub fn clear_browsing_data() -> bool {
+    BROWSER.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .is_some_and(|browser| browser.view.clear_all_browsing_data().is_ok())
+    })
+}
+
 /// The document the browser is on, whole. `None` before the first page.
 ///
 /// The URL and not the origin: the permissions machine derives its own origin

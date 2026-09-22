@@ -1,7 +1,7 @@
 ---
 title: Reti e commissioni
 description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ calcolato dalle tue chiavi, non dalla chain.
 ## Aggiungere un'altra rete
 
 Puoi aggiungere qualsiasi rete EVM in **Impostazioni → Reti**, purché abbia ciò
-che serve a un wallet Vela: undici contratti standard (l'EntryPoint ERC-4337 v0.7,
+che serve a un wallet Vela: dodici contratti standard (l'EntryPoint ERC-4337 v0.7,
 i contratti Safe v1.4.1, i moduli 4337 e passkey di Safe, MultiSend, Multicall3 e
 due deployer deterministici) e il precompilato **EIP-7951 / RIP-7212** che verifica le firme
 delle passkey all'indirizzo `0x100`. Il wallet li controlla tutti, compresa una
@@ -51,10 +51,12 @@ Il precompilato è un requisito rigido. Il suo indirizzo fa parte del calcolo di
 ogni indirizzo Vela, quindi non c'è un verificatore di riserva e non c'è modo di
 deployarne uno in seguito. Se una chain ha il precompilato ma le manca qualche
 contratto, la [configurazione della chain](/it/chain-setup) mostra cosa manca e fa
-il deploy di ciò che chiunque può deployare. Una lacuna nel controllo: un wallet
-con più di una chiave ha bisogno anche della factory dei firmatari passkey di Safe
-su quella rete, che per ora non viene controllata; senza di essa, lì può firmare
-solo la prima chiave.
+il deploy di ciò che chiunque può deployare. Due dei dodici contratti che
+controlla — la factory dei firmatari passkey di Safe e il codice del firmatario
+che quella factory distribuisce — contano solo per un wallet che ha più di una
+chiave, e il controllo lo dice contratto per contratto: senza di essi un wallet
+con una sola chiave funziona normalmente, mentre un wallet il cui indirizzo nasce
+da due a sette chiavi non si può proprio distribuire su quella rete.
 
 ## Come si paga una transazione
 

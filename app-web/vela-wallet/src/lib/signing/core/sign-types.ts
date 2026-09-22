@@ -39,7 +39,17 @@ export type SignEffect = { id: number; operation: SignOperation };
  * the seam is the contract and not one implementation's shape.
  */
 export interface SignResponder {
-	sendResponse(id: string, result?: unknown, error?: { code: number; message: string }): void;
+	/**
+	 * `error.kind` is the core's own vocabulary, passed through because a
+	 * transport sometimes has to act on WHICH refusal this was — a window
+	 * showing a blocked request (spec 081) stays open to explain it, while every
+	 * other answer closes it.
+	 */
+	sendResponse(
+		id: string,
+		result?: unknown,
+		error?: { code: number; message: string; kind?: SignErrorKind }
+	): void;
 }
 
 export interface SignShellPorts {
@@ -106,6 +116,10 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			return `Unsupported non-optional capabilities: ${detail ?? ''}`;
 		case 'unlimited_approval':
 			return `Blocked: this would grant an unlimited approval (${detail ?? ''}). Set a finite amount and try again.`;
+		case 'self_call_blocked':
+			// Spec 081: refused by the wallet, not by the person. The sheet
+			// explains it in the reader's language; this is the dApp's copy.
+			return `Blocked: this request would change who controls the wallet (${detail ?? ''}).`;
 		case 'funding_cancelled':
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':

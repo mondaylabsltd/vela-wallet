@@ -152,6 +152,14 @@
 			sendResponse: (_id, result, error) => {
 				owing = null;
 				void answerRequest(incoming.rid, error ? { error } : { result });
+				/*
+				 * Spec 081: a request the core refuses outright is answered the
+				 * moment it arrives, so the page never hangs — but the sheet is
+				 * still explaining WHY to the person in front of us. Closing 400ms
+				 * later would take the explanation away before it could be read.
+				 * Their dismissal closes this window instead.
+				 */
+				if (error?.kind === 'self_call_blocked') return;
 				closeSoon();
 			}
 		});
@@ -200,6 +208,23 @@
 	 * answer: if so, reload into it (a fresh page per request); if not, the
 	 * worker dismisses the panel and this page closes itself as a backstop.
 	 */
+	/*
+	 * Spec 081: a refused request keeps this window open after its answer has
+	 * gone out, so the person can read why (see `sendResponse`). Their dismissal
+	 * hides the sheet — and then there is nothing left here to show.
+	 *
+	 * `sheetSeen` is what makes this safe: the view is 'hidden' for the moment
+	 * between the answer and the first render too, and closing on THAT is how
+	 * the explanation disappeared before anyone could read it.
+	 */
+	let sheetSeen = $state(false);
+	$effect(() => {
+		if (signRequest.view.surface !== 'hidden') sheetSeen = true;
+	});
+	$effect(() => {
+		if (!owing && sheetSeen && signRequest.view.surface === 'hidden') closeSoon();
+	});
+
 	function closeSoon(): void {
 		setTimeout(() => {
 			if (!panel) {

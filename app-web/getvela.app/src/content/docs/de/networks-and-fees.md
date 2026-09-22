@@ -1,7 +1,7 @@
 ---
 title: Netzwerke und Gebühren
 description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ Schlüsseln berechnet wird, nicht aus der Chain.
 ## Ein weiteres Netzwerk hinzufügen
 
 Unter **Einstellungen → Netzwerke** kannst du jedes EVM-Netzwerk hinzufügen, sofern
-es hat, was eine Vela-Wallet braucht: elf Standardverträge (den ERC-4337-EntryPoint
+es hat, was eine Vela-Wallet braucht: zwölf Standardverträge (den ERC-4337-EntryPoint
 v0.7, die Safe-v1.4.1-Verträge, das 4337- und das Passkey-Modul von Safe, MultiSend,
 Multicall3 und zwei deterministische Deployer) und das **EIP-7951/RIP-7212**-Precompile, das
 Passkey-Signaturen an der Adresse `0x100` prüft. Die Wallet prüft all das –
@@ -51,10 +51,13 @@ Das Precompile ist eine harte Voraussetzung. Seine Adresse fließt in die Berech
 jeder Vela-Adresse ein, deshalb gibt es keinen Ersatz-Verifizierer und keine
 Möglichkeit, später einen bereitzustellen. Hat eine Chain das Precompile, fehlen ihr
 aber einige Verträge, zeigt die [Chain-Einrichtung](/de/chain-setup), was fehlt, und
-stellt bereit, was jeder bereitstellen kann. Eine Lücke in der Prüfung: Eine Wallet
-mit mehr als einem Schlüssel braucht in dem Netzwerk außerdem die
-Passkey-Signer-Factory von Safe, die noch nicht geprüft wird; ohne sie kann dort nur
-der erste Schlüssel signieren.
+stellt bereit, was jeder bereitstellen kann. Zwei der zwölf Verträge, auf die sie
+prüft – die Passkey-Signer-Factory von Safe und der Signer-Code, den diese Factory
+bereitstellt –, sind nur für eine Wallet mit mehr als einem Schlüssel von Belang, und
+die Prüfung sagt das für jeden Vertrag einzeln: Ohne sie funktioniert eine Wallet mit
+einem Schlüssel ganz normal, während eine Wallet, deren Adresse aus zwei bis sieben
+Schlüsseln entstanden ist, in diesem Netzwerk überhaupt nicht bereitgestellt werden
+kann.
 
 ## Wie eine Transaktion bezahlt wird
 

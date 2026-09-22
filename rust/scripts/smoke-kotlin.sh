@@ -49,7 +49,7 @@ if [ ! -f "$LIB_FILE" ]; then
 fi
 
 echo "smoke-kotlin: generating Kotlin bindings"
-cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language kotlin --out-dir bindings/kotlin --no-format
 
 OUT="target/harness-kotlin"

@@ -272,7 +272,7 @@ export async function poolRpcCall(
 	return route('rpc', method, params, chainId);
 }
 
-/** A bundler call; `X-Rpc-Url` is the core's verified fastest-RPC pick. */
+/** A bundler call. Since spec 081 the pick is never sent to the relay. */
 export async function poolBundlerCall(
 	method: string,
 	params: unknown[],
@@ -305,7 +305,7 @@ export async function getActiveBundlerBaseUrl(chainId: number): Promise<string> 
 	});
 }
 
-/** The pool's own ranking for `X-Rpc-Url` / fork seeding (invariant ②). */
+/** The pool's own ranking — used locally for fork seeding (spec 081: not sent). */
 export async function getChainRpcUrl(chainId: number): Promise<string | null> {
 	await ensureReady();
 	const callId = `rpc-url:${chainId}:${(sequence += 1)}`;

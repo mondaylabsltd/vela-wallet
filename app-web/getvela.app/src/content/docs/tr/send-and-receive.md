@@ -1,7 +1,7 @@
 ---
 title: Gönderme ve alma
 description: "Vela ile nasıl para alınır ve gönderilir — her ağda tek adres, bir ya da birçok kişiye gönderim, alıcıların adlarının nereden geldiği, neyi onayladığınız ve relay'in paranızı nasıl taşıdığı."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -47,9 +47,14 @@ Bir adres girdiğinizde Vela onun için bir ad arar: önce kendi kayıt defterin
 (başka bir Vela cüzdanının adı), sonra `.bnb`, `.arb`, `.g`, Basename ve ENS ters
 kayıtlarında; hepsini doğrudan ilgili zincirden okur. Bu tek yönlüdür — girdiğiniz
 bir adrese ad verir. `alice.eth` gibi bir ad yazmak, adres araması yapmaz.
-Kaydettiğiniz **kişiler** de adlarıyla görünür. Bir adı kanıt değil, ipucu olarak
-görün: ters kayıt ya da Vela cüzdan adı, o adresi kontrol eden kişi tarafından
-seçilir.
+Kaydettiğiniz **kişiler** de adlarıyla görünür.
+
+Bu ters kayıtlardan gelen bir ad, yalnızca **ileri yönde aynı adrese çözülüyorsa**
+gösterilir. Herkes kendi ters kaydına istediği metni yazabilir, yani kayıt tek başına
+hiçbir şey kanıtlamaz; cüzdan ad servisine o adın hangi adresi gösterdiğini sorar ve adı
+yalnızca ikisi uyuştuğunda gösterir. Kontrol yapılamıyorsa — yanıt vermeyen bir uç
+nokta, başarısız olan bir çözümleyici — adresi görürsünüz, adını değil; kontrol
+edilmemiş bir ad hiçbir zaman gösterilmez.
 
 ### Ücret coini ve hız
 

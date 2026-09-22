@@ -110,7 +110,13 @@ struct SettingsSheet: View {
                         // confirm is drawn and the action exists; verifying it
                         // means reading the code, not erasing a device with a
                         // real wallet on it.
-                        onConfirm: { onErase?(); onDismiss() },
+                        //
+                        // Spec 081 FR-017: the sheet does NOT dismiss on
+                        // confirm. The erase verifies before it succeeds, and a
+                        // failed one has to say so where the person is looking;
+                        // a success signs out and leaves this screen entirely,
+                        // so the sheet goes with it either way.
+                        onConfirm: { onErase?() },
                         onCancel: onDismiss
                     )
                 case .feedback:

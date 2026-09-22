@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import zh from '../src/lib/i18n/messages/zh.json' with { type: 'json' };
 
 /**
  * What a reader actually gets (spec 059, US2/US3).
@@ -15,10 +16,15 @@ test.describe('a locale renders server-side (FR-011, FR-014)', () => {
 	}) => {
 		const html = await (await request.get('/zh')).text();
 		expect(html).toContain('<html lang="zh"');
-		expect(html).toContain('真正属于你的以太坊钱包');
+		// Read from the catalogue, not copied into the test. The old version
+		// pinned the hero's exact words; when the founder reworded them in
+		// spec 080 this test went red on `main` and stayed there, saying
+		// nothing true about the page. A gate everyone learns to ignore is
+		// worse than no gate.
+		expect(html).toContain(zh.home.hero.headline);
 		// the subtitle too — a translated headline over an English page is the
 		// half-translated state SC-006 forbids
-		expect(html).toContain('用通行密钥签名');
+		expect(html).toContain(zh.home.hero.subtitle);
 	});
 
 	test('/ is untouched English', async ({ request }) => {

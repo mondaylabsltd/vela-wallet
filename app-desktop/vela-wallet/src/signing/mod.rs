@@ -132,6 +132,11 @@ pub struct SigningStrings {
     pub error_generic: SharedString,
     pub error_network: SharedString,
     pub error_unlimited: SharedString,
+    /// Spec 081: the request would have changed who controls the account.
+    pub blocked_title: SharedString,
+    pub blocked_body: String,
+    pub blocked_leg_body: String,
+    pub blocked_safe_tx: SharedString,
     pub funding_lead: String,
     /// The gas-account top-up, drawn IN the sheet (never a second modal).
     pub funding_title: SharedString,
@@ -146,6 +151,15 @@ pub struct SigningStrings {
     pub warn_permit_cant_cap: SharedString,
     pub warn_best_effort: SharedString,
     pub warn_verified_abi: SharedString,
+    /// An incomplete decode, in the words the phones already use for it. The
+    /// desktop used to borrow `warn_verified_abi` here, which says the
+    /// opposite: that there is no descriptor at all (spec 081 FR-008).
+    pub warn_partial: SharedString,
+    /// Where a fetched description came from, said once, under the fields.
+    /// Its corpus key lands with spec 081's i18n pass
+    /// (`specs/081-audit-product-gaps/pending-corpus/descriptor-provenance.json`);
+    /// until then `t` echoes it, as it does any missing key.
+    pub warn_descriptor_fetched: SharedString,
     pub warn_sim_unavailable: SharedString,
     /// The two words the simulated balance block needs beyond its title: what
     /// an unverified inflow is called (never its amount — a site can emit any
@@ -320,6 +334,14 @@ impl SigningStrings {
             error_generic: loc.t("send.txErrorGeneric"),
             error_network: loc.t("send.lock.netNotFound"),
             error_unlimited: a("unlimitedDisabled"),
+            blocked_title: s("selfCallBlockedTitle"),
+            blocked_body: loc
+                .t("componentsUi.signing.selfCallBlockedBody")
+                .to_string(),
+            blocked_leg_body: loc
+                .t("componentsUi.signing.selfCallBlockedLegBody")
+                .to_string(),
+            blocked_safe_tx: s("selfCallBlockedSafeTx"),
             funding_lead: loc.t("componentsUi.funding.lead").to_string(),
             funding_title: loc.t("componentsUi.funding.title"),
             funding_address_label: loc.t("componentsUi.funding.addressLabel"),
@@ -334,6 +356,8 @@ impl SigningStrings {
             warn_permit_cant_cap: a("permitCantCap"),
             warn_best_effort: s("bestEffortWarning"),
             warn_verified_abi: s("verifiedAbiWarning"),
+            warn_partial: s("partialWarning"),
+            warn_descriptor_fetched: s("descriptorFetchedWarning"),
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),
             sim_no_change: s("simResultNoChange"),

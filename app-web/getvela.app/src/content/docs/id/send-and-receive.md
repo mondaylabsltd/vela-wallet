@@ -1,7 +1,7 @@
 ---
 title: Kirim & terima
 description: "Cara menerima dan mengirim dengan Vela — satu alamat di semua jaringan, mengirim ke satu atau banyak orang, dari mana nama penerima berasal, apa yang Anda konfirmasi, dan bagaimana relay memindahkan dana Anda."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -49,9 +49,15 @@ Saat Anda memasukkan alamat, Vela mencari namanya: pertama di registrinya sendir
 dompet Vela lain), lalu di catatan balik (reverse record) `.bnb`, `.arb`, `.g`,
 Basename, dan ENS, yang dibaca langsung dari tiap chain. Pencarian ini satu arah — ia
 memberi nama pada alamat yang Anda masukkan. Mengetik nama seperti `alice.eth` tidak
-akan mencari alamatnya. **Kontak** yang Anda simpan juga menampilkan namanya. Anggap
-nama sebagai petunjuk, bukan bukti: catatan balik atau nama dompet Vela dipilih oleh
-siapa pun yang mengendalikan alamat itu.
+akan mencari alamatnya. **Kontak** yang Anda simpan juga menampilkan namanya.
+
+Nama dari catatan balik itu hanya ditampilkan kalau **resolusi majunya menunjuk ke
+alamat yang sama**. Siapa pun bisa mengisi catatan baliknya sendiri dengan teks apa
+saja, jadi catatan itu sendiri tidak membuktikan apa-apa; dompet bertanya ke layanan
+nama, alamat mana yang ditunjuk nama tersebut, dan menampilkan namanya hanya ketika
+keduanya cocok. Kalau pemeriksaan itu tidak bisa dilakukan — endpoint yang tidak
+menjawab, resolver yang gagal — Anda melihat alamatnya tanpa nama, tidak pernah nama
+yang belum diperiksa.
 
 ### Koin biaya dan kecepatan
 

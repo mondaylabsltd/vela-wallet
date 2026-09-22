@@ -107,16 +107,14 @@ green only when the endpoint names the right service and reports
 | Chain data | `ethereum-data` |
 | Exchange rates | not checked by name — must return a USD-based rate list |
 
-How well each app honours these today:
+All four apps honour all four fields, and a changed endpoint takes effect on
+the next call rather than the next launch: every path — creating a wallet,
+signing in, looking up a name for an address — reads the endpoint at the moment
+it uses it. On iOS the passkey index can also be changed on the sign-in screen
+when the default is unreachable.
 
-| App | Service endpoints | Per-network RPC |
-| --- | --- | --- |
-| Web and extension | Chain data, relay and fiat rates. The passkey index is used to look up names, but creating a wallet and signing in still use Vela's index | Yes |
-| Desktop | All four; a new passkey index takes effect after you restart or sign out | Yes |
-| Android | All four, except that looking up names for addresses still asks Vela's index | Yes |
-| iOS | **Not yet**: the page shows placeholder values and does not save. The passkey index can be changed on the sign-in screen when the default is unreachable | Read-only |
-
-These gaps are bugs, and they are tracked.
+(Until September 2026 there were four exceptions to that, the worst of them an
+iOS page that showed placeholder values and saved nothing. They are fixed.)
 
 ## Run your own relay
 
@@ -153,8 +151,8 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Prefer the published image: building from source with `docker compose up
---build` may fail on the current Dockerfile. Without Docker,
+Either works: the published image is quickest, and `docker compose up --build`
+builds the same thing from the source you can read. Without Docker,
 `cargo run --release --bin vela-relay` runs it directly.
 
 **Cloudflare Workers**
@@ -215,9 +213,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` matters even though the server's example file
-leaves it out: without it the server hands out challenges the contract rejects,
-and every registration fails.
+`P256_INDEX_DOMAIN_REGISTRY` is the one people miss: without it the server
+hands out challenges the contract rejects, and every registration fails. It is
+in `.env.example`, and it must match the deployed contract's own
+`DOMAIN_REGISTRY` — from registry VERSION 12 the challenge domain is fixed at
+deployment, so it does not move when the contract is redeployed.
 
 **Run and check**
 
@@ -229,8 +229,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 The server listens on plain HTTP (port 11256 by default); put a TLS proxy in
-front of it, since the wallet only accepts `https://` endpoints. The source
-Dockerfile may not build as of this writing; building with Cargo does.
+front of it, since the wallet only accepts `https://` endpoints. `docker build
+-f p256-index-server/Dockerfile .` works from a clean clone too; copy
+`.env.example` to `p256-index-server/.env` first if you use Compose.
 
 **If no index answers at all**, existing wallets still work: on sign-in the app
 reads the registry contract on Gnosis (then Ethereum) through your RPC nodes. A
@@ -299,9 +300,9 @@ Apple and Google only let apps signed by Vela use `getvela.app` passkeys.
 Vela runs on any EVM chain that has the P-256 precompile and the standard
 contracts it checks for. [Chain setup](/chain-setup) tells you what a chain is
 missing and deploys what anyone can deploy; [networks & fees](/docs/networks-and-fees)
-explains the requirements. One gap: a wallet with more than one key also needs
-Safe's passkey signer factory on that chain, which the check doesn't look for
-yet — without it, only the first key can sign there.
+explains the requirements. The check includes the two contracts a wallet with
+more than one key needs, and marks them as such — a chain without them still
+runs a one-key wallet.
 
 ## What still points at Vela after all this
 

@@ -1,7 +1,7 @@
 ---
 title: Audits et problèmes connus
 description: "Chaque contrat dont Vela dépend, qui a audité quelle version, si la version auditée est bien celle qui est déployée, les constats ouverts que nous surveillons, et ce qui n'a pas été audité du tout."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 « Audité » est une affirmation qui porte sur un code précis, dans une version
@@ -125,11 +125,11 @@ Donc, si une opération retire un propriétaire, une opération signée par ce
 propriétaire et placée plus loin dans le même lot passe quand même la validation
 et s'exécute. Safe a reconnu le problème et n'a pas modifié la v0.3.0.
 
-Les apps Vela ne construisent jamais de changement de propriétaires : Vela
-lui-même ne déclenche donc jamais ce cas. Il compte quand même : une dApp peut
-demander à votre portefeuille de changer ses propres propriétaires (voir « Lacunes »
-plus bas), et quiconque retire une clé compromise via un autre outil Safe ne
-pourrait pas compter sur sa neutralisation dans le même lot.
+Les apps Vela ne construisent jamais de changement de propriétaires, et une dApp
+qui en demande un est refusée d'emblée : Vela lui-même ne déclenche donc jamais ce
+cas. Cela compte encore pour quiconque retire une clé compromise via un autre outil
+Safe : cette personne ne pourrait pas compter sur la neutralisation de cette clé dans
+le même lot.
 
 ### Interception d'une opération signée (EntryPoint avant la v0.9)
 
@@ -160,22 +160,11 @@ Ce ne sont pas des constats sur les contrats, mais des endroits où le portefeui
 vous protège moins que vous ne pourriez le croire. Chacun est suivi en vue d'une
 correction :
 
-- **Les appels de votre portefeuille vers lui-même ne sont pas bloqués.** Une dApp
-  peut demander `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` ou
-  `setGuard` sur votre propre Safe ; n'importe lequel de ces appels, signé une seule
-  fois, livre le compte. Vela décode ces appels mais ne les arrête pas. Refusez
-  toute demande dont la cible est votre propre adresse.
 - **Le garde-fou sur les approbations n'arrête que les montants « illimités »**
   (2^200 ou plus ; 2^152 pour Permit2). Une approbation finie mais élevée, un
   permit signé ou un `setApprovalForAll` de NFT reçoivent un avertissement, pas un
   blocage.
-- **Les descripteurs récupérés ne sont pas authentifiés.** Un descripteur provenant
-  du serveur de données de chaîne s'affiche comme « vérifié » s'il correspond au
-  contrat ; il n'est fiable qu'autant que ce serveur.
 - **La page de signature indépendante n'est encore reliée** à aucune app.
-- **La vérification des réseaux ne cherche pas la fabrique de signataires passkey
-  de Safe**, dont les clés deux à sept ont besoin ; sur un réseau ajouté sans elle,
-  seule la première clé peut signer.
 - **Le site web charge un script d'analyse d'audience tiers** sur le même domaine
   que les passkeys. Le site interdit à ses pages d'utiliser les passkeys (un en-tête
   Permissions-Policy), et tient ce script à l'écart de la page qui détient une clé.

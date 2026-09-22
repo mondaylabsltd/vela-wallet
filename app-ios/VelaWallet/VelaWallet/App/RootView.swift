@@ -61,6 +61,14 @@ struct RootView: View {
     @State private var identiconViewer: IdenticonSubject?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
+    /// An erase ran and these keys survived (spec 081 FR-017).
+    ///
+    /// Never `Some([])`: an empty survivor list is the success, and the app has
+    /// signed out by then. A non-empty one keeps the person signed in with the
+    /// reason in the erase sheet's own body, because telling somebody their
+    /// phone is clean while their history is still on it is the one outcome
+    /// this feature cannot have.
+    @State private var eraseFailed: [String]?
     /// Naming a group — new, or renaming the one it names.
     ///
     /// The platform's own prompt, which is the shape the explore tab's
@@ -1681,7 +1689,14 @@ struct RootView: View {
     /// the networks page uses — so one endpoint store has one writer.
     private func commitRescueRpc() {
         guard let chainId = rescueChain else { return }
-        settings.editOverride(chainId: chainId, value: rpcDraft)
+        // The core keeps its per-network drafts on an OPEN card and drops an
+        // edit for a chain whose card was never seeded. The networks page
+        // seeds it by expanding a row; this sheet is the same edit through
+        // another door, so it has to open the card before it can type into it
+        // — and the probe that opening starts is what the deferred-save gate
+        // then waits on.
+        settings.expandNetwork(chainId: chainId)
+        settings.editOverride(chainId: chainId, field: .rpc, value: rpcDraft)
         settings.blurOverride(chainId: chainId)
         wallet.refresh(pull: true)
     }
@@ -2634,6 +2649,12 @@ struct RootView: View {
         var model = base
         if let view = settings.networkAdmin, view.loaded {
             model = SettingsLive.withNetworks(view, on: model, loc: loc)
+            // The last two pages drawn over live machinery (spec 081 FR-001):
+            // 端点 offered a dead host as the person's passkey index with an
+            // invented latency beside it, and 供应商 prefilled a mock API key.
+            // Both are the same machine's view; neither had a projection.
+            model = SettingsLive.withEndpoints(view, on: model, loc: loc)
+            model = SettingsLive.withProviders(view, on: model, loc: loc)
         }
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
@@ -2681,6 +2702,22 @@ struct RootView: View {
                 ?? ChainCatalog.chains.count,
             on: model, loc: loc
         )
+        // A partial wipe names what stayed, in the sheet itself (spec 081
+        // FR-017, the rule 028 set for the web and Android): the person is
+        // still signed in, and the button is still live so they can retry.
+        if let left = eraseFailed, !left.isEmpty {
+            model.eraseSheet = ConfirmSheetModel(
+                title: model.eraseSheet.title,
+                body: model.eraseSheet.body + "\n\n" + left.joined(separator: ", "),
+                confirm: model.eraseSheet.confirm,
+                cancel: model.eraseSheet.cancel,
+                danger: true,
+                note: model.eraseSheet.note,
+                callout: CalloutModel(
+                    tone: .danger, text: loc.t(I18nKeys.SettingsUi.eraseFailed)
+                )
+            )
+        }
         return model
     }
 
@@ -2749,30 +2786,46 @@ struct RootView: View {
         wallet.refresh(pull: true)
     }
 
-    /// 抹除此设备 — every key this app owns, and then the door.
+    /// 抹除此设备 — everything this device holds, and then the door
+    /// (spec 081 FR-017, `contracts/erase-device.md`).
     ///
     /// **Never run on the founder's phone.** It is wired because a drawn
     /// destructive action that does nothing is worse than one that works;
     /// verifying it means reading this code, not erasing a device with a real
     /// wallet on it.
+    ///
+    /// ## What this replaced, and why the replacement is a different shape
+    ///
+    /// The old body was eighteen hand-written key names. It missed about
+    /// fourteen groups — the account records, the pending uploads, the service
+    /// endpoints, the fee tier, the hidden-balance flag, the banned endpoints,
+    /// the receive watches, the trust marks, the browsing history, every
+    /// `vela.perm.*` grant — and it never touched `WKWebsiteDataStore`, so
+    /// every dApp the person had browsed kept its cookies and localStorage on
+    /// a phone they had just been told was wiped. It also called
+    /// `session.signOut()`, which only OPENS the confirmation: the erase ended
+    /// with a wiped phone sitting under a modal asking whether to sign out.
+    ///
+    /// Four steps now, in the contract's order: sweep, verify, and only on a
+    /// clean verification end the session — `signOut` **and**
+    /// `signOutConfirmed`, so the app restarts as new. On failure the person
+    /// stays signed in with what survived named in the sheet itself.
     private func eraseThisDevice() {
-        // Everything this app owns, by the keys it owns them under. The
-        // signed-in wallet goes through `AccountStore`, which is the one writer
-        // of those two keys.
-        for key in [
-            VelaStore.Key.contacts, VelaStore.Key.contactsDismissed,
-            VelaStore.Key.contactGroups, VelaStore.Key.customNetworks,
-            VelaStore.Key.networkConfig, VelaStore.Key.rpcProviders,
-            VelaStore.Key.displayCurrency, VelaStore.Key.balanceCache,
-            VelaStore.Key.customTokens, VelaStore.Key.transactionHistory,
-            VelaStore.Key.fiatRates, VelaStore.Key.fiatFeedAddrs, VelaStore.Key.fxRates,
-            VelaStore.Key.theme, VelaStore.Key.language, VelaStore.Key.localePrefs,
-            VelaStore.Key.avatarStyle, VelaStore.Key.textScale,
-        ] {
-            shelf.writeString(key, nil)
+        Task { @MainActor in
+            let survivors = await DeviceStorage.eraseDevice(shelf)
+            guard survivors.isEmpty else {
+                eraseFailed = survivors
+                return
+            }
+            eraseFailed = nil
+            storageTick += 1
+            // Awaited now that the erase is a task: `AccountStore` is an actor,
+            // and the two keys it owns must be gone before the session machine
+            // is told, or the sign-out reads an account list the sweep left.
+            await accounts.clearSignedInWallet()
+            session.signOut()
+            session.signOutConfirmed()
         }
-        accounts.clearSignedInWallet()
-        session.signOut()
     }
 
     /// An account row in the switcher.

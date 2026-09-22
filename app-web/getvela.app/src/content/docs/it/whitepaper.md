@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -172,11 +172,12 @@ Le chiamate e i messaggi EIP-712 vengono decodificati con i descrittori
 **ERC-7730** — integrati nell'app per i contratti più comuni, scaricati dal
 servizio dei dati delle chain o abbinati a forme standard dei token — e poi, come
 ultima risorsa, con un database pubblico di selettori, etichettato come best
-effort. Tutto il resto riceve un avviso esplicito di firma alla cieca. I
-descrittori scaricati non sono autenticati crittograficamente. Un'approvazione
-on-chain di livello «illimitato» (2^200 o più) non si può inviare finché non la
-riduci; un'approvazione finita ma elevata e i permit firmati vengono mostrati con
-un avviso, ma non bloccati. Dettagli:
+effort. Tutto il resto riceve un avviso esplicito di firma alla cieca. Un
+descrittore scaricato non viene mai etichettato come verificato: quella parola se
+la guadagna solo uno integrato nell'app, o uno scaricato identico a quello.
+Un'approvazione on-chain di livello «illimitato» (2^200 o più) non si può inviare
+finché non la riduci; un'approvazione finita ma elevata e i permit firmati vengono
+mostrati con un avviso, ma non bloccati. Dettagli:
 [firma leggibile](/it/docs/clear-signing).
 
 ### Reti
@@ -184,10 +185,10 @@ un avviso, ma non bloccati. Dettagli:
 Vela integra 24 reti — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
-accetta qualsiasi rete EVM che abbia gli undici contratti che controlla e il
-precompilato EIP-7951 / RIP-7212. (Le chiavi dalla seconda alla settima richiedono anche la
-factory dei firmatari passkey di Safe su quella rete, che il controllo non copre
-ancora.)
+accetta qualsiasi rete EVM che abbia i dodici contratti che controlla e il
+precompilato EIP-7951 / RIP-7212. Due dei dodici sono la factory dei firmatari
+passkey di Safe e il codice del firmatario che distribuisce, che servono solo a un
+wallet con più di una chiave; il controllo li riporta separatamente.
 
 ## Modello di sicurezza
 
@@ -238,27 +239,33 @@ che Vela non è una seconda parte in grado di farlo.
   chiave su ogni rete.
 - **Phishing** — una passkey non si può digitare in un sito falso, e i browser la
   offrono solo alle pagine di getvela.app e dei suoi sottodomini.
-- **dApp malevola** — affrontata dalla firma leggibile e dal controllo sulle
-  approvazioni, con una lacuna seria: una dApp può chiedere una chiamata dal tuo
-  Safe verso se stesso — `enableModule`, `addOwnerWithThreshold`,
-  `setFallbackHandler`, `setGuard` — e una qualsiasi di queste, firmata una sola
-  volta, consegna l'account in modo completo quanto il payload di Bybit. Vela
-  decodifica queste chiamate ma per ora non le blocca. Rifiuta qualsiasi richiesta
-  il cui destinatario sia l'indirizzo del tuo stesso wallet.
+- **dApp malevola** — affrontata dalla firma leggibile, dal controllo sulle
+  approvazioni e da un rifiuto: una richiesta di chiamata dal tuo Safe verso se
+  stesso — `enableModule`, `addOwnerWithThreshold`, `swapOwner`,
+  `setFallbackHandler`, `setGuard` e il resto di quella famiglia — viene bloccata,
+  anche dentro un batch o un `MultiSend`, e così pure qualsiasi ramo che porti un
+  `delegatecall` e una firma di dati tipizzati `SafeTx`. Una qualsiasi di queste,
+  firmata una sola volta, consegnerebbe l'account in modo completo quanto il
+  payload di Bybit, perciò il wallet non te le propone proprio da firmare.
 - **Servizio di backend compromesso** (relay, indice, dati delle chain, tassi di
   cambio) — nessun potere di firma, ma un'influenza reale: rifiuto del servizio,
   descrittori o elenchi di token fuorvianti, tassi di cambio sbagliati che cambiano
   quanto invia un importo in valuta fiat e (per il relay) i tempi e il prezzo del
-  gas visti sopra. I descrittori scaricati non vengono trattati come autenticati, e
-  ogni servizio si può sostituire.
+  gas visti sopra. Una descrizione scaricata dal servizio dei dati delle chain non
+  viene mai definita verificata: quella parola se la guadagna solo una descrizione
+  integrata nell'app, o una scaricata identica a quella, e le altre vengono
+  mostrate con una riga che dice che nulla le ha autenticate. Ogni servizio si può
+  sostituire.
 - **Distribuzione dell'app compromessa** — un deploy web, un aggiornamento
   dell'estensione o una build dell'app manomessi potrebbero presentarti una
   transazione malevola da firmare. È la classe di attacchi di
   [Bybit](/it/docs/bybit-attack). Le mitigazioni oggi sono limitate: la decodifica e
   il controllo sulle approvazioni nell'app stessa, le build macOS notarizzate, e la
   possibilità di compilare da te l'estensione o le app dal codice sorgente (i
-  pacchetti di release hanno checksum SHA-256, non firme). Una pagina di firma
-  indipendente che non condivide il codice dell'app è pronta ma non ancora
+  pacchetti di release hanno checksum SHA-256 e attestazioni di provenienza della
+  build GitHub che nominano il commit e l'esecuzione del workflow; il programma di
+  installazione per Windows continua a non avere una firma del codice). Una pagina
+  di firma indipendente che non condivide il codice dell'app è pronta ma non ancora
   collegata.
 - **Qualsiasi cosa servita dal dominio** — qualsiasi pagina su getvela.app o sui
   suoi sottodomini, compreso uno script che carica, potrebbe chiedere firme alle

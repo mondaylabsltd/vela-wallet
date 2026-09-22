@@ -15,8 +15,8 @@ use support::DomainDriver;
 use vela_core::abi::compute_selector;
 use vela_core::app::clear_signing::{
     ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale, ClearOperation as Op, ClearProbe,
-    ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignType, ClearSigning,
-    ClearSiweBinding, ClearSurface, Event,
+    ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignType,
+    ClearSigning, ClearSiweBinding, ClearSurface, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -374,6 +374,10 @@ fn create2_deploy_renders_calm_with_predicted_address() {
         result.contract_address.as_deref(),
         Some("0x4e59b44847b379578588920ca78fbf26c0b4956c")
     );
+    // No descriptor described this, and nobody has read the init code: the
+    // sheet says what the call IS and claims nothing else (FR-008).
+    assert_eq!(result.provenance, ClearProvenance::None);
+    assert!(!result.verified);
 }
 
 #[test]
@@ -1153,7 +1157,9 @@ fn partial_decode_floors_risk_at_caution() {
     assert!(result.partial);
     assert!(!result.fields.is_empty());
     assert_eq!(result.risk, ClearRisk::Caution);
-    assert!(result.verified, "contract-specific descriptor");
+    // Contract-specific, and fetched: nobody authenticated it (FR-008).
+    assert_eq!(result.provenance, ClearProvenance::Fetched);
+    assert!(!result.verified);
 }
 
 /// An already-expired deadline can't be trusted either — caution, and the
@@ -1306,6 +1312,7 @@ fn best_effort_decode_never_blind_signs_silently() {
     let result = sut.view().result.expect("best-effort result");
     assert_eq!(result.intent, "Mint tokens", "humanized function name");
     assert!(result.best_effort);
+    assert_eq!(result.provenance, ClearProvenance::SelectorDb);
     assert!(!result.verified);
     assert_eq!(result.risk, ClearRisk::Caution, "decoded but unverified");
     assert!(result.contract_name.is_none());
@@ -1356,6 +1363,10 @@ fn permit_typed_data() -> String {
     .to_string()
 }
 
+/// The universal ERC-2612 file as the descriptor service publishes it — and,
+/// word for word, as `clear_signing::permit_descriptor` ships it. A fetched
+/// copy equal to this one is pinned (spec 081 FR-008), so this fixture must
+/// stay an exact mirror: the pinning test is what would catch it drifting.
 fn permit_descriptor() -> String {
     json!({
         "context": { "eip712": {} },
@@ -1363,8 +1374,8 @@ fn permit_descriptor() -> String {
             "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)": {
                 "intent": "Authorize spending of tokens",
                 "fields": [
-                    { "path": "spender", "label": "Spender", "format": "raw", "visible": "always" },
-                    { "path": "value", "label": "Max spending amount", "format": "tokenAmount", "params": { "tokenPath": "@.to" }, "visible": "always" },
+                    { "path": "spender", "label": "Spender", "format": "addressName", "visible": "always" },
+                    { "path": "value", "label": "Max spending amount", "format": "tokenAmount", "params": { "tokenPath": "@.to", "threshold": "0x8000000000000000000000000000000000000000000000000000000000000000" }, "visible": "always" },
                     { "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
                     { "path": "owner", "label": "Owner", "visible": "never" },
                     { "path": "nonce", "label": "Nonce", "visible": "never" },
@@ -1375,8 +1386,14 @@ fn permit_descriptor() -> String {
     .to_string()
 }
 
+/// The ERC-2612 permit is described by bytes that ship with the app (spec 081
+/// T031), so the sheet the wallet shows most often for a signature needs no
+/// round trip at all and can say "verified" honestly. It takes precedence
+/// over the contract's published descriptor: for the standard's own typehash,
+/// the standard's reading is the right one, and it is the one nobody can edit
+/// under us.
 #[test]
-fn eip712_permit_resolves_via_erc2612_fallback() {
+fn eip712_permit_resolves_from_the_built_in_erc2612_descriptor() {
     let mut sut = Sut::new();
     let ops = sut.dispatch(Event::ResolveTypedData {
         typed_data_json: permit_typed_data(),
@@ -1385,32 +1402,16 @@ fn eip712_permit_resolves_via_erc2612_fallback() {
     });
     assert_eq!(ops, vec![Op::Now]);
     let ops = sut.resolve(Res::Clock { now_ms: NOW });
-    assert_eq!(
-        ops,
-        vec![Op::HttpGet {
-            path: format!("/erc7730/eip712/eip155-1/{USDC}.json"),
-        }]
+    assert!(
+        ops.is_empty(),
+        "built in: the permit sheet asks the network for nothing"
     );
-    let ops = sut.resolve(Res::DescriptorFetched {
-        path: format!("/erc7730/eip712/eip155-1/{USDC}.json"),
-        json: None,
-    });
-    assert_eq!(
-        ops,
-        vec![Op::HttpGet {
-            path: "/erc7730/ercs/eip712-erc2612-permit.json".to_owned(),
-        }]
-    );
-    let ops = sut.resolve(Res::DescriptorFetched {
-        path: "/erc7730/ercs/eip712-erc2612-permit.json".to_owned(),
-        json: Some(permit_descriptor()),
-    });
-    assert!(ops.is_empty());
 
     let result = sut.view().result.expect("permit result");
     assert_eq!(result.intent, "Authorize spending of tokens");
     assert_eq!(result.sign_type, ClearSignType::Signature);
-    assert!(!result.verified, "ERC fallback is not contract-specific");
+    assert_eq!(result.provenance, ClearProvenance::BuiltIn);
+    assert!(result.verified, "shipped with the app");
     assert_eq!(result.contract_address.as_deref(), Some(USDC));
 
     let labels: Vec<&str> = result.fields.iter().map(|f| f.label.as_str()).collect();
@@ -1439,10 +1440,11 @@ fn eip712_permit_resolves_via_erc2612_fallback() {
 }
 
 #[test]
-fn eip712_contract_entry_is_keyed_by_typehash_and_verified() {
+fn eip712_contract_entry_is_keyed_by_typehash_and_named() {
     let mut sut = Sut::new();
-    let encode_type =
-        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)";
+    // A message of the contract's own — not the ERC-2612 permit, which this
+    // build describes itself and never asks the server about.
+    let encode_type = "Order(address maker,address taker,uint256 amount)";
     let type_hash = {
         let hash = vela_core::primitives::keccak256(encode_type.as_bytes());
         hash.iter().map(|b| format!("{b:02x}")).collect::<String>()
@@ -1451,21 +1453,39 @@ fn eip712_contract_entry_is_keyed_by_typehash_and_verified() {
     root.insert(
         type_hash,
         json!({
-            "metadata": { "contractName": "USD Coin", "owner": "Circle" },
+            "metadata": { "contractName": "Exchange", "owner": "Somebody" },
             "display": { "formats": {
-                "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)": {
-                    "intent": "Permit",
+                encode_type: {
+                    "intent": "Authorize order",
                     "fields": [
-                        { "path": "spender", "label": "Spender", "format": "addressName" },
+                        { "path": "taker", "label": "Spender", "format": "addressName" },
                     ],
                 },
             } },
         }),
     );
     let body = serde_json::Value::Object(root).to_string();
+    let typed = json!({
+        "types": {
+            "EIP712Domain": [
+                { "name": "name", "type": "string" },
+                { "name": "chainId", "type": "uint256" },
+                { "name": "verifyingContract", "type": "address" },
+            ],
+            "Order": [
+                { "name": "maker", "type": "address" },
+                { "name": "taker", "type": "address" },
+                { "name": "amount", "type": "uint256" },
+            ],
+        },
+        "primaryType": "Order",
+        "domain": { "name": "Exchange", "chainId": 1, "verifyingContract": USDC },
+        "message": { "maker": VITALIK, "taker": SPENDER, "amount": "1000000000" },
+    })
+    .to_string();
 
     sut.dispatch(Event::ResolveTypedData {
-        typed_data_json: permit_typed_data(),
+        typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
     });
@@ -1477,12 +1497,250 @@ fn eip712_contract_entry_is_keyed_by_typehash_and_verified() {
     assert!(ops.is_empty(), "entry matched — no permit fallback fetch");
 
     let result = sut.view().result.expect("entry result");
-    assert_eq!(result.intent, "Permit");
-    assert!(result.verified);
-    assert_eq!(result.contract_name.as_deref(), Some("USD Coin"));
-    assert_eq!(result.owner.as_deref(), Some("Circle"));
+    assert_eq!(result.intent, "Authorize order");
+    // It is about this contract — its name and owner are shown — and it is
+    // still only the descriptor service's word (FR-008).
+    assert_eq!(result.provenance, ClearProvenance::Fetched);
+    assert!(!result.verified);
+    assert_eq!(result.contract_name.as_deref(), Some("Exchange"));
+    assert_eq!(result.owner.as_deref(), Some("Somebody"));
     assert_eq!(result.fields[0].role, ClearFieldRole::Spender);
-    assert_eq!(result.risk, ClearRisk::Caution, "permit intent");
+    assert_eq!(result.risk, ClearRisk::Caution, "an authorization");
+}
+
+// ---------------------------------------------------------------------------
+// Descriptor provenance (spec 081 FR-008)
+//
+// One test per value of `ClearProvenance`, because "verified" is now a reading
+// of it and of nothing else: the wallet used to print that word over any
+// contract-specific descriptor, most of which arrive over plain HTTP from a
+// base URL the person can edit.
+// ---------------------------------------------------------------------------
+
+/// A descriptor compiled into this build. Changing what the sheet says would
+/// mean shipping a release, so the word "verified" is earned.
+#[test]
+fn a_built_in_descriptor_is_verified() {
+    let mut sut = Sut::new();
+    let weth = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let ops = resolve_tx(&mut sut, weth, "0xd0e30db0", "0xde0b6b3a7640000");
+    assert!(ops.is_empty(), "built in: nothing to fetch");
+
+    let result = sut.view().result.expect("wrap result");
+    assert_eq!(result.intent, "Wrap ETH");
+    assert_eq!(result.provenance, ClearProvenance::BuiltIn);
+    assert!(result.verified);
+}
+
+/// The same descriptor, fetched. Accurate it may well be; authenticated it is
+/// not, and the sheet may not say otherwise.
+#[test]
+fn a_fetched_contract_descriptor_is_not_verified() {
+    let mut sut = Sut::new();
+    let target = "0x9999999999999999999999999999999999999999";
+    let sig = "stake(uint256 amount)";
+    let selector = compute_selector(sig).expect("selector");
+    let data = format!("{selector}{}", pad_u128(5));
+    resolve_tx(&mut sut, target, &data, "0x0");
+    let descriptor = json!({
+        "metadata": { "contractName": "Staking Pool", "owner": "Somebody" },
+        "display": { "formats": { sig: { "intent": "Stake", "fields": [
+            { "path": "amount", "label": "Amount", "format": "raw" },
+        ] } } }
+    })
+    .to_string();
+    let ops = sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{target}.json"),
+        json: Some(descriptor),
+    });
+    assert!(ops.is_empty());
+
+    let result = sut.view().result.expect("fetched result");
+    assert_eq!(result.intent, "Stake");
+    // Contract-specific — the name is shown — and unauthenticated all the same.
+    assert_eq!(result.contract_name.as_deref(), Some("Staking Pool"));
+    assert_eq!(result.provenance, ClearProvenance::Fetched);
+    assert!(!result.verified);
+}
+
+/// A token-standard shape is the app's own, but it describes the standard's
+/// method, not this contract: it names no contract and vouches for nothing.
+#[test]
+fn a_token_standard_shape_is_graded_as_the_standard_it_is() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    resolve_tx(&mut sut, USDC, &transfer, "0x0");
+    sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        json: None,
+    });
+
+    let result = sut.view().result.expect("transfer result");
+    assert_eq!(result.provenance, ClearProvenance::Standard);
+    assert!(!result.verified);
+    assert!(result.contract_name.is_none());
+}
+
+/// Permit2's messages hand out spending power off-chain, where there is no
+/// transaction to simulate. This build describes them itself (T031).
+#[test]
+fn a_permit2_allowance_is_described_by_the_app_itself() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTypedData {
+        typed_data_json: permit2_single_typed_data(),
+        chain_id: 1,
+        locale: ClearLocale::default(),
+    });
+    assert_eq!(ops, vec![Op::Now]);
+    let ops = sut.resolve(Res::Clock { now_ms: NOW });
+    assert!(ops.is_empty(), "built in: no descriptor fetch, no probes");
+
+    let result = sut.view().result.expect("permit2 result");
+    assert_eq!(result.intent, "Approve");
+    assert_eq!(result.contract_name.as_deref(), Some("Permit2"));
+    assert_eq!(result.provenance, ClearProvenance::BuiltIn);
+    assert!(result.verified);
+
+    let amount = result
+        .fields
+        .iter()
+        .find(|f| f.label == "Amount")
+        .expect("amount field");
+    assert_eq!(amount.value, "1,000 USDC", "details.token binds the amount");
+    let spender = result
+        .fields
+        .iter()
+        .find(|f| f.label == "Spender")
+        .expect("spender field");
+    assert_eq!(spender.role, ClearFieldRole::Spender);
+}
+
+/// A fetched file that says, word for word, what this build ships is pinned:
+/// believing it costs nothing the app has not already committed to. The
+/// grade is of the BYTES — how well they fit this message is `partial`'s
+/// business, and it still says its piece.
+#[test]
+fn a_fetched_file_equal_to_the_built_in_copy_is_pinned() {
+    let mut sut = Sut::new();
+    resolve_dai_style_permit(&mut sut);
+    let ops = sut.resolve(Res::DescriptorFetched {
+        path: "/erc7730/ercs/eip712-erc2612-permit.json".to_owned(),
+        json: Some(permit_descriptor()),
+    });
+    assert!(ops.is_empty());
+
+    let result = sut.view().result.expect("permit result");
+    assert_eq!(result.provenance, ClearProvenance::PinnedMatch);
+    assert!(result.verified, "the bytes are the app's own");
+    assert!(result.partial, "a DAI permit is not an ERC-2612 permit");
+}
+
+/// One byte apart from the built-in copy is a different document, and a
+/// different document is only the server's word.
+#[test]
+fn a_fetched_file_that_differs_is_only_fetched() {
+    let mut sut = Sut::new();
+    resolve_dai_style_permit(&mut sut);
+    let edited = permit_descriptor().replace("Max spending amount", "Amount");
+    let ops = sut.resolve(Res::DescriptorFetched {
+        path: "/erc7730/ercs/eip712-erc2612-permit.json".to_owned(),
+        json: Some(edited),
+    });
+    assert!(ops.is_empty());
+
+    let result = sut.view().result.expect("permit result");
+    assert_eq!(result.provenance, ClearProvenance::Fetched);
+    assert!(!result.verified);
+}
+
+/// DAI's permit shares the primary type name `Permit` and nothing else — it
+/// takes `allowed`, not `value`. It gets the ladder's lower rungs, never the
+/// built-in ERC-2612 descriptor, which is matched on the whole `encodeType`.
+fn resolve_dai_style_permit(sut: &mut Sut) {
+    let dai = "0x6b175474e89094c44da98b954eedeac495271d0f";
+    let typed = json!({
+        "types": {
+            "EIP712Domain": [
+                { "name": "name", "type": "string" },
+                { "name": "chainId", "type": "uint256" },
+                { "name": "verifyingContract", "type": "address" },
+            ],
+            "Permit": [
+                { "name": "holder", "type": "address" },
+                { "name": "spender", "type": "address" },
+                { "name": "nonce", "type": "uint256" },
+                { "name": "expiry", "type": "uint256" },
+                { "name": "allowed", "type": "bool" },
+            ],
+        },
+        "primaryType": "Permit",
+        "domain": { "name": "Dai Stablecoin", "chainId": 1, "verifyingContract": dai },
+        "message": {
+            "holder": "0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1",
+            "spender": SPENDER,
+            "nonce": "0",
+            "expiry": "1790000000",
+            "allowed": true,
+        },
+    })
+    .to_string();
+    sut.dispatch(Event::ResolveTypedData {
+        typed_data_json: typed,
+        chain_id: 1,
+        locale: ClearLocale::default(),
+    });
+    sut.resolve(Res::Clock { now_ms: NOW });
+    let ops = sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/eip712/eip155-1/{dai}.json"),
+        json: None,
+    });
+    assert_eq!(
+        ops,
+        vec![Op::HttpGet {
+            path: "/erc7730/ercs/eip712-erc2612-permit.json".to_owned(),
+        }],
+        "not the standard's Permit: the built-in descriptor does not apply"
+    );
+}
+
+fn permit2_single_typed_data() -> String {
+    json!({
+        "types": {
+            "EIP712Domain": [
+                { "name": "name", "type": "string" },
+                { "name": "chainId", "type": "uint256" },
+                { "name": "verifyingContract", "type": "address" },
+            ],
+            "PermitSingle": [
+                { "name": "details", "type": "PermitDetails" },
+                { "name": "spender", "type": "address" },
+                { "name": "sigDeadline", "type": "uint256" },
+            ],
+            "PermitDetails": [
+                { "name": "token", "type": "address" },
+                { "name": "amount", "type": "uint160" },
+                { "name": "expiration", "type": "uint48" },
+                { "name": "nonce", "type": "uint48" },
+            ],
+        },
+        "primaryType": "PermitSingle",
+        "domain": {
+            "name": "Permit2",
+            "chainId": 1,
+            "verifyingContract": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        },
+        "message": {
+            "details": {
+                "token": USDC,
+                "amount": "1000000000",
+                "expiration": "1790000000",
+                "nonce": "0",
+            },
+            "spender": SPENDER,
+            "sigDeadline": "1790000000",
+        },
+    })
+    .to_string()
 }
 
 #[test]

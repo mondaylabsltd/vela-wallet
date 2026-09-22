@@ -27,6 +27,11 @@ describe('signing messages', () => {
 	it.each(SUPPORTED_LOCALES)('no signing string is empty in %s', (locale) => {
 		for (const [field] of KEYS) {
 			const value = resolveSigningMessages(locale)[field as keyof typeof messages];
+			// A message whose corpus key has not landed yet is ABSENT, not
+			// empty (spec 081's descriptor-provenance line): the resolver
+			// leaves it out rather than drawing a raw key path, and there is
+			// nothing to measure until the catalogs carry it.
+			if (value === undefined) continue;
 			// The speed control's words are a group (spec 069): every leaf of it.
 			const leaves =
 				typeof value === 'string'

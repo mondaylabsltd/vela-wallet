@@ -22,6 +22,7 @@
 //
 
 import Foundation
+import WebKit
 
 enum DeviceStorage {
 
@@ -134,6 +135,72 @@ enum DeviceStorage {
         let keys = store.allKeys().filter { self.item(of: $0) == id }
         keys.forEach { store.remove($0) }
         return keys
+    }
+
+    // MARK: - Erase this device (spec 081 FR-017)
+
+    /// The only `vela.` key an erase leaves behind.
+    ///
+    /// A record in `vela.pendingUploads` is a passkey public key the index
+    /// service has never confirmed. The next launch's retry needs no account
+    /// list to re-send it, but a DELETED record can never be retried — and
+    /// that credential then cannot be found at sign-in on any device. Erasing
+    /// it would downgrade "recoverable" to "possibly ruined", which is strictly
+    /// worse here than at sign-out, because the account list is going too.
+    static let eraseKeepKeys: Set<String> = [VelaStore.Key.pendingUploads]
+
+    /// Erase this device, and say what survived.
+    ///
+    /// ## Why a prefix sweep and not the list this replaced
+    ///
+    /// `RootView.eraseThisDevice` used to walk eighteen hand-written key
+    /// names. It missed fourteen groups — the account records, the pending
+    /// uploads, the service endpoints, the fee tier, `vela.balanceHidden`,
+    /// `vela.rpc.banned`, the receive watches, the trust marks, the browsing
+    /// history, the `vela.perm.*` grants, the fiat feed addresses — and it
+    /// missed them **silently**, because nothing about a delete-list fails
+    /// when the app grows a key. So the direction is inverted: enumerate what
+    /// is actually stored, drop everything under `vela.`, name the exception.
+    /// A key a future feature writes is erased on the day it is first written.
+    ///
+    /// ## And the three stores that are not `UserDefaults`
+    ///
+    /// `WKWebsiteDataStore.default()` holds every dApp the person browsed —
+    /// cookies, localStorage, IndexedDB, service workers — and the old path
+    /// never touched it, so "erase this device" left somebody signed in to the
+    /// sites they had visited. `URLCache.shared` and the logo store's own
+    /// 32 MB disk cache hold the images the wallet fetched, which is a
+    /// readable list of the tokens and chains it holds.
+    ///
+    /// - Returns: the `vela.` keys still present afterwards. Empty means the
+    ///   device is clean; anything else is a failed erase the caller must show
+    ///   rather than report as success.
+    @MainActor
+    static func eraseDevice(
+        _ store: VelaStore,
+        keep: Set<String> = eraseKeepKeys
+    ) async -> [String] {
+        for key in store.allKeys() where !keep.contains(key) {
+            store.remove(key)
+        }
+
+        // Every dApp's cookies, local storage, databases and caches. The
+        // completion-handler form on purpose: the erase must not continue to
+        // its verification while WebKit is still deleting.
+        let types = WKWebsiteDataStore.allWebsiteDataTypes()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            WKWebsiteDataStore.default().removeData(
+                ofTypes: types, modifiedSince: .distantPast
+            ) { continuation.resume() }
+        }
+
+        // The images this wallet fetched: the shared cache, and the logo
+        // store's own disk cache, which is not part of it.
+        URLCache.shared.removeAllCachedResponses()
+        LogoStore.forgetAll()
+
+        // Verify by re-reading. The sweep above is not evidence of anything.
+        return store.allKeys().filter { !keep.contains($0) }
     }
 
     /// Remove every cache row's keys. The caller decides what else to refresh.

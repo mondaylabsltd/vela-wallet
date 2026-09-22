@@ -18,7 +18,8 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test",
 		"i18n:status": "bun run scripts/i18n-status.ts",
-		"i18n:stamp": "bun run scripts/i18n-stamp.ts"
+		"i18n:stamp": "bun run scripts/i18n-stamp.ts",
+		"i18n:stamp:doc": "bun run scripts/i18n-stamp-doc.ts"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.3",

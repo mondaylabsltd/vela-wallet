@@ -31,6 +31,7 @@ crates/vela-core          pure logic, zero FFI dependencies
   identicon_features      GENERATED artwork table (84 SVG fragments)
 crates/vela-core-uniffi   uniffi 0.32 shell → Kotlin (Android) + Swift (iOS)
 crates/vela-core-wasm     wasm-bindgen shell → the web app
+crates/vela-uniffi-bindgen  build-time ONLY — the `uniffi-bindgen` generator
 pkg-web/                  GENERATED, committed — the shipped web artifact
 harness/{kotlin,swift}    corpus replay through the generated bindings
 scripts/                  build, verify, smoke, bench
@@ -126,6 +127,41 @@ because the old output was garbage. **An un-enumerated behavior change is a bug.
 Bindings are checksum-coupled to the uniffi version: Kotlin, Swift and any
 consumer must regenerate together, or calls fail at runtime. Bump the workspace
 pin, regenerate, and run both smoke harnesses before committing.
+
+### The generator is not part of what ships
+
+`uniffi/cli` links the whole `uniffi_bindgen` generator — plus `uniffi_udl`,
+weedle, nom, clap, goblin, `cargo_metadata`, rustix, tempfile, askama and toml
+— into whatever crate enables it. It used to be enabled on `vela-core-uniffi`,
+the crate that *is* the shipped iOS static library, which measured
+169,581,752 bytes and 554 objects on `aarch64-apple-ios` against 122,825,640
+bytes and 516 objects without it. Spec 081 FR-014 moved the binary into its own
+crate:
+
+```bash
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
+  --library target/release/libvela_core_uniffi.dylib --language swift --out-dir bindings/swift
+```
+
+`generate --library` reads the interface metadata back out of the **built**
+library, so one generator serves `vela-core-uniffi` and
+`vela-dev-fixtures-uniffi` and depends on neither. Two rules keep it out:
+never re-enable `uniffi/cli` on a library crate, and always build the shipped
+library with `-p vela-core-uniffi` — cargo unifies features across the packages
+of a single invocation, so a workspace-wide build would fold `cli` back in.
+`vela-uniffi-bindgen` is therefore in `members` but not in `default-members`,
+and `.github/workflows/ios-package.yml` runs an `nm -u` gate on the archived
+app binary as the backstop.
+
+Be accurate about what the split changed, because FR-014's research was not:
+`nm -u` over the archived arm64 `.app` is **byte-identical** before and after,
+since `ld` was already dead-stripping the unreachable generator. The binary's
+`stat`/`fstat`/`lstat` imports — Apple's *FileTimestamp* required-reason API —
+come from Rust's own `std` codegen unit, which a static archive links whole,
+and they are declared in `app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy`
+for that reason. What the split buys is that 46 MB of build-time-only code and
+eleven crates of supply chain are no longer *inside* the artifact a wallet
+ships, held out of users' hands by a linker optimisation.
 
 
 ## i18n / L10n

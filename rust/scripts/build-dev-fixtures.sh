@@ -17,7 +17,7 @@ case "$(uname -s)" in
   Darwin) LIB="target/release/libvela_dev_fixtures.dylib" ;;
   *)      LIB="target/release/libvela_dev_fixtures.so" ;;
 esac
-cargo run --release -p vela-dev-fixtures-uniffi --bin uniffi-bindgen -- generate \
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB" --language kotlin --out-dir bindings/kotlin-dev --no-format
 echo "OK: bindings/kotlin-dev from $LIB"
 

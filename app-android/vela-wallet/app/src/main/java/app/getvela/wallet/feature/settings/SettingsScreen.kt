@@ -34,7 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -348,7 +351,22 @@ fun SettingsScreen(
     // the body behind them is a dimmed title rather than the settings list.
     val rescue = model.selectedTab == "wallet"
 
-    Box(modifier = modifier.fillMaxSize().background(colors.bgBase)) {
+    // Spec 081: tapping the page is how a person leaves a field they have
+    // finished typing in, and Compose keeps focus until something takes it.
+    // An endpoint commits on focus loss, so without this a typed URL sat
+    // uncommitted while the health badge went on reporting the OLD host as
+    // online — measured on the Xiaomi, showing "Online · 779ms" for
+    // `https://index.invalid`. Back only hides the keyboard; it does not
+    // clear focus either.
+    val focusManager = LocalFocusManager.current
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.bgBase)
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus() })
+            },
+    ) {
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(
                 modifier = Modifier

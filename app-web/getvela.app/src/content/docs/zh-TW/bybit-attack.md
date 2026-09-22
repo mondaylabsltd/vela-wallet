@@ -1,7 +1,7 @@
 ---
 title: Bybit 攻擊事件，以及它走的那條路
 description: "2025 年 2 月，Bybit 損失約 15 億美元。被攻破的不是 Safe 合約，而是介面。這一頁說明那條路徑，以及 Vela 的設計裡有什麼把它堵住。"
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # Bybit 攻擊事件，以及它走的那條路
@@ -54,11 +54,16 @@ source: ac56b16b531f
 酬載是一次替換實作位址的 `delegatecall`；那恰恰是應該讓簽署人當場停手的東西，而把它
 藏在一段友善的摘要後面，正是它沒有被擋下的原因。
 
-有兩個界限要說清楚。dApp 無法直接要求 Vela 執行 `delegatecall`——網頁能發出的請求只會產生一般的
-呼叫——所以 Bybit 那份酬載本身沒辦法從這條路進來。但網頁*可以*請求從你的 Safe 呼叫它自己：
-`enableModule`、`addOwnerWithThreshold`、`setFallbackHandler`、`setGuard`。其中任何一個，只要簽一次，
-就會像 Bybit 那份酬載一樣把帳戶整個交出去——被啟用的模組接著就能自己執行 `delegatecall`。Vela 會解碼
-這類呼叫，但目前還不會攔截；**請拒絕任何目標是你自己錢包位址的請求。** 而如果 Vela 自己的程式碼被換掉，
+有兩件事要說清楚。dApp 無法直接要求 Vela 執行 `delegatecall`——
+網頁能發出的請求只會產生一般的呼叫——所以 Bybit 那份酬載本身沒辦法從這條路進來。
+而網頁如果請求從你的 Safe 呼叫它自己，會被**直接拒絕，而不只是解碼出來**：
+`enableModule`、`addOwnerWithThreshold`、`swapOwner`、`setFallbackHandler`、`setGuard`
+以及同一族的其他方法，只要目標是你自己的錢包就會被擋下來，
+放進批次交易裡、放進 `MultiSend` 裡同樣會擋；
+任何帶 `delegatecall` 的分支，不管目標是誰也一樣擋，`SafeTx` 型別化資料簽署也一樣。
+錢包會告訴你它拒絕的是哪一個呼叫，而且不會拿出任何可以簽的東西。
+這裡面任何一個，只要簽一次，就會像 Bybit 那份酬載一樣把帳戶整個交出去——
+被啟用的模組接著就能自己執行 `delegatecall`。而如果 Vela 自己的程式碼被換掉，
 就像 `Safe{Wallet}` 那樣，解碼結果也就成了攻擊者的解碼——這正是下一點要處理的。
 
 **一條能反過來核對介面的獨立路徑。** Vela 已經做好一個零建置、零相依的

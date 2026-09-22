@@ -1,7 +1,7 @@
 ---
 title: Firma legible
 description: "Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -47,13 +47,14 @@ Vela busca un descriptor en este orden:
    permisos ERC-2612, para que la mayoría de las acciones cotidianas se sigan
    decodificando.
 
-Cuando coincide un descriptor escrito para ese contrato en específico, la
-transacción se etiqueta como **verificada**, con el nombre del contrato.
-«Verificada» significa *que se encontró un descriptor para este contrato*, no que
-se haya comprobado criptográficamente: los descriptores que se obtienen del servidor
-de datos de cadena no están firmados, así que son tan confiables como ese servidor.
-Esa es una de las razones por las que puedes
-[operar el tuyo](/es-MX/docs/self-hosting#chain-data).
+**Verificada** está reservada para la primera fuente. Una transacción se etiqueta
+como verificada solo cuando la descripción viene de un descriptor integrado en la app
+que estás usando, o del servidor de datos de cadena y es idéntica a la copia
+integrada, lo que demuestra que nada se cambió en el camino. Todo lo demás que manda
+el servidor se sigue decodificando y se sigue mostrando, con una línea que dice que
+viene del servicio de descriptores y que nada lo autenticó. Ese servicio no está
+firmado, así que es tan confiable como quien lo opere. Esa es una de las razones por
+las que puedes [operar el tuyo](/es-MX/docs/self-hosting#chain-data).
 
 Los montos de tokens se formatean con los **decimales reales on-chain** del token.
 Si Vela no puede confirmar los decimales de un token, muestra el monto como si el

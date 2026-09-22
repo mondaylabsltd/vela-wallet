@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
 import app.getvela.wallet.feature.signing.core.ClearMessageView
+import app.getvela.wallet.feature.signing.core.ClearProvenance
 import app.getvela.wallet.feature.signing.core.ClearRisk
 import app.getvela.wallet.feature.signing.core.ClearSignField
 import app.getvela.wallet.feature.signing.core.ClearSignResult
@@ -134,7 +135,15 @@ object SigningLive {
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
-        val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) + simBlocks(sim, ctx) + guardBlocks(guard, s)
+        // Spec 081: a refused request gets the refusal and nothing else. The
+        // decoded body, the simulation and the guard all describe a
+        // transaction that will never be signed, and reading them invites the
+        // question "so why can't I?" — which the sentence above already answers.
+        val refused = sign.blocked != null
+        val blocks =
+            if (refused) statusBlocks(sign, s)
+            else statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) +
+                simBlocks(sim, ctx) + guardBlocks(guard, s)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         val own = request.transportId == WALLET_TRANSPORT
@@ -152,23 +161,27 @@ object SigningLive {
             blocks = blocks,
             tech = fallback.tech.copy(
                 title = fallback.tech.title,
-                summary = clear.result?.contract_name,
-                functionLabel = clear.result?.let { s.s("techFunction") },
-                signature = clear.result?.intent,
+                summary = if (refused) null else clear.result?.contract_name,
+                functionLabel = if (refused) null else clear.result?.let { s.s("techFunction") },
+                signature = if (refused) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
                 simResult = null,
-                rawLabel = if (dataBytes > 0) s.s("techRawData") else null,
-                rawHex = facts?.second?.takeIf { dataBytes > 0 },
+                rawLabel = if (!refused && dataBytes > 0) s.s("techRawData") else null,
+                rawHex = if (refused) null else facts?.second?.takeIf { dataBytes > 0 },
             ),
             techOpen = false,
-            fee = feeModel(clear, fee, ctx, speed),
+            // No fee and no confirm control under a refusal: a fee for a
+            // transaction nobody will send is a number about nothing, and a
+            // dead "Slide to confirm" reads as an option somebody merely
+            // failed to use.
+            fee = if (refused) null else feeModel(clear, fee, ctx, speed),
             signerLabel = s.s("signingAccount"),
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
-            confirmHint = s.s("slideToConfirm"),
-            confirmAction = confirmLabel(clear, s),
-            confirmEnabled = confirmEnabled(sign, guard, fee, clear, speed),
+            confirmHint = if (refused) null else s.s("slideToConfirm"),
+            confirmAction = if (refused) null else confirmLabel(clear, s),
+            confirmEnabled = !refused && confirmEnabled(sign, guard, fee, clear, speed),
             panelTitle = s.s("signatureRequest"),
         )
     }
@@ -276,6 +289,22 @@ object SigningLive {
     }
 
     fun statusBlocks(sign: SignView, s: VelaStrings): List<SigningBlock> = buildList {
+        // Spec 081: the core refused this request outright — it would have
+        // changed who controls the account. Nothing else on the sheet matters,
+        // and `confirm_gate_open` is already false, so say it and stop.
+        sign.blocked?.let { blocked ->
+            add(SigningBlock.Intent(s.s("selfCallBlockedTitle"), SigningTone.Danger))
+            val text = when {
+                blocked.function == "SafeTx" -> s.s("selfCallBlockedSafeTx")
+                blocked.leg_index != null -> s.s(
+                    "selfCallBlockedLegBody",
+                    mapOf("index" to blocked.leg_index.toString(), "function" to blocked.function),
+                )
+                else -> s.s("selfCallBlockedBody", mapOf("function" to blocked.function))
+            }
+            add(SigningBlock.Warning(SigningTone.Danger, text))
+            return@buildList
+        }
         sign.funding?.let { funding ->
             add(SigningBlock.Warning(SigningTone.Caution, s.t("componentsUi.funding.lead", mapOf("symbol" to funding.data.native_symbol))))
         }
@@ -355,6 +384,15 @@ object SigningLive {
         if (result.to_own_token) add(SigningBlock.Warning(SigningTone.Danger, s.s("tokenToContractWarning")))
         if (result.best_effort) add(SigningBlock.Warning(SigningTone.Caution, s.s("bestEffortWarning")))
         if (result.partial) add(SigningBlock.Warning(SigningTone.Caution, s.s("partialWarning")))
+        // Spec 081 FR-008: the descriptor service answered over plain HTTP,
+        // from a base URL the person can edit, and nothing signed the answer.
+        // The other sources say nothing here: built in and pinned are what
+        // "verified" means, a token-standard shape is the standard doing its
+        // job, the 4-byte database has its line above, and a deployment
+        // claims nothing to doubt.
+        if (result.provenance == ClearProvenance.Fetched) {
+            add(SigningBlock.Warning(SigningTone.Caution, s.s("descriptorFetchedWarning")))
+        }
         if (result.fields.any { it.unverified }) add(SigningBlock.Warning(SigningTone.Caution, s.s("unverifiedWarning")))
         if (result.fields.any { it.expired }) add(SigningBlock.Warning(SigningTone.Caution, s.a("expired")))
     }

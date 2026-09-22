@@ -257,6 +257,12 @@ export interface SigningModel {
 	 * closing the sheet is the rejection (product contract, SPEC 签名).
 	 */
 	confirm: { hint: string; action: string; enabled: boolean };
+	/**
+	 * Spec 081: the request was refused outright (it would have changed who
+	 * controls the account). There is no fee to show and nothing to slide —
+	 * the only thing the sheet offers is the way out, labelled with this word.
+	 */
+	dismissOnly?: string;
 	/** Desktop third-column heading — "签名请求". */
 	panelTitle: string;
 }

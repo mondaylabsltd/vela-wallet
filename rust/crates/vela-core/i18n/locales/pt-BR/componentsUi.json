@@ -86,6 +86,7 @@
       "close": "Fechar",
       "valueLabel": "Valor",
       "bestEffortWarning": "Decodificado a partir da assinatura da função — não é um descritor verificado. Revise os detalhes com atenção.",
+      "descriptorFetchedWarning": "Esta descrição veio do serviço de descritores da Vela e nada a autenticou — confira os detalhes antes de aprovar.",
       "simWillSucceed": "Simulação aprovada — deve ser bem-sucedida",
       "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
       "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",
@@ -193,7 +194,11 @@
       "copyValue": "Copiar",
       "signWith": "Assinar com",
       "viewOnExplorer": "Ver no explorador",
-      "sendingToTokenContract": "Enviado ao contrato do próprio token"
+      "sendingToTokenContract": "Enviado ao contrato do próprio token",
+      "selfCallBlockedTitle": "A Vela não assina esta solicitação",
+      "selfCallBlockedBody": "Esta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa. Nada foi assinado.",
+      "selfCallBlockedLegBody": "A etapa {{index}} desta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa a solicitação inteira. Nada foi assinado.",
+      "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado."
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",

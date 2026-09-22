@@ -18,7 +18,6 @@ import type { APIToken, CustomToken } from './tokens-model';
 import { tokenUsdValue, tokenChainId, isNativeToken } from './tokens-model';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from './networks';
 import { loadCustomTokens } from './records';
-import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
@@ -178,13 +177,6 @@ export type FetchTokensOptions = {
 	onFailedChains?: (chainIds: number[]) => void;
 };
 
-export class APIError extends Error {
-	constructor(message = 'Failed to fetch data from server.') {
-		super(message);
-		this.name = 'APIError';
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Public API (same interface as before)
 // ---------------------------------------------------------------------------
@@ -309,14 +301,12 @@ export function getCachedNativePriceUsd(
 	return price !== null && price > 0 ? price : null;
 }
 
-/** Fetch USD to target currency exchange rate (unchanged). */
-export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
-	const url = `https://getvela.app/api/exchange-rate?currency=${encodeURIComponent(currency)}`;
-	const response = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.fiatRates });
-	if (!response.ok) throw new APIError(`/exchange-rate failed: HTTP ${response.status}`);
-	const data: { currency: string; rate: number } = await response.json();
-	return data.rate;
-}
+// A `fetchExchangeRate` helper used to live here, hard-wired to the site's
+// `/api/exchange-rate`. It had no caller: fiat conversion goes through
+// `fiat-fx.ts`, which reads the user-configurable `fiatRatesURL` endpoint
+// instead. Removed by spec 081 (FR-015) together with the `APIError` class that
+// was its last user. The site route itself is kept — it is the deployment smoke
+// test (`docs/project-takeover/05-deployment-runbook.md`).
 
 // ---------------------------------------------------------------------------
 // Core: orchestrate all chains

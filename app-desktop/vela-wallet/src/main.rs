@@ -267,6 +267,14 @@ fn main() {
         // through this: its default client answers nothing, which is why the
         // desktop drew lettermarks where every other shell draws logos.
         cx.set_http_client(crate::executor::gpui_http::AppHttpClient::shared());
+        // Spec 081 FR-002: the person's own public-key index, applied before
+        // anything asks one a question. This used to happen inside
+        // `OnboardingPage::new`, so a session that started already signed in —
+        // the common case — looked names up against ours no matter what
+        // Settings said.
+        if let Some(url) = crate::executor::storage::load_registry_endpoint() {
+            crate::executor::registry::set_registry_url(&url);
+        }
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

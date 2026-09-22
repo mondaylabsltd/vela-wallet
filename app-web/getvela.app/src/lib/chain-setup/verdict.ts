@@ -67,38 +67,44 @@ export function plan(contracts: ContractStatus[], p256: P256Status): Plan {
 	const isMissing = (key: string) => missing.some((c) => c.contract.key === key);
 	const byKey = (key: string) => contracts.find((c) => c.contract.key === key)?.contract ?? null;
 
-	const steps: Step[] = missing.map(({ contract }): Step => {
-		switch (contract.method) {
-			case 'presigned':
-				return contract.key === 'arachnidProxy'
-					? {
-							kind: 'fund-and-broadcast',
-							contract,
-							deployer: ARACHNID_DEPLOYER_EOA,
-							fundingWei: ARACHNID_FUNDING_WEI,
-							rawTx: 'arachnid'
-						}
-					: {
-							kind: 'fund-and-broadcast',
-							contract,
-							deployer: MULTICALL3_DEPLOYER_EOA,
-							fundingWei: MULTICALL3_FUNDING_WEI,
-							rawTx: 'multicall3'
-						};
-			case 'external':
-				return { kind: 'external', contract };
-			case 'create2': {
-				const factory = contract.factory!;
-				const factoryKey = factory === 'arachnid' ? 'arachnidProxy' : 'safeSingletonFactory';
-				return {
-					kind: 'create2',
-					contract,
-					factory,
-					blockedBy: isMissing(factoryKey) ? byKey(factoryKey) : null
-				};
+	// A contract another one's constructor deploys gets no step of its own:
+	// offering "deploy the singleton" would be offering something nobody can do.
+	const steps: Step[] = missing
+		.filter(({ contract }) => contract.method !== 'with-factory')
+		.map(({ contract }): Step => {
+			switch (contract.method) {
+				case 'presigned':
+					return contract.key === 'arachnidProxy'
+						? {
+								kind: 'fund-and-broadcast',
+								contract,
+								deployer: ARACHNID_DEPLOYER_EOA,
+								fundingWei: ARACHNID_FUNDING_WEI,
+								rawTx: 'arachnid'
+							}
+						: {
+								kind: 'fund-and-broadcast',
+								contract,
+								deployer: MULTICALL3_DEPLOYER_EOA,
+								fundingWei: MULTICALL3_FUNDING_WEI,
+								rawTx: 'multicall3'
+							};
+				case 'external':
+					return { kind: 'external', contract };
+				case 'create2': {
+					const factory = contract.factory!;
+					const factoryKey = factory === 'arachnid' ? 'arachnidProxy' : 'safeSingletonFactory';
+					return {
+						kind: 'create2',
+						contract,
+						factory,
+						blockedBy: isMissing(factoryKey) ? byKey(factoryKey) : null
+					};
+				}
+				case 'with-factory':
+					throw new Error(`${contract.key} has no step of its own`);
 			}
-		}
-	});
+		});
 
 	const verdict: Verdict =
 		p256 === 'missing'

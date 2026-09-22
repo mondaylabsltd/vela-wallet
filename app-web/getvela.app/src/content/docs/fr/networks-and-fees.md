@@ -1,7 +1,7 @@
 ---
 title: Réseaux et frais
 description: "Les 24 réseaux intégrés à Vela, comment en ajouter un autre, comment les frais d'une transaction sont calculés exactement et à qui ils reviennent, et ce qui se passe quand un relais n'a plus de gas."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ est calculée à partir de vos clés, et non à partir de la chaîne.
 ## Ajouter un autre réseau
 
 Vous pouvez ajouter n'importe quel réseau EVM dans **Réglages → Réseaux**, à
-condition qu'il dispose de ce dont un portefeuille Vela a besoin : onze contrats
+condition qu'il dispose de ce dont un portefeuille Vela a besoin : douze contrats
 standards (l'EntryPoint ERC-4337 v0.7, les contrats Safe v1.4.1, les modules 4337
 et passkey de Safe, MultiSend, Multicall3 et deux déployeurs déterministes) et le
 précompilé **EIP-7951 / RIP-7212**, qui vérifie les signatures de passkey à
@@ -52,10 +52,13 @@ Le précompilé est une exigence absolue. Son adresse entre dans le calcul de ch
 adresse Vela : il n'existe donc aucun vérificateur de repli, ni aucun moyen d'en
 déployer un après coup. Si une chaîne dispose du précompilé mais qu'il lui manque
 certains contrats, la page [Configurer une chaîne](/fr/chain-setup) indique ce qui
-manque et déploie ce que tout le monde peut déployer. Une lacune dans cette
-vérification : un portefeuille à plusieurs clés a aussi besoin de la fabrique de
-signataires passkey de Safe sur le réseau, ce qui n'est pas encore vérifié ; sans
-elle, seule la première clé peut signer sur ce réseau.
+manque et déploie ce que tout le monde peut déployer. Deux des douze contrats
+qu'elle vérifie — la fabrique de signataires passkey de Safe et le code de
+signataire que cette fabrique déploie — ne concernent qu'un portefeuille détenant
+plus d'une clé, et la vérification le signale contrat par contrat : sans eux, un
+portefeuille à clé unique fonctionne normalement, tandis qu'un portefeuille dont
+l'adresse vient de deux à sept clés ne peut pas du tout être déployé sur ce
+réseau.
 
 ## Comment une transaction est payée
 

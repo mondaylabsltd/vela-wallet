@@ -23,7 +23,9 @@ Everything below is grounded in the actual app behavior (`package.json` has **no
 | Name / email / phone / gov ID                                            | **Never asked**                 | —                                                     | —                                    | —                                      | Not collected                           |
 | Balances / tx history / RPC prefs                                        | No — on-device`AsyncStorage`   | —                                                     | —                                    | —                                      | Not collected                           |
 
-**No tracking anywhere.** No advertising ID, no third-party analytics SDK, no cross-app tracking. `NSPrivacyTracking=false` already set in `ios/VelaWallet/PrivacyInfo.xcprivacy`.
+**No tracking anywhere.** No advertising ID, no third-party analytics SDK, no cross-app tracking. `NSPrivacyTracking=false` is set in the shipped privacy manifest — **`app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy`** (spec 081 FR-014; the `ios/VelaWallet/…` path this line used to give belonged to the Expo tree deleted in spec 039, where no manifest ever existed). The same file declares the one required-reason API the archived binary actually imports (`NSPrivacyAccessedAPICategoryUserDefaults`, reason `CA92.1`) and one collected-data type. `.github/workflows/ios-package.yml` re-measures the archive with `nm -u` on every build and fails if an undeclared category appears.
+
+> **Reconcile before you submit:** the manifest declares that collected-data type with `NSPrivacyCollectedDataTypeLinked = false`, following getvela.app/privacy ("We don't ask for your name, email, phone number or any ID"). §1.B below recommends answering **Linked: Yes** in App Store Connect for the same data. Both feed the same nutrition label, so pick one answer — this is one of the 【你来定】 calls.
 
 Website analytics (cookieless, self-hosted) covers **getvela.app**, not the app — it is **not** part of either app-store data form. It belongs only in the privacy policy (already there).
 

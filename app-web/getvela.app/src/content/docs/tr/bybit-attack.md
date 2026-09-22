@@ -1,7 +1,7 @@
 ---
 title: Bybit saldırısı ve izlediği yol
 description: "Şubat 2025'te Bybit yaklaşık 1,5 milyar dolar kaybetti. Kırılan Safe sözleşmeleri değil, arayüzdü. Bu sayfa saldırının izlediği yolu ve Vela'nın tasarımında bu yolu neyin kapattığını anlatıyor."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # Bybit saldırısı ve izlediği yol
@@ -62,16 +62,19 @@ adresini değiştiren bir `delegatecall`'du; bir imzacıyı olduğu yerde durdur
 gereken şeyin tam da biçimi budur ve onu dost görünümlü bir özetin arkasına saklamak,
 durdurmamasının nedeni oldu.
 
-Açıkça belirtilmesi gereken iki sınır var. Bir dApp, Vela'dan doğrudan bir
+Açıkça belirtilmesi gereken iki şey var. Bir dApp, Vela'dan doğrudan bir
 `delegatecall` isteyemez — bir sayfanın yapabileceği istekler sıradan çağrılar
-üretir — yani Bybit'in yükünün kendisi bu yoldan gelemezdi. Ama bir sayfa, Safe'inizden
-yine Safe'inize yapılan bir çağrı *isteyebilir*: `enableModule`,
-`addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`. Bunlardan herhangi biri, bir
-kez imzalandığında hesabı Bybit'in yükü kadar eksiksiz biçimde devreder —
-etkinleştirilen bir modül daha sonra kendi `delegatecall`'unu çalıştırabilir. Vela bu
-çağrıları çözer ama henüz engellemez; **hedefi kendi cüzdan adresiniz olan her isteği
-reddedin.** Vela'nın kendi kodu da `Safe{Wallet}`'inki gibi değiştirilirse, çözümleme
-de saldırganın çözümlemesi olur — bir sonraki madde bunun için var.
+üretir — yani Bybit'in yükünün kendisi bu yoldan gelemezdi. Safe'inizden yine
+Safe'inize yapılan bir çağrı isteyen bir sayfa ise **yalnızca çözümlenmez,
+reddedilir**: `enableModule`, `addOwnerWithThreshold`, `swapOwner`,
+`setFallbackHandler`, `setGuard` ve o ailenin geri kalanı, hedef kendi cüzdanınız
+olduğunda — bir toplu işlemin içinde ve bir `MultiSend` içinde de — engellenir; hedefi
+ne olursa olsun `delegatecall` taşıyan her adım ve bir `SafeTx` tipli veri imzası da
+öyle. Cüzdan hangi çağrıyı reddettiğini söyler ve imzalanacak hiçbir şey sunmaz.
+Bunlardan herhangi biri bir kez imzalansaydı hesabı Bybit'in yükü kadar eksiksiz
+biçimde devrederdi — etkinleştirilen bir modül daha sonra kendi `delegatecall`'unu
+çalıştırabilir. Vela'nın kendi kodu da `Safe{Wallet}`'inki gibi değiştirilirse,
+çözümleme de saldırganın çözümlemesi olur — bir sonraki madde bunun için var.
 
 **Arayüzü kontrol edebilen bağımsız bir yol.** Vela, isteği kendisi çözen ve WebAuthn
 imzasını kendisi yapan, derleme adımı ve bağımlılığı olmayan bir

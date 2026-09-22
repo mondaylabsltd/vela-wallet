@@ -95,7 +95,7 @@
       "subtitle": "Delete everything Vela stored here",
       "desc": "Everything Vela has stored on this device is deleted. There is no backup and no undo.",
       "loses": "You lose: transaction history, contacts and groups, browsing history, dApp permissions, custom tokens and networks, RPC and endpoint settings, and every preference.",
-      "keeps": "You do not lose the wallet. Your passkey stays in Face ID / fingerprint — choose “I already have a wallet” and the same address comes back, empty of history.",
+      "keeps": "You do not lose the wallet. Erasing cannot reach your passkeys — they are held by your passkey provider (Face ID / fingerprint, a password manager, or a security key), not by this app. Choose “I already have a wallet” and the same address comes back, empty of history.",
       "confirm": "Erase Everything",
       "cancel": "Cancel",
       "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again."

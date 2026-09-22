@@ -1,7 +1,7 @@
 ---
 title: Memasang Vela
 description: "Semua cara menjalankan Vela — web, ekstensi browser, desktop, dan ponsel — berapa biaya masing-masing, apa yang bisa dilakukan, dan apa yang dibutuhkan perangkat Anda."
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -59,7 +59,8 @@ dan ARM).
   ke kunci itu — paket .deb dan .rpm memasang aturannya untuk Anda.
 
 Di macOS dan Windows, aplikasi desktop punya browser bawaan untuk dApp. Checksum setiap
-paket ada di [halaman rilis GitHub](https://github.com/mondaylabsltd/vela-wallet/releases).
+paket ada di [halaman rilis GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) —
+dan Anda bisa memeriksa lebih dari sekadar checksum, lihat di bawah.
 
 ## iPhone dan Android
 
@@ -70,6 +71,44 @@ mengompilasinya sendiri secara gratis — dengan satu perbedaan: build yang Anda
 tandatangani sendiri tidak bisa memakai passkey bawaan ponsel Anda untuk dompet
 getvela.app, meskipun memindai dengan ponsel lain dan kunci keamanan USB tetap
 berfungsi. Lihat [mengompilasi aplikasi sendiri](/id/docs/self-hosting#web-app).
+
+## Verifikasi apa yang Anda unduh
+
+Checksum hanya memberi tahu Anda bahwa dua file identik. Ia tidak bisa memberi tahu
+siapa yang membuat file itu — dan daftar checksum-nya berada di halaman yang sama
+dengan unduhannya. Karena itu setiap paket yang kami lampirkan ke sebuah rilis juga
+diberi **atestasi** (attestation): proses workflow yang membangunnya menandatangani
+sebuah pernyataan yang menyebut nama file, commit, dan proses build itu, lalu GitHub
+menyimpannya. Memeriksanya cukup satu perintah dengan
+[GitHub CLI](https://cli.github.com) (masuk sekali dengan `gh auth login`;
+pemeriksaannya gratis):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+Perintah itu mencetak siapa yang membangun file itu dan dari commit mana, atau gagal.
+Untuk jawaban itu, mesin Anda tidak perlu memercayai kami: tanda tangannya milik
+GitHub, dibuat saat build, dan tidak bisa dihasilkan oleh orang yang sekadar
+mengunggah ulang sebuah file di suatu tempat.
+
+Image Mac ditandatangani dengan Developer ID kami dan dinotarisasi Apple, yang
+diperiksa macOS untuk Anda saat Anda membukanya. Untuk menanyakannya sendiri:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Peringatan Windows tetap muncul">
+Atestasi bukan code signing. Penginstal Windows belum ditandatangani kodenya, jadi
+SmartScreen tetap menghentikannya sekali dengan "Windows melindungi PC Anda" — pilih
+<strong>Info selengkapnya</strong>, lalu <strong>Tetap jalankan</strong>. Memverifikasi
+atestasi adalah pemeriksaan yang memberi tahu Anda bahwa file itu benar-benar milik
+kami; peringatan tadi soal sertifikat yang belum kami beli.
+</Callout>
+
+Paket yang diterbitkan sebelum ini diaktifkan hanya membawa checksum.
 
 ## Memakai Vela dengan dApp
 

@@ -287,9 +287,15 @@ The `role` field enables the modal to decide layout:
 7. **No match → blind sign**
 
 **For `eth_signTypedData`:**
+0. Built into the app — Permit2's `PermitSingle` / `PermitTransferFrom`, matched on the verifying contract **and** the message's whole `encodeType` (spec 081)
 1. `erc7730/eip712/eip155-{chainId}/{verifyingContract}.json` — contract-specific (keyed by typeHash)
-2. `erc7730/ercs/eip712-erc2612-permit.json` — ERC-2612 universal
-3. **No match → blind typed data sign**
+2. Built into the app — the ERC-2612 `Permit`, for that exact `encodeType` and no look-alike
+3. `erc7730/ercs/eip712-erc2612-permit.json` — ERC-2612 universal, for every other `Permit`
+4. **No match → blind typed data sign**
+
+Each rung records where its bytes came from (`ClearProvenance`), and "verified"
+is that and nothing else: built in, or fetched and byte-equal to what is built
+in. A fetched descriptor is labelled as unauthenticated on every shell.
 
 **For `personal_sign`:**
 - No ERC-7730 lookup — always rendered as message bubble

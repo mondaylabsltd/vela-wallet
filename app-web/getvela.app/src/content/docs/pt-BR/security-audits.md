@@ -1,7 +1,7 @@
 ---
 title: Auditorias e problemas conhecidos
 description: "Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 “Auditado” é uma afirmação sobre um código específico numa versão específica, então
@@ -120,11 +120,10 @@ delas. Então, se uma operação remove um proprietário, uma operação assinad
 proprietário e colocada depois no mesmo bundle continua passando na validação e é
 executada. A Safe reconheceu isso e não alterou a v0.3.0.
 
-Os apps da Vela nunca montam trocas de proprietário, então a própria Vela nunca
-aciona esse problema. Mesmo assim, ele importa: um dApp pode pedir à sua carteira que
-troque os próprios proprietários (veja “Lacunas” abaixo), e quem removesse uma chave
-comprometida por outras ferramentas da Safe não poderia contar com o corte dela
-dentro do mesmo bundle.
+Os apps da Vela nunca montam trocas de proprietário, e um dApp que peça uma é
+recusado de imediato, então a própria Vela nunca aciona esse problema. Ele ainda
+importa para quem remove uma chave comprometida por outras ferramentas da Safe: essa
+pessoa não poderia contar com o corte dela dentro do mesmo bundle.
 
 ### Interceptação de uma operação assinada (EntryPoint anterior à v0.9)
 
@@ -153,21 +152,10 @@ isso acontecer.
 Não são achados de contrato, mas pontos em que a carteira protege você menos do que
 você talvez imagine. Cada um está sendo acompanhado para correção:
 
-- **Chamadas da sua carteira para ela mesma não são bloqueadas.** Um dApp pode pedir
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` ou `setGuard` no seu
-  próprio Safe; qualquer uma delas, assinada uma única vez, entrega a conta. A Vela
-  decodifica essas chamadas, mas não as impede. Rejeite qualquer solicitação cujo
-  destino seja o seu próprio endereço.
 - **A proteção de aprovações só barra valores “ilimitados”** (2^200 ou mais; 2^152
   no Permit2). Uma aprovação finita alta, um permit assinado ou um
   `setApprovalForAll` de NFT recebem um alerta, não um bloqueio.
-- **Os descritores buscados não são autenticados.** Um descritor do servidor de
-  dados de chain aparece como “Verificado” se corresponder ao contrato; ele é tão
-  confiável quanto esse servidor.
 - **A página de assinatura independente não está conectada** a nenhum app ainda.
-- **A verificação de rede não procura a fábrica de signatários de passkey da Safe**,
-  de que as chaves dois a sete precisam; numa rede adicionada sem ela, só a primeira
-  chave consegue assinar.
 - **O site carrega um script de análise de terceiros** no mesmo domínio das
   passkeys. O site proíbe que as suas páginas usem passkeys (um cabeçalho
   Permissions-Policy) e mantém o script fora da página que guarda uma chave.

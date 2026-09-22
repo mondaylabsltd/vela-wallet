@@ -115,6 +115,20 @@ npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fai
 
 The rule behind the table ([spec 063](../specs/063-release-channels/spec.md)): nothing is attached to a release unless a person with no developer tools can install it and reach a wallet. A macOS `.dmg` is attached only when that build was signed with our Developer ID and notarized by Apple; the Windows installer is not code-signed, so SmartScreen asks once (**More info → Run anyway**).
 
+### Provenance — where a package came from
+
+A `SHA256SUMS` file says two files are identical; it cannot say who made either of them, and it sits on the same page as the download. So every file `release.yml` attaches is also **attested** ([spec 081](../specs/081-audit-product-gaps/spec.md), FR-012) in the `publish` job — the one place in the whole release where every artifact exists together. The job asks for `id-token: write` and `attestations: write`, and `actions/attest-build-provenance@v2` signs a statement naming the commit, the workflow and the run. It is deliberately not in the packaging workflows: a reusable workflow cannot exceed its caller's permissions, and those workflows also run on pull requests, where there is nothing to attest. `clearsigning-package.yml` attests its zip the same way, in its own publishing job.
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+gh attestation verify VelaWallet-Setup-0.9.4-x64.exe --repo mondaylabsltd/vela-wallet \
+  --signer-workflow mondaylabsltd/vela-wallet/.github/workflows/release.yml
+```
+
+**macOS is the exception, and is documented as one.** The images are built, signed, notarized and attached by hand on the founder's Mac (spec 063 §3a), so no workflow can honestly claim to have built them; Apple's notarization is their proof, and `xcrun stapler validate` and `spctl -a -t open --context context:primary-signature -v` are how you ask for it. `macos-attest.yml` (`workflow_dispatch`, a tag) then downloads the images **as published**, repeats both checks, and attests those exact bytes — so a `.dmg` verifies like everything else, with `--signer-workflow …/macos-attest.yml`.
+
+**Attestation is not code signing.** It says the file is the one this repository published; it is not a certificate the operating system knows, so the Windows SmartScreen prompt stays exactly as described above.
+
 ### A phone app you built yourself
 
 It is the same wallet, with one door closed. "This device" — the phone's own passkey, through Credential Manager on Android or the system passkey sheet on iOS — only works in a build signed with *our* key: the operating system checks the app's signing identity against `getvela.app` before it lets the app use a `getvela.app` passkey, and your signature is not ours.
@@ -204,7 +218,7 @@ The wallet uses four Vela-operated services by default. Each can be replaced in 
 
 The health check drives a badge; it does **not** gate the save (`network_admin.rs`: "Health badges never gate saves"). Any Frankfurter-compatible USD-based rate source works for exchange rates — keep `?base=USD` (see [docs/fiat-price.md](fiat-price.md)).
 
-Known gaps, stated in the user guide too: the iOS Service Endpoints page is not wired to the core; the web shell's onboarding and desktop sessions that start signed in ignore a changed passkey index; Android's name lookups always use the default index; p256-index needs `P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf`, which its example config omits.
+"Empty means the default" is one rule, `NetServiceEndpoints::effective` in `network_admin.rs`, and each shell reads the endpoint at the moment it uses it rather than caching one at start-up (spec 081 FR-002 — that cache was how a configured public-key index could be ignored for the life of a process). `P256_INDEX_DOMAIN_REGISTRY` is in p256-index's `.env.example`; without it the server hands out challenges the contract rejects.
 
 ## Fee model
 
@@ -226,3 +240,5 @@ The wallet names an address the user has entered (reverse lookup only — typing
 2. **Name services, read on-chain**: `.bnb` (BSC), `.arb` (Arbitrum), `.g` (Gravity), Basename (Base, ENSIP-19) and ENS (mainnet), in that priority.
 
 The name-service table lives in each shell (web `recipient-identity.ts`, desktop `executor/identity.rs`, iOS `RecipientIdentity.swift`, Android `IdentityResolver.kt`); only positive results are cached.
+
+A reverse record is a claim, not proof — anyone can point their own record at any string — so a name from step 2 is shown only when it **resolves forward to the same address**. The check is a transcript machine in the core (`app/name_verify.rs`, the shape spec 067 established): resolver → `addr`, with an ENSIP-10 wildcard walk for Basenames, one case-insensitive comparison, and the proved name handed back so what is drawn is what was checked. It fails closed — an unanswered call, a CCIP revert or a timeout shows the bare address, because failing open would let whoever poisons a record choose the moment. Step 1 is not put to it: a Vela wallet name is a label the chain gives for that address, not a record pointing at it.

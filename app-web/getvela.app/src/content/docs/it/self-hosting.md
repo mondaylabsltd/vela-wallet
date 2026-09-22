@@ -1,7 +1,7 @@
 ---
 title: Guida al self-hosting
 description: "Tutto ciò che Vela gestisce per te, a cosa serve ogni parte e come sostituirla con la tua — il relay, l'indice delle chiavi pubbliche, i dati delle chain, i tassi di cambio e le app — più l'unica cosa che non puoi sostituire e come fare a meno di getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -115,16 +115,15 @@ aspetta il verde.
 | Dati delle chain | `ethereum-data` |
 | Tassi di cambio | non verificato per nome — deve restituire un elenco di tassi con base USD |
 
-Quanto ogni app rispetta oggi queste impostazioni:
+Tutte e quattro le app rispettano tutti e quattro i campi, e un endpoint cambiato
+ha effetto dalla chiamata successiva, non dal prossimo avvio: ogni percorso —
+creare un wallet, accedere, cercare il nome di un indirizzo — legge l'endpoint nel
+momento in cui lo usa. Su iOS l'indice passkey si può cambiare anche nella
+schermata di accesso, quando quello predefinito non è raggiungibile.
 
-| App | Endpoint dei servizi | RPC per rete |
-| --- | --- | --- |
-| Web ed estensione | Dati delle chain, relay e tassi fiat. L'indice passkey si usa per cercare i nomi, ma la creazione del wallet e l'accesso usano ancora l'indice di Vela | Sì |
-| Desktop | Tutti e quattro; un nuovo indice passkey ha effetto dopo il riavvio o dopo essere uscito dall'account | Sì |
-| Android | Tutti e quattro, tranne la ricerca dei nomi degli indirizzi, che interroga ancora l'indice di Vela | Sì |
-| iOS | **Non ancora**: la pagina mostra valori segnaposto e non salva. L'indice passkey si può cambiare nella schermata di accesso quando quello predefinito non è raggiungibile | Sola lettura |
-
-Queste lacune sono bug, e sono tracciate.
+(Fino a settembre 2026 c'erano quattro eccezioni a tutto questo, la peggiore
+delle quali una pagina iOS che mostrava valori segnaposto e non salvava nulla.
+Sono state corrette.)
 
 ## Gestisci il tuo relay
 
@@ -162,9 +161,10 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Meglio usare l'immagine pubblicata: compilare dal codice sorgente con
-`docker compose up --build` può fallire con il Dockerfile attuale. Senza Docker,
-`cargo run --release --bin vela-relay` lo esegue direttamente.
+Vanno bene entrambe le strade: l'immagine pubblicata è la più rapida, e
+`docker compose up --build` compila la stessa cosa dal codice sorgente che puoi
+leggere. Senza Docker, `cargo run --release --bin vela-relay` lo esegue
+direttamente.
 
 **Cloudflare Workers**
 
@@ -224,9 +224,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` è indispensabile anche se il file di esempio del
-server non lo riporta: senza, il server emette challenge che il contratto rifiuta,
-e ogni registrazione fallisce.
+`P256_INDEX_DOMAIN_REGISTRY` è quello che sfugge di più: senza, il server emette
+challenge che il contratto rifiuta, e ogni registrazione fallisce. Si trova in
+`.env.example` e deve corrispondere al `DOMAIN_REGISTRY` del contratto
+distribuito: dalla VERSION 12 del registro il dominio delle challenge è fissato al
+momento del deploy, quindi non si sposta quando il contratto viene ridistribuito.
 
 **Avvio e verifica**
 
@@ -239,8 +241,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 
 Il server ascolta in HTTP semplice (porta 11256 per impostazione predefinita);
 mettigli davanti un proxy TLS, perché il wallet accetta solo endpoint `https://`.
-Il Dockerfile nel codice sorgente, al momento in cui scriviamo, potrebbe non
-compilare; con Cargo la compilazione funziona.
+Anche `docker build -f p256-index-server/Dockerfile .` funziona da un clone
+pulito; se usi Compose, copia prima `.env.example` in
+`p256-index-server/.env`.
 
 **Se non risponde nessun indice**, i wallet esistenti funzionano comunque: in fase
 di accesso l'app legge il contratto di registro su Gnosis (poi su Ethereum)
@@ -311,10 +314,10 @@ solo alle app firmate da Vela.
 Vela gira su qualsiasi chain EVM che abbia il precompilato P-256 e i contratti
 standard che controlla. La [configurazione della chain](/it/chain-setup) ti dice
 cosa manca a una chain e fa il deploy di ciò che chiunque può deployare;
-[reti e commissioni](/it/docs/networks-and-fees) spiega i requisiti. Una lacuna:
-un wallet con più di una chiave ha bisogno anche della factory dei firmatari
-passkey di Safe su quella chain, che il controllo non verifica ancora — senza di
-essa, lì può firmare solo la prima chiave.
+[reti e commissioni](/it/docs/networks-and-fees) spiega i requisiti. Il controllo
+comprende i due contratti che servono a un wallet con più di una chiave, e li
+segnala come tali — una chain che ne è priva fa comunque funzionare un wallet con
+una sola chiave.
 
 ## Cosa punta ancora a Vela dopo tutto questo
 

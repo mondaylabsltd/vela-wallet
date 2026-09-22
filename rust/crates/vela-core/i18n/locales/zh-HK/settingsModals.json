@@ -60,6 +60,7 @@
       "retry": "重試",
       "addNetworkBtn": "新增網絡",
       "incompatibleHint": "此區塊鏈上尚未部署部分必需的合約。\n請使用 Vela Wallet 區塊鏈設定工具部署，然後返回重新檢查。",
+      "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
       "openChainSetupTool": "開啟區塊鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",

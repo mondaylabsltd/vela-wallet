@@ -29,7 +29,7 @@ cargo build --release -p vela-core-uniffi
 LIB_FILE="target/release/libvela_core_uniffi.dylib"
 
 echo "build-ios-xcframework: generating Swift bindings"
-cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language swift --out-dir bindings/swift
 
 echo "build-ios-xcframework: building the device static library"

@@ -60,6 +60,7 @@
       "retry": "Thử lại",
       "addNetworkBtn": "Thêm mạng",
       "incompatibleHint": "Một số hợp đồng bắt buộc chưa được triển khai trên chain này.\nDùng công cụ Vela Wallet Chain Setup để triển khai, sau đó quay lại và kiểm tra lại.",
+      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
       "openChainSetupTool": "Mở công cụ Chain Setup",
       "recheck": "Kiểm tra lại",
       "chainIdLabel": "Chain ID: {{chainId}}",

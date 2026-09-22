@@ -1,5 +1,6 @@
 package app.getvela.wallet.navigation
 
+import app.getvela.wallet.core.diagnostics.BugReportUrl
 import app.getvela.wallet.core.diagnostics.CrashSheet
 import app.getvela.wallet.feature.settings.SettingsPage
 import app.getvela.wallet.feature.settings.core.RegistryBackup
@@ -1658,10 +1659,15 @@ fun VelaNavHost(
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
                     m
                 }
+                // Spec 081 FR-016: the device lines go in `environment`, by the
+                // form's own field id. The `&body=` this used to send is IGNORED
+                // whenever `template=` names an issue form, so every report filed
+                // this way arrived blank.
                 val feedbackUrl = remember(liveModel.feedback.previewLines) {
-                    "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                        java.net.URLEncoder.encode("[android] ", "UTF-8") +
-                        "&body=" + java.net.URLEncoder.encode(liveModel.feedback.previewLines.joinToString("\n"), "UTF-8")
+                    BugReportUrl.build(
+                        what = "",
+                        environment = liveModel.feedback.previewLines.joinToString("\n"),
+                    )
                 }
                 SettingsRoute(
                     model = liveModel,
@@ -1679,7 +1685,17 @@ fun VelaNavHost(
                             scope.launch {
                                 // The keep-list: the account records and the pending-upload
                                 // ledger, which sign-out's own path owns (028's one exception).
-                                val left = DeviceStorage.erase(VelaStore(context), keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"))
+                                //
+                                // Spec 081 FR-017: `eraseDevice`, not `erase`. The latter
+                                // sweeps one DataStore; this device also holds the theme
+                                // (a second store), the crash record, the logs, the caches
+                                // and — the one that mattered — every browsed site's
+                                // cookies and localStorage under `app_webview/`.
+                                val left = DeviceStorage.eraseDevice(
+                                    context,
+                                    VelaStore(context),
+                                    keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"),
+                                )
                                 if (left.isEmpty()) {
                                     eraseFailed = null
                                     application.container.session.signOut()
@@ -1691,9 +1707,14 @@ fun VelaNavHost(
                         },
                         onFeedbackSend = { text ->
                             // Spec 048: what was typed leads the report; the device lines follow.
-                            val body = listOf(text.trim(), liveModel.feedback.previewLines.joinToString("\n")).filter { it.isNotBlank() }.joinToString("\n\n")
-                            val url = "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                                java.net.URLEncoder.encode("[android] ", "UTF-8") + "&body=" + java.net.URLEncoder.encode(body, "UTF-8")
+                            // Spec 081 FR-016: each in its OWN field — `what` and
+                            // `environment` — because `&body=` is dropped by GitHub
+                            // for an issue form, which is how this button spent its
+                            // whole life opening a blank page.
+                            val url = BugReportUrl.build(
+                                what = text.trim(),
+                                environment = liveModel.feedback.previewLines.joinToString("\n"),
+                            )
                             VelaLog.event("feedback", "send", "typed" to text.length)
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                         },

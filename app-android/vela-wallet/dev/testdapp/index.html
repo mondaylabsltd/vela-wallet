@@ -15,6 +15,9 @@
   <button id="block" type="button">Block number</button>
   <button id="switch" type="button">Switch to Gnosis</button>
   <button id="sign" type="button">Sign</button>
+  <button id="takeover" type="button">Add owner (blocked)</button>
+  <button id="enablemodule" type="button">Enable module (blocked)</button>
+  <button id="safetx" type="button">SafeTx typed data (blocked)</button>
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
   <button id="verify" type="button">Verify sign</button>
@@ -81,5 +84,24 @@
       show();
     };
     document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
+  
+    // Spec 081: the shapes the self-call guard must refuse.
+    const selfAddr = () => me ? me() : window.ethereum.selectedAddress;
+    const wordAddr = (a) => a.replace(/^0x/, '').padStart(64, '0');
+    document.getElementById('takeover').onclick = () => window.__ask('eth_sendTransaction', [
+      { from: selfAddr(), to: selfAddr(), data: '0x0d582f13' + wordAddr(selfAddr()) + '1'.padStart(64, '0'), value: '0x0' }
+    ]);
+    document.getElementById('enablemodule').onclick = () => window.__ask('eth_sendTransaction', [
+      { from: selfAddr(), to: selfAddr(), data: '0x610b5925' + wordAddr(selfAddr()), value: '0x0' }
+    ]);
+    document.getElementById('safetx').onclick = () => window.__ask('eth_signTypedData_v4', [
+      selfAddr(),
+      JSON.stringify({
+        primaryType: 'SafeTx',
+        domain: { chainId: 100, verifyingContract: selfAddr() },
+        types: { EIP712Domain: [{ name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }], SafeTx: [{ name: 'to', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'data', type: 'bytes' }] },
+        message: { to: selfAddr(), value: '0', data: '0x' }
+      })
+    ]);
   </script>
 </body>

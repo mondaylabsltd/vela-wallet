@@ -499,7 +499,10 @@ struct SettingsScreenModel {
     var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
     var rpcProviders: RpcProvidersModel
-    let endpoints: EndpointsModel
+    /// `var` since 081: the four service endpoints are the core's now, values
+    /// and health both, so the page can be swapped onto the drawing the way
+    /// every other live surface is.
+    var endpoints: EndpointsModel
     /// `var` since 058: both are MEASURED now — the storage page from the
     /// store's own keys, the about page from the running build.
     var storage: StorageModel
@@ -514,7 +517,10 @@ struct SettingsScreenModel {
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel
     let clearCachesSheet: ConfirmSheetModel
-    let eraseSheet: ConfirmSheetModel
+    /// `var` since 081: a partial wipe names what survived in this sheet, so
+    /// the person is told where they are looking rather than sent away with a
+    /// phone that was not erased (FR-017).
+    var eraseSheet: ConfirmSheetModel
     let feedback: FeedbackModel
     let rpcBanner: RpcBannerModel?
     /// `var` since 058: the hero's status line opens these, and what they show

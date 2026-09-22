@@ -1,7 +1,7 @@
 ---
 title: O ataque à Bybit e o caminho que ele usou
 description: "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não foram quebrados — a interface foi. Esta página explica o caminho do ataque e o que no design da Vela o fecha."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # O ataque à Bybit e o caminho que ele usou
@@ -67,18 +67,21 @@ endereço de implementação; é exatamente o tipo de coisa que deveria fazer um
 signatário parar na hora, e escondê-lo atrás de um resumo amigável foi o que
 impediu isso.
 
-Dois limites, para sermos exatos. Um dApp não consegue pedir à Vela um
+Duas coisas, para sermos exatos. Um dApp não consegue pedir à Vela um
 `delegatecall` diretamente — as solicitações que uma página pode fazer geram
 chamadas comuns —, então o próprio payload da Bybit não poderia chegar por esse
-caminho. Mas uma página *pode* pedir uma chamada do seu Safe para ele mesmo:
-`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`. Qualquer
-uma delas, assinada uma única vez, entrega a conta tão completamente quanto o
-payload da Bybit entregou — um módulo habilitado pode, depois, executar um
-`delegatecall` por conta própria. A Vela decodifica essas chamadas, mas ainda não as
-bloqueia; **rejeite qualquer solicitação cujo destino seja o endereço da sua própria
-carteira.** E, se o próprio código da Vela fosse trocado, como aconteceu com o da
-`Safe{Wallet}`, a decodificação também seria a do atacante — e é para isso que serve
-o próximo ponto.
+caminho. E uma página que pede uma chamada do seu Safe para ele mesmo é
+**recusada, não apenas decodificada**: `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` e o resto dessa família são bloqueados
+quando o destino é a sua própria carteira, inclusive dentro de um lote e dentro de um
+`MultiSend`, assim como qualquer trecho que carregue um `delegatecall`, seja qual for
+o alvo, e uma assinatura de dados tipados `SafeTx`. A carteira diz qual chamada
+recusou e não oferece nada para assinar. Qualquer uma delas, assinada uma única vez,
+entregaria a conta tão completamente quanto o payload da Bybit entregou — um módulo
+habilitado pode, depois, executar um `delegatecall` por conta própria. E, se o
+próprio código da Vela fosse trocado, como aconteceu com o da `Safe{Wallet}`, a
+decodificação também seria a do atacante — e é para isso que serve o próximo
+ponto.
 
 **Um caminho independente que pode conferir a interface.** A Vela construiu uma
 [página de assinatura](/pt-BR/docs/clear-signing-self-host) sem build e sem

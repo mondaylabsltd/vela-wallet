@@ -1,7 +1,7 @@
 ---
 title: Panduan hosting sendiri
 description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -111,16 +111,15 @@ hijau kalau endpoint itu menyebut nama layanan yang benar dan melaporkan
 | Data chain | `ethereum-data` |
 | Kurs | tidak diperiksa berdasarkan nama — harus mengembalikan daftar kurs berbasis USD |
 
-Seberapa baik tiap aplikasi mengikuti pengaturan ini saat ini:
+Keempat aplikasi menghormati keempat kolom itu, dan endpoint yang diubah berlaku pada
+panggilan berikutnya, bukan pada peluncuran berikutnya: setiap jalur — membuat dompet,
+masuk, mencari nama untuk sebuah alamat — membaca endpoint tepat pada saat memakainya.
+Di iOS, indeks passkey juga bisa diubah di layar masuk kalau indeks bawaan tidak bisa
+dijangkau.
 
-| Aplikasi | Endpoint layanan | RPC per jaringan |
-| --- | --- | --- |
-| Web dan ekstensi | Data chain, relay, dan kurs fiat. Indeks passkey dipakai untuk mencari nama, tetapi pembuatan dompet dan proses masuk masih memakai indeks Vela | Ya |
-| Desktop | Keempatnya; indeks passkey yang baru berlaku setelah Anda memulai ulang aplikasi atau keluar | Ya |
-| Android | Keempatnya, kecuali pencarian nama untuk alamat yang masih bertanya ke indeks Vela | Ya |
-| iOS | **Belum**: halamannya menampilkan nilai contoh dan tidak menyimpan apa pun. Indeks passkey bisa diubah di layar masuk kalau indeks bawaan tidak bisa dijangkau | Hanya-baca |
-
-Kekurangan-kekurangan ini adalah bug, dan sudah dicatat.
+(Sampai September 2026 ada empat pengecualian untuk hal itu; yang terburuk adalah
+halaman iOS yang menampilkan nilai contoh dan tidak menyimpan apa pun. Semuanya sudah
+diperbaiki.)
 
 ## Jalankan relay Anda sendiri
 
@@ -156,9 +155,10 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Sebaiknya pakai image yang sudah dipublikasikan: build dari kode sumber dengan
-`docker compose up --build` bisa gagal dengan Dockerfile yang sekarang. Tanpa Docker,
-`cargo run --release --bin vela-relay` menjalankannya secara langsung.
+Dua-duanya bisa: image yang sudah dipublikasikan paling cepat, dan
+`docker compose up --build` membangun hal yang sama dari kode sumber yang bisa Anda
+baca. Tanpa Docker, `cargo run --release --bin vela-relay` menjalankannya secara
+langsung.
 
 **Cloudflare Workers**
 
@@ -218,9 +218,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` tetap penting walaupun file contoh server tidak
-mencantumkannya: tanpanya, server membagikan challenge yang ditolak kontrak, dan setiap
-pendaftaran gagal.
+`P256_INDEX_DOMAIN_REGISTRY` adalah yang paling sering terlewat: tanpanya, server
+membagikan challenge yang ditolak kontrak, dan setiap pendaftaran gagal. Variabel ini
+ada di `.env.example`, dan nilainya harus sama dengan `DOMAIN_REGISTRY` milik kontrak
+yang sudah di-deploy — mulai VERSION 12 registri, domain challenge dipatok saat deploy,
+jadi nilainya tidak berubah ketika kontraknya di-deploy ulang.
 
 **Jalankan dan periksa**
 
@@ -232,8 +234,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 Server ini mendengarkan di HTTP biasa (port 11256 secara bawaan); pasang proxy TLS di
-depannya, karena dompet hanya menerima endpoint `https://`. Saat tulisan ini dibuat,
-Dockerfile dari kode sumber mungkin tidak bisa di-build; build dengan Cargo berhasil.
+depannya, karena dompet hanya menerima endpoint `https://`. `docker build -f
+p256-index-server/Dockerfile .` juga berhasil dari clone yang bersih; kalau memakai
+Compose, salin dulu `.env.example` menjadi `p256-index-server/.env`.
 
 **Kalau tidak ada indeks sama sekali yang menjawab**, dompet yang sudah ada tetap
 berfungsi: saat masuk, aplikasi membaca kontrak registri di Gnosis (lalu Ethereum) lewat
@@ -303,10 +306,10 @@ memakai passkey `getvela.app`.
 Vela berjalan di chain EVM apa pun yang punya precompile P-256 dan kontrak-kontrak standar
 yang diperiksanya. [Penyiapan chain](/id/chain-setup) memberi tahu apa yang kurang di
 sebuah chain dan men-deploy yang bisa di-deploy siapa saja;
-[jaringan & biaya](/id/docs/networks-and-fees) menjelaskan persyaratannya. Satu celah:
-dompet dengan lebih dari satu kunci juga membutuhkan factory signer passkey milik Safe di
-chain itu, yang belum diperiksa — tanpanya, hanya kunci pertama yang bisa
-menandatangani di sana.
+[jaringan & biaya](/id/docs/networks-and-fees) menjelaskan persyaratannya. Pemeriksaannya
+sudah mencakup dua kontrak yang dibutuhkan dompet dengan lebih dari satu kunci, dan
+menandainya sebagai kontrak semacam itu — chain tanpa keduanya tetap menjalankan dompet
+satu kunci.
 
 ## Yang masih mengarah ke Vela setelah semua ini
 

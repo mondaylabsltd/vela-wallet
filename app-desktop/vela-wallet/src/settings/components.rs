@@ -109,6 +109,13 @@ pub fn callout(
         .child(
             div()
                 .flex_1()
+                // Without this the flex item keeps its automatic min-width —
+                // the text's intrinsic width — and a long sentence runs out of
+                // the callout, out of the dialog, and over the page behind it
+                // rather than wrapping. Measured on the add-network warning
+                // (spec 081 FR-009), which left ~40% of its first sentence
+                // sitting on top of a settings row.
+                .min_w(px(0.))
                 .text_size(theme::text_row_sub())
                 .text_color(fg)
                 .child(text.into()),
@@ -892,13 +899,20 @@ pub fn key_value_row(
 /// DST1's 清理数据 card — the one thing in settings drawn as a bordered box
 /// rather than a hairline row, because it is the only action on the screen
 /// that cannot be undone.
+///
+/// `on_click` arrived with spec 081 FR-017, and its absence is the defect:
+/// this card was drawn from the first day with no handler at all, so the most
+/// destructive-looking control in the app was the one control that did
+/// nothing. `None` still means a board — the gallery draws this card too —
+/// and only a live account panel passes a handler.
 pub fn danger_card(
     theme: &Theme,
     title: gpui::SharedString,
     subtitle: gpui::SharedString,
     action: gpui::SharedString,
-) -> Div {
-    div()
+    on_click: Option<crate::flows::panels::Click>,
+) -> gpui::AnyElement {
+    let card = div()
         .flex()
         .items_center()
         .gap(px(12.))
@@ -933,7 +947,15 @@ pub fn danger_card(
                 .text_size(theme::text_row_sub())
                 .text_color(theme.error_base)
                 .child(action),
-        )
+        );
+    match on_click {
+        Some(on_click) => card
+            .id("settings-erase-card")
+            .cursor_pointer()
+            .on_click(on_click)
+            .into_any_element(),
+        None => card.into_any_element(),
+    }
 }
 
 // -- RpcBanner ----------------------------------------------------------------

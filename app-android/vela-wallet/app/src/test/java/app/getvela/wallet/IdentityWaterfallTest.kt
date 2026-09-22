@@ -57,22 +57,80 @@ class IdentityWaterfallTest {
         assertTrue(store.values.getValue(IdentityResolver.CACHE_KEY).contains(alice.lowercase()))
     }
 
-    @Test
-    fun `a name service's reverse record is decoded and labelled by the service`() = runBlocking {
-        val resolverAddr = "1111111111111111111111111111111111111111"
+    /**
+     * `addr(bytes32)` — the FORWARD record, which the core asks for once a
+     * reverse record has claimed a name (spec 081, FR-010).
+     */
+    private val selAddr = "3b3b57de"
+    private val resolverAddr = "1111111111111111111111111111111111111111"
+
+    /**
+     * An ENS registry that reverse-resolves `alice` to `claimed`, and forward-
+     * resolves `claimed` to whatever `forwardsTo` says — `null` for a name with
+     * no forward record at all.
+     */
+    private fun serveEns(claimed: String, forwardsTo: String?) {
         chainAnswers = { chain, to, data ->
             when {
                 chain != 1 -> null
                 data.startsWith("0x" + IdentityResolver.SEL_RESOLVER) -> "0x" + resolverAddr.padStart(64, '0')
-                data.startsWith("0x" + IdentityResolver.SEL_NAME) && to.equals("0x$resolverAddr", ignoreCase = true) -> abiString("alice.eth")
+                !to.equals("0x$resolverAddr", ignoreCase = true) -> null
+                data.startsWith("0x" + IdentityResolver.SEL_NAME) -> abiString(claimed)
+                data.startsWith("0x$selAddr") ->
+                    forwardsTo?.let { "0x" + it.removePrefix("0x").lowercase().padStart(64, '0') }
+                        ?: ("0x" + "0".repeat(64))
                 else -> null
             }
         }
+    }
+
+    @Test
+    fun `a name service's reverse record is decoded and labelled by the service`() = runBlocking {
+        serveEns(claimed = "alice.eth", forwardsTo = alice)
         val identity = resolver().resolve(alice)
         assertEquals("alice.eth", identity!!.name)
         assertEquals("ENS", identity.source)
         assertTrue("the index was asked first", calls.first() == "index")
         assertTrue("every service was asked", IdentityResolver.NAME_SERVICES.all { s -> calls.any { it == "call:${s.chainId}" } })
+    }
+
+    /**
+     * The attack this shell now refuses: anyone can write their own
+     * `addr.reverse`, so an address is named `vitalik.eth` and the wallet used
+     * to draw it. Resolving that name forward lands on somebody else, so no
+     * name is shown — and none is cached either.
+     */
+    @Test
+    fun `a reverse record that resolves elsewhere is not shown`() = runBlocking {
+        serveEns(claimed = "vitalik.eth", forwardsTo = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
+        assertNull(resolver().resolve(alice))
+        assertNull(store.values[IdentityResolver.CACHE_KEY])
+    }
+
+    /** A claimed name with no forward record at all names nobody. */
+    @Test
+    fun `a reverse record with no forward record is not shown`() = runBlocking {
+        serveEns(claimed = "alice.eth", forwardsTo = null)
+        assertNull(resolver().resolve(alice))
+    }
+
+    /**
+     * The forward lookup could not be made. The name is still not shown:
+     * failing open here would let whoever poisons a record pick the moment.
+     */
+    @Test
+    fun `a name is not shown when the forward lookup cannot be made`() = runBlocking {
+        // The reverse direction answers; the forward one is unreachable.
+        val reverseNode = IdentityResolver.namehash("${alice.drop(2).lowercase()}.addr.reverse").removePrefix("0x")
+        chainAnswers = { chain, to, data ->
+            when {
+                chain != 1 -> null
+                data == "0x" + IdentityResolver.SEL_RESOLVER + reverseNode -> "0x" + resolverAddr.padStart(64, '0')
+                data.startsWith("0x" + IdentityResolver.SEL_NAME) -> abiString("alice.eth")
+                else -> null
+            }
+        }
+        assertNull(resolver().resolve(alice))
     }
 
     @Test

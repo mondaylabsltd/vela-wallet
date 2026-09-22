@@ -1,7 +1,7 @@
 ---
 title: Açık imzalama
 description: "Vela, siz onaylamadan önce işlemleri anlaşılmaz hex yerine sade bir dile çevirir — niyet, tutarlar, adresler ve risk. Bir çağrıyı çözemediğinde anlamış gibi yapmaz, sizi uyarır."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -44,11 +44,13 @@ Vela bir tanımlayıcıyı şu sırayla arar:
    kasaları ve ERC-2612 izinleri (permit); böylece gündelik işlemlerin çoğu yine
    çözülür.
 
-O sözleşme için özel olarak yazılmış bir tanımlayıcı eşleştiğinde işlem, sözleşmenin
-adıyla birlikte **doğrulanmış** olarak etiketlenir. "Doğrulanmış", *bu sözleşme için
-bir tanımlayıcı bulundu* demektir; kriptografik olarak kontrol edildiği anlamına
-gelmez: zincir verisi sunucusundan alınan tanımlayıcılar imzalı değildir, yani ancak o
-sunucu kadar güvenilirdirler — bu da
+**Doğrulanmış** yalnızca ilk kaynağa ayrılmıştır. Bir işlem ancak açıklama,
+çalıştırdığınız uygulamaya yerleşik bir tanımlayıcıdan geldiğinde — ya da zincir
+verisi sunucusundan gelip yerleşik kopyanın aynısı olduğunda, ki bu da yolda hiçbir
+şeyin değiştirilmediğini kanıtlar — doğrulanmış olarak etiketlenir. Sunucunun
+gönderdiği diğer her şey yine çözülür ve yine gösterilir; yanında, tanımlayıcı
+servisinden geldiğini ve hiçbir şeyin onu doğrulamadığını söyleyen bir satır bulunur.
+O servis imzalı değildir, yani ancak onu çalıştıran kişi kadar güvenilirdir — bu da
 [kendi sunucunuzu çalıştırabilmenizin](/tr/docs/self-hosting#chain-data) bir nedeni.
 
 Token tutarları, tokenın **gerçek zincir üstü ondalık basamaklarıyla**

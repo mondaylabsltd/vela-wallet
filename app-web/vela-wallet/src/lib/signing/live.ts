@@ -218,10 +218,38 @@ function calldataBytes(paramsJson: string): number {
 	}
 }
 
+/** The sentence under a refused request (spec 081). */
+function selfCallBlockedText(
+	blocked: NonNullable<SignView['blocked']>,
+	m: SigningMessages
+): string {
+	if (blocked.function === 'SafeTx') return m.selfCallBlockedSafeTx;
+	if (blocked.leg_index != null) {
+		return fill(m.selfCallBlockedLegBody, {
+			index: String(blocked.leg_index),
+			function: blocked.function
+		});
+	}
+	return fill(m.selfCallBlockedBody, { function: blocked.function });
+}
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
 	const blocks: Block[] = [];
+
+	/*
+	 * Spec 081: the core refused this request outright — it would have changed
+	 * who controls the account. Say so and stop: the decoded intent below would
+	 * describe a transaction nobody can sign, and reading it as an option is
+	 * exactly the confusion the refusal exists to prevent. The slider is closed
+	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
+	 */
+	if (sign.blocked) {
+		blocks.push({ kind: 'intent', text: m.selfCallBlockedTitle, tone: 'danger' });
+		blocks.push({ kind: 'warning', tone: 'danger', text: selfCallBlockedText(sign.blocked, m) });
+		return blocks;
+	}
 
 	if (clear.surface === 'loading' || clear.resolving) {
 		blocks.push({ kind: 'sentence', text: m.choosePrompt, tone: 'neutral' });
@@ -265,12 +293,19 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.to_own_token) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 		}
-		if (!result.verified) {
-			blocks.push({
-				kind: 'warning',
-				tone: 'caution',
-				text: fill(m.warnSelectorNotListed, { bytes })
-			});
+		/*
+		 * Spec 081 FR-008: where the description came from, in the one case
+		 * the person can act on. This used to read "no ERC-7730 descriptor,
+		 * selector not listed" for every unverified result — said over a
+		 * descriptor the wallet had just fetched and decoded, and over an
+		 * ordinary ERC-20 transfer, both of which listed the selector fine.
+		 * The other values say nothing here: built in and pinned are the
+		 * verified ones, a token-standard shape is the standard doing its
+		 * job, the 4-byte database has `best_effort` below, and a deployment
+		 * claims nothing to warn about.
+		 */
+		if (result.provenance === 'fetched') {
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 		}
 		if (result.partial) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
@@ -416,8 +451,12 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 
 function techModel(inputs: SigningLiveInputs): TechModel {
 	const { sign, clear, m } = inputs;
-	const request = sign.request;
-	const result = clear.result;
+	// A refused request discloses nothing (spec 081). Android and iOS hide this
+	// card entirely under a refusal; web was still putting the raw
+	// `params_json` of the very request the wallet would not touch behind a
+	// disclosure — the one shell that stayed lax about it.
+	const request = sign.blocked ? null : sign.request;
+	const result = sign.blocked ? null : clear.result;
 	return {
 		title: m.advancedToggle,
 		summary: result?.contract_name ?? undefined,
@@ -519,13 +558,15 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		blocks: blocksFor(inputs),
 		tech: techModel(inputs),
 		techOpen: false,
-		fee: feeModel(inputs),
+		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
 		signer: {
 			label: m.signingAccount,
 			name: identity.name,
 			identiconSvg: identicon(identity.address),
 			address: identity.address
 		},
+		// Spec 081: refused — no fee, no slider, one way out.
+		dismissOnly: sign.blocked ? m.close : undefined,
 		confirm: {
 			hint: m.slideToConfirm,
 			/*

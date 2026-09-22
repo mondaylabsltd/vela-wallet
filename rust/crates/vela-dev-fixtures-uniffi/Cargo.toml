@@ -15,14 +15,15 @@ name = "vela_dev_fixtures"
 # what lets a release build carry neither (spec 043 FR-001, spec 052 FR-001).
 crate-type = ["cdylib", "staticlib", "lib"]
 
-[[bin]]
-name = "uniffi-bindgen"
-path = "uniffi-bindgen.rs"
-
 [dependencies]
 # `dev-fixtures` ON: this crate exists to carry the keyset, and nothing that
 # ships in a release APK depends on it — the debug source set is the only
 # consumer. `vela-core-uniffi` must never enable the feature.
 vela-core = { workspace = true, features = ["dev-fixtures"] }
-uniffi = { workspace = true, features = ["cli"] }
+# No `cli` here either (spec 081 FR-014). This library is debug-only, but cargo
+# unifies features across one invocation: leaving `cli` on would let a build
+# that touches both uniffi crates link `uniffi_bindgen` into the shipped one.
+# The generator is `vela-uniffi-bindgen`; `generate --library` reads this
+# library's metadata the same as before.
+uniffi = { workspace = true }
 thiserror = { workspace = true }

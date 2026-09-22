@@ -60,6 +60,7 @@
       "retry": "Retry",
       "addNetworkBtn": "Add Network",
       "incompatibleHint": "Some required contracts are not yet deployed on this chain.\nUse the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.",
+      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally.",
       "openChainSetupTool": "Open Chain Setup Tool",
       "recheck": "Re-check",
       "chainIdLabel": "Chain ID: {{chainId}}",

@@ -1,7 +1,7 @@
 ---
 title: Cài đặt Vela
 description: "Mọi cách để chạy Vela — web, tiện ích trình duyệt, máy tính và điện thoại — mỗi cách tốn bao nhiêu, làm được gì, và thiết bị của bạn cần gì."
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -58,7 +58,8 @@ ARM), **macOS** 11 trở lên, và **Linux** (.deb, .rpm hoặc Flatpak, x64 và
 
 Trên macOS và Windows, ứng dụng máy tính có sẵn một trình duyệt tích hợp cho dApp.
 Mã kiểm tra (checksum) của mọi gói nằm trên
-[trang phát hành của GitHub](https://github.com/mondaylabsltd/vela-wallet/releases).
+[trang phát hành của GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) —
+và bạn kiểm tra được nhiều hơn một mã checksum, xem bên dưới.
 
 ## iPhone và Android
 
@@ -68,6 +69,42 @@ nguồn công khai, nên bạn có thể tự biên dịch miễn phí — với
 bạn tự ký không dùng được passkey của chính điện thoại cho các ví getvela.app, dù quét
 mã bằng một điện thoại khác và khóa bảo mật USB vẫn dùng được. Xem
 [tự biên dịch ứng dụng](/vi/docs/self-hosting#web-app).
+
+## Kiểm chứng thứ bạn vừa tải về
+
+Mã checksum chỉ cho bạn biết hai tệp là giống nhau. Nó không cho biết ai đã tạo ra
+tệp — mà danh sách checksum lại nằm ngay trên cùng trang với bản tải về. Vì vậy mọi
+gói chúng tôi đính kèm vào một bản phát hành đều còn được **chứng thực**
+(attestation): lần chạy workflow đã dựng ra gói đó ký một tuyên bố nêu tên tệp, commit
+và lần chạy, rồi GitHub lưu lại. Kiểm tra chỉ mất một lệnh với
+[GitHub CLI](https://cli.github.com) (đăng nhập một lần bằng `gh auth login`; việc
+kiểm tra là miễn phí):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+Nó in ra ai đã dựng tệp và từ commit nào, hoặc báo thất bại. Máy của bạn không phải
+tin chúng tôi để có câu trả lời đó: chữ ký là của GitHub, được tạo ngay lúc dựng, và
+người chỉ đăng lại tệp ở đâu đó thì không tạo ra được nó.
+
+Ảnh đĩa cho Mac được ký bằng Developer ID của chúng tôi và được Apple công chứng
+(notarize); macOS kiểm tra điều đó giúp bạn khi bạn mở ảnh đĩa. Để tự hỏi lấy:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Cảnh báo của Windows vẫn còn đó">
+Chứng thực không phải là ký mã. Trình cài đặt Windows chưa được ký mã, nên SmartScreen
+vẫn chặn nó một lần với dòng "Windows đã bảo vệ PC của bạn" — hãy chọn
+<strong>Thông tin thêm</strong>, rồi <strong>Vẫn chạy</strong>. Việc kiểm tra chứng
+thực mới là bước cho bạn biết tệp đúng là của chúng tôi; còn cảnh báo kia là chuyện
+một chứng chỉ mà chúng tôi chưa mua.
+</Callout>
+
+Những gói được phát hành trước khi bật tính năng này chỉ có mã checksum.
 
 ## Dùng Vela với dApp
 

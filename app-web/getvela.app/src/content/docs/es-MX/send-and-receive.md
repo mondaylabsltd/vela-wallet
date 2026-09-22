@@ -1,7 +1,7 @@
 ---
 title: Enviar y recibir
 description: "Cómo recibir y enviar con Vela: una dirección en todas las redes, envíos a una o a muchas personas, cómo se nombra a los destinatarios, qué confirmas y cómo mueve el relay tus fondos."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -50,9 +50,15 @@ registro (el nombre de otra wallet de Vela) y luego en los registros inversos de
 `.bnb`, `.arb`, `.g`, Basename y ENS, leídos directamente de cada cadena. Esto
 funciona en un solo sentido: le pone nombre a una dirección que ingresaste. Escribir
 un nombre como `alice.eth` no busca ninguna dirección. Tus **contactos** guardados
-también muestran su nombre. Toma un nombre como una pista, no como una prueba: un
-registro inverso o el nombre de una wallet de Vela los elige quien controla esa
-dirección.
+también muestran su nombre.
+
+Un nombre de esos registros inversos solo se muestra si **resuelve hacia adelante a
+la misma dirección**. Cualquiera puede poner en su propio registro inverso el texto
+que quiera, así que el registro por sí solo no prueba nada; la wallet le pregunta al
+servicio de nombres a qué dirección apunta ese nombre, y solo muestra el nombre
+cuando los dos coinciden. Si la comprobación no se puede hacer (un endpoint que no
+responde, un resolver que falla), ves la dirección y ningún nombre, nunca uno sin
+comprobar.
 
 ### Moneda de la comisión y velocidad
 

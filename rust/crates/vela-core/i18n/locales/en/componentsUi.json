@@ -96,6 +96,7 @@
       "signingFor": "Signing for",
       "signingAccount": "Signing account",
       "bestEffortWarning": "Decoded from the function signature — not a verified descriptor. Review the details carefully.",
+      "descriptorFetchedWarning": "This description came from Vela's descriptor service and nothing authenticated it — check the details before approving.",
       "bestEffortSimulated": "Decoded from the function signature (not a verified descriptor). The preview below shows the actual effect.",
       "blindButSimulated": "Vela couldn't read this contract's details, but the preview below shows exactly what this transaction does.",
       "simWillSucceed": "Simulation passed — expected to succeed",
@@ -222,7 +223,11 @@
       "copyValue": "Copy",
       "signWith": "Sign with",
       "viewOnExplorer": "View on explorer",
-      "sendingToTokenContract": "Sent to the token’s own contract"
+      "sendingToTokenContract": "Sent to the token’s own contract",
+      "selfCallBlockedTitle": "Vela can’t sign this",
+      "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
+      "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
+      "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed."
     },
     "currency": {
       "title": "Display currency",

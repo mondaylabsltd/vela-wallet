@@ -65,16 +65,19 @@ payload was a `delegatecall` that swapped an implementation address; that is
 precisely the shape of thing that should stop a signer dead, and hiding it
 behind a friendly summary is how it did not.
 
-Two limits to be exact about. A dApp cannot ask Vela for a `delegatecall`
+Two things to be exact about. A dApp cannot ask Vela for a `delegatecall`
 directly — the requests a page can make produce ordinary calls — so the Bybit
-payload itself could not arrive that way. But a page *can* ask for a call from
-your Safe to itself: `enableModule`, `addOwnerWithThreshold`,
-`setFallbackHandler`, `setGuard`. Any one of those, signed once, hands over the
-account as completely as the Bybit payload did — an enabled module can then run a
-`delegatecall` of its own. Vela decodes such calls but does not block them yet;
-**reject any request whose target is your own wallet address.** And if Vela's own
-code were replaced, as `Safe{Wallet}`'s was, the decoding would be the attacker's
-too — which is what the next point is for.
+payload itself could not arrive that way. And a page that asks for a call from
+your Safe to itself is **refused, not merely decoded**: `enableModule`,
+`addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` and the
+rest of that family are blocked when the target is your own wallet, inside a
+batch and inside a `MultiSend` as well, as is any leg carrying a `delegatecall`
+whatever it targets, and a `SafeTx` typed-data signature. The wallet says which
+call it refused and offers nothing to sign. Any one of those, signed once, would
+hand over the account as completely as the Bybit payload did — an enabled module
+can then run a `delegatecall` of its own. And if Vela's own code were replaced,
+as `Safe{Wallet}`'s was, the decoding would be the attacker's too — which is what
+the next point is for.
 
 **An independent path that can check the interface.** Vela has built a
 zero-build, zero-dependency [signing page](/docs/clear-signing-self-host) that

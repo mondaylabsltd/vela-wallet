@@ -41,11 +41,13 @@ Vela looks for a descriptor in this order:
 3. **Standard shapes** — ERC-20 tokens, ERC-721 and ERC-1155 NFTs, ERC-4626
    vaults and ERC-2612 permits — so most everyday actions still decode.
 
-When a descriptor written for that specific contract matches, the transaction is
-labelled **verified** with the contract's name. "Verified" means *a descriptor
-for this contract was found*, not that it was cryptographically checked:
-descriptors fetched from the chain-data server are not signed, so they are only
-as trustworthy as that server — which is one reason you can
+**Verified** is reserved for the first source. A transaction is labelled verified
+only when the description came from a descriptor built into the app you are
+running — or from the chain-data server and is identical to the built-in copy,
+which proves nothing was changed in transit. Anything else the server sends is
+still decoded and still shown, with a line saying it came from the descriptor
+service and nothing authenticated it. That service is not signed, so it is only
+as trustworthy as whoever runs it — which is one reason you can
 [run your own](/docs/self-hosting#chain-data).
 
 Token amounts are formatted using the token's **real on-chain decimals**. If Vela

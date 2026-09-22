@@ -26,9 +26,9 @@ struct SigningFixturesTests {
     private func strings(_ m: SigningModel) -> [String] {
         var out = [
             m.dapp.name, m.dapp.host, m.network.name,
-            m.signer.label, m.signer.name,
-            m.confirm.hint, m.confirm.action, m.panelTitle, m.tech.title,
+            m.signer.label, m.signer.name, m.panelTitle, m.tech.title,
         ]
+        if let confirm = m.confirm { out += [confirm.hint, confirm.action] }
         for block in m.blocks {
             switch block {
             case .intent(let text, _): out.append(text)
@@ -67,6 +67,9 @@ struct SigningFixturesTests {
             }
         case .offchain(let note): out.append(note)
         case .hidden: break
+        // A refused request carries no fee at all (spec 081); `.hidden` is the
+        // off-chain case that shows the row with nothing in it.
+        case .none: break
         }
         return out
     }
@@ -95,15 +98,17 @@ struct SigningFixturesTests {
     @Test func theSlideAlwaysSaysWhatItConfirms() {
         for state in SigningStateId.allCases {
             let m = model(state)
-            #expect(!m.confirm.hint.isEmpty, "\(state) has no slide hint")
-            #expect(!m.confirm.action.isEmpty, "\(state) has no slide action")
+            // Every DRAWN state offers the slide; the refusal state has no
+            // fixture, because it is reached from the core, not the gallery.
+            #expect(m.confirm?.hint.isEmpty == false, "\(state) has no slide hint")
+            #expect(m.confirm?.action.isEmpty == false, "\(state) has no slide action")
         }
     }
 
     /// The never-unlimited mandate (spec 022 §4).
     @Test func unlimitedApprovalCannotBeConfirmedAsRequested() {
         let m = model(.cs5)
-        #expect(!m.confirm.enabled, "cs5 must not be confirmable")
+        #expect(m.confirm?.enabled == false, "cs5 must not be confirmable")
         guard case .allowance(_, _, _, let chips, _, _, _) = m.blocks.first(where: {
             if case .allowance = $0 { return true } else { return false }
         }) else { Issue.record("cs5 has no allowance editor"); return }
@@ -112,7 +117,7 @@ struct SigningFixturesTests {
 
     @Test func choosingAFiniteCapReEnablesTheSlide() {
         for state: SigningStateId in [.cs6, .cs8] {
-            #expect(model(state).confirm.enabled, "\(state) should be confirmable")
+            #expect(model(state).confirm?.enabled == true, "\(state) should be confirmable")
         }
     }
 

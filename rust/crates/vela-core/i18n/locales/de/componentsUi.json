@@ -86,6 +86,7 @@
       "close": "Schließen",
       "valueLabel": "Wert",
       "bestEffortWarning": "Aus der Funktionssignatur dekodiert — kein verifizierter Deskriptor. Prüfen Sie die Details sorgfältig.",
+      "descriptorFetchedWarning": "Diese Beschreibung stammt von Velas Deskriptor-Dienst und wurde von niemandem authentifiziert — prüfen Sie die Details vor dem Genehmigen.",
       "simWillSucceed": "Simulation bestanden — sollte erfolgreich sein",
       "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
       "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
@@ -193,7 +194,11 @@
       "copyValue": "Kopieren",
       "signWith": "Signieren mit",
       "viewOnExplorer": "Im Explorer ansehen",
-      "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet"
+      "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet",
+      "selfCallBlockedTitle": "Vela signiert diese Anfrage nicht",
+      "selfCallBlockedBody": "Diese Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela sie ab. Es wurde nichts signiert.",
+      "selfCallBlockedLegBody": "Schritt {{index}} dieser Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela die ganze Anfrage ab. Es wurde nichts signiert.",
+      "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert."
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

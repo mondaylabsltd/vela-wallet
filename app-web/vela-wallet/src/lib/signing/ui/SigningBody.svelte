@@ -25,11 +25,14 @@
 		onspeedpick?: (id: string) => void;
 		/** `null` toggles the list; an id picks a method and closes it. */
 		onsignwith?: (id: string | null) => void;
+		/** Spec 081: the way out of a refused request. */
+		onclose?: () => void;
 	}
 
 	let {
 		model,
 		onconfirm,
+		onclose,
 		onchip,
 		oncustom,
 		onfee,
@@ -50,7 +53,9 @@
 
 <div class="footer">
 	<TechDetails tech={model.tech} open={techOpen} ontoggle={() => (techOverride = !techOpen)} />
-	<FeeRow fee={model.fee} ontoggle={onfee} onpick={onfeepick} {onspeed} {onspeedpick} />
+	{#if !model.dismissOnly}
+		<FeeRow fee={model.fee} ontoggle={onfee} onpick={onfeepick} {onspeed} {onspeedpick} />
+	{/if}
 	<SignerRow
 		label={model.signer.label}
 		name={model.signer.name}
@@ -60,15 +65,35 @@
 	{#if model.signWith}
 		<SignWithRow signWith={model.signWith} onselect={onsignwith} />
 	{/if}
-	<SlideToConfirm
-		hint={model.confirm.hint}
-		action={model.confirm.action}
-		enabled={model.confirm.enabled}
-		{onconfirm}
-	/>
+	<!--
+		Spec 081: a refused request shows no fee and no slider. Leaving a dead
+		"Slide to confirm · Enable module" under the refusal reads as an option
+		the person merely failed to use.
+	-->
+	{#if model.dismissOnly}
+		<button type="button" class="dismiss" onclick={() => onclose?.()}>{model.dismissOnly}</button>
+	{:else}
+		<SlideToConfirm
+			hint={model.confirm.hint}
+			action={model.confirm.action}
+			enabled={model.confirm.enabled}
+			{onconfirm}
+		/>
+	{/if}
 </div>
 
 <style>
+	.dismiss {
+		width: 100%;
+		padding: var(--space-md) var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-lg);
+		background: transparent;
+		color: var(--color-text-primary);
+		font-size: var(--font-size-body);
+		font-weight: var(--font-weight-semibold);
+		cursor: pointer;
+	}
 	.blocks {
 		display: flex;
 		flex-direction: column;

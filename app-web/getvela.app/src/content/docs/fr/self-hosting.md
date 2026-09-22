@@ -1,7 +1,7 @@
 ---
 title: Guide d'auto-hébergement
 description: "Tout ce que Vela fait tourner pour vous, le rôle de chaque élément, et comment le remplacer par le vôtre — le relais, l'index des clés publiques, les données de chaîne, les taux de change et les apps —, plus le seul élément que vous ne pouvez pas remplacer, et comment vous passer de getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -122,16 +122,15 @@ tous les cas — attendez le vert.
 | Données de chaîne | `ethereum-data` |
 | Taux de change | pas vérifié par son nom — doit renvoyer une liste de taux en base USD |
 
-Dans quelle mesure chaque app respecte ces réglages aujourd'hui :
+Les quatre apps respectent les quatre champs, et un point d'accès modifié prend
+effet dès l'appel suivant, et non au prochain lancement : chaque chemin — créer un
+portefeuille, se connecter, chercher le nom d'une adresse — lit le point d'accès au
+moment où il s'en sert. Sur iOS, l'index des passkeys peut aussi être modifié sur
+l'écran de connexion quand celui par défaut est injoignable.
 
-| App | Points d'accès des services | RPC par réseau |
-| --- | --- | --- |
-| Web et extension | Données de chaîne, relais et taux fiat. L'index des passkeys sert à rechercher les noms, mais la création d'un portefeuille et la connexion utilisent encore l'index de Vela | Oui |
-| Bureau | Les quatre ; un nouvel index des passkeys prend effet après un redémarrage ou une déconnexion | Oui |
-| Android | Les quatre, sauf la recherche de noms pour les adresses, qui interroge encore l'index de Vela | Oui |
-| iOS | **Pas encore** : la page affiche des valeurs fictives et n'enregistre rien. L'index des passkeys peut être modifié sur l'écran de connexion quand celui par défaut est injoignable | Lecture seule |
-
-Ces lacunes sont des bugs, et elles sont suivies.
+(Jusqu'en septembre 2026, il y avait quatre exceptions à cela, la pire étant une
+page iOS qui affichait des valeurs fictives et n'enregistrait rien. Elles sont
+corrigées.)
 
 ## Faire tourner votre propre relais
 
@@ -170,9 +169,10 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Préférez l'image publiée : compiler depuis les sources avec
-`docker compose up --build` peut échouer avec le Dockerfile actuel. Sans Docker,
-`cargo run --release --bin vela-relay` le lance directement.
+Les deux marchent : l'image publiée est la voie la plus rapide, et
+`docker compose up --build` compile la même chose à partir des sources que vous
+pouvez lire. Sans Docker, `cargo run --release --bin vela-relay` le lance
+directement.
 
 **Cloudflare Workers**
 
@@ -234,9 +234,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` est indispensable, même si le fichier d'exemple du
-serveur l'omet : sans lui, le serveur émet des défis que le contrat rejette, et
-tous les enregistrements échouent.
+`P256_INDEX_DOMAIN_REGISTRY` est celui que l'on oublie : sans lui, le serveur émet
+des défis que le contrat rejette, et tous les enregistrements échouent. Il figure
+dans `.env.example`, et il doit correspondre au `DOMAIN_REGISTRY` du contrat
+déployé — depuis la VERSION 12 du registre, le domaine des défis est fixé au
+déploiement, il ne bouge donc pas quand le contrat est redéployé.
 
 **Lancer et vérifier**
 
@@ -248,9 +250,10 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 Le serveur écoute en HTTP simple (port 11256 par défaut) ; placez un proxy TLS
-devant lui, car le portefeuille n'accepte que des points d'accès `https://`. À
-l'heure où ces lignes sont écrites, le Dockerfile des sources peut ne pas
-compiler ; la compilation avec Cargo, elle, fonctionne.
+devant lui, car le portefeuille n'accepte que des points d'accès `https://`.
+`docker build -f p256-index-server/Dockerfile .` fonctionne aussi depuis un clone
+tout neuf ; copiez d'abord `.env.example` vers `p256-index-server/.env` si vous
+passez par Compose.
 
 **Si aucun index ne répond**, les portefeuilles existants fonctionnent toujours : à
 la connexion, l'app lit le contrat de registre sur Gnosis (puis sur Ethereum) via
@@ -322,9 +325,9 @@ Vela fonctionne sur toute chaîne EVM qui dispose du précompilé P-256 et des
 contrats standards qu'il vérifie. La page [Configurer une chaîne](/fr/chain-setup)
 vous dit ce qui manque à une chaîne et déploie ce que tout le monde peut déployer ;
 [réseaux et frais](/fr/docs/networks-and-fees) explique les conditions requises.
-Une lacune : un portefeuille à plusieurs clés a aussi besoin de la fabrique de
-signataires passkey de Safe sur cette chaîne, ce que la vérification ne contrôle
-pas encore — sans elle, seule la première clé peut signer sur cette chaîne.
+La vérification inclut les deux contrats dont un portefeuille à plusieurs clés a
+besoin, et les signale comme tels — une chaîne qui en est dépourvue fait quand même
+tourner un portefeuille à clé unique.
 
 ## Ce qui pointe encore vers Vela après tout cela
 

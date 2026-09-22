@@ -4035,6 +4035,48 @@ export function validateClientData(kind, client_data_json, authenticator_data) {
 }
 
 /**
+ * **Does this name actually belong to this address — the next step of the
+ * check.**
+ *
+ * A reverse record (`addr.reverse`) is written by the address itself, so it is
+ * a CLAIM: anyone who funds an address can name it after whoever their victim
+ * is about to pay. `vela_core::app::name_verify` resolves the claimed name
+ * forward and compares, and nothing but `verified` may be drawn (spec 081,
+ * FR-010).
+ *
+ * `answers_json` is the transcript so far (`LookupAnswer[]`, the same shape
+ * `registryNameStep` uses); the return is a `VerifyStep` as JSON: `eth_call`s
+ * to perform, or the verdict plus the name exactly as it was proven. The
+ * shell owns the transport; every rule is the core's.
+ * @param {number} chain_id
+ * @param {string} registry
+ * @param {string} address
+ * @param {string} name
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function verifiedNameStep(chain_id, registry, address, name, answers_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.verifiedNameStep(chain_id, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
  * Which passkeys control the wallet at `address` — the Settings keys view
  * (spec 062). `device_keys_json` is the account record's `keys` array (or a
  * one-element array built from the legacy scalars); the answer is `ask` with

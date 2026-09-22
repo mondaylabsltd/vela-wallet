@@ -75,13 +75,13 @@ struct IdentityTests {
     @Test func anUnresolvedLookupCachesNothing() async {
         let (store, identity) = fresh()
         #expect(await identity.resolve(vitalik) == nil)
-        #expect(store.readObject("recipient_id:" + vitalik.lowercased()).isEmpty)
+        #expect(store.readObject("recipient_id.v2:" + vitalik.lowercased()).isEmpty)
     }
 
     /// A cached name is used without asking anybody, and it expires.
     @Test func aCachedNameIsReadBackAndExpires() async {
         let (store, identity) = fresh()
-        let key = "recipient_id:" + vitalik.lowercased()
+        let key = "recipient_id.v2:" + vitalik.lowercased()
         store.writeObject(key, [
             "identity": ["name": "vitalik.eth", "source": "ENS"],
             "cachedAt": Date().timeIntervalSince1970 * 1000,
@@ -104,7 +104,7 @@ struct IdentityTests {
     /// gets two entries.
     @Test func theCacheKeyIsTheOneWebWrites() async {
         let (store, identity) = fresh()
-        store.writeObject("recipient_id:" + vitalik.lowercased(), [
+        store.writeObject("recipient_id.v2:" + vitalik.lowercased(), [
             "identity": ["name": "vitalik.eth", "source": "ENS"],
             "cachedAt": Date().timeIntervalSince1970 * 1000,
         ])

@@ -17,7 +17,13 @@ import app.getvela.wallet.feature.signing.SigningBlock
 import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningScreenState
+import app.getvela.wallet.feature.signing.core.SignErrorKind
+import app.getvela.wallet.feature.signing.core.SignExecutor
+import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import app.getvela.wallet.feature.signing.core.ClearConfirm
+import app.getvela.wallet.feature.signing.core.ClearProvenance
+import app.getvela.wallet.feature.signing.core.ClearSignField
+import app.getvela.wallet.feature.signing.core.ClearSignResult
 import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.ClearSurface
 import app.getvela.wallet.feature.signing.core.GuardView
@@ -76,6 +82,36 @@ class SigningLiveTest {
         val blind = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
         assertTrue(blind.blocks.any { it is SigningBlock.Warning })
         assertEquals(strings.t("componentsUi.signing.confirmLabel"), blind.confirmAction)
+    }
+
+    /**
+     * Spec 081 FR-008: the sheet says where a description came from, and only
+     * where there is something to say. A fetched descriptor is the descriptor
+     * service's word over plain HTTP; everything else either IS the app's own
+     * word or already has its own line.
+     */
+    @Test
+    fun `a fetched description says it was never authenticated, and the others say nothing`() {
+        val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        fun warningsFor(provenance: ClearProvenance): List<String> {
+            val result = ClearSignResult(
+                intent = "Stake",
+                fields = listOf(ClearSignField(label = "To", value = "0x…", format = "addressName", address = founder)),
+                contract_address = founder,
+                provenance = provenance,
+            )
+            val clear = ClearSigningView(resolved = true, result = result, surface = ClearSurface.ClearSign, confirm = ClearConfirm.Confirm)
+            val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+            return model.blocks.filterIsInstance<SigningBlock.Warning>().map { it.text }
+        }
+        assertEquals(
+            listOf(strings.t("componentsUi.signing.descriptorFetchedWarning")),
+            warningsFor(ClearProvenance.Fetched),
+        )
+        for (quiet in listOf(ClearProvenance.BuiltIn, ClearProvenance.PinnedMatch, ClearProvenance.Standard, ClearProvenance.None)) {
+            assertEquals(quiet.name, emptyList<String>(), warningsFor(quiet))
+        }
     }
 
     private fun estimate(tier: FeeTier, totalWei: String) = FeeEstimateView(
@@ -236,5 +272,40 @@ class SigningLiveTest {
         val native = SigningController.approveOpts(FeeView(fee = estimate(FeeAssetView.Native, "400000000000000"), confirm_fee_ready = true), ClearSigningView(), GuardView())
         assertNull(native.gas_fee_token)
         assertEquals("400000000000000", native.quoted_fee?.amount)
+    }
+
+    /**
+     * Spec 081, device-found. A refused request answered the page with
+     * `-32603` and the refused FUNCTION as its message — "addOwnerWithThreshold"
+     * on its own, which reads as a label, not an answer. The page now gets a
+     * sentence and a machine-readable `kind`, the way the web shell already
+     * sends one.
+     */
+    @Test
+    fun aRefusedRequestTellsThePageWhatHappenedAndWhy() {
+        val json = SignExecutor.responseJson(
+            "rid-1",
+            SignResponsePayload.Err(
+                code = -32603,
+                kind = SignErrorKind.SelfCallBlocked,
+                message = "addOwnerWithThreshold",
+            ),
+        )
+        val error = json.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertEquals("self_call_blocked", error.getString("kind"))
+        assertTrue(
+            "the message must explain, not just name: ${error.getString("message")}",
+            error.getString("message").startsWith("This request would change who controls the wallet") &&
+                error.getString("message").contains("addOwnerWithThreshold"),
+        )
+
+        // An ordinary rejection keeps its own words and still carries a kind.
+        val rejected = SignExecutor.responseJson(
+            "rid-2",
+            SignResponsePayload.Err(code = 4001, kind = SignErrorKind.UserRejected, message = null),
+        ).getJSONObject("error")
+        assertEquals("User rejected the request", rejected.getString("message"))
+        assertEquals("user_rejected", rejected.getString("kind"))
     }
 }

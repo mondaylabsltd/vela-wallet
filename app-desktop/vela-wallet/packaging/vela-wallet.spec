@@ -62,7 +62,7 @@ Vela Wallet is a self-custodial smart account wallet for EVM networks. Accounts
 are Safe smart contracts with ERC-4337 account abstraction, and transactions are
 signed with a passkey - there is no seed phrase and no private key to store.
 
-Balances and USD prices for 12 EVM networks appear in a single view, priced from
+Balances and USD prices for 24 EVM networks appear in a single view, priced from
 on-chain DEX quotes with a Chainlink oracle fallback.
 
 %prep

@@ -1,5 +1,7 @@
 > **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
 
+> **勘误（2026-09-22，spec 081 FR-015）**：官网 `app-web/getvela.app` 的五条路由 `api/{wallet,transactions,nft,bundler,proxy}` 已删除（复核后确认没有任何调用方），`ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 三个环境变量随之作废。**D11-D12-ops-external-Q5 / Q6 的题干描述的是删除前的状态**，按历史场景作答即可；若你在现在的代码里找不到这些文件，那不是你找错了。（现存 API 只有 `og` / `downloads` / `bug-report` / `exchange-rate` 四条。）
+
 # 10 — 接管面试题库(受训者可读版)
 
 - **基线 commit**:`73d7aac`(2026-07-02)。所有题目与追问以该版本代码为准。

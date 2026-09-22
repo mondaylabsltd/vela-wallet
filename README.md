@@ -45,6 +45,11 @@ and runs on your own machines.
   deploys the missing Safe and ERC-4337 contracts that anyone can deploy.
 - **Clear signing** from ERC-7730 descriptors, with an explicit blind-signing
   warning for anything that can't be decoded.
+- **A dApp cannot take over the account.** A request for a call from your Safe
+  to itself — `addOwnerWithThreshold`, `enableModule`, `setGuard` and the rest
+  of that family — is refused, inside a batch or a `MultiSend` as well, as is
+  any leg carrying a `delegatecall` and a `SafeTx` typed-data signature. The
+  rule is in the core (`self_call_guard.rs`), so every client has it.
 
 ## Architecture
 
@@ -124,6 +129,48 @@ desktop apps and the Chrome extension ship from
 Android apps are wired end to end and tested on real devices. They are headed
 for the App Store and Google Play as a one-time purchase, and you can build
 them yourself for free.
+
+## Verify what you downloaded
+
+A checksum only says that two files are the same file. Ask instead where the
+file came from: every package attached to a
+[Release](https://github.com/mondaylabsltd/vela-wallet/releases) carries a build
+provenance attestation — signed by the workflow run that produced it, recording
+the commit it was built from — which GitHub keeps and anyone can check with the
+[GitHub CLI](https://cli.github.com) (`gh auth login` once; the check is free for
+a public repository):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+
+# Stricter: also insist it came from the release workflow and nowhere else.
+gh attestation verify VelaWallet-Setup-0.9.4-x64.exe --repo mondaylabsltd/vela-wallet \
+  --signer-workflow mondaylabsltd/vela-wallet/.github/workflows/release.yml
+```
+
+The `SHA256SUMS` files stay on each release for anyone without `gh`
+(`sha256sum -c`); the one CI writes is attested along with the packages it
+lists, while `SHA256SUMS-macos` is written on the Mac that signs the images.
+
+**macOS** images are signed with our Developer ID and notarized by Apple on a
+Mac, by hand — nothing that can sign as us is stored on GitHub — so their
+provenance is Apple's, and the attestation is added afterwards from the
+published bytes (the `macOS provenance` workflow, so `--signer-workflow` for a
+`.dmg` is `.github/workflows/macos-attest.yml`). macOS checks them itself when
+you open one; to ask it out loud:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+**Windows** — the installer is not code-signed, and an attestation does not
+change that: SmartScreen still says "Windows protected your PC" once (**More
+info → Run anyway**). Verifying the attestation is what actually tells you the
+file is ours; the prompt is about a certificate we have not bought.
+
+Attestations begin with the first release built after this landed; earlier
+packages have their checksums only.
 
 ## Contributing
 

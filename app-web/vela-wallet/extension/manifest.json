@@ -2,7 +2,7 @@
 	"manifest_version": 3,
 	"name": "Vela Wallet",
 	"version": "0.9.4",
-	"description": "The passkey wallet, in your browser. One address across 12+ networks, no seed phrase.",
+	"description": "The passkey wallet, in your browser. One address across 24 networks, no seed phrase.",
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA89Uff12cMQTDfMG3qy5xcMDpmbEEfwadtSo0p0JBkgjlNdjR5so87yxlH1vHHgIOXxR2tsY1lxnIAZu/o2+k9O4OX1kr9MV+KyEyFEG+EibqD50PAmVKzECUW1FObolM+bp5U3Z57tAitltdGsfa1ngsOO3/ewU+SH8DThoiGQHiyCpPiIqogRH8A2UNO5dOTkwgK9iCqZ1wMS4laoaHl1x1pyBwPLjZXe0XCKXeZwaOqppfXv+6Er4QHDnU3RDEcDNRDIe5+gObsQGhcXTKR7XdaBb/IotvTynXePnKwWYWJH6H7haHir3Y4m7BFBC7TkKwvyoXHlARytZbrYvRDQIDAQAB",
 	"minimum_chrome_version": "116",
 	"icons": {

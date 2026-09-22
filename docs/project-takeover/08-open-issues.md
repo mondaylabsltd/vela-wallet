@@ -36,12 +36,14 @@
 `register()` 无 `excludeCredentials` → 重复"创建钱包"会铸第二个 passkey/地址。决策:JS 层单设备单账户门,或允许多账户(当前多账户 UI 已存在)。
 **验收**:决策文档化 + 若需要则实现门控。
 
-### B3. getvela.app API 滥用防护(P2)
-bundler/wallet/nft/transactions 代理无速率限制(bug-report 有)。**建议**:Cloudflare WAF rate-limiting rules(运维配置,不用改代码)+ Alchemy/Pimlico 用量告警。
-**验收**:CF 规则生效 + 压测确认限流;提供商用量告警配置截图。
+### B3. getvela.app API 滥用防护(P2)✅ 已解决(2026-09-22,spec 081 FR-015)
+原文:bundler/wallet/nft/transactions 代理无速率限制(bug-report 有),建议用 Cloudflare WAF rate-limiting 兜住。
+**实际做法是直接删除**:全仓 + vela-relay + p256-index 复核确认 `api/{wallet,transactions,nft,bundler,proxy}` 五条**零调用方**(只有 specs/docs 里的散文提到),已随本 spec 删除,连带 `ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 三个 env 一并作废。没有路由就不需要限流规则。
+剩下的 `og` / `downloads` / `bug-report` / `exchange-rate` 四条:`bug-report` 自带 per-IP 5 次/10 分钟;另外三条只读、无密钥、无上游成本。
+**顺带纠正一条长期误解**:钱包从未走 `getvela.app/api/bundler`——bundler 的默认是自营中继 `https://vela-relay-cf.getvela.app`(核心 `rust/crates/vela-core/src/app/network_admin.rs:154` 的 `DEFAULT_BUNDLER_SERVICE_URL`),在另一个仓库。
 
-### B4. `/api/proxy` SSRF 加固(P3)
-补 169.254.0.0/16、IPv6-mapped、数字 IP 形态;考虑目的地白名单。Workers 环境实际风险低。
+### B4. `/api/proxy` SSRF 加固(P3)✅ 已解决(2026-09-22,spec 081 FR-015)
+黑名单(169.254.0.0/16、IPv6-mapped、十进制 IP、DNS rebinding)不再需要补:这条开放 fetch-and-pipe 路由本身已被删除(零调用方)。
 
 ## C. 工程债
 

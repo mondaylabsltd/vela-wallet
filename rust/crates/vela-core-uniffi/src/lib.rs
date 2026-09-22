@@ -585,6 +585,30 @@ pub fn registry_name_step(address: String, answers_json: String) -> String {
     vela_core::registry_lookup::step_json(&address, &answers_json)
 }
 
+/// **Does this name actually belong to this address — the next step of the
+/// check.**
+///
+/// A reverse record (`addr.reverse`) is written by the address itself, so it is
+/// a CLAIM: anyone who funds an address can name it after whoever their victim
+/// is about to pay. `vela_core::app::name_verify` resolves the claimed name
+/// forward and compares, and nothing but `verified` may be drawn (spec 081,
+/// FR-010).
+///
+/// `answers_json` is the transcript so far (`LookupAnswer[]`, the same shape
+/// `registry_name_step` uses); the return is a `VerifyStep` as JSON: `eth_call`s
+/// to perform, or the verdict plus the name exactly as it was proven. The shell
+/// owns the transport; every rule is the core's.
+#[uniffi::export]
+pub fn verified_name_step(
+    chain_id: u32,
+    registry: String,
+    address: String,
+    name: String,
+    answers_json: String,
+) -> String {
+    vela_core::app::name_verify::step_json(chain_id, &registry, &address, &name, &answers_json)
+}
+
 /// **Where to ask about a model the compiled catalog cannot name**, or `None`
 /// when there is nothing to ask: a malformed or all-zero AAGUID, or one the
 /// catalog already answers offline.

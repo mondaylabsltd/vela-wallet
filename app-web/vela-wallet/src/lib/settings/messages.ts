@@ -127,6 +127,13 @@ export interface SettingsMessages {
 		unableToVerify: string;
 		retry: string;
 		incompatibleHint: string;
+		/**
+		 * Spec 081 FR-009: the chain works, and a wallet with more than one
+		 * passkey still cannot be created on it. Said beside a green
+		 * "Compatible", which without this reads as a contradiction of the two
+		 * crossed rows in the checklist.
+		 */
+		singleKeyOnly: string;
 		openChainSetupTool: string;
 		recheckWithRpc: string;
 		testnet: string;
@@ -254,6 +261,7 @@ export interface SettingsMessages {
 		subtitle: string;
 		whatPlaceholder: string;
 		addSteps: string;
+		stepsPlaceholder: string;
 		previewToggle: string;
 		previewVersion: string;
 		previewPlatform: string;
@@ -263,6 +271,17 @@ export interface SettingsMessages {
 		previewNone: string;
 		consent: string;
 		send: string;
+		/** Spec 081: the button while the endpoint is being asked. */
+		sending: string;
+		/** Filed — `successBody*` carry `{{number}}`. */
+		successTitle: string;
+		successBodyNew: string;
+		successBodyDeduped: string;
+		viewIssue: string;
+		/** The endpoint could not file it; the prefilled form still can. */
+		fallbackTitle: string;
+		fallbackBody: string;
+		openGithub: string;
 		openGithubForm: string;
 	};
 	rescue: {
@@ -470,6 +489,7 @@ export const SETTINGS_KEYS = [
 	'settingsModals.addNetwork.customRpcPlaceholder',
 	'settingsModals.addNetwork.addNetworkBtn',
 	'settingsModals.addNetwork.incompatibleHint',
+	'settingsModals.addNetwork.singleKeyOnly',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',
 	'settingsModals.addNetwork.testnet',
@@ -567,6 +587,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.subtitle',
 	'componentsUi.bugReport.whatPlaceholder',
 	'componentsUi.bugReport.addSteps',
+	'componentsUi.bugReport.stepsPlaceholder',
 	'componentsUi.bugReport.previewToggle',
 	'componentsUi.bugReport.previewVersion',
 	'componentsUi.bugReport.previewPlatform',
@@ -576,6 +597,14 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.previewNone',
 	'componentsUi.bugReport.consent',
 	'componentsUi.bugReport.send',
+	'componentsUi.bugReport.sending',
+	'componentsUi.bugReport.successTitle',
+	'componentsUi.bugReport.successBodyNew',
+	'componentsUi.bugReport.successBodyDeduped',
+	'componentsUi.bugReport.viewIssue',
+	'componentsUi.bugReport.fallbackTitle',
+	'componentsUi.bugReport.fallbackBody',
+	'componentsUi.bugReport.openGithub',
 	'componentsUi.bugReport.openGithubForm',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',

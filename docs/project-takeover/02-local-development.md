@@ -7,7 +7,8 @@
 - **Node 22 + npm ≥ 9**(根目录工具包);**pnpm 10**(`app-web/vela-wallet`,版本在其 `packageManager` 字段);**bun**(`app-web/getvela.app`)
 - **Rust 1.97.1**(`rustup`),加 `wasm32-unknown-unknown` target 与 `wasm-pack 0.15`(仅在改动核心后需要重建 wasm)
 - iOS:Xcode(需能编译 xcframework);Android:JDK 17 + Android Studio/SDK;桌面:gpui 的系统依赖(见 `app-desktop/vela-wallet/README.md`)
-- 无需任何私有凭据即可开发钱包本体(RPC 走公共池;bundler 走内置 `getvela.app/api/bundler` 代理)
+- 无需任何私有凭据即可开发钱包本体(RPC 走公共池;bundler 走内置的自营中继 `https://vela-relay-cf.getvela.app`,默认值在核心 `rust/crates/vela-core/src/app/network_admin.rs:154`,设置里可覆盖)
+  - 勘误(spec 081 FR-015):此处原写「bundler 走内置 `getvela.app/api/bundler` 代理」——那条路由从无调用方,已随另外四条一并删除。
 
 ## 从零启动
 
@@ -29,7 +30,7 @@ open app-ios/VelaWallet/VelaWallet.xcodeproj               # ⌘R
 
 # Android 壳:先生成 Kotlin 绑定(gitignored),再装机
 cd rust && cargo build --release -p vela-core-uniffi && \
-  cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+  cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
     --library target/release/libvela_core_uniffi.dylib --language kotlin \
     --out-dir bindings/kotlin --no-format
 cd ../app-android/vela-wallet && ./gradlew :app:installDebug
@@ -80,7 +81,9 @@ Android 真机安装/验证循环（平行空间、uiautomator 驱动、测试 d
 ```bash
 cd app-web/getvela.app
 bun install
-cp .dev.vars.example .dev.vars   # 若无 example,手工创建;需 ALCHEMY_API_KEY / PIMLICO_API_KEY(本地才需要)
+# spec 081 删掉五条 Alchemy/Pimlico 代理路由后,本地开发官网不再需要任何 key。
+# 只有想真实提交 bug-report 才建 .dev.vars 并填 GITHUB_BUG_TOKEN;
+# 不填时该路由返回 503 not_configured,客户端会回退到预填 GitHub URL——这正是要测的分支。
 bun run dev                      # SvelteKit dev
 bunx wrangler deploy             # 部署(需 Cloudflare 账号;生产密钥用 wrangler secret put)
 ```

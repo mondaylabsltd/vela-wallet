@@ -656,7 +656,14 @@ private struct EndpointsBody: View {
                     onCommit: { actions?.onBlurEndpoint(field.id) }
                 )
             }
-            Button { actions?.onResetEndpoints() } label: {
+            Button {
+                // What was typed is no longer what is stored, so the local
+                // drafts have to go with it: keeping them would leave the four
+                // boxes showing the replaced URLs over a core that had already
+                // restored the defaults — a reset that looks like it failed.
+                drafts.removeAll()
+                actions?.onResetEndpoints()
+            } label: {
                 HStack(spacing: Tokens.Space.s8) {
                     LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
                     Text(panel.reset).typeRole(Typography.flowCaption)

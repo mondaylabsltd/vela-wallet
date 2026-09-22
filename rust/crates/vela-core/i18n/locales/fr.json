@@ -95,7 +95,7 @@
       "subtitle": "Supprime tout ce que Vela a enregistré ici",
       "desc": "Tout ce que Vela a enregistré sur cet appareil est supprimé. Il n'y a ni sauvegarde ni retour en arrière.",
       "loses": "Vous perdez : l'historique des transactions, les contacts et les groupes, l'historique de navigation, les autorisations dApp, les jetons et réseaux personnalisés, les réglages RPC et de points de terminaison, et toutes les préférences.",
-      "keeps": "Vous ne perdez pas le portefeuille. Votre clé d'accès reste dans Face ID / empreinte digitale : choisissez « J'ai déjà un portefeuille » et la même adresse revient, sans l'historique.",
+      "keeps": "Vous ne perdez pas le portefeuille. L’effacement n’atteint pas vos clés d’accès : elles sont conservées par votre fournisseur de clés d’accès (Face ID / empreinte, un gestionnaire de mots de passe ou une clé de sécurité), pas par cette application. Choisissez « J’ai déjà un portefeuille » et la même adresse revient, sans historique.",
       "confirm": "Tout effacer",
       "cancel": "Annuler",
       "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez."

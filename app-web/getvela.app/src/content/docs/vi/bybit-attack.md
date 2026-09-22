@@ -1,7 +1,7 @@
 ---
 title: Vụ tấn công Bybit, và con đường nó đã dùng
 description: "Tháng 2/2025, Bybit mất khoảng 1,5 tỷ USD. Hợp đồng Safe không bị phá — giao diện mới bị phá. Trang này giải thích con đường tấn công đó, và những gì trong thiết kế của Vela chặn nó lại."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # Vụ tấn công Bybit, và con đường nó đã dùng
@@ -61,16 +61,19 @@ liệu trong vụ Bybit là một `delegatecall` tráo địa chỉ implementati
 việc phải khiến người ký khựng lại ngay, và giấu nó sau một bản tóm tắt thân thiện chính
 là lý do họ đã không khựng lại.
 
-Có hai giới hạn cần nói cho chính xác. Một dApp không thể trực tiếp yêu cầu Vela thực
+Có hai điều cần nói cho chính xác. Một dApp không thể trực tiếp yêu cầu Vela thực
 hiện `delegatecall` — các yêu cầu mà một trang web gửi được chỉ tạo ra lệnh gọi thông
-thường — nên chính dữ liệu kiểu Bybit không thể đi vào bằng đường đó. Nhưng một trang web
-*có thể* yêu cầu một lệnh gọi từ Safe của bạn tới chính nó: `enableModule`,
-`addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`. Bất kỳ lệnh nào trong số đó,
-chỉ cần ký một lần, cũng trao tài khoản đi trọn vẹn như dữ liệu trong vụ Bybit — một
-mô-đun đã được bật sau đó có thể tự chạy `delegatecall` của riêng nó. Vela giải mã những
-lệnh gọi này nhưng chưa chặn chúng; **hãy từ chối mọi yêu cầu có đích là chính địa chỉ ví
-của bạn.** Và nếu chính mã của Vela bị thay, như mã của `Safe{Wallet}` đã bị, thì phần
-giải mã cũng sẽ là của kẻ tấn công — đó là lý do có điểm tiếp theo.
+thường — nên chính dữ liệu kiểu Bybit không thể đi vào bằng đường đó. Còn một trang web
+yêu cầu lệnh gọi từ Safe của bạn tới chính nó thì **bị từ chối, chứ không chỉ được giải
+mã**: `enableModule`, `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`,
+`setGuard` và những lệnh còn lại trong họ đó đều bị chặn khi đích đến là chính ví của
+bạn, kể cả khi nằm trong một giao dịch gộp hay trong một `MultiSend`; mọi nhánh mang
+`delegatecall` dù nhắm tới đâu, và chữ ký dữ liệu có cấu trúc `SafeTx`, cũng vậy. Ví nói
+rõ nó đã từ chối lệnh gọi nào và không đưa ra thứ gì để ký. Bất kỳ lệnh nào trong số đó,
+chỉ cần ký một lần, cũng sẽ trao tài khoản đi trọn vẹn như dữ liệu trong vụ Bybit — một
+mô-đun đã được bật sau đó có thể tự chạy `delegatecall` của riêng nó. Và nếu chính mã của
+Vela bị thay, như mã của `Safe{Wallet}` đã bị, thì phần giải mã cũng sẽ là của kẻ tấn
+công — đó là lý do có điểm tiếp theo.
 
 **Một đường độc lập có thể kiểm tra lại giao diện.** Vela đã làm một
 [trang ký](/vi/docs/clear-signing-self-host) không cần build, không có thư viện phụ

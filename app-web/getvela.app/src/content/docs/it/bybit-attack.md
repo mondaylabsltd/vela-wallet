@@ -1,7 +1,7 @@
 ---
 title: L'attacco a Bybit, e la strada che ha usato
 description: "A febbraio 2025 Bybit ha perso circa 1,5 miliardi di dollari. I contratti Safe non sono stati violati — l'interfaccia sì. Questa pagina spiega la strada usata e cosa, nel design di Vela, la chiude."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # L'attacco a Bybit, e la strada che ha usato
@@ -69,18 +69,21 @@ sostituiva un indirizzo di implementazione: è esattamente il tipo di cosa che
 dovrebbe fermare di colpo un firmatario, e nasconderlo dietro un riepilogo
 rassicurante è il motivo per cui non l'ha fatto.
 
-Due limiti da dire con precisione. Una dApp non può chiedere direttamente a Vela
+Due cose da dire con precisione. Una dApp non può chiedere direttamente a Vela
 un `delegatecall` — le richieste che una pagina può fare producono chiamate
 normali — quindi il payload di Bybit in sé non potrebbe arrivare per quella
-strada. Ma una pagina *può* chiedere una chiamata dal tuo Safe verso se stesso:
-`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`. Una
-qualsiasi di queste, firmata una sola volta, consegna l'account in modo completo
-quanto il payload di Bybit — un modulo abilitato può poi eseguire un
-`delegatecall` per conto suo. Vela decodifica queste chiamate ma per ora non le
-blocca; **rifiuta qualsiasi richiesta il cui destinatario sia l'indirizzo del tuo
-stesso wallet.** E se il codice di Vela venisse sostituito, come è successo a
-quello di `Safe{Wallet}`, anche la decodifica sarebbe dell'attaccante — ed è a
-questo che serve il punto successivo.
+strada. E una pagina che chiede una chiamata dal tuo Safe verso se stesso viene
+**rifiutata, non solo decodificata**: `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` e il resto di quella famiglia
+vengono bloccati quando il destinatario è il tuo stesso wallet, anche dentro un
+batch e dentro un `MultiSend`, e così pure qualsiasi ramo che porti un
+`delegatecall`, qualunque cosa prenda di mira, e una firma di dati tipizzati
+`SafeTx`. Il wallet dice quale chiamata ha rifiutato e non offre nulla da firmare.
+Una qualsiasi di queste, firmata una sola volta, consegnerebbe l'account in modo
+completo quanto il payload di Bybit — un modulo abilitato può poi eseguire un
+`delegatecall` per conto suo. E se il codice di Vela venisse sostituito, come è
+successo a quello di `Safe{Wallet}`, anche la decodifica sarebbe dell'attaccante —
+ed è a questo che serve il punto successivo.
 
 **Una strada indipendente che può controllare l'interfaccia.** Vela ha costruito
 una [pagina di firma](/it/docs/clear-signing-self-host) senza build e senza

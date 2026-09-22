@@ -171,6 +171,9 @@ enum SettingsDialog {
     AddNetwork,
     /// DSR1 — one network's RPC is down and this is where it gets fixed.
     FixRpc,
+    /// Spec 081 FR-017 — 抹除此设备, asked before it happens. The phone draws
+    /// this as a bottom sheet; a wide layout has none, so it is a dialog.
+    EraseDevice,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -425,6 +428,14 @@ pub struct WalletPage {
     settings_page: SettingsPage,
     /// The centred dialog over the settings section, when one is open.
     settings_dialog: Option<SettingsDialog>,
+    /// An erase ran and these keys survived (spec 081 FR-017).
+    ///
+    /// `Some(empty)` never happens: an empty survivor list IS the success, and
+    /// the window has left this screen by then. A non-empty one keeps the
+    /// person signed in with the reason in the dialog's own callout, because
+    /// telling somebody their machine is clean while their history is still on
+    /// it is the one outcome this feature cannot have.
+    erase_failed: Option<Vec<String>>,
     /// Which network row DST4 has expanded in place, if any.
     ///
     /// A `SharedString` rather than a `&'static str` since spec 030: the ids
@@ -930,6 +941,7 @@ impl WalletPage {
             signing_state: "cs12",
             settings_page: SettingsPage::Account,
             settings_dialog: None,
+            erase_failed: None,
             settings_expanded_network: None,
             settings_open_dropdown: None,
             group: None,
@@ -6149,11 +6161,15 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(sign_out_desc),
             )
+            // No handler: this is the board the window draws before anybody has
+            // signed in, and there is nothing on it to erase. The LIVE account
+            // panel's card (`settings_account_footer`) is the one that acts.
             .child(danger_card(
                 theme,
                 erase_title,
                 erase_subtitle,
                 erase_confirm,
+                None,
             ))
     }
 
@@ -6770,11 +6786,19 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(sign_out_desc),
             )
+            // Spec 081 FR-017: this card had no handler from the day it was
+            // drawn, so the app's one irreversible control was decoration. It
+            // asks; `SettingsDialog::EraseDevice` confirms; `erase_device` acts.
             .child(danger_card(
                 theme,
                 erase_title,
                 erase_subtitle,
                 erase_confirm,
+                Some(Box::new(cx.listener(|this, _, _, cx| {
+                    this.erase_failed = None;
+                    this.settings_dialog = Some(SettingsDialog::EraseDevice);
+                    cx.notify();
+                }))),
             ))
     }
 
@@ -7516,9 +7540,14 @@ impl WalletPage {
                 })
                 .child(
                     div()
+                        .id("endpoints-self-hosting-guide")
+                        .cursor_pointer()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.info_base)
-                        .child(self.settings.endpoints_guide.clone()),
+                        .child(self.settings.endpoints_guide.clone())
+                        .on_click(|_, _, cx| {
+                            cx.open_url(crate::onboarding_flow::SELF_HOSTING_URL);
+                        }),
                 ),
         )
     }
@@ -7788,6 +7817,7 @@ impl WalletPage {
                 ))),
             ),
             SettingsDialog::FixRpc => (s.rpc_fix_title.clone(), None),
+            SettingsDialog::EraseDevice => (s.erase_title.clone(), Some(s.erase_subtitle.clone())),
         };
 
         let body = match kind {
@@ -7801,6 +7831,7 @@ impl WalletPage {
                 }
                 _ => self.settings_fix_rpc_body(theme),
             },
+            SettingsDialog::EraseDevice => self.settings_erase_body(theme, cx),
         };
 
         let mut header = div()
@@ -8025,7 +8056,43 @@ impl WalletPage {
         if let Some(compat) = wizard.compat.as_ref() {
             match settings_live::compat_checks(compat, &self.settings) {
                 Some(checks) => {
+                    // The VERDICT, before the list that explains it. The core
+                    // reaches one and the live dialog never said it: every
+                    // other client shows this pill, and after spec 081 gave the
+                    // checklist a crossed row, a desktop reader saw a red cross
+                    // and a warning with nothing anywhere saying the chain
+                    // works. `settings.compatible` had been loaded and unused.
+                    let badge = settings_fixtures::pill(
+                        if compat.compatible {
+                            settings_fixtures::Tone::Ok
+                        } else {
+                            settings_fixtures::Tone::Error
+                        },
+                        if compat.compatible {
+                            self.settings.compatible.clone()
+                        } else {
+                            self.settings.wizard_incompatible.clone()
+                        },
+                    );
+                    col = col.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .child(status_pill(theme, &badge)),
+                    );
                     col = col.child(check_list(theme, &mut self.icons, checks_title, &checks));
+                    // Spec 081 FR-009. The core can say "this chain works" and
+                    // "a wallet with more than one key cannot be created here"
+                    // at the same time; both are true, and the second one is
+                    // the sentence a person with several passkeys needs.
+                    if compat.compatible && !compat.multi_key_ready {
+                        col = col.child(crate::settings::components::callout(
+                            theme,
+                            &mut self.icons,
+                            crate::settings::components::CalloutTone::Warning,
+                            self.settings.single_key_only.clone(),
+                        ));
+                    }
                 }
                 // The probe could not reach a verdict. A retry, never a
                 // condemnation — the core's invariant ③, and the difference
@@ -8464,6 +8531,126 @@ impl WalletPage {
                     .text_color(theme.info_base)
                     .child(report),
             )
+    }
+
+    /// 抹除此设备, asked before it happens (spec 081 FR-017).
+    ///
+    /// Four things, in the order somebody deciding needs them: what happens,
+    /// what is NOT lost — the passkey lives with the person's passkey
+    /// provider, and nothing on this machine can reach it, so the wallet comes
+    /// back at the same address — what IS lost, and only then the two buttons.
+    /// The red one is not the default focus and is not first on the pointer's
+    /// path out of the dialog.
+    fn settings_erase_body(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
+        let s = &self.settings;
+        let desc = s.erase_desc.clone();
+        let keeps = s.erase_keeps.clone();
+        let loses = s.erase_loses.clone();
+        let confirm = s.erase_confirm.clone();
+        let cancel = s.erase_cancel.clone();
+        // A partial wipe names what stayed, in the dialog itself — the person
+        // is still signed in, and the button is still live so they can retry.
+        let failed = self.erase_failed.as_ref().map(|left| {
+            gpui::SharedString::from(format!("{} ({})", s.erase_failed, left.join(", ")))
+        });
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap(px(16.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .text_color(theme.fg_base)
+                    .child(desc),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(keeps),
+            )
+            .child(callout(theme, &mut self.icons, CalloutTone::Danger, loses));
+        if let Some(failed) = failed {
+            body = body.child(callout(theme, &mut self.icons, CalloutTone::Danger, failed));
+        }
+        body.child(
+            div()
+                .id("settings-erase-confirm")
+                .h(px(CONTACTS_BUTTON_H))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .bg(theme.error_base)
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_inverse)
+                .on_click(cx.listener(|this, _, _, cx| this.erase_device(cx)))
+                .child(confirm),
+        )
+        .child(
+            div()
+                .id("settings-erase-cancel")
+                .h(px(CONTACTS_BUTTON_H))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .border_1()
+                .border_color(theme.outline_strong)
+                .text_size(theme::text_row_title())
+                .text_color(theme.fg_base)
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.close_settings_dialog(cx);
+                    cx.notify();
+                }))
+                .child(cancel),
+        )
+    }
+
+    /// Erase, verify, and only then end the session (spec 081 FR-017,
+    /// `contracts/erase-device.md`).
+    ///
+    /// The order is the contract's and the reason is the whole feature:
+    ///
+    /// 1. **Sweep** every `vela.` key in the state document but the keep-list
+    ///    — a prefix rule, so a key a future machine writes is erased on the
+    ///    day it is first written rather than the day somebody remembers to
+    ///    add it to a list.
+    /// 2. **Forget the browser.** The in-app web view keeps every visited
+    ///    dApp's cookies, localStorage and cache on the platform's own store,
+    ///    which nothing in `executor::storage` can reach. Best-effort: there
+    ///    is no portable way to ask without a live view.
+    /// 3. **Verify by re-reading.** `erase_all` re-enumerates; a non-empty
+    ///    answer means data is still here.
+    /// 4. **End the session — CONFIRMED.** `sign_out` alone only opens the
+    ///    confirmation dialog (`session.rs`), so a wallet erased with it would
+    ///    sit in a half-signed-in state with a modal over a wiped machine.
+    ///    Both events, so the app restarts as new.
+    ///
+    /// On failure the person stays signed in, on this dialog, with what
+    /// survived named in its own callout.
+    fn erase_device(&mut self, cx: &mut Context<Self>) {
+        let survivors = match crate::executor::storage::erase_all() {
+            Ok(survivors) => survivors,
+            // A storage fault is a failed erase, said in the same words as a
+            // survivor: something is still here.
+            Err(error) => vec![error.to_string()],
+        };
+        if !crate::webview::clear_browsing_data() {
+            eprintln!("[vela-wallet] erase: no web view to clear; browsing data untouched");
+        }
+        if survivors.is_empty() {
+            self.erase_failed = None;
+            self.close_settings_dialog(cx);
+            session::sign_out(cx);
+            session::sign_out_confirmed(cx);
+        } else {
+            self.erase_failed = Some(survivors);
+        }
+        cx.notify();
     }
 
     // -- column 2: explore (spec 022 DE1–DE4) --------------------------------
@@ -9798,6 +9985,8 @@ impl WalletPage {
         // Which of the two things this column is: the request, or the gas
         // account it cannot pay from.
         let mut funding = false;
+        // Spec 081: the core refused the request outright.
+        let mut refused = false;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
@@ -9822,6 +10011,16 @@ impl WalletPage {
                 funding = true;
                 // The header and the fee card belong to the request, not to
                 // the top-up: the person is being asked for one thing here.
+                model.fee = signing_fixtures::FeeModel::Hidden;
+            } else if host.view.blocked.is_some() {
+                // Spec 081: the core refused this request — it would have
+                // changed who controls the account. The refusal is the whole
+                // sheet. The decoded body, the simulation and the cap editor
+                // all describe a transaction that will never be signed, and
+                // reading them invites the question "so why can't I?", which
+                // the refusal already answers.
+                model.blocks = signing_live::status_blocks(&host.view, &self.signing);
+                refused = true;
                 model.fee = signing_fixtures::FeeModel::Hidden;
             } else {
                 // ALWAYS the core's, never "the core's if it has any". The old
@@ -9915,19 +10114,26 @@ impl WalletPage {
             model.network_name =
                 gpui::SharedString::from(crate::flows::live::chain_name(host.chain_id));
             let speed_tier = Some(host.speed_view().tier);
-            model.fee = signing_live::fee_model(
-                &host.clear_view,
-                fee,
-                host.chain_id,
-                host.fee_open,
-                &self.signing,
-                &self.locale,
-                speed_tier,
-            );
-            model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
-            model.confirm_enabled =
-                signing_live::confirm_enabled(&host.view, &host.guard_view, fee, speed_tier);
-            if !funding && !signing_live::off_chain(&host.clear_view) {
+            if !refused {
+                model.fee = signing_live::fee_model(
+                    &host.clear_view,
+                    fee,
+                    host.chain_id,
+                    host.fee_open,
+                    &self.signing,
+                    &self.locale,
+                    speed_tier,
+                );
+                model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
+                model.confirm_enabled =
+                    signing_live::confirm_enabled(&host.view, &host.guard_view, fee, speed_tier);
+            } else {
+                // No confirm control at all. It is not disabled — it is
+                // absent, because the wallet never offered it.
+                model.confirm_label = gpui::SharedString::default();
+                model.confirm_enabled = false;
+            }
+            if !funding && !refused && !signing_live::off_chain(&host.clear_view) {
                 speed_tiers = host
                     .speed_view()
                     .options
@@ -10159,13 +10365,15 @@ impl WalletPage {
                 &model.signer_seed,
             ))
             .children(self.sign_with_row(theme, cx))
-            .child(signing_components::slide_to_confirm(
-                theme,
-                &mut self.icons,
-                model.confirm_label.clone(),
-                model.confirm_enabled,
-                confirm_action,
-            ));
+            .children((!model.confirm_label.is_empty()).then(|| {
+                signing_components::slide_to_confirm(
+                    theme,
+                    &mut self.icons,
+                    model.confirm_label.clone(),
+                    model.confirm_enabled,
+                    confirm_action,
+                )
+            }));
         column
     }
 

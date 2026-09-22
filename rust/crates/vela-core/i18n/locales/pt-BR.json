@@ -95,7 +95,7 @@
       "subtitle": "Exclui tudo o que a Vela guardou aqui",
       "desc": "Tudo o que a Vela guardou neste dispositivo é apagado. Não há backup nem como desfazer.",
       "loses": "Você perde: histórico de transações, contatos e grupos, histórico de navegação, permissões de dApps, tokens e redes personalizados, configurações de RPC e endpoints, e todas as preferências.",
-      "keeps": "Você não perde a carteira. Sua passkey continua no Face ID / impressão digital — escolha “Já tenho uma carteira” e o mesmo endereço volta, só que sem histórico.",
+      "keeps": "Você não perde a carteira. Apagar não alcança suas passkeys — elas ficam com o seu provedor de passkeys (Face ID / digital, um gerenciador de senhas ou uma chave de segurança), não com este app. Escolha “Já tenho uma carteira” e o mesmo endereço volta, só que sem histórico.",
       "confirm": "Apagar tudo",
       "cancel": "Cancelar",
       "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo."

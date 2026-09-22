@@ -88,7 +88,10 @@ const ITEM_PREFIXES: Record<StorageItemId, readonly string[]> = {
 	rates: [],
 	// Per-token metadata, per-address identity lookups, the transfer scan's
 	// cursors: everything a scan rebuilds on its own.
-	scan: ['vela.tokenMeta.', 'recipient_id:', 'vela.scan'],
+	// `recipient_id` without its colon on purpose: the identity cache is
+	// versioned (`recipient_id.v2:`, spec 081 FR-010) and the retired
+	// generations must be swept too, not left behind by a punctuation mark.
+	scan: ['vela.tokenMeta.', 'recipient_id', 'vela.scan'],
 	dapps: [PERM_PREFIX, REQUEST_PREFIX]
 };
 
@@ -116,7 +119,7 @@ export function isCacheKey(key: string): boolean {
 
 /** Is this one of ours at all? The `vela.` namespace, plus the one unprefixed cache. */
 function isOurs(key: string): boolean {
-	return key.startsWith(VELA_KEY_PREFIX) || key.startsWith('recipient_id:');
+	return key.startsWith(VELA_KEY_PREFIX) || key.startsWith('recipient_id');
 }
 
 export interface StorageItemReport {

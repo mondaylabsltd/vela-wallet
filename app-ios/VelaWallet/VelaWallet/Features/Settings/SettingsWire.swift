@@ -150,6 +150,8 @@ struct NetContractStatusWire: Decodable, Equatable {
     let name: String
     let address: String
     let deployed: Bool
+    /// Spec 081: only a wallet holding more than one passkey needs this one.
+    let multiKeyOnly: Bool
 }
 
 enum NetRpcFailureKindWire: String, Decodable {
@@ -165,6 +167,10 @@ enum NetRpcFailureKindWire: String, Decodable {
 struct NetCompatibilityWire: Decodable, Equatable {
     let chainId: Int
     let compatible: Bool
+    /// Spec 081: `compatible` answers for one key. This one answers for two to
+    /// seven — a chain can be genuinely usable and still refuse such a wallet,
+    /// because each extra key is a signer contract Safe's factory creates.
+    let multiKeyReady: Bool
     let contracts: [NetContractStatusWire]
     /// `nil` = the precompile could not be probed, which is not the same as
     /// absent.

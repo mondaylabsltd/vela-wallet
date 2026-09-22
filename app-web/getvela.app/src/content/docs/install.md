@@ -57,7 +57,8 @@ A native app, not a web page in a window: **Windows** 10 and 11 (x64 and ARM),
 
 On macOS and Windows the desktop app has a built-in browser for dApps. Checksums
 for every package are on the
-[GitHub releases page](https://github.com/mondaylabsltd/vela-wallet/releases).
+[GitHub releases page](https://github.com/mondaylabsltd/vela-wallet/releases) —
+and you can check more than a checksum, see below.
 
 ## iPhone and Android
 
@@ -67,6 +68,43 @@ yet**. The code is open, so you can build them yourself for free — with one
 difference: a build you sign yourself can't use your phone's own passkeys for
 getvela.app wallets, though scanning with another phone and USB security keys
 work. See [build the apps yourself](/docs/self-hosting#web-app).
+
+## Verify what you downloaded
+
+A checksum tells you that two files are identical. It cannot tell you who made
+the file — and the list of checksums sits on the same page as the download. So
+every package we attach to a release is also **attested**: the workflow run that
+built it signs a statement naming the file, the commit and the run, and GitHub
+keeps it. Checking it takes one command with the
+[GitHub CLI](https://cli.github.com) (sign in once with `gh auth login`; the
+check is free):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+It prints who built the file and from which commit, or it fails. Nothing on your
+machine has to trust us for that answer: the signature is GitHub's, made at build
+time, and it cannot be produced by someone who merely re-uploads a file
+somewhere.
+
+Mac images are signed with our Developer ID and notarized by Apple, which macOS
+checks for you when you open one. To ask it yourself:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="The Windows prompt stays">
+Attestation is not code signing. The Windows installer is not code-signed, so
+SmartScreen still stops it once with "Windows protected your PC" — choose
+<strong>More info</strong>, then <strong>Run anyway</strong>. Verifying the
+attestation is the check that tells you the file is really ours; the prompt is
+about a certificate we haven't bought.
+</Callout>
+
+Packages published before this was turned on carry their checksums only.
 
 ## Using Vela with dApps
 

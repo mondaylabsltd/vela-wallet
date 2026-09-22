@@ -65,10 +65,16 @@ fun CrashSheet(strings: VelaStrings, version: String) {
                 strings.t(I18nKeys.SettingsUi.BUG_SEND),
                 onClick = {
                     VelaLog.event("crash.sheet", "report tapped")
-                    val body = "Version: v$version\nThread: ${record.thread}\n${record.message}\n${record.stack}"
-                    val url = "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                        java.net.URLEncoder.encode("[android] ${record.message.take(60)}", "UTF-8") +
-                        "&body=" + java.net.URLEncoder.encode(body, "UTF-8")
+                    // Spec 081 FR-016: by FIELD ID, never `body`. With
+                    // `template=bug.yml` GitHub drops `body` silently, so this
+                    // button used to open an empty form with the stack trace
+                    // thrown away — the one moment a report is worth most.
+                    val url = BugReportUrl.build(
+                        what = record.message,
+                        steps = record.stack.lines().take(12).joinToString("\n"),
+                        environment = "App version: v$version\nPlatform: Android ${android.os.Build.VERSION.RELEASE}\nThread: ${record.thread}",
+                        titlePrefix = "[android crash] ",
+                    )
                     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                     dismiss()
                 },

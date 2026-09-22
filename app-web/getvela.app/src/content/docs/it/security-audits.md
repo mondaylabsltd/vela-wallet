@@ -1,7 +1,7 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
@@ -123,11 +123,11 @@ da quel proprietario e posizionata più avanti nello stesso bundle supera comunq
 la validazione e viene eseguita. Safe ha riconosciuto il problema e non ha
 modificato la v0.3.0.
 
-Le app di Vela non costruiscono mai modifiche ai proprietari, quindi Vela in sé
-non lo innesca mai. Conta comunque: una dApp può chiedere al tuo wallet di
-cambiare i propri proprietari (vedi «Lacune» più sotto), e chi rimuovesse una
-chiave compromessa tramite altri strumenti Safe non potrebbe contare sul fatto che
-venga esclusa già nello stesso bundle.
+Le app di Vela non costruiscono mai modifiche ai proprietari, e una dApp che ne
+chiede una viene rifiutata senza appello, quindi Vela in sé non lo innesca mai.
+Conta comunque per chi rimuove una chiave compromessa tramite altri strumenti Safe:
+non potrebbe contare sul fatto che quella chiave venga esclusa già nello stesso
+bundle.
 
 ### Intercettazione di un'operazione firmata (EntryPoint precedenti alla v0.9)
 
@@ -157,21 +157,10 @@ di Safe, e questa pagina dirà quando avverrà.
 Non sono rilievi sui contratti, ma punti in cui il wallet ti protegge meno di
 quanto potresti pensare. Per ognuno è prevista una correzione:
 
-- **Le chiamate dal tuo wallet verso se stesso non vengono bloccate.** Una dApp può
-  chiedere `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` o
-  `setGuard` sul tuo Safe; una qualsiasi di queste, firmata una sola volta,
-  consegna l'account. Vela decodifica queste chiamate ma non le ferma. Rifiuta
-  qualsiasi richiesta il cui destinatario sia il tuo stesso indirizzo.
 - **Il controllo sulle approvazioni ferma solo gli importi «illimitati»** (2^200 o
   più; 2^152 per Permit2). Un'approvazione finita ma elevata, un permit firmato o
   un `setApprovalForAll` degli NFT ricevono un avviso, non un blocco.
-- **I descrittori scaricati non sono autenticati.** Un descrittore dal server dei
-  dati delle chain viene mostrato come «verificato» se corrisponde al contratto;
-  è affidabile solo quanto quel server.
 - **La pagina di firma indipendente non è collegata** ancora a nessuna app.
-- **Il controllo della rete non verifica la factory dei firmatari passkey di
-  Safe**, che serve alle chiavi dalla seconda alla settima; su una rete aggiunta
-  senza di essa, può firmare solo la prima chiave.
 - **Il sito web carica uno script di analytics di terze parti** sullo stesso
   dominio delle passkey. Il sito vieta alle proprie pagine di usare le passkey
   (con un header Permissions-Policy) e tiene lo script lontano dalla pagina che

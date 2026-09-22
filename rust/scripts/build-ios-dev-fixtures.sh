@@ -36,7 +36,7 @@ cargo build --release -p vela-dev-fixtures-uniffi
 LIB_FILE="target/release/libvela_dev_fixtures.dylib"
 
 echo "build-ios-dev-fixtures: generating Swift bindings"
-cargo run --release -p vela-dev-fixtures-uniffi --bin uniffi-bindgen -- generate \
+cargo run --release -p vela-uniffi-bindgen --bin uniffi-bindgen -- generate \
   --library "$LIB_FILE" --language swift --out-dir bindings/swift-dev
 
 echo "build-ios-dev-fixtures: building the device static library"
