@@ -166,7 +166,7 @@ pub fn open(
         }
         // The relay's own ping keeps the room alive while the person reads;
         // a frame arriving here would be one nobody asked for.
-        drain(&mut socket, channel, deadline)?;
+        drain(&mut socket)?;
         std::thread::sleep(POLL);
     }
 
@@ -302,7 +302,7 @@ fn recv(socket: &mut Socket, channel: &Channel, deadline: Instant) -> Result<Mes
             return Err(Refusal::TimedOut);
         }
         match socket.read() {
-            Ok(Message::Close(_)) => return Err(closed_by(socket)),
+            Ok(Message::Close(frame)) => return Err(closed_by(frame.as_ref())),
             Ok(message) => return Ok(message),
             Err(tungstenite::Error::Io(error)) if would_block(&error) => {}
             Err(tungstenite::Error::ConnectionClosed | tungstenite::Error::AlreadyClosed) => {
@@ -316,12 +316,12 @@ fn recv(socket: &mut Socket, channel: &Channel, deadline: Instant) -> Result<Mes
     }
 }
 
-/// Take whatever is waiting without blocking — used while the person reads the
-/// code, so a relay that hangs up is noticed then rather than minutes later.
-fn drain(socket: &mut Socket, channel: &Channel, deadline: Instant) -> Result<(), Refusal> {
-    let _ = (channel, deadline);
+/// Take whatever is waiting, once, without blocking — used while the person
+/// reads the code, so a relay that hangs up is noticed then rather than
+/// minutes later.
+fn drain(socket: &mut Socket) -> Result<(), Refusal> {
     match socket.read() {
-        Ok(Message::Close(_)) => Err(closed_by(socket)),
+        Ok(Message::Close(frame)) => Err(closed_by(frame.as_ref())),
         Ok(Message::Text(text)) if relay_said_left(&text) => Err(Refusal::Closed),
         Ok(_) => Ok(()),
         Err(tungstenite::Error::Io(error)) if would_block(&error) => Ok(()),
@@ -342,11 +342,26 @@ fn would_block(error: &io::Error) -> bool {
     )
 }
 
-/// Why the relay hung up, in the sentence the sheet can say. 4408 is the
-/// room's ten minutes or an idle end; 4409 is somebody already in our role.
-fn closed_by(socket: &mut Socket) -> Refusal {
-    let _ = socket.flush();
-    Refusal::Unreachable
+/// Why the relay hung up, in a sentence the sheet can say (relay.md §1's close
+/// codes). 4408 is the room's ten minutes or an idle end — a wait that ran out,
+/// which is what the person actually saw; everything else, including 4409
+/// (somebody already in our role) and a peer that just went, reads as a relay
+/// that could not carry this.
+fn closed_by(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> Refusal {
+    let code = frame.map(|frame| u16::from(frame.code));
+    match code {
+        Some(4408) => Refusal::TimedOut,
+        _ => {
+            if let Some(frame) = frame {
+                eprintln!(
+                    "[vela-wallet] clear signer relay: closed {} {}",
+                    u16::from(frame.code),
+                    frame.reason
+                );
+            }
+            Refusal::Unreachable
+        }
+    }
 }
 
 fn relay_said_left(text: &str) -> bool {

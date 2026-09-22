@@ -345,6 +345,11 @@ impl Channel {
     /// page leaves its waiting card for its done card and the port, or the
     /// relay room, goes. Called when a flow finishes, when anything refuses,
     /// and when the screen goes away.
+    ///
+    /// **Safe to call from the screen while a ceremony runs**, because a
+    /// ceremony TAKES its visit out of here for as long as it is using the
+    /// line (see [`Self::take_flow`]): there is never a moment when this
+    /// thread and that one could both be writing one socket.
     pub fn end_flow(&self) {
         if let Some(mut open) = self.take_flow() {
             open.line.end();
@@ -358,8 +363,23 @@ impl Channel {
             .take()
     }
 
+    /// Hand a visit back for the flow's next ceremony.
+    ///
+    /// A visit already here is ENDED rather than dropped. Two ceremonies on
+    /// one channel — a create machine and a login machine both live, which
+    /// "add another account" makes possible — would each have taken `None` and
+    /// opened their own; the one that put its visit back second would
+    /// otherwise leave the other's port bound and the other's tab sitting in
+    /// front of nobody.
     fn keep_flow(&self, flow: Flow) {
-        *self.flow.lock().unwrap_or_else(PoisonError::into_inner) = Some(flow);
+        let displaced = self
+            .flow
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .replace(flow);
+        if let Some(mut stale) = displaced {
+            stale.line.end();
+        }
     }
 
     // -- the attempt's half ---------------------------------------------------
@@ -499,17 +519,36 @@ pub trait Line: Send {
 }
 
 /// Open a line to `page`, asking the person where their Clear Signer is first.
-fn open_line(page: &str, channel: &Channel, deadline: Instant) -> Result<Box<dyn Line>, Refusal> {
-    match channel.ask_place(deadline)? {
+///
+/// Every refusal is told to the screen and answered as a cancelled passkey —
+/// the request stays open to be answered another way. A **listener the OS will
+/// not give** is the one real failure: it is not the person refusing and it is
+/// not a relay being unreachable, so it carries its own words into the bug
+/// report rather than borrowing either sentence.
+fn open_line(
+    page: &str,
+    channel: &Channel,
+    deadline: Instant,
+) -> Result<Box<dyn Line>, PasskeyFailure> {
+    let place = channel
+        .ask_place(deadline)
+        .map_err(|refusal| gave_up(channel, refusal))?;
+    match place {
         Place::ThisDevice => Loopback::open(page)
             .map(|loopback| Box::new(loopback) as Box<dyn Line>)
             .map_err(|error| {
-                eprintln!("[vela-wallet] clear signer: could not listen: {error}");
-                Refusal::Unreachable
+                channel.end(None);
+                PasskeyFailure {
+                    kind: FailureKind::Other,
+                    message: Some(format!(
+                        "The Clear Signer could not listen on this computer: {error}"
+                    )),
+                }
             }),
         Place::OtherDevice => {
             relay::open(page, &relay_url(), relay::Seed::random(), channel, deadline)
                 .map(|line| Box::new(line) as Box<dyn Line>)
+                .map_err(|refusal| gave_up(channel, refusal))
         }
     }
 }
@@ -857,10 +896,7 @@ pub fn sign(
     channel: &Channel,
 ) -> Result<Assertion, PasskeyFailure> {
     let deadline = Instant::now() + TIMEOUT;
-    let mut line = match open_line(page, channel, deadline) {
-        Ok(line) => line,
-        Err(refusal) => return Err(gave_up(channel, refusal)),
-    };
+    let mut line = open_line(page, channel, deadline)?;
     let id = line.next_id();
     let answered = line.ask(&id, request, channel, deadline);
     // A signature is one request: the visit ends either way.
@@ -980,12 +1016,9 @@ fn ceremony_on_flow(
     }
     let mut visit = match open {
         Some(visit) => visit,
-        None => match open_line(page, channel, deadline) {
-            Ok(line) => Flow {
-                page: page.to_owned(),
-                line,
-            },
-            Err(refusal) => return Err(gave_up(channel, refusal)),
+        None => Flow {
+            page: page.to_owned(),
+            line: open_line(page, channel, deadline)?,
         },
     };
 
