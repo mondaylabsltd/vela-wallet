@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-All app state is persisted **locally on the device** via AsyncStorage — accounts, selected network,
+All app state is persisted **locally on the device** through each shell's own store (web: IndexedDB plus a little `localStorage`; desktop: one JSON file written tmp+rename; iOS/Android: the platform store) — accounts, selected network,
 custom tokens, contacts & groups, RPC bans, price/metadata caches, display currency, and service
 endpoints. There is **no server-side user store** (A03). Private keys are never stored anywhere (they
 live in the OS secure enclave, B01). This doc defines the storage contract and its safety properties.
@@ -37,7 +37,7 @@ and never a place a secret could leak into.
 ## 5. Non-functional requirements
 
 - **NFR-1** — Storage access is async and off the render path; boot (A05) must not block on a slow read.
-- **NFR-2** — In-memory layer in front of AsyncStorage for hot reads (metadata, contacts, groups).
+- **NFR-2** — In-memory layer in front of the persistent store for hot reads (metadata, contacts, groups).
 - **NFR-3** — Forward-compatible: unknown fields are preserved, not dropped, on read/rewrite where feasible.
 
 ## 6. UX / flow notes

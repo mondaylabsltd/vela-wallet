@@ -41,7 +41,7 @@
 ### 阶段 1(第 1-2 周):建立事实底盘 —— 只输入,不输出
 
 **她做:**
-1. **先当用户**:在 getvela.app 创建钱包 → 放 $20 → 发一笔 → 连一个 dApp → 故意触发一次授权上限编辑器。没亲手用过产品的人写不出能活的文案
+1. **先当用户**:在 wallet.getvela.app 创建钱包 → 放 $20 → 发一笔 → **装上 Chrome 扩展**再连一个 dApp(网页版钱包本身不连 dApp,手机/桌面 App 走内置浏览器)→ 故意触发一次授权上限编辑器。没亲手用过产品的人写不出能活的文案
 2. **按序精读四份文档**(这是她的教材,顺序即难度):
    ① [100-marketing-leads.md](100-marketing-leads.md) —— 先读"〇、先读"和"一、潜在客户分析"(画像+红线),100 条先浏览
    ② [pricing-analysis.md](pricing-analysis.md) —— 为什么 $39.99、为什么商店不是获客入口
@@ -60,7 +60,7 @@
 全部选自 distribution-plan 里**机械性高、判断量低、不对外发言**的任务:
 
 1. **目录铺设**(计划 P1-3):20+ 目录提交,逐个核对收录标准。练习:如实填表就是练"只说事实库里有的话"
-2. **素材库建设**:用 `/clear-signing-test` 场景页截 20+ 场景图、录对比演示的原始素材、整理成可复用素材库
+2. **素材库建设**:用签名画廊 `/{locale}/gallery/{state}`(35 个场景,清单在 `app-web/vela-wallet/src/lib/signing/fixtures.ts` 的 `ALL_STATES`)截 20+ 场景图、录对比演示的原始素材、整理成可复用素材库
 3. **度量看板**:接好 Cloudflare Web Analytics,建每周漏斗表(曝光→试用→激活代理指标→购买),她负责每周五填数
 4. **VOC 挖矿**(leads 文档既定研究缺口):MetaMask/Rainbow/Coinbase Wallet 的 1-3 星差评 + r/ethereum 的 drained/seed phrase 帖,产出**带原话引用的 VOC 词库**(用户描述痛点的原始词汇,按画像归类)
 
@@ -73,7 +73,7 @@
 从**模板化程度最高**的内容开始(判断量小,格式即护栏):
 
 1. **每周对比视频**(计划 P2-5):选题从 leads 第一/二梯队清单里拿(#4/#17/#16/#5/#11/#1 轮换),格式固定(30 秒并排录屏),她写脚本+制作,你在审批窗口过一眼事实
-2. **本地化内容**:把已审内容做多语言版本(14 语言包是现成杠杆)——翻译不产生新事实,风险天然低
+2. **本地化内容**:把已审内容做多语言版本(15 个语言包是现成杠杆,含英文)——翻译不产生新事实,风险天然低
 3. **Reddit 答题(联合模式)**:前 4 条她起草、你逐句改;之后她发你抽查。透明利益申报句是固定模板
 4. 官网落地页文案微调、商店 listing 文案初稿(上架前反正要过你)
 
@@ -134,7 +134,7 @@
 ## 五、给她的工具与资源
 
 - **事实库**:`docs/CONTENT-SOURCE-100-CLUES.md`(产品声明唯一出处)+ whitepaper(`app-web/getvela.app/src/content/docs/whitepaper.md`)
-- **演示台**:`/clear-signing-test` 场景页(20+ 签名场景,截图/录屏素材源)、parallel space(演示可用,**fixture 地址绝不能收真钱**,见 docs/PARALLEL-SPACE.md)
+- **演示台**:签名画廊 `/{locale}/gallery/{state}`(35 个签名场景,截图/录屏素材源;另有零构建的 `app-web/clearsigning/gallery.html`)、parallel space(演示可用,**fixture 地址绝不能收真钱**,见 docs/PARALLEL-SPACE.md)
 - **AI 协作**:可以用 Claude Code 起草(本仓库已有全部营销文档做上下文),但红线清单对 AI 产出**同样适用且更要严查**——AI 会编造产品事实,这个仓库的历史教训是"每个声明都要能指出代码/文档出处"
 - **她的第一本外部读物**:无需买课,把 why-we-charge.md 和 leads 文档"〇、先读"精读三遍,胜过通用营销课(通用课教的增长黑客大半在 distribution-plan §四的"不做"清单里)
 

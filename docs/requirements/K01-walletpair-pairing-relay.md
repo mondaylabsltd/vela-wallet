@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Epic** | K — dApp Connect (WalletPair) |
-| **Status** | ✅ Shipped |
+| **Epic** | K — dApp Connect |
+| **Status** | ⛔ Not built — founder decision (spec 027 / 2026-09-08). Kept as the design record. |
 | **Owner** | Shelchin |
 | **Depends on** | — |
 | **Related** | K02, K03, K04, H04 |
@@ -17,9 +17,12 @@ non-goal, A01) with a delegated, minimal-surface connection.
 
 ## 2. Background & context
 
-An in-app dApp browser is a large attack surface; WalletPair keeps the wallet minimal by connecting to
-desktop dApps over an encrypted relay. **There is no Bluetooth** — legacy `BLE*` type names are
-artifacts and must never be described as Bluetooth pairing.
+The reasoning below is preserved as the record of a road not taken. WalletPair was specified but
+**never built** (founder decision: spec 027 for web, 2026-09-08 for desktop). What shipped instead is
+the thing this requirement argued against — an in-app dApp browser on iOS, Android and desktop, plus
+the Chrome extension — with the attack surface answered by one signing path rather than by a relay.
+Nothing in the dApp path uses Bluetooth, and that part still holds; do not generalise it to the whole
+product, since the "another phone" key method rides the platform's hybrid/caBLE transport.
 
 ## 3. Users & stories
 
@@ -29,7 +32,7 @@ artifacts and must never be described as Bluetooth pairing.
 ## 4. Functional requirements
 
 - **FR-1** — Pair by scanning a WalletPair relay URI QR (H04); establish an **E2E-encrypted** WebSocket channel.
-- **FR-2** — **No Bluetooth** anywhere; the transport is the relay only.
+- **FR-2** — No Bluetooth in the dApp transport. (Not built.)
 - **FR-3** — Require out-of-band fingerprint verification before joining (K02).
 - **FR-4** — Use the documented encrypted EIP-1193 envelopes; EIP-5792 capabilities are returned through `wallet_getCapabilities` (K04).
 - **FR-5** — Exactly one session at a time (single-session model, K03).
@@ -46,12 +49,12 @@ Connect tab → scan pairing QR → fingerprint confirm (K02) → connected card
 ## 7. Acceptance criteria
 
 - [ ] **AC-1** — Scanning a valid pairing QR establishes an E2E-encrypted session after fingerprint confirm.
-- [ ] **AC-2** — No Bluetooth API is used or requested.
+- [ ] **AC-2** — No Bluetooth API is used or requested *by the dApp transport*. (Not built.)
 - [ ] **AC-3** — `wallet_getCapabilities` returns the wallet's EIP-5792 support (K04).
 
 ## 8. Out of scope / non-goals
 
-- Fingerprint/E2E details — **K02**; session lifecycle — **K03**; capabilities — **K04**. Desktop-without-phone connect is 🧭 roadmap.
+- Fingerprint/E2E details — **K02**; session lifecycle — **K03**; capabilities — **K04**. Desktop dApp connect shipped without a phone, through the desktop app's own browser (`app-desktop/vela-wallet/src/webview.rs`, specs 030–038).
 
 ## 9. Dependencies, risks & open questions
 

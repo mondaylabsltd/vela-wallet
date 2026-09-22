@@ -13,7 +13,7 @@
 ## Can 100 documents describe Vela?
 
 Yes — comfortably, with a little headroom. Vela is a *deliberately minimal* wallet ("a wallet that
-does less — on purpose"): no NFT gallery, no swaps, no DeFi dashboard, no in-app browser. Its depth
+does less — on purpose"): no NFT gallery, no swaps, no DeFi dashboard. Its depth
 is in **correctness of a narrow surface** (seedless passkey identity, ERC-4337 account abstraction,
 clear signing, multi-chain RPC resilience), not in feature sprawl. 100 PRDs cover that surface at
 roughly one requirement per meaningful behavior, and leave room for the roadmap items still landing.
@@ -26,25 +26,39 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 - Docs are grouped into **15 epics (A–O)**. IDs are stable: `<Epic><nn>` (e.g. `G04`).
 - Each doc follows [`_TEMPLATE.md`](./_TEMPLATE.md). Filenames: `<ID>-<slug>.md`.
 - **Every functional claim must cite a source anchor** (`file:line`). When a fact and this index
-  disagree, re-read the source — the root `README.md` is **stale** (see guardrails below).
+  disagree, re-read the source. (The root `README.md` used to be listed here as stale; spec 080
+  rewrote it against the claim ledger, so it is now a reliable summary — but the code still wins.)
 
 ### Status legend
 
 | | Meaning |
 |---|---|
 | ✅ | Shipped (in `main` / alpha build) |
-| 🚧 | In progress (active branch `feat/contacts-groups-payroll-batch`, or roadmap "now") |
+| 🚧 | In progress (roadmap "now"). *A 🚧 tag left over from the `feat/contacts-groups-payroll-batch` branch is stale — contacts, groups and payroll batch all landed; the rules are in `rust/crates/vela-core/src/app/{contacts,contacts_io,batch_import}.rs`.* |
 | 🔜 | Next (planned, roadmap "next") |
 | 🧭 | Exploring (roadmap "later" — directional, not committed) |
 
+> **Read this before trusting a §10 anchor.** Every PRD written before spec 039 cites source
+> anchors under the repo-root `src/`, `modules/`, `e2e/`, `plugins/` or `targets/` — the Expo tree,
+> deleted in spec 039. **About 135 of those paths now resolve to nothing.** The requirement is still
+> the requirement; only the address is dead. The living implementation is `rust/crates/vela-core`
+> (every money, signing, RPC and contacts rule) plus the shell that renders it:
+> `app-web/vela-wallet`, `app-desktop/vela-wallet`, `app-ios/VelaWallet`, `app-android/vela-wallet`.
+
 ### Accuracy guardrails (inherited from the fact bank — do not violate)
 
-- **No Bluetooth.** dApp pairing is WalletPair over a WebSocket relay. "BLE" type names are legacy artifacts.
+- **No Bluetooth in the dApp path.** A dApp reaches the wallet through an injected EIP-1193/6963
+  provider — the Chrome extension, or the in-app browser on iOS, Android and desktop (macOS and
+  Windows). WalletPair was specified but never built (founder decision; see Epic K). Do **not**
+  write "no Bluetooth" flatly: the "another phone" key method rides the platform's hybrid/caBLE
+  transport, which does use BLE, and the Android manifest declares the Bluetooth permissions.
 - **Audit posture:** Safe contracts are independently audited; **Vela's own integration is not, and none is scheduled.** Never write "audit planned."
 - **No token, ever.** No airdrop, no farming.
 - **Alpha, stated honestly** — no scary "tolerate bugs" banners (trust > disclaimers).
 - **Fees:** `3 × padded gas limits × max(wallet gas reading, relay price for the chosen speed)`, minimum ≈ $0.01 (Tempo: ×2, pathUSD), paid in band to the relay and shown as **one** exact amount before signing; a relay quote above 3× the wallet's own reading is refused. Not "≈2×". **24 built-in networks** (spec 080 claim ledger).
-- **`deployer-api.ts` is a mock.** Production bundler facts come from `bundler-service.ts`.
+- **Fee and bundler facts come from the core**, `rust/crates/vela-core/src/app/fee_policy.rs`.
+  (The old guardrail pointed at `deployer-api.ts`, a mock, and `bundler-service.ts`; both were in
+  the deleted Expo tree.)
 
 ---
 
@@ -108,7 +122,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 ### Epic F — Networks & RPC Infrastructure (8)
 | ID | Title | Status | Deps |
 |---|---|---|---|
-| F01 | Supported Networks Registry (12 Chains + Custom) | ✅ | — |
+| F01 | Supported Networks Registry (24 Chains + Custom) | ✅ | — |
 | F02 | Custom Network Add — Contract-Suite + Precompile Validation | ✅ | F01, B06 |
 | F03 | RPC Pool Auto-Discovery & 6-Tier Scoring | ✅ | F01 |
 | F04 | RPC Failover, Banning & Self-Heal | ✅ | F03 |
@@ -124,7 +138,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | G02 | SafeOp Hashing & WebAuthn Signature Encoding | ✅ | G01, B01 |
 | G03 | Gas Estimation (Inflation, Floors, Refuse-Doomed Ops) | ✅ | G01 |
 | G04 | Gas Price Oracle, Tiers & Wallet↔Bundler Parity | ✅ | F07 |
-| G05 | Fee Model (≈2× Cost, ~3× Cap Guard) | ✅ | G04 |
+| G05 | Fee Model (3× Padded Gas, ~3× Cap Guard) | ✅ | G04 |
 | G06 | Gas Account (Relayer EOA) & Sponsored Activation | ✅ | F07 |
 | G07 | Underfunded Detection & Top-Up Modal (Cross-Repo Coupling) | ✅ | G06 |
 | G08 | Nonce Caching & Already-Pending Recovery | ✅ | G01 |
@@ -165,10 +179,16 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | J04 | Revert-Reason Decoding | ✅ | J01 |
 | J05 | Never-Unlimited Approval Guard & Editing UX | ✅ | I06 |
 
-### Epic K — dApp Connect (WalletPair) (8)
+### Epic K — dApp Connect (8)
+
+> **WalletPair was never built.** The founder decided against it (spec 027 for web, 2026-09-08
+> for desktop), so K01/K02/K08 describe a transport that does not exist. What shipped instead is an
+> injected EIP-1193/6963 provider — the Chrome extension, and the in-app browser on iOS, Android and
+> desktop. K04–K07 (method map, EIP-1271, SIWE, EIP-5792) did ship, over that transport.
+
 | ID | Title | Status | Deps |
 |---|---|---|---|
-| K01 | WalletPair Pairing Over WebSocket Relay (QR, No BLE) | ✅ | — |
+| K01 | WalletPair Pairing Over WebSocket Relay (QR, No BLE) | ⛔ not built | — |
 | K02 | MITM-Resistant Fingerprint Verification & E2E Badge | ✅ | K01 |
 | K03 | Single-Session Model & Auto-Restore | ✅ | K01 |
 | K04 | Capability Advertisement & JSON-RPC Method Map | ✅ | K01, B07 |
@@ -219,9 +239,11 @@ These appear on `getvela.app/roadmap` and are captured as *forward requirements*
 
 - **"See every coin you receive"** (🚧 now) — internal-call / native deposit tracing → forward FR in **D05**.
 - **Wider clear-signing coverage** (🚧 now) → forward FR in **I02**.
-- **Native iOS & Android apps** (🔜 next) → **O03**.
+- **iOS & Android in the App Store / Google Play** (🔜 next) → **O03**. The apps themselves are
+  built, wired to the core and device-tested (specs 040–058); only store publication is pending.
 - **Cross-device sync + saved address book** (🔜 next) → forward FR in **H05 / C04 / E06**.
-- **Independent audit, desktop dApp connect, non-precompile-chain signing** (🧭 exploring) → **A02 / K01 / F02**.
+- **Independent audit, non-precompile-chain signing** (🧭 exploring) → **A02 / F02**.
+  (Desktop dApp connect shipped — `app-desktop/vela-wallet/src/webview.rs`, specs 030–038.)
 
 ## Conventions
 

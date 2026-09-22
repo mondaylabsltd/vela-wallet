@@ -19,8 +19,10 @@ inherit a consistent "what we will and won't build" boundary.
 
 Most wallets grow into NFT galleries, swap aggregators, DeFi dashboards, and in-app dApp browsers —
 each a new attack surface and audit burden. Vela treats the feature *gap* as a security virtue:
-"fewer paths to attack, fewer moving parts to audit." dApp interaction is delegated to WalletPair
-(Epic K) instead of an embedded browser.
+"fewer paths to attack, fewer moving parts to audit." The one exception the product did take on is
+a dApp browser: iOS, Android and desktop (macOS, Windows) ship one, and the Chrome extension injects
+the same provider into ordinary pages (Epic K). Everything it opens still goes through one signing
+path, which is how the gap stayed a virtue.
 
 ## 3. Users & stories
 
@@ -30,14 +32,14 @@ each a new attack surface and audit burden. Vela treats the feature *gap* as a s
 ## 4. Functional requirements
 
 - **FR-1** — In scope: seedless passkey identity (Epic B), send/receive (H), multi-chain balances & pricing (D/E), clear signing (I/J), dApp connect via WalletPair (K).
-- **FR-2** — Explicit non-goals: **no NFT gallery, no built-in swaps, no DeFi dashboard, no in-app dApp browser, no fiat on-ramp, no token/airdrop**.
-- **FR-3** — Supported assets: **ETH and ERC-20s** across the 12 supported chains (F01); native-coin gas per chain (plus Tempo's stablecoin gas, G10).
+- **FR-2** — Explicit non-goals: **no NFT gallery, no built-in swaps, no DeFi dashboard, no fiat on-ramp, no token/airdrop**. (An in-app dApp browser *was* a non-goal and is no longer: it ships on iOS, Android and desktop.)
+- **FR-3** — Supported assets: **native coins and ERC-20s** across the 24 built-in chains (F01); native-coin gas per chain (plus Tempo's stablecoin gas, G10).
 - **FR-4** — Any proposed feature must state which non-goal it does or doesn't cross, and justify the added surface.
 
 ## 5. Non-functional requirements
 
 - **NFR-1** — Openness: MIT-licensed app + all three backend services, self-hostable (A06/N02).
-- **NFR-2** — Web-first: runs in the browser with nothing to download; native iOS/Android share one codebase (A04).
+- **NFR-2** — Runs in the browser with nothing to download; the four shells (web, desktop, iOS, Android) share one Rust core rather than one app codebase (A04).
 
 ## 6. UX / flow notes
 

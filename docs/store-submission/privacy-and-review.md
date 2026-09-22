@@ -3,7 +3,7 @@
 
 Copy-paste-ready answers for the **Apple App Privacy (Nutrition Label)**, **Google Play Data Safety** form, and the **App Review notes** for both stores.
 
-Everything below is grounded in the actual app behavior (`package.json` has **no analytics/crash/tracking SDK**), the published privacy policy (getvela.app/privacy), and the bug-report code (`src/services/bug-report.ts`). Operator / data controller: **MONDAY LABS LTD**, UK.
+Everything below is grounded in the actual app behavior (no analytics/crash/tracking SDK in any shell's dependency manifest), the published privacy policy (getvela.app/privacy), and the bug-report code (`app-web/vela-wallet/src/lib/services/bug-report.ts`, proxied by `app-web/getvela.app/src/routes/api/bug-report`). Operator / data controller: **MONDAY LABS LTD**, UK.
 
 > ⚠️ These forms are legal attestations you personally sign. I've flagged the 3 genuine judgment calls with **【你来定】**. Everything else is a factual mapping of what the code does.
 
@@ -64,7 +64,7 @@ Contact Info (name/email/phone/address), Health, Location, Sensitive Info, Conta
 ### Export compliance (separate question, every build)
 
 - "Does your app use encryption?" → **Yes**, but only **standard/exempt** encryption (HTTPS/TLS + OS-provided passkey crypto). Qualifies for the exemption.
-- ✅ **Done:** `"ITSAppUsesNonExemptEncryption": false` is now set in `app.json` → `ios.infoPlist` and the committed `ios/VelaWallet/Info.plist`, so it stops asking every upload.
+- ✅ **Done (2026-09-23).** The key was set in the retired Expo tree's `app.json` and was lost with it; `ITSAppUsesNonExemptEncryption = false` is now in the SwiftUI shell's `app-ios/VelaWallet/VelaWallet/Info.plist`, so App Store Connect stops asking on every upload.
 
 ### Account deletion (Guideline 5.1.1(v))
 
@@ -108,7 +108,7 @@ Location, Contacts, Calendar, Photos/Videos, Audio (the unused `RECORD_AUDIO` pe
 - **Financial features declaration** → declare: **"Provides a non-custodial crypto wallet (stores/holds crypto)."** Do **NOT** check exchange/buy/sell/trade — Vela has no fiat on-ramp and no exchange. Exchange checkboxes can trigger regional licensing requirements you don't need.
 - **Target audience & content** → adults (18+); not designed for or appealing to children.
 - **Content rating (IARC questionnaire)** → finance utility, no objectionable content. Answer honestly; expect a low rating with a finance note.
-- **Permissions** → **Camera (QR scanning) only.** Bluetooth, location, microphone, and the draw-over-apps permission have all been removed from the app, so **no high-risk permissions declaration form is required.**
+- **Permissions** → the Android manifest declares `INTERNET`, `CAMERA` (QR), `VIBRATE` (the money-in buzz), `POST_NOTIFICATIONS` (a confirmation that lands while the app is away), and — for the caBLE "sign in with your phone" transport (spec 019) — `BLUETOOTH_SCAN` (with `neverForLocation`), `BLUETOOTH_CONNECT`, plus `BLUETOOTH`, `BLUETOOTH_ADMIN` and `ACCESS_FINE_LOCATION` capped at `maxSdkVersion="30"` for the pre-31 scanning API. No microphone and no draw-over-apps. **Bluetooth is not in the "removed" list any more** — declare it, and say what it is for: finding the nearby phone that scanned the QR on screen. `neverForLocation` is what keeps it off the location dialog on API 31+; read the manifest before filling the form, not this paragraph.
 - **Ads** → app contains **no ads** → declare "No ads."
 - **Government / News / COVID** → N/A.
 
@@ -136,9 +136,11 @@ HOW TO TEST:
    to the displayed address, OR contact us and we will pre-fund the review wallet.
    We can also provide a testnet build on request.
 
-DAPP CONNECT (optional): pairs with a desktop dApp by scanning a pairing QR code
-(WalletConnect-style relay over HTTPS/WebSocket). No Bluetooth. It is optional and
-not needed to use the wallet. Steps/extension link available on request.
+DAPP BROWSER (optional): the app has a built-in browser that injects a standard
+Ethereum provider (EIP-1193 / EIP-6963) into the page, so a web3 site can ask this
+wallet to sign. Every request is shown, decoded, and approved by the user with a
+passkey. There is no WalletConnect and no remote pairing. It is optional and not
+needed to use the wallet.
 
 COMPLIANCE (Guideline 3.1.5(b)): Vela is storage-only / self-custodial. It does
 NOT facilitate cryptocurrency exchange or trading, has NO fiat on-ramp, NO in-app
@@ -169,8 +171,9 @@ Receive shows the address. Send needs on-chain funds; contact us to pre-fund or 
 a testnet build.
 
 Crypto: non-custodial software wallet (store/hold only). No exchange, no fiat
-on-ramp, no in-app purchases. dApp Connect pairs over an HTTPS/WebSocket relay
-(scan a QR code) — no Bluetooth.
+on-ramp, no in-app purchases. The optional built-in dApp browser injects a standard
+Ethereum provider into the page it opens; no WalletConnect, no remote pairing.
+Bluetooth is used only to find the nearby phone that scans the sign-in QR code.
 
 Privacy policy: https://getvela.app/privacy
 Contact / data deletion: hello@mondaylabs.ltd
@@ -182,7 +185,7 @@ Contact / data deletion: hello@mondaylabs.ltd
 
 ## 6. Repo changes already made so the forms stay true (2026-06-30)
 
-Bluetooth was dropped entirely (dApp Connect now runs over the WalletPair HTTPS/WebSocket relay), along with the other unneeded permissions:
+Bluetooth was dropped at the time, along with the other unneeded permissions. **Both halves of that have since changed** — WalletPair was never built, and spec 019 brought Bluetooth back for the caBLE sign-in transport — so read this list as history and the 2026-09-11 follow-up below as the instruction:
 
 - ✅ Removed all `BLUETOOTH*` permissions + iOS Bluetooth usage strings + the `bluetooth-peripheral` background mode (`app.json`, `plugins/with-native-modules.js`, committed `Info.plist` + `AndroidManifest.xml`).
 - ✅ Removed `RECORD_AUDIO` (disabled expo-camera mic via `recordAudioAndroid:false` + strip `NSMicrophoneUsageDescription`), `ACCESS_FINE_LOCATION` (only existed for BLE scanning), and `SYSTEM_ALERT_WINDOW`.

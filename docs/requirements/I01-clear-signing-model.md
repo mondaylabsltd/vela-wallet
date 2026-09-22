@@ -37,7 +37,7 @@ says so — a fake summary would be worse than honest uncertainty.
 ## 5. Non-functional requirements
 
 - **NFR-1** — A single render path (prod + harness + replay) so behavior can't diverge.
-- **NFR-2** — i18n key depth ≤ 3 segments (a known gotcha); all copy localized (M05).
+- **NFR-2** — All copy localized (M05). (The old ≤ 3-segment key-depth rule was an Expo-runtime limit and no longer applies.)
 
 ## 6. UX / flow notes
 
@@ -55,7 +55,7 @@ says so — a fake summary would be worse than honest uncertainty.
 
 ## 9. Dependencies, risks & open questions
 
-- **Risk:** i18n keys deeper than 3 segments break (project gotcha) — keep keys shallow.
+- ~~**Risk:** i18n keys deeper than 3 segments break~~ — that was the Expo i18next runtime; the compiled Rust catalogs interned the whole path table, and 4- and 5-segment keys ship today.
 - **Open question:** wider decode coverage is 🚧 (I02).
 
 ## 10. Source anchors

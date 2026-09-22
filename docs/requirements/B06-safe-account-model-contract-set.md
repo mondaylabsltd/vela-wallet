@@ -11,8 +11,9 @@
 ## 1. Summary
 
 Every Vela wallet is an **unmodified Safe v1.4.1 smart account**, operated via **ERC-4337 account
-abstraction (EntryPoint v0.7)**, with the **Safe 4337 Module** and a **WebAuthn signer
-(SafeWebAuthnSharedSigner)** as the sole owner (threshold 1). One canonical contract set is used
+abstraction (EntryPoint v0.7)**, with the **Safe 4337 Module** and **WebAuthn signers** as its
+owners at threshold 1 — the first key uses `SafeWebAuthnSharedSigner`, each further key its own
+signer from Safe's factory, so a 1..=7-key wallet is 1-of-N. One canonical contract set is used
 **identically on every chain**, and on-chain P-256 verification runs through the **RIP-7212
 precompile**. This is the concrete, standards-based backbone under the seedless UX.
 
@@ -30,10 +31,10 @@ the WebAuthn signer configuration — keeping "audited Safe vs proprietary accou
 
 ## 4. Functional requirements
 
-- **FR-1** — Account = Safe v1.4.1 singleton behind a `SafeProxy`, with the Safe4337Module enabled and `SafeWebAuthnSharedSigner` as sole owner (threshold 1).
+- **FR-1** — Account = Safe v1.4.1 singleton behind a `SafeProxy`, with the Safe4337Module enabled and one WebAuthn signer owner per founding key (threshold 1, i.e. 1-of-N; `MAX_MULTI_KEYS = 7` in `rust/crates/vela-core/src/safe.rs`).
 - **FR-2** — Canonical addresses (same on all chains): SafeProxyFactory `0x4e1DCf7A…ec67`, Safe Singleton `0x29fcB43b…C762`, FallbackHandler `0xfd0732Dc…Ec99`, EntryPoint v0.7 `0x0000000071727De2…da032`, Safe4337Module `0x75cf1146…c226`, SafeModuleSetup `0x2dd68b00…5b47`, WebAuthn shared signer `0x94a4F6af…55c2`, MultiSend `0x38869bf6…B526`.
 - **FR-3** — On-chain P-256 verification uses `verifiers = 0x100` (RIP-7212 precompile).
-- **FR-4** — Hand-rolled Keccak-256 (0x01 padding) + minimal CBOR parser extract the COSE key with **no native crypto dependency**, identical on iOS/Android/web, locked by golden vectors.
+- **FR-4** — Keccak-256 and COSE/CBOR key extraction are implemented **once**, in `rust/crates/vela-core`, on pinned crates (no hand-rolled crypto); every shell calls that one implementation and the result is locked by golden vectors.
 - **FR-5** — Adding a custom network requires this full contract suite **plus** the RIP-7212 precompile to exist (F02).
 
 ## 5. Non-functional requirements
@@ -49,7 +50,7 @@ No direct UI. Surfaces indirectly as counterfactual addresses (B07) and as the "
 
 - [ ] **AC-1** — A deployed Vela account matches the expected Safe v1.4.1 + 4337 module + WebAuthn-owner configuration on-chain.
 - [ ] **AC-2** — The contract addresses are identical across all supported chains.
-- [ ] **AC-3** — Keccak/CBOR outputs match golden vectors on all three platforms.
+- [ ] **AC-3** — Keccak/CBOR outputs match the golden vectors when the corpus is replayed through Rust, the Swift and Kotlin bindings and the shipped wasm.
 
 ## 8. Out of scope / non-goals
 

@@ -11,7 +11,7 @@
 ## 1. Summary
 
 The RPC pool applies **two-tier banning** and **self-heal**: temporary bans (rate-limit / 401 / 403,
-~1h) vs permanent bans (0 successes + ≥6 failures, auto-expires 24h), persisted to AsyncStorage. If
+~1h) vs permanent bans (0 successes + ≥6 failures, auto-expires 24h), persisted to the shell's store. If
 **everything is banned**, the pool clears and rebuilds so the wallet never dead-ends. Automatic
 failover with exponential cooldown routes around bad endpoints.
 
@@ -30,7 +30,7 @@ app's data layer.
 
 - **FR-1** — On failure, fail over to the next-best endpoint (F03) with exponential cooldown.
 - **FR-2** — **Temporary ban** (~1h) for rate-limit / 401 / 403; **permanent ban** for 0 successes + ≥6 failures (auto-expires 24h).
-- **FR-3** — Persist ban state to AsyncStorage (A06) across restarts.
+- **FR-3** — Persist ban state to the shell's local store (A06) across restarts.
 - **FR-4** — **Self-heal**: if all endpoints are banned, clear and rebuild the pool.
 - **FR-5** — Rate-limit outcomes drive calm UX (F08), not error banners.
 

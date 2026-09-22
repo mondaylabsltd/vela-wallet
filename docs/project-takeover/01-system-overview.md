@@ -4,7 +4,7 @@
 
 ## 一句话介绍
 
-Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约钱包**(Safe v1.4.1 + EntryPoint v0.7),无助记词、无浏览器插件依赖,由**一个共享 Rust 核心 + 四个原生壳**组成(iOS SwiftUI / Android Compose / Web SvelteKit / 桌面 gpui),支持 12+ EVM 链,通过自营 bundler 收取 relayer 费获利。
+Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约钱包**(Safe v1.4.1 + EntryPoint v0.7),无助记词、无浏览器插件依赖,由**一个共享 Rust 核心 + 四个原生壳**组成(iOS SwiftUI / Android Compose / Web SvelteKit / 桌面 gpui),内置 24 条 EVM 网络(均为主网,核心 `network_admin.rs` 的 `BUILTIN_CHAINS`;用户还可自行添加满足要求的网络),通过自营中继收取手续费获利。
 
 ## 用户与商业模型
 
@@ -44,11 +44,11 @@ app-android/         Android 壳
 assets/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与两道闸门都从此路径读
 assets/wasm/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
 assets/fonts/        Plus Jakarta Sans TTF(桌面 include_bytes!)
-design/              图标 SVG 源、Lottie 启动动画、插画
 scripts/             工具包(package.json 在此,根目录无 npm 文件):gen-i18n、gen-identicon-features、
                      verify-*-parity、lint-lottie-assets、check-native-reachability、check-expo-residue、
                      gen-app-icons.sh;onchain/ 为链上 e2e 脚本(bun)
-docs/                设计/需求/测试/上架/接管文档
+docs/                设计/需求/测试/上架/接管文档;docs/design/ 是图标 SVG 源、Lottie 启动动画与插画的
+                     唯一来源(仓库根目录没有 design/)
 specs/               按落地顺序编号的功能规格(spec/plan/tasks/results)
 ```
 
