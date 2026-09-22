@@ -120,13 +120,23 @@ export function normaliseAccount(record: unknown): Account | null {
 		created_at_iso: str(r.created_at_iso, r.createdAt) ?? '',
 		keys: keys
 			.filter((k): k is Record<string, unknown> => !!k && typeof k === 'object')
-			.map((k) => ({
-				credential_id: str(k.credential_id, k.credentialId) ?? '',
-				public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
-				name: str(k.name) ?? '',
-				// Where the credential lives; the old client never recorded it.
-				transports: str(k.transports) ?? ''
-			}))
+			.map((k) => {
+				const key: Account['keys'][number] = {
+					credential_id: str(k.credential_id, k.credentialId) ?? '',
+					public_key_hex: str(k.public_key_hex, k.publicKeyHex) ?? '',
+					name: str(k.name) ?? '',
+					// Where the credential lives; the old client never recorded it.
+					transports: str(k.transports) ?? ''
+				};
+				// Spec 075: the Clear Signer page a key lives behind. It is the
+				// ONLY way that key can ever be reached, so normalising a record
+				// must carry it through — dropping it here would make the key
+				// unsignable and the wallet unopenable, silently. Absent stays
+				// absent (the field is optional on the wire).
+				const origin = str(k.signer_origin, k.signerOrigin);
+				if (origin !== undefined && origin !== '') key.signer_origin = origin;
+				return key;
+			})
 	};
 }
 

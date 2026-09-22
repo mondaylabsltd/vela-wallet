@@ -140,6 +140,8 @@ export type SettingsOverlayId =
 	/** Spec 071: the default "Sign with", and the Clear Signer's page. */
 	| 'sign-with'
 	| 'signer-page'
+	/** Spec 075: the relay a cross-device pairing goes through. */
+	| 'relay-page'
 	| 'clear-caches'
 	/** Spec 058: one storage row's Clear, asked before it happens. */
 	| 'clear-storage-item'
@@ -640,6 +642,8 @@ export interface SettingsHomeModel {
 	signWithSheet: SelectSheetModel;
 	/** Spec 071 — the Clear Signer's page. */
 	signerPage: SignerPageModel;
+	/** Spec 075 — the relay a cross-device pairing goes through. */
+	relayPage: SignerPageModel;
 	clearCachesSheet: ConfirmSheetModel;
 	eraseSheet: ConfirmSheetModel;
 	feedback: FeedbackModel;
@@ -785,6 +789,8 @@ export interface SettingsDesktopModel {
 		description: string;
 		rows: FormRowModel[];
 		page: SignerPageModel;
+		/** Spec 075 — the relay, under the page. */
+		relay: SignerPageModel;
 	};
 	networks: {
 		title: string;

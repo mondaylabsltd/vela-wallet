@@ -114,6 +114,18 @@ export interface SettingsMessages {
 		pageForeign: string;
 		pageReset: string;
 		pageSave: string;
+		/**
+		 * Spec 075: the relay a cross-device pairing goes through — the same
+		 * row shape as the page above, because it is the same kind of
+		 * decision: an address of one's own instead of ours. The relay never
+		 * sees anything but ciphertext, which is what `relaySubtitle` says.
+		 */
+		relayTitle: string;
+		relaySubtitle: string;
+		relayOfficial: string;
+		relayInvalid: string;
+		relayInsecure: string;
+		relayReset: string;
 	};
 	networks: {
 		/** Template with `{{count}}`. */
@@ -473,6 +485,12 @@ export const SETTINGS_KEYS = [
 	'settings.signing.pageForeign',
 	'settings.signing.pageReset',
 	'settings.signing.pageSave',
+	'settings.signing.relayTitle',
+	'settings.signing.relaySubtitle',
+	'settings.signing.relayOfficial',
+	'settings.signing.relayInvalid',
+	'settings.signing.relayInsecure',
+	'settings.signing.relayReset',
 	'settings.networks.count',
 	'settings.networks.custom',
 	'settings.networks.builtinNote',

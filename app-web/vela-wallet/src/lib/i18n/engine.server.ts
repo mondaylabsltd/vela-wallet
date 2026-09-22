@@ -387,7 +387,14 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			pageInsecure: k('settings.signing.pageInsecure'),
 			pageForeign: k('settings.signing.pageForeign'),
 			pageReset: k('settings.signing.pageReset'),
-			pageSave: k('settings.signing.pageSave')
+			pageSave: k('settings.signing.pageSave'),
+			// Spec 075: the relay row, beside the page row.
+			relayTitle: k('settings.signing.relayTitle'),
+			relaySubtitle: k('settings.signing.relaySubtitle'),
+			relayOfficial: k('settings.signing.relayOfficial'),
+			relayInvalid: k('settings.signing.relayInvalid'),
+			relayInsecure: k('settings.signing.relayInsecure'),
+			relayReset: k('settings.signing.relayReset')
 		},
 		networks: {
 			count: k('settings.networks.count'),
