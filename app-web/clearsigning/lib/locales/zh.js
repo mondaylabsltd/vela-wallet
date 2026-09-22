@@ -208,6 +208,8 @@ window.VelaCS.i18n.register('zh', {
   'intent.proofVerify': '确认你的钥匙',
   'intent.proofRecover': '用你的钥匙恢复',
   'intent.memberProof': '确认钥匙加入',
+  'tag.someWallet': '某个钱包',
+  'tag.selfReported': '这是它自报的名字',
   'tag.velaWallet': 'Vela 钱包',
   'tag.stepOne': '第 1 步 / 共 2 步',
   'tag.stepTwo': '第 2 步 / 共 2 步',

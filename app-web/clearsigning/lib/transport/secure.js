@@ -206,6 +206,10 @@ window.VelaCS = window.VelaCS || {};
             label: name,
             role: self.role,
             peerPublicKey: peerPk,
+            // What the peer CALLS ITSELF. Nothing here verifies it — this
+            // channel cannot — so it travels labelled as self-reported and is
+            // shown that way, never as a brand the page vouches for.
+            peerApp: typeof hello.app === 'string' ? hello.app.slice(0, 64) : '',
           });
         });
     });
@@ -235,6 +239,8 @@ window.VelaCS = window.VelaCS || {};
     this.label = config.label;
     this.role = config.role;
     this.peerPublicKey = config.peerPublicKey;
+    /** The peer's own name for itself, unverified and possibly empty. */
+    this.peerApp = config.peerApp || '';
     this.sent = 0n;
     this.received = 0n;
     // Seals and opens run one at a time, in call order. Otherwise two messages

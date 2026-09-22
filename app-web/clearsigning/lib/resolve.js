@@ -920,13 +920,30 @@ window.VelaCS = window.VelaCS || {};
     view.account = null;
     view.ceremony = { kind: kind, walletName: wallet, fromWallet: fromWallet };
 
-    // The head names the wallet, not a site: these are the wallet's own flows.
+    // The head names whoever is asking — and only wears Vela's mark when the
+    // channel vouches for it.
+    //
+    // This page is a signer anything can connect to: over BLE or the relay the
+    // requester is whatever dialled in, and its hello's `app` is a CLAIM. The
+    // page already refuses to launder a dApp's self-reported name into a
+    // verified one; painting Vela's V and "Vela 钱包" on an unverified peer was
+    // the same laundering one layer up, and the louder one, because the mark
+    // is what a person reads before deciding to trust the screen.
     var who = requesterLine(ctx);
+    var claimed = typeof ctx.requesterApp === 'string' ? ctx.requesterApp.trim().slice(0, 40) : '';
     view.dapp.name = null;
     view.dapp.nameKey = 'tag.velaWallet';
     view.dapp.letter = 'V';
     view.dapp.tone = '#ff6a1a';
     view.dapp.icon = null;
+    if (!who.verified) {
+      // A name it gave for itself, said as such; otherwise no name at all.
+      view.dapp.name = claimed || null;
+      view.dapp.nameKey = claimed ? null : 'tag.someWallet';
+      view.dapp.nameClaimed = !!claimed;
+      view.dapp.letter = (claimed || '?').slice(0, 1).toUpperCase();
+      view.dapp.tone = '#6b7280';
+    }
     view.dapp.origin = who.origin || null;
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;

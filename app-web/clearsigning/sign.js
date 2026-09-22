@@ -116,6 +116,12 @@
     // confirmed on the other device, i.e. after the only moment the comparison
     // was for (found on the radio, spec 075 T043).
     waitingState.code = state.code || (session && session.comparisonCode);
+    // Who is on the other end, and whether anything vouches for it. The
+    // postMessage and extension channels are verified by the browser itself;
+    // a socket, a radio and a relay are not.
+    waitingState.requesterApp = (session && session.requesterApp) || '';
+    waitingState.requesterVerified = !!(session && session.channel === 'post')
+      || !!(session && session.channel === 'ext');
     window.__slider = null;
     draw(ns.render.waiting(waitingState));
     phase('waiting');
@@ -338,6 +344,11 @@
       originVerified: request.originVerified,
       channel: request.channel,
       requester: request.requester,
+      // The requester's own name for itself, where the channel carried one
+      // (the handshake's hello). A CLAIM, and drawn as one: this page is a
+      // signer anything can connect to, so painting Vela's mark on whatever
+      // dialled in would be the page vouching for something it cannot check.
+      requesterApp: session.requesterApp || '',
       rpId: ns.signer.relyingPartyId(),
     });
     var view = ns.resolve(request.intent, context);

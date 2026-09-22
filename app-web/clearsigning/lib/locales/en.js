@@ -202,6 +202,8 @@ window.VelaCS.i18n.register('en', {
   'intent.proofVerify': 'Confirm your key',
   'intent.proofRecover': 'Recover with your key',
   'intent.memberProof': 'Confirm the key joins',
+  'tag.someWallet': 'A wallet',
+  'tag.selfReported': 'the name it gave for itself',
   'tag.velaWallet': 'Vela wallet',
   'tag.stepOne': '1 of 2',
   'tag.stepTwo': '2 of 2',

@@ -400,9 +400,20 @@ window.VelaCS = window.VelaCS || {};
     var sheet = el('article', 'sheet sheet-waiting');
     sheet.appendChild(el('div', 'grabber'));
     var head = el('header', 'sheet-head');
-    head.appendChild(avatar('V', '#ff6a1a'));
+    // Only a channel that vouches for the peer gets Vela's mark; over a radio
+    // or a relay this is whatever connected, and it is drawn as that.
+    var named = state.requesterApp || '';
+    head.appendChild(
+      state.requesterVerified
+        ? avatar('V', '#ff6a1a')
+        : avatar((named || '?').slice(0, 1).toUpperCase(), '#6b7280'),
+    );
     var identity = el('div', 'sheet-identity');
-    identity.appendChild(el('div', 'dapp-name', t('tag.velaWallet')));
+    identity.appendChild(el('div', 'dapp-name',
+      state.requesterVerified ? t('tag.velaWallet') : (named || t('tag.someWallet'))));
+    if (!state.requesterVerified && named) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
+    }
     if (state.origin || state.originKey) {
       identity.appendChild(el('div', 'dapp-origin', state.origin || t(state.originKey)));
     }
@@ -422,6 +433,9 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(avatar(view.dapp.letter, view.dapp.tone));
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
+    if (view.dapp.nameClaimed) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
+    }
     if (view.dapp.origin || view.dapp.originKey) {
       identity.appendChild(el('div', 'dapp-origin', view.dapp.origin || t(view.dapp.originKey)));
     }
