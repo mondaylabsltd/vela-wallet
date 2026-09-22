@@ -780,10 +780,6 @@ enum SettingsFixtures {
                 SegmentModel(id: "dark", label: loc.t(k.themeDark), icon: .moon),
                 SegmentModel(id: "auto", label: loc.t(k.themeAuto), icon: .monitor),
             ], selected: "dark"),
-            avatar: SegmentedModel(label: loc.t(k.avatarTitle), segments: [
-                SegmentModel(id: "initials", label: loc.t(k.avatarInitials)),
-                SegmentModel(id: "identicon", label: loc.t(k.avatarIdenticon)),
-            ], selected: "identicon"),
             textScale: TextScaleModel(label: loc.t(k.textScale), steps: 7, index: 3),
             signOutLabel: loc.t(k.signOutButton),
             eraseTitle: loc.t(k.eraseTitle),

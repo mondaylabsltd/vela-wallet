@@ -6,9 +6,11 @@
 //
 //  **No machine owns these, and this cut does not give them one.** They are
 //  storage keys with a reader — and the SPELLINGS are the contract: web writes
-//  `vela.theme`, `vela.language`, `vela.localePrefs`, `vela.avatarStyle` and
-//  `vela.textScale`, Android writes the same five, and a person who restores a
-//  backup onto another of their own devices finds their choices intact.
+//  `vela.theme`, `vela.language`, `vela.localePrefs` and `vela.textScale`,
+//  Android writes the same, and a person who restores a backup onto another of
+//  their own devices finds their choices intact. (`vela.avatarStyle` is
+//  retired — spec 074: every avatar is the identicon — and the core's
+//  migrations remove it.)
 //
 //  How a stored record READS is the core's (`vela_core::prefs`, spec 072):
 //  four shells had written the same five choices four ways — Android's
@@ -24,7 +26,6 @@ import Foundation
 import VelaCore
 
 enum ThemeChoice: String, CaseIterable { case system, light, dark }
-enum AvatarStyle: String, CaseIterable { case initials, identicon }
 
 /// Grouping + decimal marks. `auto` reads the device's conventions once.
 enum NumberFormatKey: String, CaseIterable {
@@ -66,7 +67,6 @@ enum TextScaleLevel: String, CaseIterable {
 final class Preferences {
 
     private(set) var theme: ThemeChoice = .system
-    private(set) var avatarStyle: AvatarStyle = .identicon
     /// `auto` follows the device. A bare string, as the other clients store it.
     private(set) var language = "auto"
     private(set) var textScale: TextScaleLevel = .standard
@@ -93,7 +93,6 @@ final class Preferences {
         booted = true
         let read = prefsRead(entries: Self.entries(store))
         theme = ThemeChoice(rawValue: read.theme) ?? .system
-        avatarStyle = AvatarStyle(rawValue: read.avatarStyle) ?? .identicon
         language = read.language
         textScale = TextScaleLevel(rawValue: read.textScale) ?? .standard
         numberFormat = NumberFormatKey(rawValue: read.numberFormat) ?? .auto
@@ -114,11 +113,12 @@ final class Preferences {
     }
 
     /// The raw text under every key the codec reads — the desktop's old
-    /// `vela.formats` included, so its migration can find it.
+    /// `vela.formats` and the retired `vela.avatarStyle` included, so their
+    /// migrations can find them.
     private static func entries(_ store: VelaStore) -> [String: String] {
         let keys = [
             VelaStore.Key.theme, VelaStore.Key.language, VelaStore.Key.localePrefs,
-            VelaStore.Key.avatarStyle, VelaStore.Key.textScale, VelaStore.Key.legacyFormats,
+            VelaStore.Key.retiredAvatarStyle, VelaStore.Key.textScale, VelaStore.Key.legacyFormats,
         ]
         return keys.reduce(into: [:]) { entries, key in
             if let raw = store.rawValue(key) { entries[key] = raw }
@@ -130,11 +130,6 @@ final class Preferences {
     func setTheme(_ value: ThemeChoice) {
         theme = value
         store.writeString(VelaStore.Key.theme, value.rawValue)
-    }
-
-    func setAvatarStyle(_ value: AvatarStyle) {
-        avatarStyle = value
-        store.writeString(VelaStore.Key.avatarStyle, value.rawValue)
     }
 
     func setLanguage(_ tag: String) {

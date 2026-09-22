@@ -55,14 +55,13 @@ fun WalletHeaderRow(
             IdenticonAvatar(
                 tappable = false,
                 seed = header.identiconSeed,
-                name = header.name,
                 contentDescription = identiconLabel ?: header.name,
                 modifier = Modifier
                     .clip(CircleShape)
                     .clickable(onClick = onIdenticon),
             )
         } else {
-            IdenticonAvatar(seed = header.identiconSeed, name = header.name, contentDescription = header.name, tappable = false)
+            IdenticonAvatar(seed = header.identiconSeed, contentDescription = header.name, tappable = false)
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {

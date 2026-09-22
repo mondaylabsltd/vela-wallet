@@ -8061,7 +8061,7 @@ public func FfiConverterTypePasskeyDirectoryEntry_lower(_ value: PasskeyDirector
 
 
 /**
- * The five display preferences, read from the store whatever its spelling.
+ * The four display preferences, read from the store whatever its spelling.
  */
 public struct PrefsRecord: Equatable, Hashable {
     /**
@@ -8072,10 +8072,6 @@ public struct PrefsRecord: Equatable, Hashable {
      * `auto`, or a locale tag.
      */
     public var language: String
-    /**
-     * `initials` | `identicon`.
-     */
-    public var avatarStyle: String
     /**
      * `compact` … `xlarge`.
      */
@@ -8095,14 +8091,10 @@ public struct PrefsRecord: Equatable, Hashable {
          * `auto`, or a locale tag.
          */language: String, 
         /**
-         * `initials` | `identicon`.
-         */avatarStyle: String, 
-        /**
          * `compact` … `xlarge`.
          */textScale: String, textScaleFactor: Double, numberFormat: String, dateFormat: String, timeFormat: String) {
         self.theme = theme
         self.language = language
-        self.avatarStyle = avatarStyle
         self.textScale = textScale
         self.textScaleFactor = textScaleFactor
         self.numberFormat = numberFormat
@@ -8128,7 +8120,6 @@ public struct FfiConverterTypePrefsRecord: FfiConverterRustBuffer {
             try PrefsRecord(
                 theme: FfiConverterString.read(from: &buf), 
                 language: FfiConverterString.read(from: &buf), 
-                avatarStyle: FfiConverterString.read(from: &buf), 
                 textScale: FfiConverterString.read(from: &buf), 
                 textScaleFactor: FfiConverterDouble.read(from: &buf), 
                 numberFormat: FfiConverterString.read(from: &buf), 
@@ -8140,7 +8131,6 @@ public struct FfiConverterTypePrefsRecord: FfiConverterRustBuffer {
     public static func write(_ value: PrefsRecord, into buf: inout [UInt8]) {
         FfiConverterString.write(value.theme, into: &buf)
         FfiConverterString.write(value.language, into: &buf)
-        FfiConverterString.write(value.avatarStyle, into: &buf)
         FfiConverterString.write(value.textScale, into: &buf)
         FfiConverterDouble.write(value.textScaleFactor, into: &buf)
         FfiConverterString.write(value.numberFormat, into: &buf)

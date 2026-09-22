@@ -275,12 +275,6 @@
 						onselect={(id) => onprefevent?.({ kind: 'theme', id })}
 					/>
 				</FormRow>
-				<FormRow label={model.appearance.avatar.label}>
-					<SegmentedControl
-						model={model.appearance.avatar.segmented}
-						onselect={(id) => onprefevent?.({ kind: 'avatar', id })}
-					/>
-				</FormRow>
 			{:else if page === 'localization'}
 				{#each model.localization.rows as row (row.id)}
 					<FormRow label={row.label}>

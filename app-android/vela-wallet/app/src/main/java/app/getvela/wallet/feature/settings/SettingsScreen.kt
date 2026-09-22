@@ -569,7 +569,7 @@ private fun SettingsHomeBody(
                 )
             }
         }
-        // The three appearance controls are not rows: they are the control
+        // The two appearance controls are not rows: they are the control
         // itself, shown inline under 语言 (ST1).
         if (section.appearanceControls) {
             VelaTextScaleSlider(model.textScale.steps, model.textScale.index, onChange = onTextScale)
@@ -580,15 +580,6 @@ private fun SettingsHomeBody(
                 },
                 selectedId = model.theme.selected,
                 onSelect = { onSegment("theme", it) },
-            )
-            Spacer(modifier = Modifier.height(VelaSpacing.lg))
-            VelaSegmentedControl(
-                label = model.avatar.label,
-                segments = model.avatar.segments.map { seg ->
-                    Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
-                },
-                selectedId = model.avatar.selected,
-                onSelect = { onSegment("avatar", it) },
             )
         }
     }
@@ -1417,7 +1408,6 @@ internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Uni
                 seed = row.addressFull,
                 size = VelaSpacing.xl4,
                 contentDescription = row.name,
-                name = row.name,
             )
             Column(
                 modifier = Modifier.weight(1f),

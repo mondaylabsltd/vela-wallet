@@ -23,7 +23,7 @@
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
@@ -53,10 +53,7 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: avatarSvgForClient(
-						view.address,
-						view.accounts[view.active_index]?.account.name ?? ''
-					)
+					identiconSvg: identiconSvgForClient(view.address)
 				}
 			: null
 	);
@@ -212,7 +209,7 @@
 			currency: currency.view,
 			m: messages,
 			identity,
-			identicon: avatarSvgForClient
+			identicon: identiconSvgForClient
 		});
 		if (!built) return built;
 		return {

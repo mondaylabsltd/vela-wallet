@@ -315,9 +315,6 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			themeLight: k('settings.appearance.themeLight'),
 			themeDark: k('settings.appearance.themeDark'),
 			themeAuto: k('settings.appearance.themeAuto'),
-			avatarTitle: k('settings.appearance.avatarTitle'),
-			avatarInitials: k('settings.appearance.avatarInitials'),
-			avatarIdenticon: k('settings.appearance.avatarIdenticon'),
 			textScale: k('settings.appearance.textScale')
 		},
 		language: {

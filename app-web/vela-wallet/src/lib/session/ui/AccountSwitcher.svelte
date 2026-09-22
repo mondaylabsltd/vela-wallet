@@ -25,7 +25,7 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 
 	interface Props {
 		copy: { accounts: SettingsMessages['accounts']; close: string };
@@ -59,7 +59,7 @@
 				activeIndex: view.active_index,
 				balances,
 				currency: currency.view,
-				identicon: (address, name) => avatarSvgForClient(address, name)
+				identicon: identiconSvgForClient
 			},
 			copy.accounts
 		);

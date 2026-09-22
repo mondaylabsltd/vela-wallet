@@ -102,7 +102,6 @@ struct WalletScreen: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: model.header.identiconSeed,
-                name: model.header.name,
                 onClose: { viewingIdenticon = false }
             )
             // `.large`, not `.medium`: the content is a big circle, a

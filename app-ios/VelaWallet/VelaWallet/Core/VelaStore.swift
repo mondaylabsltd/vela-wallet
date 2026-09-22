@@ -108,11 +108,13 @@ struct VelaStore {
         static let theme = "vela.theme"
         static let language = "vela.language"
         static let localePrefs = "vela.localePrefs"
-        static let avatarStyle = "vela.avatarStyle"
         static let textScale = "vela.textScale"
         /// The desktop's old spelling of `localePrefs` (`{number,date,time}`).
         /// Read once, by the core's migration, and removed (spec 072).
         static let legacyFormats = "vela.formats"
+        /// The avatar style, retired (spec 074: every avatar is the identicon).
+        /// Read once, by the core's migration, and removed.
+        static let retiredAvatarStyle = "vela.avatarStyle"
     }
 
     private let defaults: UserDefaults

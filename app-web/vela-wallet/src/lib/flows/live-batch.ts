@@ -35,8 +35,7 @@ export interface BatchLiveInputs {
 	symbol: string;
 	/** What the account holds of it: the figure the total is read against. */
 	balance: string;
-	/** `name` feeds the initials style; the identicon style ignores it. */
-	identicon: (seed: string, name?: string) => string;
+	identicon: (seed: string) => string;
 	/** There is already someone on the split form for this import to add to. */
 	formHasRows?: boolean;
 	/** The person chose to REPLACE them with this import instead. */
@@ -58,12 +57,11 @@ export interface BatchLiveInputs {
  */
 const artwork = new Map<string, string>();
 
-function art(inputs: BatchLiveInputs, address: string, name: string | null): string {
-	const key = `${address}\n${name ?? ''}`;
-	let svg = artwork.get(key);
+function art(inputs: BatchLiveInputs, address: string): string {
+	let svg = artwork.get(address);
 	if (svg === undefined) {
-		svg = inputs.identicon(address, name ?? undefined);
-		artwork.set(key, svg);
+		svg = inputs.identicon(address);
+		artwork.set(address, svg);
 	}
 	return svg;
 }
@@ -100,7 +98,7 @@ function previewRow(row: BatchPreviewRow, inputs: BatchLiveInputs): BatchRowMode
 		name: row.name ?? undefined,
 		address: shortenAddress(row.address),
 		addressFull: row.address,
-		identiconSvg: art(inputs, row.address, row.name),
+		identiconSvg: art(inputs, row.address),
 		amount: sendable ? `${exact(row.token_amount)} ${symbol}` : '—',
 		// The figure exactly as the sheet wrote it, so it can be read back
 		// against the sheet — beside the unit the importer took it to be in.

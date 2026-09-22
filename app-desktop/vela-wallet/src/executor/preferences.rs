@@ -1,8 +1,10 @@
-//! Theme, language, text size and avatar style — the person's display
-//! preferences, under the keys every Vela shares (spec 072).
+//! Theme, language and text size — the person's display preferences, under
+//! the keys every Vela shares (spec 072).
 //!
-//! The desktop drew all four on Settings → Appearance and stored none of them:
-//! the panel was a picture. The vocabulary, the defaults and how an older or
+//! The desktop drew them on Settings → Appearance and stored none of them:
+//! the panel was a picture. (A fourth, the avatar style, is retired — spec
+//! 074: every avatar is the identicon, and the core's migrations remove a
+//! stored `vela.avatarStyle`.) The vocabulary, the defaults and how an older or
 //! foreign spelling reads are the core's (`vela_core::prefs`); what is here is
 //! only what a shell does — read the store at launch, rewrite the legacy
 //! spellings once, remember the answer for the process, and write a choice
@@ -12,7 +14,6 @@
 //! family (`vela.localePrefs`) but are applied by [`super::format_prefs`],
 //! which owns the presets.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use serde_json::Value;
@@ -27,10 +28,6 @@ fn cell() -> &'static Mutex<Prefs> {
     PREFS.get_or_init(|| Mutex::new(prefs::read(&[])))
 }
 
-/// Initials rather than identicons, read on every avatar drawn — an atomic
-/// rather than the mutex because it is asked dozens of times a frame.
-static INITIALS: AtomicBool = AtomicBool::new(false);
-
 /// At launch, before the first window: rewrite what an older shell wrote,
 /// then read and apply what the store now says.
 pub fn boot() {
@@ -43,7 +40,8 @@ pub fn boot() {
 }
 
 /// Rewrite the known legacy spellings — the desktop's own `vela.formats`,
-/// Android's `system` / `auto` / nested text size — in one write. Returns how
+/// Android's `system` / `auto` / nested text size — and remove the retired
+/// `vela.avatarStyle`, in one write. Returns how
 /// many keys it touched; zero on a store that already agrees, which is why it
 /// is safe at every launch.
 pub fn migrate() -> Result<usize, storage::StorageError> {
@@ -61,7 +59,6 @@ pub fn load() {
 
 fn apply(read: Prefs) {
     crate::theme::set_text_scale(prefs::text_scale_factor(read.text_scale));
-    INITIALS.store(read.avatar_style == "initials", Ordering::Relaxed);
     *cell().lock().unwrap_or_else(PoisonError::into_inner) = read;
 }
 
@@ -91,12 +88,6 @@ pub fn pinned_language() -> Option<String> {
     (language != prefs::AUTO_LANGUAGE).then_some(language)
 }
 
-/// Are avatars drawn as initials?
-#[must_use]
-pub fn avatar_initials() -> bool {
-    INITIALS.load(Ordering::Relaxed)
-}
-
 /// A theme choice. A word the core does not ship is refused here rather than
 /// stored: the store is read by four shells.
 pub fn set_theme(theme: &str) {
@@ -118,12 +109,6 @@ pub fn set_text_scale(level: &str) {
         .any(|(name, _)| *name == level)
     {
         write(keys::TEXT_SCALE, level);
-    }
-}
-
-pub fn set_avatar_style(style: &str) {
-    if prefs::AVATAR_STYLES.contains(&style) {
-        write(keys::AVATAR_STYLE, style);
     }
 }
 
@@ -197,7 +182,6 @@ mod tests {
             seed(&[
                 (keys::THEME, json!("auto")),
                 (keys::LANGUAGE, json!("system")),
-                (keys::AVATAR_STYLE, json!("photo")),
                 (
                     keys::LOCALE_PREFS,
                     json!({ "numberFormat": "indian", "textScale": 1 }),
@@ -211,17 +195,21 @@ mod tests {
             assert_eq!(stored(keys::LANGUAGE), Some(json!("auto")));
             assert_eq!(stored(keys::TEXT_SCALE), Some(json!("small")));
             assert_eq!(
-                stored(keys::AVATAR_STYLE),
-                Some(json!("photo")),
-                "a value this build does not know is not overwritten"
-            );
-            assert_eq!(
                 stored(keys::LOCALE_PREFS)
                     .as_ref()
                     .and_then(|record| record.get("textScale"))
                     .cloned(),
                 None,
                 "the text size left the formats record"
+            );
+        });
+        with_temp_state("prefs-migrate-newer", || {
+            seed(&[(keys::TEXT_SCALE, json!("huge"))]);
+            assert_eq!(migrate().ok(), Some(0));
+            assert_eq!(
+                storage::read_value(keys::TEXT_SCALE).ok().flatten(),
+                Some(json!("huge")),
+                "a value this build does not know is not overwritten"
             );
         });
     }
@@ -233,7 +221,6 @@ mod tests {
         with_temp_state("prefs-write", || {
             set_theme("dark");
             set_text_scale("large");
-            set_avatar_style("initials");
             // `auto` only: pinning a real language here would change the
             // strings every test running beside this one resolves.
             set_language("auto");
@@ -243,14 +230,33 @@ mod tests {
             assert_eq!(stored(keys::THEME), Some(json!("dark")));
             assert_eq!(stored(keys::LANGUAGE), Some(json!("auto")));
             assert_eq!(stored(keys::TEXT_SCALE), Some(json!("large")));
-            assert_eq!(stored(keys::AVATAR_STYLE), Some(json!("initials")));
             assert_eq!(theme(), "dark");
-            assert!(avatar_initials());
             assert_eq!(pinned_language(), None, "auto follows the system");
             // Leave the process as a default launch would find it.
             set_theme("system");
             set_text_scale("standard");
-            set_avatar_style("identicon");
+        });
+    }
+
+    /// Spec 074: every avatar is the identicon. A stored avatar style goes at
+    /// launch, whatever it held, and nothing else it sat beside moves.
+    #[test]
+    fn the_startup_migration_removes_the_retired_avatar_style() {
+        with_temp_state("prefs-migrate-avatar", || {
+            seed(&[
+                (keys::AVATAR_STYLE, json!("initials")),
+                (keys::THEME, json!("dark")),
+            ]);
+            assert_eq!(migrate().ok(), Some(1));
+            assert!(
+                matches!(storage::read_value(keys::AVATAR_STYLE), Ok(None)),
+                "the retired key is gone"
+            );
+            assert_eq!(
+                storage::read_value(keys::THEME).ok().flatten(),
+                Some(json!("dark"))
+            );
+            assert_eq!(migrate().ok(), Some(0));
         });
     }
 }

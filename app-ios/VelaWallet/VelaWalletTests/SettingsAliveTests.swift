@@ -110,16 +110,14 @@ struct SettingsAliveTests {
         #expect(model(prefs).languageSheet.rows.first { $0.selected }?.id == "ja")
     }
 
-    /// The three appearance controls read what is in force, including the
-    /// slider's stop.
+    /// The appearance controls read what is in force, including the slider's
+    /// stop.
     @Test func theAppearanceControlsShowTheChoice() {
         let prefs = preferences()
         prefs.setTheme(.dark)
-        prefs.setAvatarStyle(.initials)
         prefs.setTextScale(.xlarge)
         let built = model(prefs)
         #expect(built.theme.selected == "dark")
-        #expect(built.avatar.selected == "initials")
         #expect(built.textScale.index == TextScaleLevel.allCases.count - 1)
         #expect(built.textScale.steps == TextScaleLevel.allCases.count)
     }

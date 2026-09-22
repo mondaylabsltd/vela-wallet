@@ -247,9 +247,6 @@ enum I18nKeys {
         static let themeLight = "settings.appearance.themeLight"
         static let themeDark = "settings.appearance.themeDark"
         static let themeAuto = "settings.appearance.themeAuto"
-        static let avatarTitle = "settings.appearance.avatarTitle"
-        static let avatarInitials = "settings.appearance.avatarInitials"
-        static let avatarIdenticon = "settings.appearance.avatarIdenticon"
         static let textScale = "settings.appearance.textScale"
 
             // Language picker.

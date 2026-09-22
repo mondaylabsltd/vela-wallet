@@ -62,8 +62,7 @@ export interface SendLiveInputs {
 	m: WalletFlowMessages;
 	currency: CurrencyView;
 	identity: WalletIdentity;
-	/** `name` feeds the initials style; the identicon style ignores it. */
-	identicon: (seed: string, name?: string) => string;
+	identicon: (seed: string) => string;
 	/**
 	 * The picker is choosing SEVERAL tokens (spec 028 T440). A shell flag, on
 	 * purpose and by precedent: the core's `multi_select_mode` flips only when
@@ -637,9 +636,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 						// Artwork is for an ADDRESS. A half-typed "0x1234" drew somebody's
 						// face for nobody; the core says when the field is not one yet.
 						identiconSvg:
-							draft.address && issue?.address !== 'invalid'
-								? identicon(draft.address, draft.name ?? undefined)
-								: '',
+							draft.address && issue?.address !== 'invalid' ? identicon(draft.address) : '',
 						amount: `${exactAmount(draft.amount)} ${token?.symbol ?? ''}`.trim(),
 						// The field shows the core's figure in the person's decimal
 						// mark and hands back a dot (`amountFromInput`, in the page):
@@ -1037,7 +1034,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	if (send.split_mode && send.recipients.length > 0) {
 		const symbol = token?.symbol ?? '';
 		const breakdown = send.recipients.map((draft) => ({
-			identiconSvg: draft.address ? identicon(draft.address, draft.name ?? undefined) : undefined,
+			identiconSvg: draft.address ? identicon(draft.address) : undefined,
 			address: draft.address || undefined,
 			label: draft.name ?? shortenAddress(draft.address),
 			// A name never stands in for the address on the page that signs.

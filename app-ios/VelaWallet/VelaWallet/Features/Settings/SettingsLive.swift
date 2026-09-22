@@ -213,8 +213,8 @@ enum SettingsLive {
     ///
     /// Two surfaces: the 货币 row's value on the home page, and which row of the
     /// picker reads as selected.
-    /// The four preference surfaces the settings page draws and has never
-    /// read: language, the three formats, the theme, the avatar and the size.
+    /// The preference surfaces the settings page draws and had never read:
+    /// language, the three formats, the theme and the size.
     ///
     /// Every row's VALUE is what is actually in force, and every sheet's
     /// selection is the same fact — a page that showed one thing in the row and
@@ -289,10 +289,6 @@ enum SettingsLive {
         copy.theme = SegmentedModel(
             label: model.theme.label, segments: model.theme.segments,
             selected: themeSegment(preferences.theme)
-        )
-        copy.avatar = SegmentedModel(
-            label: model.avatar.label, segments: model.avatar.segments,
-            selected: preferences.avatarStyle.rawValue
         )
         copy.textScale = TextScaleModel(
             label: model.textScale.label,

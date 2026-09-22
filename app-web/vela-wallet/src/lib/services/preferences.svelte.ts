@@ -1,10 +1,12 @@
 /**
  * The display preferences (spec 028 T431 — research D48; spec 072).
  *
- * Theme, language, number / date / time format, text size and avatar style.
+ * Theme, language, number / date / time format and text size. (The avatar
+ * style is retired — spec 074: every avatar is the identicon, and the core's
+ * migrations remove a stored `vela.avatarStyle`.)
  * Choosing one has no rule behind it — compare `display_currency`, whose
  * machine refuses a currency no rate can price — so there is no machine here.
- * What IS a rule is the record format: four shells wrote these five
+ * What IS a rule is the record format: four shells wrote these
  * preferences four ways (Android's `system` language and its text size nested
  * in `vela.localePrefs`, the desktop's `vela.formats`), and a record written
  * by one then meant something else to the others. How a stored record reads,
@@ -20,7 +22,7 @@
  * same reason `vela.serviceEndpoints` stayed in localStorage in 024 (research
  * D3a). The keys are Expo's, byte-for-byte, so a person's phone and browser
  * would read the same record if they ever met: `vela.localePrefs` is one JSON
- * object, `vela.avatarStyle` and `vela.language` are bare strings.
+ * object, `vela.language` and `vela.textScale` are bare strings.
  *
  * ## Why two reads
  *
@@ -35,9 +37,6 @@ import { loadCore, prefsMigrations, prefsRead } from '$lib/core/client';
 
 /** What a person picks in 外观. `system` pins nothing and follows the OS. */
 export type ThemeChoice = 'system' | 'light' | 'dark';
-
-/** Identicon derived from the address, or the first letter of the name. */
-export type AvatarStyle = 'initials' | 'identicon';
 
 /** Grouping + decimal marks. `auto` reads the platform's conventions once. */
 export type NumberFormatKey = 'auto' | 'comma_dot' | 'dot_comma' | 'space_comma' | 'indian';
@@ -74,12 +73,10 @@ export const PREF_KEYS = {
 	theme: 'vela.theme',
 	language: 'vela.language',
 	localePrefs: 'vela.localePrefs',
-	avatarStyle: 'vela.avatarStyle',
 	textScale: 'vela.textScale'
 } as const;
 
 const THEMES: readonly ThemeChoice[] = ['system', 'light', 'dark'];
-const AVATARS: readonly AvatarStyle[] = ['initials', 'identicon'];
 const NUMBERS: readonly NumberFormatKey[] = [
 	'auto',
 	'comma_dot',
@@ -130,11 +127,10 @@ function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fall
 	return allowed.includes(raw as T) ? (raw as T) : fallback;
 }
 
-/** The five preferences, read — `prefsRead`'s record, less the factor the table already holds. */
+/** The preferences, read — `prefsRead`'s record, less the factor the table already holds. */
 interface PrefsRecord {
 	theme: ThemeChoice;
 	language: string;
-	avatarStyle: AvatarStyle;
 	textScale: TextScaleLevel;
 	numberFormat: NumberFormatKey;
 	dateFormat: DateFormatKey;
@@ -149,7 +145,6 @@ function readSharedSpelling(): PrefsRecord {
 	const record: PrefsRecord = {
 		theme: oneOf(read(PREF_KEYS.theme), THEMES, 'system'),
 		language: read(PREF_KEYS.language) ?? 'auto',
-		avatarStyle: oneOf(read(PREF_KEYS.avatarStyle), AVATARS, 'identicon'),
 		textScale: oneOf(
 			read(PREF_KEYS.textScale),
 			TEXT_SCALE_LEVELS.map((level) => level.key),
@@ -193,7 +188,6 @@ function storedEntries(): string {
 
 class Preferences {
 	theme = $state<ThemeChoice>('system');
-	avatarStyle = $state<AvatarStyle>('identicon');
 	numberFormat = $state<NumberFormatKey>('auto');
 	dateFormat = $state<DateFormatKey>('auto');
 	timeFormat = $state<TimeFormatKey>('auto');
@@ -258,7 +252,6 @@ class Preferences {
 
 	#adopt(record: PrefsRecord): void {
 		this.theme = record.theme;
-		this.avatarStyle = record.avatarStyle;
 		this.language = record.language;
 		this.textScale = record.textScale;
 		this.numberFormat = record.numberFormat;
@@ -300,12 +293,6 @@ class Preferences {
 		this.#chosen = true;
 		write(PREF_KEYS.theme, value);
 		this.applyTheme();
-	}
-
-	setAvatarStyle(value: AvatarStyle): void {
-		this.avatarStyle = value;
-		this.#chosen = true;
-		write(PREF_KEYS.avatarStyle, value);
 	}
 
 	setLanguage(value: string): void {
@@ -363,7 +350,6 @@ class Preferences {
 		this.#chosen = false;
 		this.#ready = Promise.resolve();
 		this.theme = 'system';
-		this.avatarStyle = 'identicon';
 		this.numberFormat = 'auto';
 		this.dateFormat = 'auto';
 		this.timeFormat = 'auto';

@@ -462,7 +462,6 @@ struct RootView: View {
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
-        AvatarPreference.apply(prefs)
         _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
@@ -584,9 +583,6 @@ struct RootView: View {
             #endif
         }
         .themed(scheme)
-        // Every avatar in the app draws from here, so a change to the choice
-        // invalidates them — the static alone changed nothing on screen.
-        .environment(\.avatarStyle, preferences.avatarStyle)
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
@@ -604,8 +600,8 @@ struct RootView: View {
         // callback threaded through twelve call sites, is how the viewer came
         // to open from the wallet header and nowhere else: eleven sites had
         // nothing to thread.
-        .environment(\.identiconViewer, { seed, name in
-            identiconViewer = IdenticonSubject(seed: seed, name: name)
+        .environment(\.identiconViewer, { seed in
+            identiconViewer = IdenticonSubject(seed: seed)
         })
         // 新建分组 / 重命名分组.
         .alert(groupNaming?.title ?? "", isPresented: Binding(
@@ -630,7 +626,6 @@ struct RootView: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: subject.seed,
-                name: subject.name,
                 onClose: { identiconViewer = nil }
             )
             // `.large`, not `.medium`: the content is a big circle, a
@@ -656,7 +651,6 @@ struct RootView: View {
     /// so `sheet(item:)` can key the presentation on it.
     struct IdenticonSubject: Identifiable, Equatable {
         let seed: String
-        let name: String?
         var id: String { seed }
     }
 
@@ -2752,11 +2746,6 @@ struct RootView: View {
                 onTheme: { id in
                     guard let choice = SettingsLive.themeChoice(segment: id) else { return }
                     preferences.setTheme(choice)
-                },
-                onAvatar: { id in
-                    guard let style = AvatarStyle(rawValue: id) else { return }
-                    preferences.setAvatarStyle(style)
-                    AvatarPreference.apply(preferences)
                 },
                 onTextScale: { index in
                     guard let level = TextScaleLevel.allCases[safe: index] else { return }

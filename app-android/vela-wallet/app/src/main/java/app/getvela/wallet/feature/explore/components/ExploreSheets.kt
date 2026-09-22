@@ -191,7 +191,7 @@ fun ConnectionPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
-            IdenticonAvatar(tappable = false, seed = connection.accountSeed, name = connection.accountName)
+            IdenticonAvatar(tappable = false, seed = connection.accountSeed)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(
                     text = connection.accountName,

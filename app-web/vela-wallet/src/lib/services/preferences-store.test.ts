@@ -62,7 +62,6 @@ describe('what is read back', () => {
 			'localStorage',
 			fakeLocalStorage({
 				[PREF_KEYS.theme]: 'dark',
-				[PREF_KEYS.avatarStyle]: 'initials',
 				[PREF_KEYS.language]: 'ja',
 				[PREF_KEYS.localePrefs]: JSON.stringify({
 					numberFormat: 'dot_comma',
@@ -74,7 +73,6 @@ describe('what is read back', () => {
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
 		expect(preferences.theme).toBe('dark');
-		expect(preferences.avatarStyle).toBe('initials');
 		expect(preferences.language).toBe('ja');
 		expect(preferences.numberFormat).toBe('dot_comma');
 		expect(preferences.dateFormat).toBe('iso');
@@ -88,14 +86,12 @@ describe('what is read back', () => {
 			'localStorage',
 			fakeLocalStorage({
 				[PREF_KEYS.theme]: 'sepia',
-				[PREF_KEYS.avatarStyle]: 'photo',
 				[PREF_KEYS.localePrefs]: JSON.stringify({ numberFormat: 'roman' })
 			})
 		);
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
 		expect(preferences.theme).toBe('system');
-		expect(preferences.avatarStyle).toBe('identicon');
 		expect(preferences.numberFormat).toBe('auto');
 	});
 
@@ -189,13 +185,13 @@ describe('what is written', () => {
 		vi.stubGlobal('localStorage', denied);
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
-		expect(() => preferences.setAvatarStyle('initials')).not.toThrow();
-		expect(preferences.avatarStyle).toBe('initials');
+		expect(() => preferences.setTheme('dark')).not.toThrow();
+		expect(preferences.theme).toBe('dark');
 	});
 });
 
 describe("every shell's spelling reads the same (spec 072)", () => {
-	// Four shells wrote these five preferences four ways. The core reads them
+	// Four shells wrote these preferences four ways. The core reads them
 	// all and rewrites the older ones once; the store reads through it as soon
 	// as it is up, which is what `ready` waits for.
 
@@ -279,9 +275,26 @@ describe("every shell's spelling reads the same (spec 072)", () => {
 		vi.stubGlobal('document', fakeDocument());
 		preferences.boot();
 		// Stored nowhere (the store refuses writes), so a re-read would lose it.
-		preferences.setAvatarStyle('initials');
+		preferences.setTheme('dark');
 		await preferences.ready;
-		expect(preferences.avatarStyle).toBe('initials');
+		expect(preferences.theme).toBe('dark');
+	});
+
+	it('removes a stored avatar style, which nothing reads any more (spec 074)', async () => {
+		// Every avatar is the identicon now; the choice an older build stored
+		// between it and initials is cleaned out once, and changes nothing.
+		const store = fakeLocalStorage({
+			'vela.avatarStyle': 'initials',
+			[PREF_KEYS.theme]: 'dark'
+		});
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', fakeDocument());
+		preferences.boot();
+		await preferences.ready;
+		expect(store.getItem('vela.avatarStyle')).toBeNull();
+		expect(store.getItem(PREF_KEYS.theme)).toBe('dark');
+		expect(preferences.theme).toBe('dark');
+		expect('avatarStyle' in preferences).toBe(false);
 	});
 });
 

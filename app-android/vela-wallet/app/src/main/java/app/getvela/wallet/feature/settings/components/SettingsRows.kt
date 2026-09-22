@@ -169,7 +169,6 @@ fun VelaAccountRow(
                 seed = account.addressFull,
                 size = VelaSpacing.xl4 + VelaSpacing.md,
                 contentDescription = account.name,
-                name = account.name,
             )
             Column(
                 modifier = Modifier.weight(1f),

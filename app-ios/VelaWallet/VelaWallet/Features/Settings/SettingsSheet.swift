@@ -361,7 +361,7 @@ private struct AccountsSheetBody: View {
             Button { onSelect?(row.addressFull) } label: {
             VStack(spacing: 0) {
                 HStack(spacing: Tokens.Space.s12) {
-                    IdenticonAvatar(seed: row.addressFull, size: 40, name: row.name)
+                    IdenticonAvatar(seed: row.addressFull, size: 40)
                     VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)

@@ -50,7 +50,7 @@
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
 	import { amountFromInput } from '$lib/services/locale-format';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
@@ -144,10 +144,7 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: avatarSvgForClient(
-						view.address,
-						view.accounts[view.active_index]?.account.name ?? ''
-					)
+					identiconSvg: identiconSvgForClient(view.address)
 				}
 			: null
 	);
@@ -198,7 +195,7 @@
 					hidden: balance.view.hidden,
 					// The record's own lifecycle, not a chip this page assumes.
 					status: feedItemStatus(feed.view, selectedTx),
-					identicon: (seed) => avatarSvgForClient(seed, '')
+					identicon: identiconSvgForClient
 				})
 	);
 
@@ -372,7 +369,7 @@
 					m: data.flowMessages,
 					symbol: sendView.selected_token.symbol,
 					balance: sendView.selected_token.balance,
-					identicon: avatarSvgForClient,
+					identicon: identiconSvgForClient,
 					// Whether there is anyone on the form for an import to add to — the
 					// core's own count, read back from the room it reports.
 					formHasRows: (sendView.split_import_room ?? 60) < 60,
@@ -963,7 +960,7 @@
 					m: data.flowMessages,
 					currency: currency.view,
 					identity,
-					identicon: avatarSvgForClient,
+					identicon: identiconSvgForClient,
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
@@ -1347,7 +1344,7 @@
 		addToken: addTokenInputs,
 		contactPick:
 			contactsView && sendView
-				? { view: contactsView, m: data.flowMessages, identicon: avatarSvgForClient }
+				? { view: contactsView, m: data.flowMessages, identicon: identiconSvgForClient }
 				: undefined
 	});
 
