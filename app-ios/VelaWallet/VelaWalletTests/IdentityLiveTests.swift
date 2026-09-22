@@ -31,11 +31,15 @@ struct IdentityLiveTests {
     }
 
     /// ENS reverse resolution, end to end: `namehash("<addr>.addr.reverse")` →
-    /// `registry.resolver(node)` → `resolver.name(node)`.
+    /// `registry.resolver(node)` → `resolver.name(node)` — and then, since
+    /// FR-010, the name back FORWARD through `vela_core::app::name_verify`
+    /// before it counts.
     ///
     /// Every step is one this client computes itself, so a wrong namehash, a
     /// mis-sliced resolver word or a mis-decoded string all show up here as
-    /// "nobody could name them".
+    /// "nobody could name them" — and so, now, does a forward lookup this
+    /// shell fails to carry: vitalik.eth is verified because its forward
+    /// record really does point back at this address.
     @Test func ensNamesResolveThroughTheWaterfall() async {
         let (store, _, identity) = fresh()
         guard let found = await identity.resolve(vitalik) else {
@@ -48,7 +52,7 @@ struct IdentityLiveTests {
 
         // Only positive answers are cached — and this one is, so the second
         // lookup asks nobody.
-        let cached = store.readObject("recipient_id:" + vitalik.lowercased())
+        let cached = store.readObject("recipient_id.v2:" + vitalik.lowercased())
         #expect((cached["identity"] as? [String: Any])?["name"] as? String == "vitalik.eth")
     }
 
@@ -59,7 +63,7 @@ struct IdentityLiveTests {
         // A burn-adjacent address nobody has ever registered a name for.
         let nobody = "0x000000000000000000000000000000000000dEaD"
         #expect(await identity.resolve(nobody) == nil)
-        #expect(store.readObject("recipient_id:" + nobody.lowercased()).isEmpty,
+        #expect(store.readObject("recipient_id.v2:" + nobody.lowercased()).isEmpty,
                 "an absence was cached")
     }
 

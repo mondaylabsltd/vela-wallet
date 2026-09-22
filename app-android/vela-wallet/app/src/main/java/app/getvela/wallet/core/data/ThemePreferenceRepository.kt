@@ -43,4 +43,20 @@ class ThemePreferenceRepository(private val context: Context) {
     suspend fun setThemePreference(preference: ThemePreference) {
         context.settingsDataStore.edit { prefs -> prefs[key] = preference.storageValue }
     }
+
+    /**
+     * Forget the choice entirely — the erase path's, and nothing else's
+     * (spec 081 FR-017).
+     *
+     * This store sits OUTSIDE the wallet's `vela.*` file on purpose, so that
+     * signing out cannot reach a preference that is about the device rather
+     * than the account. The same separation is exactly why the erase used to
+     * miss it: `DeviceStorage.erase` enumerated one file, and this is the
+     * other one. Whole-store `clear()`, not `remove(key)`, because a
+     * preference added here next year must go on the day it is first written.
+     *
+     * @return false when the platform refused; the caller reports the survivor.
+     */
+    suspend fun clear(): Boolean =
+        runCatching { context.settingsDataStore.edit { it.clear() } }.isSuccess
 }

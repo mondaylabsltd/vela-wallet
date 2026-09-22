@@ -405,6 +405,58 @@ pub fn clear_signed_in_wallet() -> Result<()> {
     write_all(map)
 }
 
+/// The only keys an erase leaves behind (spec 081 FR-017).
+///
+/// A record in `vela.pendingUploads` is a passkey public key the index service
+/// has never confirmed. The next launch's retry needs no account list to
+/// re-send it, but a DELETED record can never be retried — and that credential
+/// then cannot be found at sign-in on any device. Erasing it would downgrade
+/// "recoverable" to "possibly ruined", which is strictly worse here than at
+/// sign-out, because the account list is going too and the retry is the only
+/// remaining path to that key. Uploading first and erasing after was the
+/// alternative, rejected because it makes a destructive action the person
+/// asked for depend on a network that may be down.
+///
+/// The same one exception the web module names, with the same reason.
+pub const ERASE_KEEP_KEYS: &[&str] = &[KEY_PENDING_UPLOADS];
+
+/// Erase this device: every `vela.` key in the document but the keep-list.
+///
+/// **A prefix sweep, not a delete-list**, and that is the whole design. The
+/// web module was rewritten once already for exactly this: its predecessor
+/// walked a hand-maintained list of the keys ONE module happened to own, and
+/// it drifted out of date in silence, because nothing about a delete-list
+/// fails when the app grows a key. So the direction is inverted — enumerate
+/// what is ACTUALLY stored, drop everything under `vela.`, and name the
+/// exceptions. A key a new machine writes next year is erased on the day it is
+/// first written, with no edit here.
+///
+/// Keys outside the `vela.` namespace are not this function's to judge and are
+/// left alone; nothing else writes to this document today, so in practice the
+/// file ends up holding the keep-list and nothing more.
+///
+/// Returns the keys that SURVIVED. A non-empty answer is a failed erase, and
+/// the caller must say so rather than reporting success — telling a person
+/// their machine is clean while their transaction history is still on it is
+/// the one outcome this feature cannot have.
+pub fn erase_all() -> Result<Vec<String>> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let erasable = |key: &str| key.starts_with("vela.") && !ERASE_KEEP_KEYS.contains(&key);
+
+    let mut map = read_all()?;
+    map.retain(|key, _| !erasable(key));
+    write_all(map)?;
+
+    // Re-READ, rather than trusting the write: the verification is the point.
+    Ok(read_all()?
+        .keys()
+        .filter(|key| erasable(key))
+        .cloned()
+        .collect())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -421,6 +473,56 @@ pub(crate) mod tests {
     /// `network_admin` saves the other three service URLs. The whole-value write
     /// this replaced meant configuring a self-hosted index silently unset the
     /// data, bundler and fiat endpoints — and saving those silently unset the
+    /// The erase, and the list it is not (spec 081 FR-017).
+    ///
+    /// The property is deliberately NOT "these keys are deleted" — that is a
+    /// delete-list with a test around it, which is the mistake the web module
+    /// was rewritten to undo. It is: a key nobody has written yet is erased by
+    /// default, the one named exception survives, and a key outside the
+    /// namespace is not this function's to judge.
+    #[test]
+    fn erase_sweeps_by_prefix_and_keeps_only_the_outbox() {
+        with_temp_state("storage-erase", || {
+            // Two keys that exist today, one that does NOT — standing in for
+            // whatever a machine written next year will store. A delete-list
+            // erase leaves that one behind and nothing fails.
+            let seeded = [
+                (KEY_ACCOUNTS, json!([{ "address": "0x88" }])),
+                (KEY_CONTACTS, json!([{ "name": "a" }])),
+                ("vela.somethingNobodyHasWrittenYet", json!("keep me? no")),
+                (KEY_PENDING_UPLOADS, json!([{ "credentialId": "cred0" }])),
+                ("notVela.leaveThisAlone", json!("not ours")),
+            ];
+            for (key, value) in seeded {
+                if write_value(key, value).is_err() {
+                    unreachable!("could not seed {key}");
+                }
+            }
+
+            let Ok(survivors) = erase_all() else {
+                unreachable!("the erase could not run");
+            };
+            assert!(
+                survivors.is_empty(),
+                "nothing under `vela.` should survive: {survivors:?}"
+            );
+
+            let Ok(after) = read_all() else {
+                unreachable!("could not re-read");
+            };
+            // The outbox: a public key the index has never confirmed, whose
+            // only remaining retry is the record itself.
+            assert!(after.contains_key(KEY_PENDING_UPLOADS));
+            // Everything else under the namespace, including the key this
+            // function has never heard of.
+            assert!(!after.contains_key(KEY_ACCOUNTS));
+            assert!(!after.contains_key(KEY_CONTACTS));
+            assert!(!after.contains_key("vela.somethingNobodyHasWrittenYet"));
+            // Not ours, not touched.
+            assert!(after.contains_key("notVela.leaveThisAlone"));
+        });
+    }
+
     /// The storage panel's two figures, measured rather than asserted.
     #[test]
     fn usage_counts_records_and_measures_the_file() {
