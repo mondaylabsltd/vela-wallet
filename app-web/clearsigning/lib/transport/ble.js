@@ -207,7 +207,16 @@ window.VelaCS = window.VelaCS || {};
     var self = this;
     if (!this.session) return Promise.reject(new Error('no session: handshake first'));
     object.v = 1;
-    object.n = ++this.outgoing;
+    // PROTOCOL §4: the greater of what we have SENT and what we have SEEN,
+    // plus one — the sequence belongs to the session, not to one direction.
+    // Counting only our own made the answer to an intent `n=1` where the
+    // wallet had already used 1, and a conforming peer drops a message whose
+    // `n` did not rise. That is what the radio pass saw: every frame arrived,
+    // the session opened the message, and the wallet threw it away
+    // ("a message whose n did not rise was dropped"). `relay.js` had it right;
+    // this transport did not.
+    object.n = Math.max(this.outgoing, this.lastSeen) + 1;
+    this.outgoing = object.n;
     var plaintext = utf8(JSON.stringify(object));
     var run = this.sending.then(function () {
       var msgId = (self.msgId + 1) & 0xff;

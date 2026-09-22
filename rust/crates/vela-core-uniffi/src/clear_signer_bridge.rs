@@ -600,6 +600,13 @@ pub fn clear_signer_ble_uuids() -> Vec<String> {
     ]
 }
 
+/// Which message a frame belongs to, for a shell's log line. `None` when it is
+/// too short to be a frame. No peripheral reads inside a frame itself.
+#[uniffi::export]
+pub fn clear_signer_ble_peek_id(frame: Vec<u8>) -> Option<u8> {
+    clear_signer::ble::Reassembler::peek_id(&frame)
+}
+
 /// Cuts messages into frames, and hands out the `msgId` the session seals
 /// into its AAD. One per connection.
 #[derive(uniffi::Object)]

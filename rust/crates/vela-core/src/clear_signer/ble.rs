@@ -207,6 +207,22 @@ impl Reassembler {
         Self::default()
     }
 
+    /// Which message a frame belongs to, for a shell's log line — `None` when
+    /// it is too short to be a frame at all.
+    ///
+    /// It exists so that no peripheral has to reach into a frame itself. The
+    /// Android one read the second byte for its diagnostics and pinned it with
+    /// a test, which was honest and still the beginning of a second parser:
+    /// the first `if` of one, in the shell, where §2 could move without it
+    /// noticing. A shell that wants to name a message asks here.
+    #[must_use]
+    pub fn peek_id(frame: &[u8]) -> Option<u8> {
+        if frame.len() < HEADER {
+            return None;
+        }
+        frame.get(1).copied()
+    }
+
     /// Take one frame. `Some` when it completed a message.
     ///
     /// A frame shorter than the header is not a frame; a frame whose `total`
@@ -401,6 +417,17 @@ mod tests {
         let whole = reassembler.accept(&short[0], 0).unwrap();
         assert_eq!(whole.payload, vec![2u8; 100]);
         assert_eq!(reassembler.pending(), 0);
+    }
+
+    #[test]
+    fn a_frame_can_be_named_without_being_parsed() {
+        let framer = Framer::new();
+        let frames = framer.frames(FLAG_SEALED, 77, &[1u8; 600]);
+        for frame in &frames {
+            assert_eq!(Reassembler::peek_id(frame), Some(77));
+        }
+        assert_eq!(Reassembler::peek_id(&[1, 2, 3]), None, "not a frame");
+        assert_eq!(Reassembler::peek_id(&[]), None);
     }
 
     #[test]
