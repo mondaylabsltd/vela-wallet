@@ -365,8 +365,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   with no peripheral role at all was being told to switch Bluetooth on,
 //   which cannot help it (iOS, T041: `unsupported` and `unavailable` had
 //   nowhere else to go).
-if (PATHS.length !== 1739) fail(`expected 1739 paths (1650 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1650) fail(`expected 1650 leaf paths, got ${leafSet.size}`);
+// 1740 (spec 075, 2026-09-22): +1 `clearSignerNearbyLost`. A pairing that
+//   worked and then dropped was borrowing "this device cannot pair this way",
+//   which is false and sends the person looking for the wrong problem (found
+//   on the radio, T043).
+if (PATHS.length !== 1740) fail(`expected 1740 paths (1651 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1651) fail(`expected 1651 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
