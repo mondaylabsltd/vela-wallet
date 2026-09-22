@@ -95,8 +95,8 @@ Order follows [plan.md](plan.md): the three packages that change core wire types
 - [x] T100 Remove each closed gap's disclosure from the site docs in all 15 locales (`self-hosting.md`, `security-audits.md`, `bybit-attack.md`, `whitepaper.md`, `install.md`, `networks-and-fees.md` as applicable)
 - [x] T101 [P] Update `README.md`, `docs/ARCHITECTURE.md`, `docs/CONTENT-SOURCE-100-CLUES.md`, and the 080 `claim-ledger.md` + `audit-report.md` ("Not fixed here" → fixed, with the PR)
 - [x] T102 Run every standing gate plus the site link crawl and `i18n:status --gate`; fix what they catch
-- [ ] T103 Write `specs/081-audit-product-gaps/results.md`: what changed, the verification table, device evidence, decisions made without the founder, and anything left open
-- [ ] T104 Open the PRs (monorepo + p256-index + vela-relay), cross-linked, with the merge order stated
+- [x] T103 Write `specs/081-audit-product-gaps/results.md`: what changed, the verification table, device evidence, decisions made without the founder, and anything left open
+- [x] T104 Open the PRs (monorepo + p256-index + vela-relay), cross-linked, with the merge order stated
 
 ## Dependencies
 

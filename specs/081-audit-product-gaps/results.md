@@ -320,6 +320,14 @@ And two more, both from the translators reading more carefully than the English 
 
 **A register fact worth not "fixing" later.** zh-HK is written two different ways on purpose, and both are right: the **app corpus** (`rust/crates/vela-core/i18n/locales/zh-HK.json`) is spoken Cantonese — 喺, 冇, 嘅, 同 — while the **site docs** (`app-web/getvela.app/src/content/docs/zh-HK/`) are HK-usage written Chinese with no Cantonese particles anywhere. Each is internally consistent; someone sweeping for consistency across both would break one of them.
 
+## Shipped as PR [#309](https://github.com/mondaylabsltd/vela-wallet/pull/309)
+
+Eight commits on `081-audit-product-gaps`, merged **after** the two service PRs — p256-index [#8](https://github.com/mondaylabsltd/p256-index/pull/8) and vela-relay [#13](https://github.com/mondaylabsltd/vela-relay/pull/13) — because this branch's self-hosting docs already describe those fixes as done. Merging the other way round would publish a claim that is not yet true; both service PRs carry a comment saying so.
+
+**Final gate sweep**: `cargo test --workspace --features vela-core/i18n-all` 48 suites; desktop `cargo check` 0 errors (7 pre-existing warnings) and 443 tests; Android `:app:testDebugUnitTest` green; iOS 663 tests in 85 suites; web `pnpm check` 0 errors, 285 e2e, and the three pre-existing unit failures from the baseline (explore fixtures, i18n FLOW_KEYS, the `36px` in `SigningHeader.svelte`); site 0 errors, 848 unit, 56 e2e, `i18n:status --gate` **0 stale in all fifteen locales**; `check-event-payloads.mjs` 0 mismatches over 491 dispatch sites; `check-native-reachability.mjs` and `gen-passkey-providers.mjs --check` both clean.
+
+`gen-passkey-providers.mjs --check` had been failing on `main` for anyone who ran it: the generator emitted one-line tuples, `cargo fmt` wrapped the long ones, and the comparison then called a byte-identical catalog stale. Regenerating to silence it produced a 198-line diff that changed nothing but whitespace. The generator now runs `rustfmt` on its own output, so the check means what it says.
+
 ## Still open in this feature
 
 Everything else in [tasks.md](tasks.md): descriptor provenance, network readiness, forward-verified names, the iOS endpoints page and index-per-call, `X-Rpc-Url`, release provenance, the dormant routes, feedback, erase, and the two service-repo PRs. The docs sync (FR-020) lands with each gap as it closes.
