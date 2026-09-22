@@ -99,7 +99,11 @@
 
 	<ul class="keys">
 		{#each keys as key, index (index)}
-			{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+			<!-- A Clear Signer key names its page, not the vault beyond it (075). -->
+			{@const holder =
+				key.kind === 'clear_signer'
+					? undefined
+					: providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
 			{@const where = holder ?? strings(providerLineFor(key.kind))}
 			{@const badge = keyBadge(key, strings)}
 			<li class="key">

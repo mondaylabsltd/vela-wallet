@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
 import { ethereumBackupRow, walletKeysModel } from './live';
+import { deviceKeys } from '$lib/services/wallet-keys';
 import type { WalletKeyRow, WalletKeys } from '$lib/services/wallet-keys';
 
 const m = resolveSettingsMessages('en');
@@ -158,5 +159,115 @@ describe('walletKeysModel', () => {
 			for (const value of Object.values(words)) expect(value, locale).not.toBe('');
 			expect(words.keyN, locale).toContain('{{n}}');
 		}
+	});
+
+	/**
+	 * Spec 075 (the Android device pass, 2026-09-22): a key minted on the Clear
+	 * Signer page lives BEHIND that page. The ceremony runs in a browser, so the
+	 * authenticator reports `platform` — and every shell captioned such a key
+	 * "this device", naming the one side of the page the wallet cannot reach.
+	 *
+	 * The core fixed the rule; the web's part is to pass the origin in (the
+	 * registry stores none) and then to draw the page rather than the vault
+	 * beyond it.
+	 */
+	describe('a key behind a Clear Signer page', () => {
+		const PAGE = 'https://sign.getvela.app';
+		/** What the row builder sees once the shell has passed the origin in. */
+		const behind = key({
+			name: 'On the page',
+			method: 'clear_signer',
+			signer_origin: PAGE,
+			// The page's own authenticator answered, and the catalog can name it:
+			// this is exactly the row that used to read "Apple Passwords".
+			provider_name: 'Apple Passwords',
+			aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+			credential_id: 'aa_bgDzJkhFmY'
+		});
+
+		it('hands the walk each key’s origin — the registry cannot tell it', () => {
+			expect(
+				deviceKeys({
+					name: 'Wallet',
+					public_key_hex: '04ab',
+					keys: [
+						{
+							credential_id: 'one',
+							public_key_hex: '04ab',
+							name: 'On the page',
+							transports: 'internal',
+							signer_origin: PAGE
+						},
+						{
+							credential_id: 'two',
+							public_key_hex: '04cd',
+							name: 'Built in',
+							transports: 'internal'
+						}
+					]
+				})
+			).toEqual([
+				{
+					public_key_hex: '04ab',
+					name: 'On the page',
+					transports: 'internal',
+					signer_origin: PAGE
+				},
+				{ public_key_hex: '04cd', name: 'Built in', transports: 'internal', signer_origin: null }
+			]);
+			// A legacy record is one key and predates the field.
+			expect(deviceKeys({ name: 'Old', public_key_hex: '04ef', keys: [] })).toEqual([
+				{ public_key_hex: '04ef', name: 'Old', transports: '', signer_origin: null }
+			]);
+		});
+
+		it('is captioned the Clear Signer, and says WHICH page', () => {
+			const model = walletKeysModel(
+				{ source: 'registry', chainId: 100, keys: [behind] },
+				'backed_up',
+				m
+			);
+			const row = model.rows[0];
+			// The signing sheet's own words for the route, so Settings and the
+			// "Sign with" chooser cannot name the same thing twice.
+			expect(row.holder).toBe('Clear Signer');
+			expect(row.holder).toBe(m.signing.methods.clear_signer);
+			// …and it is the LAST word: the catalog knows this AAGUID, and its
+			// answer names the authenticator on the page's far side.
+			expect(row.holder).not.toBe(behind.provider_name);
+			// The mark reads the same field the caption does (issue 207).
+			expect(row.key.kind).toBe('clear_signer');
+			// Which page, labelled with the route's own title, above the key itself.
+			expect(row.details.map((detail) => [detail.label, detail.value])).toEqual([
+				['Clear Signer', PAGE],
+				['Public key', '0x04' + 'ab'.repeat(64)],
+				['Credential', 'aa_bgDzJkhFmY'],
+				['AAGUID', behind.aaguid],
+				['Transport', 'platform · internal']
+			]);
+		});
+
+		it('leaves a key that lives behind no page exactly as it was', () => {
+			const plain = walletKeysModel(registry, 'backed_up', m);
+			expect(plain.rows.map((row) => row.holder)).toEqual([undefined, undefined, undefined]);
+			// No page line anywhere, absent or empty-string alike.
+			for (const row of plain.rows)
+				expect(row.details.map((detail) => detail.label)).not.toContain('Clear Signer');
+			const empty = walletKeysModel(
+				{ source: 'device', chainId: null, keys: [key({ synced: null, signer_origin: '' })] },
+				'unavailable',
+				m
+			);
+			expect(empty.rows[0].holder).toBeUndefined();
+			expect(empty.rows[0].details.map((detail) => detail.label)).toEqual([
+				'Public key',
+				'Transport'
+			]);
+		});
+
+		it('every locale names the route', () => {
+			for (const locale of SUPPORTED_LOCALES)
+				expect(resolveSettingsMessages(locale).signing.methods.clear_signer, locale).not.toBe('');
+		});
 	});
 });

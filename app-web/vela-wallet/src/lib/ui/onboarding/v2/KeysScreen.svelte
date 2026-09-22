@@ -96,7 +96,16 @@
 		<ul class="rows">
 			{#each keys as key, index (index)}
 				{@const badge = keyBadge(key, strings)}
-				{@const holder = providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
+				<!--
+					Spec 075: a key behind a Clear Signer page is not named by the
+					catalog. The AAGUID a page reports belongs to the authenticator on
+					ITS side — the one thing this wallet cannot reach — so the row says
+					the page, which is where the key lives.
+				-->
+				{@const holder =
+					key.kind === 'clear_signer'
+						? undefined
+						: providerLabel(key.provider_name, key.aaguid, isDarkTheme())}
 				{@const where = holder ?? strings(providerLineFor(key.kind))}
 				<li class="row">
 					<!--
