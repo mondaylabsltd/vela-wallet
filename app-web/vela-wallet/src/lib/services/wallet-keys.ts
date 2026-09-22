@@ -33,6 +33,18 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	attestation_hex: string;
 	/** The authenticator verified the person at registration; `null` = nobody can vouch. */
 	user_verified: boolean | null;
+	/**
+	 * Spec 075: the Clear Signer page this key lives behind, when it does —
+	 * omitted by the core when it does not (`skip_serializing_if`). The core
+	 * knows it only because [`deviceKeys`] passes it in from the account record:
+	 * the registry stores no origin.
+	 *
+	 * A row with one has `method === 'clear_signer'`, which OUTRANKS the
+	 * authenticator's report: a page runs its ceremony in a browser, so it
+	 * always answers `platform`, and that names the one side of the page this
+	 * wallet cannot reach.
+	 */
+	signer_origin?: string | null;
 }
 
 export interface WalletKeys {
@@ -53,16 +65,32 @@ interface KeysDone {
 	keys: WalletKeyRow[];
 }
 
-/** The account record's key list in founding order; a legacy record is a list of one. */
-function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'keys'>) {
+/**
+ * The account record's key list in founding order; a legacy record is a list of
+ * one.
+ *
+ * `signer_origin` travels with each key (spec 075): the walk cannot learn it
+ * anywhere else — the registry contract stores no origin — so a key behind a
+ * Clear Signer page is drawn as a passkey on some device unless this list says
+ * otherwise. A legacy record predates the field and has none.
+ */
+export function deviceKeys(account: Pick<Account, 'name' | 'public_key_hex' | 'keys'>) {
 	if (account.keys.length > 0) {
 		return account.keys.map((key) => ({
 			public_key_hex: key.public_key_hex,
 			name: key.name,
-			transports: key.transports
+			transports: key.transports,
+			signer_origin: key.signer_origin ?? null
 		}));
 	}
-	return [{ public_key_hex: account.public_key_hex, name: account.name, transports: '' }];
+	return [
+		{
+			public_key_hex: account.public_key_hex,
+			name: account.name,
+			transports: '',
+			signer_origin: null
+		}
+	];
 }
 
 /** The keys that control `account`. Never throws; the worst answer is the device's own. */

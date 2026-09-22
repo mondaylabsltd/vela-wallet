@@ -726,6 +726,17 @@ export interface WalletKeyRowModel {
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
 	holderFallback: string;
+	/**
+	 * Spec 075: the holder line already SETTLED — drawn as it stands, and the
+	 * AAGUID catalog is not asked.
+	 *
+	 * Set for a key behind a Clear Signer page. The vault on the page's far side
+	 * is the one thing this wallet cannot reach, so letting the catalog name it
+	 * ("Apple Passwords", "Built-in passkey") points the person away from where
+	 * the key is — which is the page. The device pass of 2026-09-22 found
+	 * exactly that row.
+	 */
+	holder?: string;
 	/** `197d…647b` — the public key, shortened: what tells two unnamed keys apart. */
 	fingerprint: string;
 	/** "Verify to use", "Cloud-synced" / "Device-bound" — drawn as pills, the explorer's way. */
