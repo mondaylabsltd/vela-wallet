@@ -18,7 +18,7 @@ import Foundation
 
 final class SignPrefExecutor {
 
-    static let operations = ["read_stored", "write_method", "write_signer_url"]
+    static let operations = ["read_stored", "write_method", "write_signer_url", "write_relay_url"]
 
     private let store: VelaStore
 
@@ -34,6 +34,7 @@ final class SignPrefExecutor {
                 "type": "stored",
                 "method": store.readString(VelaStore.Key.signMethod) ?? NSNull(),
                 "signer_url": store.readString(VelaStore.Key.clearSignerUrl) ?? NSNull(),
+                "relay_url": store.readString(VelaStore.Key.clearSignerRelay) ?? NSNull(),
             ])
         // Best effort: the committed choice stays on screen either way.
         case "write_method":
@@ -44,9 +45,17 @@ final class SignPrefExecutor {
         case "write_signer_url":
             store.writeString(VelaStore.Key.clearSignerUrl, operation["url"] as? String)
             return CoreJSON.string(["type": "written"])
+        // Spec 075: the relay, under the same rule — `null` is the official
+        // one, and the key goes rather than pinning a copy of a default that
+        // may move.
+        case "write_relay_url":
+            store.writeString(VelaStore.Key.clearSignerRelay, operation["url"] as? String)
+            return CoreJSON.string(["type": "written"])
         default:
             print("[vela-wallet] sign_pref: unhandled operation \(operation["type"] ?? "?")")
-            return CoreJSON.string(["type": "stored", "method": NSNull(), "signer_url": NSNull()])
+            return CoreJSON.string([
+                "type": "stored", "method": NSNull(), "signer_url": NSNull(), "relay_url": NSNull(),
+            ])
         }
     }
 }

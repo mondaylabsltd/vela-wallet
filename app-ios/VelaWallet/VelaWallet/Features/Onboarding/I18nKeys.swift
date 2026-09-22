@@ -164,6 +164,27 @@ enum I18nKeys {
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
     }
 
+    /// Spec 075: the Clear Signer, where the onboarding surface meets it.
+    ///
+    /// These live under `componentsUi.signing.*` rather than under
+    /// `onboarding.create.*` because they are the SAME sentences the signing
+    /// sheet's "Sign with" row shows — one route, one pair of words, whether
+    /// a person meets it while creating a wallet or while spending from it.
+    enum ClearSigner {
+        static let title = "componentsUi.signing.clearSignerTitle"
+        static let body = "componentsUi.signing.clearSignerBody"
+        static let whereIsIt = "componentsUi.signing.clearSignerWhere"
+        static let thisDevice = "componentsUi.signing.clearSignerThisDevice"
+        static let otherDevice = "componentsUi.signing.clearSignerOtherDevice"
+        static let pair = "componentsUi.signing.clearSignerPair"
+        static let pairHint = "componentsUi.signing.clearSignerPairHint"
+        static let pairWaiting = "componentsUi.signing.clearSignerPairWaiting"
+        static let copyLink = "componentsUi.signing.clearSignerCopyLink"
+        static let code = "componentsUi.signing.clearSignerCode"
+        static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
+        static let relayDown = "componentsUi.signing.clearSignerRelayDown"
+    }
+
     enum Settings {
         static let sectionPasskeyIndex = "onboarding.settings.sectionPasskeyIndex"
         static let endpointUrlLabel = "onboarding.settings.endpointUrlLabel"
@@ -198,6 +219,11 @@ enum I18nKeys {
         Create.methodHybridTitle, Create.methodHybridBody, Create.methodHybridUnavailable,
         Create.methodSecurityKeyTitle, Create.methodSecurityKeyBody,
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
+        ClearSigner.title, ClearSigner.body, ClearSigner.whereIsIt,
+        ClearSigner.thisDevice, ClearSigner.otherDevice,
+        ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
+        ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
+        ClearSigner.relayDown,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,

@@ -196,6 +196,10 @@ enum SettingsFixtures {
                                      icon: .lock, value: loc.t("common.automatic")),
                     SettingsRowModel(id: signerPageRow, title: loc.t("settings.signing.pageTitle"),
                                      icon: .link2, value: loc.t("settings.signing.pageOfficial")),
+                    // Spec 075: the relay a pairing with another device goes
+                    // through — beside the page, shaped like it.
+                    SettingsRowModel(id: relayRow, title: loc.t("settings.signing.relayTitle"),
+                                     icon: .zap, value: loc.t("settings.signing.relayOfficial")),
                     SettingsRowModel(id: "storage", title: loc.t(k.storageTitle),
                                      icon: .hardDrive, subtitle: loc.t(k.storageSubtitle)),
                 ],
@@ -531,9 +535,10 @@ enum SettingsFixtures {
         )
     }
 
-    /// The Settings row ids of the signing preferences (spec 071).
+    /// The Settings row ids of the signing preferences (spec 071, 075).
     static let signWithRow = "sign-with"
     static let signerPageRow = "signer-page"
+    static let relayRow = "signer-relay"
 
     /// The default "Sign with" sheet: every value the core offers, in its
     /// order and in the signing sheet's own words — the Clear Signer with the

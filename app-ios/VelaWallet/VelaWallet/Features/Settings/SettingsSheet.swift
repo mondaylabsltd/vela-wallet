@@ -43,6 +43,9 @@ struct SettingsSheet: View {
     /// address, which is what closes the sheet. Absent in the gallery.
     var onSaveSignerUrl: ((String) -> Bool)?
     var onResetSignerUrl: (() -> Void)?
+    /// The relay's Save and reset (spec 075) — the same pair, the other key.
+    var onSaveRelayUrl: ((String) -> Bool)?
+    var onResetRelayUrl: (() -> Void)?
     /// The language sheet's "suggest a fix". Absent in the gallery.
     var onOpenLink: ((String) -> Void)?
 
@@ -98,6 +101,21 @@ struct SettingsSheet: View {
                                 if onSaveSignerUrl?(text) == true { onDismiss() }
                             },
                             onReset: onResetSignerUrl.map { reset in
+                                {
+                                    reset()
+                                    onDismiss()
+                                }
+                            }
+                        )
+                    }
+                case .signerRelay:
+                    if let relay = model.relay {
+                        SignerPageSheetBody(
+                            model: relay,
+                            onSave: { text in
+                                if onSaveRelayUrl?(text) == true { onDismiss() }
+                            },
+                            onReset: onResetRelayUrl.map { reset in
                                 {
                                     reset()
                                     onDismiss()

@@ -397,6 +397,11 @@ enum SettingsLive {
             case .securityKey: k.keysProviderSecurityKey
             case .hybrid: k.keysProviderGeneric
             case .platform: k.keysProviderPlatform
+            // Spec 075: `wallet_keys` still reports only the three places an
+            // authenticator can be, so this arm is unreachable today — named
+            // rather than defaulted, so the day the row learns about a key
+            // behind a page the compiler says so here.
+            case .clearSigner: I18nKeys.ClearSigner.title
             }
             return WalletKeyRowModel(
                 id: index,
@@ -573,6 +578,8 @@ enum SettingsLive {
                     changed.value = sheet.rows.first(where: \.selected)?.label ?? row.value
                 case SettingsFixtures.signerPageRow:
                     changed.value = signerPageValue(view, loc: loc)
+                case SettingsFixtures.relayRow:
+                    changed.value = relayValue(view, loc: loc)
                 default:
                     return row
                 }
@@ -598,6 +605,28 @@ enum SettingsLive {
             save: loc.t("settings.signing.pageSave"),
             reset: view.signerUrlIsDefault ? nil : loc.t("settings.signing.pageReset")
         )
+        // Spec 075: the relay row, shaped like the page row — value, sheet,
+        // the core's own error under the field, reset only when it is not the
+        // official one. There is no "foreign" callout: a relay never sees a
+        // key, only ciphertext, so whose it is changes nothing about what it
+        // can do.
+        let relayError: String? = switch view.relayUrlError {
+        case "invalid": loc.t("settings.signing.relayInvalid")
+        case "insecure": loc.t("settings.signing.relayInsecure")
+        default: nil
+        }
+        copy.relay = SignerPageModel(
+            title: loc.t("settings.signing.relayTitle"),
+            subtitle: loc.t("settings.signing.relaySubtitle"),
+            field: UrlFieldModel(
+                id: "relay-url", label: "", value: view.relayUrl,
+                placeholder: clearSignerDefaultRelay(), tone: relayError == nil ? nil : .error
+            ),
+            error: relayError,
+            foreign: nil,
+            save: loc.t("settings.signing.pageSave"),
+            reset: view.relayUrlIsDefault ? nil : loc.t("settings.signing.relayReset")
+        )
         return copy
     }
 
@@ -605,6 +634,12 @@ enum SettingsLive {
     static func signerPageValue(_ view: SignPrefViewWire, loc: Loc) -> String {
         guard !view.signerUrlIsDefault else { return loc.t("settings.signing.pageOfficial") }
         return URL(string: view.signerUrl)?.host ?? view.signerUrl
+    }
+
+    /// "Official", or the host of the relay a person chose.
+    static func relayValue(_ view: SignPrefViewWire, loc: Loc) -> String {
+        guard !view.relayUrlIsDefault else { return loc.t("settings.signing.relayOfficial") }
+        return URL(string: view.relayUrl)?.host ?? view.relayUrl
     }
 
     static func withCurrency(

@@ -2816,6 +2816,12 @@ struct RootView: View {
                 return settings.signPref?.signerUrlError == nil
             },
             onResetSignerUrl: { settings.resetSignerUrl() },
+            // The relay, under the same rule (spec 075).
+            onSaveRelayUrl: { text in
+                settings.submitRelayUrl(text)
+                return settings.signPref?.relayUrlError == nil
+            },
+            onResetRelayUrl: { settings.resetRelayUrl() },
             onOpenLink: { openExternal($0) }
         )
         // The wallet's own request, over the page that raised it. Settings
