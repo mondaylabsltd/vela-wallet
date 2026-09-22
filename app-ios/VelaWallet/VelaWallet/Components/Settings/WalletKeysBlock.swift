@@ -192,7 +192,7 @@ struct WalletKeysBlock: View {
                     if detail.copy {
                         let id = "\(row.id):\(detail.label)"
                         Button {
-                            UIPasteboard.general.string = detail.value
+                            velaCopy(detail.value)
                             copied = id
                             Task {
                                 try? await Task.sleep(nanoseconds: 1_200_000_000)

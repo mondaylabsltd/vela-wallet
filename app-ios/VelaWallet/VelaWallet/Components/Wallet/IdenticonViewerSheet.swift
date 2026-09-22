@@ -100,9 +100,8 @@ struct IdenticonViewerSheet: View {
     }
 
     private func copy() {
-        #if canImport(UIKit)
-        UIPasteboard.general.string = address
-        #endif
+        // The button's own press is this gesture's one haptic.
+        velaCopy(address, haptic: false)
         copied = true
         Task {
             try? await Task.sleep(for: .seconds(Interaction.copiedFeedbackSeconds))

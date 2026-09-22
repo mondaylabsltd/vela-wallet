@@ -568,9 +568,7 @@ private struct DoneAddressLine: View {
     }
 
     private func copy() {
-        #if canImport(UIKit)
-        UIPasteboard.general.string = address
-        #endif
+        velaCopy(address)
         copied = true
         Task {
             try? await Task.sleep(for: .seconds(2))

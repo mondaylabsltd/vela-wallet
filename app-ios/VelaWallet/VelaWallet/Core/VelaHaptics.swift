@@ -22,7 +22,10 @@
 //
 //  Before 058 iOS had four ungoverned call sites and no vocabulary; the policy
 //  existed only in the Kotlin file's own doc comment, which is why 057 recorded
-//  haptics as "absent — no policy written".
+//  haptics as "absent — no policy written". Until 074 the vocabulary had three
+//  callers against Android's ~25 (the founder: 很多地方没有震动感觉). Now every
+//  Android site has its iOS counterpart, and no feedback generator and no
+//  pasteboard write exists outside this file.
 //
 
 import UIKit
@@ -89,10 +92,14 @@ extension VelaHaptic {
 ///
 /// Every copy in this app goes through here, which is what keeps a copy button
 /// that shows a checkmark and puts nothing on the clipboard from existing —
-/// the exact defect 058 found on the receive code's two copy buttons.
+/// the exact defect 058 found on the receive code's two copy buttons, and 074
+/// on the receive list's rows and the receipt's hash.
+///
+/// `haptic: false` only where the control has already answered the finger —
+/// a `VelaButton`'s press — so one gesture stays one haptic.
 @MainActor
-func velaCopy(_ value: String) {
+func velaCopy(_ value: String, haptic: Bool = true) {
     guard !value.isEmpty else { return }
     UIPasteboard.general.string = value
-    VelaHaptic.select.play()
+    if haptic { VelaHaptic.select.play() }
 }
