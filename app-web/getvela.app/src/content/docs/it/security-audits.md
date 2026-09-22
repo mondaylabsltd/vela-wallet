@@ -1,7 +1,7 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
@@ -94,7 +94,7 @@ Le revisioni che coprono questi contratti nella v0.2.1
 Dalla release non è stata resa pubblica alcuna vulnerabilità a livello di
 contratto, e i contratti passkey rientrano nel bounty della Safe Foundation.
 
-Le firme delle passkey vengono verificate dal precompilato **RIP-7212** della
+Le firme delle passkey vengono verificate dal precompilato **EIP-7951 / RIP-7212** della
 chain, senza verificatore di riserva. Prima di abilitare una rete, l'app controlla
 il precompilato con una firma vera. Due avvertenze: la specifica originale di
 RIP-7212 ha difetti nei casi limite che [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951)

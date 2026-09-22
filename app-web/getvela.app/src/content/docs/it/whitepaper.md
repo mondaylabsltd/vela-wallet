@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -78,7 +78,7 @@ Relay (vela-relay, ospitabile in proprio)
         ▼
 Chain EVM
   EntryPoint v0.7 → il tuo Safe v1.4.1 → modulo 4337 di Safe
-  il modulo passkey di Safe verifica P-256 tramite il precompilato RIP-7212
+  il modulo passkey di Safe verifica P-256 tramite il precompilato EIP-7951 / RIP-7212
 ```
 
 Servizi di supporto, tutti open source: un **indice delle chiavi pubbliche** che
@@ -138,7 +138,7 @@ dipendenza su cui questo documento torna più avanti.
    aspetta.
 5. **Inviare** l'operazione firmata al relay, che chiama l'EntryPoint.
 6. **Verificare on-chain**: il modulo passkey controlla la firma P-256 con il
-   precompilato RIP-7212 prima che il Safe esegua qualsiasi cosa. Non c'è un
+   precompilato EIP-7951 / RIP-7212 prima che il Safe esegua qualsiasi cosa. Non c'è un
    verificatore di riserva; una rete senza il precompilato non si può aggiungere.
 
 ### Commissioni
@@ -185,7 +185,7 @@ Vela integra 24 reti — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
 accetta qualsiasi rete EVM che abbia gli undici contratti che controlla e il
-precompilato RIP-7212. (Le chiavi dalla seconda alla settima richiedono anche la
+precompilato EIP-7951 / RIP-7212. (Le chiavi dalla seconda alla settima richiedono anche la
 factory dei firmatari passkey di Safe su quella rete, che il controllo non copre
 ancora.)
 
@@ -210,7 +210,7 @@ che Vela non è una seconda parte in grado di farlo.
 **Di cosa ti fidi**
 
 - Dei **contratti**: Safe, i suoi moduli 4337 e passkey, l'EntryPoint v0.7 e il
-  precompilato RIP-7212 della chain.
+  precompilato EIP-7951 / RIP-7212 della chain.
 - Del **dominio**: qualsiasi pagina servita da getvela.app o da uno dei suoi
   sottodomini può chiedere una firma alle tue chiavi.
 - Degli **autenticatori** che custodiscono le tue chiavi e — per le passkey
@@ -301,7 +301,7 @@ usare le passkey di `getvela.app` grazie a un permesso) e le app che compili tu
 getvela.app. La
 [guida al self-hosting](/it/docs/self-hosting#if-getvela-app-disappears) descrive
 ogni strada e i suoi limiti. Un accesso indipendente a una chain richiede anche
-che quella chain supporti RIP-7212.
+che quella chain supporti EIP-7951 / RIP-7212.
 
 ## Privacy
 
@@ -347,6 +347,6 @@ a un audit professionale. Considera Vela un software in alpha. Dettagli:
 - EIP-1271 — Validazione delle firme per i contratti
 - ERC-7730 — Descrittori per la firma leggibile
 - EIP-5792 — Batch di chiamate del wallet (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — Precompilato per la verifica delle firme P-256
+- EIP-7951 / RIP-7212 — Precompilato per la verifica delle firme P-256
 - WebAuthn / FIDO2 — Passkey
 - [Safe smart account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

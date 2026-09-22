@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 如何運作，以及使用它時你需要信任甚麼、不需要信任甚麼：帳戶、鑰匙、手續費、威脅模型、復原，以及 Vela 消失時會怎樣。"
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -61,7 +61,7 @@ Vela App——網頁版、瀏覽器擴充功能、桌面版（macOS/Windows/Linu
         ▼
 EVM 鏈
   EntryPoint v0.7 → 你的 Safe v1.4.1 → Safe 4337 模組
-  Safe 通行密鑰模組透過 RIP-7212 預編譯合約驗證 P-256 簽名
+  Safe 通行密鑰模組透過 EIP-7951 / RIP-7212 預編譯合約驗證 P-256 簽名
 ```
 
 配套服務全部開源：把新錢包登記到鏈上註冊表並回應查詢的**公鑰索引**、**鏈數據**目錄，以及**匯率**來源。
@@ -100,7 +100,7 @@ EVM 鏈
 3. **簽署**：驗證器驗證你的身份後，對操作雜湊值產生 WebAuthn 斷言。
 4. **編碼**：把斷言編碼成通行密鑰模組所需的 Safe 簽名格式。
 5. **提交**：把已簽署的操作交給中繼，由它呼叫 EntryPoint。
-6. **鏈上驗證**：通行密鑰模組先用 RIP-7212 預編譯合約檢查 P-256 簽名，Safe 才會執行任何操作。沒有後備
+6. **鏈上驗證**：通行密鑰模組先用 EIP-7951 / RIP-7212 預編譯合約檢查 P-256 簽名，Safe 才會執行任何操作。沒有後備
    驗證器；沒有該預編譯合約的網絡無法加入。
 
 ### 手續費
@@ -130,7 +130,7 @@ EVM 鏈
 
 Vela 內置 24 條網絡——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、
 Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、
-Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的十一份合約及 RIP-7212 預編譯合約的 EVM 網絡。
+Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的十一份合約及 EIP-7951 / RIP-7212 預編譯合約的 EVM 網絡。
 （第二至第七把鑰匙還需要該網絡上有 Safe 的通行密鑰簽署器工廠，目前的檢查尚未涵蓋這一點。）
 
 ## 安全模型
@@ -149,7 +149,7 @@ Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的
 
 **你需要信任的**
 
-- **合約**：Safe、它的 4337 模組和通行密鑰模組、EntryPoint v0.7，以及鏈上的 RIP-7212 預編譯合約。
+- **合約**：Safe、它的 4337 模組和通行密鑰模組、EntryPoint v0.7，以及鏈上的 EIP-7951 / RIP-7212 預編譯合約。
 - **域名**：任何由 getvela.app 或其子域名提供的頁面，都可以請求你的鑰匙簽署。
 - 保管你鑰匙的**驗證器**，以及——對同步的通行密鑰而言——背後的 Apple、Google 或密碼管理工具帳戶。
 - **你用來簽署的 App 的程式碼。**它建構交易，並向你顯示交易做甚麼。被入侵的 App 可以給你看一樣東西，
@@ -202,7 +202,7 @@ Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的
 `getvela.app`：把網頁版錢包部署到其他域名上，會建立另一個錢包。對於現有的錢包，Vela 瀏覽器擴充功能
 （獲授權後可使用 `getvela.app` 通行密鑰）和你自行編譯的 App（配合手機或安全密鑰），在沒有 getvela.app 的
 情況下仍然可以繼續使用。[自行架設指南](/zh-HK/docs/self-hosting#if-getvela-app-disappears)逐一說明每條途徑
-及其限制。要在某條鏈上獨立存取錢包，該鏈也必須支援 RIP-7212。
+及其限制。要在某條鏈上獨立存取錢包，該鏈也必須支援 EIP-7951 / RIP-7212。
 
 ## 私隱
 
@@ -236,6 +236,6 @@ Safe 的合約、它的 4337 模組和通行密鑰模組，以及 EntryPoint v0.
 - EIP-1271——合約的簽名驗證
 - ERC-7730——清晰簽署描述檔
 - EIP-5792——錢包批量呼叫（`wallet_sendCalls`）
-- RIP-7212 / EIP-7951——P-256 簽名驗證預編譯合約
+- EIP-7951 / RIP-7212——P-256 簽名驗證預編譯合約
 - WebAuthn / FIDO2——通行密鑰
 - [Safe 智能帳戶 v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

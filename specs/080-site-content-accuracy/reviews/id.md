@@ -164,3 +164,8 @@ now MIT) into `id.json` and four docs. Terms unchanged: *hosting sendiri*, *komp
 | docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees.md` ("Precompile ini punya dua nama: EIP-7951 di Ethereum, aktif sejak upgrade Fusaka (Desember 2025), dan RIP-7212 di rollup…"), at the end of the paragraph with the signature check.
+Read all 10 `EIP-7951 / RIP-7212` lines in the docs and `home.networks.body`: every one stays grammatical (*precompile EIP-7951 / RIP-7212*, *mendukung EIP-7951 / RIP-7212*); no edits needed. The security-audits caveat keeps plain RIP-7212.

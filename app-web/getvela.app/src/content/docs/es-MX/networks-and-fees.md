@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
 description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -41,9 +41,12 @@ Puedes agregar cualquier red EVM en **Ajustes → Redes**, siempre que tenga lo 
 necesita una wallet de Vela: once contratos estándar (el EntryPoint v0.7 de
 ERC-4337, los contratos de Safe v1.4.1, los módulos 4337 y de passkey de Safe,
 MultiSend, Multicall3 y dos desplegadores deterministas) y el precompilado
-**RIP-7212** que verifica las firmas de passkey en la dirección `0x100`. La wallet
-revisa todo eso, incluida una verificación de firma real contra el precompilado,
-antes de dejarte agregar la red.
+**EIP-7951 / RIP-7212** que verifica las firmas de passkey en la dirección `0x100`.
+La wallet revisa todo eso, incluida una verificación de firma real contra el
+precompilado, antes de dejarte agregar la red. El precompilado tiene dos nombres:
+EIP-7951 en Ethereum, activo desde la actualización Fusaka (diciembre de 2025), y
+RIP-7212 en los rollups. La interfaz es la misma, y la wallet acepta cualquiera de
+los dos.
 
 El precompilado es un requisito indispensable. Su dirección forma parte de cómo se
 calcula cada dirección de Vela, así que no hay verificador de respaldo ni forma de

@@ -151,3 +151,8 @@ single-string axes; no High or Medium left open. `messages.test.ts -t "ja"` pass
 | docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; （Rust、MIT）; licence-file sentence deleted | — | |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees` (ロールアップ, Fusaka アップグレード（2025 年 12 月）) after the signature-check sentence.
+Read every `EIP-7951 / RIP-7212` line in the docs and `home.networks.body`: プリコンパイル / に対応 / で検証 all still read naturally; nothing else changed.

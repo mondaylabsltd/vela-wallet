@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
 description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -41,9 +41,11 @@ anahtarlarınızdan hesaplanır.
 ağda bir Vela cüzdanının ihtiyaç duyduğu her şey olsun: on bir standart sözleşme
 (ERC-4337 EntryPoint v0.7, Safe v1.4.1 sözleşmeleri, Safe'in 4337 ve geçiş anahtarı
 modülleri, MultiSend, Multicall3 ve iki deterministik dağıtıcı) ve geçiş anahtarı
-imzalarını `0x100` adresinde doğrulayan **RIP-7212** ön derlemesi. Cüzdan, ağı
+imzalarını `0x100` adresinde doğrulayan **EIP-7951 / RIP-7212** ön derlemesi. Cüzdan, ağı
 eklemenize izin vermeden önce bunların hepsini kontrol eder; buna ön derlemeye karşı
-gerçek bir imza denemesi de dahildir.
+gerçek bir imza denemesi de dahildir. Bu ön derlemenin iki adı var: Ethereum'da Fusaka
+yükseltmesinden (Aralık 2025) beri etkin olan EIP-7951 ve rollup'larda RIP-7212. Arayüz
+aynıdır; cüzdan ikisini de kabul eder.
 
 Ön derleme kesin bir gereksinimdir. Adresi, her Vela adresinin hesaplanmasının bir
 parçasıdır; bu yüzden yedek bir doğrulayıcı yoktur ve sonradan bir tane dağıtmanın

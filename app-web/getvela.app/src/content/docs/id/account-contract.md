@@ -1,7 +1,7 @@
 ---
 title: Kontrak akun
 description: "Dompet Vela Anda adalah Safe v1.4.1 yang tidak dimodifikasi. Tidak ada satu pun kontrak di jalur menuju uang Anda yang ditulis Vela — inilah persisnya kontrak-kontrak itu, apa yang Anda dapatkan darinya, dan apa harganya."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Kontrak akun
@@ -77,7 +77,7 @@ Memakai standar tidak gratis:
   on-chain, jadi Anda bisa langsung menerima dana di sana; transaksi keluar pertama Anda
   di tiap jaringan membayar deploy kontraknya.
 - **Tidak semua chain memenuhi syarat.** Tanda tangan passkey diverifikasi dengan
-  precompile **RIP-7212**, dan alamat precompile itu adalah bagian dari data penyiapan
+  precompile **EIP-7951 / RIP-7212**, dan alamat precompile itu adalah bagian dari data penyiapan
   setiap dompet, jadi jaringan tanpa precompile itu sama sekali tidak bisa menjalankan
   Vela.
 - **Risiko Safe kini juga risiko Anda.** Memercayai kontrak yang dipakai luas tetaplah

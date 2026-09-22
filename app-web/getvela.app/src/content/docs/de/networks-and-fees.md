@@ -1,7 +1,7 @@
 ---
 title: Netzwerke und Gebühren
 description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -40,10 +40,12 @@ Schlüsseln berechnet wird, nicht aus der Chain.
 Unter **Einstellungen → Netzwerke** kannst du jedes EVM-Netzwerk hinzufügen, sofern
 es hat, was eine Vela-Wallet braucht: elf Standardverträge (den ERC-4337-EntryPoint
 v0.7, die Safe-v1.4.1-Verträge, das 4337- und das Passkey-Modul von Safe, MultiSend,
-Multicall3 und zwei deterministische Deployer) und das **RIP-7212**-Precompile, das
+Multicall3 und zwei deterministische Deployer) und das **EIP-7951/RIP-7212**-Precompile, das
 Passkey-Signaturen an der Adresse `0x100` prüft. Die Wallet prüft all das –
 einschließlich einer echten Signaturprüfung gegen das Precompile –, bevor sie dich das
-Netzwerk hinzufügen lässt.
+Netzwerk hinzufügen lässt. Das Precompile hat zwei Namen: EIP-7951 auf Ethereum, aktiv
+seit dem Fusaka-Upgrade (Dezember 2025), und RIP-7212 auf Rollups. Die Schnittstelle
+ist dieselbe, und die Wallet akzeptiert beide.
 
 Das Precompile ist eine harte Voraussetzung. Seine Adresse fließt in die Berechnung
 jeder Vela-Adresse ein, deshalb gibt es keinen Ersatz-Verifizierer und keine

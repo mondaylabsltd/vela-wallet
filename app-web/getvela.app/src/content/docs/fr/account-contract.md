@@ -1,7 +1,7 @@
 ---
 title: Le contrat de compte
 description: "Votre portefeuille Vela est un Safe v1.4.1 non modifié. Aucun contrat sur le chemin de votre argent n'a été écrit par Vela — voici exactement de quels contrats il s'agit, ce que cela vous apporte, et ce que cela coûte."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Le contrat de compte
@@ -82,7 +82,7 @@ passkey ont un public plus restreint, mais bien réel.
   immédiatement ; votre première transaction sortante sur chaque réseau paie le
   déploiement du contrat.
 - **Toutes les chaînes ne conviennent pas.** Les signatures de passkey sont
-  vérifiées par le précompilé **RIP-7212**, dont l'adresse fait partie des données
+  vérifiées par le précompilé **EIP-7951 / RIP-7212**, dont l'adresse fait partie des données
   de configuration de chaque portefeuille : un réseau qui ne l'a pas ne peut pas
   faire fonctionner Vela du tout.
 - **Le risque de Safe devient le vôtre.** Faire confiance à un contrat très utilisé

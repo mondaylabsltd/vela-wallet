@@ -1,7 +1,7 @@
 ---
 title: 백서
 description: "Vela가 어떻게 작동하는지, 그리고 Vela를 쓰려면 무엇을 신뢰해야 하고 무엇은 신뢰하지 않아도 되는지. 계정, 키, 수수료, 위협 모델, 복구, Vela가 사라지면 어떻게 되는지 설명합니다."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -69,7 +69,7 @@ Vela 앱 — 웹, 브라우저 확장 프로그램, 데스크톱(macOS/Windows/L
         ▼
 EVM 체인
   EntryPoint v0.7 → 내 Safe v1.4.1 → Safe 4337 모듈
-  Safe 패스키 모듈이 RIP-7212 프리컴파일로 P-256 검증
+  Safe 패스키 모듈이 EIP-7951 / RIP-7212 프리컴파일로 P-256 검증
 ```
 
 이를 받쳐 주는 서비스는 모두 오픈소스입니다. 새 지갑을 온체인 레지스트리에 등록하고 조회에 답하는
@@ -114,7 +114,7 @@ PIN과 터치입니다. 세션 키는 없습니다. 키는 나중에 추가하�
 3. **서명**: 인증자가 사용자를 확인한 뒤 오퍼레이션 해시에 대한 WebAuthn 어설션을 만듭니다.
 4. 어설션을 패스키 모듈이 기대하는 Safe 서명 형식으로 **인코딩**합니다.
 5. 서명된 오퍼레이션을 릴레이에 **제출**하고, 릴레이가 EntryPoint를 호출합니다.
-6. **온체인 검증**: Safe가 무엇이든 실행하기 전에 패스키 모듈이 RIP-7212 프리컴파일로 P-256
+6. **온체인 검증**: Safe가 무엇이든 실행하기 전에 패스키 모듈이 EIP-7951 / RIP-7212 프리컴파일로 P-256
    서명을 확인합니다. 대체 검증기는 없으며, 프리컴파일이 없는 네트워크는 추가할 수 없습니다.
 
 ### 수수료
@@ -152,7 +152,7 @@ PIN과 터치입니다. 세션 키는 없습니다. 키는 나중에 추가하�
 Vela에는 24개 네트워크가 내장되어 있습니다. Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH,
 Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM입니다. 그리고 Vela가 확인하는 컨트랙트
-11개와 RIP-7212 프리컴파일을 갖춘 EVM 네트워크라면 어디든 받아들입니다. (두 번째부터 일곱 번째
+11개와 EIP-7951 / RIP-7212 프리컴파일을 갖춘 EVM 네트워크라면 어디든 받아들입니다. (두 번째부터 일곱 번째
 키는 그 네트워크에 Safe의 패스키 서명자 팩토리도 있어야 하는데, 아직 이 부분은 확인하지
 않습니다.)
 
@@ -174,7 +174,7 @@ Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM입니다. 그리고 Ve
 
 **신뢰해야 하는 것**
 
-- **컨트랙트**: Safe, Safe의 4337 모듈과 패스키 모듈, EntryPoint v0.7, 그리고 체인의 RIP-7212
+- **컨트랙트**: Safe, Safe의 4337 모듈과 패스키 모듈, EntryPoint v0.7, 그리고 체인의 EIP-7951 / RIP-7212
   프리컴파일.
 - **도메인**: getvela.app이나 그 하위 도메인에서 서비스되는 페이지는 어느 것이든 키에 서명을
   요청할 수 있습니다.
@@ -243,7 +243,7 @@ Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM입니다. 그리고 Ve
 Vela 브라우저 확장 프로그램(권한을 받아 `getvela.app` 패스키를 쓸 수 있음)과 직접 빌드한
 앱(휴대폰이나 보안 키 사용)은 getvela.app 없이도 계속 작동합니다.
 [셀프 호스팅 가이드](/ko/docs/self-hosting#if-getvela-app-disappears)에 각 방법과 한계를 자세히
-적어 두었습니다. 어떤 체인에서 Vela 없이 지갑에 접근하려면 그 체인이 RIP-7212를 지원해야
+적어 두었습니다. 어떤 체인에서 Vela 없이 지갑에 접근하려면 그 체인이 EIP-7951 / RIP-7212를 지원해야
 합니다.
 
 ## 개인정보
@@ -282,6 +282,6 @@ Safe의 컨트랙트, Safe의 4337 모듈과 패스키 모듈, EntryPoint v0.7�
 - EIP-1271 — 컨트랙트 서명 검증
 - ERC-7730 — 클리어 서명 디스크립터
 - EIP-5792 — 지갑 호출 일괄 처리(`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — P-256 서명 검증 프리컴파일
+- EIP-7951 / RIP-7212 — P-256 서명 검증 프리컴파일
 - WebAuthn / FIDO2 — 패스키
 - [Safe 스마트 계정 v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

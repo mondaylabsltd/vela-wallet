@@ -261,7 +261,7 @@
 		},
 		"networks": {
 			"heading": "24 jaringan bawaan. Tambah sendiri yang lain",
-			"body": "Dompet Anda memakai alamat yang sama di semua jaringan. Saat Anda menambahkan chain EVM lain, Vela memeriksa apakah chain itu punya precompile RIP-7212 serta kontrak Safe dan ERC-4337 yang dibutuhkan. Kalau ada kontrak yang belum tersedia, <a href=\"/chain-setup\">penyiapan chain</a> menunjukkan mana saja, lalu men-deploy yang bisa di-deploy siapa saja.",
+			"body": "Dompet Anda memakai alamat yang sama di semua jaringan. Saat Anda menambahkan chain EVM lain, Vela memeriksa apakah chain itu punya precompile EIP-7951 / RIP-7212 serta kontrak Safe dan ERC-4337 yang dibutuhkan. Kalau ada kontrak yang belum tersedia, <a href=\"/chain-setup\">penyiapan chain</a> menunjukkan mana saja, lalu men-deploy yang bisa di-deploy siapa saja.",
 			"link": "Jaringan dan biaya, selengkapnya"
 		},
 		"faq": {
@@ -487,7 +487,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "cabecedf1819",
+		"home": "a9482909de80",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
 		"getStarted": "8bcd961ee0e8"

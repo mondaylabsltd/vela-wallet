@@ -1,7 +1,7 @@
 ---
 title: Il contratto dell'account
 description: "Il tuo wallet Vela è un Safe v1.4.1 non modificato. Nessun contratto sulla strada verso i tuoi soldi è stato scritto da Vela — ecco esattamente quali contratti sono, cosa ti danno e cosa costano."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Il contratto dell'account
@@ -80,7 +80,7 @@ Essere standard non è gratis:
   on-chain esista qualsiasi cosa, quindi puoi ricevere subito; la tua prima
   transazione in uscita su ogni rete paga il deploy del contratto.
 - **Non tutte le chain sono idonee.** Le firme delle passkey vengono verificate con
-  il precompilato **RIP-7212**, e il suo indirizzo fa parte dei dati di setup di
+  il precompilato **EIP-7951 / RIP-7212**, e il suo indirizzo fa parte dei dati di setup di
   ogni wallet, quindi una rete che non ce l'ha non può far girare Vela in alcun
   modo.
 - **Il rischio di Safe ora è anche il tuo.** Fidarsi di un contratto molto usato

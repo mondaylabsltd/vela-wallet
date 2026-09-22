@@ -261,7 +261,7 @@
 		},
 		"networks": {
 			"heading": "內建 24 條網路，也可以自己新增",
-			"body": "每條網路上都是同一個錢包位址。新增其他 EVM 鏈時，Vela 會檢查它有沒有 RIP-7212 預編譯合約，以及需要的 Safe 和 ERC-4337 合約。如果缺了部分合約，<a href=\"/chain-setup\">鏈設定</a>會列出缺哪些，並部署任何人都能部署的那些。",
+			"body": "每條網路上都是同一個錢包位址。新增其他 EVM 鏈時，Vela 會檢查它有沒有 EIP-7951 / RIP-7212 預編譯合約，以及需要的 Safe 和 ERC-4337 合約。如果缺了部分合約，<a href=\"/chain-setup\">鏈設定</a>會列出缺哪些，並部署任何人都能部署的那些。",
 			"link": "網路與費用，完整說明"
 		},
 		"faq": {
@@ -487,7 +487,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "cabecedf1819",
+		"home": "a9482909de80",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
 		"getStarted": "8bcd961ee0e8"

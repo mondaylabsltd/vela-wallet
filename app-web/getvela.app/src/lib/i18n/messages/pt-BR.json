@@ -261,7 +261,7 @@
 		},
 		"networks": {
 			"heading": "24 redes integradas. Adicione a sua",
-			"body": "Sua carteira tem o mesmo endereço em todas as redes. Quando você adiciona outra rede EVM, a Vela confere se ela tem o pré-compilado RIP-7212 e os contratos Safe e ERC-4337 de que precisa. Se faltarem alguns contratos, a <a href=\"/chain-setup\">configuração de rede</a> mostra quais são e implanta os que qualquer pessoa pode implantar.",
+			"body": "Sua carteira tem o mesmo endereço em todas as redes. Quando você adiciona outra rede EVM, a Vela confere se ela tem o pré-compilado EIP-7951 / RIP-7212 e os contratos Safe e ERC-4337 de que precisa. Se faltarem alguns contratos, a <a href=\"/chain-setup\">configuração de rede</a> mostra quais são e implanta os que qualquer pessoa pode implantar.",
 			"link": "Redes e taxas, em detalhe"
 		},
 		"faq": {
@@ -487,7 +487,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "cabecedf1819",
+		"home": "a9482909de80",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
 		"getStarted": "8bcd961ee0e8"

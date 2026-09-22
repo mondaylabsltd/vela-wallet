@@ -1,7 +1,7 @@
 ---
 title: Der Account-Vertrag
 description: "Deine Vela-Wallet ist ein unverändertes Safe v1.4.1. Kein Vertrag auf dem Weg zu deinem Geld wurde von Vela geschrieben – hier steht genau, welche Verträge es sind, was dir das bringt und was es kostet."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Der Account-Vertrag
@@ -81,7 +81,7 @@ Standard zu sein ist nicht umsonst:
   empfangen; deine erste ausgehende Transaktion in jedem Netzwerk bezahlt die
   Bereitstellung des Vertrags.
 - **Nicht jede Chain kommt infrage.** Passkey-Signaturen werden mit dem
-  **RIP-7212**-Precompile geprüft, und seine Adresse ist Teil der Setup-Daten jeder
+  **EIP-7951/RIP-7212**-Precompile geprüft, und seine Adresse ist Teil der Setup-Daten jeder
   Wallet – ein Netzwerk ohne dieses Precompile kann Vela überhaupt nicht ausführen.
 - **Das Risiko von Safe ist jetzt dein Risiko.** Einem weit verbreiteten Vertrag zu
   vertrauen heißt immer noch, einem Vertrag zu vertrauen. Vela hat auf dem Weg zu

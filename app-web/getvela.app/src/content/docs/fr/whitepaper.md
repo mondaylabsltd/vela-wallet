@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -84,7 +84,7 @@ Relais (vela-relay, auto-hébergeable)
         ▼
 Chaîne EVM
   EntryPoint v0.7 → votre Safe v1.4.1 → module 4337 de Safe
-  le module passkey de Safe vérifie la signature P-256 via le précompilé RIP-7212
+  le module passkey de Safe vérifie la signature P-256 via le précompilé EIP-7951 / RIP-7212
 ```
 
 Services annexes, tous open source : un **index des clés publiques** qui enregistre
@@ -145,7 +145,7 @@ bas.
    passkey.
 5. **Soumettre** l'opération signée au relais, qui appelle l'EntryPoint.
 6. **Vérifier on-chain** : le module passkey contrôle la signature P-256 avec le
-   précompilé RIP-7212 avant que le Safe n'exécute quoi que ce soit. Il n'y a pas de
+   précompilé EIP-7951 / RIP-7212 avant que le Safe n'exécute quoi que ce soit. Il n'y a pas de
    vérificateur de repli ; un réseau sans le précompilé ne peut pas être ajouté.
 
 ### Les frais
@@ -194,7 +194,7 @@ Vela intègre 24 réseaux — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, 
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume et XRPL EVM — et
 accepte tout réseau EVM qui dispose des onze contrats qu'il vérifie et du
-précompilé RIP-7212. (Les clés deux à sept ont aussi besoin de la fabrique de
+précompilé EIP-7951 / RIP-7212. (Les clés deux à sept ont aussi besoin de la fabrique de
 signataires passkey de Safe sur ce réseau, ce que la vérification ne couvre pas
 encore.)
 
@@ -220,7 +220,7 @@ seconde partie capable de le faire.
 **Ce à quoi vous faites confiance**
 
 - Les **contrats** : Safe, ses modules 4337 et passkey, l'EntryPoint v0.7, et le
-  précompilé RIP-7212 de la chaîne.
+  précompilé EIP-7951 / RIP-7212 de la chaîne.
 - Le **domaine** : toute page servie depuis getvela.app ou l'un de ses
   sous-domaines peut demander une signature à vos clés.
 - Les **authentificateurs** qui détiennent vos clés et — pour les passkeys
@@ -317,7 +317,7 @@ passkeys `getvela.app` sur autorisation) et les apps que vous compilez vous-mêm
 (avec un téléphone ou une clé de sécurité) continuent de fonctionner sans
 getvela.app. Le [guide d'auto-hébergement](/fr/docs/self-hosting#if-getvela-app-disappears)
 détaille chaque solution et ses limites. Accéder de façon indépendante à une
-chaîne exige aussi que cette chaîne prenne en charge RIP-7212.
+chaîne exige aussi que cette chaîne prenne en charge EIP-7951 / RIP-7212.
 
 ## Confidentialité
 
@@ -364,6 +364,6 @@ Détails : [audits et problèmes connus](/fr/docs/security-audits).
 - EIP-1271 — Validation de signature pour les contrats
 - ERC-7730 — Descripteurs de signature lisible
 - EIP-5792 — Regroupement d'appels par le portefeuille (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — Précompilé de vérification de signature P-256
+- EIP-7951 / RIP-7212 — Précompilé de vérification de signature P-256
 - WebAuthn / FIDO2 — Passkeys
 - [Compte intelligent Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

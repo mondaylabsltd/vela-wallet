@@ -45,6 +45,7 @@ including a real signature check against the precompile, before it lets you
 add the network. The precompile has two names: EIP-7951 on Ethereum, live since
 the Fusaka upgrade (December 2025), and RIP-7212 on rollups. The interface is the
 same, and the wallet accepts either.
+
 The precompile is a hard requirement. Its address is part of how every Vela
 address is computed, so there is no fallback verifier and no way to deploy one
 later. If a chain has the precompile but is missing some of the contracts,
@@ -67,6 +68,7 @@ sponsorship policy.
 ### What the fee is
 
 <span id="fee"></span>
+
 The confirm screen shows one amount, in the fee coin and in your display
 currency. It is calculated like this:
 

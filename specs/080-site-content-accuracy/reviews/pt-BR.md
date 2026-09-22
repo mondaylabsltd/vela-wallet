@@ -150,3 +150,8 @@ the five single-string axes; `messages.test.ts -t pt-BR` passes.
 | docs `faq`, `whitepaper`, `self-hosting` | all MIT incl. the index; “(Rust, MIT)”; no-licence sentence deleted | — | no "licence pending" line left in pt-BR |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees.md` after the signature-check sentence (“O pré-compilado tem dois nomes: EIP-7951 no Ethereum, ativo desde a atualização Fusaka…”).
+Read all `EIP-7951 / RIP-7212` spots (docs, `home.networks.body`): all grammatical as replaced (masculine article agrees: “o pré-compilado EIP-7951 / RIP-7212”, “suporte o EIP-7951 / RIP-7212”); nothing else changed.

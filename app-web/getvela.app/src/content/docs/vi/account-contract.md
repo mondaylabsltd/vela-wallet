@@ -1,7 +1,7 @@
 ---
 title: Hợp đồng tài khoản
 description: "Ví Vela của bạn là một Safe v1.4.1 nguyên bản. Không hợp đồng nào trên đường đi tới tiền của bạn do Vela viết — đây là chính xác những hợp đồng đó, chúng mang lại cho bạn điều gì, và cái giá là gì."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Hợp đồng tài khoản
@@ -76,7 +76,7 @@ Dùng chuẩn không phải là miễn phí:
   có bất cứ thứ gì trên chuỗi, nên bạn nhận tiền vào đó được ngay; giao dịch gửi đi đầu
   tiên của bạn trên mỗi mạng sẽ trả chi phí triển khai hợp đồng.
 - **Không phải chuỗi nào cũng đủ điều kiện.** Chữ ký passkey được xác minh bằng precompile
-  **RIP-7212**, và địa chỉ của nó là một phần trong dữ liệu thiết lập của mọi ví, nên một
+  **EIP-7951 / RIP-7212**, và địa chỉ của nó là một phần trong dữ liệu thiết lập của mọi ví, nên một
   mạng không có nó hoàn toàn không chạy được Vela.
 - **Rủi ro của Safe giờ là rủi ro của bạn.** Tin một hợp đồng được dùng rộng rãi thì vẫn
   là tin một hợp đồng. Vela không thêm hợp đồng thứ hai nào của riêng mình trên đường đi

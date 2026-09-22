@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -93,7 +93,7 @@ Bu sözleşmeleri v0.2.1 sürümünde kapsayan incelemeler
 Sürümden bu yana sözleşme düzeyinde bir açık açıklanmadı ve geçiş anahtarı
 sözleşmeleri Safe Foundation ödül programının kapsamında.
 
-Geçiş anahtarı imzaları zincirin **RIP-7212** ön derlemesiyle, yedek bir doğrulayıcı
+Geçiş anahtarı imzaları zincirin **EIP-7951 / RIP-7212** ön derlemesiyle, yedek bir doğrulayıcı
 olmadan doğrulanır. Uygulama bir ağı etkinleştirmeden önce ön derlemeyi gerçek bir
 imzayla kontrol eder. İki çekince: özgün RIP-7212 spesifikasyonunda
 [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951)'in düzelttiği uç durum kusurları

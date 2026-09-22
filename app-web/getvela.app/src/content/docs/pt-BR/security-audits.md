@@ -1,7 +1,7 @@
 ---
 title: Auditorias e problemas conhecidos
 description: "Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 “Auditado” é uma afirmação sobre um código específico numa versão específica, então
@@ -91,7 +91,7 @@ As revisões que cobrem esses contratos na v0.2.1
 Nenhuma vulnerabilidade de contrato foi divulgada desde a release, e os contratos de
 passkey estão no escopo do bug bounty da Safe Foundation.
 
-As assinaturas de passkey são verificadas pelo pré-compilado **RIP-7212** da rede,
+As assinaturas de passkey são verificadas pelo pré-compilado **EIP-7951 / RIP-7212** da rede,
 sem verificador alternativo. Antes de habilitar uma rede, o app testa o
 pré-compilado com uma assinatura real. Duas ressalvas: a especificação original do
 RIP-7212 tem falhas em casos extremos que o

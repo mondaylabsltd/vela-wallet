@@ -165,3 +165,8 @@ indeclinable.
 | docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees.md` («У прекомпайла два названия: EIP-7951 в Ethereum, где он работает с обновления Fusaka (декабрь 2025 года), и RIP-7212 в роллапах…»), at the end of the paragraph with the signature check.
+Read all 10 `EIP-7951 / RIP-7212` lines in the docs and `home.networks.body`: every one stays grammatical (the name stands after «прекомпайл», so no case or gender agreement is involved); no edits needed. The security-audits caveat keeps plain RIP-7212.

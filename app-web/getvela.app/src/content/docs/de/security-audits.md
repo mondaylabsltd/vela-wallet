@@ -1,7 +1,7 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
@@ -94,7 +94,7 @@ Die Prüfungen, die diese Verträge in v0.2.1 abdecken
 Seit dem Release wurde keine Schwachstelle auf Vertragsebene offengelegt, und die
 Passkey-Verträge fallen unter das Bounty der Safe Foundation.
 
-Passkey-Signaturen werden vom **RIP-7212**-Precompile der Chain geprüft, ohne
+Passkey-Signaturen werden vom **EIP-7951/RIP-7212**-Precompile der Chain geprüft, ohne
 Ersatz-Verifizierer. Bevor die App ein Netzwerk aktiviert, prüft sie das Precompile mit
 einer echten Signatur. Zwei Einschränkungen: Die ursprüngliche RIP-7212-Spezifikation
 hat Schwächen in Randfällen, die [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951)

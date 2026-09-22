@@ -1,7 +1,7 @@
 ---
 title: Audits et problèmes connus
 description: "Chaque contrat dont Vela dépend, qui a audité quelle version, si la version auditée est bien celle qui est déployée, les constats ouverts que nous surveillons, et ce qui n'a pas été audité du tout."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 « Audité » est une affirmation qui porte sur un code précis, dans une version
@@ -96,7 +96,7 @@ Aucune vulnérabilité au niveau des contrats n'a été divulguée depuis la
 publication, et les contrats passkey entrent dans le périmètre du bug bounty de la
 Safe Foundation.
 
-Les signatures de passkey sont vérifiées par le précompilé **RIP-7212** de la
+Les signatures de passkey sont vérifiées par le précompilé **EIP-7951 / RIP-7212** de la
 chaîne, sans vérificateur de repli. Avant d'activer un réseau, l'app contrôle le
 précompilé avec une vraie signature. Deux réserves : la spécification RIP-7212
 d'origine présente des défauts dans des cas limites que

@@ -1,7 +1,7 @@
 ---
 title: Redes e taxas
 description: "As 24 redes integradas à Vela, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -41,9 +41,12 @@ Você pode adicionar qualquer rede EVM em **Configurações → Redes**, desde q
 tenha o que uma carteira Vela precisa: onze contratos padrão (o EntryPoint v0.7 do
 ERC-4337, os contratos do Safe v1.4.1, os módulos 4337 e de passkey da Safe,
 MultiSend, Multicall3 e dois implantadores determinísticos) e o pré-compilado
-**RIP-7212**, que verifica assinaturas de passkey no endereço `0x100`. A carteira
-confere todos eles, inclusive com uma verificação de assinatura real no
-pré-compilado, antes de deixar você adicionar a rede.
+**EIP-7951 / RIP-7212**, que verifica assinaturas de passkey no endereço `0x100`.
+A carteira confere todos eles, inclusive com uma verificação de assinatura real no
+pré-compilado, antes de deixar você adicionar a rede. O pré-compilado tem dois
+nomes: EIP-7951 no Ethereum, ativo desde a atualização Fusaka (dezembro de 2025), e
+RIP-7212 nos rollups. A interface é a mesma, e a carteira aceita qualquer um dos
+dois.
 
 O pré-compilado é indispensável. O endereço dele faz parte de como todo
 endereço da Vela é calculado, então não existe verificador alternativo nem como

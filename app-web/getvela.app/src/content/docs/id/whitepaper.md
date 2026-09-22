@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -81,7 +81,7 @@ Relay (vela-relay, bisa di-hosting sendiri)
         ▼
 Chain EVM
   EntryPoint v0.7 → Safe v1.4.1 Anda → modul 4337 Safe
-  modul passkey Safe memverifikasi P-256 lewat precompile RIP-7212
+  modul passkey Safe memverifikasi P-256 lewat precompile EIP-7951 / RIP-7212
 ```
 
 Layanan pendukung, semuanya open source: **indeks kunci publik** yang mendaftarkan dompet
@@ -132,7 +132,7 @@ bawah.
 4. **Enkode** asersi itu menjadi tanda tangan Safe yang diharapkan modul passkey.
 5. **Kirim** operasi yang sudah ditandatangani ke relay, yang memanggil EntryPoint.
 6. **Verifikasi on-chain**: modul passkey memeriksa tanda tangan P-256 dengan precompile
-   RIP-7212 sebelum Safe mengeksekusi apa pun. Tidak ada verifier cadangan; jaringan
+   EIP-7951 / RIP-7212 sebelum Safe mengeksekusi apa pun. Tidak ada verifier cadangan; jaringan
    tanpa precompile itu tidak bisa ditambahkan.
 
 ### Biaya
@@ -177,7 +177,7 @@ Vela punya 24 jaringan bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimi
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — dan menerima
 jaringan EVM apa pun yang punya sebelas kontrak yang diperiksanya dan precompile
-RIP-7212. (Kunci kedua sampai ketujuh juga membutuhkan factory signer passkey milik Safe
+EIP-7951 / RIP-7212. (Kunci kedua sampai ketujuh juga membutuhkan factory signer passkey milik Safe
 di jaringan itu, yang belum tercakup dalam pemeriksaannya.)
 
 ## Model keamanan
@@ -202,7 +202,7 @@ kedua yang bisa melakukannya.
 **Yang Anda percayai**
 
 - **Kontraknya**: Safe, modul 4337 dan modul passkey-nya, EntryPoint v0.7, dan precompile
-  RIP-7212 milik chain.
+  EIP-7951 / RIP-7212 milik chain.
 - **Domainnya**: halaman apa pun yang disajikan dari getvela.app atau salah satu
   subdomainnya bisa meminta tanda tangan dari kunci Anda.
 - **Autentikator** yang menyimpan kunci Anda, dan — untuk passkey yang tersinkron — akun
@@ -286,7 +286,7 @@ aplikasi yang Anda kompilasi sendiri (dengan ponsel atau kunci keamanan) tetap b
 tanpa getvela.app.
 [Panduan hosting sendiri](/id/docs/self-hosting#if-getvela-app-disappears) menguraikan
 setiap jalur beserta batasannya. Akses mandiri ke sebuah chain juga mensyaratkan chain itu
-mendukung RIP-7212.
+mendukung EIP-7951 / RIP-7212.
 
 ## Privasi
 
@@ -329,6 +329,6 @@ Perlakukan Vela sebagai perangkat lunak alfa. Detailnya:
 - EIP-1271 — Validasi tanda tangan untuk kontrak
 - ERC-7730 — Deskriptor clear signing
 - EIP-5792 — Batching panggilan dompet (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — Precompile verifikasi tanda tangan P-256
+- EIP-7951 / RIP-7212 — Precompile verifikasi tanda tangan P-256
 - WebAuthn / FIDO2 — Passkey
 - [Akun pintar Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

@@ -1,7 +1,7 @@
 ---
 title: Hesap sözleşmesi
 description: "Vela cüzdanınız değiştirilmemiş bir Safe v1.4.1. Paranıza giden yoldaki hiçbir sözleşmeyi Vela yazmadı — burada tam olarak hangi sözleşmeler olduğu, bunun size ne kazandırdığı ve neye mal olduğu anlatılıyor."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # Hesap sözleşmesi
@@ -75,7 +75,7 @@ Standart olmak bedava değil:
 - **Hesabın dağıtılması gerekir.** Adresiniz zincirde hiçbir şey yokken `CREATE2` ile
   hesaplanır, yani o adrese hemen para alabilirsiniz; her ağdaki ilk giden işleminiz
   sözleşmeyi dağıtmanın bedelini öder.
-- **Her zincir uygun değil.** Geçiş anahtarı imzaları **RIP-7212** ön derlemesiyle
+- **Her zincir uygun değil.** Geçiş anahtarı imzaları **EIP-7951 / RIP-7212** ön derlemesiyle
   doğrulanır ve onun adresi her cüzdanın kurulum verisinin bir parçasıdır; bu yüzden
   bu ön derlemesi olmayan bir ağda Vela hiç çalışamaz.
 - **Safe'in riski artık sizin riskiniz.** Yaygın kullanılan bir sözleşmeye güvenmek de

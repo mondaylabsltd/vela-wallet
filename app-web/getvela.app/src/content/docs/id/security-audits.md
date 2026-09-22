@@ -1,7 +1,7 @@
 ---
 title: Audit & masalah yang diketahui
 description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 "Sudah diaudit" adalah klaim tentang kode tertentu pada versi tertentu, jadi halaman ini
@@ -92,7 +92,7 @@ Tinjauan yang mencakup kontrak-kontrak ini pada v0.2.1
 Belum ada kerentanan tingkat kontrak yang diungkap sejak rilis, dan kontrak passkey
 termasuk dalam cakupan bounty Safe Foundation.
 
-Tanda tangan passkey diverifikasi oleh precompile **RIP-7212** milik chain, tanpa
+Tanda tangan passkey diverifikasi oleh precompile **EIP-7951 / RIP-7212** milik chain, tanpa
 verifier cadangan. Sebelum mengaktifkan sebuah jaringan, aplikasi memeriksa precompile
 itu dengan tanda tangan sungguhan. Dua catatan: spesifikasi RIP-7212 yang asli punya
 kelemahan pada kasus tepi yang diperbaiki [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951)

@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
 description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -40,10 +40,12 @@ dari kunci Anda, bukan dari chain-nya.
 Anda bisa menambahkan jaringan EVM apa pun di **Pengaturan → Jaringan**, asalkan
 jaringan itu punya semua yang dibutuhkan dompet Vela: sebelas kontrak standar
 (EntryPoint ERC-4337 v0.7, kontrak Safe v1.4.1, modul 4337 dan modul passkey milik Safe,
-MultiSend, Multicall3, dan dua deployer deterministik) serta precompile **RIP-7212**
+MultiSend, Multicall3, dan dua deployer deterministik) serta precompile **EIP-7951 / RIP-7212**
 yang memverifikasi tanda tangan passkey di alamat `0x100`. Dompet memeriksa semuanya,
 termasuk uji tanda tangan sungguhan terhadap precompile itu, sebelum mengizinkan Anda
-menambahkan jaringannya.
+menambahkan jaringannya. Precompile ini punya dua nama: EIP-7951 di Ethereum, aktif sejak
+upgrade Fusaka (Desember 2025), dan RIP-7212 di rollup. Antarmukanya sama, dan dompet
+menerima keduanya.
 
 Precompile ini syarat mutlak. Alamatnya adalah bagian dari cara setiap alamat Vela
 dihitung, jadi tidak ada verifier cadangan dan tidak ada cara untuk men-deploy-nya

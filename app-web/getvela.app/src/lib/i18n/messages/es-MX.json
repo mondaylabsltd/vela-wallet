@@ -261,7 +261,7 @@
 		},
 		"networks": {
 			"heading": "24 redes integradas. Agrega la tuya",
-			"body": "Tu wallet tiene la misma dirección en todas las redes. Cuando agregas otra cadena EVM, Vela verifica que tenga el precompilado RIP-7212 y los contratos de Safe y ERC-4337 que necesita. Si faltan algunos contratos, la página de <a href=\"/chain-setup\">configuración de cadenas</a> te dice cuáles y despliega los que cualquiera puede desplegar.",
+			"body": "Tu wallet tiene la misma dirección en todas las redes. Cuando agregas otra cadena EVM, Vela verifica que tenga el precompilado EIP-7951 / RIP-7212 y los contratos de Safe y ERC-4337 que necesita. Si faltan algunos contratos, la página de <a href=\"/chain-setup\">configuración de cadenas</a> te dice cuáles y despliega los que cualquiera puede desplegar.",
 			"link": "Redes y comisiones, en detalle"
 		},
 		"faq": {
@@ -487,7 +487,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "cabecedf1819",
+		"home": "a9482909de80",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
 		"getStarted": "8bcd961ee0e8"

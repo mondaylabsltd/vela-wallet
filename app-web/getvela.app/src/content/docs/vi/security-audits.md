@@ -1,7 +1,7 @@
 ---
 title: Kiểm toán & vấn đề đã biết
 description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
@@ -89,7 +89,7 @@ Các lần rà soát bao phủ những hợp đồng này ở phiên bản v0.2.
 Từ khi phát hành chưa có lỗ hổng cấp hợp đồng nào được công bố, và các hợp đồng passkey
 nằm trong phạm vi chương trình thưởng lỗi của Safe Foundation.
 
-Chữ ký passkey được xác minh bởi precompile **RIP-7212** của chuỗi, không có bộ xác minh
+Chữ ký passkey được xác minh bởi precompile **EIP-7951 / RIP-7212** của chuỗi, không có bộ xác minh
 dự phòng. Trước khi bật một mạng, ứng dụng kiểm tra precompile bằng một chữ ký thật. Hai
 lưu ý: đặc tả RIP-7212 ban đầu có một số lỗi ở các trường hợp biên mà
 [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) đã sửa (chúng chỉ ảnh hưởng tới những

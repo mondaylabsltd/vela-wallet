@@ -167,3 +167,7 @@ catalog already wrote it). New adjective: *selbst hostbar* for "self-hostable".
 | docs `faq`, `whitepaper`, `self-hosting` | all-MIT wording; „(Rust, MIT)“; licence-file sentence deleted | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees` („… aktiv seit dem Fusaka-Upgrade (Dezember 2025), und RIP-7212 auf Rollups …“). Compounds with the spaced slash split wrongly („EIP-7951 / RIP-7212-Precompile“ couples only RIP-7212), so they are now written unspaced, „EIP-7951/RIP-7212-Precompile“, in 8 doc lines and `home.networks.body`; the two standalone uses (whitepaper) keep the site form „EIP-7951 / RIP-7212“.

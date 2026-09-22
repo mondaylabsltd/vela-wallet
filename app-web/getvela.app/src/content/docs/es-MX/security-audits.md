@@ -1,7 +1,7 @@
 ---
 title: Auditorías y problemas conocidos
 description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
-source: 47e7102c4188
+source: c4c50ad89f2f
 ---
 
 «Auditado» es una afirmación sobre un código específico en una versión específica,
@@ -94,7 +94,7 @@ No se ha divulgado ninguna vulnerabilidad a nivel de contrato desde su lanzamien
 y los contratos de passkey entran en el alcance del programa de recompensas de la
 Safe Foundation.
 
-Las firmas de passkey las verifica el precompilado **RIP-7212** de la cadena, sin
+Las firmas de passkey las verifica el precompilado **EIP-7951 / RIP-7212** de la cadena, sin
 verificador de respaldo. Antes de habilitar una red, la app prueba el precompilado
 con una firma real. Dos salvedades: la especificación original de RIP-7212 tiene
 fallas en casos límite que corrige [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951)

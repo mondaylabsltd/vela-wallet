@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 怎麼運作，以及使用它時你需要、和不需要信任什麼：帳戶、金鑰、手續費、威脅模型、復原，以及 Vela 消失了會怎樣。"
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -62,7 +62,7 @@ Vela 應用程式——網頁版、瀏覽器擴充功能、桌面版（macOS/Win
         ▼
 EVM 鏈
   EntryPoint v0.7 → 你的 Safe v1.4.1 → Safe 4337 模組
-  Safe 密碼金鑰模組透過 RIP-7212 預編譯合約驗證 P-256 簽章
+  Safe 密碼金鑰模組透過 EIP-7951 / RIP-7212 預編譯合約驗證 P-256 簽章
 ```
 
 配套服務全都開源：把新錢包註冊到鏈上註冊表並回應查詢的**公鑰索引**、**鏈資料**目錄，以及
@@ -101,7 +101,7 @@ getvela.app 和它的子網域上的頁面，這讓它們能防範釣魚；同�
 3. **簽署**：驗證器確認是你本人之後，對操作的雜湊值產生 WebAuthn 斷言。
 4. **編碼**成密碼金鑰模組需要的 Safe 簽章格式。
 5. **送出**：把簽好的操作交給中繼，由它呼叫 EntryPoint。
-6. **鏈上驗證**：密碼金鑰模組先用 RIP-7212 預編譯合約檢查 P-256 簽章，Safe 才會執行任何動作。沒有備用
+6. **鏈上驗證**：密碼金鑰模組先用 EIP-7951 / RIP-7212 預編譯合約檢查 P-256 簽章，Safe 才會執行任何動作。沒有備用
    驗證器；不支援這個預編譯合約的網路無法新增。
 
 ### 手續費
@@ -131,7 +131,7 @@ getvela.app 和它的子網域上的頁面，這讓它們能防範釣魚；同�
 Vela 內建 24 條網路——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、
 Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、
 Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它會檢查的 11 份
-合約和 RIP-7212 預編譯合約的 EVM 網路。（第二到第七把金鑰還需要該網路上有 Safe 的密碼金鑰簽署器工廠合約，
+合約和 EIP-7951 / RIP-7212 預編譯合約的 EVM 網路。（第二到第七把金鑰還需要該網路上有 Safe 的密碼金鑰簽署器工廠合約，
 目前的檢查還沒涵蓋這一項。）
 
 ## 安全模型
@@ -150,7 +150,7 @@ Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受
 
 **你需要信任的**
 
-- **合約**：Safe、它的 4337 模組和密碼金鑰模組、EntryPoint v0.7，以及鏈上的 RIP-7212 預編譯合約。
+- **合約**：Safe、它的 4337 模組和密碼金鑰模組、EntryPoint v0.7，以及鏈上的 EIP-7951 / RIP-7212 預編譯合約。
 - **網域**：getvela.app 或它任何子網域上的頁面，都能要求你的金鑰簽署。
 - 存放你金鑰的**驗證器**，以及——對同步的密碼金鑰來說——它背後的 Apple、Google 或密碼管理工具帳號。
 - **你用來簽署的那個應用程式的程式碼。** 是它組出交易，並告訴你交易在做什麼。被竄改的應用程式可以給你看一樣
@@ -202,7 +202,7 @@ Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受
 接手架設。唯一搬不走的，是密碼金鑰的依賴方 `getvela.app`：把網頁錢包放到別的網域上，得到的是另一個錢包。對已經存在的錢包來說，
 Vela 瀏覽器擴充功能（取得授權後可以使用 `getvela.app` 的密碼金鑰）和你自己建置的應用程式（搭配手機或安全
 金鑰）不靠 getvela.app 也能繼續使用。[自架指南](/zh-TW/docs/self-hosting#if-getvela-app-disappears)
-逐一說明了每一條路和它的限制。要在某條鏈上獨立存取錢包，還需要那條鏈支援 RIP-7212。
+逐一說明了每一條路和它的限制。要在某條鏈上獨立存取錢包，還需要那條鏈支援 EIP-7951 / RIP-7212。
 
 ## 隱私
 
@@ -235,6 +235,6 @@ alpha 階段的軟體看待。詳情請看[稽核與已知問題](/zh-TW/docs/se
 - EIP-1271——合約的簽章驗證
 - ERC-7730——清晰簽署描述檔
 - EIP-5792——錢包批次呼叫（`wallet_sendCalls`）
-- RIP-7212 / EIP-7951——P-256 簽章驗證預編譯合約
+- EIP-7951 / RIP-7212——P-256 簽章驗證預編譯合約
 - WebAuthn / FIDO2——密碼金鑰
 - [Safe 智慧帳戶 v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

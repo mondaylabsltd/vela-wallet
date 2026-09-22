@@ -1,7 +1,7 @@
 ---
 title: Réseaux et frais
 description: "Les 24 réseaux intégrés à Vela, comment en ajouter un autre, comment les frais d'une transaction sont calculés exactement et à qui ils reviennent, et ce qui se passe quand un relais n'a plus de gas."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -41,9 +41,12 @@ Vous pouvez ajouter n'importe quel réseau EVM dans **Réglages → Réseaux**, 
 condition qu'il dispose de ce dont un portefeuille Vela a besoin : onze contrats
 standards (l'EntryPoint ERC-4337 v0.7, les contrats Safe v1.4.1, les modules 4337
 et passkey de Safe, MultiSend, Multicall3 et deux déployeurs déterministes) et le
-précompilé **RIP-7212**, qui vérifie les signatures de passkey à l'adresse `0x100`.
-Le portefeuille vérifie tous ces éléments, y compris un vrai contrôle de signature
-auprès du précompilé, avant de vous laisser ajouter le réseau.
+précompilé **EIP-7951 / RIP-7212**, qui vérifie les signatures de passkey à
+l'adresse `0x100`. Le portefeuille vérifie tous ces éléments, y compris un vrai
+contrôle de signature auprès du précompilé, avant de vous laisser ajouter le
+réseau. Le précompilé porte deux noms : EIP-7951 sur Ethereum, actif depuis la mise
+à niveau Fusaka (décembre 2025), et RIP-7212 sur les rollups. L'interface est la
+même, et le portefeuille accepte l'un comme l'autre.
 
 Le précompilé est une exigence absolue. Son adresse entre dans le calcul de chaque
 adresse Vela : il n'existe donc aucun vérificateur de repli, ni aucun moyen d'en

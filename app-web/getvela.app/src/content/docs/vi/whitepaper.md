@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -73,7 +73,7 @@ Relay (vela-relay, tự triển khai được)
         ▼
 Chuỗi EVM
   EntryPoint v0.7 → Safe v1.4.1 của bạn → mô-đun 4337 của Safe
-  Mô-đun passkey của Safe xác minh P-256 qua precompile RIP-7212
+  Mô-đun passkey của Safe xác minh P-256 qua precompile EIP-7951 / RIP-7212
 ```
 
 Các dịch vụ hỗ trợ, tất cả đều mã nguồn mở: một **chỉ mục khóa công khai** đăng ký ví mới
@@ -123,7 +123,7 @@ sẽ quay lại bên dưới.
    tác.
 4. **Mã hóa** xác nhận đó thành dạng chữ ký Safe mà mô-đun passkey mong đợi.
 5. **Gửi** thao tác đã ký tới relay, relay gọi EntryPoint.
-6. **Xác minh trên chuỗi**: mô-đun passkey kiểm tra chữ ký P-256 bằng precompile RIP-7212
+6. **Xác minh trên chuỗi**: mô-đun passkey kiểm tra chữ ký P-256 bằng precompile EIP-7951 / RIP-7212
    trước khi Safe thực thi bất cứ điều gì. Không có bộ xác minh dự phòng; một mạng không có
    precompile thì không thể thêm vào.
 
@@ -164,7 +164,7 @@ chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
 Vela có 24 mạng tích hợp sẵn — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — và chấp nhận bất kỳ
-mạng EVM nào có mười một hợp đồng mà nó kiểm tra cùng precompile RIP-7212. (Khóa thứ hai tới
+mạng EVM nào có mười một hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. (Khóa thứ hai tới
 thứ bảy còn cần factory tạo bộ ký passkey của Safe trên mạng đó, thứ mà bước kiểm tra chưa
 bao gồm.)
 
@@ -187,7 +187,7 @@ lưu ký mang lại cho bạn là Vela không phải một bên thứ hai có đ
 **Những gì bạn phải tin**
 
 - **Các hợp đồng**: Safe, mô-đun 4337 và mô-đun passkey của nó, EntryPoint v0.7, và precompile
-  RIP-7212 của chuỗi.
+  EIP-7951 / RIP-7212 của chuỗi.
 - **Tên miền**: bất kỳ trang nào được phục vụ từ getvela.app hoặc một tên miền con của nó đều
   có thể xin các khóa của bạn một chữ ký.
 - **Các trình xác thực** giữ khóa của bạn, và — với passkey được đồng bộ — tài khoản Apple,
@@ -264,7 +264,7 @@ ra một ví khác. Với các ví
 tự biên dịch (với điện thoại hoặc khóa bảo mật) vẫn tiếp tục hoạt động khi không có
 getvela.app. [Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) trình
 bày rõ từng con đường và giới hạn của nó. Truy cập độc lập trên một chuỗi cũng đòi hỏi chuỗi đó
-hỗ trợ RIP-7212.
+hỗ trợ EIP-7951 / RIP-7212.
 
 ## Quyền riêng tư
 
@@ -304,6 +304,6 @@ Vela là phần mềm alpha. Chi tiết: [kiểm toán & vấn đề đã biết
 - EIP-1271 — Xác thực chữ ký cho hợp đồng
 - ERC-7730 — Bộ mô tả cho ký minh bạch
 - EIP-5792 — Gộp lệnh gọi của ví (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — Precompile xác minh chữ ký P-256
+- EIP-7951 / RIP-7212 — Precompile xác minh chữ ký P-256
 - WebAuthn / FIDO2 — Passkey
 - [Tài khoản thông minh Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

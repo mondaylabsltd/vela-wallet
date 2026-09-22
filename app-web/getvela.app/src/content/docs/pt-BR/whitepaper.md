@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -81,7 +81,7 @@ Relay (vela-relay, auto-hospedável)
         ▼
 Rede EVM
   EntryPoint v0.7 → o seu Safe v1.4.1 → módulo 4337 da Safe
-  O módulo de passkey da Safe verifica P-256 pelo pré-compilado RIP-7212
+  O módulo de passkey da Safe verifica P-256 pelo pré-compilado EIP-7951 / RIP-7212
 ```
 
 Serviços de apoio, todos de código aberto: um **índice de chaves públicas** que
@@ -139,7 +139,7 @@ adiante.
 4. **Codificar** a asserção como a assinatura do Safe que o módulo de passkey espera.
 5. **Enviar** a operação assinada ao relay, que chama o EntryPoint.
 6. **Verificar on-chain**: o módulo de passkey confere a assinatura P-256 com o
-   pré-compilado RIP-7212 antes de o Safe executar qualquer coisa. Não existe
+   pré-compilado EIP-7951 / RIP-7212 antes de o Safe executar qualquer coisa. Não existe
    verificador alternativo; uma rede sem o pré-compilado não pode ser adicionada.
 
 ### Taxas
@@ -183,7 +183,7 @@ A Vela tem 24 redes integradas — Ethereum, BNB Chain, Polygon, Arbitrum, Optim
 Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
 aceita qualquer rede EVM que tenha os onze contratos que ela verifica e o
-pré-compilado RIP-7212. (As chaves dois a sete também precisam da fábrica de
+pré-compilado EIP-7951 / RIP-7212. (As chaves dois a sete também precisam da fábrica de
 signatários de passkey da Safe nessa rede, o que a verificação ainda não cobre.)
 
 ## Modelo de segurança
@@ -207,7 +207,7 @@ a Vela não é uma segunda parte capaz de fazer isso.
 **Em que você confia**
 
 - Nos **contratos**: Safe, os módulos 4337 e de passkey dele, EntryPoint v0.7 e o
-  pré-compilado RIP-7212 da rede.
+  pré-compilado EIP-7951 / RIP-7212 da rede.
 - No **domínio**: qualquer página servida pelo getvela.app ou por um dos seus
   subdomínios pode pedir uma assinatura às suas chaves.
 - Nos **autenticadores** que guardam as suas chaves e — para passkeys sincronizadas
@@ -294,7 +294,7 @@ passkeys do `getvela.app` por permissão) e os apps que você mesmo compilar (co
 celular ou uma chave de segurança) continuam funcionando sem o getvela.app. O
 [guia de auto-hospedagem](/pt-BR/docs/self-hosting#if-getvela-app-disappears)
 detalha cada caminho e os seus limites. O acesso independente a uma rede também
-exige que essa rede suporte o RIP-7212.
+exige que essa rede suporte o EIP-7951 / RIP-7212.
 
 ## Privacidade
 
@@ -337,6 +337,6 @@ Detalhes: [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).
 - EIP-1271 — Validação de assinaturas para contratos
 - ERC-7730 — Descritores de assinatura legível
 - EIP-5792 — Agrupamento de chamadas na carteira (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — Pré-compilado de verificação de assinaturas P-256
+- EIP-7951 / RIP-7212 — Pré-compilado de verificação de assinaturas P-256
 - WebAuthn / FIDO2 — Passkeys
 - [Safe smart account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

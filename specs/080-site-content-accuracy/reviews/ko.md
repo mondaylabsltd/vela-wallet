@@ -198,3 +198,8 @@ single-string axes; no High or Medium left open. `messages.test.ts -t "ko"` pass
 | docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; (Rust, MIT); licence-file sentence deleted | — | |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees` (EIP-7951이며 / RIP-7212입니다, 롤업) after the signature-check sentence.
+Read every `EIP-7951 / RIP-7212` line in the docs and `home.networks.body`: the particle still attaches to RIP-7212 (…RIP-7212를 지원해야), so all read correctly; nothing else changed.

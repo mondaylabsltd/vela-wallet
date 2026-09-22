@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
 description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: fdc50dbbf13a
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -40,9 +40,11 @@ bạn, không phụ thuộc vào chuỗi.
 Bạn có thể thêm bất kỳ mạng EVM nào trong **Cài đặt → Mạng lưới**, miễn là mạng đó có
 đủ những gì một ví Vela cần: mười một hợp đồng tiêu chuẩn (EntryPoint v0.7 của
 ERC-4337, các hợp đồng Safe v1.4.1, mô-đun 4337 và mô-đun passkey của Safe, MultiSend,
-Multicall3 và hai bộ triển khai tất định) và precompile **RIP-7212** xác minh chữ ký
+Multicall3 và hai bộ triển khai tất định) và precompile **EIP-7951 / RIP-7212** xác minh chữ ký
 passkey tại địa chỉ `0x100`. Ví kiểm tra tất cả những thứ đó, bao gồm cả một lần kiểm
-tra chữ ký thật với precompile, trước khi cho bạn thêm mạng.
+tra chữ ký thật với precompile, trước khi cho bạn thêm mạng. Precompile này có hai tên:
+EIP-7951 trên Ethereum, có hiệu lực từ bản nâng cấp Fusaka (tháng 12/2025), và RIP-7212
+trên các rollup. Giao diện giống hệt nhau, và ví chấp nhận cả hai.
 
 Precompile là yêu cầu bắt buộc. Địa chỉ của nó là một phần trong cách tính mọi địa chỉ
 Vela, nên không có bộ xác minh dự phòng và cũng không có cách nào triển khai bù về sau.

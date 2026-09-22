@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -82,7 +82,7 @@ Relay (vela-relay, selbst hostbar)
         ▼
 EVM-Chain
   EntryPoint v0.7 → dein Safe v1.4.1 → Safe-4337-Modul
-  Passkey-Modul von Safe prüft P-256 über das RIP-7212-Precompile
+  Passkey-Modul von Safe prüft P-256 über das EIP-7951/RIP-7212-Precompile
 ```
 
 Unterstützende Dienste, alle Open Source: ein **Public-Key-Index**, der neue Wallets in
@@ -141,7 +141,7 @@ Papier weiter unten zurückkommt.
 5. **Einreichen:** Die signierte Operation geht an das Relay, das den EntryPoint
    aufruft.
 6. **On-chain prüfen:** Das Passkey-Modul prüft die P-256-Signatur mit dem
-   RIP-7212-Precompile, bevor das Safe irgendetwas ausführt. Es gibt keinen
+   EIP-7951/RIP-7212-Precompile, bevor das Safe irgendetwas ausführt. Es gibt keinen
    Ersatz-Verifizierer; ein Netzwerk ohne das Precompile lässt sich nicht hinzufügen.
 
 ### Gebühren
@@ -188,7 +188,7 @@ Vela hat 24 eingebaute Netzwerke – Ethereum, BNB Chain, Polygon, Arbitrum, Opt
 Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume und XRPL EVM – und
 akzeptiert jedes EVM-Netzwerk, das die elf Verträge hat, auf die es prüft, sowie das
-RIP-7212-Precompile. (Die Schlüssel zwei bis sieben brauchen in diesem Netzwerk
+EIP-7951/RIP-7212-Precompile. (Die Schlüssel zwei bis sieben brauchen in diesem Netzwerk
 außerdem die Passkey-Signer-Factory von Safe, die die Prüfung noch nicht abdeckt.)
 
 ## Sicherheitsmodell
@@ -211,7 +211,7 @@ Was dir Selbstverwahrung gibt: Vela ist keine zweite Partei, die das kann.
 **Worauf du vertraust**
 
 - Die **Verträge**: Safe, sein 4337- und sein Passkey-Modul, EntryPoint v0.7 und das
-  RIP-7212-Precompile der Chain.
+  EIP-7951/RIP-7212-Precompile der Chain.
 - Die **Domain**: Jede Seite, die von getvela.app oder einer ihrer Subdomains
   ausgeliefert wird, kann deine Schlüssel um eine Signatur bitten.
 - Die **Authentifikatoren**, die deine Schlüssel halten, und – bei synchronisierten
@@ -300,7 +300,7 @@ eine andere Wallet. Für bestehende Wallets funktionieren die Vela-Browser-Erwei
 (mit einem Handy oder Sicherheitsschlüssel) auch ohne getvela.app weiter. Die
 [Anleitung zum Selbsthosten](/de/docs/self-hosting#if-getvela-app-disappears)
 beschreibt jeden Weg und seine Grenzen. Unabhängiger Zugang auf einer Chain setzt
-außerdem voraus, dass diese Chain RIP-7212 unterstützt.
+außerdem voraus, dass diese Chain EIP-7951 / RIP-7212 unterstützt.
 
 ## Datenschutz
 
@@ -345,6 +345,6 @@ es nicht gleichwertig. Behandle Vela als Alpha-Software. Details:
 - EIP-1271 – Signaturprüfung für Verträge
 - ERC-7730 – Deskriptoren für die Klartext-Signatur
 - EIP-5792 – Bündeln von Wallet-Aufrufen (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 – Precompile zur Prüfung von P-256-Signaturen
+- EIP-7951 / RIP-7212 – Precompile zur Prüfung von P-256-Signaturen
 - WebAuthn / FIDO2 – Passkeys
 - [Safe Smart Account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

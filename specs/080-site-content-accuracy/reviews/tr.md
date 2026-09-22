@@ -210,3 +210,8 @@ anahtarı*, *ücret teklifi*, *bedel* (trade-off), *genel ERC-4337 bundler'ları
 | docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees.md` ("Bu ön derlemenin iki adı var: Ethereum'da Fusaka yükseltmesinden (Aralık 2025) beri etkin olan EIP-7951 ve rollup'larda RIP-7212…"), at the end of the paragraph with the signature check.
+Read all 10 `EIP-7951 / RIP-7212` lines in the docs and `home.networks.body`: every one stays grammatical (*EIP-7951 / RIP-7212 ön derlemesi*, suffix *RIP-7212'yi* still follows the last name read aloud); no edits needed. The security-audits caveat keeps plain RIP-7212.

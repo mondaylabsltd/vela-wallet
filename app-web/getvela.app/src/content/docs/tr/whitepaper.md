@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: d3b8cf6739f8
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -80,7 +80,7 @@ Relay (vela-relay, kendi sunucunuzda barındırılabilir)
         ▼
 EVM zinciri
   EntryPoint v0.7 → Safe v1.4.1 hesabınız → Safe 4337 modülü
-  Safe geçiş anahtarı modülü P-256'yı RIP-7212 ön derlemesiyle doğrular
+  Safe geçiş anahtarı modülü P-256'yı EIP-7951 / RIP-7212 ön derlemesiyle doğrular
 ```
 
 Destek servisleri, hepsi açık kaynak: yeni cüzdanları zincir üstündeki bir kayıt
@@ -133,7 +133,7 @@ ama bu aynı zamanda bu belgenin aşağıda yeniden ele aldığı bir bağımlı
 4. Onay, geçiş anahtarı modülünün beklediği Safe imzası olarak **kodlanır**.
 5. İmzalı işlem, EntryPoint'i çağıran relay'e **gönderilir**.
 6. **Zincir üstünde doğrulanır**: Safe herhangi bir şeyi yürütmeden önce geçiş anahtarı
-   modülü P-256 imzasını RIP-7212 ön derlemesiyle kontrol eder. Yedek bir doğrulayıcı
+   modülü P-256 imzasını EIP-7951 / RIP-7212 ön derlemesiyle kontrol eder. Yedek bir doğrulayıcı
    yoktur; ön derlemesi olmayan bir ağ eklenemez.
 
 ### Ücretler
@@ -175,7 +175,7 @@ onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı bir onay v
 Vela'da 24 yerleşik ağ var — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve kontrol ettiği
-on bir sözleşmeye ve RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. (İkinci ila
+on bir sözleşmeye ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. (İkinci ila
 yedinci anahtarlar o ağda Safe'in geçiş anahtarı imzalayıcı fabrikasına da ihtiyaç
 duyar; kontrol bunu henüz kapsamıyor.)
 
@@ -200,7 +200,7 @@ olmamasıdır.
 **Neye güveniyorsunuz**
 
 - **Sözleşmelere**: Safe, onun 4337 ve geçiş anahtarı modülleri, EntryPoint v0.7 ve
-  zincirin RIP-7212 ön derlemesi.
+  zincirin EIP-7951 / RIP-7212 ön derlemesi.
 - **Alan adına**: getvela.app'ten ya da alt alan adlarından birinden sunulan her sayfa,
   anahtarlarınızdan imza isteyebilir.
 - Anahtarlarınızı tutan **kimlik doğrulayıcılara** ve — eşitlenen geçiş anahtarları
@@ -284,7 +284,7 @@ anahtarlarını kullanabilir) ve kendi derlediğiniz uygulamalar (bir telefon ya
 güvenlik anahtarıyla) getvela.app olmadan çalışmaya devam eder.
 [Kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting#if-getvela-app-disappears)
 her yolu ve sınırlarını tek tek açıklıyor. Bir zincirde bağımsız erişim, o zincirin
-RIP-7212'yi desteklemesini de gerektirir.
+EIP-7951 / RIP-7212'yi desteklemesini de gerektirir.
 
 ## Gizlilik
 
@@ -328,6 +328,6 @@ denetime denk değil. Vela'yı alfa yazılım olarak görün. Ayrıntılar:
 - EIP-1271 — Sözleşmeler için imza doğrulama
 - ERC-7730 — Açık imzalama tanımlayıcıları
 - EIP-5792 — Cüzdan çağrılarını toplu gönderme (`wallet_sendCalls`)
-- RIP-7212 / EIP-7951 — P-256 imza doğrulama ön derlemesi
+- EIP-7951 / RIP-7212 — P-256 imza doğrulama ön derlemesi
 - WebAuthn / FIDO2 — Geçiş anahtarları
 - [Safe akıllı hesabı v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

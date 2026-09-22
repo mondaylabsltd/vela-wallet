@@ -165,3 +165,8 @@ single-string axes; no High or Medium left open. `messages.test.ts -t "vi"` pass
 | docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; (Rust, MIT); licence-file sentence deleted | — | |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees` («Precompile này có hai tên: … (tháng 12/2025) … trên các rollup») after the signature-check sentence.
+Read every `EIP-7951 / RIP-7212` line in the docs and `home.networks.body`: "precompile EIP-7951 / RIP-7212" reads as a name after the noun, so no change was needed.

@@ -169,3 +169,8 @@ English, as networks-and-fees does), iCloud 鑰匙圈 / Google 密碼管理工�
 
 Checks: `bunx vitest run src/lib/i18n/messages.test.ts -t "zh-TW"` 11/11 pass; `docs.test.ts` passes; no unprefixed
 `](/docs` links; no index-licence-pending sentence left in the catalog or docs.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence (EIP-7951 on Ethereum since Fusaka, December 2025; RIP-7212 on rollups; same interface, the wallet accepts either) to networks-and-fees.md after the real-signature-check sentence; "rollup" kept in English as in zh, and the paragraph break before 預編譯合約是硬性… kept.
+Read every `EIP-7951 / RIP-7212` line (docs + `home.networks.body`): all read naturally before 預編譯合約 / after 支援, no counter or particle issues, no change needed; security-audits keeps plain 「最初／原本的 RIP-7212 規格／規範」.

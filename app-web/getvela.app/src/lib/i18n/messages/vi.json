@@ -261,7 +261,7 @@
 		},
 		"networks": {
 			"heading": "24 mạng tích hợp sẵn. Thêm mạng của riêng bạn",
-			"body": "Ví của bạn có cùng một địa chỉ trên mọi mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có precompile RIP-7212 cùng các hợp đồng Safe và ERC-4337 cần thiết hay không. Nếu thiếu một số hợp đồng, trang <a href=\"/chain-setup\">thiết lập chuỗi</a> cho biết thiếu những gì, và triển khai những hợp đồng mà ai cũng triển khai được.",
+			"body": "Ví của bạn có cùng một địa chỉ trên mọi mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có precompile EIP-7951 / RIP-7212 cùng các hợp đồng Safe và ERC-4337 cần thiết hay không. Nếu thiếu một số hợp đồng, trang <a href=\"/chain-setup\">thiết lập chuỗi</a> cho biết thiếu những gì, và triển khai những hợp đồng mà ai cũng triển khai được.",
 			"link": "Mạng và phí, chi tiết"
 		},
 		"faq": {
@@ -487,7 +487,7 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "cabecedf1819",
+		"home": "a9482909de80",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
 		"getStarted": "8bcd961ee0e8"

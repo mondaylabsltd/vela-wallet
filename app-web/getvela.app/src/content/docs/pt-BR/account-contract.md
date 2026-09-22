@@ -1,7 +1,7 @@
 ---
 title: O contrato da conta
 description: "A sua carteira Vela é um Safe v1.4.1 sem modificações. Nenhum contrato no caminho até o seu dinheiro foi escrito pela Vela — aqui estão exatamente quais contratos são, o que isso garante e quanto custa."
-source: 588a6ba6e672
+source: 17fbc25a3149
 ---
 
 # O contrato da conta
@@ -79,7 +79,7 @@ Ser padrão tem um preço:
   antes de existir qualquer coisa on-chain, então você pode receber nele na hora; a
   sua primeira transação de saída em cada rede paga a implantação do contrato.
 - **Nem toda rede se qualifica.** As assinaturas de passkey são verificadas com o
-  pré-compilado **RIP-7212**, e o endereço dele faz parte dos dados de configuração
+  pré-compilado **EIP-7951 / RIP-7212**, e o endereço dele faz parte dos dados de configuração
   de toda carteira, então uma rede sem ele simplesmente não consegue rodar a Vela.
 - **O risco da Safe passa a ser o seu risco.** Confiar num contrato amplamente usado
   continua sendo confiar num contrato. A Vela não acrescentou um segundo contrato

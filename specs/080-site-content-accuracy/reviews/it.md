@@ -179,3 +179,7 @@ ospitare in proprio») rather than an adjective like «ospitabile», which reads
 | docs `faq`, `whitepaper`, `self-hosting` | all-MIT wording; «(Rust, MIT)»; licence-file sentence deleted | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (P-256 naming)
+
+Added the two-names sentence to `networks-and-fees` («… attivo dall'upgrade Fusaka (dicembre 2025), e RIP-7212 sui rollup …»). Every other «EIP-7951 / RIP-7212» already reads correctly: Italian puts the name after the noun («il precompilato EIP-7951 / RIP-7212»), so there was no compound or agreement to fix.
