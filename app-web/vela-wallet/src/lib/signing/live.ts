@@ -218,10 +218,38 @@ function calldataBytes(paramsJson: string): number {
 	}
 }
 
+/** The sentence under a refused request (spec 081). */
+function selfCallBlockedText(
+	blocked: NonNullable<SignView['blocked']>,
+	m: SigningMessages
+): string {
+	if (blocked.function === 'SafeTx') return m.selfCallBlockedSafeTx;
+	if (blocked.leg_index != null) {
+		return fill(m.selfCallBlockedLegBody, {
+			index: String(blocked.leg_index),
+			function: blocked.function
+		});
+	}
+	return fill(m.selfCallBlockedBody, { function: blocked.function });
+}
+
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
 	const bytes = calldataBytes(sign.request?.params_json ?? '[]');
 	const blocks: Block[] = [];
+
+	/*
+	 * Spec 081: the core refused this request outright — it would have changed
+	 * who controls the account. Say so and stop: the decoded intent below would
+	 * describe a transaction nobody can sign, and reading it as an option is
+	 * exactly the confusion the refusal exists to prevent. The slider is closed
+	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
+	 */
+	if (sign.blocked) {
+		blocks.push({ kind: 'intent', text: m.selfCallBlockedTitle, tone: 'danger' });
+		blocks.push({ kind: 'warning', tone: 'danger', text: selfCallBlockedText(sign.blocked, m) });
+		return blocks;
+	}
 
 	if (clear.surface === 'loading' || clear.resolving) {
 		blocks.push({ kind: 'sentence', text: m.choosePrompt, tone: 'neutral' });

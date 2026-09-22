@@ -132,6 +132,11 @@ pub struct SigningStrings {
     pub error_generic: SharedString,
     pub error_network: SharedString,
     pub error_unlimited: SharedString,
+    /// Spec 081: the request would have changed who controls the account.
+    pub blocked_title: SharedString,
+    pub blocked_body: String,
+    pub blocked_leg_body: String,
+    pub blocked_safe_tx: SharedString,
     pub funding_lead: String,
     /// The gas-account top-up, drawn IN the sheet (never a second modal).
     pub funding_title: SharedString,
@@ -320,6 +325,12 @@ impl SigningStrings {
             error_generic: loc.t("send.txErrorGeneric"),
             error_network: loc.t("send.lock.netNotFound"),
             error_unlimited: a("unlimitedDisabled"),
+            blocked_title: s("selfCallBlockedTitle"),
+            blocked_body: loc.t("componentsUi.signing.selfCallBlockedBody").to_string(),
+            blocked_leg_body: loc
+                .t("componentsUi.signing.selfCallBlockedLegBody")
+                .to_string(),
+            blocked_safe_tx: s("selfCallBlockedSafeTx"),
             funding_lead: loc.t("componentsUi.funding.lead").to_string(),
             funding_title: loc.t("componentsUi.funding.title"),
             funding_address_label: loc.t("componentsUi.funding.addressLabel"),

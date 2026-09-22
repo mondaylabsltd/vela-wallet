@@ -276,6 +276,22 @@ object SigningLive {
     }
 
     fun statusBlocks(sign: SignView, s: VelaStrings): List<SigningBlock> = buildList {
+        // Spec 081: the core refused this request outright — it would have
+        // changed who controls the account. Nothing else on the sheet matters,
+        // and `confirm_gate_open` is already false, so say it and stop.
+        sign.blocked?.let { blocked ->
+            add(SigningBlock.Intent(s.s("selfCallBlockedTitle"), SigningTone.Danger))
+            val text = when {
+                blocked.function == "SafeTx" -> s.s("selfCallBlockedSafeTx")
+                blocked.leg_index != null -> s.s(
+                    "selfCallBlockedLegBody",
+                    mapOf("index" to blocked.leg_index.toString(), "function" to blocked.function),
+                )
+                else -> s.s("selfCallBlockedBody", mapOf("function" to blocked.function))
+            }
+            add(SigningBlock.Warning(SigningTone.Danger, text))
+            return@buildList
+        }
         sign.funding?.let { funding ->
             add(SigningBlock.Warning(SigningTone.Caution, s.t("componentsUi.funding.lead", mapOf("symbol" to funding.data.native_symbol))))
         }

@@ -585,6 +585,31 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
         });
     }
 
+    // Spec 081: the core refused the request outright — it would have changed
+    // who controls the account. This is the whole story of the sheet, so it is
+    // said first and in the danger tone; `confirm_gate_open` is already false.
+    if let Some(blocked) = sign.blocked.as_ref() {
+        out.push(Block::Intent {
+            text: s.blocked_title.clone(),
+            tone: Tone::Danger,
+        });
+        let text = if blocked.function == "SafeTx" {
+            s.blocked_safe_tx.to_string()
+        } else if let Some(index) = blocked.leg_index {
+            crate::signing::fill(
+                &s.blocked_leg_body,
+                &[("index", &index.to_string()), ("function", &blocked.function)],
+            )
+        } else {
+            crate::signing::fill(&s.blocked_body, &[("function", &blocked.function)])
+        };
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: SharedString::from(text),
+        });
+        return out;
+    }
+
     if let Some(error) = sign.error.as_ref() {
         // The two the person can act on get their own sentence; the rest share
         // the send flow's, because a wallet should not have two ways of saying

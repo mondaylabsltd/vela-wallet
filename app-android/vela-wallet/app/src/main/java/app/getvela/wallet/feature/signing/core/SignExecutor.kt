@@ -256,6 +256,7 @@ class SignExecutor(
             SignErrorKind.InvalidParams -> "Invalid params"
             SignErrorKind.UnsupportedCapability -> "Unsupported capability"
             SignErrorKind.UnlimitedApproval -> "Unlimited approvals are disabled"
+            SignErrorKind.SelfCallBlocked -> "This request would change who controls the wallet"
             SignErrorKind.FundingCancelled -> "Funding cancelled"
             SignErrorKind.SubmitFailed -> "The transaction could not be submitted"
             SignErrorKind.StaleFeeQuote -> "The fee quote expired"

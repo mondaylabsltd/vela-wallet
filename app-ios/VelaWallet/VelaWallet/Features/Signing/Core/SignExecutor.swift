@@ -374,6 +374,7 @@ final class SignExecutor {
         case "invalid_params": return "Invalid params"
         case "unsupported_capability": return "Unsupported capability"
         case "unlimited_approval": return "Unlimited approvals are disabled"
+        case "self_call_blocked": return "This request would change who controls the wallet"
         case "funding_cancelled": return "Funding cancelled"
         case "submit_failed": return "The transaction could not be submitted"
         case "stale_fee_quote": return "The fee quote expired"

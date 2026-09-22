@@ -217,6 +217,25 @@ enum SigningLive {
     static func statusBlocks(sign: SignViewWire, loc: Loc) -> [SigningBlock] {
         var blocks: [SigningBlock] = []
 
+        // Spec 081: the core refused this request outright — it would have
+        // changed who controls the account. Nothing else on the sheet matters,
+        // and `confirmGateOpen` is already false, so say it and stop.
+        if let blocked = sign.blocked {
+            blocks.append(.intent(text: s(loc, "selfCallBlockedTitle"), tone: .danger))
+            let text: String
+            if blocked.function == "SafeTx" {
+                text = s(loc, "selfCallBlockedSafeTx")
+            } else if let leg = blocked.legIndex {
+                text = s(loc, "selfCallBlockedLegBody", [
+                    "index": String(leg), "function": blocked.function,
+                ])
+            } else {
+                text = s(loc, "selfCallBlockedBody", ["function": blocked.function])
+            }
+            blocks.append(.warning(tone: .danger, text: text))
+            return blocks
+        }
+
         if let funding = sign.funding {
             blocks.append(.warning(
                 tone: .caution,
@@ -226,6 +245,8 @@ enum SigningLive {
         if let error = sign.error {
             let text: String = switch error.kind {
             case .unlimitedApproval: a(loc, "unlimitedDisabled")
+            // The blocked sheet above already says it, in full.
+            case .selfCallBlocked: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.

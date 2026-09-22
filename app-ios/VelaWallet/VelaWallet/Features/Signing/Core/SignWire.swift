@@ -69,6 +69,9 @@ enum SignErrorKind: String, Decodable {
     /// -32603 — the final params still carried an unlimited approval, refused
     /// fail-closed.
     case unlimitedApproval = "unlimited_approval"
+    /// -32603 — the request would have changed who controls the account
+    /// (spec 081). Refused by the wallet, not by the person.
+    case selfCallBlocked = "self_call_blocked"
     case fundingCancelled = "funding_cancelled"
     case submitFailed = "submit_failed"
     /// **No response is sent for this one.** The displayed fee quote went
@@ -171,6 +174,15 @@ enum SignNoticeWire: Decodable, Equatable {
     }
 }
 
+/// Why a request is refused outright: the Safe function it would have called,
+/// and where in the request it sat.
+struct SignBlockedViewWire: Decodable, Equatable {
+    let function: String
+    let selector: String
+    let legIndex: Int?
+    let nested: Bool
+}
+
 struct SignViewWire: Decodable, Equatable {
     let surface: SignSurface
     let request: SignRequestViewWire?
@@ -188,12 +200,14 @@ struct SignViewWire: Decodable, Equatable {
     /// Never set by the in-app browser — see `SignNoticeWire`.
     let notice: SignNoticeWire?
     let globalChainId: Int
+    /// Present when the self-call guard refused the request (spec 081).
+    let blocked: SignBlockedViewWire?
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,
         pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: false,
         reconcilePending: false, swipeAction: .none, trackerHandoff: nil,
-        notice: nil, globalChainId: 0
+        notice: nil, globalChainId: 0, blocked: nil
     )
 
     var isVisible: Bool { surface != .hidden }
