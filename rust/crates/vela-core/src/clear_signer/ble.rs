@@ -109,6 +109,28 @@ impl Framer {
         self.last_id
     }
 
+    /// Size the chunk for a negotiated ATT MTU, and say what it became.
+    ///
+    /// A peripheral learns the MTU when the central subscribes, and this is
+    /// the arithmetic every one of them would otherwise write for itself:
+    /// `mtu - 3` is what an ATT value may carry (opcode + handle), and
+    /// [`HEADER`] of that is ours, so the payload is `mtu - 3 - 6`.
+    ///
+    /// [`DEFAULT_CHUNK`] is deliberately NOT that number. It is what the page
+    /// writes with, and a central's oversized write is split into a long write
+    /// by the OS — but a peripheral's **notify** cannot be split: `updateValue`
+    /// truncates at the link's maximum, and a truncated frame is a message
+    /// that never completes (iOS, spec 075 T041, found this). So a peripheral
+    /// calls this once the MTU is known rather than trusting the default.
+    ///
+    /// The result is clamped to [`MIN_CHUNK`]..=[`DEFAULT_CHUNK`]: an MTU
+    /// smaller than the floor still sends, in frames the link will carry.
+    pub fn fit_to_mtu(&mut self, mtu: usize) -> usize {
+        let room = mtu.saturating_sub(3 + HEADER);
+        self.chunk = room.clamp(MIN_CHUNK, DEFAULT_CHUNK);
+        self.chunk
+    }
+
     /// A write the peripheral refused: halve the chunk and try again, down to
     /// [`MIN_CHUNK`]. Returns `false` when there is nothing left to give up —
     /// the caller should report the failure rather than loop.
@@ -405,6 +427,37 @@ mod tests {
                 page.contains(&format!("var {name} = '{uuid}'")),
                 "{name} is not what the page connects to"
             );
+        }
+    }
+
+    /// The MTU ladder, which all three peripherals walk: a notify cannot be
+    /// split, so the frame must fit the link whole.
+    #[test]
+    fn a_frame_fits_the_link_it_is_notified_over() {
+        let mut framer = Framer::new();
+        // The MTU every modern phone negotiates. 244 + 6 would be 250, which
+        // an ATT value of 244 cannot carry — this is the bug that sends.
+        assert_eq!(framer.fit_to_mtu(247), 238);
+        assert_eq!(framer.chunk() + HEADER, 244, "exactly the ATT payload");
+        assert_eq!(framer.fit_to_mtu(185), 176, "an older iPhone");
+        assert_eq!(
+            framer.fit_to_mtu(512),
+            DEFAULT_CHUNK,
+            "never above the default"
+        );
+        // The default MTU: 23 - 3 - 6 = 14, under the floor, so the floor.
+        assert_eq!(framer.fit_to_mtu(23), MIN_CHUNK);
+        assert_eq!(
+            framer.fit_to_mtu(0),
+            MIN_CHUNK,
+            "nonsense still sends something"
+        );
+
+        // Every frame of a real message fits what the link takes.
+        framer.fit_to_mtu(247);
+        let id = framer.next_id();
+        for frame in framer.frames(FLAG_SEALED, id, &[7u8; 2_500]) {
+            assert!(frame.len() <= 247 - 3, "a frame of {} bytes", frame.len());
         }
     }
 
