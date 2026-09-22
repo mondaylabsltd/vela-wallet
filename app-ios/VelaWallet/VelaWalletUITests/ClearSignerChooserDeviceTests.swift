@@ -20,9 +20,11 @@
 //  ceremony (the machine mints no key until a method is picked), which is
 //  exactly what makes the picker reachable on a simulator with no passkeys.
 //
-//  Launched OUTSIDE the parallel space (`-vela.parallelSpace 0`, the argument
-//  domain, so nothing is written): these two want the Welcome screen, and a
-//  session left behind by an earlier class would hide it.
+//  Launched OUTSIDE the parallel space (`VELA_PARALLEL_SPACE=0`): these two
+//  want the Welcome screen, and an earlier class in the same run enters the
+//  space — which writes a fixture wallet. Clearing the flag alone leaves that
+//  record on disk and this class then opens on a wallet, which is the trap
+//  `VelaWalletUITests` is skipped for. `0` LEAVES, and leaving removes it.
 //
 
 import XCTest
@@ -115,9 +117,13 @@ final class ClearSignerChooserDeviceTests: XCTestCase {
 
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        // The argument domain outranks the persisted flag WITHOUT writing
-        // anything, so this class states its own environment rather than
-        // inheriting the last one's (the lesson in `VelaWalletUITests`).
+        // `VELA_PARALLEL_SPACE=0` LEAVES the space, and leaving is the point:
+        // an earlier class in the same run enters it, and entering writes a
+        // fixture wallet into `vela.accounts`. Clearing only the flag (the
+        // argument domain) would leave that record behind and this class would
+        // open on a wallet rather than on Welcome — which is exactly why
+        // `VelaWalletUITests` is skipped in the scheme.
+        app.launchEnvironment["VELA_PARALLEL_SPACE"] = "0"
         app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_THEME"] = "dark"
