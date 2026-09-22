@@ -80,6 +80,13 @@ describe('catalog()', () => {
 		expect(linked('zh')).toContain('href="/zh/docs/');
 	});
 
+	it('keeps a link’s #fragment when it adds the prefix', () => {
+		const tradeoff = (locale: string) => catalog(locale as never).home.tradeoffs.items[0].body;
+		expect(tradeoff('en')).toContain('href="/docs/self-hosting#relay"');
+		expect(tradeoff('ja')).toContain('href="/ja/docs/self-hosting#relay"');
+		expect(tradeoff('ja')).toContain('href="/ja/docs/networks-and-fees#fee"');
+	});
+
 	it('leaves external links and anchors alone', () => {
 		expect(catalog('zh').home.why.p1).toContain(
 			'href="https://docs.cdp.coinbase.com/coinbase-wallet/overview"'
