@@ -66,6 +66,11 @@ class ClearSignerBleWire(
         val secret = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(16).also(random::nextBytes)
         handshake = ClearSignerHandshake(secret, nonce)
+        // Until the central negotiates, 23 is the only MTU BLE promises. The
+        // hello can go out before `onMtuChanged` arrives, and a hello the link
+        // truncated is a handshake that never happens — so the frames start
+        // small and grow, rather than starting at a size nothing guarantees.
+        framer.fitToMtu(DEFAULT_MTU)
     }
 
     private sealed interface Incoming {
@@ -198,15 +203,20 @@ class ClearSignerBleWire(
     // -- frames ---------------------------------------------------------------
 
     /**
-     * The chunk the central's ATT MTU leaves room for (three bytes of GATT
-     * overhead). The core's framer only ever gives ground, and only by
-     * halving, so this walks it down the same way `ble.rs`'s own tests do.
+     * Size the frames for the link the central negotiated.
+     *
+     * The arithmetic is the core's (`Framer::fit_to_mtu`), and it is not the
+     * obvious one: the default chunk of 244 is what the PAGE writes with, and
+     * 244 plus the six-byte header is a 250-byte value an MTU-247 link cannot
+     * carry. A central survives that because the OS turns an oversized write
+     * into a long write. **A notify cannot be split** —
+     * `notifyCharacteristicChanged` hands the stack the whole value and the
+     * link truncates it — and every answer this route carries goes out over
+     * notify, so a frame that does not fit is a signature that never arrives.
      */
     private fun fitChunk(mtu: Int) {
-        val room = (mtu - 3).coerceAtLeast(1)
-        while (framer.chunk().toInt() > room && framer.halve()) {
-            // Down one more step.
-        }
+        val fitted = runCatching { framer.fitToMtu(mtu.toUInt()) }.getOrNull() ?: return
+        VelaLog.event("clearsigner.ble", "the link was sized", "mtu" to mtu.toString(), "chunk" to fitted.toString())
     }
 
     /** One frame into the core's reassembler; non-null when a message is whole. */
@@ -223,11 +233,13 @@ class ClearSignerBleWire(
     /**
      * One whole message out on `p2c`.
      *
-     * A frame the stack refuses is a chunk this connection cannot carry:
-     * halve and send the WHOLE message again, because the central's
-     * reassembler (like ours) starts a message over when its `total`
-     * disagrees with what it already holds. Down to the core's floor, and
-     * then it is a failure rather than a loop.
+     * The size is [fitChunk]'s business, not this one's: by the time a frame
+     * is built it already fits the negotiated link. [halve] here is the
+     * fallback for the case the MTU did not predict — a stack that refuses
+     * the value anyway — and it sends the WHOLE message again, because the
+     * central's reassembler (like ours) starts a message over when its
+     * `total` disagrees with what it already holds. Down to the core's floor,
+     * and then it is a failure rather than a loop.
      */
     private suspend fun push(msgId: UByte, payload: ByteArray, sealed: Boolean): Boolean =
         withContext(Dispatchers.IO) {
@@ -308,4 +320,9 @@ class ClearSignerBleWire(
 
     private fun nextRequestId(): String =
         ByteArray(8).also(ids::nextBytes).joinToString("") { "%02x".format(it) }
+
+    private companion object {
+        /** What BLE promises before a central asks for more. */
+        const val DEFAULT_MTU = 23u
+    }
 }

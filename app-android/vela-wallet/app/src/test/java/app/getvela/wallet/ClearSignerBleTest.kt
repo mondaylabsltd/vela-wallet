@@ -97,6 +97,22 @@ class ClearSignerBleTest {
         "componentsUi.scanner.grantPermission",
     )
 
+    /** One ordinary request: a message to sign. */
+    private val SMALL_REQUEST =
+        """{"intent":{"method":"personal_sign","params":["0x68"],"origin":""},"context":{"chainId":100}}"""
+
+    /** A batch intent's worth of calldata — several KB, and so many frames. */
+    private val BIG_REQUEST = JSONObject()
+        .put(
+            "intent",
+            JSONObject()
+                .put("method", "eth_sendTransaction")
+                .put("params", JSONArray().put(JSONObject().put("data", "0x" + "ab".repeat(2_000))))
+                .put("origin", ""),
+        )
+        .put("context", JSONObject().put("chainId", 100))
+        .toString()
+
     private val repoRoot = File(
         System.getProperty("vela.repo.root")
             ?: error("vela.repo.root not set — run via Gradle (testOptions wires it)"),
@@ -146,6 +162,33 @@ class ClearSignerBleTest {
             assertEquals("$name: msgId", msgId, message.msgId)
             assertEquals("$name: sealed", sealed, message.sealed)
             assertEquals("$name: payload", case.getString("payload"), hex(message.payload))
+        }
+    }
+
+    /**
+     * The MTU ladder, across the bridge (`Framer::fit_to_mtu`).
+     *
+     * 244 is the page's WRITE size, not a whole frame: 244 plus the six-byte
+     * header is a 250-byte value an MTU-247 link cannot carry. A central gets
+     * away with that because the OS turns an oversized write into a long
+     * write; a peripheral's notify cannot be split, so the link truncates it
+     * and the message never completes. Every answer this route sends goes out
+     * over notify, which makes this the direction that carries the signature.
+     */
+    @Test
+    fun `the chunk is sized for the link, header and all`() {
+        val framer = ClearSignerFramer()
+        assertEquals("what every modern phone negotiates", 238u, framer.fitToMtu(247u))
+        assertEquals("exactly the ATT payload", 244, framer.chunk().toInt() + framer.header().toInt())
+        assertEquals("an older iPhone", 176u, framer.fitToMtu(185u))
+        assertEquals("never above the page's own size", 244u, framer.fitToMtu(512u))
+        assertEquals("the default MTU is under the floor", 20u, framer.fitToMtu(23u))
+        assertEquals("nonsense still sends something", 20u, framer.fitToMtu(0u))
+
+        framer.fitToMtu(247u)
+        val id = framer.nextId()
+        for (frame in framer.frames(id, ByteArray(2_500) { 7 }, true)) {
+            assertTrue("a ${frame.size}-byte frame on an MTU-247 link", frame.size <= 247 - 3)
         }
     }
 
@@ -273,6 +316,29 @@ class ClearSignerBleTest {
     }
 
     // -- several requests, and the end ----------------------------------------
+
+    /**
+     * A batch intent over a real link. Several KB of calldata is a dozen-odd
+     * frames at an MTU of 247, and the fake radio refuses any that would not
+     * fit — which is what the old arithmetic (`mtu - 3`, leaving 244 and
+     * framing 250) would have produced on every phone in the world.
+     */
+    @Test
+    fun `a big intent goes out in frames the link can carry`() =
+        session(mtu = 247, requestJson = BIG_REQUEST) { run ->
+            val intent = run.handshakeAndOpenFirstIntent()
+            assertEquals("intent", intent.getString("t"))
+            // Not merely delivered — delivered whole. A truncated frame would
+            // have left this message half-arrived and silent.
+            assertEquals(
+                "the calldata survived the trip",
+                "0x" + "ab".repeat(2_000),
+                intent.getJSONObject("intent").getJSONArray("params").getJSONObject(0).getString("data"),
+            )
+            assertTrue("it really did take several frames", run.radio.notified > 5)
+            run.answer(intent.getString("id"), "user_rejected")
+            assertTrue(run.answered() is ClearSignerAnswer.Signed)
+        }
 
     @Test
     fun `one connection carries several requests and ends with bye`() = session { run ->
@@ -461,10 +527,31 @@ class ClearSignerBleTest {
             return startable
         }
 
+        /**
+         * A notification cannot be split. The real stack would hand an
+         * oversized value to the link, which truncates it — and a truncated
+         * frame is a message that never completes. Here it is an assertion
+         * instead, on every frame, in every test.
+         */
         override fun notify(frame: ByteArray): Boolean {
+            negotiated?.let { mtu ->
+                assertTrue(
+                    "a ${frame.size}-byte frame does not fit an MTU-$mtu link",
+                    frame.size <= maxOf(mtu - 3, SMALLEST_FRAME),
+                )
+            }
+            notified += 1
             frames.put(frame)
             return true
         }
+
+        /** How many frames have gone out, for tests that care that it was many. */
+        @Volatile
+        var notified = 0
+            private set
+
+        @Volatile
+        private var negotiated: Int? = null
 
         override fun stop() {
             stopped = true
@@ -476,6 +563,7 @@ class ClearSignerBleTest {
         }
 
         fun mtu(mtu: Int) {
+            negotiated = mtu
             listening().onMtu(mtu)
         }
 
@@ -518,6 +606,17 @@ class ClearSignerBleTest {
 
         companion object {
             const val NAME = "Vela test phone"
+
+            /**
+             * The protocol's own floor, asked of the core rather than typed
+             * here. Below this a link cannot carry a frame at all — PROTOCOL
+             * §2 stops at a 20-byte chunk — and `fitToMtu` says as much by
+             * clamping rather than going lower, so an MTU under it is a link
+             * this channel was never going to work on.
+             */
+            val SMALLEST_FRAME: Int = ClearSignerFramer().let {
+                it.fitToMtu(0u).toInt() + it.header().toInt()
+            }
         }
     }
 
@@ -576,8 +675,8 @@ class ClearSignerBleTest {
         }
 
         /** Put another request down the same connection (§11). */
-        fun ask(): Deferred<ClearSignerAnswer> {
-            pending = scope.async(Dispatchers.Default) { wire.ask(signature()) }
+        fun ask(requestJson: String = SMALL_REQUEST): Deferred<ClearSignerAnswer> {
+            pending = scope.async(Dispatchers.Default) { wire.ask(signature(requestJson)) }
             return pending
         }
 
@@ -626,7 +725,13 @@ class ClearSignerBleTest {
         kotlinx.coroutines.SupervisorJob() + Dispatchers.Default,
     )
 
-    private fun session(shuffle: Boolean = false, body: suspend (Run) -> Unit) = runBlocking {
+    private fun session(
+        shuffle: Boolean = false,
+        /** What a modern phone negotiates; the size the frames must fit. */
+        mtu: Int = 247,
+        requestJson: String = SMALL_REQUEST,
+        body: suspend (Run) -> Unit,
+    ) = runBlocking {
         val radio = FakeRadio()
         val shown = CompletableDeferred<String>()
         val confirm = CompletableDeferred<Boolean>()
@@ -638,12 +743,12 @@ class ClearSignerBleTest {
             shown.complete(code)
             confirm.await()
         }
-        val asking = scope.async(Dispatchers.Default) { wire.ask(signature()) }
+        val asking = scope.async(Dispatchers.Default) { wire.ask(signature(requestJson)) }
         val run = Run(radio, wire, page(), shown, confirm, advertised, asking)
         run.shuffled(shuffle)
-        // A small MTU, so a hello and an intent both span several frames and
-        // reassembly is genuinely on trial rather than nominally.
-        radio.mtu(23)
+        // The central negotiates, and from here on every frame the wallet
+        // notifies is checked against what this link can carry.
+        radio.mtu(mtu)
         try {
             body(run)
         } finally {
@@ -674,8 +779,8 @@ class ClearSignerBleTest {
         )
     }
 
-    private fun signature() = ClearSignerAsk.Signature(
-        """{"intent":{"method":"personal_sign","params":["0x68"],"origin":""},"context":{"chainId":100}}""",
+    private fun signature(requestJson: String = SMALL_REQUEST) = ClearSignerAsk.Signature(
+        requestJson,
         ByteArray(32) { 0xab.toByte() },
         emptyList(),
     )
