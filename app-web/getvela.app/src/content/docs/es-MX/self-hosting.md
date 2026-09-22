@@ -1,7 +1,7 @@
 ---
 title: Guía de autoalojamiento
 description: "Todo lo que Vela opera por ti, qué hace cada pieza y cómo reemplazarla por la tuya (el relay, el índice de llaves públicas, los datos de cadena, los tipos de cambio y las apps), además de lo único que no puedes reemplazar y cómo arreglártelas sin getvela.app."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -192,9 +192,7 @@ Luego pon `https://your-relay` en el campo **Vela Relay**.
   dirección del relay con la que se agregó.
 - El relay lee los detalles de cada cadena y las stablecoins que acepta de un
   directorio de cadenas: `ethereum-data.getvela.app`, a menos que configures
-  `VELA_RELAY_CHAIN_DIRECTORY_URL` con [el tuyo](#chain-data). Esta variable existe
-  desde septiembre de 2026; una versión anterior del relay siempre lee la copia de
-  Vela.
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` con [el tuyo](#chain-data). Esta variable existe desde vela-relay v0.9.6; las versiones anteriores siempre leen la copia de Vela.
 
 ## Opera tu propio índice de llaves públicas
 

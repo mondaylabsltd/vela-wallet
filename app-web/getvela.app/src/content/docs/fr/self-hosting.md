@@ -1,7 +1,7 @@
 ---
 title: Guide d'auto-hébergement
 description: "Tout ce que Vela fait tourner pour vous, le rôle de chaque élément, et comment le remplacer par le vôtre — le relais, l'index des clés publiques, les données de chaîne, les taux de change et les apps —, plus le seul élément que vous ne pouvez pas remplacer, et comment vous passer de getvela.app."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -203,9 +203,7 @@ Saisissez ensuite `https://your-relay` dans le champ **Vela Relay**.
   relais avec laquelle il a été ajouté.
 - Le relais lit les informations de chaque chaîne et les stablecoins qu'il accepte
   dans un annuaire de chaînes : `ethereum-data.getvela.app`, sauf si vous faites
-  pointer `VELA_RELAY_CHAIN_DIRECTORY_URL` vers [le vôtre](#chain-data). Cette
-  variable existe depuis septembre 2026 ; une version plus ancienne du relais lit
-  toujours la copie de Vela.
+  pointer `VELA_RELAY_CHAIN_DIRECTORY_URL` vers [le vôtre](#chain-data). Cette variable existe à partir de vela-relay v0.9.6 ; les versions antérieures lisent toujours la copie de Vela.
 
 ## Faire tourner votre propre index des clés publiques
 

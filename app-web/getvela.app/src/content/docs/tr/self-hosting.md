@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -193,8 +193,7 @@ Ardından `https://your-relay` adresini **Vela Relay** alanına girin.
   adresini korur.
 - Relay, her zincirin ayrıntılarını ve kabul ettiği stabilcoinleri bir zincir
   dizininden okur. `VELA_RELAY_CHAIN_DIRECTORY_URL` ile [kendinizinkini](#chain-data)
-  belirtmediğiniz sürece bu dizin `ethereum-data.getvela.app` adresidir. Bu ayar Eylül
-  2026'da eklendi; daha eski bir relay sürümü her zaman Vela'nın kopyasını okur.
+  belirtmediğiniz sürece bu dizin `ethereum-data.getvela.app` adresidir. Bu ayar vela-relay v0.9.6 ve sonrasında vardır; daha eski sürümler her zaman Vela'nın kopyasını okur.
 
 ## Kendi açık anahtar dizininizi çalıştırın
 

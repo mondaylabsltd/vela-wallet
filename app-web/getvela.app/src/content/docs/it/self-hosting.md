@@ -1,7 +1,7 @@
 ---
 title: Guida al self-hosting
 description: "Tutto ciò che Vela gestisce per te, a cosa serve ogni parte e come sostituirla con la tua — il relay, l'indice delle chiavi pubbliche, i dati delle chain, i tassi di cambio e le app — più l'unica cosa che non puoi sostituire e come fare a meno di getvela.app."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -194,9 +194,7 @@ Poi inserisci `https://your-relay` nel campo **Vela Relay**.
   relay con cui è stata aggiunta.
 - Il relay legge i dettagli di ogni chain e le stablecoin che accetta da un archivio
   delle chain: `ethereum-data.getvela.app`, a meno che tu non imposti
-  `VELA_RELAY_CHAIN_DIRECTORY_URL` su [un archivio tuo](#chain-data). L'impostazione
-  è arrivata a settembre 2026; le build precedenti del relay leggono sempre la copia
-  di Vela.
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` su [un archivio tuo](#chain-data). L'impostazione esiste da vela-relay v0.9.6; le build precedenti leggono sempre la copia di Vela.
 
 ## Gestisci il tuo indice delle chiavi pubbliche
 

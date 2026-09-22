@@ -185,8 +185,7 @@ Then put `https://your-relay` in the **Vela relay** field.
   it was added with.
 - The relay reads each chain's details and the stablecoins it accepts from a
   chain directory: `ethereum-data.getvela.app` unless you set
-  `VELA_RELAY_CHAIN_DIRECTORY_URL` to [your own](#chain-data). The setting arrived
-  in September 2026; an older relay build always reads Vela's copy.
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` to [your own](#chain-data). It needs vela-relay v0.9.6 or later; older builds always read Vela's copy.
 
 ## Run your own public-key index
 

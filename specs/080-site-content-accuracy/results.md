@@ -134,4 +134,4 @@ The paying customer is the technical user who self-hosts and compiles, so the co
 - **Licence:** p256-index is MIT (mondaylabsltd/p256-index#7); every "no licence yet" line is gone.
 - **README:** 252 → 138 lines, written to keep a developer: what's worth reading in the code, the architecture diagram, a repository map with run commands, the four services to self-host, the security model and status. Architecture history, tooling, distribution, platform notes, web deployment, endpoints, fee formula and name resolution moved to `docs/ARCHITECTURE.md`.
 
-**Merge order before this site goes live:** mondaylabsltd/vela-relay#12 and mondaylabsltd/p256-index#7.
+**Prerequisites, done 2026-09-22:** mondaylabsltd/vela-relay#12 merged and released as v0.9.6 (the guides now say "v0.9.6 or later" instead of a date); mondaylabsltd/p256-index#7 merged.

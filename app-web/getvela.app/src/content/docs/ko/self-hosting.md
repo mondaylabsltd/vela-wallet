@@ -1,7 +1,7 @@
 ---
 title: 셀프 호스팅 가이드
 description: "Vela가 대신 운영하는 모든 것, 각각의 역할, 그리고 릴레이, 공개 키 인덱스, 체인 데이터, 환율, 앱을 직접 운영하는 것으로 바꾸는 방법. 바꿀 수 없는 단 하나와, getvela.app 없이 지내는 방법도 다룹니다."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -178,8 +178,7 @@ curl https://your-relay/v1/treasury/100   # Gnosis의 트레저리 주소와 가
   씁니다.
 - 릴레이는 체인별 정보와, 수수료로 받아 주는 스테이블코인 목록을 체인 디렉터리에서 읽습니다.
   `VELA_RELAY_CHAIN_DIRECTORY_URL`을 [직접 운영하는 체인 데이터](#chain-data)로 설정하지 않으면
-  `ethereum-data.getvela.app`에서 읽습니다. 이 설정은 2026년 9월에 추가되었고, 그보다 오래된
-  릴레이 빌드는 항상 Vela의 사본을 읽습니다.
+  `ethereum-data.getvela.app`에서 읽습니다. 이 설정은 vela-relay v0.9.6부터 쓸 수 있고, 그보다 오래된 빌드는 항상 Vela의 사본을 읽습니다.
 
 ## 공개 키 인덱스 직접 운영하기
 

@@ -1,7 +1,7 @@
 ---
 title: Hướng dẫn tự triển khai
 description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
-source: 5ae6005a9396
+source: a093c30db3fb
 ---
 
 <script>
@@ -184,8 +184,7 @@ Sau đó nhập `https://your-relay` vào trường **Vela Relay**.
   khi thêm nó.
 - Relay đọc một danh mục chuỗi để biết thông tin từng chuỗi và những stablecoin nó chấp
   nhận. Danh mục đó là `ethereum-data.getvela.app`, trừ khi bạn đặt
-  `VELA_RELAY_CHAIN_DIRECTORY_URL` trỏ tới [danh mục của riêng bạn](#chain-data). Thiết lập
-  này có từ tháng 9/2026; các phiên bản relay cũ hơn luôn đọc bản của Vela.
+  `VELA_RELAY_CHAIN_DIRECTORY_URL` trỏ tới [danh mục của riêng bạn](#chain-data). Thiết lập này có từ vela-relay v0.9.6; các phiên bản cũ hơn luôn đọc bản của Vela.
 
 ## Tự chạy chỉ mục khóa công khai
 
