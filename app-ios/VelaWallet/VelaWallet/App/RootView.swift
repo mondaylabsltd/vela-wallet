@@ -309,9 +309,18 @@ struct RootView: View {
         // stored "Sign with" — and the Clear Signer, on the page Settings
         // names (spec 071).
         spine.signMethod = { [settingsStore] in settingsStore.signPref?.method ?? "auto" }
-        spine.clearSigner = ClearSigner(loc: loc, signerUrl: { [settingsStore] in
-            settingsStore.signPref?.signerUrl
-        })
+        // ONE Clear Signer for the whole app (spec 075). It is a passkey
+        // route now, not only a way to sign: onboarding's ceremonies and the
+        // money path's signatures go through the same object, which is what
+        // keeps "one page, one session, one sheet" true — two instances would
+        // be two sheets racing to present over each other.
+        let clearSigner = ClearSigner(
+            loc: loc,
+            signerUrl: { [settingsStore] in settingsStore.signPref?.signerUrl },
+            relayUrl: { [settingsStore] in settingsStore.signPref?.relayUrl }
+        )
+        spine.clearSigner = clearSigner
+        onboarding.clearSigner = clearSigner
         // The balance read publishes what it found here, and the receipt scan
         // reads it: which chains this account uses, which tokens it holds, and
         // what they were worth. Web gets the same three facts from its

@@ -119,6 +119,11 @@ actor RegistryClient {
         self.resolver = resolver
     }
 
+    /// The service in force. Spec 075: the Clear Signer page fetches its own
+    /// member challenge, and it must ask the registry THIS wallet is using —
+    /// otherwise the two challenges cannot be equal and the proof is refused.
+    func base() -> String { baseURL }
+
     func setBaseURL(_ url: String) {
         baseURL = Self.normalize(url)
     }
