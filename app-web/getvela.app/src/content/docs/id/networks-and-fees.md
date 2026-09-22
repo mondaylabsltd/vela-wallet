@@ -1,6 +1,7 @@
 ---
 title: Jaringan & biaya
-description: 12 jaringan yang didukung Vela, cara kerja biaya gas pada abstraksi akun, siapa yang menjalankan relay dan mengumpulkan biayanya, kapan Anda membiayai sendiri aktivasi akun gas, dan bagaimana Vela memilih endpoint RPC.
+description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -9,136 +10,161 @@ description: 12 jaringan yang didukung Vela, cara kerja biaya gas pada abstraksi
 
 # Jaringan & biaya
 
-## Jaringan yang didukung
+## Jaringan bawaan
 
-Vela hadir dengan **12 jaringan EVM** bawaan:
+Vela punya **24 jaringan** bawaan, semuanya mainnet:
 
-| Jaringan | Token biaya asli |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Jaringan | Gas dibayar dengan | Jaringan | Gas dibayar dengan |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (koin native-nya) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (koin native-nya) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (tidak ada koin native) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Dompet Anda punya **alamat yang sama di semuanya**, jadi hanya ada satu alamat untuk
-dibagikan ke mana pun.
+Di sebagian besar jaringan itu, Anda juga bisa membayar biaya dengan stablecoin USD yang
+diterima relay di jaringan tersebut (lihat di bawah).
 
-Anda juga bisa **menambahkan jaringan sendiri** (Pengaturan → Jaringan). Karena Vela
-adalah dompet berbasis akun pintar, sebuah jaringan harus menyediakan kontrak yang
-diandalkan Vela — EntryPoint ERC-4337, kontrak-kontrak Safe, dan precompile tanda
-tangan **P-256 (RIP-7212)** yang memverifikasi passkey Anda di rantai. Vela
-memeriksanya otomatis sebelum mengizinkan Anda menambah jaringan.
+Dompet Anda punya **alamat yang sama di setiap jaringan**, karena alamat itu dihitung
+dari kunci Anda, bukan dari chain-nya.
 
-<Callout type="info" title="Kenapa Gnosis sering muncul">
-Selain menjadi salah satu dari 12 jaringan, Gnosis Chain menampung <strong>Indeks
-Passkey</strong> milik Vela — kontrak yang menyimpan kunci publik dan nama akun Anda
-untuk pemulihan lintas perangkat. Itu terpisah dari jaringan mana yang Anda pakai untuk
-bertransaksi.
+## Menambahkan jaringan lain
+
+Anda bisa menambahkan jaringan EVM apa pun di **Pengaturan → Jaringan**, asalkan
+jaringan itu punya semua yang dibutuhkan dompet Vela: sebelas kontrak standar
+(EntryPoint ERC-4337 v0.7, kontrak Safe v1.4.1, modul 4337 dan modul passkey milik Safe,
+MultiSend, Multicall3, dan dua deployer deterministik) serta precompile **EIP-7951 / RIP-7212**
+yang memverifikasi tanda tangan passkey di alamat `0x100`. Dompet memeriksa semuanya,
+termasuk uji tanda tangan sungguhan terhadap precompile itu, sebelum mengizinkan Anda
+menambahkan jaringannya. Precompile ini punya dua nama: EIP-7951 di Ethereum, aktif sejak
+upgrade Fusaka (Desember 2025), dan RIP-7212 di rollup. Antarmukanya sama, dan dompet
+menerima keduanya.
+
+Precompile ini syarat mutlak. Alamatnya adalah bagian dari cara setiap alamat Vela
+dihitung, jadi tidak ada verifier cadangan dan tidak ada cara untuk men-deploy-nya
+belakangan. Kalau sebuah chain punya precompile itu tetapi kekurangan sebagian kontrak,
+[penyiapan chain](/id/chain-setup) menunjukkan apa yang kurang dan men-deploy yang bisa
+di-deploy siapa saja. Ada satu celah dalam pemeriksaannya: dompet dengan lebih dari satu
+kunci juga membutuhkan factory signer passkey milik Safe di jaringan itu, yang belum
+diperiksa; tanpanya, hanya kunci pertama yang bisa menandatangani di sana.
+
+## Bagaimana transaksi dibayar
+
+Vela adalah dompet ERC-4337: Anda tidak menyiarkan transaksi sendiri. Aplikasi menyusun
+sebuah **UserOperation**, Anda menandatanganinya dengan salah satu kunci Anda, lalu
+sebuah **relay** mengirimkannya ke chain dan menalangi gasnya lebih dulu. (ERC-4337
+menyebut peran ini bundler.) Relay mendapat penggantiannya **di dalam operasi Anda**:
+pembayarannya berupa transfer dari dompet Anda ke relay yang berada dalam batch yang
+sama dengan transaksi Anda, sehingga ikut dilindungi tanda tangan Anda. Tidak ada
+paymaster, tidak ada yang mensponsori gas Anda, dan tidak ada yang bisa menolak
+transaksi Anda karena kebijakan sponsor.
+
+### Berapa biayanya
+
+<span id="fee"></span>
+
+Layar konfirmasi menampilkan satu jumlah, dalam koin biaya dan dalam mata uang tampilan
+Anda. Cara menghitungnya:
+
+- **Gas yang dicadangkan dompet.** Dompet menyimulasikan transaksi lalu mencadangkan gas
+  lebih banyak daripada perkiraan pemakaiannya: perkiraan verifikasi dan eksekusi
+  masing-masing dinaikkan setengahnya, dengan batas minimum (misalnya, verifikasi
+  minimal 300.000 gas setelah dompet di-deploy, dan 2.000.000 untuk transaksi yang
+  men-deploy-nya).
+- **Harga gas.** Yang lebih tinggi antara hasil baca dompet sendiri atas harga gas
+  jaringan dan harga relay untuk kecepatan yang Anda pilih. Kecepatan bawaannya
+  *cepat*, yang dihargai relay sekitar 1,8 × base fee ditambah dua kali priority fee.
+- **Biaya = 3 × gas yang dicadangkan × harga gas**, dengan minimum sekitar $0,01. Di
+  Tempo, pengalinya 2 dan biayanya dibayar dengan pathUSD.
+
+Cadangannya jauh di atas pemakaian sebenarnya dan harganya diberi ruang lebih, jadi
+biayanya lebih besar daripada biaya on-chain transaksinya — dan lebih besar lagi untuk
+transaksi pertama Anda di suatu jaringan, yang sekaligus men-deploy dompet Anda. Relay
+membayar biaya sebenarnya dan menyimpan sisanya; tidak ada yang dikembalikan. Di
+jaringan yang murah, jumlahnya hanya beberapa sen; di mainnet Ethereum, jumlahnya bisa
+lumayan besar. Anda tidak perlu menebak: jumlah pastinya ada di layar konfirmasi
+sebelum Anda menandatangani.
+
+**Siapa yang menerimanya.** Biaya itu masuk ke siapa pun yang menjalankan relay yang
+dipakai dompet — relay Vela, kecuali Anda menggantinya. Deployment vela-relay mana pun
+bisa dipakai, termasuk [yang Anda jalankan sendiri](/id/docs/self-hosting#relay), dan
+dompet memakai rumus yang sama, relay mana pun yang Anda pilih.
+
+<Callout type="info" title="Yang Anda lihat adalah yang Anda bayar">
+Jumlah biaya dan alamat tujuannya adalah bagian dari operasi yang Anda tandatangani.
+Relay yang mengubah salah satunya akan membuat tanda tangan Anda tidak sah, jadi Anda
+membayar persis sebesar jumlah yang ditampilkan — tidak lebih, bahkan kalau harga gas
+naik sebelum transaksi masuk ke blok. Kuotasi harga gas dari relay yang lebih dari tiga
+kali hasil baca dompet sendiri akan ditolak.
 </Callout>
 
-## Cara kerja biaya (abstraksi akun)
+### Anda bisa membayar dengan apa
 
-Vela memakai **abstraksi akun ERC-4337**, jadi transaksi tidak disiarkan langsung oleh
-Anda — ia berupa **UserOperation** yang diserahkan ke sebuah **relay**, yang
-mengirimkannya ke rantai dan mendapat penggantian gasnya. (Spesifikasi ERC-4337
-menyebut peran itu *bundler*. Milik Vela disebut relay karena ia melakukan lebih dari
-sekadar memaket: ia memberi kuotasi biaya di dalam kanal dan menjalankan protokol akun
-gas di bawah ini, dan keduanya bukan bagian dari standar.) Beberapa hal mengikutinya:
+- **Koin native** jaringan itu, selalu.
+- **Stablecoin USD** dari daftar relay untuk jaringan itu, bila relay bisa menghargai
+  koin native-nya. Stablecoin yang sama sekali tidak Anda miliki disembunyikan.
+- Di **Tempo**, yang tidak punya koin native, hanya **pathUSD**.
 
-- **Gas dibayar dari saldo dompet Anda sendiri** — secara bawaan dengan token asli
-  jaringan (ETH, BNB, xDAI…), atau dengan stablecoin yang didukung di tempat relay
-  menawarkannya; Anda memilih aset biayanya di layar konfirmasi. Tempo tidak punya koin
-  asli, jadi gas di sana selalu diselesaikan dengan stablecoin USD. Tidak ada
-  **paymaster** ERC-4337 yang mensponsori — atau menggerbangi — setiap transaksi. (Vela
-  bisa saja mensponsori _aktivasi akun gas_ sekali jalan untuk pengguna baru; itu hal
-  terpisah, dibahas di bawah.)
-- **Relay yang memberi kuotasi harga gas** — ia satu-satunya sumber kebenaran, dan
-  dompet menampilkan kuotasi itu lalu menandatangani persis apa yang ditampilkannya.
-  Tidak ada pemilih kecepatan: setiap transaksi dikirim dengan prioritas tinggi.
-- Total tagihannya adalah **biaya jaringan ditambah biaya layanan relay**, dengan
-  tagihan minimum kecil untuk transaksi yang sangat murah. Kuotasi relay itulah
-  harganya — tidak ada daftar tarif terpisah yang perlu dilihat. Sebagian mengalir ke
-  validator rantai; sisanya membayar relay yang menalangi gas dan menjalankan
-  infrastrukturnya.
-- Layar konfirmasi menampilkan **perkiraan biaya** dalam aset biaya dan dalam mata uang
-  tampilan Anda sebelum Anda menandatangani. Jumlah yang dikuotasi dan penerimanya
-  adalah bagian dari yang Anda tandatangani, jadi relay dibayar persis sebesar yang
-  ditampilkan — angka yang berubah akan membatalkan tanda tangan Anda.
+Anda memilih koin biaya, beserta kecepatannya (*Lambat*, *Standar*, atau *Cepat*), di
+layar konfirmasi dan di Pengaturan.
 
-## Siapa yang menjalankan relay — dan siapa yang mendapat biayanya
+### Transaksi pertama Anda di suatu jaringan
 
-Setiap jaringan mengarah ke sebuah relay. Secara bawaan itu **relay milik Vela
-sendiri**, dan Anda bisa mengganti endpoint-nya di _Pengaturan → Lanjutan → Endpoint
-Layanan_. Satu endpoint berlaku untuk semua jaringan bawaan; jaringan buatan sendiri
-menyimpan URL relay yang Anda berikan saat menambahkannya.
+Anda bisa menerima di jaringan mana pun sebelum dompet Anda ada di sana. Saat pertama
+kali Anda mengirim dari suatu jaringan, transaksi itu sekaligus men-deploy kontrak dompet
+Anda (dan satu kontrak signer kecil untuk tiap kunci tambahan). Gas untuk deploy itu
+termasuk dalam biaya transaksi tersebut, jadi pengiriman pertama di tiap jaringan lebih
+mahal daripada pengiriman berikutnya.
 
-Catatan jujur soal kompatibilitas: aplikasinya mengambil kuotasi biaya lewat metode RPC
-khusus Vela (`vela_getInBandGasQuote`), dan alur pengirimannya gagal tanpa itu. Jadi
-endpoint yang Anda tuju harus menjalankan
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) — instans milik Vela atau
-milik Anda sendiri. Bundler ERC-4337 umum seperti **Pimlico** atau **Alchemy** tidak
-mengimplementasikan metode itu, jadi pada rilis sekarang ia tidak akan jalan dari ujung
-ke ujung.
+Saat Anda mengirim koin native dalam jumlah **maksimum**, Vela menyisihkan cukup untuk
+biayanya.
 
-Siapa pun yang mengoperasikan relay untuk sebuah jaringan **mengumpulkan biaya jaringan
-itu** — markup relay pada setiap transaksi dan deposit aktivasi akun gas. Jalankan
-vela-relay Anda sendiri dan biaya itu membiayai infrastruktur Anda alih-alih milik
-Vela; Vela tidak mengambil potongan dari lalu lintas yang Anda arahkan ke tempat lain.
+## Siapa yang menjalankan relay — dan siapa yang menerima biayanya
 
-<Callout type="warning" title="Akun gas adalah bagian dari protokol vela-relay">
-Langkah <strong>aktivasi akun gas</strong> mengisi sebuah akun relay khusus untuk
-dompet Anda di setiap jaringan. Kalau Anda mengarahkan endpoint-nya ke vela-relay yang
-Anda hosting sendiri, depositnya mengisi akun relay Anda sendiri, bukan milik Vela.
-</Callout>
+Secara bawaan, setiap jaringan memakai **relay milik Vela**, dan biayanya masuk ke Vela.
+Anda bisa mengarahkan dompet ke relay lain di **Pengaturan → Lanjutan → Endpoint
+Layanan**; satu alamat melayani semua jaringan bawaan, sedangkan jaringan kustom tetap
+memakai alamat relay yang tercatat saat jaringan itu ditambahkan. Relay-nya harus
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) — milik Vela atau yang Anda
+jalankan sendiri — karena dompet meminta kuotasi biaya dengan metode khusus Vela yang
+tidak diimplementasikan bundler umum seperti Pimlico atau Alchemy. Siapa pun yang
+menjalankan relay yang Anda pakai, dialah yang menerima biayanya;
+[panduan hosting sendiri](/id/docs/self-hosting#relay) menjelaskan cara menjalankannya.
 
-### Mengaktifkan akun gas (Vela Relay)
+Relay menerima operasi yang sudah ditandatangani. Relay tidak bisa mengubah penerima,
+jumlah, biaya, atau apa pun lainnya. Relay bisa menunda atau menolaknya, dan menentukan
+kapan transaksi itu masuk ke chain — jadi untuk sebuah swap, secara teori relay bisa
+bertransaksi mendahului Anda (front-running) dalam batas slippage Anda.
 
-Di relay Vela, transaksi pertama Anda pada setiap jaringan akan **mengaktifkan sebuah
-akun gas khusus**. Aplikasinya lebih dulu meminta kas relay untuk membiayainya bagi
-Anda — ini terjadi diam-diam di dalam alur pengiriman, dan dompet yang disponsori tidak
-pernah melihat layar pengisian. Hanya kalau sponsornya ditolak, aplikasinya menampilkan
-permintaan pengisian: Anda mengirim sedikit token asli ke alamat akun gas yang
-ditampilkannya, dan ia memberi tahu kenapa sponsornya tidak tersedia.
+### Kalau gas sebuah relay habis
 
-**Anda membayar sendiri biaya aktivasinya** kapan pun sponsor gratis tidak ditawarkan,
-yaitu ketika:
+Relay membayar gas dari **treasury**-nya sendiri di tiap jaringan. Kalau treasury itu
+kosong, layar kirim memberi tahu Anda sebelum Anda menandatangani:
 
-- **Kas Vela untuk jaringan itu kosong atau menipis** — dana gratis di rantai itu
-  sedang habis.
-- **Anda sudah memakai kuota gratisnya** — sponsor dibatasi per dompet, jadi setelah
-  beberapa kali pertama, Anda yang membiayai.
-- **Relay Vela sama sekali tidak membiayai jaringan itu** — misalnya **jaringan buatan
-  sendiri atau jaringan uji yang Anda tambahkan**, yang untuknya Vela tidak memegang
-  kas. (Arahkan yang seperti itu ke relay Anda sendiri kalau Anda ingin melewati
-  aktivasi sama sekali.)
+- Di jaringan yang dilayani relay Vela, operator relay (Vela) perlu mengisinya kembali;
+  Anda bisa melaporkannya. Kalau tidak bisa menunggu, Anda **boleh** mengirim sedikit
+  koin native ke treasury itu sendiri. Kontribusi itu **tidak dapat dikembalikan** dan
+  **tidak** membayar transaksi Anda sendiri.
+- Di jaringan kustom, mengisi dana relay menjadi urusan siapa pun yang menjalankannya —
+  bisa jadi Anda sendiri.
 
-Deposit aktivasinya **tidak dapat dikembalikan** — ia saldo awal milik relay dan mengisi
-dirinya sendiri dari penggantian gas seiring waktu, meski tetap bisa menipis dan perlu
-**diaktifkan ulang** nanti. Alamat relay juga bisa berubah saat ada peningkatan layanan,
-dan itu menuntut aktivasi baru.
+Tidak ada akun gas per dompet dan tidak ada deposit aktivasi: versi awal Vela pernah
+punya mekanisme itu, dan sekarang sudah tidak ada.
 
-Biayanya diambil dari saldo Anda pada **aset biaya** yang Anda pilih — token asli secara
-bawaan. Kalau sebuah pengiriman terhalang karena gas, artinya saldo Anda pada aset biaya
-itu tidak menutupi biayanya; di tempat relay menawarkan gas berbasis stablecoin,
-mengganti aset biaya di layar konfirmasi bisa membukanya.
+## Cara Vela membaca tiap jaringan
 
-Saat Anda mengirim jumlah **maksimum** dari token asli, Vela otomatis menyisihkan cukup
-untuk gas agar transaksinya tidak gagal.
-
-## Bagaimana Vela berbicara dengan setiap jaringan
-
-Vela membaca saldo dan mengirim transaksi lewat **sekumpulan endpoint RPC**, bukan satu
-penyedia tunggal. Ia mengumpulkan endpoint dari beberapa sumber, menilainya berdasarkan
-latensi dan keandalan, dan **beralih otomatis** saat salah satunya lambat atau mati —
-sementara mencadangkan endpoint yang buruk — sehingga satu node yang rewel tidak pernah
-menjatuhkan seluruh aplikasi.
+Vela membaca saldo dan menyimulasikan transaksi lewat **sekumpulan endpoint RPC** per
+jaringan — endpoint bawaan, cadangan publik, serta kunci penyedia atau endpoint yang Anda
+tambahkan — dan pindah ke endpoint berikutnya kalau satu endpoint lambat atau mati. Anda
+bisa mengatur endpoint sendiri per jaringan di **Pengaturan → Jaringan**. (Aplikasi
+Android saat ini memakai satu endpoint per jaringan, tanpa pengalihan otomatis, dan
+aplikasi iPhone belum mengizinkan Anda mengubahnya.)
 
 Berikutnya: [cara kerja passkey](/id/docs/passkeys).

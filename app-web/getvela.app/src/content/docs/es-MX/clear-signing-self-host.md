@@ -1,105 +1,122 @@
 ---
-title: Aloja tú la página de firma
-description: La página sin dependencias y la extensión de Chrome que decodifican una transacción por su cuenta y la firman con tu passkey — cómo correr tu propia copia y cuál copia puede firmar por tu wallet.
+title: Aloja tú mismo la página de firma
+description: "La página y la extensión de Chrome sin dependencias que decodifican una transacción por su cuenta y la firman con tu passkey: cómo ejecutar tu propia copia y qué copia puede firmar para tu wallet."
+source: c81389ef7aa2
 ---
 
-# Aloja tú la página de firma
+# Aloja tú mismo la página de firma
 
-Vela decodifica cada transacción antes de que la apruebes, y ese trabajo es
-trabajo de verdad — pero lo hace la misma app que armó la transacción. Si la app, o
-la ruta por la que te llega, está alterada, puede mostrarte una cosa y firmar otra.
-Es exactamente lo que le pasó a [Bybit](/es-MX/docs/bybit-attack).
+Vela decodifica cada transacción antes de que la apruebes, y esa decodificación es
+un trabajo honesto, pero lo hace la misma app que armó la transacción. Si alguien
+altera la app, o el camino por el que te llega, puede mostrarte una cosa y firmar
+otra. Eso es exactamente lo que le pasó a [Bybit](/es-MX/docs/bybit-attack).
 
-La página de firma existe para partir eso en dos: la transacción viene de un lado,
-y la revisión y la firma ocurren en otro que tú controlas.
+La página de firma existe para partir eso en dos: la transacción viene de un lugar,
+y la revisión y la firma ocurren en otro que controlas tú.
+
+**Estado:** construida y probada localmente; **no publicada**, y **ninguna app de
+Vela le envía solicitudes todavía**. Hoy es algo para leer, ejecutar y probar con
+los solicitantes de demostración de su carpeta `samples/`. Usarla para firmas reales
+requiere que las apps le dirijan sus solicitudes, y eso todavía está por
+construirse.
 
 ## Qué es
 
-Una carpeta —`app-web/clearsigning` en el repositorio— que es a la vez página web y
-extensión de Chrome. Puro HTML, CSS y JavaScript: sin framework, sin bundler, sin
-paso de compilación, sin dependencias y sin peticiones de red propias.
+Una carpeta (`app-web/clearsigning` en el repositorio) que es a la vez una página
+web y una extensión de Chrome. HTML, CSS y JavaScript puros: sin framework, sin
+bundler, sin paso de compilación, sin dependencias y sin datos obtenidos de un
+servidor; su única solicitud es para los logos decorativos de los tokens.
 
 Cuando recibe una solicitud de firma, no confía en el resumen que viene con ella.
-Decodifica la calldata en crudo por su cuenta, calcula su propio digest, te muestra
-qué autorizará realmente la firma y solo entonces pide tu passkey.
+Decodifica el calldata crudo por su cuenta, calcula su propio digest, te muestra lo
+que la firma va a autorizar en realidad y solo entonces se lo pide a tu passkey.
 
-Como no hay paso de compilación, los archivos que lees son los que corren. Puedes
-comparar la carpeta contra el repositorio y saber qué estás sirviendo.
+Como no hay paso de compilación, los archivos que lees son los archivos que se
+ejecutan. Puedes comparar la carpeta con el repositorio y saber qué estás
+sirviendo.
 
-## Cuál copia puede firmar por tu wallet
+## Qué copia puede firmar para tu wallet
 
-Una passkey queda atada al dominio donde se creó. Tus llaves de Vela están
-registradas bajo `getvela.app`, y un navegador solo se las ofrecerá a una página
-cuya relying party sea `getvela.app`. Esa sola regla decide qué forma de correr tu
-copia te sirve.
+Una passkey está ligada al dominio en el que se creó. Tus llaves de Vela están
+registradas bajo `getvela.app`, y un navegador solo las ofrece a una página cuya
+relying party sea `getvela.app`. Esa sola regla decide qué forma de ejecutar tu
+propia copia te sirve.
 
-**Como extensión de Chrome: esta es la que se usa con tu wallet existente.** La
-relying party de la extensión es `getvela.app` sin importar de dónde vino la
-carpeta, así que tus llaves actuales pueden firmar ahí, mientras que el código es la
-carpeta que cargaste e inspeccionaste.
+**Como extensión de Chrome: la forma de usarla con tus llaves existentes.** La
+relying party de la extensión es `getvela.app` sin importar de dónde venga la
+carpeta, así que tus llaves existentes pueden firmar en ella, mientras que el código
+es la carpeta que cargaste y revisaste.
 
-1. Abre `chrome://extensions` y activa el **modo de desarrollador**.
-2. **Cargar extensión sin empaquetar** y elige la carpeta `app-web/clearsigning`.
-3. El ícono de la barra abre la página en una pestaña.
+1. Consigue la carpeta: `git clone https://github.com/mondaylabsltd/vela-wallet`
+   (está dentro, en `app-web/clearsigning`).
+2. Abre `chrome://extensions` y activa el **Modo de desarrollador**.
+3. Haz clic en **Cargar descomprimida** y elige la carpeta `app-web/clearsigning`.
+4. El ícono de la barra de herramientas abre la página en una pestaña.
 
-**Como página en tu propio dominio, o en localhost.** Servida por HTTP(S), la
-relying party de la página es su propio nombre de host, así que puede firmar con
-llaves registradas bajo *ese* host, no con llaves registradas bajo `getvela.app`.
-Esa es la forma correcta de probar toda la ceremonia de punta a punta, de correr el
-flujo de escritorio y de firmar por una wallet cuya llave se creó en tu propio
-dominio. No es una forma de firmar por una wallet de `getvela.app` ya existente.
+**Como página en tu propio dominio, o en localhost.** Servida por HTTPS (o desde
+localhost), la relying party de la página es su propio nombre de host, así que puede
+firmar con llaves registradas bajo _ese_ nombre de host, no con llaves registradas
+bajo `getvela.app`. Por eso es la forma correcta de probar toda la ceremonia de
+punta a punta, de ejecutar el flujo de escritorio y de firmar para una wallet cuya
+llave se creó en tu propio dominio. No es una forma de firmar para una wallet
+existente de `getvela.app`.
 
 ```sh
 cd app-web/clearsigning
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
-Todas las rutas de la app son relativas, así que un subdirectorio en un host
-existente también funciona; abrir `index.html` directo del disco (`file://`) sirve
-para echar un ojo — sin origen no hay relying party y no se puede firmar nada.
+Todas las rutas de la app son relativas, así que también funciona en un subdirectorio
+de un host que ya tengas, y abrir `index.html` directamente desde el disco
+(`file://`) sirve para darle una vuelta: sin origen no hay relying party, y no se
+puede firmar nada.
 
 ## Qué hace antes de firmar
 
 - **Decodifica la transacción por su cuenta.** Qué hace la llamada, a quién y por
-  cuánto, desde la calldata — incluidas las llamadas anidadas dentro de un lote.
-- **Solo firma un digest que ella misma calculó.** Los digests EIP-191, EIP-712,
-  SafeOp y SafeMessage se calculan en la página y se contrastan con `vela-core`, el
-  mismo código que usa la wallet. Un digest que no puede calcular es un rechazo, no
-  una firma.
-- **Revisa que la transacción sea la que se pidió.** La llamada que pidió el sitio
-  tiene que estar realmente dentro de la operación que se va a firmar.
-- **Rechaza una aprobación ilimitada.** No una advertencia: un rechazo, con una
-  indicación de qué hacer en su lugar.
-- **Dice cuando no puede leer algo,** en vez de mostrar un resumen amable del que no
-  puede responder.
+  cuánto, a partir del calldata, incluidas las llamadas anidadas dentro de un lote.
+- **Solo firma un digest que calculó ella.** Los digests EIP-191, EIP-712, SafeOp y
+  SafeMessage se calculan en la página y se contrastan con `vela-core`, el mismo
+  código que usa la wallet. Un digest que no puede calcular es un rechazo, no una
+  firma.
+- **Comprueba que la transacción sea la que se solicitó.** La llamada que pidió el
+  sitio tiene que estar realmente dentro de la operación que se firma.
+- **Rechaza una aprobación de nivel «ilimitado».** No es una advertencia: es un
+  rechazo, con una indicación de qué hacer en su lugar.
+- **Dice cuando no puede leer algo,** en lugar de mostrar un resumen amigable que no
+  puede respaldar.
 - **Muestra la dirección y el identicon de la cuenta,** y no muestra un nombre de
-  destinatario suministrado por quien pidió la firma. Todo lo que controla el
-  solicitante o se quita o se etiqueta como suyo.
+  destinatario proporcionado por quien pidió la firma. Todo lo que controla el
+  solicitante se descarta o se etiqueta como suyo.
 
-## Qué no tiene a propósito
+## Lo que a propósito no tiene
 
-- **Ningún editor.** La solicitud queda fija al llegar: la firmas o no. Un selector
-  de comisiones o un editor de límites reescribiría la calldata, que es justo la
-  enfermedad que esta página existe para evitar.
+- **Nada de editores.** La solicitud queda fija cuando llega: la firmas o no. Un
+  selector de comisión o un editor de montos autorizados reescribiría el calldata,
+  que es justo el mal que esta página existe para evitar.
 - **No crea llaves.** La página de firma no puede crear una passkey. Crear una sería
-  crear una cuenta distinta.
-- **Sin peticiones de red.** Si no hay nada que traer, no hay nada que interceptar.
+  crear otra cuenta.
+- **Nada de datos de la red.** Nada de lo que muestra o firma se obtiene de fuera. Lo
+  único que carga son los logos de los tokens, como imágenes, desde el servidor de
+  datos de cadena de Vela; si fallan, una letra ocupa su lugar.
 
 ## Cómo le llega una solicitud
 
-| Quien solicita | Canal |
+| Solicitante                                  | Canal                                                                      |
 | -------------------------------------------- | -------------------------------------------------------------------------- |
-| Una página en el mismo navegador | `postMessage` |
-| Una página del mismo navegador, hacia la extensión | Puerto de la extensión |
-| Una app de escritorio en la misma máquina | Fragmento de URL + callback en loopback |
-| Un teléfono u otra computadora | Bluetooth LE (protocolo implementado; la radio todavía no se prueba en hardware real) |
+| Una página en el mismo navegador             | `postMessage`                                                              |
+| Una página en el mismo navegador, hacia la extensión | Puerto de la extensión                                             |
+| Una app de escritorio en la misma computadora | Fragmento de URL + callback de loopback (demo en `samples/`; la app de escritorio de Vela todavía no lo usa) |
+| Un celular u otra computadora                | Bluetooth LE (protocolo implementado; el radio todavía no se ha probado en hardware real) |
 
-El formato de intercambio, los digests y una tabla de de dónde viene cada elemento
-en pantalla están en `PROTOCOL.md`, junto al código.
+El formato de transmisión, los digests y una tabla de dónde sale cada elemento de la
+pantalla están en `PROTOCOL.md`, junto al código.
 
-## Cuándo usarla
+## Dónde encaja
 
-Desde el día en que la cuenta guarda dinero que te dolería perder — y de ahí en
-adelante, para cada firma. No solo para montos grandes: una aprobación chiquita
-puede entregar lo suficiente para vaciar una cuenta. Un hábito de firma guardado
-para ocasiones especiales no está puesto el día que hace falta.
+Una vez que las apps puedan pasarle sus solicitudes, el uso previsto es sencillo:
+desde el día en que la cuenta tenga dinero que no quieras perder, cada firma pasa por
+una página cuyo código cargaste tú mismo. No solo para montos grandes: una aprobación
+pequeña puede entregar lo suficiente para vaciar una cuenta. Mientras tanto, la
+página es una forma de leer y probar exactamente cómo va a funcionar esa segunda
+opinión.

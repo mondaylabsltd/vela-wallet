@@ -1,6 +1,7 @@
 ---
 title: Netzwerke und Gebühren
-description: Die 12 Netzwerke, die Vela unterstützt, wie Gasgebühren bei Account Abstraction funktionieren, wer das Relay betreibt und die Gebühren einnimmt, wann du die Aktivierung des Gas-Kontos selbst zahlst und wie Vela RPC-Endpunkte auswählt.
+description: "Die 24 in Vela eingebauten Netzwerke, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
+source: b58f2cec8d4f
 ---
 
 <script>
@@ -9,143 +10,167 @@ description: Die 12 Netzwerke, die Vela unterstützt, wie Gasgebühren bei Accou
 
 # Netzwerke und Gebühren
 
-## Unterstützte Netzwerke
+## Eingebaute Netzwerke
 
-Vela bringt **12 EVM-Netzwerke** mit:
+In Vela sind **24 Netzwerke** eingebaut, alle davon Mainnets:
 
-| Netzwerk | Natives Gebühren-Token |
-| ----------- | ---------------- |
-| Ethereum | ETH |
-| BNB Chain | BNB |
-| Polygon | POL |
-| Arbitrum | ETH |
-| Optimism | ETH |
-| Base | ETH |
-| Avalanche | AVAX |
-| Gnosis | xDAI |
-| Unichain | ETH |
-| Tempo | USD |
-| Monad | MON |
-| World Chain | ETH |
+| Netzwerk | Gas bezahlt in | Netzwerk | Gas bezahlt in |
+| --- | --- | --- | --- |
+| Ethereum | ETH | Arc | USDC (der native Coin) |
+| BNB Chain | BNB | X Layer | OKB |
+| Polygon | POL | Stable | USDT0 (der native Coin) |
+| Arbitrum | ETH | Soneium | ETH |
+| Optimism | ETH | MegaETH | ETH |
+| Base | ETH | Robinhood Chain | ETH |
+| Avalanche | AVAX | Mantle | MNT |
+| Gnosis | xDAI | Kaia | KAIA |
+| Unichain | ETH | Celo | CELO |
+| Tempo | pathUSD (kein nativer Coin) | Ink | ETH |
+| Monad | MON | Plume | PLUME |
+| World Chain | ETH | XRPL EVM | XRP |
 
-Deine Wallet hat **auf allen dieselbe Adresse**, du gibst also überall dieselbe
-heraus.
+In den meisten davon kannst du die Gebühr auch in einem USD-Stablecoin zahlen, den
+das Relay in diesem Netzwerk akzeptiert (siehe unten).
 
-Du kannst auch **eigene Netzwerke hinzufügen** (Einstellungen → Netzwerke). Weil
-Vela eine Smart-Account-Wallet ist, muss ein Netzwerk die Verträge bereitstellen,
-auf die Vela baut — den ERC-4337 EntryPoint, die Safe-Verträge und die
-**P-256-Precompile (RIP-7212)**, die deinen Passkey on-chain prüft. Vela
-kontrolliert das automatisch, bevor es dich ein Netzwerk hinzufügen lässt.
+Deine Wallet hat **in jedem Netzwerk dieselbe Adresse**, weil die Adresse aus deinen
+Schlüsseln berechnet wird, nicht aus der Chain.
 
-<Callout type="info" title="Warum Gnosis so oft auftaucht">
-Gnosis Chain ist nicht nur eines der 12 Netzwerke, sondern beherbergt auch Velas
-**Passkey-Index** — den Vertrag, der deinen öffentlichen Schlüssel und deinen
-Account-Namen für die geräteübergreifende Wiederherstellung speichert. Das ist
-unabhängig davon, auf welchem Netzwerk du Transaktionen machst.
+## Ein weiteres Netzwerk hinzufügen
+
+Unter **Einstellungen → Netzwerke** kannst du jedes EVM-Netzwerk hinzufügen, sofern
+es hat, was eine Vela-Wallet braucht: elf Standardverträge (den ERC-4337-EntryPoint
+v0.7, die Safe-v1.4.1-Verträge, das 4337- und das Passkey-Modul von Safe, MultiSend,
+Multicall3 und zwei deterministische Deployer) und das **EIP-7951/RIP-7212**-Precompile, das
+Passkey-Signaturen an der Adresse `0x100` prüft. Die Wallet prüft all das –
+einschließlich einer echten Signaturprüfung gegen das Precompile –, bevor sie dich das
+Netzwerk hinzufügen lässt. Das Precompile hat zwei Namen: EIP-7951 auf Ethereum, aktiv
+seit dem Fusaka-Upgrade (Dezember 2025), und RIP-7212 auf Rollups. Die Schnittstelle
+ist dieselbe, und die Wallet akzeptiert beide.
+
+Das Precompile ist eine harte Voraussetzung. Seine Adresse fließt in die Berechnung
+jeder Vela-Adresse ein, deshalb gibt es keinen Ersatz-Verifizierer und keine
+Möglichkeit, später einen bereitzustellen. Hat eine Chain das Precompile, fehlen ihr
+aber einige Verträge, zeigt die [Chain-Einrichtung](/de/chain-setup), was fehlt, und
+stellt bereit, was jeder bereitstellen kann. Eine Lücke in der Prüfung: Eine Wallet
+mit mehr als einem Schlüssel braucht in dem Netzwerk außerdem die
+Passkey-Signer-Factory von Safe, die noch nicht geprüft wird; ohne sie kann dort nur
+der erste Schlüssel signieren.
+
+## Wie eine Transaktion bezahlt wird
+
+Vela ist eine ERC-4337-Wallet: Du sendest eine Transaktion nicht selbst ins Netzwerk.
+Die App baut eine **UserOperation**, du signierst sie mit einem deiner Schlüssel, und
+ein **Relay** reicht sie on-chain ein und streckt das Gas vor. (ERC-4337 nennt diese
+Rolle Bundler.) Das Relay wird **innerhalb deiner Operation** bezahlt: Die Zahlung ist
+eine Überweisung von deiner Wallet an das Relay, die im selben Batch steckt wie deine
+Transaktion und deshalb von deiner Signatur abgedeckt ist. Es gibt keinen Paymaster,
+niemand sponsert dein Gas, und niemand kann deine Transaktion wegen einer
+Sponsoring-Richtlinie ablehnen.
+
+### Wie hoch die Gebühr ist
+
+<span id="fee"></span>
+
+Der Bestätigungsbildschirm zeigt einen einzigen Betrag, im Gebühren-Coin und in deiner
+Anzeigewährung. Er wird so berechnet:
+
+- **Gas, das die Wallet reserviert.** Die Wallet simuliert die Transaktion und
+  reserviert mehr Gas, als sie voraussichtlich verbraucht: Die Schätzungen für
+  Verifizierung und Ausführung werden jeweils um die Hälfte erhöht, mit Mindestwerten
+  (zum Beispiel mindestens 300.000 Gas für die Verifizierung, sobald die Wallet
+  bereitgestellt ist, und 2.000.000 für die Transaktion, die sie bereitstellt).
+- **Gaspreis.** Der höhere von zwei Werten: der Gaspreis des Netzwerks, wie ihn die
+  Wallet selbst abliest, und der Preis des Relays für die gewählte Geschwindigkeit.
+  Voreingestellt ist *Schnell*; dafür setzt das Relay etwa das 1,8-Fache der
+  Basisgebühr plus die doppelte Prioritätsgebühr an.
+- **Gebühr = 3 × reserviertes Gas × Gaspreis**, mindestens etwa 0,01 US-Dollar. Auf
+  Tempo ist der Faktor 2, und die Gebühr wird in pathUSD bezahlt.
+
+Die Reserve liegt deutlich über dem, was die Transaktion verbrauchen wird, und der
+Preis enthält Spielraum; die Gebühr ist deshalb höher als die On-Chain-Kosten der
+Transaktion – und noch höher bei deiner ersten Transaktion in einem Netzwerk, die
+zugleich deine Wallet bereitstellt. Das Relay zahlt die echten Kosten und behält den
+Rest; erstattet wird nichts. In günstigen Netzwerken sind das Cent-Beträge; im
+Ethereum-Mainnet kann es ein spürbarer Betrag sein. Raten musst du nie: Der genaue
+Betrag steht vor dem Signieren auf dem Bestätigungsbildschirm.
+
+**Wer sie bekommt.** Die Gebühr geht an den Betreiber des Relays, auf das die Wallet
+eingestellt ist – das von Vela, sofern du es nicht änderst. Jede vela-relay-Instanz
+funktioniert, auch [eine, die du selbst betreibst](/de/docs/self-hosting#relay), und
+die Wallet rechnet mit derselben Formel, egal welches Relay du wählst.
+
+<Callout type="info" title="Was du siehst, zahlst du">
+Der Gebührenbetrag und die Adresse, an die er geht, sind Teil der Operation, die du
+signierst. Ein Relay, das eines davon ändert, würde deine Signatur ungültig machen –
+du zahlst also genau den angezeigten Betrag, nicht mehr, selbst wenn das Gas vor der
+Aufnahme in einen Block teurer wird. Ein Gaspreis-Angebot des Relays, das mehr als das
+Dreifache des Werts beträgt, den die Wallet selbst abliest, wird abgelehnt.
 </Callout>
 
-## Wie Gebühren funktionieren (Account Abstraction)
+### Womit du zahlen kannst
 
-Vela nutzt **ERC-4337 Account Abstraction**: Eine Transaktion wird nicht direkt
-von dir gesendet, sondern als **UserOperation** einem **Relay** übergeben, das sie
-on-chain einreicht und für das Gas entschädigt wird. (Die ERC-4337-Spezifikation
-nennt diese Rolle *Bundler*. Velas heißt Relay, weil es mehr tut als bündeln: Es
-stellt Gebühren in-band und betreibt das Gas-Konto-Protokoll weiter unten — beides
-nicht Teil des Standards.) Daraus folgt einiges:
+- Mit dem **nativen Coin** des Netzwerks, immer.
+- Mit einem **USD-Stablecoin** aus der Liste des Relays für dieses Netzwerk, wenn das
+  Relay den Preis des nativen Coins ermitteln kann. Stablecoins, von denen du nichts
+  hast, werden ausgeblendet.
+- Auf **Tempo**, das keinen nativen Coin hat, nur mit **pathUSD**.
 
-- **Gas wird aus dem Guthaben deiner eigenen Wallet bezahlt** — standardmäßig im
-  nativen Token des Netzwerks (ETH, BNB, xDAI …) oder in einem unterstützten
-  Stablecoin, wo das Relay einen anbietet; das Gebühren-Asset wählst du auf dem
-  Bestätigungsbildschirm. Tempo hat keine native Coin, dort wird Gas immer in
-  USD-Stablecoins abgerechnet. Es gibt keinen ERC-4337-**Paymaster**, der jede
-  Transaktion sponsert — oder blockiert. (Die einmalige *Gas-Konto-Aktivierung*
-  kann Vela für neue Nutzer übernehmen; das ist etwas anderes und steht unten.)
-- **Das Relay nennt den Gaspreis** — es ist die einzige Quelle der Wahrheit, und
-  die Wallet zeigt genau dieses Angebot und signiert genau das, was sie zeigt.
-  Es gibt keine Geschwindigkeitsauswahl: Jede Transaktion wird mit hoher Priorität
-  eingereicht.
-- Die Gesamtsumme sind die **Netzwerkkosten plus die Servicegebühr des Relays**,
-  mit einer kleinen Mindestgebühr bei sehr günstigen Transaktionen. Das Angebot
-  des Relays ist der Preis — es gibt keine separate Gebührentabelle. Ein Teil geht
-  an die Validatoren der Chain, der Rest an das Relay, das das Gas vorstreckt und
-  die Infrastruktur betreibt.
-- Der Bestätigungsbildschirm zeigt die **geschätzte Gebühr** im Gebühren-Asset und
-  in deiner Anzeigewährung, bevor du signierst. Der genannte Betrag und sein
-  Empfänger sind Teil dessen, was du signierst — das Relay bekommt also exakt das,
-  was angezeigt wurde; eine geänderte Zahl würde deine Signatur ungültig machen.
+Den Gebühren-Coin und die Geschwindigkeit (*Langsam*, *Standard* oder *Schnell*)
+wählst du auf dem Bestätigungsbildschirm und in den Einstellungen.
 
-## Wer das Relay betreibt — und wer die Gebühren bekommt
+### Deine erste Transaktion in einem Netzwerk
 
-Jedes Netzwerk zeigt auf ein Relay. Standardmäßig ist das **Velas eigenes Relay**,
-und du kannst den Endpunkt unter _Einstellungen → Erweitert → Service-Endpunkte_
-ersetzen. Ein Endpunkt gilt für alle eingebauten Netzwerke; ein eigenes Netzwerk
-behält die Relay-URL, die du beim Hinzufügen angegeben hast.
+Du kannst in jedem Netzwerk empfangen, bevor deine Wallet dort existiert. Wenn du zum
+ersten Mal aus einem Netzwerk sendest, stellt diese Transaktion auch deinen
+Wallet-Vertrag bereit (und einen kleinen Signer-Vertrag für jeden zusätzlichen
+Schlüssel). Das Gas für die Bereitstellung steckt in der Gebühr dieser Transaktion,
+deshalb kostet die erste Sendung in jedem Netzwerk mehr als die folgenden.
 
-Eine ehrliche Einschränkung zur Kompatibilität: Die App holt Gebühren über eine
-Vela-spezifische RPC-Methode (`vela_getInBandGasQuote`), und ohne sie scheitert
-der Sendevorgang. Der Endpunkt, auf den du zeigst, muss also
-[vela-relay](https://github.com/mondaylabsltd/vela-relay) betreiben — Velas
-Instanz oder eine, die du selbst hostest. Ein generischer ERC-4337-Bundler wie
-**Pimlico** oder **Alchemy** implementiert diese Methode nicht und funktioniert im
-aktuellen Release deshalb nicht durchgängig.
+Wenn du das **Maximum** eines nativen Coins sendest, behält Vela genug für die Gebühr
+zurück.
 
-Wer für ein Netzwerk das Relay betreibt, **kassiert die Gebühren dieses
-Netzwerks** — den Relay-Aufschlag auf jede Transaktion und die Einzahlung zur
-Gas-Konto-Aktivierung. Betreibe dein eigenes vela-relay, und diese Gebühren
-finanzieren deine Infrastruktur statt Velas; an Traffic, den du woanders hin
-leitest, verdient Vela nichts.
+## Wer das Relay betreibt – und wer die Gebühr bekommt
 
-<Callout type="warning" title="Das Gas-Konto gehört zum vela-relay-Protokoll">
-Der Schritt **Gas-Konto-Aktivierung** stattet auf jedem Netzwerk ein eigenes
-Relay-Konto für deine Wallet aus. Zeigt dein Endpunkt auf ein selbst gehostetes
-vela-relay, füllt die Einzahlung das Konto deines eigenen Relays, nicht das von
-Vela.
-</Callout>
+Standardmäßig nutzt jedes Netzwerk **Velas Relay**, und die Gebühr geht an Vela. Unter
+**Einstellungen → Erweitert → Dienst-Endpunkte** kannst du die Wallet auf ein anderes
+Relay umstellen; eine Adresse bedient alle eingebauten Netzwerke, und ein eigenes
+Netzwerk behält die Relay-Adresse, mit der es hinzugefügt wurde. Das Relay muss ein
+[vela-relay](https://github.com/mondaylabsltd/vela-relay) sein – das von Vela oder eines,
+das du betreibst –, weil die Wallet das Gebührenangebot über eine Vela-spezifische
+Methode abfragt, die allgemeine Bundler wie Pimlico oder Alchemy nicht implementieren.
+Wer das Relay betreibt, das du nutzt, erhält die Gebühr; die
+[Anleitung zum Selbsthosten](/de/docs/self-hosting#relay) erklärt, wie du eines
+betreibst.
 
-### Das Gas-Konto aktivieren (Vela Relay)
+Das Relay erhält eine Operation, die bereits signiert ist. Empfänger, Betrag, Gebühr
+oder sonst etwas kann es nicht ändern. Es kann die Operation verzögern oder ablehnen,
+und es entscheidet, wann sie on-chain landet – bei einem Swap könnte es dir deshalb
+grundsätzlich innerhalb deiner Slippage zuvorkommen.
 
-Auf Velas Relay **aktiviert deine erste Transaktion in jedem Netzwerk ein eigenes
-Gas-Konto**. Die App bittet zuerst die Kasse des Relays, das für dich zu
-übernehmen — das passiert still im Sendevorgang, und eine gesponserte Wallet
-bekommt nie einen Finanzierungsbildschirm zu sehen. Erst wenn das abgelehnt wird,
-zeigt die App eine Aufforderung zum Auffüllen: Du schickst einen kleinen Betrag
-des nativen Tokens an die angezeigte Gas-Konto-Adresse, und sie sagt dir, warum es
-diesmal kein Sponsoring gab.
+### Wenn einem Relay das Gas ausgeht
 
-**Die Aktivierungsgebühr zahlst du selbst**, wann immer kein kostenloses Sponsoring
-angeboten wird — nämlich wenn:
+Ein Relay bezahlt das Gas in jedem Netzwerk aus seiner eigenen **Treasury**. Ist diese
+leer, sagt dir der Sendebildschirm das, bevor du signierst:
 
-- **Velas Kasse für dieses Netzwerk leer oder knapp ist** — der freie Topf ist auf
-  dieser Chain vorübergehend aufgebraucht.
-- **Du dein Freikontingent ausgeschöpft hast** — Sponsoring ist pro Wallet
-  gedeckelt, jenseits der ersten Male zahlst du selbst.
-- **Velas Relay dieses Netzwerk gar nicht finanziert** — z. B. **eigene oder
-  Testnetzwerke, die du selbst hinzugefügt hast** und für die Vela keine Kasse
-  führt. (Leite sie an dein eigenes Relay, wenn du die Aktivierung lieber ganz
-  überspringen willst.)
+- In einem Netzwerk, das Velas Relay bedient, muss der Betreiber des Relays (Vela) sie
+  auffüllen; du kannst das melden. Wenn du nicht warten kannst, kannst du
+  **freiwillig** selbst einen kleinen Betrag des nativen Coins an die Treasury
+  schicken. Dieser Beitrag ist **nicht erstattungsfähig** und bezahlt **nicht** deine
+  eigene Transaktion.
+- In einem eigenen Netzwerk ist es Sache des Betreibers, das Relay zu finanzieren – und
+  das bist womöglich du.
 
-Die Aktivierungseinzahlung ist **nicht erstattungsfähig** — sie ist das
-Startguthaben des Relay-Kontos und füllt sich über die Zeit aus Gas-Erstattungen
-auf, kann sich aber trotzdem leeren und später eine **erneute Aktivierung**
-brauchen. Auch bei einem Service-Upgrade kann sich die Relay-Adresse ändern, was
-eine frische Aktivierung nötig macht.
+Es gibt kein Gas-Konto pro Wallet und keine Aktivierungseinzahlung: Eine frühere
+Version von Vela hatte so etwas, und es existiert nicht mehr.
 
-Die Gebühr geht von deinem Guthaben im gewählten **Gebühren-Asset** ab —
-standardmäßig dem nativen Token. Wird eine Sendung wegen Gas blockiert, reicht
-dein Guthaben in diesem Gebühren-Asset nicht für die Gebühr; wo das Relay
-Stablecoin-Gas anbietet, kann ein Wechsel des Gebühren-Assets auf dem
-Bestätigungsbildschirm das lösen.
+## Wie Vela die Netzwerke liest
 
-Sendest du den **Maximalbetrag** eines nativen Tokens, legt Vela automatisch genug
-für Gas zurück, damit die Transaktion nicht scheitert.
-
-## Wie Vela mit jedem Netzwerk spricht
-
-Vela liest Guthaben und reicht Transaktionen über einen **Pool von
-RPC-Endpunkten** ein, nicht über einen einzelnen Anbieter. Es sammelt Endpunkte
-aus mehreren Quellen, bewertet sie nach Latenz und Zuverlässigkeit und **wechselt
-automatisch**, wenn einer langsam oder ausgefallen ist — schlechte Endpunkte
-werden vorübergehend auf die Bank gesetzt, damit ein einzelner wackliger Node nie
-die ganze App lahmlegt.
+Vela liest Guthaben und simuliert Transaktionen über einen **Pool von
+RPC-Endpunkten** pro Netzwerk – die eingebauten, öffentliche Ausweichendpunkte und
+alle Anbieterschlüssel oder Endpunkte, die du hinzufügst – und wechselt zum nächsten,
+wenn ein Endpunkt langsam ist oder ausfällt. Einen eigenen Endpunkt pro Netzwerk legst
+du unter **Einstellungen → Netzwerke** fest. (Die Android-App nutzt derzeit einen
+Endpunkt pro Netzwerk, ohne Umschalten, und in der iPhone-App lässt er sich noch nicht
+ändern.)
 
 Weiter: [So funktionieren Passkeys](/de/docs/passkeys).

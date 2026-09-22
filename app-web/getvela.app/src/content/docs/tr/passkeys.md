@@ -1,6 +1,7 @@
 ---
 title: Geçiş anahtarları nasıl çalışır
-description: "Vela'nın arkasındaki güvenlik modeli: geçiş anahtarı nedir, anahtarınız nerede durur ve ortada neden oltalanacak bir şey yoktur."
+description: "Geçiş anahtarı nedir, her anahtar türünde özel anahtar nerede durur, neden oltalanacak bir sır yoktur ve bir geçiş anahtarı sizi neye karşı korumaz."
+source: b23999b2ed69
 ---
 
 <script>
@@ -9,58 +10,74 @@ description: "Vela'nın arkasındaki güvenlik modeli: geçiş anahtarı nedir, 
 
 # Geçiş anahtarları nasıl çalışır
 
-Vela'nın bütün güvenlik modeli tek bir fikre dayanıyor: cüzdanınızı kontrol eden
-anahtar, cihazınızın oluşturduğu ve işletim sisteminizin tuttuğu bir **geçiş
-anahtarı** — Vela dahil hiçbir uygulama onu okuyamaz — ve yalnızca yüzünüzle ya da
-parmak izinizle kullanılır.
+Bir Vela cüzdanını kontrol eden anahtarlar **geçiş anahtarlarıdır**: P-256 eğrisi
+üzerindeki WebAuthn kimlik bilgileri. Her birini cihazınız ya da güvenlik anahtarınız
+oluşturur, özel anahtarı saklar ve onu yalnızca siz Face ID, parmak izi, cihaz
+PIN'iniz ya da güvenlik anahtarına dokunup PIN girerek onayladıktan sonra kullanır.
+Vela özel anahtarı hiçbir zaman almaz; bir parola yöneticisi onu eşitliyorsa, onu
+sizin adınıza şifreli olarak o parola yöneticisi tutar.
 
-## Geçiş anahtarı aslında nedir
+## Geçiş anahtarı nedir
 
-Geçiş anahtarı, cihazınızın ürettiği bir genel/özel anahtar çifti. **Özel
-anahtar** işletim sisteminizin geçiş anahtarı sağlayıcısında durur — Apple'da
-genellikle iCloud Anahtar Zinciri, Android'de Google Şifre Yöneticisi — ve uçtan
-uca şifreli saklanır; yani hiçbir uygulama onu okuyamaz veya kopyalayamaz.
-Uygulamalar anahtarı almaz; kimliğinizi doğruladıktan sonra yalnızca *cihazınızdan
-bir şeyi imzalamasını isteyebilirler*.
+Geçiş anahtarı, tek bir web sitesi için oluşturulan bir açık/özel anahtar çiftidir —
+Vela için bu site `getvela.app`. Bir uygulama özel anahtarı hiçbir zaman almaz; yalnızca
+kimlik doğrulayıcıdan bir şeyi imzalamasını isteyebilir, kimlik doğrulayıcı da önce size
+sorar.
 
-Bu, Apple Pay'i ve biyometrik kilidinizi koruyan teknolojinin aynısı.
+Özel anahtarın nerede durduğu anahtarın türüne bağlıdır:
 
-<Callout type="info" title="Can alıcı nokta">
-Bir uygulama — Vela dahil — imza isteyebilir, ama özel anahtarınızı asla görmez.
-Yüzünüz ya da parmak iziniz cihazınıza imzalama yetkisi verir; anahtarın kendisi
-uçtan uca şifreli olarak işletim sisteminizde kalır.
+| Anahtar türü | Özel anahtar nerede durur | Diğer cihazlara eşitlenir mi? |
+| --- | --- | --- |
+| **Bu cihaz** — Face ID, Touch ID, parmak izi, Windows Hello | Platformunuzun parola yöneticisinde (iCloud Anahtar Zinciri, Google Şifre Yöneticisi) ya da 1Password gibi bir parola yöneticisinde | Eşitleme açıksa genellikle evet, uçtan uca şifreli. Windows Hello anahtarları bilgisayarda kalır |
+| QR kod okutarak bağlanan **başka bir telefon** | O telefonun parola yöneticisinde | Yukarıdaki gibi |
+| **Donanım güvenlik anahtarı** (YubiKey ve diğer FIDO2 anahtarları, USB ya da NFC ile) | Güvenlik anahtarının içinde | Asla |
+
+Bir Vela cüzdanı, cüzdanı oluştururken seçilen, istediğiniz türlerden en fazla yedi
+anahtar kullanabilir; bu seçimi [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers)
+sayfası anlatıyor.
+
+## Oltalanacak bir sır yok
+
+Oltalama, bir sırrı size teslim ettirerek işler. Kurtarma ifadesi, ikna edilip bir
+yere yazabileceğiniz on iki kelimedir. Geçiş anahtarının ise **yazabileceğiniz bir
+sırrı yoktur**: ifşa edilecek, yapıştırılacak bir şey yoktur ve sahte bir site onu
+isteyemez. Üstelik geçiş anahtarı tek bir web sitesi için oluşturulduğundan,
+tarayıcınız bir `getvela.app` geçiş anahtarını yalnızca getvela.app ve alt alan
+adlarındaki sayfalara sunar.
+
+Bu da kendi saklamada sık görülen bir kayıp türünü — çalınan kurtarma ifadesini —
+bütünüyle ortadan kaldırır.
+
+## Geçiş anahtarının sizi korumadığı şeyler
+
+<Callout type="warning" title="Geçiş anahtarı onayladığınız her şeyi imzalar">
+Telefonunuzun ya da tarayıcınızın gösterdiği istem, <em>hangi</em> anahtarın
+kullanıldığını söyler, <em>neyin</em> imzalandığını değil. Onaylarsanız bir geçiş
+anahtarı zararlı bir işlemi de iyi bir işlem kadar kolay imzalar. Bu yüzden Vela,
+siz imzalamadan önce her işlemi çözer (<a href="/tr/docs/clear-signing">açık
+imzalama</a>); işlemi gösteren sayfanın kendisi de bu yüzden önemlidir
+(<a href="/tr/docs/bybit-attack">Bybit saldırısı</a>).
 </Callout>
 
-## Ortada neden oltalanacak bir şey yok
+Kilidi açık telefonunuzu ele geçirip onun kontrolünü geçebilen birine ya da geçiş
+anahtarınızın eşitlendiği hesabı kontrol eden birine karşı da korumaz. Cihazınızda bir
+parola kodu tanımlı tutun, Apple ya da Google hesabınızı güvenceye alın ve hiçbir yere
+eşitlenmeyen bir donanım güvenlik anahtarını değerlendirin.
 
-Oltalama, bir sırrı size teslim ettirerek işler. Kurtarma ifadesinde o sır, sahte
-bir sayfaya yazabileceğiniz on iki kelimedir. Geçiş anahtarında ise
-**yazabileceğiniz bir sır yoktur**. Dolandırıcı bir site sizden "geçiş
-anahtarınızı girmenizi" isteyemez, çünkü geçiş anahtarı girilebilen bir şey değil
-— biyometrinizle kapılanmış bir donanım işlemi.
+## İmzalamak nasıl bir his
 
-Bu, insanların kendi sakladıkları parayı kaybetmesinin en yaygın yolunu ortadan
-kaldırır.
+1. Bir işlemin ne yaptığını okuduktan sonra onu Vela'da onaylarsınız.
+2. Cihazınız ya da güvenlik anahtarınız Face ID, parmak izi, PIN'iniz ya da dokunma
+   artı PIN ister.
+3. İmzalar ve uygulamaya yalnızca imza geri döner.
+4. Uygulama imzalı işlemi relay'e verir, relay de onu zincire gönderir; cüzdan
+   sözleşmeniz herhangi bir şey yapmadan önce geçiş anahtarı imzasını zincir üstünde
+   kontrol eder.
 
-## Bir işlemi imzalamak nasıl hissettirir
+## Açık anahtar nereye gider
 
-1. Vela'da bir işlemi onaylarsınız.
-2. Cihazınız Face ID / Touch ID ister.
-3. Cihazınız işlemi geçiş anahtarınızla imzalar.
-4. Vela imzalı işlemi ağa yayınlar.
+Anahtarlarınızın **açık** yarıları, yeni bir cihazın cüzdanınızı bulabilmesi için
+Gnosis Chain üzerindeki herkese açık bir kayıt defterine yazılır. Bu,
+[kurtarma ve giriş](/tr/docs/recovery) sayfasının konusu.
 
-Telefonunuzun kilidini açmakla aynı hareket — çünkü cihazınızın zaten her yerde
-kullandığı geçiş anahtarı mekanizmasının aynısı.
-
-<Callout type="warning" title="Cihaz güvenliği yine de önemli">
-Geçiş anahtarı, uzaktan saldırılara ve oltalamaya karşı fazlasıyla iyi koruma
-sağlar. Cihazınız kilidi açık hâldeyken eline geçiren ve biyometrik kontrolünüzü
-geçebilen birine karşı korumaz. Cihazınızda bir parola kodu tanımlı tutun ve
-kilidi açık telefonu güvenmediğiniz birine vermeyin.
-</Callout>
-
-## Geri kalanı nerede
-
-Geçiş anahtarınızın **genel** anahtarı, cüzdanınızın yeni bir cihazda geri
-getirilebilmesi için küçük bir zincir üstü dizine yazılır. Sonraki sayfanın konusu
-bu: [kurtarma ve giriş](/tr/docs/recovery).
+Sırada: [imzalayıcılar ve güvenlik anahtarları](/tr/docs/signers).

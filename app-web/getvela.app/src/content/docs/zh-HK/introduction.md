@@ -1,45 +1,44 @@
 ---
 title: 簡介
-description: Vela 係乜、為邊啲人做，同埋一個唔使助記詞嘅自我保管智能錢包背後嘅諗法。
+description: "用六行說明 Vela 是甚麼，再列出大家最常帶着來的問題——每個問題都直接連結到答案。"
+source: f1879437a0b5
 ---
 
-# 簡介
+# Vela 說明文件
 
-Vela 係一個俾 EVM 網絡用嘅**自我保管智能錢包**。啲鎖匙喺你手上，但係冇助記詞要抄
-低——你用通行密鑰簽名，靠嘅係你張臉或者你隻手指。
+Vela 是一個**開源、可自行架設、適用於以太坊及其他 EVM 網絡的錢包**，無需助記詞。你的錢包是一個未經修改的
+[Safe](/zh-HK/docs/account-contract) 智能帳戶，你用**通行密鑰**簽署——可以在你的手機或電腦上、
+在另一部手機上，或在一把硬件安全密鑰上。
 
-呢份文件會講點樣開始、點樣開錢包、點樣轉幣，同埋佢背後嗰套安全模型係點一回事。
+- **不靠我們也能運作。**App 以及背後的每一項服務——中繼、公鑰索引、鏈數據和匯率服務——都採用 MIT 授權。按照[自行架設指南](/zh-HK/docs/self-hosting)自行編譯、自行運行；指南亦列明了限制條件。
+- **你的鑰匙，最多七把。**在建立錢包時選定；其中任何一把都能簽署。Vela 從不持有這些鑰匙，在你的錢包上也沒有任何角色。
+- **24 條網絡，同一個地址。**另外還可以加入任何符合要求的 EVM 網絡。
+- **先看清楚，再簽署。**交易會被解碼成淺白的文字；無法解碼的部分會清楚標示。
+- **Alpha 階段。**它可以正常使用、存放真實資金，但仍很年輕：請先用小額。
+  [這裏的 alpha 是甚麼意思](/blog/vela-is-in-alpha)。
 
-## 一句話版本
+## 找答案
 
-- **自我保管。** 你啲錢由一把淨係你先用得到嘅鎖匙控制。Vela（呢間公司）冇辦法
-  轉走、凍結或者幫你攞返你啲錢。
-- **冇助記詞。** 你把簽名鎖匙係一把擺喺裝置安全硬件入面嘅通行密鑰。唔存在嗰啲
-  會唔見、會俾人釣走嘅十二個英文字。
-- **一個 Safe 智能帳戶。** 每個錢包都係一份 [Safe](https://github.com/safe-fndn/safe-smart-account)
-  智能合約，用 ERC-4337 帳戶抽象嚟操作——正正係佢令你可以用通行密鑰簽名，
-  亦令你喺批准之前睇得明每一筆交易。
-- **12 條網絡，同一個地址。** 以太坊、BNB Chain、Polygon、Arbitrum、Optimism、
-  Base、Avalanche、Gnosis、Unichain、Tempo、Monad 同 World Chain——再加埋你自己
-  加嘅網絡——全部都係同一個地址。
-- **睇得明嘅簽名。** 只要有對應嘅描述符，交易就會解成人睇得明嘅意圖（ERC-7730）；
-  冇嘅話，Vela 會退返去盡力而為嘅解碼，並且出警告。解唔到嘅調用會標示出嚟，
-  唔會收埋。
-- **開源。** 錢包同佢全部服務都[公開喺 GitHub](https://github.com/mondaylabsltd/vela-wallet)，
-  任何人都可以自己查佢哋到底做咗啲乜。
-- **仲係測試版軟件。** Vela 用得，亦真係放住真錢，但佢未經過好多年嘅正式環境磨練。
-  請由細額開始。[測試版說明](/blog/vela-is-in-alpha)講清楚咗呢句話嘅意思。
+| 我想知道…… | 請看 |
+| --- | --- |
+| 怎樣把一切都改由自己運行 | [自行架設指南](/zh-HK/docs/self-hosting) |
+| 怎樣運行自己的中繼，手續費歸誰 | [自行架設指南 → 中繼](/zh-HK/docs/self-hosting#relay) · [網絡與費用 → 手續費](/zh-HK/docs/networks-and-fees#fee) |
+| getvela.app 下線了會怎樣 | [自行架設指南 → 沒有 getvela.app 時](/zh-HK/docs/self-hosting#if-getvela-app-disappears) |
+| 一筆交易為甚麼收這個價錢 | [網絡與費用](/zh-HK/docs/networks-and-fees) |
+| 我的鏈是否支援，或怎樣加入一條鏈 | [網絡與費用](/zh-HK/docs/networks-and-fees) · [鏈設定](/zh-HK/chain-setup) |
+| Vela 有沒有經過審計 | [審計與已知問題](/zh-HK/docs/security-audits) |
+| 怎樣確認自己實際簽署的是甚麼 | [清晰簽署](/zh-HK/docs/clear-signing) · [Bybit 被攻擊事件](/zh-HK/docs/bybit-attack) |
+| 應該安裝哪個 App，要花多少錢 | [安裝 Vela](/zh-HK/docs/install) · [取得 Vela](/zh-HK/get-started) |
+| 怎樣建立錢包，用哪些鑰匙 | [建立錢包](/zh-HK/docs/create-wallet) · [簽署鑰匙與安全密鑰](/zh-HK/docs/signers) |
+| 手機遺失或刪除了通行密鑰怎麼辦 | [復原與登入](/zh-HK/docs/recovery) |
+| 之後還能否加入或更換鑰匙 | [簽署鑰匙與安全密鑰](/zh-HK/docs/signers) |
+| 怎樣用 Vela 連接 dApp | [安裝 Vela → dApp](/zh-HK/docs/install#dapps) |
+| 我的錢包有哪些資料是公開的 | [建立錢包 → 哪些內容會公開](/zh-HK/docs/create-wallet#what-is-public) · [私隱政策](/privacy) |
 
-## 佢為邊啲人做
+## 深入閱讀
 
-Vela 係為咗嗰啲想要真正自我保管、又唔想俾助記詞管理搞到頭痕嘅人做嘅——亦為咗
-已經中過一次招嘅人。只要你解得開自己部手機，你就用得到 Vela。
+- [我們為甚麼做 Vela](/zh-HK/docs/why-vela)——來龍去脈，以及我們選擇的取捨。
+- [白皮書](/zh-HK/docs/whitepaper)——架構，以及你究竟需要信任甚麼。
+- [帳戶合約](/zh-HK/docs/account-contract)——你的錢存放在哪些合約裏。
 
-## 跟住睇邊度
-
-- [安裝 Vela](/zh-HK/docs/install) —— 佢喺瀏覽器行，唔使下載。
-- [開你個錢包](/zh-HK/docs/create-wallet) —— 大約一分鐘開好第一個錢包。
-- [通行密鑰點運作](/zh-HK/docs/passkeys) —— 把安全模型講清楚。
-- [白皮書](/zh-HK/docs/whitepaper) —— 完整嘅架構同信任模型。
-
-如果你更在意*點解*而唔係*點做*，[網誌](/blog)記錄咗 Vela 係點樣一步步做出嚟嘅。
+[網誌](/blog)記錄了 Vela 的開發過程。

@@ -1,6 +1,7 @@
 ---
 title: So funktionieren Passkeys
-description: Das Sicherheitsmodell hinter Vela — was ein Passkey ist, wo dein Schlüssel liegt und warum es nichts zum Abfischen gibt.
+description: "Was ein Passkey ist, wo der private Schlüssel bei jeder Schlüsselart liegt, warum es kein Geheimnis gibt, das man dir abfischen kann, und wovor ein Passkey dich nicht schützt."
+source: b23999b2ed69
 ---
 
 <script>
@@ -9,62 +10,74 @@ description: Das Sicherheitsmodell hinter Vela — was ein Passkey ist, wo dein 
 
 # So funktionieren Passkeys
 
-Velas gesamtes Sicherheitsmodell steht auf einer Idee: Der Schlüssel, der deine
-Wallet kontrolliert, ist ein **Passkey**. Dein Gerät erzeugt ihn, dein
-Betriebssystem hält ihn — keine App, auch Vela nicht, kann ihn lesen — und
-benutzt wird er nur mit deinem Gesicht oder deinem Fingerabdruck.
+Die Schlüssel, die eine Vela-Wallet steuern, sind **Passkeys**:
+WebAuthn-Anmeldedaten auf der Kurve P-256. Dein Gerät oder Sicherheitsschlüssel
+erzeugt jeden davon, verwahrt den privaten Schlüssel und benutzt ihn erst, wenn du mit
+Face ID, Fingerabdruck, Geräte-PIN oder Berührung und PIN am Sicherheitsschlüssel
+bestätigst. Vela erhält den privaten Schlüssel nie; synchronisiert ihn ein
+Passwortmanager, verwahrt der Manager ihn verschlüsselt für dich.
 
-## Was ein Passkey wirklich ist
+## Was ein Passkey ist
 
-Ein Passkey ist ein Schlüsselpaar aus öffentlichem und privatem Schlüssel, das
-dein Gerät erzeugt. Der **private Schlüssel** liegt beim Passkey-Dienst deines
-Betriebssystems — typischerweise iCloud-Schlüsselbund bei Apple, Google
-Passwortmanager bei Android — Ende-zu-Ende verschlüsselt, sodass keine App ihn
-lesen oder kopieren kann. Apps bekommen den Schlüssel nicht; sie dürfen nach
-deiner Authentifizierung *dein Gerät bitten, etwas zu signieren*.
+Ein Passkey ist ein Schlüsselpaar aus öffentlichem und privatem Schlüssel, erzeugt für
+eine einzige Website – bei Vela `getvela.app`. Eine App erhält den privaten Schlüssel
+nie; sie kann den Authentifikator nur bitten, etwas zu signieren, und der fragt vorher
+dich.
 
-Das ist dieselbe Technik, die Apple Pay und deine biometrische Entsperrung
-schützt.
+Wo der private Schlüssel liegt, hängt von der Schlüsselart ab:
 
-<Callout type="info" title="Der entscheidende Punkt">
-Eine App — Vela eingeschlossen — kann eine Signatur anfordern, sieht aber nie
-deinen privaten Schlüssel. Gesicht oder Fingerabdruck autorisieren dein Gerät zu
-signieren; der Schlüssel selbst bleibt beim Betriebssystem, Ende-zu-Ende
-verschlüsselt.
+| Schlüsselart | Wo der private Schlüssel liegt | Auf andere Geräte synchronisiert? |
+| --- | --- | --- |
+| **Dieses Gerät** – Face ID, Touch ID, Fingerabdruck, Windows Hello | Im Passwortmanager deiner Plattform (iCloud-Schlüsselbund, Google Passwortmanager) oder in einem Passwortmanager wie 1Password | Meist ja, Ende-zu-Ende-verschlüsselt, wenn die Synchronisierung an ist. Windows-Hello-Schlüssel bleiben auf dem PC |
+| **Ein anderes Handy**, verbunden per QR-Code | Im Passwortmanager dieses Handys | Wie oben |
+| **Ein Hardware-Sicherheitsschlüssel** (YubiKey und andere FIDO2-Schlüssel, per USB oder NFC) | Im Sicherheitsschlüssel selbst | Nie |
+
+Eine Vela-Wallet kann bis zu sieben Schlüssel in beliebiger Mischung nutzen, gewählt
+beim Erstellen; [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers)
+behandelt diese Wahl.
+
+## Kein Geheimnis zum Abfischen
+
+Phishing funktioniert, indem man dich dazu bringt, ein Geheimnis herauszugeben. Eine
+Seed-Phrase sind zwölf Wörter, die man dir abschwatzen kann, bis du sie irgendwo
+eintippst. Ein Passkey hat **kein Geheimnis, das du eintippen könntest**: Es gibt
+nichts zu verraten, nichts einzufügen, und eine gefälschte Seite kann nicht danach
+fragen. Und weil ein Passkey für eine einzige Website erzeugt wird, bietet dein
+Browser einen `getvela.app`-Passkey nur Seiten auf getvela.app und ihren Subdomains
+an.
+
+Damit fällt eine ganze Klasse von Verlusten weg, die bei der Selbstverwahrung häufig
+ist: die gestohlene Wiederherstellungsphrase.
+
+## Wovor ein Passkey dich nicht schützt
+
+<Callout type="warning" title="Ein Passkey signiert, was du freigibst">
+Die Abfrage deines Handys oder Browsers sagt, <em>welcher</em> Schlüssel benutzt wird,
+nicht, <em>was</em> signiert wird. Ein Passkey signiert eine schädliche Transaktion
+genauso bereitwillig wie eine gute, wenn du sie freigibst. Deshalb dekodiert Vela jede
+Transaktion, bevor du signierst (<a href="/de/docs/clear-signing">Klartext-Signatur</a>),
+und deshalb kommt es auf die Seite an, die sie anzeigt
+(<a href="/de/docs/bybit-attack">der Bybit-Angriff</a>).
 </Callout>
 
-## Warum es nichts zum Abfischen gibt
+Er schützt auch nicht vor jemandem, der dein entsperrtes Handy hat und dessen Prüfung
+bestehen kann, oder der das Konto kontrolliert, über das dein Passkey synchronisiert
+wird. Richte einen Gerätecode ein, sichere dein Apple- oder Google-Konto und zieh
+einen Hardware-Sicherheitsschlüssel in Betracht, der nirgends synchronisiert wird.
 
-Phishing funktioniert, indem man dich dazu bringt, ein Geheimnis herauszugeben.
-Bei einer Seed-Phrase sind das zwölf Wörter, die du in eine gefälschte Seite
-tippen kannst. Bei einem Passkey gibt es **kein Geheimnis, das man tippen könnte**.
-Eine Betrugsseite kann dich nicht bitten, „deinen Passkey einzugeben“, weil ein
-Passkey nichts Eingebbares ist — er ist eine Hardware-Operation, die deine
-Biometrie freigibt.
+## Wie sich das Signieren anfühlt
 
-Damit fällt der mit Abstand häufigste Weg weg, auf dem Menschen selbstverwahrtes
-Geld verlieren.
+1. Du bestätigst eine Transaktion in Vela, nachdem du gelesen hast, was sie tut.
+2. Dein Gerät oder Sicherheitsschlüssel verlangt Face ID, einen Fingerabdruck, deine
+   PIN oder Berührung plus PIN.
+3. Es signiert, und nur die Signatur geht zurück an die App.
+4. Die App übergibt die signierte Operation an das Relay, das sie einreicht; dein
+   Wallet-Vertrag prüft die Passkey-Signatur on-chain, bevor er irgendetwas tut.
 
-## Wie sich eine Signatur anfühlt
+## Wohin der öffentliche Schlüssel geht
 
-1. Du bestätigst eine Transaktion in Vela.
-2. Dein Gerät fragt nach Face ID / Touch ID.
-3. Dein Gerät signiert die Transaktion mit deinem Passkey.
-4. Vela schickt die signierte Transaktion ins Netzwerk.
+Die **öffentlichen** Hälften deiner Schlüssel werden in einem öffentlichen Register auf
+der Gnosis Chain festgehalten, damit ein neues Gerät deine Wallet finden kann. Darum
+geht es in [Wiederherstellung und Anmeldung](/de/docs/recovery).
 
-Dieselbe Geste wie beim Entsperren deines Handys — weil es derselbe
-Passkey-Mechanismus ist, den dein Gerät überall sonst schon benutzt.
-
-<Callout type="warning" title="Gerätesicherheit bleibt wichtig">
-Ein Passkey schützt hervorragend gegen Angriffe aus der Ferne und gegen Phishing.
-Er schützt nicht gegen jemanden, der dein entsperrtes Gerät in der Hand hat und
-deine biometrische Prüfung besteht. Setz einen Gerätecode und gib dein
-entsperrtes Handy niemandem, dem du nicht vertraust.
-</Callout>
-
-## Wo der Rest liegt
-
-Der **öffentliche** Schlüssel deines Passkeys wird in einem kleinen On-Chain-Index
-veröffentlicht, damit deine Wallet auf einem neuen Gerät wiederhergestellt werden
-kann. Das ist das Thema der nächsten Seite:
-[Wiederherstellung und Anmeldung](/de/docs/recovery).
+Weiter: [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers).

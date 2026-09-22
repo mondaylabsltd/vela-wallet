@@ -1,178 +1,107 @@
 ---
 title: 監査と既知の問題
-description: Vela が依存するすべてのオンチェーンのコントラクト、誰が監査したのか、監査された版と実際に配置されている版が一致するのか、そして何が監査されていないのか。
+description: "Vela が依存するすべてのコントラクト、どのバージョンを誰が監査したのか、監査されたバージョンがデプロイされているものと同じか、私たちが注視している未解決の指摘、そしてまったく監査されていないもの。"
+source: c4c50ad89f2f
 ---
 
-「監査済み」とは、特定のコードの特定のバージョンについての主張です。だからこのページ
-はその言葉を振り回すのではなく、報告書そのもの、配置アドレスそのもの、そして監査版と
-配置版の差分を示します。あわせて、何が**監査されていない**のかも挙げます。後者の
-リストも、前者と同じだけ重みを持つからです。
+「監査済み」とは、特定のバージョンの特定のコードについての主張です。そのため、このページでは監査報告書、コミット、デプロイ先のアドレスを示します。そして、それと同じくらい重要な、**監査されていない**ものも挙げます。
 
-最終確認：2026 年 8 月。誤りを見つけたら教えてください。直します。
+最終確認日：2026 年 9 月 22 日。誤りを見つけたら知らせてください。修正します。
 
 ## 資金の経路
 
-あなたのお金に触れうるコントラクトは 4 層。4 層とも、公開された監査のある第三者の
-コントラクトであり、いずれも配置アドレスは公式の正規デプロイです。
+資金に触れうるコントラクトは、すべて第三者のコードの正規のデプロイメントで、レビューが公開されています。
 
 ### Safe v1.4.1 —— アカウント本体
 
-あなたのウォレットは [Safe](https://github.com/safe-global/safe-smart-account) の
-プロキシです。SafeL2 のシングルトン、プロキシファクトリ、互換フォールバックハンドラ、
-そしてバッチ用の MultiSend。
+あなたのウォレットは、SafeL2 シングルトンと SafeProxyFactory を使う [Safe](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) のプロキシです。バッチ処理は MultiSend を通ります。
 
-[Ackee Blockchain が Safe v1.4.0 を監査](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)
-（最終報告 2023 年 3 月）：指摘 11 件、クリティカルおよび高はゼロ。私たちが配置する
-v1.4.1 と監査された v1.4.0 の差は、ERC-4337 互換のための 1 行の修正だけです
-（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）。
-MultiSend のロジックは
-[G0 Group が監査した v1.3.0](https://github.com/safe-global/safe-smart-account/tree/main/docs)
-以来変わっていません。すべてのアドレスは
-[safe-deployments](https://github.com/safe-global/safe-deployments) の正規デプロイ
-と一致し、これらのコントラクトは
-[Safe Foundation のバグバウンティ](https://docs.safefoundation.org/security/bug-bounty)
-の対象です（クリティカルで最大 100 万ドル）。
+[Ackee Blockchain が Safe v1.4.0 を監査しました](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)（最終報告 2023 年 3 月 16 日、修正レビュー 3 月 28 日）。指摘は 11 件で、Critical や High はありません。Medium の 2 件は、変更されずに認識済みとされました。対象範囲は SafeL2、SafeProxyFactory、CompatibilityFallbackHandler、MultiSendCallOnly、SignMessageLib です。v1.4.1 と v1.4.0 の機能上の違いは 1 行だけで、モジュールのセットアップにおける ERC-4337 互換性の修正です（[PR #572](https://github.com/safe-global/safe-smart-account/pull/572)）。Safe は Ackee に相談し、再監査は不要と結論づけました。MultiSend のロジックは v1.3.0 から変わっておらず、v1.3.0 は [G0 Group が監査しています](https://github.com/safe-global/safe-smart-account/tree/main/docs)。すべてのアドレスは [safe-deployments](https://github.com/safe-global/safe-deployments) と一致します。コアコントラクトは [Safe Foundation のバグバウンティ](https://docs.safefoundation.org/security/bug-bounty)の対象で、最上位の報奨金は最大 100 万ドルです。
 
-監査が扱わないものがひとつあります。2025 年の Bybit の事件です。あの攻撃が侵害した
-のは Safe 公式ウェブフロントエンドのビルドパイプラインであって、コントラクトでは
-ありません。[公式のフォレンジックの結論](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)
-は、Safe のスマートコントラクトに脆弱性はなかったとしています。私たちはこれを
-ウェブと運用の層についての教訓として読んでいます。その層こそ、あなたが私たちを
-厳しく見るべき場所でもあります。
+2025 年の Bybit の事件は、コントラクトに関する指摘ではありません。攻撃者が改ざんしたのは Safe のウェブインターフェースに配信される JavaScript であり、Safe の[調査声明](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)はコントラクトに脆弱性はなかったとしています。[事件についてのページ](/ja/docs/bybit-attack)では、同じ種類の攻撃が、私たちのものも含めてあらゆるウォレットのインターフェースに関わる理由を説明しています。
 
-### Safe4337Module v0.3.0 —— ERC-4337 のアダプタ
+### Safe4337Module v0.3.0 —— ERC-4337 アダプター
 
-`0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` に配置。v0.3.0 の正規アドレスです
-（Sourcify で完全一致——オンチェーンのバイトコードが監査されたコードそのもの）。
-[Ackee Blockchain が監査](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)
-（最終報告 2024 年 3 月）し、情報レベルを超える未解決の指摘はありません。私たちが
-使う v0.3.0 + EntryPoint v0.7 + Safe 1.4.1 以上という組み合わせは、監査とリリース
-ノートが記述しているとおりの構成です。
+`0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` にデプロイされ（Sourcify で完全一致）、あなたの Safe のフォールバックハンドラーにも設定されています。レビューは 3 回行われています。[報告書はこちら](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)。
 
-このモジュールの履歴には、公表された問題がひとつあります。v0.1.0（2023 年）は
-`initCode` と `paymasterAndData` に署名しておらず、ガスのグリーフィング経路が
-ありました。これは
-[v0.2.0 で修正](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)
-され、v0.1.0 がテストネットの外へ出ることはありませんでした。私たちが使うのは
-v0.3.0 で、この修正を引き継いでいます。
+- **Ackee Blockchain**、最終報告 2024 年 3 月：警告 1 件（コンパイラのオプティマイザーの使用）が認識済み。それより重い未解決の指摘はありません。
+- **Certora**、2026 年 8 月：**Medium** の指摘が 1 件あり、認識済みですが v0.3.0 では**修正されていません**。*認可の変更が、同じバンドル内ですでに検証された後続の UserOperation を無効にしない*というものです。後述の「既知の問題」を参照してください。
+- **Nethermind**、2026 年 8 月：指摘なし。
 
-### SafeWebAuthnSharedSigner v0.2.1 —— パスキーの署名器
+ウォレットのデプロイ時にこのモジュールを有効にする SafeModuleSetup v0.3.0（`0x2dd6…5b47`）は、Certora と Nethermind のレビューの対象に含まれています。
 
-`0x94a4F6affBd8975951142c3999aEAB7ecee555c2` に配置。v0.2.1 の正規アドレスです
-（Safe のシングルトンファクトリにより、どのチェーンでも同じ）。
+このモジュールで公表された問題は 1 件です。v0.1.0 は `initCode` と `paymasterAndData` に署名しておらず、ガスを浪費させる攻撃の余地がありましたが、[v0.2.0 で修正されました](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)。Safe によれば、v0.1.0 はテストネット以外では使われていません。Vela が使っているのは v0.3.0 で、EntryPoint v0.7 と Safe 1.4.1 との組み合わせは、このモジュールのリリースが示している構成です。
 
-「shared（共有）」の意味と、意味しないこと：共有されているのは*コントラクトの配置*
-であって、Safe のシングルトンが共有されているのと同じです。あなたの鍵は共有されま
-せん。各 Safe が delegatecall で `configure()` を呼び、自分の P-256 公開鍵を自分の
-ストレージに保存します。ひとつの署名器のインスタンスが表すのは、Safe ごとにちょうど
-ひとつのパスキーであり、他人の Safe があなたのものを使うことはできません。
+### Safe パスキーモジュール v0.2.1 —— 署名器
 
-ここではバージョンが効きます。v0.2.0 の監査は、共有署名器が対象外であると
-[明記しています](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.0/audit.md)
-——当時そのコントラクトはまだ存在しませんでした。私たちが配置しているものを対象と
-するのは v0.2.1 の監査です。
-[Hats Finance の監査コンペ](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
-（2024 年 6〜7 月：高ゼロ、中ゼロ、低 3 件——すべて修正済み）に加えて、
-[Certora によるリリースコミットのレビュー](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)
-でも新たな指摘はありませんでした。リリース以降、コントラクトレベルの脆弱性は公表
-されていません。パスキー関連のコントラクトも Safe Foundation のバウンティ対象です。
+最初の鍵は、`0x94a4F6affBd8975951142c3999aEAB7ecee555c2` にある **SafeWebAuthnSharedSigner** が検証します。「Shared（共有）」とは、Safe のシングルトンと同じように、コントラクトのデプロイメントが共有されているという意味です。鍵が共有されるわけではありません。各 Safe は、自分の P-256 公開鍵を自分のストレージに保存しています。
 
-Safe 自身のドキュメントは、ひとつのクレデンシャルをアカウント唯一の鍵として扱うので
-はなく、パスキーの所有に復旧経路を組み合わせることを勧めています。Vela がこれをどう
-扱うかは[復旧とサインイン](/ja/docs/recovery)にあります。
+追加の鍵にはそれぞれ専用の署名器コントラクトがあり、`0x1d31F259eE307358a26dFb23EB365939E8641195` の **SafeWebAuthnSignerFactory** が、`0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` の **SafeWebAuthnSigner シングルトン**へのプロキシとして作成します。
 
-オンチェーンの P-256 検証は RIP-7212 のプリコンパイルを直接使い、Solidity の
-フォールバック検証器はありません。ネットワークを有効化する前に、アプリは実際の署名で
-プリコンパイルを試し、検証に失敗すればそのネットワークを断ります。正直な注意が 2 つ。
-当初の RIP-7212 仕様には端のケースの欠陥があり、
-[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) がそれを直すために書かれました
-（正しい形の WebAuthn 署名には影響しません）。そして 1 回の試行では、あるチェーンの
-実装が珍しい実行文脈でどう食い違いうるかを、すべて捕まえることはできません。
+v0.2.1 のこれらのコントラクトを対象とするレビューは次のとおりです（[報告書](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)）。
 
-### EntryPoint v0.7 —— ERC-4337 のエントリポイント
+- [Hats Finance の監査コンペティション](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)（2024 年 6〜7 月）：High と Medium の指摘はなし。Low が 3 件あり、すべて修正済み。
+- **Certora** によるリリースコミットのレビュー：新たな指摘はなし。（それ以前の v0.2.0 の監査には、共有署名器はまだ監査されていないと記されています。共有署名器はその監査のあとに追加されたものです。）
+- **Nethermind**、2026 年 8 月：指摘なし。
 
-`0x0000000071727De22E5E9d8BAf0edAc6f37da032` に配置。
-[v0.7.0 の正規デプロイ](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)です。
-[OpenZeppelin が監査](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
-（イーサリアム財団の委託、2024 年 1 月）：クリティカル ゼロ、高 ゼロ、中 5 件、
-すべて解決済み——そして監査されたコミットが、配置されているリリースです。
-EntryPoint v0.7.0 はイーサリアム財団の
-[ERC-4337 バグバウンティ](https://docs.erc4337.io/community/bug-bounty)の対象です
-（最大 25 万ドル）。
+リリース以降、コントラクトレベルの脆弱性は公表されておらず、パスキーのコントラクトも Safe Foundation のバウンティの対象です。
 
-## 私たちが見張っている既知の問題
+パスキーの署名はチェーンの **EIP-7951 / RIP-7212** プリコンパイルで検証され、代わりの検証器はありません。アプリは、ネットワークを有効にする前に、実際の署名でプリコンパイルを確認します。注意点が 2 つあります。当初の RIP-7212 の仕様には境界ケースの欠陥があり、[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) で修正されています（影響するのはもともと失敗すべき入力だけで、正しい形式の WebAuthn 署名には影響しません）。また、一度の確認では、チェーンの実装がずれうるすべてのケースを見つけることはできません。
 
-### EntryPoint のグリーフィング経路
+### EntryPoint v0.7 —— 操作を実行する
 
-2026 年 2 月、Trust Security のセキュリティ研究者が、v0.9 より前のすべての
-EntryPoint——私たちが使う v0.7 を含みます——に影響するグリーフィングと検閲の経路を
-[公表しました](https://erc4337.substack.com/p/improving-useroperation-execution)。
-署名済みの UserOperation がマイニングされる前に横取りできる攻撃者は、それを自分が
-制御するコールフレームの中で実行し、内側の実行を失敗させられます。操作は失敗します
-が、ガスは請求されます。イーサリアム財団はこの発見に 5 万ドルの報奨金を支払い、
-資金窃取ではなく検閲・グリーフィングの経路と分類しました。実際に悪用されたことは
-ありません。
+`0x0000000071727De22E5E9d8BAf0edAc6f37da032` にデプロイされた、[正規の v0.7.0 リリース](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)です。Ethereum Foundation の依頼で [OpenZeppelin が監査しました](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)（2024 年 1 月）。Critical と High の指摘はなく、Medium が 5 件、24 件の指摘すべてが解決済みで、修正レビューのコミットはリリースと一致します。Ethereum Foundation の [ERC-4337 バグバウンティ](https://docs.erc4337.io/community/bug-bounty)（最大 25 万ドル）の対象です。
 
-できること：手数料を無駄にし、取引を遅らせること。できないこと：資金を盗むこと、
-署名を偽造すること。Vela の露出は狭く、UserOperation は公開のメモリプールを通らず
-リレーへ直接送られるので横取りの機会がほとんどなく、最悪でもあなたが同意済みの手数料
-の範囲に収まります。修正は EntryPoint v0.9（2025 年 11 月）にしかなく、v0.7 自体に
-パッチは当てられません。周辺のスタック——とくに Safe の 4337 モジュール系——が v0.9
-に対応するのに合わせて移行する見込みで、そのときはここに書きます。
+## 注視している既知の問題
+
+### 同じバンドル内での認可の変更（Safe4337Module、Certora M-01）
+
+EntryPoint は、バンドル内のすべての操作を検証してから、それぞれを実行します。そのため、ある操作が所有者を削除しても、同じバンドルの後ろのほうにある、その所有者が署名した操作は検証を通過して実行されます。Safe はこれを認識したうえで、v0.3.0 を変更しませんでした。
+
+Vela のアプリは所有者を変更する操作を一切組み立てないので、Vela 自身がこれを引き起こすことはありません。それでも無関係ではありません。dApp はあなたのウォレットに、自分自身の所有者を変更するよう求められます（後述の「欠けている防御」を参照）。また、ほかの Safe ツールで漏れた鍵を削除する人も、同じバンドルの中でその鍵が確実に締め出されるとは期待できません。
+
+### 署名済みの操作の横取り（v0.9 より前の EntryPoint）
+
+2026 年 2 月、研究者たちが、v0.7 を含む v0.9 より前のすべての EntryPoint に影響する、妨害と検閲の手口を[公表しました](https://erc4337.substack.com/p/improving-useroperation-execution)。署名済みの操作をマイニング前に手に入れた人は、それを自分が管理する呼び出しの中で実行し、内部の実行を強制的にリバートさせられます。操作は失敗し、署名し直す必要があります。（Vela のインバンド手数料では、手数料の送金も一緒にリバートするので、ガス代を負担するのはあなたではなくリレーです。）影響を受けるのは、リエントランシー保護のあるコントラクトを呼び出す操作や、一時的な状態によってリバートさせられる操作で、単純な送金は影響を受けません。出金のフローに対して繰り返し使われれば、しばらくのあいだ資金を使えない状態が続くおそれがあります。署名を偽造することも、資金の行き先を変えることもできません。
+
+Vela のリレーは共有のメンプールを通さず操作を直接送信しますが、保留中の `handleOps` トランザクションは公開のメンプールで見えるため、これはリスクを狭めるだけで、なくすわけではありません。修正は EntryPoint v0.9（2025 年 11 月）にしかなく、v0.7 にパッチを当てることはできません。移行は Safe の 4337 モジュールが v0.9 に対応するかどうかにかかっており、移行したらこのページでお知らせします。
+
+### Vela 自身の防御に欠けているもの
+
+コントラクトの指摘ではありませんが、ウォレットがあなたを守る範囲が、想像よりも狭いかもしれない点です。いずれも修正に向けて追跡しています。
+
+- **ウォレットから自分自身への呼び出しはブロックされません。**dApp は、あなたの Safe に対して `enableModule`、`addOwnerWithThreshold`、`setFallbackHandler`、`setGuard` を求められます。そのどれかに一度署名すれば、アカウントを明け渡すことになります。Vela はこれらの呼び出しをデコードしますが、止めはしません。宛先があなた自身のアドレスになっているリクエストは、拒否してください。
+- **承認のガードが止めるのは「無制限」の額だけです**（2^200 以上。Permit2 では 2^152 以上）。大きいが有限の額の承認、署名による許可、NFT の `setApprovalForAll` には注意が表示されるだけで、ブロックはされません。
+- **取得したディスクリプターは認証されていません。**チェーンデータサーバーから取得したディスクリプターは、コントラクトと一致すれば「検証済み」と表示されます。その信頼性はサーバーの信頼性と同じです。
+- **独立した署名ページは、まだどのアプリとも連携していません。**
+- **ネットワークの確認では、Safe のパスキー署名器ファクトリーを調べていません。**2 本目から 7 本目の鍵にはこれが必要で、これがないまま追加されたネットワークでは、署名できるのは最初の鍵だけです。
+- **ウェブサイトは、パスキーと同じドメインで第三者のアナリティクスのスクリプトを読み込んでいます。**サイトは自分のページがパスキーを使うことを（Permissions-Policy ヘッダーで）禁止しており、鍵を保持するページにはこのスクリプトを載せていません。
 
 ## 監査されていないもの
 
-- **Vela 自身のコントラクト。** 私たちが書いた小さなコントラクトが 2 つ、Gnosis に
-  配置されています。
-  [パスキー公開鍵インデックス](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools)
-  （あなたの端末が公開鍵を見つけるための、追記のみのレジストリ）と、そのバッチ補助
-  です。これらは監査されていません。構造上、資金を保持せず、所有者もおらず、
-  アップグレードもできません。発見のための層であって、認可の層ではありません。支払い
-  の権限は、つねにあなたの Safe の中に設定されたパスキーから来ます。現実的な最悪の
-  事態はグリーフィング（誰かがインデックスの項目を先取りする）で、復旧が不便になる
-  ことはあっても、お金は動かせません。以前の手数料設計にあったガス精算用のスプリッタ
-  は、もう取引の経路にありません。
-- **Multicall3。** その README 自身が
-  [はっきり書いています](https://github.com/mds1/multicall3)：「このコントラクトは
-  監査されていません。」私たちは、作者が安全だと説明しているとおりの使い方——残高、
-  トークンのメタデータ、価格を読むためのバッチ読み取り——をしています。Vela がそこに
-  承認を与えることはなく、資金を持たせることもありません。バグの最悪の結果は、読み
-  取り値が正しくないことです。
-- **CREATE2 のデプロイヤー。**
-  [Arachnid の決定論的デプロイプロキシ](https://github.com/Arachnid/deterministic-deployment-proxy)
-  はエコシステム標準のステートレスなデプロイヤーで、正式な監査はありません。あるチェーン
-  で欠けていたり改変されていたりすれば、私たちのネットワーク検査は安全側に倒れて失敗
-  します。
-- **Tempo と pathUSD。** 12 の組み込みネットワークのひとつである Tempo にはネイティブ
-  コインがなく、ガスは pathUSD ステーブルコインで決済されます。2026 年 8 月時点で、
-  Tempo のコアプロトコルにも pathUSD にも公開されたセキュリティ監査はなく、バグ
-  バウンティもありません。独立した
-  [DefiLlama の担保評価](https://artifacts.llama.fi/md-exports/pathusd-collateral-assessment-april2026-1776332825042.md)
-  （2026 年 4 月）は pathUSD を高リスクと評価しました。これはチェーン側のリスクで、
-  どのウォレットにも緩和できません。Tempo に置いた資金も、そこでのガス決済も、それを
-  引き継ぎます。Tempo はこのリストで最も新しく、最も実績の少ないチェーンとして扱い、
-  残高の大きさもそれに合わせてください。監査が公開されればこの節を更新します。
-- **Vela そのもの。** 私たちのアプリとバックエンドサービスは第三者の監査を受けて
-  いません。これがこのページで最大の留保であり、サイトのヘッダーにも明記しています。
-  正直な詳細は[Vela はアルファです](/blog/vela-is-in-alpha)に。少額から始めてください。
-  コードを読んでください。
+- **Vela 自身のコントラクト。**`0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`（Gnosis。Ethereum と Base でも同じアドレス）にある[公開鍵レジストリ](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)、`0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf` にある最初のレジストリのデプロイメント（そのアドレスは、すべての登録の署名ドメインに含まれています）、そしてそれらが置き換えた以前のインデックス（`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`。読み取り専用の履歴）。これらは監査されていません。資金を持たず、所有者もおらず、アップグレードもできません。認可の層ではなく、ウォレットを見つけるための層です。資金を動かす権限は、あなたの Safe に設定された鍵からしか生まれません。現実的に起こりうる最悪の事態は、新しい端末でウォレットが見つけにくくなることであり、資金が動くことではありません。
+- **Multicall3。**その README には「This contract is unaudited.」と[書かれています](https://github.com/mds1/multicall3)。Vela はこれを、残高、トークンの詳細、価格の見積もりといったまとめての読み取りにしか使わず、承認や資金には一切使いません。
+- **決定論的デプロイヤー**（Arachnid の CREATE2 プロキシと Safe のシングルトンファクトリー）。エコシステムの標準でステートレスですが、正式な監査は受けていません。これらがなければ、Vela のネットワークの確認は安全側に倒れて失敗します。確認するのはそのアドレスにコードがあることで、1 バイトずつ一致するかではありません。
+- **Tempo。**24 の内蔵ネットワークのひとつで、ネイティブコインがなく、Vela はそこでのガス代を pathUSD というステーブルコインで払います。2026 年 9 月時点で、Tempo の[セキュリティポリシー](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)には、プロトコルはまだ監査中で、有効なバグバウンティはないと書かれています。Tempo で保有する資金と、そこで払うガス代には、このチェーンレベルのリスクが伴います。一覧の中で最も新しく、最も実績の少ないチェーンとして扱ってください。
+- **Vela そのもの。**アプリ、バックエンドのサービス、そして上に挙げたコントラクトは、第三者による監査を受けておらず、その予定もありません。これがこのページで最も大きな注意点です。詳しくは [Vela is in alpha](/blog/vela-is-in-alpha) に書いています。少額から始め、コードを読んでください。
 
 ## 自分で確かめる
 
-上のアドレスはすべて公開された正規デプロイで、公式のレジストリと突き合わせられます
-——[safe-deployments](https://github.com/safe-global/safe-deployments)、
-[safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)、
-そして [EntryPoint のリリースノート](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)：
+以下のアドレスは、どれも正規の公開デプロイメントです。[safe-deployments](https://github.com/safe-global/safe-deployments)、[safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)、[EntryPoint のリリース](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)と照らし合わせて確認してください。
 
-| コントラクト | アドレス |
-| ----------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1 | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1 | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| CompatibilityFallbackHandler v1.4.1 | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| MultiSend v1.4.1 | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| SafeModuleSetup v0.3.0 | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0 | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| パスキー公開鍵インデックス（Gnosis） | `0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3` |
+| コントラクト                              | アドレス                                     |
+| ----------------------------------------- | -------------------------------------------- |
+| SafeL2 シングルトン v1.4.1                | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner シングルトン v0.2.1    | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| 公開鍵レジストリ（Vela、未監査）          | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+
+¹ ネットワークを追加するときに確認されます。あなたの Safe は、代わりに 4337 モジュールをフォールバックハンドラーとして使っています。

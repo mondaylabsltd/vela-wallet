@@ -64,3 +64,73 @@ describe('every docs file has frontmatter a YAML parser can read', () => {
 		});
 	}
 });
+
+/**
+ * A translated doc links inside its own language (spec 080).
+ *
+ * Translated docs write their internal links with the locale prefix
+ * (`/ja/docs/recovery`), because nothing rewrites them at render time. A link
+ * written without it silently drops a Japanese reader onto the English page —
+ * nine Chinese links did exactly that. The pages that exist only in English
+ * (blog, legal, registry) must keep their unprefixed URL: a `/ja/privacy`
+ * does not exist.
+ */
+const LOCALIZED = /^\/(docs(\/[a-z0-9-]+)?|about|roadmap|get-started|chain-setup)?(#.*)?$/;
+const ENGLISH_ONLY = /^\/(blog|privacy|terms|registry)(\/|$|#)/;
+
+describe('translated docs keep their links in their own language', () => {
+	for (const file of markdownFiles(DOCS)) {
+		const relative = file.slice(DOCS.length + 1);
+		const parts = relative.split('/');
+		if (parts.length !== 2) continue;
+		const tag = parts[0];
+
+		it(`${relative} prefixes every localized link with /${tag}`, () => {
+			const text = readFileSync(file, 'utf8');
+			const targets = [
+				...[...text.matchAll(/\]\((\/[^)\s]*)\)/g)].map((m) => m[1]),
+				...[...text.matchAll(/href="(\/[^"]*)"/g)].map((m) => m[1])
+			];
+			const wrong = targets.filter(
+				(t) =>
+					LOCALIZED.test(t) ||
+					(t.startsWith(`/${tag}/`) && ENGLISH_ONLY.test(t.slice(tag.length + 1)))
+			);
+			expect(wrong, `unlocalized or mis-localized links in ${relative}`).toEqual([]);
+		});
+	}
+});
+
+/**
+ * Anchors other pages link to (contracts/docs-information-architecture.md).
+ * Heading ids come from heading TEXT, so they differ per language; the anchors
+ * that are linked from elsewhere are explicit `<span id>` markers and must be
+ * present in every copy of the page.
+ */
+const STABLE_ANCHORS: Record<string, string[]> = {
+	'self-hosting': [
+		'if-getvela-app-disappears',
+		'relay',
+		'index',
+		'chain-data',
+		'exchange-rates',
+		'web-app'
+	],
+	install: ['dapps'],
+	'networks-and-fees': ['fee'],
+	'create-wallet': ['what-is-public']
+};
+
+describe('linked anchors exist in every language', () => {
+	for (const [slug, anchors] of Object.entries(STABLE_ANCHORS)) {
+		const copies = markdownFiles(DOCS).filter((f) => f.endsWith(`/${slug}.md`));
+		for (const file of copies) {
+			const relative = file.slice(DOCS.length + 1);
+			it(`${relative} carries ${anchors.join(', ')}`, () => {
+				const text = readFileSync(file, 'utf8');
+				for (const id of anchors)
+					expect(text, `${relative} lacks id="${id}"`).toContain(`id="${id}"`);
+			});
+		}
+	}
+});

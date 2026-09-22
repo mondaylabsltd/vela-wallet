@@ -1,6 +1,7 @@
 ---
 title: Teknik doküman
-description: Vela nasıl çalışıyor ve onu kullanmak için neye güvenmeniz gerekiyor — neye gerekmiyor. Mimari, güvenlik modeli, kurtarma ve bütün bunları kendiniz nasıl doğrularsınız.
+description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -9,264 +10,324 @@ description: Vela nasıl çalışıyor ve onu kullanmak için neye güvenmeniz g
 
 # Teknik doküman
 
-<Callout type="info" title="Durum: alfa · v0.1">
+<Callout type="info" title="Durum: alfa · son güncelleme Eylül 2026">
 Bu sayfa Vela'nın bugün nasıl çalıştığını ve onu kullanmak için neye güvenmeniz
-gerekip gerekmediğini anlatıyor. Pazarlamadan çok dürüstlüğü gözetiyor. Vela
-<a href="/blog/vela-is-in-alpha">alfada</a> — küçük tutarlarla başlayın. Vela'nın
-tokenı yok. Buradaki her şey açık kaynak kodla doğrulanabilir.
+gerekip neye gerekmediğini anlatıyor. Vela <a href="/blog/vela-is-in-alpha">alfa</a>
+aşamasında — küçük tutarlarla başlayın. Vela'nın tokenı yok. Buradaki her şey açık
+kaynak kodla karşılaştırılarak kontrol edilebilir; kod ile bu sayfa çeliştiğinde
+doğru olan koddur, hatalı olan da bu sayfadır.
 </Callout>
 
 ## Özet
 
-Vela, EVM ağları için **kendi saklamanızda duran bir akıllı sözleşme cüzdanı**. Her
-cüzdan, bir **geçiş anahtarının** kontrol ettiği bir
-[Safe](https://github.com/safe-fndn/safe-smart-account) akıllı hesabı; geçiş anahtarı
-ise cihazınızın işletim sisteminin tuttuğu, uçtan uca şifreli saklanan ve Face ID,
-Touch ID veya parmak iziyle açılan bir WebAuthn (P-256) kimlik bilgisi. Kopyalamanız,
-saklamanız ya da kaybetmeniz gereken kurtarma ifadeleri ve özel anahtarlar yok.
+Vela, Ethereum ve diğer EVM ağları için **kendi saklamanızda duran bir akıllı
+sözleşme cüzdanıdır**. Her cüzdan, **ERC-4337** üzerinden çalıştırılan ve en fazla
+yedi **geçiş anahtarıyla** kontrol edilen değiştirilmemiş bir **Safe v1.4.1**
+hesabıdır — geçiş anahtarları, cihazlarınızın, parola yöneticinizin ya da donanım
+güvenlik anahtarlarınızın tuttuğu WebAuthn P-256 anahtarlarıdır. Kurtarma ifadesi
+yoktur.
 
-Şirket olarak Vela, anahtarlarınızı da paranızı da hiç tutmuyor ve onları **taşıyamaz,
-donduramaz ya da el koyamaz**. Uygulama, işlem relay'i ve destek servisleri açık kaynak
-ve kendiniz barındırabilirsiniz. Güvenmeniz gereken şey, denetlenmiş akıllı
-sözleşmelere, işletim sisteminizin geçiş anahtarı kasasına ve — yalnızca çalışırlık
-için — değiştirebileceğiniz ya da kendiniz çalıştırabileceğiniz bir relay'e iner.
+Şirket olarak Vela anahtarlarınızı hiçbir zaman tutmaz ve Safe'inizde hiçbir rolü
+yoktur; bu yüzden paranızı kendi başına **taşıyamaz, donduramaz ya da ona el
+koyamaz**. Ama anahtarlarınızdan imza isteyen yazılımı Vela yazar ve sunar —
+aşağıdaki tehdit modelinin önemli olmasının nedeni de bu. Uygulamalar, işlemleri
+zincire gönderen relay ve destek servisleri açık kaynaktır ve her birinin kendi
+kopyasını çalıştırabilirsiniz. Kısacası güvenmeniz gerekenler: sözleşmeler,
+anahtarlarınızı tutan kimlik doğrulayıcılar, imzalarken kullandığınız uygulamanın
+kodu, geçiş anahtarlarınızın ait olduğu alan adı ve uygulamayı yönlendirdiğiniz
+servisler.
 
 ## Vela neden var
 
-Çoğu cüzdan bir takası dayatıyor:
+- **Kurtarma ifadeli cüzdanlar** her kullanıcının önüne 12–24 kelimelik bir sır koyar:
+  tek bir arıza noktası ve sürekli bir oltalama hedefi.
+- **Saklamalı (custodial) cüzdanlar** kurtarma ifadesini, paranın saklamasını
+  üstlenerek ortadan kaldırır.
+- Tek bir şirketin sunucularına ve kapalı koduna bağlı **geçiş anahtarı cüzdanları**
+  kurtarma ifadesini ortadan kaldırır, ama şirket ortadan kalkarsa sizi ortada bırakır.
+- **Kör imzalama** — okuyamadığınız anlaşılmaz veriyi onaylamak — hâlâ yaygındır ve
+  cüzdanların boşaltılma yollarından biridir.
 
-- **Kurtarma ifadeli cüzdanlar** her kullanıcının önüne 12–24 kelimelik bir sır koyar.
-  Bu, tek arıza noktasıdır ve sürekli bir oltalama hedefidir.
-- **Saklayıcı cüzdanlar** kurtarma ifadesini ortadan kaldırır ama paranızı kendi
-  saklamalarına alır — kriptonun ortadan kaldırması gereken karşı taraf riskini geri
-  getirerek.
-- **Kör imzalama** — okuyamadığınız anlaşılmaz hex'i onaylamak — ekosistemde
-  normalleşti ve boşaltılan cüzdanların büyük bir bölümünün arkasında bu var.
-
-Vela, sizi tamamen kendi saklamanızda tutarken saklayıcı bir uygulama kadar kolay
-olmayı amaçlıyor: kurtarma ifadesi yok, saklayıcı yok ve imzalamadan önce
-okuyamayacağınız işlem yok.
+Vela, bu bağımlılıkların hiçbiri olmadan bir geçiş anahtarının kolaylığını amaçlar:
+standart bir hesap, açık kod, değiştirilebilir servisler ve imzalamadan önce
+okuyabileceğiniz işlemler.
 
 ## Tasarım ilkeleri
 
-1. **Kendi saklamanız, istisnasız.** Anahtarlar cihazınızda üretilir ve işletim
-   sisteminizin geçiş anahtarı sağlayıcısında uçtan uca şifreli durur. Vela'nın
-   sunucuları yalnızca genel veriyi görür.
-2. **Güvenmeyin, doğrulayın.** Bütün yığın — uygulama ve dört arka uç servisinin
-   tamamı — MIT lisansıyla açık kaynak.
-3. **Kör imzalama yok.** İşlemler, tanımlayıcısı olan her yerde insanın okuyabileceği
-   bir niyete çevrilir; bilinmeyen çağrılar saklanmaz, işaretlenir.
-4. **Daha az yapın.** Cüzdan ETH ve ERC-20'leri tutar ve seçtiğiniz dApp'lere
-   bağlanır. Güvenilecek daha az kod, daha küçük saldırı yüzeyi.
+1. **Kendi saklama, istisnasız.** Anahtarları kimlik doğrulayıcılarınız oluşturur ve
+   tutar. Vela'nın servisleri onları hiçbir zaman görmez; neleri gördükleri Gizlilik
+   bölümünde listeleniyor.
+2. **Standart sözleşmeler, değiştirilmeden.** Paranıza giden yoldaki hiçbir sözleşmeyi
+   Vela yazmadı.
+3. **Güvenmeyin, doğrulayın.** Uygulamalar ve servisler herkese açık; servisleri kendi
+   sunucunuzda barındırabilirsiniz.
+4. **İmzalamadan önce çözümleme.** Çözülemeyen her şey açık bir kör imzalama uyarısı
+   taşır.
+5. **Daha azını yapmak.** Cüzdan gönderir, alır ve seçtiğiniz dApp'ler için imzalar.
 
 ## Mimari
 
 ```text
-Vela uygulaması (iOS / Android / web, tek kod tabanı)
-  • Geçiş anahtarı (WebAuthn P-256, işletim sisteminin sağlayıcısı)
-  • UserOperation oluşturma ve imzalama
-  • Açık imzalama arayüzü (ERC-7730)
-        │  imzalı UserOperation
+Vela uygulamaları — web, tarayıcı uzantısı, masaüstü (macOS/Windows/Linux), iOS, Android
+  ortak tek bir Rust çekirdeği (kurallar, kriptografi, ABI, açık imzalama) + her biri için yerel bir kabuk
+  • UserOperation'ı oluşturur ve ne yaptığını gösterir
+  • anahtarınızdan bir WebAuthn onayı (assertion) ister
+        │  imzalı UserOperation (ücret dahil)
         ▼
-Vela relay'i (ERC-4337, kendiniz barındırabilirsiniz)
-  • handleOps çağrısını EntryPoint'e gönderir
-  • İşleminizi değiştiremez ya da taklit edemez
+Relay (vela-relay, kendi sunucunuzda barındırılabilir)
+  • ücreti teklif eder, gas bedelini peşin öder, handleOps'u gönderir
+  • işlemi değiştiremez
         ▼
 EVM zinciri
-  EntryPoint v0.7 → Safe akıllı hesabı
-  WebAuthn imzalayıcısı P-256'yı zincir üstünde doğrular
+  EntryPoint v0.7 → Safe v1.4.1 hesabınız → Safe 4337 modülü
+  Safe geçiş anahtarı modülü P-256'yı EIP-7951 / RIP-7212 ön derlemesiyle doğrular
 ```
 
-### Hesap modeli
+Destek servisleri, hepsi açık kaynak: yeni cüzdanları zincir üstündeki bir kayıt
+defterine kaydeden ve sorguları yanıtlayan bir **açık anahtar dizini**, bir **zincir
+verisi** dizini ve bir **döviz kuru** kaynağı. Bkz.
+[kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting).
 
-Cüzdanınız, **Safe 4337 Modülü** ve hesabın sahibi olarak bir **WebAuthn
-imzalayıcısıyla**, **ERC-4337** hesap soyutlaması (EntryPoint v0.7) üzerinden
-çalıştırılan bir **Safe v1.4.1** akıllı hesabı (bir proxy sözleşmesi).
+### Hesap
 
-Adres **deterministik** ve **karşıolgusal**: herhangi bir işlem gönderilmeden önce
-geçiş anahtarınızın genel anahtarından `CREATE2` ile hesaplanır, yani hesap hiç
-kurulmadan önce oraya para alabilirsiniz. Hesap, ilk işleminizde kendi bakiyesinden
-ödeyerek kendini kurar.
+Cüzdanınız bir **Safe v1.4.1** proxy'sidir (SafeL2 singleton'ı); Safe'in **4337 modülü
+v0.3.0** hem modülü hem de yedek işleyicisi (fallback handler) olarak etkindir ve
+**EntryPoint v0.7** üzerinden çalıştırılır. Sahipleri, Safe'in **geçiş anahtarı modülü
+v0.2.1**'deki imzalayıcılardır: ilk anahtarı paylaşılan imzalayıcı, her ek anahtarı ise
+Safe'in fabrikasının oluşturduğu kendi imzalayıcı sözleşmesi doğrular. Eşik **1**'dir.
 
-### Anahtarlar ve kimlik doğrulama
+Adres **deterministik ve karşıolgusaldır** (counterfactual): hiçbir şey dağıtılmadan
+önce, kurucu anahtarların hepsini içeren Safe kurulum verisinden `CREATE2` ile
+hesaplanır. Her ağda aynıdır. O adrese hemen para alabilirsiniz; her ağdaki ilk
+işleminiz cüzdanı dağıtır ve bunun bedelini o işlemin ücreti içinde öder.
 
-Kimlik doğrulama, **P-256** eğrisindeki **WebAuthn geçiş anahtarlarıyla** yapılır. Özel
-anahtar cihazınızda üretilir ve işletim sisteminizin geçiş anahtarı sağlayıcısında
-(iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi) uçtan uca şifreli durur;
-sağlayıcı onu cihazlarınız arasında eşitler. **Vela'nın sunucuları yalnızca genel
-anahtarınızı görür.** İmzalamak her seferinde yeni bir biyometrik doğrulama gerektirir
-— uzun ömürlü bir oturum anahtarı yoktur. Ayrıntılar için
-[geçiş anahtarları nasıl çalışır](/tr/docs/passkeys).
+### Anahtarlar
 
-### İmzalama ve işlem akışı
+Bir cüzdanın, oluşturulduğu anda sabitlenen **bir ila yedi anahtarı** vardır.
+Herhangi biri tek başına imzalayabilir (1-of-n). Bir anahtar şunlardan biri olabilir:
 
-1. Safe'iniz için bir ERC-4337 `UserOperation` **oluşturulur** ve gaz tahmin edilir.
-2. Çağrı, insanın okuyabileceği bir niyete **çözülür** ve incelemeniz için gösterilir.
-3. **İmzalarsınız** — cihazınız, biyometrik doğrulamanın ardından işlem özeti üzerinde
-   bir WebAuthn onayı üretir.
-4. Onay, bir **EIP-1271** sözleşme imzası olarak **kodlanır**.
-5. İmzalı işlem relay'e **iletilir**, relay de onu EntryPoint'e gönderir.
-6. **Zincir üstünde doğrulanır** — Safe, yürütmeden önce P-256 imzasını RIP-7212 ön
-   derlemesiyle zincir üstünde doğrular. Ön derleme zorunludur: yedek doğrulayıcı yoktur
-   ve Vela, onu sunmayan bir ağı açmayı reddeder.
+- kullandığınız cihazdaki bir geçiş anahtarı — izin verirseniz iCloud Anahtar Zinciri,
+  Google Şifre Yöneticisi ya da başka bir parola yöneticisi tarafından eşitlenir;
+- QR kod okutarak bağlanılan başka bir telefon (WebAuthn hibrit taşıması);
+- USB ya da NFC ile kullanılan ve hiçbir yere eşitlenmeyen bir donanım güvenlik
+  anahtarı.
 
-Relay, **zaten imzalanmış** bir işlem alır. Alıcıyı, tutarı ya da başka bir alanı, imzayı
-geçersiz kılmadan değiştiremez.
+Her imza, kimlik doğrulayıcının kendi kullanıcı doğrulamasını gerektirir — biyometri ya
+da cihaz PIN'i veya güvenlik anahtarının PIN'i ve dokunuşu. Oturum anahtarı yoktur.
+Anahtarlar sonradan eklenemez, kaldırılamaz ya da değiştirilemez: cüzdanın henüz
+dağıtılmadığı her zincirdeki adres hâlâ kurucu kümeyi temsil eder; bu yüzden tek bir
+zincirde sahipleri değiştirmek, hesabın zincirden zincire farklılaşmasına yol açardı.
 
-### Relay ve gaz modeli
+Geçiş anahtarları bir bağlı olan tarafa (relying party) aittir — Vela'nınkiler
+**`getvela.app`** için oluşturulur. Tarayıcılar onları yalnızca getvela.app ya da alt
+alan adlarındaki sayfalara sunar; onları oltalamaya karşı dayanıklı kılan şey budur,
+ama bu aynı zamanda bu belgenin aşağıda yeniden ele aldığı bir bağımlılıktır.
 
-- Gaz, **kendi cüzdan bakiyenizden** ödenir — varsayılan olarak ağın yerel tokenıyla ya
-  da relay'in sunduğu yerlerde desteklenen bir stabilcoinle. Yerel parası olmayan
-  Tempo'da gaz her zaman dolar stabilcoinleriyle ödenir. Ortada **paymaster** ve
-  işlemlerinizi sponsorlayan — ya da kapılayan — üçüncü bir taraf yok.
-- **Gaz fiyatının tek doğruluk kaynağı relay'dir.** Fiyatı canlı zincir koşullarından
-  belirler; cüzdan o fiyatı gösterir ve tam olarak gösterdiğini imzalar.
-- Vela'nın relay ücreti bilerek basit: toplam, **ağ maliyeti artı relay'in hizmet
-  ücreti**; çok ucuz işlemlerde küçük bir asgari tutarla. Bir kısmı zincirin
-  doğrulayıcılarına gider; kalanı altyapıyı çalıştıran ve gaz hesabınızı fonlu tutan
-  relay'e.
-- Cüzdan, **tahmini ücreti onaylamadan önce gösterir** — hem ücret varlığında hem de
-  görüntüleme para biriminizde — ve bildirilen tutar ile alıcısı imzaladığınız şeyin
-  parçasıdır; yani relay'e tam olarak gösterilen kadar ödenir. Gizli marj yok.
-- Her Safe'in her zincirde **ayrılmış bir relay hesabı** (gaz hesabı) vardır ve bu hesap
-  **iade edilmeyen** bir depozitoyla etkinleştirilir. Hesap zamanla tükenebilir, yani
-  sonradan **yeniden etkinleştirme** gerekebilir — tam olarak tek seferlik bir depozito
-  değildir.
+### İmzalama akışı
 
-Relay bir **çalışırlık** bağımlılığı, bir **saklama** bağımlılığı değil: iletmeyi
-geciktirebilir ya da reddedebilir, ama hiçbir şeyi değiştiremez, taklit edemez ya da
-çalamaz. Açık kaynak ve kendinizinkini çalıştırabilirsiniz; üstelik fiyat gizlenmek
-yerine **bildirilip gösterildiği** için, kendi barındırdığınız ya da üçüncü taraf bir
-relay'in ücreti bile imzalamadan önce size görünür. Bkz.
-[ağlar ve ücretler](/tr/docs/networks-and-fees).
+1. Safe'iniz için relay'e ödeme yapan bir transferi de içeren bir UserOperation
+   **oluşturulur** ve simüle edilir.
+2. İnsanın okuyabileceği bir niyete **çözülür** ve size gösterilir.
+3. **İmzalanır**: kimlik doğrulayıcınız, kimliğinizi doğruladıktan sonra işlem özeti
+   üzerinde bir WebAuthn onayı üretir.
+4. Onay, geçiş anahtarı modülünün beklediği Safe imzası olarak **kodlanır**.
+5. İmzalı işlem, EntryPoint'i çağıran relay'e **gönderilir**.
+6. **Zincir üstünde doğrulanır**: Safe herhangi bir şeyi yürütmeden önce geçiş anahtarı
+   modülü P-256 imzasını EIP-7951 / RIP-7212 ön derlemesiyle kontrol eder. Yedek bir doğrulayıcı
+   yoktur; ön derlemesi olmayan bir ağ eklenemez.
 
-### Açık imzalama (ERC-7730)
+### Ücretler
 
-Vela, calldata'yı ve EIP-712 tipli verisini **ERC-7730** tanımlayıcılarıyla çözer ve
-**niyeti** (Takas, Gönder, Onayla…), **özü** (tutarlar, adresler) ve **ayrıntıları**
-(nonce, son tarih, ham calldata) istendiğinde, riske göre renk kodlu biçimde gösterir.
-Eşleşen bir tanımlayıcı yoksa Vela çağrıyı anlamış gibi yapmak yerine açık bir kör imza
-uyarısı gösterir.
+- Relay'e **işlem içinde** ödeme yapılır: işlem sıfır EntryPoint ücreti bildirir ve
+  Safe'inizden relay'in adresine bir transfer içerir. Tutar ve alıcı imzaladığınız
+  şeyin parçasıdır; yani onay ekranında gösterilenin tam olarak aynısını ödersiniz.
+- Ücret, **cüzdanın işlem için ayırdığı gas'ın üç katıdır** (simülasyon tahminleri
+  yarı yarıya artırılır ve alt sınırlar uygulanır); **cüzdanın kendi gas fiyatı
+  okuması ile relay'in seçilen hız için verdiği fiyattan yüksek olanıyla
+  fiyatlanır** ve asgari tutar yaklaşık 0,01 dolardır. Tempo'da çarpan ikidir. Hem
+  ayrılan miktardaki pay hem de fiyattaki pay yüzünden ücret, işlemin gerçek zincir
+  üstü maliyetinin üstündedir, bir ağdaki ilk işlemde ise daha da fazla; aradaki farkı
+  relay tutar. Kesin tutar, siz imzalamadan önce onay ekranındadır.
+- Ücret, cüzdanın ayarlı olduğu relay'e gider: varsayılan olarak Vela'nınkine ya da
+  kendi çalıştırdığınız dahil herhangi bir vela-relay dağıtımına.
+- Ücret ağın coiniyle ya da relay'in kabul ettiği bir USD stabilcoiniyle ödenir
+  (yerel coini olmayan Tempo'da pathUSD). **Paymaster yoktur**: kimse gas
+  sponsorluğu yapmaz ve kimse işlemleri bir sponsorluk politikasıyla süzemez.
+- Bir relay'in bir ağdaki kendi gas kasası boşsa, cüzdan bunu siz imzalamadan önce
+  söyler. Kullanıcı başına bir depozito yoktur.
+
+Ayrıntılar: [ağlar ve ücretler](/tr/docs/networks-and-fees).
+
+### Açık imzalama
+
+Çağrılar ve EIP-712 mesajları **ERC-7730** tanımlayıcılarıyla çözülür — yaygın
+sözleşmeler için uygulamaya yerleşik olanlar, zincir verisi servisinden alınanlar ya da
+standart token biçimleriyle eşleştirilenler — ve son çare olarak, "elden gelen en iyi
+çözümleme" olarak etiketlenen herkese açık bir seçici veritabanı kullanılır. Geriye
+kalan her şey açık bir kör imzalama uyarısı alır. Alınan tanımlayıcılar kriptografik
+olarak doğrulanmaz. "Sınırsız" düzeydeki (2^200 ya da daha fazla) zincir üstü bir
+onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı bir onay ve imzalı izinler
+(permit) bir uyarıyla gösterilir ama engellenmez. Ayrıntılar:
+[açık imzalama](/tr/docs/clear-signing).
 
 ### Ağlar
 
-Vela 12 EVM ağını destekliyor — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad ve World Chain — artı kendi eklediğiniz ağlar.
-Özel bir ağ, ancak Vela'nın dayandığı sözleşmeleri (EntryPoint, Safe sözleşmeleri,
-WebAuthn imzalayıcısı) ve RIP-7212 P-256 ön derlemesini zaten barındırıyorsa
-eklenebilir; Vela bunu açmadan önce kontrol eder.
+Vela'da 24 yerleşik ağ var — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
+Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
+MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve kontrol ettiği
+on bir sözleşmeye ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. (İkinci ila
+yedinci anahtarlar o ağda Safe'in geçiş anahtarı imzalayıcı fabrikasına da ihtiyaç
+duyar; kontrol bunu henüz kapsamıyor.)
 
 ## Güvenlik modeli
 
-**Vela'nın yapamadıkları:**
+**Vela'nın yapamadıkları**
 
-- Paranızı taşımak, harcamak ya da devretmek — Safe'e yalnızca geçiş anahtarınız yetki
-  verebilir.
-- Hesabınızı dondurmak ya da ona el koymak — Safe zincirdeki sizin sözleşmeniz ve
-  Vela'nın onda ayrıcalıklı bir rolü yok.
-- Sizin adınıza imzalamak — her işlem yeni bir biyometrik onay gerektirir.
-- Özel anahtarınızı görmek — anahtar Vela'ya hiç ulaşmaz; onunla yalnızca cihazınız
-  imzalayabilir.
-- Siz imzaladıktan sonra işlemi değiştirmek — her değişiklik imzayı geçersiz kılar.
+- Paranızı kendi başına taşımak, harcamak ya da dondurmak — Safe'inize yalnızca
+  anahtarlarınız yetki verir ve Vela'nın onda hiçbir rolü yoktur. (Vela'nın
+  yapabildiği, sizden imza isteyen yazılımı yayımlamaktır; aşağıdaki tehditlere
+  bakın.)
+- Siz imzaladıktan sonra bir işlemi değiştirmek — her değişiklik imzayı geçersiz kılar.
+- Özel anahtarlarınızı okumak — kimlik doğrulayıcılarınızda kalırlar.
+- Cüzdanınıza anahtar eklemek ya da ondan anahtar kaldırmak.
 
-**"Donduramaz"ın kapsamadığı şey:** *tokenın* kendisi. İzinli bir stabilcoin — USDC,
-USDT ve fiat teminatlı tokenların çoğu — ihraççısının sizinki dahil herhangi bir adrese
-karşı çağırabileceği bir kara liste işlevi taşır. O güç ihraççıya aittir ve tokenı hangi
-cüzdanda tutarsanız tutun vardır; Vela dahil hiçbir kendi saklamanızda duran cüzdan onu
-elinden alamaz. Kendi saklamanın verdiği şey şu: **biz**, bunu yapabilecek ikinci bir
-taraf değiliz.
+**"Donduramaz"ın kapsamadığı şey: token.** USDC, USDT ve itibari paraya dayalı
+tokenların çoğu, ihraççısının sizinki dahil herhangi bir adresi kara listeye almasına
+izin verir. Bu güç ihraççıya aittir ve hangi cüzdanı kullanırsanız kullanın vardır.
+Kendi saklamanın size verdiği şey, Vela'nın bunu yapabilecek ikinci bir taraf
+olmamasıdır.
 
-**Neye güveniyorsunuz:**
+**Neye güveniyorsunuz**
 
-- **Safe sözleşmelerine** (denetlenmiş, yaygın kullanılan) ve P-256 anahtarınızı
-  doğrulayan WebAuthn imzalayıcısına.
-- Kimlik bilgilerinizi koruyup eşitlemesi için **işletim sisteminizin geçiş anahtarı
-  sağlayıcısına** (Apple / Google).
-- Sorguladığınız **RPC sağlayıcılarına** (Vela, yük devretmeli çok kaynaklı bir havuz
-  kullanır; kendinizinkini de tanımlayabilirsiniz).
-- Yalnızca çalışırlık için **relay'e** — ve onu kendiniz barındırabilirsiniz.
+- **Sözleşmelere**: Safe, onun 4337 ve geçiş anahtarı modülleri, EntryPoint v0.7 ve
+  zincirin EIP-7951 / RIP-7212 ön derlemesi.
+- **Alan adına**: getvela.app'ten ya da alt alan adlarından birinden sunulan her sayfa,
+  anahtarlarınızdan imza isteyebilir.
+- Anahtarlarınızı tutan **kimlik doğrulayıcılara** ve — eşitlenen geçiş anahtarları
+  için — onların arkasındaki Apple, Google ya da parola yöneticisi hesabına.
+- **İmzalarken kullandığınız uygulamanın koduna.** İşlemi o oluşturur ve ne yaptığını
+  size o gösterir. Ele geçirilmiş bir uygulama size bir şey gösterip başka bir şeyi
+  imzalamanızı isteyebilir; kimlik doğrulayıcının istemi aradaki farkı size söylemez.
+- Okuduğunuz **RPC uç noktalarına**: yalan söyleyen bir düğüm yanlış bakiyeler ya da
+  yanlış bir simülasyon önizlemesi gösterebilir. Kendi uç noktanızı tanımlayabilirsiniz.
+- **Zincir verisi ve döviz kuru servislerine**: token listelerini, tanımlayıcıları,
+  ücret tokenı listesini ve itibari para tutarını token tutarına çevirmekte kullanılan
+  kurları onlar sağlar.
+- **Relay'e**: imzaladığınızı değiştiremez, ama geciktirebilir ya da reddedebilir,
+  zincire ne zaman gireceğini seçebilir (dolayısıyla kayma toleransınız içinde bir
+  takasın önüne geçebilir) ve ücretinizin dayandığı gas fiyatını, cüzdanın kendi
+  okumasının üç katına kadar belirleyebilir.
 
-**Ele alınan tehditler:**
+**Ele alınan tehditler**
 
-- **Kaybolan ya da çalınan cihaz** — hırsızın imzalamak için yine de biyometrinize ya da
-  PIN'inize ihtiyacı var.
-- **Oltalama / zararlı dApp** — açık imzalamayla karşılanır.
-- **Ele geçirilmiş Vela sunucusu** — imzalama yeteneği vermez; etki alanı fon kaybı
-  değil, bozulan hizmettir.
-- **Tedarik zinciri riski** — açık kaynak ve kendi barındırmayla hafifletilir.
+- **Kaybolan ya da çalınan cihaz** — hırsızın yine de kimlik doğrulayıcının kontrolünü
+  geçmesi gerekir; başka bir anahtar erişimi geri getirir. Ama bir anahtar
+  kaldırılamaz: biri başkasının eline geçmiş olabilirse paranızı yeni bir cüzdana
+  taşıyın, çünkü eski adres her ağda o anahtar tarafından harcanabilir olmaya devam
+  eder.
+- **Oltalama** — geçiş anahtarı sahte bir siteye yazılamaz ve tarayıcılar onu yalnızca
+  getvela.app ve alt alan adlarındaki sayfalara sunar.
+- **Kötü niyetli dApp** — açık imzalama ve onay korumasıyla karşılanır, ama ciddi bir
+  eksik var: bir dApp, Safe'inizden yine Safe'inize bir çağrı isteyebilir —
+  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — ve
+  bunlardan herhangi biri, bir kez imzalandığında hesabı Bybit'in yükü kadar eksiksiz
+  biçimde devreder. Vela bu çağrıları çözer ama henüz engellemez. Hedefi kendi cüzdan
+  adresiniz olan her isteği reddedin.
+- **Ele geçirilmiş arka uç servisi** (relay, dizin, zincir verisi, döviz kurları) —
+  imzalama gücü yoktur ama gerçek bir etkisi vardır: hizmeti reddetmek, yanıltıcı
+  tanımlayıcılar ya da token listeleri, bir itibari para tutarının ne kadar gönderdiğini
+  değiştiren yanlış döviz kurları ve (relay için) yukarıdaki zamanlama ve gas fiyatı.
+  Alınan tanımlayıcılar doğrulanmış kabul edilmez ve her servis değiştirilebilir.
+- **Ele geçirilmiş uygulama dağıtımı** — değiştirilmiş bir web dağıtımı, uzantı
+  güncellemesi ya da uygulama derlemesi, size imzalatmak için kötü niyetli bir işlem
+  sunabilir. Bu, [Bybit](/tr/docs/bybit-attack) sınıfı bir saldırıdır. Bugünkü
+  önlemler sınırlı: uygulamanın kendi içindeki çözümleme ve onay koruması, onaylanmış
+  (notarized) macOS derlemeleri ve uzantıyı ya da uygulamaları kaynak koddan kendiniz
+  derlemeniz (sürüm paketleri imza değil, SHA-256 sağlama toplamı taşır). Uygulamanın
+  kodunu paylaşmayan bağımsız bir imza sayfası hazır ama henüz bağlanmadı.
+- **Alan adından sunulan her şey** — getvela.app ya da alt alan adlarındaki herhangi bir
+  sayfa, yüklediği bir betik dahil, Vela geçiş anahtarlarından imza isteyebilir ve istem
+  yalnızca "getvela.app"i gösterir. Bu yüzden web sitesi kendi sayfalarının geçiş
+  anahtarı kullanmasını yasaklar ve analitik betiğini anahtar barındıran sayfanın
+  dışında tutar. Alan adı el değiştirirse, yeni sahibi geçiş anahtarlarını hangi
+  uygulamaların kullanabileceğini de kontrol eder. Uzantı ve kendi derlediğiniz
+  uygulamalar kendi kodlarını taşır; ama varsayılan olarak tanımlayıcıları yine
+  getvela.app altından alır ve oradaki servisleri kullanırlar.
 
 ## Kurtarma
 
-Geçiş anahtarınız işletim sisteminizin sağlayıcısı tarafından yedeklenir; yeni bir
-cihazda aynı Apple ya da Google hesabıyla giriş yapmak onu geri getirir ve cüzdanınız
-yeniden görünür.
+Cüzdan oluşturmak, cüzdanın açık anahtarlarını ve adresini Gnosis'teki herkese açık
+bir **kayıt defteri sözleşmesine** yayımlar (Ethereum'a kopyalanabilir). Yeni bir
+cihazda anahtarlarınızdan **herhangi biriyle** giriş yaparsınız; uygulama cüzdanı dizin
+aracılığıyla ya da o olmazsa doğrudan kayıt defterinden bulur ve anahtarların kayıtlı
+adresi yeniden verdiğini kontrol eder. Tek anahtarlı bir cüzdan, hiç kayıt defteri
+olmadan iki imzadan da yeniden kurulabilir.
 
-<Callout type="warning" title="Platform geçiş anahtarı yedeğiniz, kurtarmanızın kendisi">
-Vela'nın kurtarması, iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi tarafından
-eşitlenen geçiş anahtarınızdır. Tasarım gereği kurtarma ifadesi, sosyal kurtarma ve
-vasi yok — yani Vela'nın kaybedebileceği, sızdırabileceği ya da kullanmaya
-zorlanabileceği bir şey yok. Madalyonun öbür yüzü gerçek: <strong>hem</strong>
-cihazınızı <strong>hem de</strong> bulutta eşitlenen geçiş anahtarınızı kaybeder ve
-başka bir kopyanız olmazsa hesap kurtarılamaz. Platformunuzun geçiş anahtarı yedeğini
-açık, hesabını da güvende tutun.
+<Callout type="warning" title="Anahtarlarınız, kurtarmanızın kendisidir">
+Kurtarma ifadesi, sosyal kurtarma ya da vasi yok — Vela'nın kaybedebileceği,
+sızdırabileceği ya da kullanmaya zorlanabileceği hiçbir şey yok. Kurucu anahtarların
+hepsi kaybolursa cüzdan kurtarılamaz. Cüzdanı birden fazla anahtarla oluşturun, geçiş
+anahtarı eşitlemesine güveniyorsanız onu açık tutun ve arkasındaki hesabı güvenceye
+alın.
 </Callout>
 
-Dürüstçe söylenmiş sınırları da içeren tam kurtarma modeli
-[kurtarma ve giriş](/tr/docs/recovery) sayfasında.
+Ayrıntılar: [kurtarma ve giriş](/tr/docs/recovery).
 
 ## Vela ortadan kalkarsa
 
-Kendi saklamanız, anahtarlarınızın ve paranızın Vela'nın çevrimiçi olmasına bağlı
-olmaması demek. Para **zincir üstündeki kendi Safe sözleşmenizde** duruyor ve relay
-açık kaynak ve değiştirilebilir.
-
-Dürüst bir uyarı: WebAuthn, bir geçiş anahtarını bir ilgili taraf alan adına
-(`getvela.app`) bağlar. O alan adı kalıcı olarak kaybedilseydi, ona bağlı geçiş
-anahtarlarının başka bir yerde çalışması için yardıma ihtiyacı olurdu — kimlik
-doğrulayıcıya özgün ilgili tarafı sunabilen bir araca. Vela bu durum için eskiden
-geliştirici düzeyinde bir tarayıcı uzantısı sunuyordu ve onu Eylül 2026'da kaldırdı;
-alan adı kaybı için tüketici düzeyinde bir kurtarma yolu hâlâ bitmemiş bir iş ve biz de
-var gibi ima etmek yerine bunu söylüyoruz. Zincir üstünde bağımsız erişim ayrıca hedef
-zincirin P-256 (RIP-7212) desteğine bağlı; o destek de zincirlerde giderek yaygınlaşıyor.
+Paranız zincir üstünde, kendi Safe'inizde kalır. Sözleşmeler Vela'ya bağlı değildir ve
+Vela'nın çalıştırdığı her servis açık kaynaktır, başkaları da çalıştırabilir.
+Taşınamayan tek şey, geçiş anahtarlarının bağlı olan tarafı olan
+`getvela.app`'tir: web cüzdanının başka bir alan adındaki kopyası başka bir cüzdan
+oluşturur. Mevcut cüzdanlar için Vela tarayıcı uzantısı (izinle `getvela.app` geçiş
+anahtarlarını kullanabilir) ve kendi derlediğiniz uygulamalar (bir telefon ya da
+güvenlik anahtarıyla) getvela.app olmadan çalışmaya devam eder.
+[Kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting#if-getvela-app-disappears)
+her yolu ve sınırlarını tek tek açıklıyor. Bir zincirde bağımsız erişim, o zincirin
+EIP-7951 / RIP-7212'yi desteklemesini de gerektirir.
 
 ## Gizlilik
 
-Hesap yok, e-posta yok, KYC yok, toplanacak bir kurtarma ifadesi yok. Sunucular
-yalnızca **genel anahtarınızı** ve seçtiğiniz hesap adını saklıyor (cihazlar arası
-kurtarma için) ve bunlar tasarım gereği zincir üstünde yayımlanıyor. İşlem içerikleri
-loglanmıyor. Site, çerezsiz ve kendi barındırdığımız bir analitik kullanıyor. Bkz.
-[gizlilik politikası](/privacy).
+Hesap yok, e-posta yok, KYC yok. Bir cüzdan oluşturduğunuzda kayıt defterine yazılan
+şeyler herkese açık olur: her anahtarın açık anahtarı ve kimlik bilgisi kimliği,
+kimlik doğrulayıcı modeli, cüzdan adınız ve anahtar etiketleriniz, adres ve imzalı
+kayıt verisi. Vela'nın dizini bu kaydı göndermeden önce görür, ayrıca adını aradığınız
+adresleri de görür; Vela'nın relay'i adresinizi, gönderdiğiniz işlemleri ve
+uygulamanızın kullandığı RPC uç noktasını (URL'sindeki olası API anahtarı dahil) görür
+ve işlemleri yeniden denemek ve sorun teşhis etmek için sınırlı bir süre saklar. Her
+servis IP adresinizi görür. Web sitesi çerezsiz bir analitik kullanır. Bağlayıcı liste
+[gizlilik politikasıdır](/privacy).
 
-## Doğrulanabilirlik ve açık kaynak
+## Açık kaynak
 
-Her şey **MIT lisanslı ve açık kaynak** — uygulama ve dört arka uç servisinin tamamı
-(zincir verisi, geçiş anahtarı dizini, relay, döviz kurları) ve bunları **kendiniz
-barındırabilirsiniz** (Ayarlar → Gelişmiş → Servis Uç Noktaları). Kodu
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet)
-adresinde okuyun.
+Her şey MIT lisanslıdır: cüzdan (bütün uygulamalar ve çekirdek), relay, açık anahtar
+dizini, döviz kuru servisi ve zincir verisi dizini. Kod:
+[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Token yok
 
-Vela'nın **tokenı yok** ve çıkarma planı da yok. Satın alınacak, farm edilecek ya da
-üzerine spekülasyon yapılacak bir şey yok. Gaz, her ağın yerel varlığıyla ödenir.
+Vela'nın tokenı yok ve çıkarma planı da yok. Satın alınacak, farm edilecek ya da
+üzerine spekülasyon yapılacak bir şey yok. Ücretler her ağın coiniyle ya da bir
+stabilcoinle ödenir.
 
 ## Denetim durumu ve sınırlar
 
-Her Vela hesabının çekirdeğindeki **Safe sözleşmeleri** bağımsız olarak denetlendi ve
-sahada sınandı. Vela'nın onların etrafındaki **kendi entegrasyonu**, **bağımsız bir
-üçüncü taraf denetiminden geçmedi** ve planlanmış bir denetim yok — profesyonel bir
-denetim, tarihi olan bir taahhüt değil, proje karşılayabildiğinde ulaşılacak bir hedef.
-O zamana kadar entegrasyonun incelemesi gayriresmî: kod açık kaynak ve onu okuyan
-yetkin, ilgili topluluk üyelerine ve yapay zekâ destekli incelemeye dayanıyor. Bu
-yardımcı oluyor, ama profesyonel bir denetime denk değil. Vela'yı alfa yazılım sayın ve
-bu kadar genç bir şeye koymaktan rahatsız olmayacağınız tutarları kullanın.
+Safe'in sözleşmeleri, onun 4337 ve geçiş anahtarı modülleri ve EntryPoint v0.7 bağımsız
+olarak denetlenmiştir ve yaygın biçimde kullanılır. **Vela'nın kendi kodu —
+uygulamalar, arka uç servisleri ve kayıt defteri sözleşmesi — bağımsız bir üçüncü taraf
+denetiminden geçmedi ve takvime alınmış bir denetim de yok**; profesyonel bir denetim,
+tarihi olan bir taahhüt değil, proje bir denetimi finanse edebildiğinde ulaşılacak bir
+hedef. O zamana kadar inceleme gayriresmî: kod açık, yetkin topluluk üyeleri onu
+okuyor ve yapay zekâ araçlarıyla inceleniyor. Bu yardımcı oluyor; ama profesyonel bir
+denetime denk değil. Vela'yı alfa yazılım olarak görün. Ayrıntılar:
+[denetimler ve bilinen sorunlar](/tr/docs/security-audits).
 
 ## Kaynaklar
 
 - ERC-4337 — EntryPoint üzerinden hesap soyutlaması
-- EIP-1271 — Sözleşmeler için standart imza doğrulama
-- ERC-7730 — Açık imzalama / yapılandırılmış veri tanımlayıcıları
-- EIP-5792 — Cüzdan çağrı toplu işleme
-- RIP-7212 — secp256r1 (P-256) imza doğrulaması için ön derleme
-- WebAuthn / FIDO2 — Geçiş anahtarı kimlik doğrulaması
-- [Safe akıllı hesabı v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- EIP-1271 — Sözleşmeler için imza doğrulama
+- ERC-7730 — Açık imzalama tanımlayıcıları
+- EIP-5792 — Cüzdan çağrılarını toplu gönderme (`wallet_sendCalls`)
+- EIP-7951 / RIP-7212 — P-256 imza doğrulama ön derlemesi
+- WebAuthn / FIDO2 — Geçiş anahtarları
+- [Safe akıllı hesabı v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

@@ -1,8 +1,14 @@
 # Store Listing Copy — App Store + Google Play
 
-Grounded in real product facts (`src/models/chains.ts` = 12 chains; ERC-7730 clear-signing shipped; WalletPair relay for dApp Connect — **not** Bluetooth; no analytics SDK; Safe v1.4.1 + ERC-4337 + passkeys). Brand voice matches getvela.app ("An Ethereum wallet you actually own." / "A wallet that does less — on purpose."). *"Your keys. Your face." was retired 2026-09-15 by spec 059 — if it still appears in a submitted listing, it is stale copy.*
+Grounded in real product facts — **re-checked 2026-09-22 by spec 080**: 24 built-in networks (`rust/crates/vela-core/src/app/network_admin.rs` `BUILTIN_CHAINS`); ERC-7730 clear signing shipped; dApps connect through an injected provider (extension + in-app browsers) — **WalletPair was dropped**, and there is no Bluetooth; Safe v1.4.1 + ERC-4337 + one to seven passkeys or security keys. Brand voice matches getvela.app ("An Ethereum wallet you actually own." / "A wallet that does less — on purpose."). *"Your keys. Your face." was retired 2026-09-15 by spec 059 — if it still appears in a submitted listing, it is stale copy.*
 
 **Red lines respected:** no "audited"/"audit planned" claims (open-source = *anyone can inspect the code*, not a third-party audit); no "beta/alpha"; no price/exchange/ROI claims; no fiat on-ramp/trading claims; dApp Connect described as QR/relay, not Bluetooth.
+
+> **Before submitting — corrections from spec 080 (2026-09-22).** The listings below were drafted before several product changes. Fix these in every language first; [`specs/080-site-content-accuracy/claim-ledger.md`](../../specs/080-site-content-accuracy/claim-ledger.md) has the canonical wording.
+> - "sign with your face or fingerprint" / "a passkey stored in your device's secure hardware": a key can be a synced passkey (held by the password manager, not confined to secure hardware), another phone, or a hardware security key; face/fingerprint/PIN only *unlock* it (C-keys-2, C-auth-1).
+> - "Your passkey is backed up by iCloud/Google, so you can sign in on a new device": recovery is signing in with any of up to seven founding keys, found through the on-chain registry (C-keys-1, C-sync-1).
+> - "No tracking": the website uses cookieless analytics and the relay logs operations for a limited time; say what the privacy policy says.
+> - Network count is now 24 (fixed below).
 
 Field character limits noted as `(≤N)`. Counts verified for the English fields.
 
@@ -33,7 +39,7 @@ Your signing key is a passkey stored in your device's secure hardware. There's n
 A REAL SMART ACCOUNT
 Every Vela wallet is a Safe smart account (v1.4.1) running on ERC-4337 account abstraction — a standard trusted across Ethereum. One address works on every network.
 
-12 NETWORKS, ONE ADDRESS
+24 NETWORKS, ONE ADDRESS
 Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain — plus any custom EVM network you add. See every balance and USD value in one portfolio.
 
 NO BLIND SIGNING
@@ -59,7 +65,7 @@ A wallet that does less — on purpose.
 ```
 The first public release of Vela Wallet:
 • Self-custody with no seed phrase — sign with Face ID or Touch ID
-• A Safe smart account across 12 EVM networks, one address
+• A Safe smart account across 24 EVM networks, one address
 • Clear transaction signing (ERC-7730) — read every call before you approve
 • Cross-device recovery via your passkey
 • On-chain pricing, no third-party price API
@@ -85,7 +91,7 @@ Your signing key is a passkey held in your device's secure hardware and synced b
 A REAL SMART ACCOUNT
 Every Vela wallet is a Safe smart account (v1.4.1) on ERC-4337 account abstraction — a standard trusted across Ethereum. One address works on every network.
 
-12 NETWORKS, ONE ADDRESS
+24 NETWORKS, ONE ADDRESS
 Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain — plus any custom EVM network you add. Every balance and USD value in one portfolio.
 
 NO BLIND SIGNING
@@ -132,7 +138,7 @@ Vela 是面向以太坊及 EVM 网络的自我托管加密钱包。私钥由你�
 真正的智能账户
 每个 Vela 钱包都是一个 Safe 智能账户(v1.4.1),基于 ERC-4337 账户抽象运行。一个地址,通行所有网络。
 
-12 条网络,一个地址
+24 条网络,一个地址
 以太坊、Base、Arbitrum、Optimism、Polygon、BNB Chain、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain,以及你自定义的任意 EVM 网络 —— 所有余额与美元估值,尽在一个资产视图。
 
 拒绝盲签

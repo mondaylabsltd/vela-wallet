@@ -1,107 +1,121 @@
 ---
-title: Hospede você a página de assinatura
-description: A página sem dependências e a extensão do Chrome que decodificam a transação por conta própria e a assinam com sua passkey — como rodar a sua cópia e qual cópia consegue assinar pela sua carteira.
+title: Hospedar a página de assinatura
+description: "A página sem dependências e a extensão do Chrome que decodificam uma transação por conta própria e a assinam com a sua passkey — como rodar a sua própria cópia, e qual cópia consegue assinar pela sua carteira."
+source: c81389ef7aa2
 ---
 
-# Hospede você a página de assinatura
+# Hospedar a página de assinatura
 
-A Vela decodifica cada transação antes de você aprovar, e esse trabalho é trabalho
-de verdade — mas quem o faz é o mesmo app que montou a transação. Se o app, ou o
-caminho por onde ele chega até você, for adulterado, ele pode mostrar uma coisa e
-assinar outra. Foi exatamente isso que aconteceu com a
+A Vela decodifica cada transação antes de você aprová-la, e essa decodificação é um
+trabalho honesto — mas é um trabalho feito pelo mesmo app que montou a transação. Se
+o app, ou o caminho pelo qual ele chega até você, for adulterado, ele pode mostrar
+uma coisa e assinar outra. Foi exatamente o que aconteceu com a
 [Bybit](/pt-BR/docs/bybit-attack).
 
-A página de assinatura existe para partir isso em dois: a transação vem de um lugar,
-e a conferência e a assinatura acontecem em outro, que você controla.
+A página de assinatura existe para dividir isso em dois: a transação vem de um lugar,
+e a conferência e a assinatura acontecem num lugar que você controla.
 
-## O que ela é
+**Situação:** pronta e testada localmente; **não publicada**, e **nenhum app da Vela
+envia solicitações para ela ainda**. Hoje, ela é algo para ler, rodar e experimentar
+com os solicitantes de demonstração da pasta `samples/`. Usá-la para assinaturas de
+verdade exige que os apps encaminhem suas solicitações para ela, e isso ainda precisa
+ser construído.
 
-Uma pasta — `app-web/clearsigning` no repositório — que é ao mesmo tempo página web
-e extensão do Chrome. HTML, CSS e JavaScript puros: sem framework, sem bundler, sem
-etapa de build, sem dependências e sem requisições de rede próprias.
+## O que é
 
-Ao receber um pedido de assinatura, ela não confia no resumo que veio junto. Ela
+Uma pasta — `app-web/clearsigning` no repositório — que é ao mesmo tempo uma página
+web e uma extensão do Chrome. HTML, CSS e JavaScript puros: nenhum framework, nenhum
+bundler, nenhuma etapa de build, nenhuma dependência e nenhum dado buscado de um
+servidor — a única requisição que ela faz é pelos logos decorativos dos tokens.
+
+Diante de uma solicitação de assinatura, ela não confia no resumo que veio junto. Ela
 decodifica a calldata crua por conta própria, calcula o próprio digest, mostra o que
-a assinatura vai realmente autorizar e só então pede a sua passkey.
+a assinatura vai autorizar de fato e só então chama a sua passkey.
 
-Como não há etapa de build, os arquivos que você lê são os que rodam. Dá para
-comparar a pasta com o repositório e saber o que você está servindo.
+Como não há etapa de build, os arquivos que você lê são os arquivos que rodam. Você
+pode comparar a pasta com o repositório e saber exatamente o que está servindo.
 
 ## Qual cópia consegue assinar pela sua carteira
 
-Uma passkey fica presa ao domínio em que foi criada. Suas chaves da Vela estão
-registradas sob `getvela.app`, e o navegador só as oferece a uma página cuja relying
-party seja `getvela.app`. Essa única regra decide qual jeito de rodar a sua cópia te
-serve.
+Uma passkey fica vinculada ao domínio em que foi criada. As suas chaves da Vela são
+registradas sob `getvela.app`, e um navegador só as oferece a uma página cuja
+relying party (a parte confiável, no vocabulário do WebAuthn) seja `getvela.app`.
+Essa única regra decide qual forma de rodar a sua própria cópia é útil para você.
 
-**Como extensão do Chrome — é esta que se usa com a carteira que você já tem.** A
-relying party da extensão é `getvela.app` independentemente de onde a pasta veio,
-então suas chaves atuais conseguem assinar ali, enquanto o código é a pasta que você
+**Como extensão do Chrome — a forma de usá-la com as chaves que você já tem.** A
+relying party da extensão é `getvela.app`, não importa de onde a pasta veio, então as
+suas chaves existentes conseguem assinar nela, enquanto o código é a pasta que você
 carregou e inspecionou.
 
-1. Abra `chrome://extensions` e ligue o **Modo do desenvolvedor**.
-2. **Carregar sem compactação** e escolha a pasta `app-web/clearsigning`.
-3. O ícone na barra abre a página em uma aba.
+1. Obtenha a pasta: `git clone https://github.com/mondaylabsltd/vela-wallet`
+   (ela está em `app-web/clearsigning`).
+2. Abra `chrome://extensions` e ative o **Modo do desenvolvedor**.
+3. Clique em **Carregar sem compactação** e escolha a pasta `app-web/clearsigning`.
+4. O ícone na barra de ferramentas abre a página numa aba.
 
-**Como página no seu próprio domínio, ou em localhost.** Servida por HTTP(S), a
-relying party da página é o próprio hostname dela — então ela assina com chaves
-registradas sob *aquele* hostname, não com chaves registradas sob `getvela.app`. É o
-jeito certo de experimentar a cerimônia inteira de ponta a ponta, rodar o fluxo de
-desktop e assinar por uma carteira cuja chave foi criada no seu próprio domínio. Não
-é um jeito de assinar por uma carteira `getvela.app` existente.
+**Como página no seu próprio domínio, ou no localhost.** Servida por HTTPS (ou a
+partir do localhost), a relying party da página é o próprio hostname dela — então
+ela consegue assinar com chaves registradas sob _aquele_ hostname, não com chaves
+registradas sob `getvela.app`. Isso a torna a forma certa de experimentar toda a
+cerimônia de ponta a ponta, de rodar o fluxo de desktop e de assinar por uma carteira
+cuja chave foi criada no seu próprio domínio. Não é uma forma de assinar por uma
+carteira existente do `getvela.app`.
 
 ```sh
 cd app-web/clearsigning
 python3 -m http.server 8080   # → http://localhost:8080
 ```
 
-Todos os caminhos do app são relativos, então um subdiretório num host existente
-também funciona; abrir `index.html` direto do disco (`file://`) serve para dar uma
-olhada — sem origem não há relying party e nada pode ser assinado.
+Todos os caminhos no app são relativos, então um subdiretório num host existente
+também funciona, e abrir o `index.html` direto do disco (`file://`) serve para dar
+uma olhada — sem origem, não há relying party e nada pode ser assinado.
 
 ## O que ela faz antes de assinar
 
-- **Decodifica a transação por conta própria.** O que a chamada faz, para quem e de
-  quanto, a partir da calldata — inclusive chamadas aninhadas dentro de um lote.
-- **Só assina um digest que ela mesma calculou.** Os digests EIP-191, EIP-712,
-  SafeOp e SafeMessage são calculados na página e conferidos contra o `vela-core`, o
+- **Ela mesma decodifica a transação.** O que a chamada faz, para quem e de quanto,
+  a partir da calldata — inclusive chamadas aninhadas dentro de um lote.
+- **Ela só assina um digest que ela mesma calculou.** Os digests EIP-191, EIP-712,
+  SafeOp e SafeMessage são calculados na página e conferidos com o `vela-core`, o
   mesmo código que a carteira usa. Um digest que ela não consegue calcular é uma
   recusa, não uma assinatura.
-- **Confere que a transação é a que foi pedida.** A chamada que o site pediu precisa
-  estar de fato dentro da operação que será assinada.
-- **Recusa uma aprovação ilimitada.** Não é aviso — é recusa, com uma indicação do
-  que fazer no lugar.
-- **Diz quando não consegue ler algo,** em vez de mostrar um resumo simpático pelo
-  qual não pode responder.
-- **Mostra o endereço e o identicon da conta,** e não mostra nome de destinatário
-  fornecido por quem pediu a assinatura. Tudo o que o solicitante controla ou é
-  removido ou é rotulado como sendo dele.
+- **Ela confere se a transação é a que foi solicitada.** A chamada que o site pediu
+  precisa estar de fato dentro da operação que está sendo assinada.
+- **Ela recusa uma aprovação no nível “ilimitado”.** Não é um aviso — é uma recusa,
+  com uma indicação do que fazer no lugar.
+- **Ela diz quando não consegue ler algo,** em vez de mostrar um resumo amigável que
+  não pode sustentar.
+- **Ela mostra o endereço e o identicon da conta,** e não mostra um nome de
+  destinatário fornecido por quem pediu a assinatura. Tudo o que o solicitante
+  controla é descartado ou identificado como vindo dele.
 
 ## O que ela deliberadamente não tem
 
-- **Nenhum editor.** O pedido fica fixo ao chegar: você assina ou não. Um seletor de
-  taxas ou um editor de limite reescreveria a calldata, que é justamente a doença
-  que esta página existe para evitar.
-- **Nenhuma criação de chave.** A página de assinatura não cria passkey. Criar uma
-  seria criar outra conta.
-- **Nenhuma requisição de rede.** Se não há nada a buscar, não há nada a
-  interceptar.
+- **Nenhum editor.** A solicitação fica fixa quando chega: você assina ou não
+  assina. Um seletor de taxa ou um editor de limite reescreveriam a calldata, que é
+  justamente a doença que esta página existe para evitar.
+- **Nenhuma criação de chave.** A página de assinatura não consegue criar uma
+  passkey. Criar uma seria criar outra conta.
+- **Nenhum dado da rede.** Nada do que ela mostra ou assina é buscado. A única coisa
+  que ela carrega são os logos dos tokens, como imagens, do servidor de dados de chain
+  da Vela; se falharem, uma letra ocupa o lugar deles.
 
-## Como um pedido chega até ela
+## Como uma solicitação chega até ela
 
-| Quem pede | Canal |
-| -------------------------------------------- | -------------------------------------------------------------------------- |
-| Uma página no mesmo navegador | `postMessage` |
-| Uma página do mesmo navegador, para a extensão | Porta da extensão |
-| Um app de desktop na mesma máquina | Fragmento de URL + callback em loopback |
-| Um celular ou outro computador | Bluetooth LE (protocolo implementado; o rádio ainda não foi testado em hardware real) |
+| Solicitante                                   | Canal                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| Uma página no mesmo navegador                 | `postMessage`                                                              |
+| Uma página no mesmo navegador, para a extensão | Porta da extensão                                                         |
+| Um app de desktop na mesma máquina            | Fragmento de URL + callback de loopback (demonstração em `samples/`; o app de desktop da Vela ainda não usa isso) |
+| Um celular ou outro computador                | Bluetooth LE (protocolo implementado; o rádio ainda não foi testado em hardware real) |
 
-O formato de troca, os digests e uma tabela de onde vem cada item da tela estão no
-`PROTOCOL.md`, ao lado do código.
+O formato das mensagens, os digests e uma tabela de onde vem cada item da tela estão
+em `PROTOCOL.md`, ao lado do código.
 
-## Quando usar
+## Onde ela se encaixa
 
-A partir do dia em que a conta guarda dinheiro cuja perda te incomodaria — e daí em
-diante, em toda assinatura. Não só para valores altos: uma aprovação pequena pode
-entregar o suficiente para esvaziar uma conta. Um hábito de assinatura guardado para
-ocasiões especiais não está de pé no dia em que faz falta.
+Quando os apps puderem entregar suas solicitações a ela, o uso previsto é simples: a
+partir do dia em que a conta guardar um dinheiro que você não gostaria de perder,
+toda assinatura passa por uma página cujo código você mesmo carregou. Não só para
+valores altos — uma aprovação pequena pode entregar o suficiente para esvaziar uma
+conta. Até lá, a página é uma forma de ler e testar exatamente como essa segunda
+opinião vai funcionar.

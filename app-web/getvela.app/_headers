@@ -1,0 +1,9 @@
+# Spec 080. Passkeys are bound to getvela.app, so any page served from this
+# origin could ask a visitor's keys for a signature — and the system prompt
+# shows only "getvela.app", never the transaction. None of this site's pages use
+# WebAuthn (the wallet lives at wallet.getvela.app), so the site forbids itself,
+# and every script it loads, from calling navigator.credentials at all.
+# A signing page ever served from this origin must detach this header for its
+# own path (`! Permissions-Policy`).
+/*
+  Permissions-Policy: publickey-credentials-get=(), publickey-credentials-create=()

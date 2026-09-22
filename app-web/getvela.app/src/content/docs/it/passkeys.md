@@ -1,6 +1,7 @@
 ---
 title: Come funzionano le passkey
-description: Il modello di sicurezza dietro Vela — cos'è una passkey, dove vive la tua chiave e perché non c'è nulla da rubare con il phishing.
+description: "Cos'è una passkey, dove sta la chiave privata per ogni tipo di chiave, perché non c'è nessun segreto da rubare con il phishing e da cosa una passkey non ti protegge."
+source: b23999b2ed69
 ---
 
 <script>
@@ -9,58 +10,73 @@ description: Il modello di sicurezza dietro Vela — cos'è una passkey, dove vi
 
 # Come funzionano le passkey
 
-Tutto il modello di sicurezza di Vela poggia su un'idea: la chiave che controlla il
-tuo wallet è una **passkey**, creata dal tuo dispositivo e custodita dal sistema
-operativo — nessuna app, Vela inclusa, può leggerla — e usata solo con il tuo volto
-o la tua impronta.
+Le chiavi che controllano un wallet Vela sono **passkey**: credenziali WebAuthn
+sulla curva P-256. Il tuo dispositivo o la tua chiave di sicurezza crea ciascuna
+di esse, conserva la chiave privata e la usa solo dopo che hai confermato con Face
+ID, l'impronta, il PIN del dispositivo, oppure un tocco e il PIN su una chiave di
+sicurezza. Vela non riceve mai la chiave privata; se un gestore di password la
+sincronizza, è il gestore a custodirla, cifrata, per conto tuo.
 
-## Cos'è davvero una passkey
+## Cos'è una passkey
 
-Una passkey è una coppia di chiavi pubblica/privata creata dal tuo dispositivo. La
-**chiave privata** è custodita dal servizio passkey del sistema operativo — di
-solito il Portachiavi iCloud su Apple, il Gestore delle password di Google su
-Android — cifrata end-to-end, quindi nessuna app può leggerla o copiarla. Le app
-non ricevono la chiave: ricevono il permesso di *chiedere al tuo dispositivo di
-firmare qualcosa* dopo che ti sei autenticato.
+Una passkey è una coppia di chiavi pubblica/privata creata per un solo sito web —
+per Vela, `getvela.app`. Un'app non riceve mai la chiave privata: può solo chiedere
+all'autenticatore di firmare qualcosa, e l'autenticatore prima lo chiede a te.
 
-È la stessa tecnologia che protegge Apple Pay e lo sblocco biometrico.
+Dove sta la chiave privata dipende dal tipo di chiave:
 
-<Callout type="info" title="Il punto chiave">
-Un'app — Vela compresa — può richiedere una firma, ma non vede mai la tua chiave
-privata. Volto o impronta autorizzano il dispositivo a firmare; la chiave resta nel
-sistema operativo, cifrata end-to-end.
+| Tipo di chiave | Dove sta la chiave privata | Sincronizzata su altri dispositivi? |
+| --- | --- | --- |
+| **Questo dispositivo** — Face ID, Touch ID, impronta, Windows Hello | Il gestore di password della tua piattaforma (Portachiavi iCloud, Gestore delle password di Google) o un gestore di password come 1Password | Di solito sì, con crittografia end-to-end, se la sincronizzazione è attiva. Le chiavi di Windows Hello restano sul PC |
+| **Un altro telefono**, collegato scansionando un codice QR | Il gestore di password di quel telefono | Come sopra |
+| **Una chiave di sicurezza hardware** (YubiKey e altre chiavi FIDO2, via USB o NFC) | Dentro la chiave di sicurezza | Mai |
+
+Un wallet Vela può usare fino a sette chiavi, di qualsiasi combinazione, scelte
+quando lo crei; [firmatari e chiavi di sicurezza](/it/docs/signers) parla di questa
+scelta.
+
+## Nessun segreto da rubare con il phishing
+
+Il phishing funziona facendoti consegnare un segreto. Una seed phrase sono dodici
+parole che qualcuno può convincerti a digitare da qualche parte. Una passkey **non
+ha alcun segreto che si possa digitare**: non c'è niente da rivelare, niente da
+incollare, e un sito falso non può chiedertelo. E poiché una passkey è creata per
+un solo sito, il browser offre una passkey di `getvela.app` solo alle pagine di
+getvela.app e dei suoi sottodomini.
+
+Questo elimina un'intera categoria di perdite — la frase di recupero rubata — che
+nell'autocustodia è frequente.
+
+## Da cosa una passkey non ti protegge
+
+<Callout type="warning" title="Una passkey firma qualsiasi cosa tu approvi">
+La richiesta del telefono o del browser dice <em>quale</em> chiave viene usata, non
+<em>che cosa</em> viene firmato. Se la approvi, una passkey firma una transazione
+dannosa con la stessa facilità di una legittima. Per questo Vela decodifica ogni
+transazione prima che tu firmi (<a href="/it/docs/clear-signing">firma
+leggibile</a>), e per questo conta la pagina che te la mostra
+(<a href="/it/docs/bybit-attack">l'attacco a Bybit</a>).
 </Callout>
 
-## Perché non c'è nulla da rubare con il phishing
+Non protegge nemmeno da chi ha il tuo telefono sbloccato e riesce a superarne il
+controllo, o da chi controlla l'account tramite cui la passkey si sincronizza.
+Tieni impostato un codice di blocco del dispositivo, proteggi il tuo account Apple
+o Google e valuta una chiave di sicurezza hardware che non si sincronizza da
+nessuna parte.
 
-Il phishing funziona facendoti consegnare un segreto. Con una frase seed, quel
-segreto sono dodici parole che puoi digitare in una pagina falsa. Con una passkey
-**non c'è nessun segreto digitabile**. Un sito truffaldino non può chiederti di
-«inserire la tua passkey», perché una passkey non si inserisce: è un'operazione
-hardware sbloccata dalla tua biometria.
+## Com'è firmare
 
-Questo elimina il modo di gran lunga più comune in cui si perdono fondi
-auto-custoditi.
+1. Confermi una transazione in Vela, dopo aver letto cosa fa.
+2. Il dispositivo o la chiave di sicurezza chiede Face ID, l'impronta, il PIN,
+   oppure un tocco più il PIN.
+3. Firma, e all'app torna solo la firma.
+4. L'app passa l'operazione firmata al relay, che la invia; il contratto del tuo
+   wallet controlla la firma della passkey on-chain prima di fare qualsiasi cosa.
 
-## Che effetto fa firmare una transazione
+## Dove va la chiave pubblica
 
-1. Confermi una transazione in Vela.
-2. Il dispositivo chiede Face ID / Touch ID.
-3. Il dispositivo firma la transazione con la tua passkey.
-4. Vela trasmette la transazione firmata alla rete.
+Le metà **pubbliche** delle tue chiavi vengono registrate in un registro pubblico
+su Gnosis Chain, così un nuovo dispositivo può trovare il tuo wallet. È
+l'argomento di [recupero e accesso](/it/docs/recovery).
 
-Lo stesso gesto con cui sblocchi il telefono — perché è lo stesso meccanismo di
-passkey che il tuo dispositivo usa già dappertutto.
-
-<Callout type="warning" title="La sicurezza del dispositivo conta ancora">
-Una passkey protegge benissimo da attacchi a distanza e phishing. Non protegge da
-chi ha in mano il tuo dispositivo sbloccato e supera il controllo biometrico. Tieni
-un codice di blocco impostato e non passare un telefono sbloccato a qualcuno di cui
-non ti fidi.
-</Callout>
-
-## Dove sta il resto
-
-La chiave **pubblica** della tua passkey viene pubblicata in un piccolo indice
-on-chain, così il wallet può essere recuperato su un nuovo dispositivo. È
-l'argomento della pagina successiva: [recupero e accesso](/it/docs/recovery).
+Poi: [firmatari e chiavi di sicurezza](/it/docs/signers).

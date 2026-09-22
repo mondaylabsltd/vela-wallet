@@ -1,6 +1,7 @@
 ---
 title: Récupération et connexion
-description: Comment Vela vous laisse récupérer votre portefeuille sur un nouvel appareil sans phrase de récupération — et les limites honnêtes de ce modèle.
+description: "Comment revenir dans votre portefeuille sur un nouvel appareil avec n'importe laquelle de vos clés, où le portefeuille est recherché, et les limites réelles d'une récupération sans phrase de récupération."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,76 +10,86 @@ description: Comment Vela vous laisse récupérer votre portefeuille sur un nouv
 
 # Récupération et connexion
 
-La partie la plus difficile d'un portefeuille sans phrase de récupération, c'est
-justement la récupération : s'il n'y a pas douze mots, comment revenir depuis un
-nouveau téléphone ? Voici exactement comment Vela s'y prend.
+Sans phrase de récupération, la récupération repose sur deux choses : **une clé que
+vous avez encore**, et **un enregistrement public des clés qui appartiennent à
+votre portefeuille**.
 
-## Comment ça marche
+## Ce qui est enregistré à la création d'un portefeuille
 
-Quand vous créez un portefeuille, deux choses sont publiées dans l'**index de
-passkeys** de Vela :
+L'adresse de votre portefeuille est calculée à partir de toutes les clés avec
+lesquelles vous le créez. Pour que n'importe laquelle de ces clés puisse retrouver
+le portefeuille plus tard, créer un portefeuille inscrit un enregistrement dans un
+**contrat de registre** public sur Gnosis Chain : la clé publique de chaque clé,
+l'adresse du portefeuille, son nom, et les données d'enregistrement signées. Le
+registre n'a pas de propriétaire et ne peut être ni modifié ni effacé. (La liste
+complète de ce qui est public se trouve sur
+[créer votre portefeuille](/fr/docs/create-wallet#what-is-public).)
 
-- La **clé publique** de votre passkey (jamais la clé privée).
-- Le **nom** que vous avez choisi pour le portefeuille.
+Le service d'index des clés publiques de Vela soumet cet enregistrement et en paie
+le gas ; l'enregistrement lui-même est on-chain, et n'importe quelle app peut le
+lire directement.
 
-La clé publique est stockée sur la blockchain Gnosis via un contrat : elle est
-donc lisible publiquement et ne dépend pas du fait que les serveurs de Vela
-restent en ligne.
+## Se connecter sur un nouvel appareil
 
-Votre clé **privée**, elle, est une passkey synchronisée par le trousseau de votre
-plateforme — **trousseau iCloud** sur les appareils Apple, **gestionnaire de mots
-de passe Google** sur Android.
+1. Ouvrez Vela et choisissez de vous connecter.
+2. Utilisez **n'importe laquelle** de vos clés : une passkey synchronisée sur cet
+   appareil, un téléphone à proximité (scannez le QR code) ou votre clé de
+   sécurité.
+3. Vela déduit la clé publique de cette clé à partir de la signature, la recherche —
+   d'abord dans l'index de Vela, puis, si l'index ne répond pas, dans le contrat de
+   registre sur Gnosis, puis sur Ethereum — et reconstruit le portefeuille. Avant de
+   vous l'afficher, il vérifie que les clés trouvées aboutissent bien à l'adresse
+   enregistrée.
 
-Pour vous connecter sur un nouvel appareil :
+Les listes de comptes ne sont pas synchronisées entre appareils ; la connexion les
+reconstruit.
 
-1. Connectez-vous au même compte iCloud ou Google, avec la synchronisation du
-   trousseau activée.
-2. Ouvrez Vela et choisissez de vous connecter.
-3. Authentifiez-vous avec votre passkey. Votre plateforme fournit la passkey
-   synchronisée ; l'index fournit le compte correspondant. Votre portefeuille est
-   de retour.
-
-L'index est un cache, pas un point de défaillance unique. S'il devenait
-inaccessible et que votre compte n'est pas en stockage local, Vela peut
-reconstruire votre clé publique sur l'appareil à partir de deux signatures de
-passkey, puis en redériver l'adresse de votre portefeuille — sans aucun serveur.
-
-<Callout type="info" title="Pourquoi séparer ainsi">
-La clé publique dans l'index on-chain permet à n'importe qui (y compris une
-installation toute neuve) de retrouver votre compte. La clé privée, synchronisée
-par le trousseau de la plateforme en qui vous avez confiance, est ce qui autorise
-réellement les transactions. Tout ce qui est dans l'index est public, et rien de
-ce qui s'y trouve ne peut déplacer vos fonds — seules les signatures de votre
-passkey le peuvent.
+<Callout type="info" title="Si aucun index ni registre ne répond">
+Un portefeuille à <strong>clé unique</strong> peut être reconstruit sur l'appareil
+sans aucun serveur : deux signatures de cette clé suffisent pour retrouver sa clé
+publique et recalculer l'adresse. Un portefeuille à plusieurs clés a besoin de
+l'enregistrement du registre, car une clé ne peut pas dire à l'app quelles étaient
+les autres.
 </Callout>
+
+## Copies de l'enregistrement
+
+Le registre sur Gnosis est celui que les apps lisent en premier. Depuis les
+**Réglages**, vous pouvez aussi copier l'enregistrement de votre portefeuille dans
+le même contrat de registre sur **Ethereum**, en payant vous-même le gas, pour que
+l'enregistrement existe sur une deuxième chaîne. N'importe qui peut faire une telle
+copie ; elle ne contient rien qui puisse déplacer des fonds.
 
 ## Les limites, honnêtement
 
-L'auto-conservation veut dire que la responsabilité est réelle. Voici ce qu'il
-faut comprendre.
-
-<Callout type="warning" title="Votre récupération dépend du trousseau de votre plateforme">
-La connexion multi-appareils de Vela repose sur la synchronisation de votre
-passkey via le trousseau iCloud ou le gestionnaire de mots de passe Google. Gardez
-ce compte sécurisé et ses options de récupération à jour. Si vous perdez
-<strong>à la fois</strong> vos appareils <strong>et</strong> le trousseau de votre
-compte de plateforme, Vela ne peut pas régénérer votre clé privée — par
-conception, nous ne l'avons jamais eue.
+<Callout type="warning" title="Une clé perdue est perdue">
+Si toutes les clés avec lesquelles vous avez créé le portefeuille ont disparu — les
+passkeys synchronisées, les téléphones, les clés de sécurité —, personne ne peut
+récupérer le portefeuille : ni Vela, ni Apple, ni Google, ni personne. Il n'y a ni
+phrase de récupération, ni réinitialisation par le support, ni porte dérobée.
 </Callout>
 
-Conseils pratiques :
+Ce qui rend ce scénario improbable, c'est d'avoir plus d'un moyen d'entrer :
 
-- **Laissez la synchronisation du trousseau active.** C'est elle qui transporte
-  votre passkey d'un appareil à l'autre.
-- **Sécurisez votre compte Apple / Google** avec un mot de passe solide et ses
-  propres méthodes de récupération. Ce compte fait désormais partie de la sécurité
-  de votre portefeuille.
-- **Gardez plus d'un appareil connecté** quand c'est possible, pour qu'un
-  téléphone perdu reste un désagrément et non une crise.
+- **Laissez la synchronisation des passkeys activée** si vous utilisez la passkey
+  de cet appareil. C'est elle qui transporte la clé vers un nouveau téléphone ou un
+  nouvel ordinateur.
+- **Sécurisez le compte qui se trouve derrière.** Celui qui contrôle votre compte
+  Apple ou Google peut être en mesure d'utiliser une passkey synchronisée ;
+  donnez-lui un mot de passe solide et ses propres options de récupération.
+- **Créez le portefeuille avec plus d'une clé**, par exemple la passkey de votre
+  téléphone et une clé de sécurité matérielle gardée en lieu sûr. Les clés ne
+  peuvent être ajoutées qu'à la création du portefeuille ([pourquoi](/fr/docs/signers)).
+  N'oubliez pas que n'importe quelle clé peut signer seule — et ne peut pas être
+  retirée : si l'une d'elles est un jour compromise, transférez vos fonds vers un
+  nouveau portefeuille ([que faire](/fr/docs/signers)).
 
-## Ce que Vela peut et ne peut pas faire
+## Ce que Vela peut faire et ne peut pas faire
 
-- **Peut :** vous aider à retrouver votre compte grâce à l'index public.
-- **Ne peut pas :** déplacer vos fonds, geler votre portefeuille ou récupérer une
-  clé privée. Vela ne l'a jamais détenue. C'est tout l'intérêt de
-  l'auto-conservation — et le marché que vous passez pour l'obtenir.
+- **Peut :** faire fonctionner l'index, pour que votre portefeuille soit retrouvé
+  rapidement sur un nouvel appareil.
+- **Ne peut pas :** déplacer vos fonds, geler votre portefeuille, ajouter ou
+  retirer des clés, ni récupérer une clé que vous avez perdue. Vela ne détient
+  jamais vos clés.
+
+Ensuite : [la signature lisible](/fr/docs/clear-signing).

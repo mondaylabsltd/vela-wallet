@@ -1,6 +1,7 @@
 ---
 title: Whitepaper
-description: Cómo funciona Vela y qué tienes —y qué no— que dar por bueno para usarla. Arquitectura, modelo de seguridad, recuperación y cómo verificarlo todo por tu cuenta.
+description: "Cómo funciona Vela y en qué tienes (y en qué no tienes) que confiar para usarla: la cuenta, las llaves, la comisión, el modelo de amenazas, la recuperación y qué pasa si Vela desaparece."
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -9,268 +10,336 @@ description: Cómo funciona Vela y qué tienes —y qué no— que dar por bueno
 
 # Whitepaper
 
-<Callout type="info" title="Estado: alfa · v0.1">
-Esta página describe cómo funciona Vela hoy y qué tienes o no tienes que dar por
-bueno para usarla. Prefiere la honestidad al marketing. Vela está en
-<a href="/blog/vela-is-in-alpha">alfa</a>: empieza con montos chicos. Vela no tiene
-token. Todo lo de aquí es verificable contra el código abierto.
+<Callout type="info" title="Estado: alfa · última revisión en septiembre de 2026">
+Esta página describe cómo funciona Vela hoy y en qué tienes y en qué no tienes que
+confiar para usarla. Vela está en <a href="/blog/vela-is-in-alpha">alfa</a>: empieza
+con montos pequeños. Vela no tiene token. Todo lo que dice esta página se puede
+contrastar con el código abierto; donde el código y esta página no coincidan, el
+código tiene la razón y esta página tiene un bug.
 </Callout>
 
 ## Resumen
 
-Vela es una **wallet de contrato inteligente en autocustodia** para redes EVM. Cada
-wallet es una cuenta inteligente
-[Safe](https://github.com/safe-fndn/safe-smart-account) controlada por una
-**passkey**: una credencial WebAuthn (P-256) guardada por el sistema operativo de
-tu dispositivo, cifrada de extremo a extremo y desbloqueada con Face ID, Touch ID o
-huella. No hay frases semilla ni llaves privadas que copiar, guardar o perder.
+Vela es una **wallet de contrato inteligente de autocustodia** para Ethereum y otras
+redes EVM. Cada wallet es una cuenta **Safe v1.4.1** sin modificar, operada a través
+de **ERC-4337** y controlada por hasta siete **passkeys**: llaves WebAuthn P-256 que
+guardan tus dispositivos, tu gestor de contraseñas o llaves de seguridad físicas. No
+hay frase semilla.
 
-Vela, la empresa, nunca tiene tus llaves ni tus fondos y **no puede moverlos,
-congelarlos ni incautarlos**. La app, el relay de transacciones y los servicios de
-apoyo son de código abierto y autohospedables. Lo que tienes que dar por bueno se
-reduce a contratos auditados, a la bóveda de passkeys de tu sistema operativo y —
-solo para disponibilidad— a un relay que puedes reemplazar o correr tú.
+Vela, la empresa, nunca tiene tus llaves ni ningún rol en tu Safe, así que **no
+puede mover, congelar ni confiscar tus fondos** por su cuenta. Lo que sí hace es
+escribir y servir el software que les pide a tus llaves que firmen, y por eso importa
+el modelo de amenazas de más abajo. Las apps, el relay que envía las transacciones y
+los servicios de apoyo son de código abierto, y puedes operar tu propia copia de cada
+uno. En qué confías, en pocas palabras: en los contratos, en los autenticadores
+que guardan tus llaves, en el código de la app con la que firmas, en el dominio al
+que pertenecen tus passkeys y en los servicios a los que apuntas la app.
 
 ## Por qué existe Vela
 
-La mayoría de las wallets te obliga a un trade-off:
+- Las **wallets con frase semilla** ponen un secreto de 12 a 24 palabras frente a
+  cada usuario: un punto único de falla y un blanco permanente de phishing.
+- Las **wallets custodiales** eliminan la frase semilla quedándose con la custodia de
+  los fondos.
+- Las **wallets con passkey** que dependen de los servidores y del código cerrado de
+  una sola empresa eliminan la frase semilla, pero te dejan varado si la empresa
+  desaparece.
+- La **firma a ciegas** (aprobar datos opacos que no puedes leer) sigue siendo común,
+  y es una de las formas en que vacían wallets.
 
-- **Las wallets con frase semilla** ponen un secreto de 12 a 24 palabras frente a
-  cada usuario. Es el punto único de falla y un blanco constante de phishing.
-- **Las wallets custodiales** quitan la frase semilla pero se quedan con la custodia
-  de tus fondos, reintroduciendo el riesgo de contraparte que las cripto venían a
-  eliminar.
-- **La firma a ciegas** —aprobar hexadecimal que no puedes leer— se normalizó en
-  todo el ecosistema y está detrás de buena parte de las wallets vaciadas.
-
-Vela busca ser tan fácil como una app custodial y dejarte en autocustodia completa:
-sin frase semilla, sin custodia ajena y sin transacciones que no puedas leer antes
-de firmarlas.
+Vela busca la comodidad de una passkey sin ninguna de esas dependencias: una cuenta
+estándar, código abierto, servicios reemplazables y transacciones que puedes leer
+antes de firmar.
 
 ## Principios de diseño
 
-1. **Autocustodia, sin excepciones.** Las llaves se generan en tu dispositivo y las
-   guarda el servicio de passkeys de tu sistema, cifradas de extremo a extremo. Los
-   servidores de Vela solo ven datos públicos.
-2. **Verifica, no confíes.** Todo el stack —la app y los cuatro servicios de
-   backend— es de código abierto con licencia MIT.
-3. **Nada de firma a ciegas.** Las transacciones se traducen a intención legible
-   donde exista un descriptor; las llamadas desconocidas se marcan, no se esconden.
-4. **Hacer menos.** La wallet guarda ETH y ERC-20 y se conecta a las dApps que tú
-   elijas. Menos código en el que confiar, menor superficie de ataque.
+1. **Autocustodia, sin excepciones.** Las llaves las crean y las guardan tus
+   autenticadores. Los servicios de Vela nunca las ven; lo que sí ven está en la
+   sección de Privacidad.
+2. **Contratos estándar, sin modificar.** Ningún contrato en el camino hacia tus
+   fondos lo escribió Vela.
+3. **Verifica, no confíes.** Las apps y los servicios son públicos; los servicios se
+   pueden autoalojar.
+4. **Decodificar antes de firmar.** Lo que no se puede decodificar lleva una
+   advertencia explícita de firma a ciegas.
+5. **Hacer menos.** La wallet envía, recibe y firma para las dApps que tú eliges.
 
 ## Arquitectura
 
 ```text
-App Vela (iOS / Android / Web, una sola base de código)
-  • Passkey (WebAuthn P-256, servicio de passkeys del sistema)
-  • Construcción y firma de la UserOperation
-  • Interfaz de firma legible (ERC-7730)
-        │  UserOperation firmada
+Apps de Vela — web, extensión de navegador, escritorio (macOS/Windows/Linux), iOS, Android
+  un solo núcleo compartido en Rust (reglas, criptografía, ABI, firma legible) + una capa nativa en cada una
+  • arman la UserOperation y te muestran lo que hace
+  • le piden a tu llave una aserción WebAuthn
+        │  UserOperation firmada (comisión incluida)
         ▼
-Relay Vela (ERC-4337, autohospedable)
-  • envía handleOps al EntryPoint
-  • no puede alterar ni falsificar tu transacción
+Relay (vela-relay, autoalojable)
+  • cotiza la comisión, paga el gas por adelantado, envía handleOps
+  • no puede cambiar la operación
         ▼
 Cadena EVM
-  EntryPoint v0.7 → cuenta inteligente Safe
-  El firmante WebAuthn verifica P-256 on-chain
+  EntryPoint v0.7 → tu Safe v1.4.1 → módulo 4337 de Safe
+  El módulo de passkey de Safe verifica P-256 con el precompilado EIP-7951 / RIP-7212
 ```
 
-### Modelo de cuenta
+Servicios de apoyo, todos de código abierto: un **índice de llaves públicas** que
+registra las wallets nuevas en un registro on-chain y responde búsquedas, un
+directorio de **datos de cadena** y una fuente de **tipos de cambio**. Consulta la
+[guía de autoalojamiento](/es-MX/docs/self-hosting).
 
-Tu wallet es una cuenta inteligente **Safe v1.4.1** (un contrato proxy) operada con
-abstracción de cuentas **ERC-4337** (EntryPoint v0.7), con el **Safe 4337 Module** y
-un **firmante WebAuthn** como dueño de la cuenta.
+### La cuenta
 
-La dirección es **determinista** y **contrafactual**: se calcula desde la llave
-pública de tu passkey con `CREATE2` antes de que se envíe ninguna transacción, así
-que puedes recibir fondos antes de que se despliegue. La cuenta se despliega sola,
-pagando de su propio saldo, en tu primera transacción.
+Tu wallet es un proxy de **Safe v1.4.1** (singleton SafeL2), con el **módulo 4337
+v0.3.0** de Safe habilitado como su módulo y su fallback handler, operado a través del
+**EntryPoint v0.7**. Sus dueños son firmantes de passkey del **módulo de passkey
+v0.2.1** de Safe: la primera llave la verifica el firmante compartido, y cada llave
+adicional, su propio contrato firmante creado por la fábrica de Safe. El umbral es
+**1**.
 
-### Llaves y autenticación
+La dirección es **determinista y contrafactual**: se calcula con `CREATE2` a partir
+de los datos de configuración del Safe, que incluyen cada llave fundadora, antes de
+desplegar nada. Es la misma en todas las redes. Puedes recibir en ella de inmediato;
+tu primera transacción en cada red despliega la wallet y paga el despliegue dentro de
+la comisión de esa transacción.
 
-La autenticación usa **passkeys WebAuthn** en la curva **P-256**. La llave privada
-se genera en tu dispositivo y la guarda, cifrada de extremo a extremo, el servicio
-de passkeys de tu sistema (Llavero de iCloud o Gestor de contraseñas de Google), que
-la sincroniza entre tus dispositivos. **Los servidores de Vela solo ven tu llave
-pública.** Firmar exige una verificación biométrica nueva cada vez: no hay llave de
-sesión de larga vida. Todo el detalle en
-[cómo funcionan las passkeys](/es-MX/docs/passkeys).
+### Las llaves
 
-### Firma y flujo de la transacción
+Una wallet tiene **de una a siete llaves**, fijas desde que la creas. Cualquiera de
+ellas puede firmar sola (1-of-n). Una llave puede ser:
 
-1. **Construir** una `UserOperation` ERC-4337 para tu Safe y estimar el gas.
-2. **Decodificar** la llamada a intención legible y mostrarla para revisión.
-3. **Firmar**: tras la verificación biométrica, tu dispositivo produce una aserción
-   WebAuthn sobre el hash de la operación.
-4. **Codificar** la aserción como firma de contrato **EIP-1271**.
-5. **Retransmitir** la operación firmada al relay, que la envía al EntryPoint.
-6. **Verificar on-chain**: el Safe verifica la firma P-256 on-chain con el
-   precompilado RIP-7212 antes de ejecutar. El precompilado es requisito duro: no
-   hay verificador de respaldo, y Vela se niega a habilitar una red que no lo tenga.
+- una passkey en el dispositivo que estás usando, sincronizada por el Llavero de
+  iCloud, el Administrador de contraseñas de Google u otro gestor de contraseñas si
+  lo permites;
+- otro celular, al que llegas escaneando un código QR (el transporte híbrido de
+  WebAuthn);
+- una llave de seguridad física por USB o NFC, que no se sincroniza en ningún lado.
 
-El relay recibe una operación **ya firmada**. No puede cambiar destinatario, monto
-ni ningún otro campo sin invalidar la firma.
+Cada firma necesita la verificación de usuario del propio autenticador: un dato
+biométrico o el PIN del dispositivo, o el PIN y un toque en una llave de seguridad.
+No hay llave de sesión. Las llaves no se pueden agregar, quitar ni reemplazar
+después: en cada cadena donde la wallet todavía no está desplegada, la dirección
+sigue representando al conjunto fundador, así que cambiar los dueños en una cadena
+haría que la cuenta fuera distinta de una cadena a otra.
 
-### Relay y modelo de gas
+Las passkeys pertenecen a una relying party; las de Vela se crean para
+**`getvela.app`**. Los navegadores solo las ofrecen a páginas de getvela.app o de sus
+subdominios, que es lo que las hace resistentes al phishing; también es una
+dependencia a la que este documento vuelve más abajo.
 
-- El gas se paga **del saldo de tu propia wallet**, en el token nativo de la red por
-  defecto, o en una stablecoin soportada donde el relay ofrezca una. Tempo, que no
-  tiene moneda nativa, siempre liquida gas en stablecoins en dólares. **No hay
-  paymaster** ni un tercero que patrocine —o condicione— tus transacciones.
-- **El relay es la única fuente de verdad para el precio del gas.** Lo cotiza desde
-  las condiciones reales de la cadena; la wallet muestra esa cotización y firma
-  exactamente lo que muestra.
-- El cobro del relay de Vela es deliberadamente simple: el total es el **costo de
-  red más la comisión de servicio del relay**, con un mínimo pequeño en
-  transacciones muy baratas. Una parte va a los validadores de la cadena; el resto
-  paga al relay que opera la infraestructura y mantiene fondeada tu cuenta de gas.
-- La wallet **muestra la comisión estimada antes de que confirmes** —en el activo de
-  comisiones y en tu moneda de visualización— y el monto cotizado junto con su
-  destinatario son parte de lo que firmas, así que al relay se le paga exactamente
-  lo mostrado. Sin sobreprecio escondido.
-- Cada Safe tiene una **cuenta de relay dedicada** (cuenta de gas) por cadena,
-  activada con un depósito **no reembolsable**. Puede agotarse con el tiempo, así
-  que quizá necesite **reactivarse** más adelante: no es estrictamente un depósito
-  de una sola vez.
+### Flujo de firma
 
-El relay es una dependencia de **disponibilidad**, no de **custodia**: puede
-demorar o negarse, pero nunca alterar, falsificar ni robar. Es de código abierto y
-puedes correr el tuyo — y como el precio se **cotiza y se muestra** en vez de
-esconderse, incluso la comisión de un relay propio o de terceros siempre te queda a
-la vista antes de firmar. Ve
-[redes y comisiones](/es-MX/docs/networks-and-fees).
+1. **Armar** una UserOperation para tu Safe (que incluye una transferencia que le
+   paga al relay) y simularla.
+2. **Decodificarla** en una intención legible y mostrártela.
+3. **Firmar**: tu autenticador produce una aserción WebAuthn sobre el hash de la
+   operación después de verificar que eres tú.
+4. **Codificar** la aserción como la firma de Safe que espera el módulo de passkey.
+5. **Enviar** la operación firmada al relay, que llama al EntryPoint.
+6. **Verificar on-chain**: el módulo de passkey comprueba la firma P-256 con el
+   precompilado EIP-7951 / RIP-7212 antes de que el Safe ejecute nada. No hay verificador de
+   respaldo; una red sin el precompilado no se puede agregar.
 
-### Firma legible (ERC-7730)
+### Comisiones
 
-Vela decodifica calldata y datos tipados EIP-712 con descriptores **ERC-7730** y
-presenta la **intención** (Intercambiar, Enviar, Aprobar…), lo **sustancial**
-(montos, direcciones) y, a petición, los **detalles** (nonce, fecha límite, calldata
-en crudo), con colores por riesgo. Cuando ningún descriptor coincide, Vela muestra
-una advertencia explícita de firma a ciegas en vez de fingir que entiende la
-llamada.
+- Al relay se le paga **dentro de la operación**: la operación declara comisiones de
+  EntryPoint en cero e incluye una transferencia de tu Safe a la dirección del relay.
+  El monto y el destinatario forman parte de lo que firmas, así que pagas exactamente
+  lo que mostró la pantalla de confirmación.
+- La comisión es **el triple del gas que la wallet reserva para la operación** (las
+  estimaciones simuladas, aumentadas un 50%, con mínimos), **al precio más alto
+  entre la lectura que hace la propia wallet del precio del gas y el precio del relay
+  para la velocidad elegida**, con un mínimo de alrededor de US$0.01. En Tempo el
+  múltiplo es dos. El margen en la reserva y en el precio deja la comisión por encima
+  del costo on-chain real de la operación, y más aún en la primera transacción en
+  una red; el relay se queda con la diferencia. El monto exacto está en la pantalla
+  de confirmación antes de que firmes.
+- La comisión va al relay que tenga configurado la wallet: el de Vela por defecto, o
+  cualquier despliegue de vela-relay, incluido uno que operes tú.
+- La comisión se paga en la moneda de la red o en una stablecoin en dólares que el
+  relay acepte (pathUSD en Tempo, que no tiene moneda nativa). **No hay paymaster**:
+  nadie patrocina el gas, y nadie puede filtrar transacciones con una política de
+  patrocinio.
+- Si la tesorería de gas de un relay en una red está vacía, la wallet te lo dice
+  antes de que firmes. No hay depósito por usuario.
+
+Detalles: [redes y comisiones](/es-MX/docs/networks-and-fees).
+
+### Firma legible
+
+Las llamadas y los mensajes EIP-712 se decodifican con descriptores **ERC-7730**
+(integrados en la app para los contratos comunes, obtenidos del servicio de datos de
+cadena o emparejados con formas estándar de tokens) y luego, como último recurso, con
+una base de datos pública de selectores, con la etiqueta de mejor esfuerzo. Lo que
+quede recibe una advertencia explícita de firma a ciegas. Los descriptores obtenidos
+no están autenticados criptográficamente. Una aprobación on-chain de nivel
+«ilimitado» (2^200 o más) no se puede enviar hasta que la reduzcas; una aprobación
+finita grande y los permisos firmados se muestran con una advertencia, pero no se
+bloquean. Detalles: [firma legible](/es-MX/docs/clear-signing).
 
 ### Redes
 
-Vela soporta 12 redes EVM —Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad y World Chain— más redes personalizadas.
-Una red personalizada solo se puede agregar si ya aloja los contratos de los que
-Vela depende (el EntryPoint, los contratos Safe, el firmante WebAuthn) y el
-precompilado P-256 RIP-7212; Vela lo revisa antes de habilitarla.
+Vela trae 24 redes integradas (Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
+Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
+Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume y XRPL EVM) y
+acepta cualquier red EVM que tenga los once contratos que revisa y el precompilado
+EIP-7951 / RIP-7212. (Las llaves de la dos a la siete también necesitan en esa red la fábrica de
+firmantes de passkey de Safe, que la revisión todavía no cubre.)
 
 ## Modelo de seguridad
 
-**Lo que Vela no puede hacer:**
+**Lo que Vela no puede hacer**
 
-- Mover, gastar o transferir tus fondos: solo tu passkey puede autorizar al Safe.
-- Congelar o incautar tu cuenta: el Safe es tu contrato on-chain; Vela no tiene
-  ningún rol privilegiado sobre él.
-- Firmar por ti: cada transacción necesita una aserción biométrica nueva.
-- Ver tu llave privada: nunca llega a Vela; solo tu dispositivo puede usarla para
-  firmar.
-- Alterar una transacción después de que la firmas: cualquier cambio invalida la
+- Mover, gastar ni congelar tus fondos por su cuenta: solo tus llaves autorizan tu
+  Safe, y Vela no tiene ningún rol en él. (Lo que Vela sí puede hacer es publicar
+  software que te pida firmar; consulta las amenazas de más abajo.)
+- Cambiar una transacción después de que la firmas: cualquier cambio invalida la
   firma.
+- Leer tus llaves privadas: se quedan en tus autenticadores.
+- Agregar una llave a tu wallet, o quitar una.
 
-**Lo que «no puede congelar» no cubre: el *token*.** Una stablecoin con permisos
-—USDC, USDT y la mayoría de los tokens respaldados por moneda fiduciaria— trae una
-función de lista negra que su emisor puede invocar contra cualquier dirección,
-incluida la tuya. Ese poder es del emisor y existe tengas el token en la wallet que
-lo tengas; ninguna wallet de autocustodia, Vela incluida, puede quitarlo. Lo que la
-autocustodia te da es que **nosotros** no somos una segunda parte que pueda.
+**Lo que «no puede congelar» no cubre: el token.** USDC, USDT y la mayoría de los
+tokens respaldados por dinero fiat le permiten a su emisor meter cualquier dirección
+en una lista negra, incluida la tuya. Ese poder es del emisor y existe sin importar
+qué wallet uses. Lo que te da la autocustodia es que Vela no sea una segunda parte
+que pueda hacerlo.
 
-**En qué sí confías:**
+**En qué confías**
 
-- En los **contratos Safe** (auditados, muy usados) y en el firmante WebAuthn que
-  verifica tu llave P-256.
-- En el **servicio de passkeys de tu sistema** (Apple / Google) para proteger y
-  sincronizar tu credencial.
-- En los **proveedores de RPC** que consultas (Vela usa un grupo multi-fuente con
-  conmutación; puedes poner los tuyos).
-- En el **relay**, solo para disponibilidad — y lo puedes autohospedar.
+- En los **contratos**: Safe, sus módulos 4337 y de passkey, el EntryPoint v0.7 y el
+  precompilado EIP-7951 / RIP-7212 de la cadena.
+- En el **dominio**: cualquier página servida desde getvela.app o uno de sus
+  subdominios puede pedirles a tus llaves una firma.
+- En los **autenticadores** que guardan tus llaves y, en el caso de las passkeys
+  sincronizadas, en la cuenta de Apple, de Google o del gestor de contraseñas que
+  está detrás.
+- En **el código de la app con la que firmas.** Arma la transacción y te muestra lo
+  que hace. Una app comprometida puede mostrarte una cosa y pedirte que firmes otra;
+  el aviso del autenticador no te va a decir la diferencia.
+- En los **endpoints RPC** de los que lees: un nodo que miente puede mostrar saldos
+  equivocados o una vista previa de simulación equivocada. Puedes configurar los
+  tuyos.
+- En los **servicios de datos de cadena y de tipos de cambio**: proporcionan las
+  listas de tokens, los descriptores, la lista de tokens para pagar comisiones y los
+  tipos de cambio que se usan para convertir un monto en moneda fiat en un monto en
+  tokens.
+- En el **relay**: no puede cambiar lo que firmaste, pero puede retrasarlo o
+  rechazarlo, elegir cuándo entra a la cadena (así que podría adelantarse a un swap
+  dentro de tu tolerancia al deslizamiento) y fijar el precio del gas en el que se basa
+  tu comisión, hasta el triple de la lectura de la propia wallet.
 
-**Amenazas consideradas:**
+**Amenazas consideradas**
 
-- **Dispositivo perdido o robado**: quien lo tenga sigue necesitando tu biometría o
-  tu PIN para firmar.
-- **Phishing / dApp maliciosa**: se atiende con la firma legible.
-- **Servidor de Vela comprometido**: no da capacidad de firma; el radio del daño es
-  servicio degradado, no pérdida de fondos.
-- **Riesgo de cadena de suministro**: se mitiga con código abierto y autohospedaje.
+- **Dispositivo perdido o robado**: un ladrón todavía tiene que pasar la
+  verificación del autenticador; otra llave te devuelve el acceso. Pero una llave no
+  se puede quitar: si alguna puede estar en manos de alguien más, pasa tus fondos a
+  una wallet nueva, porque esa llave puede seguir gastando desde la dirección vieja
+  en todas las redes.
+- **Phishing**: una passkey no se puede escribir en un sitio falso, y los navegadores
+  solo la ofrecen a páginas de getvela.app y sus subdominios.
+- **dApp maliciosa**: la cubren la firma legible y la protección de aprobaciones, con
+  un hueco serio: una dApp puede pedir una llamada de tu Safe a sí mismo
+  (`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`), y
+  cualquiera de ellas, firmada una sola vez, entrega la cuenta tan completamente como
+  lo hizo la carga de Bybit. Vela decodifica esas llamadas pero todavía no las
+  bloquea. Rechaza cualquier solicitud cuyo destino sea la dirección de tu propia
+  wallet.
+- **Servicio de backend comprometido** (relay, índice, datos de cadena, tipos de
+  cambio): sin poder de firma, pero con influencia real: negar el servicio,
+  descriptores o listas de tokens engañosos, tipos de cambio equivocados que cambian
+  cuánto se envía por un monto en moneda fiat y (en el caso del relay) el momento y el
+  precio del gas mencionados arriba. Los descriptores obtenidos no se tratan como
+  autenticados, y cada servicio se puede reemplazar.
+- **Entrega de la app comprometida**: un despliegue web, una actualización de la
+  extensión o una compilación de la app alterados podrían presentarte una transacción
+  maliciosa para firmar. Es la clase de ataque de [Bybit](/es-MX/docs/bybit-attack).
+  Las mitigaciones de hoy son limitadas: la decodificación y la protección de
+  aprobaciones de la propia app, las versiones de macOS notarizadas y compilar tú
+  mismo la extensión o las apps desde el código fuente (los paquetes publicados traen
+  sumas de verificación SHA-256, no firmas). Hay una página de firma independiente que
+  no comparte el código de la app, ya construida pero todavía no conectada.
+- **Cualquier cosa servida desde el dominio**: cualquier página de getvela.app o de
+  sus subdominios, incluido un script que cargue, podría pedir firmas a las passkeys
+  de Vela, y el aviso solo muestra «getvela.app». Por eso el sitio web prohíbe que sus
+  propias páginas usen passkeys, y mantiene su script de analítica fuera de la página
+  que guarda una llave. Si el dominio cambiara de manos, su nuevo dueño también
+  controlaría qué apps pueden usar las passkeys. La extensión y las apps compiladas
+  por ti llevan su propio código, aunque por defecto siguen obteniendo descriptores y
+  usando servicios bajo getvela.app.
 
 ## Recuperación
 
-Tu passkey la respalda el servicio de tu sistema operativo; en un dispositivo nuevo,
-iniciar sesión con la misma cuenta de Apple o Google la restaura, y tu wallet
-reaparece.
+Crear una wallet publica sus llaves públicas y su dirección en un **contrato de
+registro** público en Gnosis (que se puede copiar a Ethereum). En un dispositivo
+nuevo inicias sesión con **cualquiera** de tus llaves; la app encuentra la wallet a
+través del índice o, si eso falla, directamente desde el registro, y comprueba que
+las llaves den de nuevo la dirección registrada. Una wallet de una sola llave también
+se puede reconstruir a partir de dos firmas, sin ningún registro.
 
-<Callout type="warning" title="El respaldo de passkeys de tu plataforma es tu recuperación">
-La recuperación de Vela es tu passkey, sincronizada por el Llavero de iCloud o el
-Gestor de contraseñas de Google. Por diseño no hay frase semilla, ni recuperación
-social, ni guardianes: nada que Vela pueda perder, filtrar o verse obligada a usar.
-El otro lado es real: si pierdes <strong>tanto</strong> tu dispositivo
-<strong>como</strong> la passkey sincronizada en la nube, sin otra copia, la cuenta
-no se puede recuperar. Deja activo el respaldo de passkeys de tu plataforma y
-asegura esa cuenta.
+<Callout type="warning" title="Tus llaves son tu recuperación">
+No hay frase semilla, ni recuperación social, ni guardianes: nada que Vela pudiera
+perder, filtrar o verse obligada a usar. Si se pierden todas las llaves fundadoras,
+la wallet no se puede recuperar. Crea la wallet con más de una llave, mantén activada
+la sincronización de passkeys si dependes de ella y protege la cuenta que está
+detrás.
 </Callout>
 
-El modelo completo de recuperación, con sus límites honestos, está en
-[recuperación e inicio de sesión](/es-MX/docs/recovery).
+Detalles: [recuperación e inicio de sesión](/es-MX/docs/recovery).
 
 ## Si Vela desaparece
 
-Autocustodia significa que tus llaves y tus fondos no dependen de que Vela siga en
-línea. Los fondos viven en **tu contrato Safe on-chain**, y el relay es de código
-abierto y reemplazable.
-
-Una salvedad honesta: WebAuthn ata una passkey a un dominio de relying party
-(`getvela.app`). Si ese dominio se perdiera de forma permanente, las passkeys atadas
-a él necesitarían ayuda para funcionar en otro lado: una herramienta capaz de
-presentarle al autenticador la relying party original. Vela distribuía antes una
-extensión de navegador de nivel desarrollador para ese caso y la retiró en
-septiembre de 2026; una ruta de recuperación para la pérdida del dominio apta para
-usuarios comunes sigue siendo trabajo pendiente, y lo decimos en vez de insinuar que
-existe. El acceso on-chain independiente también depende del soporte P-256
-(RIP-7212) de la cadena destino, que va mejorando en varias cadenas.
+Tus fondos se quedan en tu Safe, on-chain. Los contratos no dependen de Vela, y cada
+servicio que opera Vela es de código abierto para que alguien más lo opere. Lo único
+que no se puede mover es la relying party de las passkeys,
+`getvela.app`: una copia de la wallet web en otro dominio crea otra wallet. Para las
+wallets existentes, la extensión de Vela para el navegador (que puede usar passkeys
+de `getvela.app` por permiso) y las apps que compiles tú (con un celular o una llave
+de seguridad) siguen funcionando sin getvela.app. La
+[guía de autoalojamiento](/es-MX/docs/self-hosting#if-getvela-app-disappears)
+detalla cada camino y sus límites. El acceso independiente a una cadena también
+requiere que esa cadena admita EIP-7951 / RIP-7212.
 
 ## Privacidad
 
-Sin cuentas, sin correo, sin KYC, sin frase semilla que recolectar. Los servidores
-solo guardan tu **llave pública** y un nombre de cuenta que elegiste (para la
-recuperación entre dispositivos), publicados on-chain por diseño. El contenido de
-las transacciones no se registra. El sitio usa analítica autohospedada y sin
-cookies. Ve el [aviso de privacidad](/privacy).
+Sin cuenta, sin correo, sin KYC. Lo que se vuelve público se escribe en el registro
+cuando creas una wallet: la llave pública y el ID de credencial de cada llave, el
+modelo de autenticador, el nombre de tu wallet y los nombres de tus llaves, la
+dirección y los datos de registro firmados. El índice de Vela ve ese registro antes
+de enviarlo, y las direcciones cuyo nombre buscas; el relay de Vela ve tu dirección,
+las operaciones que envías y el endpoint RPC que usa tu app (incluida cualquier llave
+de API que traiga su URL), y guarda las operaciones por un tiempo limitado para
+reintentar y diagnosticar. Todos los servicios ven tu dirección IP. El sitio web usa
+analítica sin cookies. La [política de privacidad](/privacy) es la lista oficial.
 
-## Verificabilidad y código abierto
+## Código abierto
 
-Todo es **de código abierto con licencia MIT**: la app y los cuatro servicios de
-backend (datos de cadena, índice de passkeys, relay, tipos de cambio), que puedes
-**autohospedar** (Ajustes → Avanzado → Endpoints de servicio). Lee el código en
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+Todo tiene licencia MIT: la wallet (todas las apps y el núcleo), el relay, el índice
+de llaves públicas, el servicio de tipos de cambio y el directorio de datos de
+cadena. Código:
+[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Sin token
 
-Vela **no tiene token** ni planes de tenerlo. No hay nada que comprar, farmear ni
-especular. El gas se paga en el activo nativo de cada red.
+Vela no tiene token ni planea tener uno. No hay nada que comprar ni que farmear, ni nada con
+qué especular. Las comisiones se pagan en la moneda de cada red o en una stablecoin.
 
-## Estado de auditorías y limitaciones
+## Estado de las auditorías y limitaciones
 
-Los **contratos Safe** en el centro de cada cuenta Vela están auditados de forma
-independiente y probados en batalla. La **integración propia de Vela** alrededor de
-ellos **no ha pasado por una auditoría independiente de terceros**, y por ahora no
-hay ninguna programada: una auditoría profesional es una meta para cuando el
-proyecto pueda pagarla, no un compromiso con fecha. Hasta entonces la revisión es
-informal: el código es abierto y depende de que miembros capaces e interesados de la
-comunidad lo lean, más revisión asistida por IA. Ayuda, pero no equivale a una
-auditoría profesional. Trata a Vela como software en alfa y usa montos que te
-sientas cómodo poniendo en algo tan joven.
+Los contratos de Safe, sus módulos 4337 y de passkey, y el EntryPoint v0.7 están
+auditados de forma independiente y son muy usados. **El código propio de Vela (las
+apps, los servicios de backend y el contrato de registro) no ha tenido una auditoría
+independiente de terceros, y no hay ninguna programada**; una auditoría profesional
+es una meta para cuando el proyecto pueda pagarla, no un compromiso con fecha.
+Mientras tanto, la revisión es informal: el código es abierto, miembros capaces de la
+comunidad lo leen y se revisa con herramientas de IA. Eso ayuda; no equivale a una
+auditoría profesional. Trata a Vela como software en alfa. Detalles:
+[auditorías y problemas conocidos](/es-MX/docs/security-audits).
 
 ## Referencias
 
-- ERC-4337 — abstracción de cuentas vía EntryPoint
-- EIP-1271 — estándar de validación de firmas para contratos
-- ERC-7730 — firma legible / descriptores de datos estructurados
-- EIP-5792 — agrupación de llamadas de wallet
-- RIP-7212 — precompilado para verificación de firmas secp256r1 (P-256)
-- WebAuthn / FIDO2 — autenticación con passkeys
-- [Cuenta inteligente Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- ERC-4337: abstracción de cuentas a través del EntryPoint
+- EIP-1271: validación de firmas para contratos
+- ERC-7730: descriptores de firma legible
+- EIP-5792: agrupación de llamadas de la wallet (`wallet_sendCalls`)
+- EIP-7951 / RIP-7212: precompilado de verificación de firmas P-256
+- WebAuthn / FIDO2: passkeys
+- [Safe smart account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

@@ -145,9 +145,9 @@
 
 **16. 交易前先模拟"余额会怎么变"。** `BalanceChangePreview` 显示净资产变化（+绿 / −），或"预计会失败（但仍付 gas）"警告（`src/components/signing/BalanceChangePreview.tsx`、`tx-simulation.ts` 用 `eth_simulateV1`）。→ "签之前就看到结果"，是把抽象安全感落到具体的杀手级演示点。
 
-**17. 永不无限授权：把被动警告改成主动控制。** `EditableApproveCard` 不提供"Unlimited/Max"选项，用户必须选有限额度或撤销，否则确认键禁用（`approval-guard.ts` 静态封顶 2^200）。→ 直接掐死"无限 approve 被盗"这一最常见 drain 场景，做成"我们从设计上就让你签不出无限授权"的硬核卖点。
+**17. "无限"级授权必须先改成具体金额。** ⚠️ 2026-09-22 更正（claim ledger C-approve-1）：只有达到"无限"级别（≥ 2^200；Permit2 ≥ 2^152）的链上授权会被拦下，要改成具体金额、余额或撤销才能提交；金额很大但有限的授权、签名式授权和 `setApprovalForAll` 只提示不拦截。→ 可以说"MAX 授权签不出去"，不能说"签不出无限授权"。
 
-**18. gas 费用透明拆分，确认前全看见。** 屏幕展示 network fee / relayer fee / total，价格由 bundler 报、钱包不自行加价，且**拒绝高于约 3× 网络费率的报价**（whitepaper、FAQ）。→ 对比"看不懂的 gas"，强调"我们把每一分钱拆给你看"。
+**18. 手续费签名前就看得到，付给中继，中继可以换。** ⚠️ 2026-09-22 按代码更正（spec 080 claim ledger C-fee-1）：确认页显示**一个**确切金额（不是拆分），= 钱包预留 gas × 3 × 所选速度价格，最低约 1 美分，签名后不会变；中继报价高于钱包自身读数 3 倍会被拒。手续费付给提交交易的中继——默认是 Vela 的，可以换成其他 vela-relay 或自己部署。→ 对比"签完才知道扣多少"，强调"签之前就知道，钱付给谁也由你选"。
 
 **19. bundler 拿到的是已签名交易，改一个字段签名就失效。** whitepaper："cannot change the recipient, amount, or any field"。→ 解释"中继者也偷不了你"，回应"那个帮我发交易的服务会不会作恶"的疑虑。
 
@@ -155,7 +155,7 @@
 
 **21. 你需要信任的，被收敛到极小。** whitepaper："reduces to audited Safe contracts + 你的 OS passkey 保险库 + 一个可替换/自建的 relay（仅 liveness）"。→ 适合做一张"信任边界"信息图，理性用户看完就放心。
 
-**22. 和 Apple Pay 同款硬件保护。** 私钥存在 Secure Enclave / StrongБox，App 永远拿不到、只能"请求硬件签名"（`docs/passkeys.md`）。→ 用大众熟悉的 Apple Pay 类比，瞬间建立"这很安全"的直觉。
+**22. ~~和 Apple Pay 同款硬件保护~~** ⚠️ 2026-09-22 撤回（spec 080 claim ledger C-sign-1）：同步的通行密钥由 iCloud 钥匙串/Google 密码管理器端到端加密同步，会离开设备，不能说"私钥存在 Secure Enclave、不出芯片"。可以说：签名在你的设备上完成，通行密钥的私钥绝不会交给 Vela；要"不出硬件"就在创建时加一把安全密钥。
 
 **23. 坦诚设备安全的边界。** 文档明确："passkey 防远程攻击和钓鱼极好，但防不住拿到你已解锁手机并能过生物识别的人——请设锁屏密码。"→ 这种"连自己的短板都告诉你"的诚实，本身就是高级别信任营销。
 

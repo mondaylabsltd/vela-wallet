@@ -6,6 +6,8 @@ author: Shelchin
 tags: [security, shutdowns, passkeys]
 ---
 
+> **Corrections, 22 September 2026.** An entry-level Ledger (Nano S Plus) cost $59 in Ledger's US store in August 2026, not "around $44". And Family wallet is winding down (it keeps working until April 2027 and then moves users to account.aave.com), so calling it "shut down" overstated it. The deadline for Pulse has passed; the checklist and the three questions at the end still apply to any wallet that closes.
+
 Pulse posted a [shutdown notice](https://x.com/PulseSocialFi/status/2084884180132114531) (pinned on their
 X account). Three things in it matter: the service is being discontinued for
 financial reasons; after August 21, 2026 you will no longer be able to access

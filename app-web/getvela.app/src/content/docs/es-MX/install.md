@@ -1,48 +1,118 @@
 ---
 title: Instalar Vela
-description: "Vela corre en tu navegador: sin instalación y sin tienda de apps. Abre la wallet web, o revisa primero qué necesita tu dispositivo para las passkeys."
+description: "Todas las formas de usar Vela (web, extensión de navegador, escritorio y celular): cuánto cuesta cada una, qué puede hacer y qué necesita tu dispositivo."
+source: f88fdfac1001
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
 
 # Instalar Vela
 
-Vela corre **en tu navegador**: no hay nada que descargar ni tienda de apps por la
-que pasar. Abre la wallet web y en menos de un minuto puedes crear o restaurar una
-wallet.
+La misma wallet funciona en varios lugares, y en todos abre la misma dirección con
+las mismas llaves. Elige según lo que necesites; puedes usar más de uno. Las
+descargas están en [Obtener Vela](/es-MX/get-started).
+
+| | Qué es | Costo | Estado |
+| --- | --- | --- | --- |
+| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) en cualquier navegador reciente | Gratis | Disponible |
+| **Extensión de navegador** | La wallet en tu barra de herramientas; se conecta a dApps | Gratis | Se descarga y se carga a mano; todavía no está en la Chrome Web Store |
+| **Escritorio** | App nativa para macOS, Windows y Linux | Gratis | Descarga desde Obtener Vela o GitHub |
+| **iPhone, Android** | Apps nativas | Pago único en las tiendas | Todavía no están en las tiendas; puedes compilarlas desde el código fuente |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Abrir la wallet web →</a>
 
-La misma wallet, hecha desde una sola base de código, también corre en iOS y
-Android. **Las apps móviles nativas vienen pronto** y, cuando salgan, tu passkey y
-tu wallet se pasan tal cual, porque la cuenta vive on-chain y no dentro de una app
-en particular.
+## Web
+
+No hay nada que instalar. Abre [wallet.getvela.app](https://wallet.getvela.app/),
+crea una wallet o inicia sesión, y ahí está. Tu lista de cuentas se guarda en este
+navegador; en otro dispositivo, simplemente vuelves a iniciar sesión con una de tus
+llaves.
+
+## Extensión de navegador
+
+Para navegadores basados en Chromium: Chrome, Edge y Brave (Chrome 116 o posterior).
+Pone la wallet en la barra de herramientas y deja que las dApps se conecten a ella
+directamente. Mientras no esté en la Chrome Web Store:
+
+1. Descarga la extensión desde [Obtener Vela](/es-MX/get-started) y descomprímela
+   en una carpeta que vayas a conservar: el navegador la ejecuta desde ahí.
+2. Abre `chrome://extensions` y activa el **Modo de desarrollador**.
+3. Haz clic en **Cargar descomprimida** y elige esa carpeta.
+
+Es la misma wallet: la extensión y la wallet web usan las mismas passkeys de
+`getvela.app`, así que las mismas llaves abren la misma dirección.
+
+## Escritorio
+
+Una app nativa, no una página web dentro de una ventana: **Windows** 10 y 11 (x64 y
+ARM), **macOS** 11 o posterior, y **Linux** (.deb, .rpm o Flatpak, x64 y ARM).
+
+- **Windows** te advertirá que «protegió su PC», porque el instalador todavía no
+  tiene firma de código. Elige **Más información** y luego **Ejecutar de todas
+  formas**.
+- Las versiones para **macOS** las firma y notariza Apple en un paso aparte, así que
+  pueden quedarse atrás de las otras plataformas. Si el botón de Mac dice «Muy
+  pronto», la versión notarizada más reciente para Mac está en la página de
+  versiones de GitHub.
+- **Linux**: para usar una llave de seguridad USB, tu sistema tiene que darle acceso
+  a la app; los paquetes .deb y .rpm instalan esa regla por ti.
+
+En macOS y Windows, la app de escritorio trae un navegador integrado para dApps. Las
+sumas de verificación de cada paquete están en la
+[página de versiones de GitHub](https://github.com/mondaylabsltd/vela-wallet/releases).
+
+## iPhone y Android
+
+Apps nativas para iOS 17.4 o posterior y Android 10 o posterior. Se venderán como
+pago único en App Store y Google Play; **todavía no están en las tiendas**. El
+código es abierto, así que puedes compilarlas tú mismo gratis, con una diferencia:
+una versión que firmas tú no puede usar las passkeys del propio celular para wallets
+de getvela.app, aunque sí funcionan escanear con otro celular y las llaves de
+seguridad USB. Consulta [compilar las apps tú mismo](/es-MX/docs/self-hosting#web-app).
+
+## Usar Vela con dApps
+
+<span id="dapps"></span>
+
+Las dApps se conectan a Vela igual que a cualquier wallet de navegador (EIP-1193 y
+EIP-6963):
+
+- en un navegador de computadora, a través de la **extensión de Vela para el
+  navegador**;
+- dentro de la **app de escritorio** (macOS, Windows), la **app de iPhone** y la
+  **app de Android**, a través de su navegador integrado.
+
+La wallet web de wallet.getvela.app no se conecta a dApps, y no hay WalletConnect.
+Cada solicitud que hace una dApp se decodifica y se te muestra antes de que firmes;
+consulta [firma legible](/es-MX/docs/clear-signing).
 
 ## Qué necesita tu dispositivo
 
-Vela firma con **passkeys** (WebAuthn), así que necesitas un dispositivo y un
-navegador que las soporten — o sea, prácticamente cualquier cosa de los últimos
-años:
+Vela firma con **passkeys**, que son compatibles con casi cualquier dispositivo de
+los últimos años:
 
-| Plataforma | Soporte de passkeys | Sincronizado por |
-| -------- | --------------- | --------- |
-| iPhone / iPad / Mac | iOS/iPadOS 16+, Safari reciente | Llavero de iCloud |
-| Android | Android 9+, Chrome actual | Gestor de contraseñas de Google |
-| Escritorio | Chrome, Edge, Safari, Firefox actuales | El servicio de passkeys de tu plataforma |
+| Dispositivo | Compatible |
+| --- | --- |
+| iPhone, iPad, Mac | iOS / iPadOS 16 o posterior; macOS con un Safari o Chrome reciente |
+| Android | Un Android reciente con servicios de Google Play, o una llave de seguridad USB |
+| Windows | Windows Hello con Chrome o Edge, o una llave de seguridad |
+| Linux | Una llave de seguridad, o un celular cerca (escaneando el código QR) |
 
-Para que tu wallet te siga a un dispositivo nuevo, deja prendida la sincronización
-de passkeys de tu plataforma (Llavero de iCloud en Apple, Gestor de contraseñas de
-Google en Android/Chrome). Cómo funciona está en
-[recuperación e inicio de sesión](/es-MX/docs/recovery).
+Si tu dispositivo no puede guardar una passkey por sí mismo, usa otro celular o una
+llave de seguridad física. En [Firmantes y llaves de seguridad](/es-MX/docs/signers)
+está qué tipos de llave admite cada app.
 
-## Las únicas URL oficiales
+## Las únicas direcciones oficiales
 
-Vela es de código abierto, y ese es justo el punto — pero también significa que
-debes asegurarte de estar en el sitio real. Las únicas direcciones oficiales son:
+- **getvela.app**: este sitio y las descargas
+- **wallet.getvela.app**: la wallet web
+- **github.com/mondaylabsltd**: el código y los paquetes de cada versión
 
-- **getvela.app** — este sitio
-- **wallet.getvela.app** — la wallet
-
-Si algo te manda a otro lado a «instalar Vela», detente y compara con estas dos. El
-código es público en
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+<Callout type="warning" title="Verifica antes de instalar">
+Si algo te manda a otro lugar para «instalar Vela» o para «verificar tu wallet»,
+detente. Vela nunca te pide una frase semilla: no tiene ninguna.
+</Callout>
 
 Sigue: [crea tu wallet](/es-MX/docs/create-wallet).

@@ -19,14 +19,18 @@
 	 * a translator could localize "Jun 2026" into something the CSS cannot key
 	 * off. They are ordered to match `m.roadmap.upcoming` / `m.roadmap.shipped`.
 	 */
-	const UPCOMING_STATUS = ['now', 'now', 'next', 'next', 'later'] as const;
+	const UPCOMING_STATUS = ['now', 'next', 'next', 'next', 'later'] as const;
+	// Dates from the merge of the work each item describes (spec 080 research §5).
 	const SHIPPED_DATES = [
-		'Jun 2026',
-		'Jun 13, 2026',
+		'Sep 19, 2026',
+		'Sep 19, 2026',
+		'Sep 17, 2026',
+		'Sep 11, 2026',
+		'Sep 2026',
+		'Aug 2026',
+		'Jul 2026',
+		'Jun 16, 2026',
 		'Jun 9, 2026',
-		'Jun 4, 2026',
-		'May 28, 2026',
-		'May 2026',
 		'Apr 22, 2026'
 	] as const;
 </script>

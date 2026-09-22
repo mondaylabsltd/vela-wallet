@@ -1,88 +1,101 @@
 ---
 title: Hesap sözleşmesi
-description: Vela cüzdanınız, değiştirilmemiş bir Safe v1.4.1. Sözleşme yolundaki hiçbir satır bizim elimizden çıkmadı — bunun size kazandırdıkları ve maliyeti burada.
+description: "Vela cüzdanınız değiştirilmemiş bir Safe v1.4.1. Paranıza giden yoldaki hiçbir sözleşmeyi Vela yazmadı — burada tam olarak hangi sözleşmeler olduğu, bunun size ne kazandırdığı ve neye mal olduğu anlatılıyor."
+source: 17fbc25a3149
 ---
 
 # Hesap sözleşmesi
 
-Cüzdanınız bir uygulamanın özel veri yapısı değil. **Safe v1.4.1** akıllı hesabı —
-Vela'nın hiç göremeyeceği kadar büyük hazineleri tutan sözleşmenin aynısı — Safe'in
-yayımladığı hâliyle, hiçbir değişiklik yapılmadan kuruluyor.
+Cüzdanınız bir uygulamanın özel veri yapısı değil. Bir **Safe v1.4.1** akıllı
+hesabıdır — zincir üstündeki pek çok büyük hazinenin kullandığı sözleşme — ve Safe'in
+yayımladığı hâliyle, hiçbir değişiklik yapılmadan dağıtılır.
 
-Bu cümle kısa, sonuçları değil; o yüzden bu sayfa onları tek tek yazıyor.
+## Yoldaki hiçbir şey bizim değil
 
-## Yoldaki hiçbir şey bize ait değil
+Paranıza dokunabilecek her sözleşmeyi Safe ya da ERC-4337'nin yazarları yazdı:
 
-Sizinle paranız arasında dört sözleşme duruyor. Vela bunların hiçbirini yazmadı:
+| Sözleşme | Cüzdanınızdaki rolü | Yazan |
+| --- | --- | --- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, bir proxy üzerinden) | Hesabın kendisi; sahipler, eşik, yürütme | Safe |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | EntryPoint'in Safe'i çalıştırmasını sağlar; aynı zamanda yedek işleyicisi (fallback handler) | Safe |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | İlk anahtarın P-256 imzalarını doğrular | Safe |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) ve oluşturduğu imzalayıcılar | Her ek anahtar için küçük bir imzalayıcı sözleşme | Safe |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | İmzaladığınız işlemi yürütür | ERC-4337 yazarları |
 
-| Sözleşme | Yazan |
-| --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) (hesabın kendisi, bir proxy) | Safe |
-| [Safe 4337 Module](https://github.com/safe-global/safe-modules/tree/main/modules/4337) | Safe |
-| [SafeWebAuthnSharedSigner](https://github.com/safe-global/safe-modules/tree/main/modules/passkey) (P-256 anahtarınızı doğrular) | Safe |
-| [ERC-4337 EntryPoint v0.7](https://eips.ethereum.org/EIPS/eip-4337) | ERC-4337 yazarları |
+Vela'nın kendi sözleşmeleri bu listede yok: yeni bir cihazın cüzdanı bulabilmesi için
+her cüzdanın anahtarlarını kaydeden **açık anahtar kayıt defteri**
+([kurtarma](/tr/docs/recovery)), ona eşlik eden alan adı kayıt defteri ve onların
+yerini aldığı eski dizin. Bunlar para tutmaz ve Safe'inizde hiçbir rolleri yoktur.
 
-Ortada bir Vela sözleşmesi yok. Depo hiç Solidity içermiyor — bunu tek komutla
-kontrol edebilirsiniz:
+Cüzdan deposunda hiç Solidity yok — bunu tek bir komutla kontrol edebilirsiniz:
 
 ```bash
 git clone https://github.com/mondaylabsltd/vela-wallet
 find vela-wallet -name '*.sol'   # hiçbir şey yazdırmaz
 ```
 
-Vela bir ağ eklediğinde **o** sözleşmeleri kanonik adreslerine kuruyor. Kendi
-tasarladığı bir sözleşmeyi kurmuyor ve sizinkinde ayrıcalıklı bir rolü yok: yönetici
-anahtarı yok, yükseltme yolu yok, ekleyebileceğimiz bir modül yok.
+Vela'nın hesabınızda ayrıcalıklı bir rolü yok: yönetici anahtarı yok, yükseltme yolu
+yok, ekleyebileceği bir modül yok. Safe'inizi yalnızca sizin anahtarlarınız
+değiştirebilir.
 
 ## "Değiştirilmemiş" neden asıl önemli kelime
 
-Bir sürü cüzdan "bir Safe" ya da "Safe'in bir çatalı" ya da "Safe'ten esinlenmiş bir
-hesap" üzerine kurulu. Çatal, eski bir itibara sahip yeni bir sözleşmedir. Pratikte
-farklar şunlar:
+Pek çok cüzdan "bir Safe", bir Safe çatalı ya da Safe'ten esinlenmiş bir hesap üzerine
+kuruludur. Aradaki fark üç açıdan önemlidir.
 
-**Denetimler gerçekten kullandığınız şeyi kapsıyor.** Safe'in denetim raporları tam
-olarak bu sürümlerdeki byte kodunu kapsıyor. Bir çatalın denetimleri ise çataldan
-önceki kodu kapsar. Bir cüzdan hesap sözleşmesini değiştirmişse, andığı her denetim
-başka bir şeyin denetimidir ve değişiklik de kimsenin bakmadığı kısımdır.
+**Denetimler gerçekten kullandığınız şeyi kapsar.** Safe'in denetimleri bu sürümleri ya
+da bunlardan yalnızca küçük, belgelenmiş değişikliklerle ayrılan önceki sürümleri
+kapsar (ayrıntılar [denetimler sayfasında](/tr/docs/security-audits)). Bir çatalın
+denetimleri çataldan önceki kodu kapsar; değişiklik ise kimsenin denetlemediği
+kısımdır.
 
-**Ekosistem hesabınıza Safe muamelesi yapıyor, çünkü o bir Safe.** Blok
-gezginleri onu çözer. Safe'in kendi işlem araçları onu anlar. Vela yarın ortadan
-kalkarsa cüzdanınız öksüz bir biçim olmaz — Ethereum'un en çok araç desteğine sahip
-akıllı hesabıdır ve Safe uyumlu her arayüz onu sürebilir.
-["Vela ortadan kalkarsa cüzdanınız kalkmaz"](/tr/docs/why-vela) cümlesini
-niyetimizle ilgili değil, sözleşmelerle ilgili bir ifade yapan şey de budur.
+**Ekosistem hesabınıza Safe gibi davranır, çünkü o bir Safe.** Blok gezginleri onu
+çözer; Safe'in araçları onu okuyabilir ve onun için işlem oluşturabilir. Ama bu
+işlemleri *imzalamak* için bir programın, anahtarınızdan geçiş anahtarlarınızın ait
+olduğu alan adı olan `getvela.app` için imza isteyebilmesi gerekir — bu yüzden başka bir
+alan adından sunulan Safe'in kendi web uygulaması sizin adınıza imzalayamaz. Neyin
+imzalayabildiğini
+[kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting#if-getvela-app-disappears)
+listeliyor.
 
-**Saldırı yüzeyi, herkesin izlediği bir yüzey.** Kendine özel bir hesap sözleşmesi,
-yalnızca yazarının baktığı bir sözleşmedir. Buna ise Safe'te parası olan herkes
-bakıyor.
+**Saldırı yüzeyi, başka pek çok kişinin de izlediği bir yüzey.** Kendine özgü bir hesap
+sözleşmesini çoğunlukla yalnızca yazarı izler. Safe'in çekirdek sözleşmelerini bir
+Safe'te parası olan herkes izler; 4337 ve geçiş anahtarı modüllerinin izleyicisi daha
+az, ama gerçek.
 
-## Maliyeti ne
+## Bedeli ne
 
-Standart olmak bedava değil ve takaslar gerçek:
+Standart olmak bedava değil:
 
-- **Gaz.** Akıllı hesap, imzayı zincir üstünde doğrular. Zincire göre, düz bir EOA
-  transferinin kabaca 1,5–3 katı gaz bekleyin. Bkz.
-  [ağlar ve ücretler](/tr/docs/networks-and-fees).
-- **Hesabın kurulması gerekir.** Adresiniz zincirde hiçbir şey yokken `CREATE2` ile
-  hesaplanır, yani hemen para alabilirsiniz; ama giden ilk işlem sözleşmenin kurulum
-  bedelini öder.
-- **Her zincir uygun değil.** WebAuthn imzalayıcısı P-256 imzasını zincir üstünde
-  doğrular, bunun için de **RIP-7212** ön derlemesi gerekir. Vela, zayıf bir
-  doğrulayıcıya düşmektense o ön derlemesi olmayan bir ağı açmayı reddeder.
-- **Safe'in riski artık sizin riskiniz.** Yaygın kullanılan bir sözleşmeye güvenmek
-  de sonuçta bir sözleşmeye güvenmektir. Vela'nın söyleyebileceği şey, bunun üstüne
-  güvenmeniz gereken ikinci bir şey eklememiş olmasıdır.
+- **Gas.** İmzanız zincir üstünde doğrulanır ve işlem EntryPoint üzerinden yürür.
+  Dağıtılmış bir Vela cüzdanından yapılan basit bir gönderim, Gnosis üzerindeki
+  ölçümlerimizde (Eylül 2026) zincir üstünde kabaca 140.000–170.000 gas kullandı;
+  sıradan bir hesaptan yapılan düz bir ETH transferi 21.000 kullanır. Gas'ın üstüne
+  relay kendi ücretini alır — bkz. [ağlar ve ücretler](/tr/docs/networks-and-fees).
+- **Hesabın dağıtılması gerekir.** Adresiniz zincirde hiçbir şey yokken `CREATE2` ile
+  hesaplanır, yani o adrese hemen para alabilirsiniz; her ağdaki ilk giden işleminiz
+  sözleşmeyi dağıtmanın bedelini öder.
+- **Her zincir uygun değil.** Geçiş anahtarı imzaları **EIP-7951 / RIP-7212** ön derlemesiyle
+  doğrulanır ve onun adresi her cüzdanın kurulum verisinin bir parçasıdır; bu yüzden
+  bu ön derlemesi olmayan bir ağda Vela hiç çalışamaz.
+- **Safe'in riski artık sizin riskiniz.** Yaygın kullanılan bir sözleşmeye güvenmek de
+  sonuçta bir sözleşmeye güvenmektir. Vela, paranıza giden yola güvenmeniz gereken
+  ikinci bir kendi sözleşmesini eklemedi.
 
 ## Ne denetlendi, ne denetlenmedi
 
-Safe'in sözleşmeleri ve WebAuthn imzalayıcı modülü üçüncü taraflarca denetlendi ve
-o raporlar herkese açık. **Vela'nın kendi uygulama kodu bağımsız bir denetimden
-geçmedi** ve planlanmış bir denetim de yok — bu, tarihi olan bir taahhüt değil,
-proje karşılayabildiğinde ulaşılacak bir hedef. Vela'nın bağlı olduğu her sözleşme,
-denetim raporu ve takip ettiğimiz sorunlar
-[denetimler ve bilinen sorunlar](/tr/docs/security-audits) sayfasında.
+Safe'in sözleşmelerinin, 4337 ve geçiş anahtarı modüllerinin ve EntryPoint v0.7'nin
+yayımlanmış üçüncü taraf denetimleri var. **Vela'nın kendi kodu — uygulamalar, arka uç
+servisleri ve kayıt defteri sözleşmesi — üçüncü taraf denetiminden geçmedi ve
+takvime alınmış bir denetim de yok**; bu, tarihi olan bir taahhüt değil, proje bir
+denetimi finanse edebildiğinde ulaşılacak bir hedef. Her sözleşme, denetim raporu ve
+takip ettiğimiz sorunlar [denetimler ve bilinen sorunlar](/tr/docs/security-audits)
+sayfasında.
 
 ## Kendiniz bakın
 
-Hesabınız zincir üstünde. Bir blok gezgininde açıp uygulama adresini okuyun:
-Vela'nın desteklediği her ağda, byte byte, Safe'in v1.4.1 kanonik kurulumu olacak.
+Hesabınız zincir üstünde. Dağıtıldıktan sonra adresinizi bir blok gezgininde açın:
+uygulaması (implementation) Safe'in kanonik SafeL2 v1.4.1 dağıtımı olan bir Safe
+proxy'sidir; her ağda.
+
+Sırada: [denetimler ve bilinen sorunlar](/tr/docs/security-audits).

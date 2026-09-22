@@ -1,6 +1,7 @@
 ---
 title: Kurtarma ve giriş
-description: Vela'nın kurtarma ifadesi olmadan yeni bir cihazda cüzdanınızı geri getirme yöntemi — ve bu modelin dürüstçe söylenmiş sınırları.
+description: "Yeni bir cihazda anahtarlarınızdan herhangi biriyle cüzdanınıza nasıl dönersiniz, cüzdan nerede aranır ve kurtarma ifadesi olmadan kurtarmanın dürüstçe söylenmiş sınırları."
+source: 77cf3f24c7c7
 ---
 
 <script>
@@ -9,72 +10,78 @@ description: Vela'nın kurtarma ifadesi olmadan yeni bir cihazda cüzdanınızı
 
 # Kurtarma ve giriş
 
-Kurtarma ifadesi olmayan bir cüzdanın en zor kısmı kurtarmadır: on iki kelime
-yoksa yeni bir telefonda hesabınıza nasıl döneceksiniz? Vela bunu tam olarak
-şöyle çözüyor.
+Kurtarma ifadesi olmadığında kurtarma iki şeye dayanır: **hâlâ elinizde olan bir
+anahtar** ve **hangi anahtarların cüzdanınıza ait olduğunu gösteren herkese açık bir
+kayıt**.
 
-## Nasıl çalışıyor
+## Cüzdan oluşturduğunuzda neler kaydedilir
 
-Bir cüzdan oluşturduğunuzda Vela'nın **geçiş anahtarı dizinine** iki şey yazılır:
+Cüzdanınızın adresi, cüzdanı oluştururken kullandığınız anahtarların tamamından
+hesaplanır. Bu anahtarlardan herhangi biri cüzdanı sonradan yeniden bulabilsin diye,
+cüzdan oluşturmak Gnosis Chain üzerindeki herkese açık bir **kayıt defteri
+sözleşmesine** bir kayıt yazar: her anahtarın açık anahtarı, cüzdanın adresi, adı ve
+imzalı kayıt verisi. Kayıt defterinin sahibi yoktur; kayıtlar düzenlenemez ve
+silinemez. (Neyin herkese açık olduğunun tam listesi
+[cüzdanınızı oluşturun](/tr/docs/create-wallet#what-is-public) sayfasında.)
 
-- Geçiş anahtarınızın **genel anahtarı** (özel anahtar asla).
-- Cüzdana verdiğiniz **ad**.
+Bu kaydı Vela'nın açık anahtar dizini servisi gönderir ve gas ücretini öder; kaydın
+kendisi zincir üstündedir ve herhangi bir uygulama onu doğrudan okuyabilir.
 
-Genel anahtar, bir akıllı sözleşme aracılığıyla Gnosis blok zincirinde saklanır;
-yani herkes tarafından okunabilir ve Vela'nın sunucularının ayakta kalmasına bağlı
-değildir.
+## Yeni bir cihazda giriş yapmak
 
-**Özel** anahtarınız ise platform anahtar zincirinizin eşitlediği bir geçiş
-anahtarı: Apple cihazlarda **iCloud Anahtar Zinciri**, Android'de **Google Şifre
-Yöneticisi**.
+1. Vela'yı açın ve giriş yapmayı seçin.
+2. Anahtarlarınızdan **herhangi birini** kullanın: bu cihaza eşitlenmiş bir geçiş
+   anahtarı, yakındaki bir telefon (QR kodu okutun) ya da güvenlik anahtarınız.
+3. Vela o anahtarın açık anahtarını imzadan çıkarır ve arar — önce Vela'nın
+   dizininde; dizin yanıt vermezse Gnosis'teki kayıt defteri sözleşmesinde, ardından
+   Ethereum'dakinde — ve cüzdanı yeniden kurar. Cüzdanı size göstermeden önce,
+   bulduğu anahtarların gerçekten kayıtlı adresi verdiğini kontrol eder.
 
-Yeni bir cihazda giriş yapmak için:
+Hesap listeleri cihazlar arasında eşitlenmez; giriş yapmak onları yeniden kurar.
 
-1. Anahtar zinciri eşitlemesi açık olacak şekilde aynı iCloud ya da Google
-   hesabına girin.
-2. Vela'yı açın ve giriş yapmayı seçin.
-3. Geçiş anahtarınızla kimliğinizi doğrulayın. Platform eşitlenmiş geçiş
-   anahtarını, dizin de eşleşen hesabı verir. Cüzdanınız geri geldi.
-
-Dizin bir önbellek, tek bir arıza noktası değil. Erişilemez hâle gelirse ve
-hesabınız yerel depoda yoksa Vela, genel anahtarınızı iki geçiş anahtarı
-imzasından cihaz üzerinde yeniden kurabilir ve cüzdan adresinizi ondan yeniden
-türetebilir — hiçbir sunucuya ihtiyaç duymadan.
-
-<Callout type="info" title="Neden böyle ikiye ayrıldı">
-Zincir üstü dizindeki genel anahtar, herkesin (sıfırdan kurulmuş bir uygulama
-dahil) hesabınızı bulmasını sağlar. İşlemlere asıl yetkiyi veren şeyse, güvendiğiniz
-platform anahtar zincirinin eşitlediği özel anahtar. Dizindeki her şey herkese açık
-veridir; içindeki hiçbir şey paranızı taşıyamaz — bunu yalnızca geçiş anahtarınızın
-imzaları yapabilir.
+<Callout type="info" title="Ne dizin ne kayıt defteri yanıt verirse">
+<strong>Tek anahtarlı</strong> bir cüzdan, hiçbir sunucuya ihtiyaç duymadan cihazın
+üzerinde yeniden kurulabilir: o anahtardan alınan iki imza, açık anahtarını geri
+çıkarmaya ve adresi yeniden hesaplamaya yeter. Birden fazla anahtarı olan bir cüzdan
+kayıt defteri kaydına ihtiyaç duyar, çünkü tek bir anahtar uygulamaya diğerlerinin ne
+olduğunu söyleyemez.
 </Callout>
+
+## Kaydın kopyaları
+
+Uygulamaların ilk okuduğu kayıt defteri Gnosis'tekidir. **Ayarlar**'dan cüzdanınızın
+kaydını gas ücretini kendiniz ödeyerek **Ethereum**'daki aynı kayıt defteri
+sözleşmesine de kopyalayabilirsiniz; böylece kayıt ikinci bir zincirde de bulunur. Bu
+kopyayı herkes yapabilir; içinde para taşıyabilecek hiçbir şey yoktur.
 
 ## Dürüstçe söylenmiş sınırlar
 
-Kendi saklamanız, sorumluluğun da gerçekten sizde olması demek. Anlaşılması
-gerekenler şunlar.
-
-<Callout type="warning" title="Kurtarmanız platform anahtar zincirinize bağlı">
-Vela'nın cihazlar arası girişi, geçiş anahtarınızın iCloud Anahtar Zinciri ya da
-Google Şifre Yöneticisi üzerinden eşitlenmesine dayanır. O hesabı güvende tutun ve
-kurtarma seçeneklerini güncel tutun. Hem cihazlarınıza <strong>hem de</strong>
-platform hesabınızın anahtar zincirine erişiminizi kaybederseniz, Vela özel
-anahtarınızı sizin için yeniden üretemez — tasarım gereği o anahtar bizde hiç
-olmadı.
+<Callout type="warning" title="Kaybolan anahtar kaybolmuştur">
+Cüzdanı oluştururken kullandığınız anahtarların hepsi gittiyse — eşitlenen geçiş
+anahtarları, telefonlar, güvenlik anahtarları — cüzdanı kimse kurtaramaz: ne Vela, ne
+Apple ya da Google, ne de bir başkası. Kurtarma ifadesi, destek ekibinin sıfırlaması
+ya da arka kapı yoktur.
 </Callout>
 
-Pratik öneriler:
+Bunun olasılığını düşüren şey, cüzdana birden fazla yoldan girebilmektir:
 
-- **Anahtar zinciri eşitlemesini açık tutun.** Geçiş anahtarınızı cihazlar
-  arasında taşıyan şey o.
-- **Apple / Google hesabınızı güvenceye alın**: güçlü bir parola ve kendi kurtarma
-  yöntemleriyle. O hesap artık cüzdanınızın güvenliğinin bir parçası.
-- **Mümkünse birden fazla cihazda giriş yapmış olun**, böylece kaybolan tek bir
-  telefon bir kriz değil, sadece bir zahmet olur.
+- Bu cihazın geçiş anahtarını kullanıyorsanız **geçiş anahtarı eşitlemesini açık
+  tutun**. Anahtarı yeni bir telefona ya da bilgisayara taşıyan şey odur.
+- **Arkasındaki hesabı güvenceye alın.** Apple ya da Google hesabınızı kontrol eden
+  kişi, eşitlenmiş bir geçiş anahtarını kullanabilir; hesaba güçlü bir parola ve ayrı
+  kurtarma seçenekleri tanımlayın.
+- **Cüzdanı birden fazla anahtarla oluşturun**; örneğin telefonunuzun geçiş anahtarı
+  ve güvenli bir yerde saklanan bir donanım güvenlik anahtarı. Anahtarlar yalnızca
+  cüzdanı oluştururken eklenebilir ([neden](/tr/docs/signers)). Unutmayın, herhangi bir
+  anahtar tek başına imzalayabilir — ve kaldırılamaz; bu yüzden biri ele geçirilirse
+  paranızı yeni bir cüzdana taşıyın ([ne yapmalı](/tr/docs/signers)).
 
 ## Vela'nın yapabildikleri ve yapamadıkları
 
-- **Yapabilir:** genel dizin üzerinden hesabınızı yeniden bulmanıza yardım etmek.
-- **Yapamaz:** paranızı taşımak, cüzdanınızı dondurmak ya da bir özel anahtarı
-  geri getirmek. Vela o anahtarı hiç tutmuyor. Kendi saklamanın bütün mesele
-  olduğu yer burası — ve karşılığında yaptığınız takas da bu.
+- **Yapabilir:** dizini çalışır durumda tutmak; böylece cüzdanınız yeni bir cihazda
+  hızla bulunur.
+- **Yapamaz:** paranızı taşımak, cüzdanınızı dondurmak, anahtar eklemek ya da
+  kaldırmak veya kaybettiğiniz bir anahtarı kurtarmak. Vela anahtarlarınızı hiçbir
+  zaman tutmaz.
+
+Sırada: [açık imzalama](/tr/docs/clear-signing).

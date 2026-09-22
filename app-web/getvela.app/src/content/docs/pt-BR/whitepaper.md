@@ -1,6 +1,7 @@
 ---
 title: Whitepaper
-description: Como a Vela funciona e o que você precisa — e não precisa — aceitar como verdade para usá-la. Arquitetura, modelo de segurança, recuperação e como conferir tudo por conta própria.
+description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
+source: 5bfc38a16ccb
 ---
 
 <script>
@@ -9,263 +10,333 @@ description: Como a Vela funciona e o que você precisa — e não precisa — a
 
 # Whitepaper
 
-<Callout type="info" title="Status: alfa · v0.1">
-Esta página descreve como a Vela funciona hoje e o que você precisa ou não precisa
-aceitar como verdade para usá-la. Ela prefere honestidade a marketing. A Vela está
-em <a href="/blog/vela-is-in-alpha">alfa</a> — comece com valores pequenos. A Vela
-não tem token. Tudo aqui é verificável contra o código aberto.
+<Callout type="info" title="Situação: alfa · última revisão em setembro de 2026">
+Esta página descreve como a Vela funciona hoje e em que você precisa e não precisa
+confiar para usá-la. A Vela está em <a href="/blog/vela-is-in-alpha">alfa</a> — comece
+com valores pequenos. A Vela não tem token. Tudo aqui pode ser conferido no código
+aberto; onde o código e esta página discordarem, o código está certo e esta página
+tem um bug.
 </Callout>
 
 ## Resumo
 
-A Vela é uma **carteira de contrato inteligente autocustodiada** para redes EVM.
-Cada carteira é uma conta inteligente
-[Safe](https://github.com/safe-fndn/safe-smart-account) controlada por uma
-**passkey** — uma credencial WebAuthn (P-256) guardada pelo sistema operacional do
-seu aparelho, criptografada de ponta a ponta e destravada com Face ID, Touch ID ou
-digital. Não há frases-semente nem chaves privadas para você copiar, guardar ou
-perder.
+A Vela é uma **carteira de contrato inteligente de autocustódia** para Ethereum e
+outras redes EVM. Cada carteira é uma conta **Safe v1.4.1** sem modificações,
+operada pelo **ERC-4337** e controlada por até sete **passkeys** — chaves WebAuthn
+P-256 guardadas nos seus aparelhos, no seu gerenciador de senhas ou em chaves de
+segurança físicas. Não existe frase de recuperação.
 
-A Vela, a empresa, nunca fica com suas chaves nem com seus fundos e **não pode
-movê-los, congelá-los ou confiscá-los**. O app, o relay de transações e os serviços
-de apoio são todos código aberto e auto-hospedáveis. O que você precisa confiar se
-resume a contratos auditados, ao cofre de passkeys do seu sistema operacional e —
-só para disponibilidade — a um relay que você pode trocar ou rodar você mesmo.
+A Vela, a empresa, nunca guarda as suas chaves e não tem nenhum papel no seu Safe,
+então **não consegue mover, congelar nem confiscar os seus fundos** por conta
+própria. Mas é ela que escreve e distribui o software que pede às suas chaves para
+assinar — e é por isso que o modelo de ameaças abaixo importa. Os apps, o relay que
+envia as transações e os serviços de apoio são de código aberto, e você pode rodar a
+sua própria cópia de cada um. Em que você confia, em resumo: nos contratos, nos
+autenticadores que guardam as suas chaves, no código do app com que você assina,
+no domínio ao qual as suas passkeys pertencem e nos serviços para os quais você
+aponta o app.
 
 ## Por que a Vela existe
 
-A maioria das carteiras impõe uma troca:
+- **Carteiras com frase de recuperação** colocam um segredo de 12 a 24 palavras na
+  frente de cada usuário: um ponto único de falha e um alvo permanente de phishing.
+- **Carteiras custodiais** eliminam a frase de recuperação tomando a custódia dos
+  fundos.
+- **Carteiras com passkey** que dependem dos servidores e do código fechado de uma
+  única empresa eliminam a frase de recuperação, mas deixam você na mão se a empresa
+  sumir.
+- A **assinatura às cegas** — aprovar dados opacos que você não consegue ler — ainda
+  é comum, e é uma das formas pelas quais carteiras são esvaziadas.
 
-- **Carteiras com frase-semente** colocam um segredo de 12 a 24 palavras na frente
-  de cada usuário. É o ponto único de falha e um alvo constante de phishing.
-- **Carteiras custodiais** tiram a frase-semente mas assumem a custódia dos seus
-  fundos, trazendo de volta o risco de contraparte que a cripto deveria eliminar.
-- **Assinatura às cegas** — aprovar hexadecimal que você não lê — virou norma no
-  ecossistema inteiro e está por trás de boa parte das carteiras esvaziadas.
+A Vela busca a praticidade de uma passkey sem nenhuma dessas dependências: uma conta
+padrão, código aberto, serviços substituíveis e transações que você consegue ler
+antes de assinar.
 
-A Vela quer ser tão fácil quanto um app custodial mantendo você em autocustódia
-completa: sem frase-semente, sem custódia alheia e sem transação que você não consiga
-ler antes de assinar.
+## Princípios de design
 
-## Princípios de projeto
-
-1. **Autocustódia, sem exceção.** As chaves nascem no seu aparelho e ficam com o
-   serviço de passkeys do seu sistema, criptografadas de ponta a ponta. Os
-   servidores da Vela só veem dados públicos.
-2. **Verifique, não confie.** A pilha inteira — app e os quatro serviços de backend
-   — é código aberto sob licença MIT.
-3. **Nada de assinatura às cegas.** As transações são traduzidas em intenção legível
-   onde existe descritor; chamadas desconhecidas são sinalizadas, não escondidas.
-4. **Fazer menos.** A carteira guarda ETH e ERC-20 e se conecta às dApps que você
-   escolher. Menos código em que confiar, superfície de ataque menor.
+1. **Autocustódia, sem exceções.** As chaves são criadas e guardadas pelos seus
+   autenticadores. Os serviços da Vela nunca as veem; o que eles veem está listado em
+   Privacidade.
+2. **Contratos padrão, sem modificações.** Nenhum contrato no caminho até os seus
+   fundos foi escrito pela Vela.
+3. **Verifique, não confie.** Os apps e os serviços são públicos; os serviços podem
+   ser hospedados por conta própria.
+4. **Decodificar antes de assinar.** O que não pode ser decodificado vem com um
+   aviso explícito de assinatura às cegas.
+5. **Fazer menos.** A carteira envia, recebe e assina para os dApps que você
+   escolhe.
 
 ## Arquitetura
 
 ```text
-App Vela (iOS / Android / Web, uma base de código só)
-  • Passkey (WebAuthn P-256, serviço de passkeys do sistema)
-  • Montagem e assinatura da UserOperation
-  • Interface de assinatura legível (ERC-7730)
-        │  UserOperation assinada
+Apps da Vela — web, extensão de navegador, desktop (macOS/Windows/Linux), iOS, Android
+  um único núcleo em Rust compartilhado (regras, criptografia, ABI, assinatura legível) + uma camada nativa em cada um
+  • monta a UserOperation e mostra o que ela faz
+  • pede à sua chave uma asserção WebAuthn
+        │  UserOperation assinada (taxa incluída)
         ▼
-Relay Vela (ERC-4337, auto-hospedável)
-  • envia handleOps ao EntryPoint
-  • não consegue alterar nem forjar sua transação
+Relay (vela-relay, auto-hospedável)
+  • cota a taxa, adianta o gas, envia handleOps
+  • não consegue alterar a operação
         ▼
-Chain EVM
-  EntryPoint v0.7 → conta inteligente Safe
-  O assinante WebAuthn verifica P-256 on-chain
+Rede EVM
+  EntryPoint v0.7 → o seu Safe v1.4.1 → módulo 4337 da Safe
+  O módulo de passkey da Safe verifica P-256 pelo pré-compilado EIP-7951 / RIP-7212
 ```
 
-### Modelo de conta
+Serviços de apoio, todos de código aberto: um **índice de chaves públicas** que
+registra carteiras novas num registro on-chain e responde a consultas, um diretório
+de **dados de chain** e uma fonte de **cotações**. Veja o
+[guia de auto-hospedagem](/pt-BR/docs/self-hosting).
 
-Sua carteira é uma conta inteligente **Safe v1.4.1** (um contrato proxy) operada por
-abstração de contas **ERC-4337** (EntryPoint v0.7), com o **Safe 4337 Module** e um
-**assinante WebAuthn** como dono da conta.
+### Conta
 
-O endereço é **determinístico** e **contrafactual**: é calculado a partir da chave
-pública da sua passkey via `CREATE2` antes de qualquer transação ser enviada, então
-você recebe fundos nele antes de ele ser implantado. A conta se implanta sozinha,
-pagando do próprio saldo, na sua primeira transação.
+A sua carteira é um proxy **Safe v1.4.1** (singleton SafeL2), com o **módulo 4337
+v0.3.0** da Safe habilitado como módulo e como fallback handler, operado pelo
+**EntryPoint v0.7**. Os proprietários dela são signatários de passkey do **módulo
+de passkey v0.2.1** da Safe: a primeira chave é verificada pelo signatário
+compartilhado, e cada chave adicional, pelo seu próprio contrato signatário criado
+pela fábrica da Safe. O limite é **1**.
 
-### Chaves e autenticação
+O endereço é **determinístico e contrafactual**: ele é calculado com `CREATE2` a
+partir dos dados de configuração do Safe, que incluem todas as chaves fundadoras,
+antes de qualquer coisa ser implantada. Ele é o mesmo em todas as redes. Você pode
+receber nele na hora; a sua primeira transação em cada rede implanta a carteira e
+paga por isso dentro da taxa dessa transação.
 
-A autenticação usa **passkeys WebAuthn** na curva **P-256**. A chave privada é
-gerada no seu aparelho e fica, criptografada de ponta a ponta, com o serviço de
-passkeys do sistema (Chaveiro do iCloud ou Gerenciador de senhas do Google), que a
-sincroniza entre seus aparelhos. **Os servidores da Vela só veem a sua chave
-pública.** Assinar exige uma verificação biométrica nova a cada vez — não há chave de
-sessão de vida longa. Todos os detalhes em
-[como as passkeys funcionam](/pt-BR/docs/passkeys).
+### Chaves
 
-### Assinatura e fluxo da transação
+Uma carteira tem **de uma a sete chaves**, definidas quando você a cria. Qualquer uma
+delas pode assinar sozinha (1-of-n). Uma chave pode ser:
 
-1. **Montar** uma `UserOperation` ERC-4337 para o seu Safe e estimar o gas.
-2. **Decodificar** a chamada em intenção legível e mostrar para conferência.
-3. **Assinar** — depois da verificação biométrica, seu aparelho produz uma asserção
-   WebAuthn sobre o hash da operação.
-4. **Codificar** a asserção como assinatura de contrato **EIP-1271**.
-5. **Repassar** a operação assinada ao relay, que a envia ao EntryPoint.
-6. **Verificar on-chain** — o Safe confere a assinatura P-256 on-chain pelo
-   precompilado RIP-7212 antes de executar. O precompilado é requisito duro: não há
-   verificador de reserva, e a Vela se recusa a habilitar uma rede sem ele.
+- uma passkey no aparelho que você está usando — sincronizada pelas Chaves do
+  iCloud, pelo Gerenciador de senhas do Google ou por outro gerenciador de senhas, se
+  você permitir;
+- outro celular, conectado escaneando um QR code (o transporte híbrido do WebAuthn);
+- uma chave de segurança física por USB ou NFC, que não é sincronizada em lugar
+  nenhum.
 
-O relay recebe uma operação **já assinada**. Ele não pode mudar destinatário, valor
-ou qualquer outro campo sem invalidar a assinatura.
+Toda assinatura exige a verificação de usuário do próprio autenticador — biometria
+ou o PIN do aparelho, ou o PIN e um toque numa chave de segurança. Não existe chave
+de sessão. As chaves não podem ser adicionadas, removidas nem trocadas depois: em
+cada rede onde a carteira ainda não foi implantada, o endereço continua
+representando o conjunto fundador, então trocar proprietários numa rede faria a conta
+ficar diferente de uma rede para outra.
 
-### Relay e modelo de gas
+As passkeys pertencem a uma relying party (a parte confiável, no vocabulário do
+WebAuthn) — as da Vela são criadas para **`getvela.app`**. Os navegadores só as
+oferecem a páginas do getvela.app ou dos seus subdomínios, e é isso que as torna
+resistentes a phishing; é também uma dependência à qual este documento volta mais
+adiante.
 
-- O gas é pago **do saldo da sua própria carteira** — no token nativo da rede por
-  padrão, ou numa stablecoin suportada onde o relay oferecer. A Tempo, que não tem
-  moeda nativa, sempre liquida gas em stablecoins em dólar. **Não há paymaster** nem
-  terceiro patrocinando — ou barrando — suas transações.
-- **O relay é a única fonte de verdade para o preço do gas.** Ele cota a partir das
-  condições reais da chain; a carteira mostra essa cotação e assina exatamente o que
-  mostra.
-- A cobrança do relay da Vela é deliberadamente simples: o total é o **custo de rede
-  mais a taxa de serviço do relay**, com uma taxa mínima pequena em transações muito
-  baratas. Uma parte vai para os validadores da chain; o resto paga o relay que
-  mantém a infraestrutura e mantém sua conta de gas com saldo.
-- A carteira **mostra a taxa estimada antes de você confirmar** — no ativo da taxa e
-  na sua moeda de exibição — e o valor cotado, junto com o destinatário, faz parte do
-  que você assina, então o relay recebe exatamente o que foi mostrado. Sem margem
-  escondida.
-- Cada Safe tem uma **conta de relay dedicada** (conta de gas) por chain, ativada
-  por um depósito **não reembolsável**. Ela pode se esgotar com o tempo e precisar de
-  **nova ativação** depois — ou seja, não é exatamente um depósito único.
+### Fluxo de assinatura
 
-O relay é uma dependência de **disponibilidade**, não de **custódia**: ele pode
-atrasar ou recusar, mas nunca alterar, forjar ou roubar. É código aberto e você pode
-rodar o seu — e, como o preço é **cotado e mostrado** em vez de escondido, até a taxa
-de um relay próprio ou de terceiros fica sempre visível antes de você assinar. Veja
-[redes e taxas](/pt-BR/docs/networks-and-fees).
+1. **Montar** uma UserOperation para o seu Safe — incluindo uma transferência que
+   paga o relay — e simulá-la.
+2. **Decodificar** a operação numa intenção legível e mostrá-la a você.
+3. **Assinar**: o seu autenticador verifica você e produz uma asserção WebAuthn
+   sobre o hash da operação.
+4. **Codificar** a asserção como a assinatura do Safe que o módulo de passkey espera.
+5. **Enviar** a operação assinada ao relay, que chama o EntryPoint.
+6. **Verificar on-chain**: o módulo de passkey confere a assinatura P-256 com o
+   pré-compilado EIP-7951 / RIP-7212 antes de o Safe executar qualquer coisa. Não existe
+   verificador alternativo; uma rede sem o pré-compilado não pode ser adicionada.
 
-### Assinatura legível (ERC-7730)
+### Taxas
 
-A Vela decodifica calldata e dados tipados EIP-712 com descritores **ERC-7730** e
-mostra a **intenção** (Trocar, Enviar, Aprovar…), a **substância** (valores,
-endereços) e, sob demanda, os **detalhes** (nonce, prazo, calldata crua), com cores
-por risco. Quando nenhum descritor casa, a Vela mostra um aviso explícito de
-assinatura às cegas em vez de fingir que entendeu a chamada.
+- O relay é pago **dentro da própria operação**: a operação declara zero de taxas do
+  EntryPoint e inclui uma transferência do seu Safe para o endereço do relay. O valor
+  e o destinatário fazem parte do que você assina, então você paga exatamente o que a
+  tela de confirmação mostrou.
+- A taxa é **o triplo do gas que a carteira reserva para a operação** (as estimativas
+  simuladas aumentadas em metade, com mínimos), **precificado pelo maior entre a
+  leitura de preço de gas da própria carteira e o preço do relay para a velocidade
+  escolhida**, com mínimo de cerca de US$ 0,01. Na Tempo, o multiplicador é dois. A
+  folga na reserva e no preço deixa a taxa acima do custo real da operação on-chain,
+  ainda mais na primeira transação numa rede; o relay fica com a diferença. O valor
+  exato aparece na tela de confirmação antes de você assinar.
+- A taxa vai para o relay configurado na carteira: o da Vela, por padrão, ou
+  qualquer implantação do vela-relay, inclusive uma que você mesmo rode.
+- A taxa é paga na moeda da rede ou numa stablecoin em dólar que o relay aceite
+  (pathUSD na Tempo, que não tem moeda nativa). **Não há paymaster**: ninguém
+  patrocina o gas, e ninguém pode filtrar transações por uma política de patrocínio.
+- Se a tesouraria de gas do próprio relay numa rede estiver vazia, a carteira avisa
+  antes de você assinar. Não existe depósito por usuário.
+
+Detalhes: [redes e taxas](/pt-BR/docs/networks-and-fees).
+
+### Assinatura legível
+
+Chamadas e mensagens EIP-712 são decodificadas com descritores **ERC-7730** —
+integrados ao app para contratos comuns, buscados no serviço de dados de chain ou
+correspondidos a formatos padrão de tokens — e, como último recurso, com um banco de
+dados público de seletores, marcado como melhor esforço. O que sobrar recebe um aviso
+explícito de assinatura às cegas. Os descritores buscados não são autenticados
+criptograficamente. Uma aprovação on-chain no nível “ilimitado” (2^200 ou mais) não
+pode ser enviada até que você a reduza; uma aprovação finita alta e permits
+assinados aparecem com um alerta, mas não são bloqueados. Detalhes:
+[assinatura legível](/pt-BR/docs/clear-signing).
 
 ### Redes
 
-A Vela suporta 12 redes EVM — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, Gnosis, Unichain, Tempo, Monad e World Chain — mais redes
-personalizadas. Uma rede personalizada só pode ser adicionada se já hospedar os
-contratos de que a Vela depende (o EntryPoint, os contratos Safe, o assinante
-WebAuthn) e o precompilado P-256 RIP-7212; a Vela confere antes de habilitar.
+A Vela tem 24 redes integradas — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
+Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
+Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume e XRPL EVM — e
+aceita qualquer rede EVM que tenha os onze contratos que ela verifica e o
+pré-compilado EIP-7951 / RIP-7212. (As chaves dois a sete também precisam da fábrica de
+signatários de passkey da Safe nessa rede, o que a verificação ainda não cobre.)
 
 ## Modelo de segurança
 
-**O que a Vela não pode fazer:**
+**O que a Vela não consegue fazer**
 
-- Mover, gastar ou transferir seus fundos — só a sua passkey pode autorizar o Safe.
-- Congelar ou confiscar sua conta — o Safe é o seu contrato on-chain; a Vela não tem
-  papel privilegiado nele.
-- Assinar no seu lugar — cada transação exige uma asserção biométrica nova.
-- Ver sua chave privada — ela nunca chega à Vela; só o seu aparelho consegue usá-la
-  para assinar.
-- Alterar uma transação depois que você assina — qualquer mudança invalida a
+- Mover, gastar ou congelar os seus fundos por conta própria — só as suas chaves
+  autorizam o seu Safe, e a Vela não tem nenhum papel nele. (O que a Vela consegue
+  fazer é distribuir um software que pede a sua assinatura; veja as ameaças abaixo.)
+- Alterar uma transação depois que você a assina — qualquer mudança invalida a
   assinatura.
+- Ler as suas chaves privadas — elas ficam nos seus autenticadores.
+- Adicionar uma chave à sua carteira, ou remover uma.
 
-**O que «não pode congelar» não cobre: o *token*.** Uma stablecoin com permissões —
-USDC, USDT e a maioria dos tokens lastreados em moeda — traz uma função de blacklist
-que o emissor pode acionar contra qualquer endereço, inclusive o seu. Esse poder é do
-emissor e existe em qualquer carteira onde você guarde o token; nenhuma carteira
-autocustodiada, Vela inclusive, pode tirá-lo. O que a autocustódia te dá é que
-**nós** não somos uma segunda parte que possa fazer isso.
+**O que “não consegue congelar” não cobre: o token.** USDC, USDT e a maioria dos
+tokens lastreados em moeda fiduciária permitem que o emissor coloque qualquer
+endereço numa lista de bloqueio, inclusive o seu. Esse poder pertence ao emissor e
+existe qualquer que seja a carteira que você usa. O que a autocustódia garante é que
+a Vela não é uma segunda parte capaz de fazer isso.
 
-**No que você confia:**
+**Em que você confia**
 
-- Nos **contratos Safe** (auditados, muito usados) e no assinante WebAuthn que
-  verifica sua chave P-256.
-- No **serviço de passkeys do seu sistema** (Apple / Google) para proteger e
-  sincronizar sua credencial.
-- Nos **provedores de RPC** que você consulta (a Vela usa um conjunto de várias
-  fontes com failover; você pode configurar os seus).
-- No **relay**, só para disponibilidade — e você pode auto-hospedá-lo.
+- Nos **contratos**: Safe, os módulos 4337 e de passkey dele, EntryPoint v0.7 e o
+  pré-compilado EIP-7951 / RIP-7212 da rede.
+- No **domínio**: qualquer página servida pelo getvela.app ou por um dos seus
+  subdomínios pode pedir uma assinatura às suas chaves.
+- Nos **autenticadores** que guardam as suas chaves e — para passkeys sincronizadas
+  — na conta Apple, Google ou do gerenciador de senhas por trás delas.
+- **No código do app com que você assina.** Ele monta a transação e mostra o que ela
+  faz. Um app comprometido pode mostrar uma coisa e pedir que você assine outra; o
+  aviso do autenticador não vai mostrar a diferença.
+- Nos **endpoints RPC** de que você lê: um nó mentiroso pode mostrar saldos errados
+  ou uma prévia de simulação errada. Você pode definir os seus próprios.
+- Nos **serviços de dados de chain e de cotações**: eles fornecem listas de tokens,
+  descritores, a lista de tokens aceitos para a taxa e as cotações usadas para
+  transformar um valor em moeda fiduciária num valor em tokens.
+- No **relay**: ele não consegue mudar o que você assinou, mas pode atrasar ou
+  recusar a operação, escolher quando ela entra na rede (então poderia se antecipar a
+  um swap seu, dentro da sua tolerância de slippage) e definir o preço de gas em que a
+  sua taxa se baseia, até o triplo da leitura da própria carteira.
 
-**Ameaças consideradas:**
+**Ameaças consideradas**
 
-- **Aparelho perdido ou roubado** — quem estiver com ele ainda precisa da sua
-  biometria ou do seu PIN para assinar.
-- **Phishing / dApp maliciosa** — tratado pela assinatura legível.
-- **Servidor da Vela comprometido** — não dá capacidade de assinatura; o raio do
-  estrago é serviço degradado, não perda de fundos.
-- **Risco de cadeia de suprimentos** — mitigado por código aberto e auto-hospedagem.
+- **Aparelho perdido ou roubado** — um ladrão ainda precisa passar pela verificação
+  do autenticador; outra chave devolve o acesso. Mas uma chave não pode ser removida:
+  se uma delas pode estar nas mãos de outra pessoa, transfira os seus fundos para uma
+  carteira nova, porque o endereço antigo continua podendo ser movimentado por aquela
+  chave em todas as redes.
+- **Phishing** — uma passkey não pode ser digitada num site falso, e os navegadores
+  só a oferecem a páginas do getvela.app e dos seus subdomínios.
+- **dApp malicioso** — tratado pela assinatura legível e pela proteção de aprovações,
+  com uma lacuna séria: um dApp pode pedir uma chamada do seu Safe para ele mesmo —
+  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — e
+  qualquer uma delas, assinada uma única vez, entrega a conta tão completamente quanto
+  o payload da Bybit. A Vela decodifica essas chamadas, mas ainda não as bloqueia.
+  Rejeite qualquer solicitação cujo destino seja o endereço da sua própria carteira.
+- **Serviço de backend comprometido** (relay, índice, dados de chain, cotações) —
+  nenhum poder de assinatura, mas influência real: recusar o serviço, descritores ou
+  listas de tokens enganosos, cotações erradas que mudam quanto um valor em moeda
+  fiduciária envia e (no caso do relay) o momento e o preço de gas descritos acima. Os
+  descritores buscados não são tratados como autenticados, e cada serviço pode ser
+  substituído.
+- **Distribuição do app comprometida** — uma implantação web adulterada, uma
+  atualização de extensão ou uma versão de app poderia apresentar uma transação
+  maliciosa para você assinar. Esse é o tipo de ataque da
+  [Bybit](/pt-BR/docs/bybit-attack). As mitigações hoje são limitadas: a decodificação
+  e a proteção de aprovações no próprio app, versões de macOS notarizadas e a
+  possibilidade de compilar a extensão ou os apps você mesmo a partir do código-fonte
+  (os pacotes de release trazem checksums SHA-256, não assinaturas). Uma página de
+  assinatura independente, que não compartilha o código do app, está pronta, mas
+  ainda não conectada.
+- **Qualquer coisa servida pelo domínio** — qualquer página do getvela.app ou dos
+  seus subdomínios, inclusive um script que ela carregue, poderia pedir assinaturas às
+  passkeys da Vela, e o aviso mostra só “getvela.app”. Por isso, o site proíbe as
+  próprias páginas de usar passkeys e mantém o script de análise fora da página que
+  guarda uma chave. Se o domínio trocasse de dono, o novo dono também controlaria
+  quais apps podem usar as passkeys. A extensão e os apps compilados por você trazem o
+  próprio código, embora, por padrão, ainda busquem descritores e usem serviços sob o
+  getvela.app.
 
 ## Recuperação
 
-Sua passkey é copiada pelo serviço do seu sistema operacional; em um aparelho novo,
-entrar com a mesma conta Apple ou Google a restaura, e sua carteira reaparece.
+Criar uma carteira publica as chaves públicas e o endereço dela num **contrato de
+registro** público na Gnosis (que pode ser copiado para o Ethereum). Num aparelho
+novo, você faz login com **qualquer uma** das chaves; o app encontra a carteira pelo
+índice ou, se ele falhar, direto no registro, e confere se as chaves recalculam o
+endereço registrado. Uma carteira de chave única também pode ser reconstruída a
+partir de duas assinaturas, sem registro nenhum.
 
-<Callout type="warning" title="O backup de passkeys da sua plataforma é a sua recuperação">
-A recuperação da Vela é a sua passkey, sincronizada pelo Chaveiro do iCloud ou pelo
-Gerenciador de senhas do Google. Por projeto, não há frase-semente, recuperação
-social nem guardiões — nada que a Vela possa perder, vazar ou ser obrigada a usar. O
-outro lado é real: se você perder <strong>tanto</strong> o aparelho
-<strong>quanto</strong> a passkey sincronizada na nuvem, sem nenhuma outra cópia, a
-conta não pode ser recuperada. Mantenha o backup de passkeys da sua plataforma
-ligado e proteja essa conta.
+<Callout type="warning" title="As suas chaves são a sua recuperação">
+Não há frase de recuperação, nem recuperação social, nem guardiões — nada que a Vela
+pudesse perder, vazar ou ser obrigada a usar. Se todas as chaves fundadoras forem
+perdidas, a carteira não pode ser recuperada. Crie a carteira com mais de uma chave,
+mantenha a sincronização de passkeys ativada se depender dela e proteja a conta por
+trás dela.
 </Callout>
 
-O modelo completo de recuperação, com seus limites honestos, está em
-[recuperação e login](/pt-BR/docs/recovery).
+Detalhes: [recuperação e login](/pt-BR/docs/recovery).
 
-## Se a Vela sumir
+## Se a Vela deixar de existir
 
-Autocustódia significa que suas chaves e seus fundos não dependem de a Vela estar no
-ar. Os fundos vivem no **seu contrato Safe on-chain**, e o relay é código aberto e
-substituível.
-
-Uma ressalva honesta: o WebAuthn prende uma passkey a um domínio de relying party
-(`getvela.app`). Se esse domínio fosse perdido em definitivo, as passkeys presas a
-ele precisariam de ajuda para funcionar em outro lugar — uma ferramenta capaz de
-apresentar ao autenticador a relying party original. A Vela distribuía antes uma
-extensão de navegador de nível desenvolvedor para esse caso e a retirou em setembro
-de 2026; um caminho de recuperação para perda de domínio adequado ao público geral
-continua sendo trabalho em aberto, e dizemos isso em vez de dar a entender que já
-existe. O acesso on-chain independente também depende do suporte a P-256 (RIP-7212)
-da chain de destino, que vem melhorando em várias chains.
+Os seus fundos continuam no seu Safe, on-chain. Os contratos não dependem da Vela, e
+todos os serviços que a Vela opera são de código aberto, para que outra pessoa possa
+rodá-los. A única coisa que não pode mudar de lugar é a relying party das
+passkeys, `getvela.app`: uma cópia da carteira web em outro domínio cria outra
+carteira. Para carteiras existentes, a extensão da Vela para navegador (que pode usar
+passkeys do `getvela.app` por permissão) e os apps que você mesmo compilar (com um
+celular ou uma chave de segurança) continuam funcionando sem o getvela.app. O
+[guia de auto-hospedagem](/pt-BR/docs/self-hosting#if-getvela-app-disappears)
+detalha cada caminho e os seus limites. O acesso independente a uma rede também
+exige que essa rede suporte o EIP-7951 / RIP-7212.
 
 ## Privacidade
 
-Sem contas, sem e-mail, sem KYC, sem frase-semente para coletar. Os servidores
-guardam só a sua **chave pública** e um nome de conta escolhido por você (para a
-recuperação entre aparelhos), publicados on-chain por projeto. O conteúdo das
-transações não é registrado. O site usa analytics auto-hospedada e sem cookies. Veja
-a [política de privacidade](/privacy).
+Sem cadastro, sem e-mail, sem KYC. O que se torna público é gravado no registro
+quando você cria uma carteira: a chave pública e o ID de credencial de cada chave, o
+modelo do autenticador, o nome da carteira e os nomes das chaves, o endereço e os
+dados de registro assinados. O índice da Vela vê esse registro antes de enviá-lo, e
+também os endereços cujos nomes você procura; o relay da Vela vê o seu endereço, as
+operações que você envia e o endpoint RPC que o seu app usa (inclusive qualquer chave
+de API na URL dele), e guarda as operações por um tempo limitado para tentar de novo
+e diagnosticar problemas. Todos os serviços veem o seu endereço IP. O site usa
+análise sem cookies. A [política de privacidade](/privacy) é a lista oficial.
 
-## Verificabilidade e código aberto
+## Código aberto
 
-Tudo é **licenciado MIT e de código aberto** — o app e os quatro serviços de backend
-(dados de chain, índice de passkeys, relay, taxas de câmbio), que você pode
-**auto-hospedar** (Configurações → Avançado → Endpoints de serviço). Leia o código em
-[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
+Tudo tem licença MIT: a carteira (todos os apps e o núcleo), o relay, o índice de
+chaves públicas, o serviço de cotações e o diretório de dados de chain. Código:
+[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Sem token
 
-A Vela **não tem token** e não pretende ter. Não há nada para comprar, farmar ou
-especular. O gas é pago no ativo nativo de cada rede.
+A Vela não tem token nem planos de ter um. Não há nada para comprar, farmar ou
+especular. As taxas são pagas na moeda de cada rede ou numa stablecoin.
 
-## Status de auditoria e limitações
+## Situação das auditorias e limitações
 
-Os **contratos Safe** no centro de toda conta Vela são auditados de forma
-independente e testados na prática. A **integração da própria Vela** em volta deles
-**não passou por auditoria independente de terceiros**, e nenhuma está agendada por
-enquanto — uma auditoria profissional é uma meta para quando o projeto puder bancar,
-não um compromisso com data. Até lá a revisão é informal: o código é aberto e conta
-com membros capazes e interessados da comunidade lendo, além de revisão assistida por
-IA. Ajuda, mas não equivale a uma auditoria profissional. Trate a Vela como software
-em alfa e use valores que você se sinta confortável em colocar em algo tão novo.
+Os contratos da Safe, os módulos 4337 e de passkey dela e o EntryPoint v0.7 são
+auditados de forma independente e amplamente usados. **O código da própria Vela —
+os apps, os serviços de backend e o contrato de registro — não passou por uma
+auditoria independente de terceiros, e nenhuma está agendada**; uma auditoria
+profissional é um objetivo para quando o projeto puder pagar por uma, não um
+compromisso com data. Até lá, a revisão é informal: o código é aberto, membros
+capacitados da comunidade o leem e ele é revisado com ferramentas de IA. Isso ajuda,
+mas não equivale a uma auditoria profissional. Trate a Vela como software em alfa.
+Detalhes: [auditorias e problemas conhecidos](/pt-BR/docs/security-audits).
 
 ## Referências
 
-- ERC-4337 — abstração de contas via EntryPoint
-- EIP-1271 — padrão de validação de assinatura para contratos
-- ERC-7730 — assinatura legível / descritores de dados estruturados
-- EIP-5792 — agrupamento de chamadas da carteira
-- RIP-7212 — precompilado para verificação de assinatura secp256r1 (P-256)
-- WebAuthn / FIDO2 — autenticação por passkey
-- [Conta inteligente Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
+- ERC-4337 — Abstração de contas pelo EntryPoint
+- EIP-1271 — Validação de assinaturas para contratos
+- ERC-7730 — Descritores de assinatura legível
+- EIP-5792 — Agrupamento de chamadas na carteira (`wallet_sendCalls`)
+- EIP-7951 / RIP-7212 — Pré-compilado de verificação de assinaturas P-256
+- WebAuthn / FIDO2 — Passkeys
+- [Safe smart account v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)

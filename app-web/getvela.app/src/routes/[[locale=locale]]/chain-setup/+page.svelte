@@ -8,7 +8,7 @@
 	import { pathFor } from '$lib/i18n/locales';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { SAFE_FACTORY_GUIDE_URL, SAFE_FACTORY_REQUEST_URL } from '$lib/chain-setup/deployers';
-	import { RIP_7212_URL } from '$lib/chain-setup/required-contracts';
+	import { P256_PRECOMPILE_URL } from '$lib/chain-setup/required-contracts';
 	import { ChainSetup, formatCoin } from '$lib/chain-setup/setup.svelte';
 	import type { Step } from '$lib/chain-setup/verdict';
 	import type { PageData } from './$types';
@@ -227,7 +227,7 @@
 				<h2>{t.verdict.blocked.title}</h2>
 				<p>{t.verdict.blocked.body}</p>
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a class="link" href={RIP_7212_URL} target="_blank" rel="noopener"
+				<a class="link" href={P256_PRECOMPILE_URL} target="_blank" rel="noopener"
 					>{t.verdict.blocked.link} ↗</a
 				>
 			{/if}

@@ -136,7 +136,7 @@ export function requiredContract(key: string): RequiredContract {
 }
 
 /**
- * RIP-7212 — the P-256 precompile at `0x100`.
+ * EIP-7951 / RIP-7212 — the P-256 precompile at `0x100`.
  *
  * This one is different in kind from the eleven above. Its address is baked
  * into every Vela address: the account's setup calldata names `0x100` as the
@@ -156,4 +156,9 @@ export const VALID_P256_CALL =
 	'3be8cbcb3f590087711ae5ed74b9cd06a88058d0bbe700b5f0ec5a1bfac15592' +
 	'f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314';
 
-export const RIP_7212_URL = 'https://github.com/ethereum/RIPs/blob/master/RIPS/rip-7212.md';
+/**
+ * EIP-7951 is the P-256 precompile on Ethereum (Fusaka, December 2025) and
+ * supersedes RIP-7212 with the same interface at the same address; rollups ship
+ * it under the RIP-7212 name. The EIP page covers both.
+ */
+export const P256_PRECOMPILE_URL = 'https://eips.ethereum.org/EIPS/eip-7951';

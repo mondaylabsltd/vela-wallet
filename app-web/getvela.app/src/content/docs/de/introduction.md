@@ -1,55 +1,55 @@
 ---
 title: Einführung
-description: Was Vela ist, für wen es gebaut wurde und welche Idee hinter einer selbstverwahrten Smart Wallet ohne Seed-Phrase steckt.
+description: "Was Vela ist, in sechs Zeilen, und eine Liste der Fragen, mit denen Leute hierherkommen – jede direkt mit ihrer Antwort verlinkt."
+source: f1879437a0b5
 ---
 
-# Einführung
+# Vela-Dokumentation
 
-Vela ist eine **selbstverwahrte Smart Wallet** für EVM-Netzwerke. Die Schlüssel
-gehören dir, aber es gibt keine Seed-Phrase zum Aufschreiben — du signierst mit
-einem Passkey, per Gesicht oder Fingerabdruck.
+Vela ist eine **quelloffene, selbst hostbare Wallet für Ethereum und andere
+EVM-Netzwerke**, ohne Seed-Phrase. Deine Wallet ist ein unveränderter
+[Safe](/de/docs/account-contract)-Smart-Account, und du signierst mit **Passkeys** –
+auf deinem Handy oder Computer, auf einem anderen Handy oder mit einem
+Hardware-Sicherheitsschlüssel.
 
-Diese Dokumentation zeigt, wie du anfängst, eine Wallet erstellst, Token bewegst
-und das Sicherheitsmodell dahinter verstehst.
+- **Läuft ohne uns.** Die Apps und jeder Dienst dahinter – das Relay, der
+  Public-Key-Index, die Chain-Daten und die Wechselkurse – stehen unter der
+  MIT-Lizenz. Bau und betreib sie selbst mit der
+  [Anleitung zum Selbsthosten](/de/docs/self-hosting), die auch die Grenzen nennt.
+- **Deine Schlüssel, bis zu sieben.** Beim Erstellen der Wallet gewählt; jeder
+  einzelne kann signieren. Vela hat sie nie und hat keine Rolle in deiner Wallet.
+- **24 Netzwerke, eine Adresse.** Dazu jedes EVM-Netzwerk, das du hinzufügst und das
+  die Anforderungen erfüllt.
+- **Du liest, bevor du signierst.** Transaktionen werden in verständliche Sprache
+  übersetzt; was sich nicht dekodieren lässt, wird gekennzeichnet.
+- **Alpha.** Vela funktioniert und ist mit echtem Geld im Einsatz, aber es ist jung:
+  Fang mit kleinen Beträgen an. [Was Alpha hier bedeutet](/blog/vela-is-in-alpha).
 
-## Die kurze Fassung
+## Antworten finden
 
-- **Selbstverwahrt.** Über dein Geld bestimmt ein Schlüssel, den nur du benutzen
-  kannst. Vela (die Firma) kann dein Geld weder bewegen noch einfrieren noch
-  zurückholen.
-- **Keine Seed-Phrase.** Dein Signaturschlüssel ist ein Passkey in der sicheren
-  Hardware deines Geräts. Es gibt keine zwölf Wörter, die verloren gehen oder
-  abgefischt werden können.
-- **Ein Safe Smart Account.** Jede Wallet ist ein
-  [Safe](https://github.com/safe-fndn/safe-smart-account)-Vertrag, betrieben über
-  ERC-4337 Account Abstraction — genau das erlaubt dir, mit einem Passkey zu
-  signieren und jede Transaktion vor der Freigabe zu lesen.
-- **12 Netzwerke, eine Adresse.** Ethereum, BNB Chain, Polygon, Arbitrum,
-  Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad und World Chain —
-  dazu eigene Netzwerke — alle unter derselben Adresse.
-- **Lesbares Signieren.** Wo ein Deskriptor existiert, wird die Transaktion in
-  eine verständliche Absicht übersetzt (ERC-7730). Wo nicht, fällt Vela auf eine
-  Best-Effort-Dekodierung zurück und warnt dich. Aufrufe, die es nicht lesen
-  kann, werden markiert, nicht versteckt.
-- **Open Source.** Wallet und alle Dienste sind
-  [öffentlich auf GitHub](https://github.com/mondaylabsltd/vela-wallet), damit
-  jeder prüfen kann, was sie tun.
-- **Alpha-Software.** Vela funktioniert und hält echtes Geld, aber es hat noch
-  keine Jahre im Produktivbetrieb hinter sich. Fang mit kleinen Beträgen an. Der
-  [Alpha-Beitrag](/blog/vela-is-in-alpha) erklärt, was das bedeutet.
+| Ich möchte wissen … | Hier entlang |
+| --- | --- |
+| Wie ich alles selbst betreibe | [Anleitung zum Selbsthosten](/de/docs/self-hosting) |
+| Wie ich mein eigenes Relay betreibe und wer die Gebühr bekommt | [Anleitung zum Selbsthosten → Relay](/de/docs/self-hosting#relay) · [Netzwerke und Gebühren → die Gebühr](/de/docs/networks-and-fees#fee) |
+| Was passiert, wenn getvela.app offline geht | [Anleitung zum Selbsthosten → ohne getvela.app](/de/docs/self-hosting#if-getvela-app-disappears) |
+| Warum eine Transaktion kostet, was sie kostet | [Netzwerke und Gebühren](/de/docs/networks-and-fees) |
+| Ob meine Chain unterstützt wird oder wie ich eine hinzufüge | [Netzwerke und Gebühren](/de/docs/networks-and-fees) · [Chain-Einrichtung](/de/chain-setup) |
+| Ob Vela auditiert ist | [Audits und bekannte Probleme](/de/docs/security-audits) |
+| Wie ich prüfe, was ich wirklich signiere | [Klartext-Signatur](/de/docs/clear-signing) · [Der Bybit-Angriff](/de/docs/bybit-attack) |
+| Welche App ich installieren soll und was sie kostet | [Vela installieren](/de/docs/install) · [Vela holen](/de/get-started) |
+| Wie ich eine Wallet erstelle und welche Schlüssel ich nehme | [Wallet erstellen](/de/docs/create-wallet) · [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers) |
+| Was ich tue, wenn ich mein Handy verliere oder einen Passkey lösche | [Wiederherstellung und Anmeldung](/de/docs/recovery) |
+| Ob ich später Schlüssel hinzufügen oder ändern kann | [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers) |
+| Wie ich Vela mit einer dApp nutze | [Vela installieren → dApps](/de/docs/install#dapps) |
+| Was an meiner Wallet öffentlich ist | [Wallet erstellen → was öffentlich ist](/de/docs/create-wallet#what-is-public) · [Datenschutzerklärung](/privacy) |
 
-## Für wen es gebaut ist
+## Vertiefen
 
-Vela ist für Leute, die echte Selbstverwahrung wollen, ohne die Fußangel der
-Seed-Phrase-Verwaltung — und für die, die damit schon einmal auf die Nase
-gefallen sind. Wenn du dein Handy entsperren kannst, kannst du Vela benutzen.
+- [Warum wir Vela gebaut haben](/de/docs/why-vela) – die Geschichte und der
+  Kompromiss, für den wir uns entschieden haben.
+- [Whitepaper](/de/docs/whitepaper) – die Architektur und genau das, worauf du
+  vertraust.
+- [Der Account-Vertrag](/de/docs/account-contract) – in welchen Verträgen dein Geld
+  liegt.
 
-## Wie es weitergeht
-
-- [Vela installieren](/de/docs/install) — läuft im Browser, nichts herunterzuladen.
-- [Wallet erstellen](/de/docs/create-wallet) — deine erste Wallet in etwa einer Minute.
-- [So funktionieren Passkeys](/de/docs/passkeys) — das Sicherheitsmodell, klar erklärt.
-- [Whitepaper](/de/docs/whitepaper) — die vollständige Architektur und das Vertrauensmodell.
-
-Wenn dich das *Warum* mehr interessiert als das *Wie*, erzählt der
-[Blog](/blog), wie Vela entsteht.
+Der [Blog](/blog) begleitet, wie Vela gebaut wird.

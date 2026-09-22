@@ -1,183 +1,220 @@
 ---
 title: Kiểm toán & vấn đề đã biết
-description: Mọi hợp đồng trên chuỗi mà Vela phụ thuộc vào, ai đã kiểm toán, phiên bản được kiểm toán có khớp với phiên bản thật sự đang chạy hay không, và những gì hoàn toàn chưa được kiểm toán.
+description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
+source: c4c50ad89f2f
 ---
 
-"Đã kiểm toán" là một khẳng định về một phiên bản cụ thể của một đoạn mã cụ thể, nên
-trang này không vẫy vẫy cái từ đó — nó dẫn đúng báo cáo, đúng địa chỉ triển khai, và
-đúng những khác biệt giữa phiên bản được kiểm toán với phiên bản đang chạy. Nó cũng
-liệt kê những gì _chưa_ được kiểm toán, vì danh sách đó gánh trọng lượng không kém
-danh sách đầu.
+"Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
+này dẫn ra các báo cáo, các commit và các địa chỉ triển khai — và liệt kê cả những gì
+**chưa** được kiểm toán, điều quan trọng không kém.
 
-Rà soát lần cuối: tháng 8/2026. Nếu bạn thấy chỗ nào sai ở đây, hãy báo và chúng tôi
+Rà soát lần cuối: 22/9/2026. Nếu bạn thấy chỗ nào sai, hãy báo cho chúng tôi và chúng tôi
 sẽ sửa.
 
 ## Đường đi của tiền
 
-Có bốn lớp hợp đồng có thể chạm vào tiền của bạn. Cả bốn đều là hợp đồng của bên thứ
-ba, có báo cáo kiểm toán công khai, và ở mỗi trường hợp địa chỉ đang chạy chính là bản
-triển khai chuẩn chính thức.
+Mọi hợp đồng có thể chạm tới tiền của bạn đều là bản triển khai chính thức của mã do bên
+thứ ba viết, có báo cáo rà soát công khai.
 
-### Safe v1.4.1 — bản thân tài khoản
+### Safe v1.4.1 — chính tài khoản
 
-Ví của bạn là một proxy [Safe](https://github.com/safe-global/safe-smart-account):
-singleton SafeL2, proxy factory, fallback handler tương thích, và MultiSend để gộp lô.
+Ví của bạn là một proxy [Safe](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)
+dùng singleton SafeL2 và SafeProxyFactory. Các giao dịch gộp đi qua MultiSend.
 
 [Ackee Blockchain đã kiểm toán Safe v1.4.0](https://github.com/safe-global/safe-smart-account/blob/main/docs/audit_1_4_0.md)
-(báo cáo cuối tháng 3/2023): 11 phát hiện, không cái nào ở mức nghiêm trọng hay cao.
-Bản v1.4.1 chúng tôi triển khai khác bản v1.4.0 được kiểm toán đúng một sửa đổi một
-dòng cho tương thích ERC-4337
-([PR #572](https://github.com/safe-global/safe-smart-account/pull/572)). Logic của
-MultiSend không đổi kể từ
-[bản v1.3.0 do G0 Group kiểm toán](https://github.com/safe-global/safe-smart-account/tree/main/docs).
-Mọi địa chỉ đều khớp với các bản triển khai chuẩn trong
-[safe-deployments](https://github.com/safe-global/safe-deployments), và các hợp đồng
-nằm trong
-[chương trình thưởng lỗi của Safe Foundation](https://docs.safefoundation.org/security/bug-bounty)
-(tới 1.000.000 USD cho phát hiện nghiêm trọng).
+(báo cáo cuối ngày 16/3/2023, rà soát bản sửa ngày 28/3): 11 phát hiện, không cái nào ở
+mức nghiêm trọng hay cao; hai phát hiện mức trung bình được ghi nhận chứ không sửa. Phạm
+vi gồm SafeL2, SafeProxyFactory, CompatibilityFallbackHandler, MultiSendCallOnly và
+SignMessageLib. v1.4.1 khác v1.4.0 đúng một dòng về chức năng, là một bản sửa tương thích
+ERC-4337 trong phần thiết lập mô-đun
+([PR #572](https://github.com/safe-global/safe-smart-account/pull/572)); Safe đã hỏi ý kiến
+Ackee và kết luận không cần kiểm toán lại. Logic của MultiSend không đổi kể từ v1.3.0,
+phiên bản đã được [G0 Group kiểm toán](https://github.com/safe-global/safe-smart-account/tree/main/docs).
+Mọi địa chỉ đều khớp với [safe-deployments](https://github.com/safe-global/safe-deployments).
+Các hợp đồng lõi nằm trong phạm vi
+[chương trình thưởng lỗi của Safe Foundation](https://docs.safefoundation.org/security/bug-bounty),
+với mức thưởng cao nhất lên tới 1.000.000 USD.
 
-Một thứ mà kiểm toán không bao phủ: vụ Bybit năm 2025. Cuộc tấn công đó chiếm dây
-chuyền build của giao diện web chính thức của Safe, chứ không phải các hợp đồng —
-[kết luận điều tra chính thức](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)
-không tìm thấy lỗ hổng nào trong hợp đồng thông minh của Safe. Chúng tôi đọc nó như một
-bài học về lớp web và vận hành, cũng chính là lớp mà bạn nên soi chúng tôi.
+Sự cố Bybit năm 2025 không phải là một phát hiện về hợp đồng: kẻ tấn công đã sửa đổi phần
+JavaScript được phục vụ cho giao diện web của Safe, và
+[tuyên bố điều tra](https://safefoundation.org/blog/safe-ecosystem-foundation-statement)
+của Safe không tìm thấy lỗ hổng nào trong các hợp đồng.
+[Trang của chúng tôi về vụ này](/vi/docs/bybit-attack) giải thích vì sao cùng một lớp tấn
+công đó liên quan tới mọi giao diện ví, kể cả của chúng tôi.
 
 ### Safe4337Module v0.3.0 — bộ chuyển đổi ERC-4337
 
-Triển khai tại `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`, địa chỉ chuẩn của v0.3.0
-(Sourcify khớp chính xác — bytecode trên chuỗi chính là mã đã được kiểm toán).
-[Ackee Blockchain kiểm toán](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md)
-(báo cáo cuối tháng 3/2024), không còn phát hiện chưa xử lý nào trên mức thông tin. Tổ
-hợp v0.3.0 + EntryPoint v0.7 + Safe ≥1.4.1 mà chúng tôi dùng đúng là cấu hình mà bản
-kiểm toán và ghi chú phát hành mô tả.
+Được triển khai tại `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` (Sourcify khớp chính xác),
+và cũng được đặt làm fallback handler cho Safe của bạn. Đã qua ba lần rà soát —
+[báo cáo ở đây](https://github.com/safe-global/safe-modules/blob/main/modules/4337/docs/v0.3.0/audit.md):
 
-Lịch sử của module có một vấn đề từng được công bố: v0.1.0 (2023) không ký `initCode`
-và `paymasterAndData`, một lối quấy rối tiêu tốn gas. Nó đã được
-[sửa ở v0.2.0](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module)
-và v0.1.0 chưa bao giờ rời khỏi testnet. Chúng tôi dùng v0.3.0, vốn thừa hưởng bản sửa
-đó.
+- **Ackee Blockchain**, báo cáo cuối tháng 3/2024: một cảnh báo (dùng trình tối ưu của
+  trình biên dịch) đã được ghi nhận, không có gì ở mức cao hơn còn mở.
+- **Certora**, tháng 8/2026: một phát hiện mức **trung bình**, đã được ghi nhận và **không
+  được sửa** trong v0.3.0 — *thay đổi về quyền không vô hiệu hóa các UserOperation phía sau
+  đã được xác thực trong cùng một bundle*. Xem "Vấn đề đã biết" bên dưới.
+- **Nethermind**, tháng 8/2026: không có phát hiện nào.
 
-### SafeWebAuthnSharedSigner v0.2.1 — bộ ký passkey
+SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), hợp đồng bật mô-đun khi một ví được triển khai,
+nằm trong phạm vi rà soát của Certora và Nethermind.
 
-Triển khai tại `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`, địa chỉ chuẩn của v0.2.1
-(giống nhau trên mọi chuỗi nhờ singleton factory của Safe).
+Lịch sử của mô-đun có một vấn đề từng được công bố: v0.1.0 không ký `initCode` và
+`paymasterAndData`, một lỗ hổng cho phép quấy phá bằng cách tiêu hao gas,
+[đã được sửa ở v0.2.0](https://safefoundation.org/blog/strengthening-security-addressing-the-incident-of-the-canonical-4337-module);
+theo Safe, v0.1.0 chưa từng được dùng ngoài testnet. Vela dùng v0.3.0 với EntryPoint v0.7
+và Safe 1.4.1, đúng cấu hình mà bản phát hành của mô-đun mô tả.
 
-"Shared" (dùng chung) nghĩa là gì — và không nghĩa là gì: thứ được dùng chung là _bản
-triển khai hợp đồng_, đúng như singleton của Safe được dùng chung. Khóa của bạn thì
-không. Mỗi Safe gọi `configure()` bằng delegatecall và lưu khóa công khai P-256 của
-riêng nó trong bộ nhớ của chính nó. Một thể hiện của bộ ký đại diện đúng một passkey
-cho một Safe, và Safe của người khác không dùng được khóa của bạn.
+### Mô-đun passkey của Safe v0.2.1 — các bộ ký
 
-Ở đây phiên bản rất quan trọng. Bản kiểm toán v0.2.0
-[nói thẳng](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.0/audit.md)
-rằng bộ ký dùng chung nằm ngoài phạm vi — lúc đó hợp đồng còn chưa tồn tại. Những bản
-kiểm toán bao phủ thứ chúng tôi triển khai là các bản của v0.2.1:
-[một cuộc thi kiểm toán của Hats Finance](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
-(tháng 6–7/2024: không phát hiện cao, không phát hiện trung bình, ba phát hiện thấp —
-đều đã sửa) cùng
-[một lượt rà soát của Certora trên commit phát hành](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)
-không có phát hiện mới. Từ khi phát hành chưa có lỗ hổng nào ở mức hợp đồng được công
-bố; các hợp đồng passkey nằm trong phạm vi chương trình thưởng lỗi của Safe Foundation.
+Khóa đầu tiên của bạn được xác minh bởi **SafeWebAuthnSharedSigner** tại
+`0x94a4F6affBd8975951142c3999aEAB7ecee555c2`. "Shared" (dùng chung) nghĩa là bản triển khai
+hợp đồng được dùng chung, giống như singleton của Safe; khóa của bạn thì không. Mỗi Safe
+lưu khóa công khai P-256 của riêng nó trong bộ nhớ lưu trữ của riêng nó.
 
-Tài liệu của chính Safe khuyến nghị đi kèm quyền sở hữu bằng passkey với một đường khôi
-phục, thay vì coi một chứng danh duy nhất là chiếc khóa duy nhất của tài khoản. Vela xử
-lý việc này thế nào thì có ở [Khôi phục & đăng nhập](/vi/docs/recovery).
+Mỗi khóa thêm vào có hợp đồng ký của riêng nó, do **SafeWebAuthnSignerFactory** tại
+`0x1d31F259eE307358a26dFb23EB365939E8641195` tạo ra dưới dạng proxy trỏ tới **singleton
+SafeWebAuthnSigner** tại `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50`.
 
-Việc xác minh P-256 trên chuỗi dùng thẳng precompile RIP-7212, không có bộ xác minh dự
-phòng viết bằng Solidity. Trước khi bật bất kỳ mạng nào, ứng dụng thử precompile bằng
-một chữ ký thật và từ chối mạng đó nếu xác minh thất bại. Hai lưu ý thật thà: đặc tả
-RIP-7212 gốc có những khiếm khuyết ở trường hợp biên mà
-[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) được viết ra để sửa (chúng không
-ảnh hưởng tới các chữ ký WebAuthn đúng dạng), và một phép thử không thể bắt được mọi
-cách mà phần cài đặt của một chuỗi có thể lệch đi trong những bối cảnh thực thi bất
-thường.
+Các lần rà soát bao phủ những hợp đồng này ở phiên bản v0.2.1
+([báo cáo](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit.md)):
 
-### EntryPoint v0.7 — điểm vào của ERC-4337
+- Một [cuộc thi kiểm toán Hats Finance](https://github.com/safe-global/safe-modules/blob/main/modules/passkey/docs/v0.2.1/audit-competition-report-hats.md)
+  (tháng 6–7/2024): không có phát hiện mức cao hay trung bình; ba phát hiện mức thấp, đều
+  đã sửa.
+- Rà soát của **Certora** trên commit phát hành: không có phát hiện mới. (Bản kiểm toán
+  v0.2.0 trước đó ghi chú rằng bộ ký dùng chung khi ấy chưa được kiểm toán — nó được thêm
+  vào sau lần kiểm toán đó.)
+- **Nethermind**, tháng 8/2026: không có phát hiện nào.
 
-Triển khai tại `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, là
-[bản triển khai chuẩn v0.7.0](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0).
-[OpenZeppelin kiểm toán](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
-(do Ethereum Foundation đặt hàng, tháng 1/2024): không phát hiện nghiêm trọng, không
-phát hiện cao, năm phát hiện trung bình, tất cả đã xử lý — và commit được kiểm toán
-chính là bản phát hành đang chạy. EntryPoint v0.7.0 nằm trong
+Từ khi phát hành chưa có lỗ hổng cấp hợp đồng nào được công bố, và các hợp đồng passkey
+nằm trong phạm vi chương trình thưởng lỗi của Safe Foundation.
+
+Chữ ký passkey được xác minh bởi precompile **EIP-7951 / RIP-7212** của chuỗi, không có bộ xác minh
+dự phòng. Trước khi bật một mạng, ứng dụng kiểm tra precompile bằng một chữ ký thật. Hai
+lưu ý: đặc tả RIP-7212 ban đầu có một số lỗi ở các trường hợp biên mà
+[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951) đã sửa (chúng chỉ ảnh hưởng tới những
+đầu vào vốn dĩ phải thất bại, không ảnh hưởng tới chữ ký WebAuthn đúng định dạng), và một
+lần thăm dò không thể phát hiện mọi cách mà phần cài đặt trên một chuỗi có thể lệch chuẩn.
+
+### EntryPoint v0.7 — chạy thao tác của bạn
+
+Được triển khai tại `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, là
+[bản phát hành chính thức v0.7.0](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0).
+[Được OpenZeppelin kiểm toán](https://www.openzeppelin.com/news/erc-4337-account-abstraction-incremental-audit)
+cho Ethereum Foundation (tháng 1/2024): không có phát hiện mức nghiêm trọng hay cao, năm
+phát hiện mức trung bình, cả 24 phát hiện đều đã được xử lý; commit rà soát bản sửa khớp
+với bản phát hành. Nó nằm trong phạm vi
 [chương trình thưởng lỗi ERC-4337](https://docs.erc4337.io/community/bug-bounty) của
 Ethereum Foundation (tới 250.000 USD).
 
-## Những vấn đề đã biết mà chúng tôi đang theo dõi
+## Vấn đề đã biết mà chúng tôi đang theo dõi
 
-### Lối quấy rối ở EntryPoint
+### Thay đổi quyền trong cùng một bundle (Safe4337Module, Certora M-01)
 
-Tháng 2/2026, các nhà nghiên cứu bảo mật tại Trust Security
-[công bố](https://erc4337.substack.com/p/improving-useroperation-execution)
-một lối quấy rối và kiểm duyệt ảnh hưởng tới mọi EntryPoint trước v0.9, kể cả bản v0.7
-chúng tôi dùng. Kẻ tấn công chặn được một UserOperation đã ký trước khi nó lên khối có
-thể thực thi nó bên trong một khung gọi do chính hắn kiểm soát và ép phần thực thi bên
-trong revert — thao tác thất bại nhưng gas vẫn bị tính. Ethereum Foundation đã trả
-50.000 USD tiền thưởng cho phát hiện này; họ xếp nó là lối kiểm duyệt/quấy rối chứ
-không phải lối trộm tiền, và nó chưa bao giờ bị khai thác.
+EntryPoint xác thực mọi thao tác trong một bundle trước khi thực thi bất kỳ thao tác nào.
+Vì vậy, nếu một thao tác gỡ bỏ một chủ sở hữu, thì một thao tác do chính chủ sở hữu đó ký
+và nằm phía sau trong cùng bundle vẫn qua được bước xác thực và vẫn chạy. Safe đã ghi nhận
+điều này và không thay đổi v0.3.0.
 
-Nó làm được gì: đốt một khoản phí và làm chậm một giao dịch. Nó không làm được gì: trộm
-tiền hay giả mạo chữ ký. Mức phơi nhiễm của Vela hẹp, vì UserOperation đi thẳng tới
-relay chứ không qua mempool công khai, nên chẳng có mấy cơ hội để chặn — và trường hợp
-xấu nhất bị giới hạn bởi đúng khoản phí bạn đã đồng ý. Bản sửa chỉ có ở EntryPoint v0.9
-(tháng 11/2025); bản v0.7 tự nó không vá được. Chúng tôi dự kiến chuyển sang khi phần
-còn lại của hệ thống — đặc biệt là dòng module 4337 của Safe — có hỗ trợ v0.9, và sẽ
-ghi lại ở đây khi điều đó xảy ra.
+Các ứng dụng Vela không bao giờ dựng thao tác thay đổi chủ sở hữu, nên bản thân Vela không
+bao giờ kích hoạt vấn đề này. Nó vẫn quan trọng: một dApp có thể yêu cầu ví của bạn tự
+thay đổi chủ sở hữu của nó (xem "Những chỗ hở" bên dưới), và bất kỳ ai gỡ bỏ một khóa bị lộ
+bằng công cụ Safe khác cũng không thể trông vào việc khóa đó bị chặn ngay trong cùng bundle.
+
+### Chặn bắt một thao tác đã ký (EntryPoint trước v0.9)
+
+Tháng 2/2026, các nhà nghiên cứu đã
+[công bố](https://erc4337.substack.com/p/improving-useroperation-execution) một hướng tấn
+công quấy phá và kiểm duyệt ảnh hưởng tới mọi EntryPoint trước v0.9, kể cả v0.7. Ai lấy
+được một thao tác đã ký trước khi nó được đưa vào khối có thể thực thi nó bên trong một lệnh
+gọi do họ kiểm soát và ép phần thực thi bên trong bị hoàn tác: thao tác thất bại và phải ký
+lại. (Với phí trả ngay trong thao tác của Vela, lệnh chuyển phí cũng bị hoàn tác theo, nên
+relay chứ không phải bạn chịu tiền gas.) Nó ảnh hưởng tới những thao tác gọi các hợp đồng có
+chống tái nhập (reentrancy), hoặc có thể bị làm cho hoàn tác nhờ trạng thái tạm thời; các lệnh
+chuyển đơn giản không bị ảnh hưởng. Nếu bị dùng lặp đi lặp lại nhắm vào các luồng rút tiền,
+nó có thể khiến tiền không dùng được trong một thời gian. Nó không thể giả mạo chữ ký hay
+chuyển hướng tiền.
+
+Relay của Vela gửi thao tác trực tiếp chứ không qua một mempool dùng chung, nhưng một giao
+dịch `handleOps` đang chờ vẫn hiện trong mempool công khai, nên điều này chỉ thu hẹp mức độ
+phơi nhiễm chứ không loại bỏ nó. Bản sửa chỉ có trong EntryPoint v0.9 (tháng 11/2025); v0.7
+không thể vá. Việc chuyển sang v0.9 phụ thuộc vào việc mô-đun 4337 của Safe hỗ trợ v0.9, và
+trang này sẽ thông báo khi điều đó diễn ra.
+
+### Những chỗ hở trong lớp phòng vệ của chính Vela
+
+Đây không phải phát hiện về hợp đồng, mà là những chỗ ví bảo vệ bạn ít hơn bạn có thể
+tưởng. Mỗi mục đều đang được theo dõi để sửa:
+
+- **Lệnh gọi từ ví tới chính nó không bị chặn.** Một dApp có thể yêu cầu `enableModule`,
+  `addOwnerWithThreshold`, `setFallbackHandler` hoặc `setGuard` trên chính Safe của bạn;
+  bất kỳ lệnh nào trong số đó, chỉ cần ký một lần, cũng trao tài khoản đi. Vela giải mã
+  những lệnh gọi này nhưng không ngăn chúng. Hãy từ chối mọi yêu cầu có đích là chính địa
+  chỉ của bạn.
+- **Lớp chặn cấp quyền chỉ chặn số lượng "không giới hạn"** (từ 2^200 trở lên; 2^152 với
+  Permit2). Một lệnh cấp quyền lớn nhưng hữu hạn, một permit dạng chữ ký, hoặc
+  `setApprovalForAll` cho NFT chỉ nhận cảnh báo thận trọng, không bị chặn.
+- **Bộ mô tả lấy về không được xác thực.** Một bộ mô tả từ máy chủ dữ liệu chuỗi được hiện
+  là "đã xác minh" nếu nó khớp với hợp đồng; nó chỉ đáng tin bằng chính máy chủ đó.
+- **Trang ký độc lập chưa được kết nối** với ứng dụng nào.
+- **Bước kiểm tra mạng không tìm factory tạo bộ ký passkey của Safe**, thứ mà khóa thứ hai
+  tới thứ bảy cần; trên một mạng được thêm vào khi thiếu nó, chỉ khóa đầu tiên ký được.
+- **Trang web tải một script phân tích của bên thứ ba** trên cùng tên miền với passkey.
+  Trang web cấm chính các trang của mình dùng passkey (bằng header Permissions-Policy), và
+  không tải script đó trên trang đang giữ khóa.
 
 ## Những gì chưa được kiểm toán
 
-- **Các hợp đồng của chính Vela.** Hai hợp đồng nhỏ do chúng tôi tự viết, triển khai
-  trên Gnosis:
-  [chỉ mục khóa công khai passkey](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools)
-  (một sổ chỉ-thêm giúp các thiết bị của bạn tìm ra khóa công khai) và hợp đồng phụ trợ
-  gộp lô của nó. Chúng chưa được kiểm toán. Theo cấu tạo, chúng không giữ tiền, không
-  có chủ sở hữu và không nâng cấp được — đó là lớp tra cứu, không phải lớp cấp quyền.
-  Quyền chi tiêu luôn đến từ passkey được cấu hình bên trong Safe của bạn. Sự cố tệ nhất
-  có thể hình dung là quấy rối (ai đó chiếm chỗ một mục trong chỉ mục), khiến việc khôi
-  phục bất tiện hơn chứ không chuyển được tiền. Một hợp đồng chia tiền thanh toán gas từ
-  thiết kế phí cũ nay không còn nằm trong luồng giao dịch.
-- **Multicall3.** Chính README của nó
-  [nói thẳng](https://github.com/mds1/multicall3): "This contract is unaudited." Chúng
-  tôi dùng nó đúng theo cách mà tác giả mô tả là an toàn — gộp lô các lệnh gọi chỉ đọc
-  để lấy số dư, metadata token và báo giá. Vela không bao giờ cấp quyền cho nó và nó
-  không bao giờ giữ tiền. Hậu quả xấu nhất của một lỗi là đọc ra số liệu sai.
-- **Bộ triển khai CREATE2.**
-  [Proxy triển khai tất định của Arachnid](https://github.com/Arachnid/deterministic-deployment-proxy)
-  là bộ triển khai phi trạng thái tiêu chuẩn của hệ sinh thái; nó không có kiểm toán
-  chính thức. Các bước kiểm tra mạng của chúng tôi sẽ thất bại theo hướng an toàn nếu
-  nó thiếu hoặc bị sửa trên một chuỗi.
-- **Tempo và pathUSD.** Tempo, một trong mười hai mạng có sẵn của chúng tôi, không có
-  đồng gốc; gas ở đó thanh toán bằng stablecoin pathUSD. Tính tới tháng 8/2026, cả giao
-  thức lõi của Tempo lẫn pathUSD đều chưa có kiểm toán bảo mật công bố hay chương trình
-  thưởng lỗi, và một
-  [đánh giá tài sản thế chấp độc lập của DefiLlama](https://artifacts.llama.fi/md-exports/pathusd-collateral-assessment-april2026-1776332825042.md)
-  (tháng 4/2026) xếp pathUSD ở mức rủi ro cao. Đây là rủi ro ở tầng chuỗi mà không ví
-  nào giảm nhẹ được: tiền bạn giữ trên Tempo, và việc thanh toán gas ở đó, đều thừa
-  hưởng nó. Hãy coi Tempo là chuỗi mới nhất và ít được kiểm chứng nhất trong danh sách
-  và cân đối số dư cho phù hợp. Chúng tôi sẽ cập nhật mục này khi có kiểm toán được công
-  bố.
-- **Bản thân Vela.** Ứng dụng và các dịch vụ phía sau của chúng tôi chưa qua kiểm toán
-  bên thứ ba. Đó là lưu ý lớn nhất trên trang này, chúng tôi ghi nó ngay ở đầu trang
-  web, và chi tiết thật thà nằm ở [Vela đang ở giai đoạn alpha](/blog/vela-is-in-alpha).
-  Hãy bắt đầu với số nhỏ. Hãy đọc mã nguồn.
+- **Các hợp đồng của chính Vela.**
+  [Sổ đăng ký khóa công khai](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)
+  tại `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` (Gnosis; cùng địa chỉ trên Ethereum và
+  Base), bản triển khai sổ đăng ký ban đầu tại `0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf`
+  (địa chỉ của nó là một phần trong miền chữ ký của mọi lần đăng ký), và chỉ mục cũ mà chúng
+  đã thay thế (`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`, lịch sử chỉ đọc). Chúng chưa
+  được kiểm toán. Chúng không giữ tiền, không có chủ sở hữu và không thể nâng cấp; chúng là
+  một lớp tra cứu, không phải lớp cấp quyền. Quyền chi tiêu chỉ đến từ các khóa được cấu
+  hình trong Safe của bạn. Trường hợp xấu nhất có thể xảy ra trên thực tế là một ví khó tìm
+  hơn trên thiết bị mới, chứ không phải tiền bị chuyển đi.
+- **Multicall3.** README của nó
+  [ghi rõ](https://github.com/mds1/multicall3) "This contract is unaudited." (hợp đồng này
+  chưa được kiểm toán). Vela chỉ dùng nó để đọc theo lô — số dư, thông tin token, báo giá —
+  không bao giờ dùng với lệnh cấp quyền hay với tiền.
+- **Các bộ triển khai tất định** (CREATE2 proxy của Arachnid và singleton factory của Safe)
+  — chuẩn chung của hệ sinh thái và không có trạng thái, nhưng chưa được kiểm toán chính
+  thức. Bước kiểm tra mạng của Vela sẽ từ chối nếu chúng không có mặt; nó kiểm tra rằng có
+  mã tại địa chỉ đó, chứ không so khớp từng byte.
+- **Tempo.** Một trong 24 mạng tích hợp sẵn, không có coin gốc; Vela trả gas ở đó bằng
+  stablecoin pathUSD. Tính đến tháng 9/2026,
+  [chính sách bảo mật](https://github.com/tempoxyz/.github/blob/main/SECURITY.md) của Tempo
+  cho biết giao thức vẫn đang được kiểm toán và chưa có chương trình thưởng lỗi nào đang
+  hoạt động. Tiền giữ trên Tempo, và gas trả ở đó, mang rủi ro ở cấp chuỗi này; hãy coi nó
+  là chuỗi mới nhất và ít được kiểm chứng nhất trong danh sách.
+- **Chính Vela.** Các ứng dụng, dịch vụ phía sau và các hợp đồng nêu trên chưa được bên thứ
+  ba kiểm toán, và cũng chưa có lịch kiểm toán nào. Đó là lưu ý lớn nhất trên trang này.
+  Chi tiết nằm ở [Vela is in alpha](/blog/vela-is-in-alpha). Hãy bắt đầu với số tiền nhỏ,
+  và đọc mã nguồn.
 
-## Tự kiểm tra
+## Tự mình kiểm tra
 
-Mọi địa chỉ ở trên đều là bản triển khai công khai chuẩn mà bạn đối chiếu được với các
-sổ đăng ký chính thức —
+Mọi địa chỉ dưới đây đều là bản triển khai chính thức công khai. Hãy đối chiếu chúng với
 [safe-deployments](https://github.com/safe-global/safe-deployments),
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
-và [ghi chú phát hành EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
+và [bản phát hành EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
 
-| Hợp đồng | Địa chỉ |
-| ----------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1 | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1 | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| CompatibilityFallbackHandler v1.4.1 | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| MultiSend v1.4.1 | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| SafeModuleSetup v0.3.0 | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0 | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| Chỉ mục khóa công khai passkey (Gnosis) | `0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3` |
+| Hợp đồng                                  | Địa chỉ                                      |
+| ----------------------------------------- | -------------------------------------------- |
+| Singleton SafeL2 v1.4.1                   | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| Singleton SafeWebAuthnSigner v0.2.1       | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Sổ đăng ký khóa công khai (Vela, chưa kiểm toán) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+
+¹ Được kiểm tra khi thêm một mạng; Safe của bạn dùng mô-đun 4337 làm fallback handler thay
+cho nó.

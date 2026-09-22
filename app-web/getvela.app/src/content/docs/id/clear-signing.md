@@ -1,6 +1,7 @@
 ---
 title: Clear signing
-description: Vela menerjemahkan transaksi ke bahasa yang jelas sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa menerjemahkan, ia memperingatkan Anda, bukan berpura-pura.
+description: "Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham."
+source: 858d8631b7e5
 ---
 
 <script>
@@ -9,82 +10,96 @@ description: Vela menerjemahkan transaksi ke bahasa yang jelas sebelum Anda meny
 
 # Clear signing
 
-Sebagian besar dompet meminta Anda menyetujui dinding heksadesimal lalu berharap yang
-terbaik. "Tanda tangan buta" — menyetujui panggilan yang sebenarnya tidak bisa Anda
-baca — ada di balik sebagian besar dompet yang terkuras. Jawaban Vela adalah **clear
-signing**: sebelum Anda menandatangani, transaksinya diterjemahkan menjadi sesuatu
-yang bisa Anda pahami.
+Banyak dompet masih menampilkan data mentah untuk kontrak apa pun yang tidak mereka
+kenali, dan "tanda tangan buta" (blind signing) — menyetujui panggilan yang sebenarnya
+tidak bisa Anda baca — adalah salah satu cara dompet dikuras. Jawaban Vela adalah
+**clear signing**: sebelum Anda menandatangani, transaksinya didekode menjadi sesuatu
+yang bisa Anda pahami, sejauh mungkin.
 
-## Yang Anda lihat
+## Apa yang Anda lihat
 
 Alih-alih calldata mentah, Vela menampilkan:
 
 - **Maksud** — apa yang dilakukan transaksi itu: *Kirim*, *Setujui*, *Tukar*, dan
   seterusnya.
-- **Intinya** — jumlah dan alamat yang terlibat, dengan jumlah token dalam satuan
-  sebenarnya dan penerima yang diterjemahkan menjadi nama bila ada.
-- **Detailnya** — nonce, tenggat, dan calldata mentah, tersedia saat diminta alih-alih
-  disodorkan ke muka Anda.
-- **Indikasi risiko**, dengan kode warna, supaya yang menakutkan terlihat menakutkan.
+- **Intinya** — jumlah dan alamat yang terlibat, dengan jumlah token ditampilkan dalam
+  satuan sebenarnya dan penerima diubah menjadi nama bila namanya ada.
+- **Detailnya** — nonce, tenggat, dan calldata mentah, tersedia saat Anda butuhkan
+  alih-alih disodorkan ke muka Anda.
+- **Indikasi risiko**, dengan kode warna supaya tindakan berbahaya langsung menonjol.
 
 ## Cara kerjanya (ERC-7730)
 
-Vela menerjemahkan **panggilan kontrak** maupun **data bertipe EIP-712** memakai
-deskriptor
-[ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry) — definisi
-kecil yang bisa dibagikan tentang arti fungsi-fungsi sebuah kontrak.
+Vela mendekode **panggilan kontrak** maupun **typed data EIP-712** memakai deskriptor
+[ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry) — definisi kecil
+yang bisa dibagikan tentang arti fungsi-fungsi sebuah kontrak.
 
-- Kalau ada **deskriptor khusus kontrak**, transaksinya ditandai **terverifikasi** dan
-  diberi label dengan nama kontraknya.
-- Kalau tidak ada, Vela turun ke **deskriptor standar** untuk bentuk-bentuk umum —
-  token ERC-20, NFT ERC-721, vault ERC-4626, dan permit ERC-2612 — sehingga sebagian
-  besar aktivitas sehari-hari tetap terbaca.
+Vela mencari deskriptor dengan urutan ini:
 
-Jumlah token diformat memakai **desimal on-chain sebenarnya** milik token itu. Vela
-tidak pernah begitu saja mengasumsikan 18; kalau desimalnya tidak bisa dipastikan, ia
-tetap menampilkan nilainya tetapi **menandainya belum terverifikasi** alih-alih
-menebak.
+1. **Bawaan aplikasi** — deskriptor untuk kontrak yang banyak dipakai: router Uniswap,
+   PancakeSwap, dan SushiSwap, WETH, pool Aave v3, 1inch, Lido dan wstETH, serta
+   Seaport.
+2. **Diambil dari server data chain milik Vela**, yang menerbitkan ulang registri
+   ERC-7730 publik.
+3. **Bentuk standar** — token ERC-20, NFT ERC-721 dan ERC-1155, vault ERC-4626, dan
+   permit ERC-2612 — jadi sebagian besar tindakan sehari-hari tetap bisa didekode.
+
+Kalau deskriptor yang ditulis khusus untuk kontrak itu cocok, transaksinya diberi label
+**terverifikasi** beserta nama kontraknya. "Terverifikasi" berarti *deskriptor untuk
+kontrak ini ditemukan*, bukan bahwa deskriptor itu diperiksa secara kriptografis:
+deskriptor yang diambil dari server data chain tidak ditandatangani, jadi tingkat
+kepercayaannya hanya setinggi server itu — itulah salah satu alasan Anda bisa
+[menjalankan server sendiri](/id/docs/self-hosting#chain-data).
+
+Jumlah token diformat dengan **desimal on-chain token yang sebenarnya**. Kalau Vela
+tidak bisa memastikan desimal sebuah token, jumlahnya ditampilkan seolah token itu punya
+18 desimal dan **ditandai belum terverifikasi**, supaya angka yang salah tidak pernah
+terlihat seperti angka yang sudah diperiksa.
 
 ## Tingkat risiko
 
-Setiap transaksi yang berhasil diterjemahkan mendapat tingkat risiko agar pola
-berbahaya menonjol:
+Setiap transaksi yang didekode mendapat tingkat risiko supaya pola berbahaya langsung
+menonjol:
 
-- **Hati-hati** untuk persetujuan dan permit — Anda sedang memberi daya belanja.
-- **Bahaya** untuk yang benar-benar berisiko, seperti **persetujuan token tanpa
-  batas**.
+- **Hati-hati** untuk persetujuan dan permit — Anda memberi izin untuk membelanjakan.
+- **Bahaya** untuk yang benar-benar berisiko, seperti **persetujuan token tanpa batas**.
 - Risiko lebih rendah untuk tindakan rutin seperti staking atau menyetor.
 
-<Callout type="warning" title="Persetujuan tanpa batas diblokir">
-Sebuah "approve" yang memberi jatah tanpa batas adalah salah satu cara paling umum
-dana terkuras belakangan. Vela tidak sekadar menandainya: ia menulis ulang
-permintaannya menjadi jumlah terbatas pilihan Anda, dan pemeriksaan terakhir sebelum
-pengiriman menolak mengirim persetujuan apa pun yang masih tanpa batas. Penjaga itu
-membaca calldata mentah secara langsung, jadi ia bekerja bahkan saat tidak ada
-deskriptor untuk kontrak tersebut.
+<Callout type="warning" title="Persetujuan on-chain “tanpa batas” tidak bisa dikirim">
+Persetujuan on-chain dengan jumlah tanpa batas adalah salah satu cara paling umum dana
+dikuras di kemudian hari. Saat dApp meminta persetujuan seperti itu (<code>approve</code>,
+<code>increaseAllowance</code>, atau <code>approve</code> milik Permit2) di tingkat
+"tanpa batas" — 2^200 atau lebih (2^152 untuk Permit2), angka yang dipakai dApp untuk
+"tanpa batas" — Vela tidak akan mengirimnya sampai Anda mengubahnya menjadi jumlah
+tertentu, sebesar saldo Anda, atau pencabutan; pemeriksaan terakhir sebelum pengiriman
+membaca calldata mentah, jadi pemeriksaan ini berlaku dengan atau tanpa deskriptor. Yang
+tidak dihentikannya: <strong>persetujuan besar yang terbatas</strong> (bahkan jauh di
+atas saldo Anda), <strong>permit yang ditandatangani</strong> (tanda tangan EIP-2612 dan
+Permit2), dan <code>setApprovalForAll</code> untuk NFT — masing-masing ditampilkan dengan
+peringatan hati-hati, dan keputusannya ada di tangan Anda.
 </Callout>
 
-## Saat Vela tidak bisa menerjemahkan sebuah panggilan
+## Kalau Vela tidak bisa mendekode sebuah panggilan
 
-Kejujuran lebih penting daripada layar yang rapi. Kalau tidak ada deskriptor ERC-7730
-tetapi fungsinya muncul di basis data selector publik, Vela menerjemahkan panggilan itu
-secara umum dan melabelinya **upaya terbaik** — terbaca, tetapi belum terverifikasi —
-di bawah spanduk peringatan. Kalau itu pun gagal, atau Vela hanya bisa menerjemahkan
-sebagian transaksi, ia **tidak** berpura-pura memahaminya.
+Kalau tidak ada deskriptor ERC-7730 tetapi fungsinya tercantum di basis data selector
+publik, Vela mendekode panggilan itu secara umum dan memberinya label **upaya terbaik**
+(best effort) — sudah didekode, tetapi belum terverifikasi — di bawah spanduk peringatan.
+Kalau cara itu pun gagal, atau Vela hanya bisa mendekode sebagian transaksi, Vela
+**tidak** berpura-pura memahaminya.
 
 <Callout type="danger" title="Peringatan tanda tangan buta yang tegas">
-Kalau sebuah panggilan tidak bisa diterjemahkan, Vela menampilkan peringatan tanda
-tangan buta yang jelas alih-alih ringkasan ramah yang palsu. Kalau hanya sebagian
-kolom yang bisa dipecahkan, ia memberi tahu Anda bahwa tampilannya belum lengkap dan
-menahan tingkat risikonya tetap tinggi. Anda selalu tahu seberapa banyak dari yang
-Anda tandatangani yang benar-benar bisa dibaca Vela.
+Kalau sebuah panggilan tidak bisa didekode, Vela menampilkan peringatan tanda tangan
+buta yang jelas, bukan ringkasan yang pura-pura ramah. Kalau hanya sebagian kolom yang
+bisa diurai, Vela memberi tahu bahwa tampilannya tidak lengkap dan tetap menjaga tingkat
+risikonya tinggi. Anda selalu tahu seberapa banyak dari yang Anda tandatangani yang
+benar-benar bisa dibaca Vela.
 </Callout>
 
 ## Kenapa ini penting
 
-Swakelola berarti tidak ada yang bisa membatalkan transaksi buruk untuk Anda.
-Pertahanannya bukan meja bantuan — melainkan memahami apa yang Anda setujui
-**sebelum** Anda menyetujuinya. Clear signing mengubah "percayalah pada gumpalan tak
-terbaca ini" menjadi "inilah persisnya apa yang dilakukannya". Lihat
-[whitepaper](/id/docs/whitepaper) untuk tahu di mana posisinya dalam model keamanan
-Vela secara keseluruhan.
+Di dompet non-kustodial, tidak ada yang bisa membatalkan transaksi buruk untuk Anda.
+Pertahanannya bukan layanan pelanggan — melainkan memahami apa yang Anda setujui
+**sebelum** Anda menyetujuinya. Clear signing adalah cara Vela berusaha menunjukkan hal
+itu, dan ada batasnya: clear signing hanya bisa sejujur aplikasi yang menampilkannya,
+itulah sebabnya [pemeriksaan independen](/id/docs/clear-signing-self-host) penting.
+Lihat [whitepaper](/id/docs/whitepaper) untuk posisinya dalam model keamanan Vela.

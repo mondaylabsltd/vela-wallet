@@ -1,61 +1,77 @@
 ---
 title: 常见问题
-description: 关于 Vela 的常见问题——托管、通行密钥、智能账户、恢复、支持的网络、费用与隐私。
+description: "关于托管、钥匙、恢复、网络、费用、Vela 能看到什么、开源，以及 Vela 不在了会怎样的简短回答。"
+source: 7446e22f990d
 ---
 
 # 常见问题
 
 ## Vela 是自托管的吗？
 
-是。你的钱包是一个智能账户，由一把只有你能用的钥匙控制；这把钥匙由你设备的操作
-系统保管，Vela 从来看不到。Vela 无法转移、冻结或者找回你的资金。
-
-## 我的钱包是普通账户还是合约？
-
-它是一个 **Safe 智能账户**（一个智能合约），通过 ERC-4337 账户抽象来操作。正是
-这一点让你可以用通行密钥签名、在批准前读懂每一笔交易，并且在每条网络上用同一个
-地址。架构见[白皮书](/zh/docs/whitepaper)。
+是的。你的钱包是一个 Safe 智能账户，只受你的钥匙控制，而钥匙留在你的设备、你的密码管理器或你的
+安全密钥里。Vela 不持有任何钥匙，在账户上也没有任何角色，所以它自己无法动用、冻结或找回你的资金。但
+请你的钥匙签名的软件是它写的——见[威胁模型](/zh/docs/whitepaper)。
 
 ## 真的没有助记词吗？
 
-真的没有。你的签名钥匙是一把由设备操作系统保管的通行密钥，Vela 永远看不到它。
-没有那十二个要抄下来、会弄丢、会被钓走的单词。为什么这样是安全的，见
-[通行密钥是怎么工作的](/zh/docs/passkeys)。
+真的没有。你的钥匙是通行密钥，而通行密钥没有可以抄下来或输入的秘密。见[通行密钥如何工作](/zh/docs/passkeys)。
 
-## 手机丢了会怎样？
+## 创建钱包需要什么？
 
-如果你的通行密钥通过 iCloud 钥匙串或者 Google 密码管理器同步，那就在新设备上用
-同一个账户登录，钱包就回来了。完整模型和它的边界，见[恢复与登录](/zh/docs/recovery)。
+一台支持通行密钥的设备（带面容、指纹或 Windows Hello 的较新手机或电脑），或者两把硬件安全密钥。不需要邮箱、不需要注册账户、也不需要预先充值。创建时最多可以加七把钥匙，之后不能再加。见
+[创建钱包](/zh/docs/create-wallet)。
+
+## 手机丢了怎么办？
+
+在新设备上用任意另一把钥匙登录：通过 iCloud 钥匙串或 Google 密码管理器同步过来的同一个通行密钥、
+另一部手机，或你的安全密钥。如果那部手机上存着你唯一的钥匙、而且没有同步，钱包就无法恢复。见
+[恢复与登录](/zh/docs/recovery)。
 
 ## 支持哪些网络和代币？
 
-Vela 内置 **12 条 EVM 网络**——以太坊、BNB Chain、Polygon、Arbitrum、Optimism、
-Base、Avalanche、Gnosis、Unichain、Tempo、Monad 和 World Chain——再加上你自己添加
-的网络，可以持有原生代币和 ERC-20。你的地址在所有网络上都一样。见
-[网络与费用](/zh/docs/networks-and-fees)。
+24 条内置 EVM 网络，包括 Ethereum、Base、Arbitrum、Optimism、Polygon、BNB Chain、Gnosis 和
+Avalanche，另外还可以添加任何满足要求的 EVM 网络。支持原生币和 ERC-20 代币。每条网络上都是同一个
+地址。见[网络与手续费](/zh/docs/networks-and-fees)。
 
-## 用起来要花多少钱？
+## 要花多少钱？
 
-钱包本身免费，Vela **没有代币**。你从自己的钱包余额里支付网络 **gas**，再加一笔
-中继费。价格由中继器报出，并且在**你签名之前**以「网络费 / 中继费 / 合计」的形式
-显示——每一笔交易的确切成本都在确认页上，而且报出的金额是你所签内容的一部分，
-签完就不会再变。非常便宜的交易可能会触发一个很小的最低收费。在没有原生币的 Tempo
-上，gas 用美元稳定币支付。另外每条网络都需要一笔很小的、**不可退还的押金来激活它的
-gas 中继账户**（Vela 可能会为新用户垫付）；由于那个账户会被慢慢用掉，之后你可能还
-要再补一次——它并不是严格意义上的一次性支出。细节见
-[网络与费用](/zh/docs/networks-and-fees)。
+- **App：**网页钱包、浏览器扩展和桌面版免费。iOS 和 Android App 将在商店以一次性买断的方式销售；
+  你也可以免费从源码编译任何一个 App。
+- **每笔交易：**从你的钱包付给提交它的中继一笔手续费——默认是 Vela 的中继，你也可以换成其他中继
+  或自己部署一个。它包含 gas 和中继的利润，最低约 0.01 美元。确切金额在你签名前显示在确认页上，
+  并写在你签名的内容里。没有押金，也没有订阅费。[手续费怎么算](/zh/docs/networks-and-fees#fee)。
+- **没有代币。**Vela 没有代币，也不打算发。
 
-## Vela（这家公司）能看到什么、能做什么？
+## 能用 Vela 连接 dApp 吗？
 
-Vela 保存你通行密钥的**公钥**和你起的**名字**，用于跨设备登录。它看不到你的私钥，
-你的余额是从公开链上读取的，也没有任何邮箱注册。以[隐私政策](/privacy)为准。
+能，通过 Vela 浏览器扩展（Chrome、Edge、Brave），以及桌面版（macOS、Windows）、iOS 和 Android App
+内置的浏览器。wallet.getvela.app 上的网页钱包不连接 dApp。见[安装](/zh/docs/install#dapps)。
 
-## Vela 是开源的吗？
+## Vela 能看到什么、能做什么？
 
-是——钱包和它的四项后端服务（链上数据、通行密钥索引、中继、汇率）都以 MIT 许可
-[公开在 GitHub 上](https://github.com/mondaylabsltd/vela-wallet)，你也可以自行部署。
+Vela 读不到你的钥匙，自己也动不了你的资金。它的服务能看到你的 IP 地址，以及 App 向它们询问的内容：
+登记新钱包时，索引能看到你的公钥和钱包名称，也能看到你查询名字的地址；中继能看到你的地址、你提交的
+操作，以及你的 App 使用的 RPC 节点；链数据服务能看到你的 App 查询了哪些代币和合约。哪些内容会公开在链上，见[创建钱包](/zh/docs/create-wallet#what-is-public)。完整、权威的说明
+以[隐私政策](/privacy)为准。
 
-## 我有个问题这里没有。
+## Vela 开源吗？
 
-在 [GitHub](https://github.com/mondaylabsltd/vela-wallet) 上开一个 issue，或者在
-[X](https://x.com/realvelawallet) 或 [Telegram](https://t.me/velawallet) 上找我们。
+全部开源，都采用 MIT 许可：钱包 App 和核心、中继、公钥索引、汇率服务和链数据目录，代码都在
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories) 上。每一项服务你都可以自己运行——
+见[自托管指南](/zh/docs/self-hosting)。
+
+## Vela 经过审计吗？
+
+存放你资金的合约——Safe 及其模块、ERC-4337 EntryPoint——都经过审计。Vela 自己的代码没有，目前也
+没有排期。见[审计与已知问题](/zh/docs/security-audits)。
+
+## 如果 Vela 关门了呢？
+
+你的资金留在链上你自己的 Safe 里。对于已有的钱包，Vela 浏览器扩展和你自己编译的 App 不依赖
+getvela.app 也能继续用，每一项服务都是开源的、别人也能运行。[自托管指南](/zh/docs/self-hosting#if-getvela-app-disappears)
+列出了每条路及其限制。
+
+## 我的问题这里没有。
+
+在 [GitHub](https://github.com/mondaylabsltd/vela-wallet/issues) 上提 issue，或者通过
+[X](https://x.com/realvelawallet)、[Telegram](https://t.me/velawallet) 联系我们。

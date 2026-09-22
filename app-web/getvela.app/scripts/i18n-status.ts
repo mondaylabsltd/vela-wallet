@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { en } from '../src/lib/i18n/messages/en.ts';
+import { docFingerprint, recordedSource } from './doc-fingerprint.ts';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, type Locale } from '../src/lib/i18n/locales.ts';
 
 const here = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
@@ -74,6 +75,8 @@ interface Row {
 	fallback: number;
 	stale: number;
 	staleNames: string[];
+	/** Translated docs with no `source:` stamp — their freshness is unknown. */
+	unstamped: number;
 	state: string;
 	date: string;
 }
@@ -90,6 +93,7 @@ for (const locale of SUPPORTED_LOCALES) {
 			fallback: 0,
 			stale: 0,
 			staleNames: [],
+			unstamped: 0,
 			state: 'source',
 			date: ''
 		});
@@ -100,6 +104,7 @@ for (const locale of SUPPORTED_LOCALES) {
 	const fingerprints = (t._fingerprints ?? {}) as Record<string, string>;
 	let translated = 0;
 	let stale = 0;
+	let unstamped = 0;
 	const staleNames: string[] = [];
 
 	for (const ns of PAGE_NAMESPACES) {
@@ -112,7 +117,15 @@ for (const locale of SUPPORTED_LOCALES) {
 		}
 	}
 	for (const slug of docSlugs) {
-		if (docExists(locale, slug)) translated++;
+		if (!docExists(locale, slug)) continue;
+		translated++;
+		const recorded = recordedSource(readFileSync(here(`${DOCS}/${locale}/${slug}.md`), 'utf8'));
+		if (recorded === null) {
+			unstamped++;
+		} else if (recorded !== docFingerprint(here(`${DOCS}/${slug}.md`))) {
+			stale++;
+			staleNames.push(`docs/${slug}`);
+		}
 	}
 
 	const r = review[locale] ?? { state: 'drafted' };
@@ -123,6 +136,7 @@ for (const locale of SUPPORTED_LOCALES) {
 		fallback: totalPages - translated,
 		stale,
 		staleNames,
+		unstamped,
 		state: r.state,
 		date: r.date ?? ''
 	});
@@ -149,6 +163,14 @@ const staleRows = rows.filter((r) => r.stale > 0);
 if (staleRows.length) {
 	console.log('\nSTALE — the English changed after these were translated:');
 	for (const r of staleRows) console.log(`  ${r.locale}: ${r.staleNames.join(', ')}`);
+}
+
+const unstampedRows = rows.filter((r) => r.unstamped > 0);
+if (unstampedRows.length) {
+	console.log(
+		'\nUNSTAMPED docs (no `source:` — freshness unknown; run i18n:stamp after re-aligning):'
+	);
+	for (const r of unstampedRows) console.log(`  ${r.locale}: ${r.unstamped}`);
 }
 
 const reviewed = rows.filter((r) => r.state === 'reviewed').map((r) => r.locale);

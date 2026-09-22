@@ -14,11 +14,17 @@ thing and sign another. That is exactly what happened to
 The signing page exists to split that in two: the transaction comes from one
 place, and the check and the signature happen somewhere you control.
 
+**Status:** built and tested locally; **not published**, and **no Vela app sends
+requests to it yet**. Today it is something to read, run and try with the demo
+requesters in its `samples/` folder. Using it for real signatures needs the apps
+to route their requests to it, which is still to be built.
+
 ## What it is
 
 One folder — `app-web/clearsigning` in the repository — that is both a web page
 and a Chrome extension. Pure HTML, CSS and JavaScript: no framework, no
-bundler, no build step, no dependencies, and no network requests of its own.
+bundler, no build step, no dependencies, and no data fetched from a server —
+its only request is for decorative token logos.
 
 Given a signing request it does not trust the summary that came with it. It
 decodes the raw calldata itself, computes its own digest, shows you what the
@@ -34,16 +40,18 @@ registered under `getvela.app`, and a browser will only offer them to a page
 whose relying party is `getvela.app`. That single rule decides which way of
 running your own copy is useful to you.
 
-**As a Chrome extension — the one to use with your existing wallet.** The
+**As a Chrome extension — the way to use it with your existing keys.** The
 extension's relying party is `getvela.app` regardless of where the folder came
 from, so your existing keys can sign in it, while the code is the folder you
 loaded and inspected.
 
-1. Open `chrome://extensions` and turn on **Developer mode**.
-2. **Load unpacked**, and pick the `app-web/clearsigning` folder.
-3. The toolbar icon opens the page in a tab.
+1. Get the folder: `git clone https://github.com/mondaylabsltd/vela-wallet`
+   (it is `app-web/clearsigning` inside).
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. **Load unpacked**, and pick the `app-web/clearsigning` folder.
+4. The toolbar icon opens the page in a tab.
 
-**As a page on your own domain, or on localhost.** Served over HTTP(S), the
+**As a page on your own domain, or on localhost.** Served over HTTPS (or from localhost), the
 page's relying party is its own hostname — so it can sign with keys registered
 under _that_ hostname, not with keys registered under `getvela.app`. That makes
 it the right way to try the whole ceremony end to end, to run the desktop flow,
@@ -69,7 +77,7 @@ around — with no origin, there is no relying party and nothing can be signed.
   refusal, not a signature.
 - **It checks the transaction is the one that was requested.** The call the
   site asked for has to actually be inside the operation being signed.
-- **It refuses an unlimited approval.** Not a warning — a refusal, with a
+- **It refuses an approval at the "unlimited" level.** Not a warning — a refusal, with a
   pointer to what to do instead.
 - **It says when it cannot read something,** instead of showing a friendly
   summary it cannot stand behind.
@@ -84,7 +92,9 @@ around — with no origin, there is no relying party and nothing can be signed.
   the disease this page exists to prevent.
 - **No key creation.** The signing page cannot create a passkey. Creating one
   would be creating a different account.
-- **No network requests.** Nothing to fetch means nothing to intercept.
+- **No data from the network.** Nothing it shows or signs is fetched. The only
+  thing it loads is token logos, as images, from Vela's chain-data server; if
+  they fail, a letter takes their place.
 
 ## How a request reaches it
 
@@ -92,15 +102,16 @@ around — with no origin, there is no relying party and nothing can be signed.
 | -------------------------------------------- | -------------------------------------------------------------------------- |
 | A page in the same browser                   | `postMessage`                                                              |
 | A page in the same browser, to the extension | Extension port                                                             |
-| A desktop app on the same machine            | URL fragment + loopback callback                                           |
+| A desktop app on the same machine            | URL fragment + loopback callback (demo in `samples/`; the Vela desktop app doesn't use it yet) |
 | A phone or another computer                  | Bluetooth LE (protocol implemented; radio not yet tested on real hardware) |
 
 The wire format, the digests, and a table of where every item on the screen
 comes from are in `PROTOCOL.md` beside the code.
 
-## When to use it
+## Where it fits
 
-The day the account holds money you would mind losing — and from then on, for
-every signature. Not only for large amounts: a small approval can hand over
-enough to empty an account. A signing habit kept for special occasions is not
-in place on the day it is needed.
+Once the apps can hand their requests to it, the intended use is simple: from
+the day the account holds money you would mind losing, every signature goes
+through a page whose code you loaded yourself. Not only for large amounts — a
+small approval can hand over enough to empty an account. Until then, the page is
+a way to read and test exactly how that second opinion will work.

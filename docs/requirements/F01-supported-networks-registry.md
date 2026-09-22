@@ -1,4 +1,4 @@
-# F01 · Supported Networks Registry (12 Chains + Custom)
+# F01 · Supported Networks Registry (24 Chains + Custom)
 
 | | |
 |---|---|
@@ -10,10 +10,11 @@
 
 ## 1. Summary
 
-Vela ships a registry of **12 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, **Unichain, Tempo, Monad, World Chain** — plus **user-added custom chains** (F02).
+Vela ships a registry of **24 EVM networks** (12 until 2026-09-17, specs 060/061) — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
+Avalanche, Gnosis, **Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH,
+Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM** — plus **user-added custom chains** (F02).
 Each entry carries chainId, native coin, logos, and per-chain config that the rest of the app keys off.
-(The root README's "8 networks" is stale.)
+(Source of truth: `BUILTIN_CHAINS` in `rust/crates/vela-core/src/app/network_admin.rs`; the site's list is checked against it by `app-web/getvela.app/src/lib/networks.test.ts`.)
 
 ## 2. Background & context
 
@@ -28,7 +29,7 @@ a contract-suite check (F02). Tempo is special: no native coin, gas in stablecoi
 
 ## 4. Functional requirements
 
-- **FR-1** — Provide the 12 built-in chains with chainId, native symbol/decimals, display name, and logo.
+- **FR-1** — Provide the 24 built-in chains with chainId, native symbol/decimals, display name, and logo.
 - **FR-2** — Mark chain-specific traits: Tempo has no native coin (stablecoin gas, G10); L2 gas bumps (G03).
 - **FR-3** — Allow user-added custom chains, persisted locally (A06) after validation (F02).
 - **FR-4** — Expose the active/selected network to balances (D02), pricing (E01), send (H01), and dApp capability advertisement (K04).
@@ -44,7 +45,7 @@ Network filter/selection surfaces (NetworkFilterSheet) let users scope views per
 
 ## 7. Acceptance criteria
 
-- [ ] **AC-1** — All 12 chains appear with correct native coin and logo.
+- [ ] **AC-1** — All 24 chains appear with correct native coin and logo.
 - [ ] **AC-2** — Tempo is flagged as stablecoin-gas (no native coin).
 - [ ] **AC-3** — A validated custom chain persists and participates in balances/send.
 
@@ -59,5 +60,5 @@ Network filter/selection surfaces (NetworkFilterSheet) let users scope views per
 
 ## 10. Source anchors
 
-- `src/models/chains.ts:42-119` — the 12-chain registry.
+- `rust/crates/vela-core/src/app/network_admin.rs` `BUILTIN_CHAINS` — the 24-chain registry (the Expo-era `src/models/chains.ts` is gone).
 - `docs/CONTENT-SOURCE-100-CLUES.md` — clue 14.
