@@ -369,8 +369,11 @@ class OnboardingExecutor(
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(memberChallenge))
                 // Spec 075: a wallet signed into through the Clear Signer proves
                 // its members there too — the key is behind that page and no
-                // provider on this device holds it. `registry_publish` carries
-                // no `signer_origin`, so this opens the person's own page.
+                // provider on this device holds it. `RegistryPublishMember`
+                // carries no `signer_origin`, so the page comes from the stored
+                // key record instead; an unknown key falls back to the person's
+                // own page, which is right for a `getvela.app` key and the only
+                // guess available for anything else.
                 val assertion = if (method == KeyMethod.ClearSigner) {
                     assertionOf(
                         asserted(
@@ -380,7 +383,8 @@ class OnboardingExecutor(
                                     .put("credential_id", member.credentialIdHex)
                                     .put("public_key_hex", member.publicKeyHex)
                                     .put("attestation_hex", member.attestationHex)
-                                    .put("group_public_key_hex", groupPublicKey),
+                                    .put("group_public_key_hex", groupPublicKey)
+                                    .put("signer_origin", signerOriginOf(member.credentialIdHex)),
                                 expectedMemberChallenge = bytes,
                             ),
                         ),
@@ -429,6 +433,28 @@ class OnboardingExecutor(
      * judged. [expectedMemberChallenge] is the registry challenge this
      * executor fetched, which a member proof's answer must match exactly.
      */
+    /**
+     * The Clear Signer page a stored key lives behind, or empty.
+     *
+     * A lookup of a fact this device wrote down, not a decision: the create and
+     * sign-in machines stamped `signer_origin` on the key record, and the one
+     * operation that needs it (`registry_publish`'s live member proof) does not
+     * carry it.
+     */
+    private suspend fun signerOriginOf(credentialIdHex: String): String {
+        val accounts = runCatching { store.loadAccounts() }.getOrNull() ?: return ""
+        for (index in 0 until accounts.length()) {
+            val keys = accounts.optJSONObject(index)?.optJSONArray("keys") ?: continue
+            for (at in 0 until keys.length()) {
+                val key = keys.optJSONObject(at) ?: continue
+                if (key.optString("credential_id").equals(credentialIdHex, ignoreCase = true)) {
+                    return key.optString("signer_origin")
+                }
+            }
+        }
+        return ""
+    }
+
     private suspend fun onPage(
         operation: JSONObject,
         expectedMemberChallenge: ByteArray? = null,
@@ -464,13 +490,23 @@ class OnboardingExecutor(
      * already answers every ceremony's failure in.
      */
     private fun registered(outcome: ClearSignerCeremonyOutcome): JSONObject = when (outcome) {
-        is ClearSignerCeremonyOutcome.Registered -> JSONObject(outcome.registrationJson)
+        is ClearSignerCeremonyOutcome.Registered -> wire(outcome.registrationJson)
         else -> throw PasskeyFailure(FailureKind.Other, "The Clear Signer did not create a key")
     }
 
     private fun asserted(outcome: ClearSignerCeremonyOutcome): JSONObject = when (outcome) {
-        is ClearSignerCeremonyOutcome.Asserted -> JSONObject(outcome.assertionJson)
+        is ClearSignerCeremonyOutcome.Asserted -> wire(outcome.assertionJson)
         else -> throw PasskeyFailure(FailureKind.Other, "The Clear Signer did not sign")
+    }
+
+    /**
+     * A verdict's JSON, read. The bridge substitutes an empty string if the
+     * core could not serialise its own value, and an unreadable answer must
+     * reach the machine as a described ceremony failure rather than as a
+     * `JSONException` nobody on this path catches.
+     */
+    private fun wire(json: String): JSONObject = runCatching { JSONObject(json) }.getOrElse {
+        throw PasskeyFailure(FailureKind.Other, "The Clear Signer's answer could not be read")
     }
 
     /** The machine's `Assertion` wire, back as the shell's own value. */
