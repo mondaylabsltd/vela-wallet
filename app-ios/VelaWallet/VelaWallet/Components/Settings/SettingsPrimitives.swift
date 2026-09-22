@@ -293,7 +293,11 @@ struct SettingsSegmentedControl: View {
                 // strokeBorder leaves the fill untouched, so the whole cell has
                 // to be made hittable explicitly (button-feedback rule).
                 .contentShape(Rectangle())
-                .onTapGesture { onSelect(segment.id) }
+                // A pick that takes effect: Select, as Android's segments.
+                .onTapGesture {
+                    VelaHaptic.select.play()
+                    onSelect(segment.id)
+                }
             }
         }
         .padding(Tokens.Space.s4)

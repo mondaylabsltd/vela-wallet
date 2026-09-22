@@ -618,6 +618,7 @@ struct RootView: View {
                 // An empty name is not a group. The core would refuse it, and
                 // asking it to is how a blank row appears in a list.
                 guard !name.isEmpty else { return }
+                VelaHaptic.select.play()
                 contacts.saveGroup(id: target?.id, name: name)
             }
         }
@@ -1561,7 +1562,10 @@ struct RootView: View {
                                     address: contactAddress
                                 )
                             },
-                            onFavourite: { contacts.toggleFavorite(address: contact.address) },
+                            onFavourite: {
+                                VelaHaptic.select.play()
+                                contacts.toggleFavorite(address: contact.address)
+                            },
                             // 删除联系人 at the foot of the page shipped doing
                             // nothing too — the row swipe was the only way out.
                             onDelete: {
@@ -2204,6 +2208,7 @@ struct RootView: View {
         // A coin that cannot pay is not a choice — the row is disabled, and
         // this holds the same rule for any path that reaches here without it.
         guard let option = fees.view?.options[safe: index], !option.insufficient else { return }
+        VelaHaptic.select.play()
         let contract = option.contract
         fees.selectAsset(contract)
         send.chooseFeeToken(contract)
@@ -2388,6 +2393,7 @@ struct RootView: View {
                     onDeleteTx: { deleteOpenTransaction() },
                     chainSheet: chainSheet(for: state),
                     onPickChain: { chainId in
+                        VelaHaptic.select.play()
                         chainFilter = chainId
                         activity.chainFilter(chainId)
                     },
@@ -2415,7 +2421,10 @@ struct RootView: View {
                     sendCtaDisabled: sendCtaDisabled(state),
                     onSelectToken: selectSendToken,
                     onSelectAllTokens: { visible in selectAllValuable(visible) },
-                    onSendFilter: { id in sendClassFilter = id },
+                    onSendFilter: { id in
+                        VelaHaptic.select.play()
+                        sendClassFilter = id
+                    },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
                     onRemoveRecipient: { index in removeSplitRow(at: index) },
@@ -2509,7 +2518,9 @@ struct RootView: View {
     private func scanTool(_ tool: ScanTool) {
         switch tool {
         case .torch: camera.toggleTorch()
-        case .flip: camera.flip()
+        case .flip:
+            camera.flip()
+            VelaHaptic.select.play()
         case .gallery: pickCodeFromLibrary()
         }
     }
@@ -2721,7 +2732,10 @@ struct RootView: View {
                 onRemoveNetwork: { settings.deleteNetwork(id: $0) },
                 onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
-                onSelectChain: { settings.selectChain($0) },
+                onSelectChain: { chainId in
+                    VelaHaptic.select.play()
+                    settings.selectChain(chainId)
+                },
                 onEditCustomRpc: { settings.editCustomRpc($0) },
                 onRecheck: { settings.recheck(customRpc: $0) },
                 onConfirmAdd: { settings.confirmAdd() },
@@ -3035,8 +3049,10 @@ struct RootView: View {
         return true
     }
 
-    /// An account row in the switcher.
+    /// An account row in the switcher — from the wallet header, Explore or
+    /// Settings, every one a pick that takes effect.
     private func switchToAccount(_ address: String) {
+        VelaHaptic.select.play()
         Task {
             let records = await accounts.loadAccounts()
             guard let index = records.firstIndex(where: {
