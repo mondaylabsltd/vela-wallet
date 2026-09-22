@@ -27,7 +27,17 @@
 - [x] T009 The page's ceremony suite also judged by the real core (`clearSignerVerifyCeremony`), 61/61
 
 ## C — Shells (agents)
-- [ ] T030 Web: the fourth route in create / sign-in / backup; postMessage sessions; relay pairing sheet
+- [x] T030 Web: the fourth route in create / sign-in / backup; postMessage sessions; relay pairing sheet
+  — `AddMethodPicker` lists four (create's first key, "add another", the sign-in
+  sheet); the onboarding executor routes `method = clear_signer` to the page and
+  reports the core's verdict; one page visit per flow (create → member proof,
+  sign-in → proofs), ended with `bye` when the flow is; the relay requester runs
+  on WebCrypto, pinned to `tests/clear-signer/secure-session.json`; the sheet
+  asks where, draws the QR + link + the six digits, and sends nothing before the
+  confirm; a key with `signer_origin` is signed on ITS page, `auto` included;
+  Settings' relay row in both layouts. 1577 unit tests; e2e: create through the
+  page, sign in again, a signature for a key behind the page, and the same create
+  across two pages over the mock relay.
 - [ ] T031 Android: same, loopback WS sessions, relay pairing sheet, Settings relay row
 - [ ] T032 iOS: same
 - [ ] T033 Desktop: same; loopback WS replaces fragment + callback
