@@ -72,6 +72,13 @@ enum class KeyMethod(val wire: String) {
     Platform("platform"),
     Hybrid("hybrid"),
     SecurityKey("security_key"),
+
+    /**
+     * Spec 075: the Clear Signer — a page the person reads, which runs the
+     * WebAuthn ceremony itself. A passkey route of our own, beside the three
+     * the platform offers, and offered wherever they are.
+     */
+    ClearSigner("clear_signer"),
     ;
 
     companion object {

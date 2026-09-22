@@ -13,6 +13,7 @@ class SignPrefExecutor(private val store: KeyValueStore) {
         is SignPrefOperation.ReadStored -> SignPrefShellResult.Stored(
             method = store.read(KeyValueStore.Keys.SIGN_METHOD),
             signer_url = store.read(KeyValueStore.Keys.CLEAR_SIGNER_URL),
+            relay_url = store.read(KeyValueStore.Keys.CLEAR_SIGNER_RELAY),
         )
 
         // Best effort: the committed choice stays on screen either way.
@@ -25,6 +26,14 @@ class SignPrefExecutor(private val store: KeyValueStore) {
             val url = operation.url
             if (url == null) store.remove(KeyValueStore.Keys.CLEAR_SIGNER_URL)
             else store.write(KeyValueStore.Keys.CLEAR_SIGNER_URL, url)
+            SignPrefShellResult.Written
+        }
+
+        // Spec 075: the relay, the same way — a removed key is the official one.
+        is SignPrefOperation.WriteRelayUrl -> {
+            val url = operation.url
+            if (url == null) store.remove(KeyValueStore.Keys.CLEAR_SIGNER_RELAY)
+            else store.write(KeyValueStore.Keys.CLEAR_SIGNER_RELAY, url)
             SignPrefShellResult.Written
         }
     }
