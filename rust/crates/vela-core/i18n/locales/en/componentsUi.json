@@ -222,7 +222,11 @@
       "copyValue": "Copy",
       "signWith": "Sign with",
       "viewOnExplorer": "View on explorer",
-      "sendingToTokenContract": "Sent to the token’s own contract"
+      "sendingToTokenContract": "Sent to the token’s own contract",
+      "selfCallBlockedTitle": "Vela can’t sign this",
+      "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
+      "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
+      "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed."
     },
     "currency": {
       "title": "Display currency",

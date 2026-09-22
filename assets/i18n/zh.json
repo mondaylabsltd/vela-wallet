@@ -1350,7 +1350,11 @@
    "copyValue": "复制",
    "signWith": "签名方式",
    "viewOnExplorer": "在区块浏览器中查看",
-   "sendingToTokenContract": "发送到代币自身合约"
+   "sendingToTokenContract": "发送到代币自身合约",
+   "selfCallBlockedTitle": "Vela 不会签这笔请求",
+   "selfCallBlockedBody": "这笔请求会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了它。什么都没有签。",
+   "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
+   "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。"
   },
   "currency": {
    "title": "显示货币",

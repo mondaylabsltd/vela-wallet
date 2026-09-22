@@ -1340,7 +1340,11 @@
    "copyValue": "複製",
    "signWith": "簽署方式",
    "viewOnExplorer": "喺區塊瀏覽器睇",
-   "sendingToTokenContract": "傳送到代幣自己嘅合約"
+   "sendingToTokenContract": "傳送到代幣自己嘅合約",
+   "selfCallBlockedTitle": "Vela 不會簽這筆請求",
+   "selfCallBlockedBody": "這筆請求會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交給別人，所以 Vela 拒絕了它。什麼都沒有簽。",
+   "selfCallBlockedLegBody": "這筆請求的第 {{index}} 步會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交給別人，所以 Vela 拒絕了整筆請求。什麼都沒有簽。",
+   "selfCallBlockedSafeTx": "這筆請求要你的鎖匙授權一筆稍後才執行的 Safe 交易。Vela 拒絕了它——這種簽章可以在你不在場時使用。什麼都沒有簽。"
   },
   "currency": {
    "title": "顯示貨幣",

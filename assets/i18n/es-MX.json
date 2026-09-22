@@ -1343,7 +1343,11 @@
    "copyValue": "Copiar",
    "signWith": "Firmar con",
    "viewOnExplorer": "Ver en el explorador",
-   "sendingToTokenContract": "Enviado al contrato del propio token"
+   "sendingToTokenContract": "Enviado al contrato del propio token",
+   "selfCallBlockedTitle": "Vela no firma esta solicitud",
+   "selfCallBlockedBody": "Esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela la rechaza. No se firmó nada.",
+   "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
+   "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada."
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",

@@ -1340,7 +1340,11 @@
    "copyValue": "コピー",
    "signWith": "署名方法",
    "viewOnExplorer": "エクスプローラーで表示",
-   "sendingToTokenContract": "トークン自身のコントラクトへの送金"
+   "sendingToTokenContract": "トークン自身のコントラクトへの送金",
+   "selfCallBlockedTitle": "Vela はこの要求に署名しません",
+   "selfCallBlockedBody": "この要求は、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は拒否しました。何も署名していません。",
+   "selfCallBlockedLegBody": "この要求の {{index}} 番目の処理が、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は要求全体を拒否しました。何も署名していません。",
+   "selfCallBlockedSafeTx": "この要求は、後で実行される Safe トランザクションの承認を鍵に求めています。そのような署名はあなたがいない場所でも使えるため、Vela は拒否しました。何も署名していません。"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",

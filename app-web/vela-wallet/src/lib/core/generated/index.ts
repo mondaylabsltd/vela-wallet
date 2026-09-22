@@ -288,6 +288,7 @@ export * from './SessionSignOutView';
 export * from './SessionView';
 export * from './SignAccountRef';
 export * from './SignApproveOpts';
+export * from './SignBlockedView';
 export * from './SignDappIdentity';
 export * from './SignErrorKind';
 export * from './SignErrorNotice';

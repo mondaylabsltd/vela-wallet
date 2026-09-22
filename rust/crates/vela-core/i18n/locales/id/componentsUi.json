@@ -193,7 +193,11 @@
       "copyValue": "Salin",
       "signWith": "Tanda tangani dengan",
       "viewOnExplorer": "Lihat di explorer",
-      "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
+      "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri",
+      "selfCallBlockedTitle": "Vela tidak menandatangani permintaan ini",
+      "selfCallBlockedBody": "Permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolaknya. Tidak ada yang ditandatangani.",
+      "selfCallBlockedLegBody": "Langkah {{index}} pada permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolak seluruh permintaan. Tidak ada yang ditandatangani.",
+      "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani."
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

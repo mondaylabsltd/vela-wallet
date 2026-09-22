@@ -1343,7 +1343,11 @@
    "copyValue": "Copier",
    "signWith": "Signer avec",
    "viewOnExplorer": "Voir dans l’explorateur",
-   "sendingToTokenContract": "Envoyé au contrat du jeton lui-même"
+   "sendingToTokenContract": "Envoyé au contrat du jeton lui-même",
+   "selfCallBlockedTitle": "Vela ne signe pas cette demande",
+   "selfCallBlockedBody": "Cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela la refuse. Rien n’a été signé.",
+   "selfCallBlockedLegBody": "L’étape {{index}} de cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela refuse toute la demande. Rien n’a été signé.",
+   "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé."
   },
   "signingApprove": {
    "resultingTotal": "Nouvelle autorisation totale",

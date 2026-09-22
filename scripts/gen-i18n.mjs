@@ -329,12 +329,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `send.splitRemaining` is what is left to give out; `send.splitFillEmpty`
 //   puts one amount in every empty row. Everything ELSE those issues needed was
 //   already here, in all fifteen locales, unread. No new branch.
-// 1687 (merge of the two above, 2026-09-21): spec 068 and issue 686 added
-//   +13 leaf and the one `settings.feeSpeed` branch; issues 204-206 added +11
-//   leaf and no branch. The two sets share no path, so they simply add:
-//   1662 + 14 + 11 = 1687 = (1575 + 13 + 11) leaf + (87 + 1) branch.
-if (PATHS.length !== 1687) fail(`expected 1687 paths (1599 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1599) fail(`expected 1599 leaf paths, got ${leafSet.size}`);
+// 1691 (spec 081, 2026-09-22): the self-call guard's blocked sheet needs four
+//   leaves under the existing `componentsUi.signing` branch —
+//   `selfCallBlockedTitle`, `...Body`, `...LegBody` (the batch wording, with
+//   the 1-based step) and `...SafeTx` (the typed-data case, which names no
+//   function). No new branch: 1687 + 4 = 1691 = 1603 leaf + 88 branch.
+if (PATHS.length !== 1691) fail(`expected 1691 paths (1603 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1603) fail(`expected 1603 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

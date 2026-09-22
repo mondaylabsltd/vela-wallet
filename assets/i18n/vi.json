@@ -1340,7 +1340,11 @@
    "copyValue": "Sao chép",
    "signWith": "Ký bằng",
    "viewOnExplorer": "Xem trên explorer",
-   "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
+   "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
+   "selfCallBlockedTitle": "Vela không ký yêu cầu này",
+   "selfCallBlockedBody": "Yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối. Không có gì được ký.",
+   "selfCallBlockedLegBody": "Bước {{index}} của yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối toàn bộ yêu cầu. Không có gì được ký.",
+   "selfCallBlockedSafeTx": "Yêu cầu này muốn khóa của bạn phê duyệt một giao dịch Safe để thực thi sau. Vela từ chối — chữ ký như vậy có thể được dùng khi bạn không có mặt. Không có gì được ký."
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",
