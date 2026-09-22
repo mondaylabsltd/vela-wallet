@@ -207,3 +207,36 @@ export interface SigningMessages {
 	expiredValue: string;
 	sentToTokenContract: string;
 }
+
+/**
+ * The words the Clear Signer's own sheet reads, and nothing else.
+ *
+ * The sheet is drawn over the signing surfaces AND over the onboarding
+ * screens (spec 075: creating a wallet and signing in can run on the page
+ * too), and those two places resolve their copy differently — the signing
+ * surfaces hold a whole `SigningMessages`, the onboarding screens a flat map
+ * of corpus keys. One narrow shape lets both build the same model without
+ * either pretending to be the other.
+ */
+export type ClearSignerWords = Pick<
+	SigningMessages,
+	| 'close'
+	| 'clearSignerWaiting'
+	| 'clearSignerWaitingHint'
+	| 'clearSignerReopen'
+	| 'clearSignerCancel'
+	| 'clearSignerClosed'
+	| 'clearSignerRefused'
+	| 'clearSignerMismatch'
+	| 'clearSignerTimeout'
+	| 'clearSignerWhere'
+	| 'clearSignerThisDevice'
+	| 'clearSignerOtherDevice'
+	| 'clearSignerPair'
+	| 'clearSignerPairHint'
+	| 'clearSignerPairWaiting'
+	| 'clearSignerCopyLink'
+	| 'clearSignerCode'
+	| 'clearSignerCodeConfirm'
+	| 'clearSignerRelayDown'
+>;

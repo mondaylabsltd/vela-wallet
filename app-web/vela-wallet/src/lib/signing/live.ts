@@ -44,7 +44,7 @@ import { fill } from '$lib/wallet/messages';
 import { encodeQr } from '$lib/wallet/qr';
 import type { SignMethod } from '$lib/onboarding/core/passkey';
 import type { ClearSignerNotice } from './clear-signer';
-import type { SigningMessages } from './messages';
+import type { ClearSignerWords, SigningMessages } from './messages';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -617,7 +617,7 @@ export function clearSignerModel(
 		waiting: boolean;
 		notice: ClearSignerNotice | null;
 	},
-	m: SigningMessages
+	m: ClearSignerWords
 ): ClearSignerModel | null {
 	if (state.asking === true) {
 		return {

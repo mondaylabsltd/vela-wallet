@@ -265,7 +265,7 @@ export class SecureSession {
 				{
 					name: 'AES-GCM',
 					iv: iv as BufferSource,
-					additionalData: this.#aad(this.outgoing, counter) as BufferSource
+					additionalData: this.#additionalData(this.outgoing, counter) as BufferSource
 				},
 				this.#key,
 				plaintext as BufferSource
@@ -297,7 +297,7 @@ export class SecureSession {
 					{
 						name: 'AES-GCM',
 						iv: head as BufferSource,
-						additionalData: this.#aad(this.incoming, counter) as BufferSource
+						additionalData: this.#additionalData(this.incoming, counter) as BufferSource
 					},
 					this.#key,
 					sealed.subarray(12) as BufferSource
@@ -311,7 +311,7 @@ export class SecureSession {
 	}
 
 	/** The relay binds the IV's counter into the AAD (relay.md §2.5). */
-	#aad(direction: string, counter: bigint): Uint8Array {
+	#additionalData(direction: string, counter: bigint): Uint8Array {
 		return utf8(`${this.label}|${direction}|${counter.toString()}`);
 	}
 

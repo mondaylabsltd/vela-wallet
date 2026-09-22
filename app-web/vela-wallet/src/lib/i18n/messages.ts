@@ -203,6 +203,33 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.storage.resetCopy'
 ] as const;
 
+/**
+ * Spec 075: the Clear Signer's own sheet, drawn over the create flow and
+ * Welcome by `ClearSignerHost.svelte`. Creating a wallet and signing in can
+ * run on the signer page — on this device or another one — and the person
+ * needs the same words there that a signature gets.
+ */
+const FLOW_CLEAR_SIGNER_KEYS = [
+	'common.cancel',
+	'componentsUi.signing.clearSignerWaiting',
+	'componentsUi.signing.clearSignerWaitingHint',
+	'componentsUi.signing.clearSignerReopen',
+	'componentsUi.signing.clearSignerClosed',
+	'componentsUi.signing.clearSignerRefused',
+	'componentsUi.signing.clearSignerMismatch',
+	'componentsUi.signing.clearSignerTimeout',
+	'componentsUi.signing.clearSignerWhere',
+	'componentsUi.signing.clearSignerThisDevice',
+	'componentsUi.signing.clearSignerOtherDevice',
+	'componentsUi.signing.clearSignerPair',
+	'componentsUi.signing.clearSignerPairHint',
+	'componentsUi.signing.clearSignerPairWaiting',
+	'componentsUi.signing.clearSignerCopyLink',
+	'componentsUi.signing.clearSignerCode',
+	'componentsUi.signing.clearSignerCodeConfirm',
+	'componentsUi.signing.clearSignerRelayDown'
+] as const;
+
 /** The transient status line the create machine reports. */
 const FLOW_STATUS_KEYS = [
 	'onboarding.create.statusSettingUpIdentity',
@@ -237,6 +264,7 @@ export const FLOW_KEYS: readonly string[] = [
 		...FLOW_RAIL_KEYS,
 		...FLOW_FORM_KEYS,
 		...FLOW_KEYS_SCREEN_KEYS,
+		...FLOW_CLEAR_SIGNER_KEYS,
 		...FLOW_OUTCOME_SCREEN_KEYS,
 		...FLOW_PROMPT_KEYS,
 		...FLOW_STATUS_KEYS,

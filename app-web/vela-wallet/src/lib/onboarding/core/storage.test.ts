@@ -60,7 +60,10 @@ describe('loadAccounts', () => {
 	});
 
 	it('reads the retired client’s spelling and rewrites the list once', () => {
-		storage.setItem(STORAGE_KEYS.accounts, JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT]));
+		storage.setItem(
+			STORAGE_KEYS.accounts,
+			JSON.stringify([EXPO_WITH_KEYS, EXPO_WITHOUT_KEYS, CURRENT])
+		);
 		const accounts = loadAccounts();
 		expect(accounts.map((a) => a.public_key_hex)).toEqual(['04ab', '04cd', '04ef']);
 		expect(accounts[0].keys).toEqual([

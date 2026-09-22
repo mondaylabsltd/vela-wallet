@@ -107,7 +107,8 @@ export function normaliseAccount(record: unknown): Account | null {
 	const old =
 		'publicKeyHex' in r ||
 		'createdAt' in r ||
-		(Array.isArray(r.keys) && r.keys.some((k) => k && typeof k === 'object' && 'credentialId' in k)) ||
+		(Array.isArray(r.keys) &&
+			r.keys.some((k) => k && typeof k === 'object' && 'credentialId' in k)) ||
 		!Array.isArray(r.keys);
 	if (!old) return record as Account;
 	const keys = Array.isArray(r.keys) ? r.keys : [];

@@ -1799,7 +1799,10 @@ describe('the folded speed control (spec 068)', () => {
 	// while a send at the stored default adds no row, because most sends need
 	// no decision about speed and a permanent line would ask for one.
 	it('restates a chosen speed on the confirm, and only a chosen one', () => {
-		const chosen = liveSendConfirm(confirmModel(), speedInputs(false, 'slow', THREE, { picked: true }));
+		const chosen = liveSendConfirm(
+			confirmModel(),
+			speedInputs(false, 'slow', THREE, { picked: true })
+		);
 		expect(new Map(chosen.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
 			m['send.gasTier.slow']
 		);
@@ -1883,7 +1886,10 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('says why a slower default is running at the fastest speed', () => {
-			const model = liveSendForm(formModel(), speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true }));
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true })
+			);
 			// The summary names the tier actually in force…
 			expect(model.speed?.value).toBe(m['send.gasTier.fast']);
 			// …and says why, in the corpus's words.
@@ -1901,7 +1907,10 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('restates a free upgrade on the confirm, as it restates a pick', () => {
-			const model = liveSendConfirm(confirmModel(), speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true }));
+			const model = liveSendConfirm(
+				confirmModel(),
+				speedInputs(false, 'fast', FLOOR_CLAMPED, { free: true })
+			);
 			expect(new Map(model.facts.map((f) => [f.label, f.value])).get(m['send.feeSpeedLabel'])).toBe(
 				m['send.gasTier.fast']
 			);
@@ -1922,7 +1931,10 @@ describe('the folded speed control (spec 068)', () => {
 		];
 
 		it('says a network it already knows has one speed at once, while the rest re-measure', () => {
-			const model = liveSendForm(formModel(), speedInputs(true, 'fast', measuring, { oneSpeedKnown: true }));
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', measuring, { oneSpeedKnown: true })
+			);
 			expect(model.speed?.singleNote).toBe(m['send.feeSpeedSingle']);
 			// Unknown, the same frame is three rows still measuring — never a guess.
 			const unknown = liveSendForm(formModel(), speedInputs(true, 'fast', measuring));
@@ -1930,10 +1942,12 @@ describe('the folded speed control (spec 068)', () => {
 		});
 
 		it('lets settled numbers overrule what it remembered', () => {
-			const model = liveSendForm(formModel(), speedInputs(true, 'fast', FLOOR_CLAMPED, { oneSpeedKnown: true }));
+			const model = liveSendForm(
+				formModel(),
+				speedInputs(true, 'fast', FLOOR_CLAMPED, { oneSpeedKnown: true })
+			);
 			expect(model.speed?.singleNote).toBeUndefined();
 			expect(model.speed?.options).toHaveLength(3);
 		});
-
 	});
 });

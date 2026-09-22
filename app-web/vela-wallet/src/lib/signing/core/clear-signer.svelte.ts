@@ -268,6 +268,20 @@ class ClearSignerSession {
 		else this.view = { asking: false, pairing: null, waiting: false, notice: this.view.notice };
 	}
 
+	/**
+	 * The page answered and the CORE would not take it (a wrong challenge, a
+	 * foreign key). The channel knows nothing of that verdict, so the caller
+	 * that asked for it says which sentence the sheet ends on.
+	 */
+	noteRefusal(code: string): void {
+		this.view = {
+			asking: false,
+			pairing: null,
+			waiting: false,
+			notice: this.#cancelled ? null : noticeOf(code)
+		};
+	}
+
 	reopen(): void {
 		this.#channel?.reopen();
 	}

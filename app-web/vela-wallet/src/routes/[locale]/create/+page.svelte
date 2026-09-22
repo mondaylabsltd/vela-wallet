@@ -14,6 +14,7 @@
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
+	import ClearSignerHost from '$lib/ui/onboarding/ClearSignerHost.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
@@ -64,6 +65,11 @@
 		onExit={() => goto(home)}
 	/>
 </main>
+
+<!-- Spec 075: a founding key can be minted on the Clear Signer's page. The
+     wait, the pairing code and the sentence a refusal ends with are drawn
+     over this flow, which stays exactly as it was underneath. -->
+<ClearSignerHost {strings} />
 
 {#if pending}
 	<PromptSheet
