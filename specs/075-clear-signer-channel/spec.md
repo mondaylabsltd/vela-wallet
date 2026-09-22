@@ -151,3 +151,34 @@ indistinguishable from a good one. Zero dependencies removes the supply chain;
 it does not prove that what is being served today is what was reviewed. A
 content hash the wallet remembers ("I know this version") would close it — not
 in 075.
+
+### Pinning the page's contents — what it can and cannot prove
+
+Tempting, and worth writing down before somebody builds the version that only
+looks safe: **the wallet never sees the bytes the browser ran.** The page
+executes in a browser — on another device entirely, over BLE or the relay — so
+a hash the wallet computes is a hash of ITS OWN fetch. A server can answer the
+wallet with the reviewed version and the browser with another, and a cached
+copy in the browser was fetched before either. A page that reports its own hash
+is no better: a tampered page reports whatever it likes.
+
+Two things do work, and they are not equally strong:
+
+1. **The app serves the page itself, over loopback, from bytes it ships.** Then
+   the bytes the browser executes and the bytes the wallet trusts are the same
+   bytes, and distribution is not part of the story at all. It only covers the
+   same-device channel, and it trades "my own deployment" for "the app I
+   installed" — the page then belongs to `localhost`, not to the person's
+   domain.
+2. **Cross-device: pin the origin, and treat a hash as a tripwire.** The page
+   can report a manifest of what it loaded and the wallet can compare it with a
+   value the person recorded. That catches drift and careless tampering. It
+   does not catch a page that lies, and it must be named a tripwire rather than
+   a guarantee.
+
+Note what `rpId` already does here: a page on any other domain — byte-identical
+or not — **cannot use these passkeys at all**, because WebAuthn refuses. So
+content pinning is not defending against "somebody distributed a fake page"; it
+defends against "the person's own domain served bad bytes", which is a smaller
+and better-understood problem (a static file, SRI on every script, a strict CSP,
+and a recorded hash as the tripwire).
