@@ -54,18 +54,24 @@ import uniffi.vela_core_uniffi.qrMatrix
 @Composable
 fun ClearSignerSheets(
     state: ClearSignerChannel.State,
-    onWhere: (thisDevice: Boolean) -> Unit,
+    onWhere: (ClearSignerChannel.Route) -> Unit,
     onConfirmCode: () -> Unit,
     onCancel: () -> Unit,
+    /** Spec 075 T040: "Grant Permission" on the Bluetooth card. */
+    onGrantBluetooth: () -> Unit = {},
 ) {
     when (state) {
-        is ClearSignerChannel.State.Where -> ClearSignerWhereSheet(onWhere, onCancel)
+        is ClearSignerChannel.State.Where -> ClearSignerWhereSheet(state.nearby, onWhere, onCancel)
         is ClearSignerChannel.State.Pairing -> ClearSignerPairSheet(state.link, onCancel)
         is ClearSignerChannel.State.Code -> ClearSignerCodeSheet(state.code, onConfirmCode, onCancel)
         // Paired and confirmed: the request is with the other device now, and
         // this screen has nothing to offer but the way out. Without this the
         // app would look idle while somebody reads a card on their laptop.
         is ClearSignerChannel.State.Paired -> ClearSignerPairedSheet(onCancel)
+        // Spec 075 T040: advertising, and waiting for a browser in the room.
+        is ClearSignerChannel.State.Nearby -> ClearSignerNearbySheet(state.deviceName, onCancel)
+        is ClearSignerChannel.State.BluetoothRefused ->
+            ClearSignerBluetoothSheet(onGrantBluetooth, onCancel)
         else -> Unit
     }
 }
@@ -73,15 +79,25 @@ fun ClearSignerSheets(
 /**
  * "Where is your Clear Signer?"
  *
- * The page can be on this phone (a tab over the app, on its own loopback) or
- * on another device entirely — a laptop's browser holding the passkey. Both
- * are the same route as far as the wallet is concerned; only the wire differs,
- * so this is one question with two answers rather than two routes in the
- * method picker.
+ * The page can be on this phone (a tab over the app, on its own loopback), on
+ * another device entirely — a laptop's browser holding the passkey, reached
+ * through the blind relay — or on a browser in the same room, which connects
+ * to this phone over Bluetooth with no server in between at all. All three are
+ * the same route as far as the wallet is concerned; only the wire differs, so
+ * this is one question with three answers rather than three rows in the method
+ * picker.
+ *
+ * The Bluetooth row appears only when the app has a radio to offer
+ * ([ClearSignerChannel.offersNearby]): a row that always ends in "this phone
+ * cannot do that" is worse than no row.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClearSignerWhereSheet(onPick: (thisDevice: Boolean) -> Unit, onCancel: () -> Unit) {
+fun ClearSignerWhereSheet(
+    nearby: Boolean,
+    onPick: (ClearSignerChannel.Route) -> Unit,
+    onCancel: () -> Unit,
+) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
     ModalBottomSheet(
@@ -104,14 +120,17 @@ fun ClearSignerWhereSheet(onPick: (thisDevice: Boolean) -> Unit, onCancel: () ->
                 fontSize = VelaTextSize.xl2,
                 modifier = Modifier.padding(bottom = VelaSpacing.md),
             )
-            listOf(
-                true to "componentsUi.signing.clearSignerThisDevice",
-                false to "componentsUi.signing.clearSignerOtherDevice",
-            ).forEach { (here, key) ->
+            buildList {
+                add(Triple(ClearSignerChannel.Route.ThisDevice, "componentsUi.signing.clearSignerThisDevice", VelaIcons.Eye))
+                add(Triple(ClearSignerChannel.Route.OtherDevice, "componentsUi.signing.clearSignerOtherDevice", VelaIcons.ScanLine))
+                if (nearby) {
+                    add(Triple(ClearSignerChannel.Route.Nearby, "connect.dapp.connectBleTitle", VelaIcons.Network))
+                }
+            }.forEach { (route, key, icon) ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onPick(here) }
+                        .clickable { onPick(route) }
                         .padding(vertical = VelaSpacing.lg),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -124,7 +143,7 @@ fun ClearSignerWhereSheet(onPick: (thisDevice: Boolean) -> Unit, onCancel: () ->
                         modifier = Modifier.weight(1f),
                     )
                     Icon(
-                        imageVector = if (here) VelaIcons.Eye else VelaIcons.ScanLine,
+                        imageVector = icon,
                         contentDescription = null,
                         tint = colors.fgSubtle,
                         modifier = Modifier.size(VelaIconSize.lg),
@@ -289,6 +308,118 @@ private fun QrBlock(payload: String) {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Advertising, and waiting for a browser in the room to connect (spec 075
+ * T040, PROTOCOL §1).
+ *
+ * The device name is the point of this card. Chrome's chooser lists whatever
+ * is advertising nearby, and in an office that can be several phones; the
+ * person has to know which line is theirs BEFORE they look, because picking
+ * the wrong one is how a pairing ends up with somebody else's page. It is the
+ * phone's own Bluetooth name — this app does not rename the adapter, which
+ * would rename it for every other app on the device.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClearSignerNearbySheet(deviceName: String, onCancel: () -> Unit) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    ModalBottomSheet(
+        onDismissRequest = onCancel,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = colors.bgRaised,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VelaSizing.screenPaddingX)
+                .padding(bottom = VelaSpacing.xl3),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            Text(
+                text = strings.t("connect.dapp.connectBleTitle"),
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.bold,
+                fontSize = VelaTextSize.xl2,
+            )
+            Text(
+                text = deviceName,
+                color = colors.fgBase,
+                fontFamily = VelaMonoFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+            )
+            Text(
+                text = strings.t("componentsUi.signing.clearSignerPairWaiting"),
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                lineHeight = VelaLeading.normal * VelaTextSize.base,
+            )
+            VelaSecondaryButton(
+                strings.t("common.cancel"),
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/**
+ * The Android 12 Bluetooth permissions were refused (spec 075 T040).
+ *
+ * Advertising needs `BLUETOOTH_ADVERTISE`, and talking to whatever connects
+ * needs `BLUETOOTH_CONNECT`. Without them the peripheral cannot start at all,
+ * and a flow that simply sat there waiting for a connection that can never
+ * arrive would be the worst version of this: the person would blame their
+ * laptop. So the refusal is said, with the way to undo it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ClearSignerBluetoothSheet(onGrant: () -> Unit, onCancel: () -> Unit) {
+    val strings = LocalVelaStrings.current
+    val colors = VelaTheme.colors
+    ModalBottomSheet(
+        onDismissRequest = onCancel,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = colors.bgRaised,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VelaSizing.screenPaddingX)
+                .padding(bottom = VelaSpacing.xl3),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            Text(
+                text = strings.t("connect.dapp.blePermTitle"),
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.bold,
+                fontSize = VelaTextSize.xl2,
+            )
+            Text(
+                text = strings.t("connect.dapp.blePermBody"),
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                lineHeight = VelaLeading.normal * VelaTextSize.base,
+            )
+            VelaPrimaryButton(
+                strings.t("componentsUi.scanner.grantPermission"),
+                onClick = onGrant,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            VelaSecondaryButton(
+                strings.t("common.cancel"),
+                onClick = onCancel,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

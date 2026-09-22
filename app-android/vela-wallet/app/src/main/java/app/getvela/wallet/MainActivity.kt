@@ -86,6 +86,28 @@ class MainActivity : ComponentActivity() {
     private var locationSettingsAnswer:
         kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
+    /**
+     * The app went to the background.
+     *
+     * A Clear Signer flow over BLE stops advertising here: PROTOCOL §1 wants
+     * the peripheral in the foreground for the length of a session, and an
+     * advert this app has forgotten about is one a stranger can still connect
+     * to. The loopback route is deliberately untouched — its page is a Custom
+     * Tab, so being backgrounded is that flow's normal state.
+     */
+    override fun onStop() {
+        super.onStop()
+        (application as VelaWalletApplication).container.clearSigner.leftForeground()
+    }
+
+    override fun onDestroy() {
+        // The host holds this activity's permission launchers; an app-scoped
+        // container holding a dead activity's is a leak and a crash in waiting.
+        val container = (application as VelaWalletApplication).container
+        if (isFinishing) container.clearSignerBleHost = null
+        super.onDestroy()
+    }
+
     /** The permissions the caBLE scan needs on this API level. */
     private fun bluetoothPermissions(): Array<String> =
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -98,8 +120,19 @@ class MainActivity : ComponentActivity() {
         }
 
     /** Grant (or confirm) the Bluetooth permissions; `true` if all are held. */
-    suspend fun requestBluetoothPermission(): Boolean {
-        val needed = bluetoothPermissions().filter {
+    suspend fun requestBluetoothPermission(): Boolean =
+        requestPermissions(bluetoothPermissions())
+
+    /**
+     * Grant (or confirm) exactly these permissions; `true` if all are held.
+     *
+     * Spec 075 T040 asks for a different pair from the caBLE scan above —
+     * `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT`, because there the phone
+     * is the peripheral — so the launcher is shared and the set is the
+     * caller's.
+     */
+    suspend fun requestPermissions(permissions: Array<String>): Boolean {
+        val needed = permissions.filter {
             checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
         if (needed.isEmpty()) return true
@@ -268,6 +301,15 @@ class MainActivity : ComponentActivity() {
             locationSettingsAnswer?.complete(Unit)
             locationSettingsAnswer = null
         }
+        // Spec 075 T040: the Clear Signer's Bluetooth route. Attached after the
+        // launchers above, because that is all it needs from an activity — the
+        // GATT server itself holds the application context.
+        (application as VelaWalletApplication).container.clearSignerBleHost =
+            app.getvela.wallet.feature.signing.clearsigner.AndroidClearSignerBleHost(
+                context = applicationContext,
+                askPermissions = { permissions -> requestPermissions(permissions) },
+                enableAdapter = { requestEnableBluetooth() },
+            )
         enableEdgeToEdge()
 
         val container = (application as VelaWalletApplication).container

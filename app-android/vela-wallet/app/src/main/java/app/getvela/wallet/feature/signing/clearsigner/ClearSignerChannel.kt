@@ -32,8 +32,9 @@ import java.security.SecureRandom
  *
  * 1. **Where the signer is.** On this device the page is a Custom Tab over the
  *    app on a loopback socket ([ClearSignerLoopback]); on another device it is
- *    reached through a blind relay ([ClearSignerRelayWire]). The person is
- *    asked once per flow.
+ *    reached through a blind relay ([ClearSignerRelayWire]) or, when the other
+ *    device is in the room, over Bluetooth with this phone as the GATT
+ *    peripheral ([ClearSignerBleWire]). The person is asked once per flow.
  * 2. **One page visit per flow.** A create mints a key and then confirms its
  *    membership; a recovery signs twice. Those are one conversation, kept open
  *    between requests and ended — `bye` — by [endFlow].
@@ -62,6 +63,15 @@ class ClearSignerChannel(
     private val appName: String = "vela-android",
     /** The relay transport; a fake one in tests. */
     private val sockets: RelaySockets = OkHttpRelaySockets(),
+    /**
+     * Spec 075 T040: the Bluetooth route's platform side — the activity's, and
+     * `null` where there is none (a process with no activity attached, a test
+     * that is not about the radio). The route is offered only when it is here.
+     *
+     * A provider rather than a value: this channel is built once per process,
+     * and the activity that owns the permission launchers comes and goes.
+     */
+    private val bleHost: () -> ClearSignerBleHost? = { null },
 ) : ClearSigner {
 
     /** The sentences a refusal is told in (`componentsUi.signing.clearSigner*`). */
@@ -72,13 +82,31 @@ class ClearSignerChannel(
         val timeout: String,
         /** Spec 075: the relay could not be reached. */
         val relayDown: String = timeout,
+        /** Spec 075 T040: Bluetooth is off, refused, or this phone cannot advertise. */
+        val bluetoothBlocked: String = relayDown,
     )
+
+    /** Where this flow's Clear Signer page is — asked once, on the first request. */
+    enum class Route {
+        /** A Custom Tab over the app, on the wallet's own loopback. */
+        ThisDevice,
+
+        /** Another device entirely, reached through the blind relay. */
+        OtherDevice,
+
+        /** A browser in the room: this phone advertises and it connects. */
+        Nearby,
+    }
 
     sealed interface State {
         data object Idle : State
 
-        /** Spec 075: "where is your Clear Signer?" — this device, or another. */
-        data object Where : State
+        /**
+         * Spec 075: "where is your Clear Signer?" — this device, another one
+         * through the relay, or, when this phone can advertise, one nearby
+         * over Bluetooth.
+         */
+        data class Where(val nearby: Boolean = false) : State
 
         /** The page is open (or being opened) at [url] and the socket is listening. */
         data class Waiting(val url: String) : State
@@ -91,6 +119,25 @@ class ClearSignerChannel(
 
         /** Spec 075: paired and confirmed — the other device is being asked. */
         data object Paired : State
+
+        /**
+         * Spec 075 T040: this phone is advertising under [deviceName], which
+         * is the name the browser's chooser will show. Saying it here is the
+         * difference between picking your own phone and picking a stranger's.
+         */
+        data class Nearby(val deviceName: String) : State
+
+        /**
+         * Spec 075 T040: the Android 12 Bluetooth permissions were refused.
+         *
+         * It is a card with a way to grant them, not a wait that quietly never
+         * ends — and it is the ONLY readiness that gets one. An adapter that
+         * is off raises the system's own dialog, and a phone that cannot
+         * advertise cannot be argued with; both of those end the attempt with
+         * a sentence on [notice] instead of a card asking for something the
+         * person has already refused or cannot give.
+         */
+        data object BluetoothRefused : State
     }
 
     private val _state = MutableStateFlow<State>(State.Idle)
@@ -107,21 +154,47 @@ class ClearSignerChannel(
 
     /** Where this flow's signer is, once the person has said. */
     @Volatile
-    private var onThisDevice: Boolean? = null
+    private var route: Route? = null
 
     @Volatile
-    private var whereAnswer: CompletableDeferred<Boolean?>? = null
+    private var whereAnswer: CompletableDeferred<Route?>? = null
 
     @Volatile
     private var codeAnswer: CompletableDeferred<Boolean>? = null
+
+    /** The Bluetooth card's "try again", or its Cancel. */
+    @Volatile
+    private var bluetoothAnswer: CompletableDeferred<Boolean>? = null
+
+    /**
+     * Why this flow's channel could not be opened at all, when there is a
+     * better sentence than "the page was closed".
+     *
+     * A request that never opened a page comes back as [ClearSignerAnswer.Cancelled]
+     * like any other, and the caller is told "the Clear Signer was closed
+     * without signing" — which is true of a dismissed sheet and a lie about a
+     * radio the person was never allowed to turn on. This carries the real
+     * reason as far as the sentence, and is cleared at the start of every
+     * request so it can never outlive the attempt that set it.
+     */
+    @Volatile
+    private var unopenable: String? = null
+
+    /** Is the Bluetooth route on offer at all on this build and this phone? */
+    val offersNearby: Boolean get() = bleHost() != null
 
     override fun describe(chainId: Int, account: String): ClearSignerLabels = labels(chainId, account)
 
     // -- what the screens drive -----------------------------------------------
 
-    /** "On this device" / "On another device" on the where sheet. */
+    /** A row on the where sheet. */
+    fun chooseWhere(route: Route) {
+        whereAnswer?.complete(route)
+    }
+
+    /** "On this device" / "On another device" — the two-way question, unchanged. */
     fun chooseWhere(thisDevice: Boolean) {
-        whereAnswer?.complete(thisDevice)
+        chooseWhere(if (thisDevice) Route.ThisDevice else Route.OtherDevice)
     }
 
     /** The codes match. */
@@ -129,10 +202,27 @@ class ClearSignerChannel(
         codeAnswer?.complete(true)
     }
 
+    /** "Try again" on the Bluetooth card — ask for whatever is still missing. */
+    fun retryBluetooth() {
+        bluetoothAnswer?.complete(true)
+    }
+
+    /**
+     * The app went to the background. PROTOCOL §1 wants the peripheral in the
+     * foreground while a session is running, and an advert this app forgot
+     * about is one a stranger can still connect to — so a Bluetooth flow ends
+     * here. The loopback route does NOT: its page is a Custom Tab, so being
+     * backgrounded is the normal, expected state of that flow.
+     */
+    fun leftForeground() {
+        if (wire is ClearSignerBleWire) endFlow()
+    }
+
     /** Cancel, on any of the sheets: the same as closing the page. */
     fun cancel() {
         whereAnswer?.complete(null)
         codeAnswer?.complete(false)
+        bluetoothAnswer?.complete(false)
         wire?.cancel()
     }
 
@@ -148,9 +238,9 @@ class ClearSignerChannel(
      */
     fun endFlow() {
         val live = wire
-        val hadTab = onThisDevice == true
+        val hadTab = route == Route.ThisDevice
         wire = null
-        onThisDevice = null
+        route = null
         cancel()
         live?.end()
         _state.value = State.Idle
@@ -247,14 +337,15 @@ class ClearSignerChannel(
     private suspend fun put(ask: ClearSignerAsk, signerOrigin: String): Put =
         one.withLock {
             notice.value = null
+            unopenable = null
             val existing = wire
             val mine = existing == null
             val live = existing ?: open(signerOrigin) ?: return@withLock Put(ClearSignerAnswer.Cancelled, true)
             // A later request of the same flow raises no sheet of its own. The
             // loopback names its page again from inside `ask` (its sheet offers
-            // "open it again"); a paired device has no page of ours to name, so
-            // the wait is said here.
-            if (!mine && onThisDevice == false) _state.value = State.Paired
+            // "open it again"); a page on another device — relayed or nearby —
+            // has no page of ours to name, so the wait is said here.
+            if (!mine && route != null && route != Route.ThisDevice) _state.value = State.Paired
             val answer = try {
                 live.ask(ask)
             } catch (cancellation: CancellationException) {
@@ -285,22 +376,26 @@ class ClearSignerChannel(
      */
     private suspend fun open(signerOrigin: String): ClearSignerWire? {
         val page = signerOrigin.ifEmpty { signerUrl() }
-        val here = onThisDevice ?: askWhere() ?: return null
-        onThisDevice = here
+        val chosen = route ?: askWhere() ?: return null
+        // The Bluetooth route is the only one that can be refused by something
+        // other than the person — no radio, no permission, an adapter that is
+        // off. Finding that out here means a card that says so, while the
+        // flow is still unopened and another route is still available.
+        val radio = if (chosen == Route.Nearby) awaitRadio() ?: return null else null
+        route = chosen
         // A channel that cannot even be built — a port nothing will bind, a
         // 2⁻³² secret that is not a P-256 scalar — is an unopened page, not an
         // exception on its way through the signing paths.
         val built = runCatching {
-            if (here) {
-                ClearSignerLoopback(
+            when (chosen) {
+                Route.ThisDevice -> ClearSignerLoopback(
                     base = page,
                     openPage = openPage,
                     timeoutMs = timeoutMs,
                     random = random,
                     onOpened = { url -> _state.value = State.Waiting(url) },
                 )
-            } else {
-                ClearSignerRelayWire(
+                Route.OtherDevice -> ClearSignerRelayWire(
                     relayUrl = relayUrl().ifEmpty { clearSignerDefaultRelay() },
                     signerUrl = page,
                     sockets = sockets,
@@ -310,10 +405,19 @@ class ClearSignerChannel(
                     onLink = { link -> _state.value = State.Pairing(link) },
                     confirmCode = { code -> awaitCode(code) },
                 )
+                Route.Nearby -> ClearSignerBleWire(
+                    radio = radio ?: error("the Bluetooth route was taken without a radio"),
+                    signerUrl = page,
+                    appName = appName,
+                    timeoutMs = timeoutMs,
+                    random = random,
+                    onAdvertising = { name -> _state.value = State.Nearby(name) },
+                    confirmCode = { code -> awaitCode(code) },
+                )
             }
         }.getOrElse { error ->
             VelaLog.failure("clearsigner", "the channel could not be opened", error)
-            onThisDevice = null
+            route = null
             _state.value = State.Idle
             return null
         }
@@ -326,14 +430,61 @@ class ClearSignerChannel(
      * five-minute clock as everything else: a question left on screen must not
      * hold the request open forever.
      */
-    private suspend fun askWhere(): Boolean? {
-        val answer = CompletableDeferred<Boolean?>()
+    private suspend fun askWhere(): Route? {
+        val answer = CompletableDeferred<Route?>()
         whereAnswer = answer
-        _state.value = State.Where
-        val here = withTimeoutOrNull(timeoutMs) { answer.await() }
+        _state.value = State.Where(nearby = offersNearby)
+        val chosen = withTimeoutOrNull(timeoutMs) { answer.await() }
         whereAnswer = null
-        if (here == null) _state.value = State.Idle
-        return here
+        if (chosen == null) _state.value = State.Idle
+        return chosen
+    }
+
+    /**
+     * Hardware, permissions and the adapter, with a card for each way it can
+     * say no and a "try again" that asks once more. `null` means the person
+     * gave up (or was never going to be able to) — the flow does not open, and
+     * the sentence rides on [notice] so whatever raised the request says why.
+     */
+    private suspend fun awaitRadio(): BlePeripheral? {
+        val host = bleHost() ?: return null
+        while (true) {
+            val readiness = runCatching { host.ready() }.getOrElse { error ->
+                VelaLog.failure("clearsigner.ble", "the radio could not be asked about", error)
+                BleReadiness.Unsupported
+            }
+            when (readiness) {
+                BleReadiness.Ready -> return runCatching { host.peripheral() }.getOrElse { error ->
+                    VelaLog.failure("clearsigner.ble", "the peripheral could not be built", error)
+                    blocked()
+                }
+                // The permissions are the one refusal worth a second ask: the
+                // person may have tapped Deny without reading, and there is
+                // something for them to do about it.
+                BleReadiness.Refused -> {
+                    val answer = CompletableDeferred<Boolean>()
+                    bluetoothAnswer = answer
+                    _state.value = State.BluetoothRefused
+                    val again = withTimeoutOrNull(timeoutMs) { answer.await() } ?: false
+                    bluetoothAnswer = null
+                    if (!again) return blocked()
+                }
+                // The adapter's own dialog was declined, or this phone cannot
+                // advertise at all. Neither is a question worth asking twice.
+                BleReadiness.AdapterOff, BleReadiness.Unsupported -> {
+                    VelaLog.event("clearsigner.ble", "the radio is not usable", "why" to readiness.toString())
+                    return blocked()
+                }
+            }
+        }
+    }
+
+    /** No radio: say so where the flow's own screen will read it, and stop. */
+    private fun blocked(): BlePeripheral? {
+        unopenable = words().bluetoothBlocked
+        notice.value = unopenable
+        _state.value = State.Idle
+        return null
     }
 
     /**
@@ -373,7 +524,9 @@ class ClearSignerChannel(
                 (answer.outcome as? ClearSignerOutcome.Refused)?.refusal
                     ?: ClearSignerRefusal.Declined,
             )
-            ClearSignerAnswer.Cancelled -> w.closed
+            // A channel that never opened says why; everything else that
+            // comes back with nothing is a page the person closed.
+            ClearSignerAnswer.Cancelled -> unopenable ?: w.closed
         }
     }
 
