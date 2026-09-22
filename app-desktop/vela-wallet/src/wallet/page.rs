@@ -5662,13 +5662,24 @@ impl WalletPage {
             .gap(px(16.))
             .pb(px(24.))
             .child({
-                let mut titles = div().flex().flex_col().gap(px(6.)).child(
-                    div()
-                        .text_size(theme::text_panel_title())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .child(title),
-                );
+                // `flex_1` + `min_w(0)`, or this column takes its INTRINSIC
+                // width in the row: a description that does not wrap then runs
+                // off the right edge of the window instead of folding onto a
+                // second line. Seen at `xlarge` on Transaction speed, in both
+                // English and German, once the nav column beside it grew.
+                let mut titles = div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .gap(px(6.))
+                    .child(
+                        div()
+                            .text_size(theme::text_panel_title())
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(theme.fg_base)
+                            .child(title),
+                    );
                 if let Some(description) = description {
                     titles = titles.child(
                         div()

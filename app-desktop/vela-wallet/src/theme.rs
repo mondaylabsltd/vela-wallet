@@ -323,9 +323,15 @@ pub const SETTINGS_NAV_W: f32 = 216.;
 /// "Transaktionsgeschwindigkeit" ran out of the column, across the divider and
 /// onto the network list behind it — measured, not imagined. Truncation in the
 /// row is still the backstop; this is what stops it having to.
+///
+/// It only ever GROWS. Multiplying it down at the smaller stops bought
+/// nothing — the panel beside it has room to spare either way — and cost two
+/// German labels their endings at `compact`, where a 216px column would have
+/// held them whole.
 #[must_use]
 pub fn settings_nav_w() -> f32 {
-    (SETTINGS_NAV_W * crate::executor::appearance_prefs::text_factor()).round()
+    let factor = crate::executor::appearance_prefs::text_factor();
+    (SETTINGS_NAV_W * factor.max(1.0)).round()
 }
 
 /// One row of that column.
