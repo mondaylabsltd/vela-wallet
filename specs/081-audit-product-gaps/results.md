@@ -336,6 +336,20 @@ It is the same shape as the `gen-passkey-providers.mjs` problem this feature fix
 
 Fixed by running it, not by reformatting by hand. All 48 workspace suites and the desktop's 443 still pass afterwards, and `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` — the exact command CI uses, which my sweep had also been running without the feature flag — is clean.
 
+## And a second CI failure: the Linux build is the only one that compiles the Linux code
+
+`desktop` failed again, this time on a real compile error — `crate::webview::clear_browsing_data` not found. The erase work (FR-017) added that call to `erase_device`, which is **not** `cfg`-gated, and `mod webview` only exists on macOS and Windows; Linux gets `webview_absent.rs`, a same-named module that is the shape of the browser it does not have. The stub never grew the new function.
+
+Nothing local could have caught it. gpui's Linux build needs a system toolchain this machine does not have, so `cargo check` here compiles the macOS path and is silent about the other one — the same blind spot the workflow already documents for Windows ("only a real Windows build finds that class of bug"). CI is the first place the Linux arm is ever compiled.
+
+The stub now answers `true`, deliberately, not `false`: the bool means "was the platform asked", the caller logs a `false` as "no web view to clear", and on Linux there is no browser and so nothing that failed to be cleared. `false` would print a warning about a permanent condition on every erase.
+
+Swept for more of the same: `clear_browsing_data` is the **only** `webview::` call this branch added, and every other `webview::` name used outside a `cfg` block is already in the stub.
+
+## One more parity tail, from the Android device run
+
+Android and iOS hide the Technical details card under a refusal; web was still putting the raw `params_json` of the very request the wallet refused behind a disclosure. `techModel` is now refusal-aware on web too — the one shell that had stayed lax about it.
+
 ## Still open in this feature
 
 Everything else in [tasks.md](tasks.md): descriptor provenance, network readiness, forward-verified names, the iOS endpoints page and index-per-call, `X-Rpc-Url`, release provenance, the dormant routes, feedback, erase, and the two service-repo PRs. The docs sync (FR-020) lands with each gap as it closes.

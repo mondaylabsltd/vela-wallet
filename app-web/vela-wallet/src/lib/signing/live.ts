@@ -451,8 +451,12 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 
 function techModel(inputs: SigningLiveInputs): TechModel {
 	const { sign, clear, m } = inputs;
-	const request = sign.request;
-	const result = clear.result;
+	// A refused request discloses nothing (spec 081). Android and iOS hide this
+	// card entirely under a refusal; web was still putting the raw
+	// `params_json` of the very request the wallet would not touch behind a
+	// disclosure — the one shell that stayed lax about it.
+	const request = sign.blocked ? null : sign.request;
+	const result = sign.blocked ? null : clear.result;
 	return {
 		title: m.advancedToggle,
 		summary: result?.contract_name ?? undefined,
