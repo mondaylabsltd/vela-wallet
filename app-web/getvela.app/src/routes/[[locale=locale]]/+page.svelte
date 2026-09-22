@@ -753,19 +753,27 @@
 		   wrap normally. */
 		text-wrap: balance;
 	}
-	/* CJK glyphs fill their em box, so a headline set at the Latin size reads
-	   noticeably larger and runs out of line much sooner — 真正属于你的以太坊钱包
-	   wrapped mid-word (你 | 的) at the Latin scale. `word-break: auto-phrase`
-	   is the nominally correct fix and measurably does nothing here, so this
-	   uses the answer CJK typography has always used: a slightly smaller scale
-	   and a little more leading. `html[lang]` is set per locale in
-	   hooks.server.ts, so this follows the page, not the browser. */
+	/* CJK headlines are set in each platform's own sans (tokens.css), bold and
+	   at the Latin scale — the look the founder chose on 2026-09-22 — with a
+	   little more leading than Latin, which CJK needs. Japanese is the
+	   exception: its headline is twice as long, so it keeps a smaller scale and
+	   breaks at phrase boundaries (`auto-phrase`, Chrome; others wrap as
+	   before) instead of inside イーサリアム. Korean breaks between words, as
+	   Korean does. `html[lang]` follows the page (hooks.server.ts and the root
+	   layout). */
 	:global(html[lang^='zh']) h1,
-	:global(html[lang='ja']) h1,
 	:global(html[lang='ko']) h1 {
+		line-height: 1.12;
+		letter-spacing: -0.01em;
+	}
+	:global(html[lang='ko']) h1 {
+		word-break: keep-all;
+	}
+	:global(html[lang='ja']) h1 {
 		font-size: clamp(2.35rem, 4.6vw, 3.6rem);
 		line-height: 1.2;
 		letter-spacing: -0.01em;
+		word-break: auto-phrase;
 	}
 	/* Two short sentences, so it can carry the weight of a standfirst rather
 	   than reading as body text under a headline. Sized for the longest locale
@@ -1128,7 +1136,7 @@
 		background: var(--accent-soft);
 	}
 	.counter-count {
-		font-family: var(--font-serif);
+		font-family: var(--font-serif-latin);
 		font-size: 3rem;
 		font-weight: 700;
 		line-height: 1;
