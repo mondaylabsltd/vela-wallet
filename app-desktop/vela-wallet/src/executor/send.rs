@@ -142,6 +142,10 @@ impl SendContext {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
+                    // Spec 075: the page this key lives behind, untouched —
+                    // dropping it here would make `sign_route` forget where
+                    // the key is and offer a route that cannot reach it.
+                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect(),
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
@@ -580,6 +584,7 @@ mod tests {
                     public_key_hex: format!("04{i:02x}"),
                     name: String::new(),
                     transports: transports.to_owned(),
+                    signer_origin: None,
                 })
                 .collect(),
         }

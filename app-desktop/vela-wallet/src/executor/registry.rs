@@ -978,12 +978,28 @@ pub fn publish(
                 // its possession proof over caBLE (a fresh QR), a USB one on the
                 // key in the port. Hardcoding SecurityKey here was why a caBLE
                 // recovery silently entered the wallet unpublished.
-                let assertion = passkey::assert(
-                    &challenge_bytes,
-                    Some(&member.credential_id),
-                    method,
-                    ceremony,
-                )
+                // Spec 075: a wallet signed in through the Clear Signer
+                // re-publishes through it too. The page fetches this same
+                // member challenge itself and will not sign unless the two
+                // agree, so what is passed here is what the wallet was given.
+                let assertion = if method == vela_core::app::KeyMethod::ClearSigner {
+                    crate::executor::clear_signer::member_proof(
+                        &member.credential_id,
+                        &member.public_key_hex,
+                        &member.attestation_hex,
+                        &group_public_key,
+                        &challenge_bytes,
+                        &registry_url(),
+                        &ceremony.clear_signer,
+                    )
+                } else {
+                    passkey::assert(
+                        &challenge_bytes,
+                        Some(&member.credential_id),
+                        method,
+                        ceremony,
+                    )
+                }
                 .map_err(|failure| {
                     // A ceremony failure inside a publish is not a
                     // network failure. It is reported as an answered
@@ -1011,6 +1027,11 @@ pub fn publish(
             transports: member.transports.clone(),
             proof,
         });
+    }
+    // Spec 075: every member that had to sign live signed on one page visit;
+    // it is over now, whether or not any of them used it.
+    if method == vela_core::app::KeyMethod::ClearSigner {
+        crate::executor::clear_signer::end_flow();
     }
 
     // The group key silently closes over the content hash.
@@ -1181,6 +1202,7 @@ mod tests {
             public_key_hex: recorded()["publicKey"].as_str().unwrap().to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
+            signer_origin: None,
         }];
         let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device);
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);

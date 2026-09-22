@@ -707,6 +707,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 name: String::new(),
                 transports: "internal".to_owned(),
+                signer_origin: None,
             }],
         };
         let mut ctx = SignContext::new(

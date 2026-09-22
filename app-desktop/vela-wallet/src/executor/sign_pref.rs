@@ -41,6 +41,7 @@ impl Machine for SignPref {
             SignPrefOperation::ReadStored => Answer::Now(SignPrefShellResult::Stored {
                 method: stored(storage::KEY_SIGN_METHOD),
                 signer_url: stored(storage::KEY_CLEAR_SIGNER_URL),
+                relay_url: stored(storage::KEY_CLEAR_SIGNER_RELAY),
             }),
             // Best effort, both: the committed choice stays on screen either
             // way, and the next launch simply reads the old value.
@@ -58,6 +59,18 @@ impl Machine for SignPref {
                     // The official page is the absence of a choice, so a
                     // later default can move without rewriting anybody's.
                     None => storage::remove_value(storage::KEY_CLEAR_SIGNER_URL),
+                };
+                Answer::Now(SignPrefShellResult::Written)
+            }
+            // Spec 075: the same shape for the relay, under its own key, so a
+            // person who moved one has not moved the other.
+            SignPrefOperation::WriteRelayUrl { url } => {
+                let _ = match url {
+                    Some(url) => storage::write_value(
+                        storage::KEY_CLEAR_SIGNER_RELAY,
+                        Value::String(url.clone()),
+                    ),
+                    None => storage::remove_value(storage::KEY_CLEAR_SIGNER_RELAY),
                 };
                 Answer::Now(SignPrefShellResult::Written)
             }

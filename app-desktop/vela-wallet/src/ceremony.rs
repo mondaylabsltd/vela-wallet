@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::ctap::usb::TouchRequest;
+use crate::executor::clear_signer;
 use crate::executor::passkey::{Ceremony, CredentialChoice, PinRequest, WindowHandle};
 
 /// The wallet picker's half of the channel. Same shape as the PIN's and for
@@ -69,7 +70,6 @@ struct PinState {
 }
 
 /// Shared between the screen and whatever ceremony is currently running.
-#[derive(Default)]
 pub struct CeremonyChannel {
     /// What the key is waiting for right now, if anything. A `Mutex` rather
     /// than an atomic flag because it carries the key's product string and
@@ -97,6 +97,28 @@ pub struct CeremonyChannel {
     /// and then asked which wallet.
     pin_answered: Condvar,
     pick_answered: Condvar,
+    /// Spec 075: the Clear Signer's half. Not a `Mutex` of its own — it is
+    /// already one, and it is shared with the executor by `Arc` because a
+    /// ceremony on a background thread and the screen both hold it.
+    clear_signer: Arc<clear_signer::Channel>,
+}
+
+impl Default for CeremonyChannel {
+    fn default() -> Self {
+        Self {
+            touch: Mutex::default(),
+            qr: Mutex::default(),
+            dismissed: std::sync::atomic::AtomicBool::new(false),
+            pin: Mutex::default(),
+            pick: Mutex::default(),
+            pin_answered: Condvar::new(),
+            pick_answered: Condvar::new(),
+            // The stream half goes unread here: this screen polls (see
+            // `CEREMONY_TICK_MS`), because the thread a ceremony blocks on has
+            // no gpui handle to wake anybody with.
+            clear_signer: clear_signer::Channel::new().0,
+        }
+    }
 }
 
 impl CeremonyChannel {
@@ -141,8 +163,15 @@ impl CeremonyChannel {
             }),
             pin: Arc::new(move |request| pin_channel.request_pin(request)),
             pick: Arc::new(move |choices| pick_channel.request_choice(choices)),
+            clear_signer: Arc::clone(&self.clear_signer),
             window,
         }
+    }
+
+    /// The Clear Signer's channel — what the screen reads to draw the "where
+    /// is it?" choice, the waiting sheet and the pairing code.
+    pub fn clear_signer(&self) -> Arc<clear_signer::Channel> {
+        Arc::clone(&self.clear_signer)
     }
 
     /// What a key is waiting for right now, if anything.
@@ -294,6 +323,9 @@ impl CeremonyChannel {
         if let Ok(mut slot) = self.qr.lock() {
             *slot = None;
         }
+        // A page visit the flow was holding open — and the port or the relay
+        // room under it — goes down with the flow.
+        self.clear_signer.close();
         // A scan still waiting for a phone must not outlive the flow by up to
         // ninety seconds.
         self.dismissed

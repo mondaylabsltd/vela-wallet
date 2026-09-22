@@ -34,7 +34,7 @@ use vela_core::user_op::{
     build_multi_send_execute_call_data, calculate_safe_op_hash,
 };
 
-use crate::executor::clear_signer::tests::{page_of, signing_key};
+use crate::executor::clear_signer::tests::{page_of_channel, signing_key};
 use crate::executor::clear_signer::{self, Ask, Channel, Refusal};
 use crate::executor::user_op::{self, Signer};
 
@@ -350,7 +350,7 @@ impl Rig {
     /// The page the ceremony asked the screen to open, opened, with the
     /// wallet's key in the browser.
     fn open_page(&self) -> Tab {
-        let url = page_of(&self.channel);
+        let url = page_of_channel(&self.channel);
         let mut tab = self.browser.open(&url);
         tab.add_passkey(&self.key, &self.credential);
         tab

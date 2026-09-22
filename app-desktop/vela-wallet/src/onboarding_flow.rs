@@ -154,6 +154,9 @@ fn provider_line(key: &CreateKeyRow) -> &'static str {
         KeyMethod::Platform => "onboarding.create.methodPlatformTitle",
         KeyMethod::Hybrid => "onboarding.create.methodHybridTitle",
         KeyMethod::SecurityKey => "onboarding.create.providerSecurityKey",
+        // Spec 075: a key the Clear Signer minted lives behind its page, and
+        // the row says so in the picker's own words.
+        KeyMethod::ClearSigner => "componentsUi.signing.clearSignerTitle",
     }
 }
 

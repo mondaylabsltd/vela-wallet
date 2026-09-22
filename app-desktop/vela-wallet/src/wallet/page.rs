@@ -6571,6 +6571,7 @@ impl WalletPage {
                 public_key_hex: account.public_key_hex.clone(),
                 name: account.name.clone(),
                 transports: String::new(),
+                signer_origin: None,
             }]
         } else {
             account
@@ -6581,6 +6582,7 @@ impl WalletPage {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
+                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect()
         };
