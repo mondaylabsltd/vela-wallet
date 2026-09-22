@@ -546,13 +546,25 @@ impl App for CreateWallet {
                             .is_some(),
                         aaguid,
                         provider_name,
-                        // The report first; the person's tap only when the
+                        // The page first, when the key lives behind one (spec
+                        // 075): a page runs the ceremony in a browser and so
+                        // reports `platform`, and drawing "a passkey on this
+                        // device" would name the wrong side of the page. Then
+                        // the report; the person's tap only when the
                         // authenticator said nothing about itself.
-                        kind: crate::passkey::reported_method(
-                            &draft.authenticator_attachment,
-                            &draft.transports,
-                        )
-                        .unwrap_or(draft.method),
+                        kind: if draft
+                            .signer_origin
+                            .as_deref()
+                            .is_some_and(|origin| !origin.is_empty())
+                        {
+                            KeyMethod::ClearSigner
+                        } else {
+                            crate::passkey::reported_method(
+                                &draft.authenticator_attachment,
+                                &draft.transports,
+                            )
+                            .unwrap_or(draft.method)
+                        },
                         method: draft.method,
                     }
                 })

@@ -87,8 +87,14 @@ pub struct WalletKeyRow {
     pub aaguid: String,
     /// "Apple Passwords", "1Password" … empty when the catalog cannot name it.
     pub provider_name: String,
-    /// `platform` | `hybrid` | `security_key`.
+    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
     pub method: String,
+    /// Spec 075: the Clear Signer page this key lives behind, when it does —
+    /// so a row can name the page rather than the device on the far side of
+    /// it. Known from the account record; the registry does not store it, so a
+    /// row the device could not match stays `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signer_origin: Option<String>,
     /// Uncompressed `04‖x‖y`, lowercase bare hex.
     pub public_key_hex: String,
     /// The WebAuthn credential id, base64url as authenticators and the registry
@@ -127,6 +133,29 @@ fn method_of(attachment: &str, transports: &str) -> &'static str {
     passkey::reported_method_name(attachment, transports).unwrap_or("platform")
 }
 
+/// The same question for a ROW, where one thing outranks the report: a key that
+/// lives behind a Clear Signer page (spec 075).
+///
+/// A page runs the ceremony in a browser, so it reports `platform` — the
+/// attachment describes the authenticator on the page's side, which this wallet
+/// cannot address any other way. Drawing that key as "a passkey on this device"
+/// tells the person the opposite of where it is, and the device pass of
+/// 2026-09-22 found exactly that: a key minted on the page, captioned as the
+/// built-in one. Where a key lives is the page.
+fn row_method(attachment: &str, transports: &str, signer_origin: Option<&str>) -> &'static str {
+    if signer_origin.is_some_and(|origin| !origin.is_empty()) {
+        return "clear_signer";
+    }
+    method_of(attachment, transports)
+}
+
+/// The page a key lives behind, empty strings read as absent.
+fn page_of(signer_origin: Option<&String>) -> Option<String> {
+    signer_origin
+        .filter(|origin| !origin.is_empty())
+        .map(ToOwned::to_owned)
+}
+
 fn normal_key(public_key_hex: &str) -> Option<String> {
     Some(primitives::to_hex(
         &public_key_bytes(public_key_hex)?,
@@ -145,7 +174,8 @@ fn device_rows(device: &[DeviceKey]) -> Vec<WalletKeyRow> {
             synced: None,
             aaguid: String::new(),
             provider_name: String::new(),
-            method: method_of("", &key.transports).to_owned(),
+            method: row_method("", &key.transports, key.signer_origin.as_deref()).to_owned(),
+            signer_origin: page_of(key.signer_origin.as_ref()),
             public_key_hex: normal_key(&key.public_key_hex).unwrap_or_default(),
             credential_id: String::new(),
             attestation_hex: String::new(),
@@ -228,7 +258,15 @@ fn registry_rows(unit_body: &str, device: &[DeviceKey]) -> Option<Vec<WalletKeyR
                 .unwrap_or_default()
                 .to_owned(),
             aaguid,
-            method: method_of(attachment, transports).to_owned(),
+            // The registry knows nothing of pages; the device record does, and
+            // `remembered` is this key's own record when the device has one.
+            method: row_method(
+                attachment,
+                transports,
+                remembered.and_then(|key| key.signer_origin.as_deref()),
+            )
+            .to_owned(),
+            signer_origin: remembered.and_then(|key| page_of(key.signer_origin.as_ref())),
             public_key_hex,
             credential_id,
             attestation_hex: if attestation.is_empty() {
@@ -821,6 +859,38 @@ mod tests {
         assert_eq!(method_of("cross-platform", "usb,nfc"), "security_key");
         assert_eq!(method_of("", "usb"), "security_key");
         assert_eq!(method_of("", ""), "platform");
+    }
+
+    /// Spec 075: a row says where its key LIVES, and for a key behind a Clear
+    /// Signer page that is the page — whatever the authenticator on the far
+    /// side reports about itself (a page always answers `platform`).
+    #[test]
+    fn a_row_for_a_key_behind_a_page_says_so() {
+        assert_eq!(row_method("platform", "internal", None), "platform");
+        assert_eq!(row_method("platform", "internal", Some("")), "platform");
+        assert_eq!(
+            row_method("platform", "internal", Some("http://localhost:8140")),
+            "clear_signer"
+        );
+        // Even a report that would otherwise read as a fob: the page is how
+        // this wallet reaches it.
+        assert_eq!(
+            row_method("cross-platform", "usb", Some("https://sign.getvela.app")),
+            "clear_signer"
+        );
+
+        let rows = device_rows(&[
+            behind("cs", "https://sign.getvela.app"),
+            held("apple", "internal"),
+        ]);
+        assert_eq!(
+            (rows[0].method.as_str(), rows[0].signer_origin.as_deref()),
+            ("clear_signer", Some("https://sign.getvela.app"))
+        );
+        assert_eq!(
+            (rows[1].method.as_str(), rows[1].signer_origin.as_deref()),
+            ("platform", None)
+        );
     }
 
     #[test]

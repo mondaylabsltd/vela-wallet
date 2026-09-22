@@ -612,6 +612,44 @@ fn the_chosen_add_method_reaches_the_shell_and_the_key_row() {
     assert_eq!(keys[1].kind, KeyMethod::Platform, "the row says what it IS");
 }
 
+/// Spec 075: a key minted on the Clear Signer page LIVES behind that page, and
+/// the row has to say so.
+///
+/// The page runs the ceremony in a browser, so the authenticator's report is
+/// `platform` — the device pass of 2026-09-22 found the row drawing a key made
+/// on a page as the built-in passkey of the phone, which is the wrong side of
+/// the page and the one place this wallet cannot reach it.
+#[test]
+fn a_key_minted_on_the_page_is_drawn_as_living_there() {
+    let mut sut = registered("Ann");
+
+    sut.dispatch(Event::AddKey {
+        name: "Page".to_owned(),
+        method: KeyMethod::ClearSigner,
+    });
+    let mut registration = support::second_registration(CRED2);
+    registration.signer_origin = Some("https://sign.getvela.app".to_owned());
+    sut.resolve(ShellResult::PasskeyRegistered {
+        registration,
+        now_iso: NOW.to_owned(),
+    });
+    sut.resolve(ShellResult::MemberProofSigned {
+        proof: support::member_proof("k2"),
+    });
+
+    let keys = sut.view().keys;
+    assert_eq!(
+        keys[1].method,
+        KeyMethod::ClearSigner,
+        "the choice routes the ceremony"
+    );
+    assert_eq!(
+        keys[1].kind,
+        KeyMethod::ClearSigner,
+        "and the row says where the key lives — the page, not this device"
+    );
+}
+
 /// The creation-time confirmation must run on the route that MINTED the key.
 ///
 /// `SignMemberProof` is a `get()` against the credential the previous step just
