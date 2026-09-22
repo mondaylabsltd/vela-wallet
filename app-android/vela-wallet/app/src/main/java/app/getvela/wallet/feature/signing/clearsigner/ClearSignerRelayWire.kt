@@ -153,7 +153,10 @@ class ClearSignerRelayWire(
                 },
             )
         }.getOrElse { error ->
-            return ClearSignerAnswer.Unreachable(error.message ?: "the relay could not be reached")
+            return ClearSignerAnswer.Unreachable(
+                error.message ?: "the relay could not be reached",
+                Unreachability.Channel,
+            )
         }
         socket = opened
 
@@ -167,7 +170,7 @@ class ClearSignerRelayWire(
                 is Incoming.Closed -> return if (cancelled) {
                     ClearSignerAnswer.Cancelled
                 } else {
-                    ClearSignerAnswer.Unreachable(next.reason ?: "closed")
+                    ClearSignerAnswer.Unreachable(next.reason ?: "closed", Unreachability.PeerGone)
                 }
                 is Incoming.Binary -> Unit // Nothing is sealed before the hellos.
                 is Incoming.Text -> {
@@ -188,7 +191,10 @@ class ClearSignerRelayWire(
         opened.send(handshake.hello(appName.ifEmpty { null }))
         val live = runCatching { handshake.complete(peerHello, true) }.getOrElse { error ->
             VelaLog.failure("clearsigner.relay", "handshake refused", error)
-            return ClearSignerAnswer.Unreachable(error.message ?: "the handshake failed")
+            return ClearSignerAnswer.Unreachable(
+                error.message ?: "the handshake failed",
+                Unreachability.Channel,
+            )
         }
         val confirmed = withTimeoutOrNull(timeoutMs) { confirmCode(live.code()) } ?: false
         if (!confirmed) {

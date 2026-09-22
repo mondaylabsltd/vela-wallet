@@ -323,6 +323,9 @@ class AppContainer(private val app: Application) {
                     relayDown = i18nRuntime.t("componentsUi.signing.clearSignerRelayDown"),
                     bluetoothNeeded = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothNeeded"),
                     bluetoothOff = i18nRuntime.t("componentsUi.signing.clearSignerBluetoothOff"),
+                    bluetoothUnsupported =
+                        i18nRuntime.t("componentsUi.signing.clearSignerBluetoothUnsupported"),
+                    nearbyLost = i18nRuntime.t("componentsUi.signing.clearSignerNearbyLost"),
                 )
             },
             // Spec 075 T040: the phone advertises as a GATT peripheral for a

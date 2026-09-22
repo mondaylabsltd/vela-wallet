@@ -79,7 +79,28 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
         }
     }
 
+    @Volatile
+    private var started = false
+
     override fun start(events: BlePeripheralEvents): Boolean {
+        // One peripheral, one session. `events` is a single field, and a
+        // second wire attaching over the first would take delivery of frames
+        // the first is still waiting for.
+        //
+        // This is NOT what the T043 radio pass turned out to be, and the
+        // hypothesis is worth writing down so nobody derives it twice: a
+        // peripheral outliving its wire — or two GATT servers advertising the
+        // same service uuid — would have broken the HELLO as well, since the
+        // page discovers the service once and writes everything to it. The
+        // pass had a working handshake and a working request; only the answer
+        // went missing, which is a length problem, not an identity one (see
+        // `sweep` in ClearSignerBleWire). These guards are here because the
+        // lifecycle was genuinely loose, not because it was the culprit.
+        if (started || stopped) {
+            VelaLog.event("clearsigner.ble", "a second start on a used peripheral was refused")
+            return false
+        }
+        started = true
         this.events = events
         val manager = this.manager ?: return false
         val adapter = manager.adapter ?: return false
@@ -167,6 +188,11 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
     override fun stop() {
         if (stopped) return
         stopped = true
+        VelaLog.event("clearsigner.ble", "the peripheral is stopping")
+        // Detached BEFORE the teardown: a disconnection raised by closing the
+        // server is this end's own doing, and a wire that has finished with
+        // the radio should not be told the page left.
+        events = null
         runCatching { manager?.adapter?.bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback) }
         val live = server
         server = null
@@ -183,7 +209,10 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
                     // One conversation at a time: a second central would share
                     // this session's `msgId`s and its counters, which the core
                     // would (rightly) refuse to open.
-                    if (central == null) central = device
+                    if (central == null) {
+                        central = device
+                        VelaLog.event("clearsigner.ble", "a central connected")
+                    }
                 BluetoothProfile.STATE_DISCONNECTED ->
                     if (central?.address == device.address) {
                         central = null
@@ -194,6 +223,7 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
         }
 
         override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
+            VelaLog.event("clearsigner.ble", "the central negotiated", "mtu" to mtu.toString())
             events?.onMtu(mtu)
         }
 
@@ -232,7 +262,12 @@ class AndroidBlePeripheral(private val context: Context) : BlePeripheral {
                 server?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, null)
             }
             if (central == null) central = device
-            value?.let { events?.onFrame(it) }
+            val listening = events
+            if (listening == null) {
+                VelaLog.event("clearsigner.ble", "a write arrived with nothing listening")
+                return
+            }
+            value?.let(listening::onFrame)
         }
 
         override fun onCharacteristicReadRequest(
@@ -338,7 +373,25 @@ class AndroidClearSignerBleHost(
         return BleReadiness.Ready
     }
 
-    override fun peripheral(): BlePeripheral = AndroidBlePeripheral(context)
+    /**
+     * One radio at a time, whatever the flow above it did.
+     *
+     * Every peripheral opens its own GATT server and its own advertiser, and
+     * an abandoned one keeps both — a second service with the same uuid for
+     * the page's chooser to find, and an advert nobody is watching that a
+     * stranger can still connect to. A flow that ended cleanly stops its own;
+     * this is for the ones that did not.
+     */
+    @Volatile
+    private var current: BlePeripheral? = null
+
+    override fun peripheral(): BlePeripheral {
+        current?.let { previous ->
+            VelaLog.event("clearsigner.ble", "stopping the peripheral the last flow left behind")
+            runCatching { previous.stop() }
+        }
+        return AndroidBlePeripheral(context).also { current = it }
+    }
 
     private fun permissions(): List<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

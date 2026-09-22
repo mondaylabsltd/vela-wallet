@@ -89,6 +89,18 @@ class ClearSignerChannel(
         val bluetoothNeeded: String = relayDown,
         /** Spec 075 T040: the radio is off (`clearSignerBluetoothOff`). */
         val bluetoothOff: String = bluetoothNeeded,
+        /**
+         * Spec 075 T040: this phone cannot pair this way at all
+         * (`clearSignerBluetoothUnsupported`). Also what a radio that would
+         * not advertise is told as — the person's options are the same.
+         */
+        val bluetoothUnsupported: String = bluetoothNeeded,
+        /**
+         * Spec 075 T040: the page was there and then it was not — the link
+         * dropped mid-flow. Distinct from every other Bluetooth sentence,
+         * because the pairing DID work and the advice is to try it again.
+         */
+        val nearbyLost: String = bluetoothUnsupported,
     )
 
     /** Where this flow's Clear Signer page is — asked once, on the first request. */
@@ -184,6 +196,18 @@ class ClearSignerChannel(
      */
     @Volatile
     private var unopenable: String? = null
+
+    /**
+     * The route the request being judged rode on.
+     *
+     * [route] itself cannot answer this: a request that came back with nothing
+     * ends its flow, and [endFlow] clears [route] BEFORE the caller turns the
+     * answer into a sentence. Reading it there gave every failed Bluetooth
+     * request the relay's words (T043 defect 2) — right up to the point where
+     * a test finally asked.
+     */
+    @Volatile
+    private var judgedRoute: Route? = null
 
     /** Is the Bluetooth route on offer at all on this build and this phone? */
     val offersNearby: Boolean get() = bleHost() != null
@@ -343,9 +367,13 @@ class ClearSignerChannel(
         one.withLock {
             notice.value = null
             unopenable = null
+            judgedRoute = null
             val existing = wire
             val mine = existing == null
             val live = existing ?: open(signerOrigin) ?: return@withLock Put(ClearSignerAnswer.Cancelled, true)
+            // Remembered while the flow is still alive: the answer is turned
+            // into words after `endFlow` has forgotten where it was going.
+            judgedRoute = route
             // A later request of the same flow raises no sheet of its own. The
             // loopback names its page again from inside `ask` (its sheet offers
             // "open it again"); a page on another device — relayed or nearby —
@@ -422,6 +450,9 @@ class ClearSignerChannel(
             }
         }.getOrElse { error ->
             VelaLog.failure("clearsigner", "the channel could not be opened", error)
+            // A radio handed out and then not used keeps a GATT server and an
+            // advert up with nobody behind them.
+            radio?.let { runCatching { it.stop() } }
             route = null
             _state.value = State.Idle
             return null
@@ -492,7 +523,11 @@ class ClearSignerChannel(
      */
     private fun blocked(why: BleReadiness): BlePeripheral? {
         val w = words()
-        unopenable = if (why == BleReadiness.AdapterOff) w.bluetoothOff else w.bluetoothNeeded
+        unopenable = when (why) {
+            BleReadiness.AdapterOff -> w.bluetoothOff
+            BleReadiness.Unsupported -> w.bluetoothUnsupported
+            else -> w.bluetoothNeeded
+        }
         notice.value = unopenable
         _state.value = State.Idle
         return null
@@ -524,8 +559,22 @@ class ClearSignerChannel(
         return when (answer) {
             ClearSignerAnswer.TimedOut -> w.timeout
             is ClearSignerAnswer.Unreachable -> {
-                VelaLog.event("clearsigner", "relay unreachable", "detail" to answer.detail)
-                w.relayDown
+                // The route picks the words. Telling somebody who chose
+                // Bluetooth that the relay could not be reached — and advising
+                // them to try a route they did not choose — names the wrong
+                // channel and offers the wrong remedy (T043 radio pass).
+                VelaLog.event(
+                    "clearsigner",
+                    "the channel could not carry the request",
+                    "route" to (judgedRoute?.name ?: "unknown"),
+                    "why" to answer.why.name,
+                    "detail" to answer.detail,
+                )
+                when {
+                    judgedRoute != Route.Nearby -> w.relayDown
+                    answer.why == Unreachability.PeerGone -> w.nearbyLost
+                    else -> w.bluetoothUnsupported
+                }
             }
             is ClearSignerAnswer.Ceremonial -> told(
                 (answer.outcome as? ClearSignerCeremonyOutcome.Refused)?.refusal
