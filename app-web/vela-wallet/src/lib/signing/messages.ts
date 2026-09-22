@@ -134,6 +134,14 @@ export interface SigningMessages {
 	warnPermitCantCap: string;
 	warnBestEffort: string;
 	warnVerifiedAbi: string;
+	/**
+	 * Spec 081 FR-008: this description came from the descriptor service and
+	 * nobody authenticated it. Optional only until its corpus key lands with
+	 * the feature's i18n pass — the resolver hands `undefined` while the
+	 * catalogs lack it, and the sheet says one thing less rather than drawing
+	 * a raw key path.
+	 */
+	warnDescriptorFetched: string;
 	warnSimUnavailable: string;
 	warnDrain: string;
 	okSelfTransfer: string;

@@ -38,6 +38,7 @@ export * from './ClearMessageView';
 export * from './ClearNumberFormat';
 export * from './ClearOperation';
 export * from './ClearProbe';
+export * from './ClearProvenance';
 export * from './ClearRisk';
 export * from './ClearShellResult';
 export * from './ClearSignField';

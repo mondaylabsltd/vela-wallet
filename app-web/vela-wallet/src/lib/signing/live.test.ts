@@ -7,6 +7,7 @@
  * slider — not as a warning somebody can slide past.
  */
 import { describe, expect, it } from 'vitest';
+import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
@@ -106,6 +107,7 @@ const DECODED: ClearSigningView = {
 		risk: 'normal',
 		contract_address: '0x' + 'cc'.repeat(20),
 		verified: true,
+		provenance: 'built_in',
 		sign_type: 'transaction',
 		partial: false,
 		best_effort: false,
@@ -320,23 +322,54 @@ describe('a decoded request', () => {
 		expect(danger.blocks[0]).toMatchObject({ tone: 'danger' });
 	});
 
-	it('says every flag the core raised: a burn, an unverified selector, best effort', () => {
+	it('says every flag the core raised: a burn, a best-effort decode', () => {
 		const flagged = buildSigningModel(
 			inputs({
 				clear: {
 					...DECODED,
-					result: { ...DECODED.result!, to_own_token: true, verified: false, best_effort: true }
+					result: {
+						...DECODED.result!,
+						to_own_token: true,
+						verified: false,
+						provenance: 'selector_db',
+						best_effort: true
+					}
 				}
 			})
 		)!;
 		const warnings = flagged.blocks.filter((b) => b.kind === 'warning');
-		expect(warnings).toHaveLength(3);
+		expect(warnings).toHaveLength(2);
 		expect(warnings[0]).toMatchObject({ tone: 'danger' });
 		// …and says them in words, not in template slots: "Calling {{fn}} —"
 		// shipped once (spec 062 found it on the registry backup).
 		for (const warning of warnings) {
 			expect(JSON.stringify(warning)).not.toContain('{{');
 		}
+	});
+
+	/*
+	 * Spec 081 FR-008. The old rule was `!verified` → "selector not listed",
+	 * which named the wrong problem for three of the five sources: the
+	 * descriptor service answered, the selector WAS listed, and nobody
+	 * authenticated the answer. Only a fetched descriptor gets a line, and it
+	 * is a line about authentication.
+	 */
+	it('says where a fetched description came from, and nothing about the other sources', () => {
+		const said = (provenance: ClearProvenance) =>
+			buildSigningModel(
+				inputs({
+					m: { ...m, warnDescriptorFetched: 'Not authenticated.' },
+					clear: {
+						...DECODED,
+						result: { ...DECODED.result!, verified: false, provenance }
+					}
+				})
+			)!.blocks.filter((b) => b.kind === 'warning');
+
+		expect(said('fetched')).toMatchObject([{ tone: 'caution', text: 'Not authenticated.' }]);
+		expect(said('standard')).toHaveLength(0);
+		expect(said('pinned_match')).toHaveLength(0);
+		expect(said('none')).toHaveLength(0);
 	});
 
 	it("the wallet's own registry backup is drawn verified, with rows and no warning", () => {

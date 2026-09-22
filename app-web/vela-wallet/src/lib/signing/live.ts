@@ -293,12 +293,19 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.to_own_token) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 		}
-		if (!result.verified) {
-			blocks.push({
-				kind: 'warning',
-				tone: 'caution',
-				text: fill(m.warnSelectorNotListed, { bytes })
-			});
+		/*
+		 * Spec 081 FR-008: where the description came from, in the one case
+		 * the person can act on. This used to read "no ERC-7730 descriptor,
+		 * selector not listed" for every unverified result — said over a
+		 * descriptor the wallet had just fetched and decoded, and over an
+		 * ordinary ERC-20 transfer, both of which listed the selector fine.
+		 * The other values say nothing here: built in and pinned are the
+		 * verified ones, a token-standard shape is the standard doing its
+		 * job, the 4-byte database has `best_effort` below, and a deployment
+		 * claims nothing to warn about.
+		 */
+		if (result.provenance === 'fetched') {
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 		}
 		if (result.partial) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });

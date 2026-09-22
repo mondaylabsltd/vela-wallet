@@ -4,6 +4,7 @@ import app.getvela.wallet.core.data.KeyValueStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.keccak256
 
@@ -23,13 +24,24 @@ import uniffi.vela_core_uniffi.keccak256
  * 2. **Cache**, positive entries only, 24 hours.
  * 3. **The passkey index** — a Vela user, by wallet reference.
  * 4. **Name services**, asked together, answered in priority order:
- *    `.bnb`, `.arb`, `.g`, Basename, ENS.
+ *    `.bnb`, `.arb`, `.g`, Basename, ENS — each name forward-verified
+ *    before it counts.
  *
  * ## Only positive results are cached
  *
  * The core says so (`ContactShellResult::IdentityResolved`, invariant ⑦): a
  * name registered a minute after somebody looked would otherwise be
  * invisible for a day. A miss costs a lookup; a cached miss costs the truth.
+ *
+ * ## A reverse record is a claim, not a name (spec 081, FR-010)
+ *
+ * `addr.reverse` is written by the address itself, so whoever controls an
+ * address controls the string this class used to hand the UI: fund a fresh
+ * address, name it after the contact somebody is about to pay, and the wallet
+ * drew that name beside the payment. Every name a name service returns is now
+ * put to `vela_core::app::name_verify`, which resolves it FORWARD and compares;
+ * only a verified name is shown or cached. The rule is the core's, written once
+ * for four shells — what is here is the transport.
  */
 class IdentityResolver(
     private val store: KeyValueStore,
@@ -39,6 +51,19 @@ class IdentityResolver(
     /** `eth_call` on one chain: the `result` hex, or `null` for "no answer" / `0x`. */
     private val ethCall: suspend (chainId: Int, to: String, data: String) -> String?,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    /**
+     * `verifiedNameStep` from the core. A seam so the JVM tests can script the
+     * verdict, exactly as `RegistryNameLookup` holds one for its own walk.
+     */
+    private val verifiedNameStep: (
+        chainId: Int,
+        registry: String,
+        address: String,
+        name: String,
+        answersJson: String,
+    ) -> String = { chainId, registry, address, name, answers ->
+        uniffi.vela_core_uniffi.verifiedNameStep(chainId.toUInt(), registry, address, name, answers)
+    },
 ) {
     data class Identity(val name: String, val source: String)
 
@@ -78,7 +103,10 @@ class IdentityResolver(
         return null
     }
 
-    /** One service's answer for one address, or `null`. */
+    /**
+     * One service's answer for one address, forward-verified, or `null`. A
+     * name this returns has been proven to resolve back to `address`.
+     */
     internal suspend fun reverseResolve(address: String, service: NameService): String? {
         val stripped = address.removePrefix("0x").lowercase()
         val reverseNode = when (val registrar = service.reverseRegistrar) {
@@ -98,7 +126,54 @@ class IdentityResolver(
         val resolver = resolverWord.takeLast(40)
         if (resolver.all { it == '0' }) return null
         val nameWord = ethCall(service.chainId, "0x$resolver", "0x$SEL_NAME$node") ?: return null
-        return decodeName(nameWord)
+        // What the address CLAIMS to be called. Nothing may draw it yet.
+        val claimed = decodeName(nameWord) ?: return null
+        return forwardVerified(address, service, claimed)
+    }
+
+    /**
+     * The claimed name, but only if resolving it forward lands back on
+     * `address`.
+     *
+     * Which calls are made, in what order, what an unanswered one means and the
+     * comparison itself are all `name_verify`'s; this drives the transcript.
+     * `null` covers both "this name is somebody else's" and "nobody answered" —
+     * failing open on the second would let whoever poisons a record choose the
+     * moment.
+     */
+    internal suspend fun forwardVerified(address: String, service: NameService, claimed: String): String? {
+        val answers = JSONArray()
+        repeat(MAX_VERIFY_ROUNDS) {
+            val next = runCatching {
+                JSONObject(verifiedNameStep(service.chainId, service.registry, address, claimed, answers.toString()))
+            }.getOrNull() ?: return null
+            if (next.optString("type") != "ask") {
+                return if (next.optString("forward_state") == "verified") {
+                    // The core hands back the name it PROVED, normalised.
+                    // Drawing that and not the reverse record's own spelling is
+                    // what keeps what is shown and what was checked together.
+                    next.optString("name").ifBlank { null }
+                } else {
+                    null
+                }
+            }
+            val requests = next.optJSONArray("requests") ?: return null
+            for (i in 0 until requests.length()) {
+                val request = requests.optJSONObject(i) ?: return null
+                val body = runCatching {
+                    ethCall(request.optInt("chain_id"), request.optString("to"), request.optString("data"))
+                }.getOrNull()
+                answers.put(
+                    JSONObject()
+                        .put("id", request.optString("id"))
+                        // A call that did not answer is `failed`, never an empty
+                        // body: the core's verdicts turn on the difference.
+                        .put("outcome", if (body == null) "failed" else "ok")
+                        .put("body", body ?: JSONObject.NULL),
+                )
+            }
+        }
+        return null
     }
 
     private suspend fun cached(lower: String): Identity? {
@@ -119,9 +194,20 @@ class IdentityResolver(
     }
 
     companion object {
-        /** `vela.recipientIdentity` — `{ "0xlowercase": { name, source, at } }`, one document (the desktop's shape). */
-        const val CACHE_KEY = "vela.recipientIdentity"
+        /**
+         * `vela.recipientIdentity.v2` — `{ "0xlowercase": { name, source, at } }`,
+         * one document (the desktop's shape).
+         *
+         * The `.v2` is the forward-verification rule arriving (FR-010):
+         * everything the old key holds was cached under no rule at all, so a
+         * poisoned name would have kept its place for a day after the fix
+         * shipped. A new key retires the lot at once.
+         */
+        const val CACHE_KEY = "vela.recipientIdentity.v2"
         const val CACHE_TTL_MS = 24.0 * 60 * 60 * 1000
+
+        /** Verification is three `eth_call`s at most; this only stops a spin. */
+        const val MAX_VERIFY_ROUNDS = 8
 
         /** Priority order. Adding a service is a row here, as long as it follows the ENS registry pattern. */
         val NAME_SERVICES: List<NameService> = listOf(

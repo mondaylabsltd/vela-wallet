@@ -29,6 +29,16 @@
 //  found today is not a fact about the address; caching the absence would keep
 //  a person nameless for 24 hours after they registered one.
 //
+//  ## A reverse record is a claim, not a name (spec 081, FR-010)
+//
+//  `addr.reverse` is written by the address itself, so whoever controls an
+//  address controls the string this file used to hand the UI: fund a fresh
+//  address, name it after the contact somebody is about to pay, and the wallet
+//  drew that name beside the payment. Every name a service returns is now put
+//  to `vela_core::app::name_verify`, which resolves it FORWARD and compares;
+//  only a verified name is shown or cached. The rule is the core's, written
+//  once for four shells — what is here is the transport.
+//
 
 import Foundation
 import VelaCore
@@ -67,20 +77,42 @@ final class RecipientIdentity {
                 registry: "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e"),
     ]
 
-    /// `recipient_id:<address>` — web's key, so a name resolved in one client
-    /// is not re-resolved in the other.
-    private static let cachePrefix = "recipient_id:"
+    /// `recipient_id.v2:<address>` — web's key, so a name resolved in one
+    /// client is not re-resolved in the other.
+    ///
+    /// The `.v2` is the forward-verification rule arriving (FR-010): everything
+    /// the old prefix holds was written under no rule at all, so a poisoned
+    /// name would have kept its place for a day after the fix shipped. A new
+    /// prefix retires the lot at once.
+    private static let cachePrefix = "recipient_id.v2:"
     private static let cacheTTLMs: Double = 24 * 60 * 60 * 1000
+    /// Verification is three `eth_call`s at most; this only stops a spin.
+    private static let maxVerifyRounds = 8
 
     private let store: VelaStore
     private let pool: RpcPool
     private let accounts: AccountStore
+    private let verifyStep: (Int, String, String, String, String) -> String
     private var memo: [String: Identity] = [:]
 
-    init(store: VelaStore, pool: RpcPool, accounts: AccountStore) {
+    /// `verifyStep` is `verifiedNameStep` from the core, held as a closure so a
+    /// test can script a verdict without the network — the seam
+    /// `RegistryNameLookup` already keeps for its own walk.
+    init(
+        store: VelaStore,
+        pool: RpcPool,
+        accounts: AccountStore,
+        verifyStep: @escaping (Int, String, String, String, String) -> String = {
+            verifiedNameStep(
+                chainId: UInt32(truncatingIfNeeded: $0),
+                registry: $1, address: $2, name: $3, answersJson: $4
+            )
+        }
+    ) {
         self.store = store
         self.pool = pool
         self.accounts = accounts
+        self.verifyStep = verifyStep
     }
 
     /// A display identity for `address`, or `nil` when nobody could name it.
@@ -160,7 +192,8 @@ final class RecipientIdentity {
     )
 
     /// `registry.resolver(node)` → `resolver.name(node)`, the ENS reverse
-    /// pattern, entirely on-chain.
+    /// pattern, entirely on-chain — and then the name back forward again,
+    /// because a reverse record alone proves nothing.
     private func reverseResolve(_ address: String, service: Service) async -> String? {
         guard let resolverSelector = Multicall.selector("resolver(bytes32)"),
               let nameSelector = Multicall.selector("name(bytes32)")
@@ -187,8 +220,67 @@ final class RecipientIdentity {
                                         data: nameSelector + node)
         else { return nil }
 
-        let name = TokenMetadata.decodeString(nameWord)
-        return name.isEmpty ? nil : name
+        // What the address CLAIMS to be called. Nothing may draw it yet.
+        let claimed = TokenMetadata.decodeString(nameWord)
+        guard !claimed.isEmpty else { return nil }
+        return await forwardVerified(address, service: service, claimed: claimed)
+    }
+
+    /// The claimed name, but only if resolving it forward lands back on
+    /// `address`.
+    ///
+    /// Which calls are made, in what order, what an unanswered one means and
+    /// the comparison itself are all `name_verify`'s; this drives the
+    /// transcript. `nil` covers both "this name is somebody else's" and "nobody
+    /// answered" — failing open on the second would let whoever poisons a
+    /// record choose the moment.
+    private func forwardVerified(_ address: String, service: Service, claimed: String) async -> String? {
+        var answers: [[String: Any]] = []
+        for _ in 0..<Self.maxVerifyRounds {
+            let transcript = (try? JSONSerialization.data(withJSONObject: answers))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            let raw = verifyStep(service.chainId, service.registry, address, claimed, transcript)
+            guard let bytes = raw.data(using: .utf8),
+                  let next = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+            else { return nil }
+            guard (next["type"] as? String) == "ask" else {
+                guard (next["forward_state"] as? String) == "verified",
+                      let name = next["name"] as? String, !name.isEmpty
+                else { return nil }
+                // The core hands back the name it PROVED, normalised. Drawing
+                // that and not the reverse record's own spelling is what keeps
+                // what is shown and what was checked together.
+                return name
+            }
+            guard let requests = next["requests"] as? [[String: Any]] else { return nil }
+            for request in requests {
+                guard let id = request["id"] as? String,
+                      let chainId = request["chain_id"] as? Int,
+                      let to = request["to"] as? String,
+                      let data = request["data"] as? String
+                else { return nil }
+                let body = await rawCall(chainId, to: to, data: data)
+                answers.append([
+                    "id": id,
+                    // A call that did not answer is `failed`, never an empty
+                    // body: the core's verdicts turn on the difference.
+                    "outcome": body == nil ? "failed" : "ok",
+                    "body": body ?? NSNull(),
+                ])
+            }
+        }
+        return nil
+    }
+
+    /// One `eth_call`, routed, as the RAW result hex the core reads. `nil` is
+    /// "nobody answered"; a bare `0x` comes back as the answer it is.
+    private func rawCall(_ chainId: Int, to: String, data: String) async -> String? {
+        let outcome = await pool.call(
+            chainId: chainId, method: "eth_call", params: [["to": to, "data": data], "latest"]
+        )
+        guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+        else { return nil }
+        return hex
     }
 
     /// One `eth_call`, routed. `nil` covers every unresolved path — an RPC

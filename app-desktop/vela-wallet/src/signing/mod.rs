@@ -151,6 +151,15 @@ pub struct SigningStrings {
     pub warn_permit_cant_cap: SharedString,
     pub warn_best_effort: SharedString,
     pub warn_verified_abi: SharedString,
+    /// An incomplete decode, in the words the phones already use for it. The
+    /// desktop used to borrow `warn_verified_abi` here, which says the
+    /// opposite: that there is no descriptor at all (spec 081 FR-008).
+    pub warn_partial: SharedString,
+    /// Where a fetched description came from, said once, under the fields.
+    /// Its corpus key lands with spec 081's i18n pass
+    /// (`specs/081-audit-product-gaps/pending-corpus/descriptor-provenance.json`);
+    /// until then `t` echoes it, as it does any missing key.
+    pub warn_descriptor_fetched: SharedString,
     pub warn_sim_unavailable: SharedString,
     /// The two words the simulated balance block needs beyond its title: what
     /// an unverified inflow is called (never its amount — a site can emit any
@@ -345,6 +354,8 @@ impl SigningStrings {
             warn_permit_cant_cap: a("permitCantCap"),
             warn_best_effort: s("bestEffortWarning"),
             warn_verified_abi: s("verifiedAbiWarning"),
+            warn_partial: s("partialWarning"),
+            warn_descriptor_fetched: s("descriptorFetchedWarning"),
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),
             sim_no_change: s("simResultNoChange"),

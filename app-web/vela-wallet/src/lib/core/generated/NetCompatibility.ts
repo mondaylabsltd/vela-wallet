@@ -6,7 +6,17 @@ import type { NetRpcFailureKind } from "./NetRpcFailureKind";
  * Mirror of `CompatibilityResult` (models/types.ts:257-271), with the
  * English `error` strings replaced by data the shell words itself.
  */
-export type NetCompatibility = { chain_id: number, compatible: boolean, contracts: Array<NetContractStatus>, 
+export type NetCompatibility = { chain_id: number, 
+/**
+ * A one-key wallet can be created and can sign here.
+ */
+compatible: boolean, 
+/**
+ * Spec 081: and a wallet with two to seven keys can too — it also needs
+ * Safe's passkey signer factory and its singleton. `compatible` without
+ * this is a real state: the chain works, but only for a single-key wallet.
+ */
+multi_key_ready: boolean, contracts: Array<NetContractStatus>, 
 /**
  * `None` = never probed (RPC failure short-circuited).
  */

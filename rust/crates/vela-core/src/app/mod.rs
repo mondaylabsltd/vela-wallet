@@ -57,6 +57,7 @@ pub mod fee_tier_pref;
 pub mod login;
 pub mod manage_tokens;
 pub mod money;
+pub mod name_verify;
 pub mod network_admin;
 pub mod payment_request;
 pub mod receive_watch;

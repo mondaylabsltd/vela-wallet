@@ -40,6 +40,12 @@
 //!   (`clear-signing.ts:1266-1270`).
 //! - **Zero resolved fields is a blind sign, never a half-truth**
 //!   (`clear-signing.ts:587-590`).
+//! - **"Verified" means authenticated, not contract-specific** (spec 081
+//!   FR-008). Every result carries a [`ClearProvenance`], and `verified` is
+//!   derived from it in [`ClearSigning::view`]: only a descriptor compiled
+//!   into this build — or a fetched one byte-equal to it — earns the word.
+//!   A descriptor the chain-data server hands over plain HTTP, from a base
+//!   URL the person can edit, is `Fetched`, and the sheets say so.
 //! - **SIWE domain must be a bare RFC-3986 authority** — userinfo, path or
 //!   scheme in the first line means "not SIWE at all" (`siwe.ts:45`); CRLF is
 //!   normalized so the line-1 anchor can't be defeated (`siwe.ts:33-36`); an
@@ -159,6 +165,28 @@ const ERC_CALLDATA_FALLBACKS: [&str; 3] = [
     "/erc7730/ercs/calldata-erc4626-vaults.json",
 ];
 const PERMIT_FALLBACK_PATH: &str = "/erc7730/ercs/eip712-erc2612-permit.json";
+
+/// Uniswap's Permit2, at the same address on every chain it is deployed to.
+const PERMIT2_ADDRESS: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+
+/// The `encodeType` strings of the typed messages this build describes itself
+/// (spec 081 FR-008). Comparing the string IS comparing the typehash — it is
+/// the preimage EIP-712 hashes — so a built-in descriptor is used only for
+/// the exact message it was written for, never for a look-alike that merely
+/// shares a primary type name. Written in `build_encode_type` order: primary
+/// type first, then its dependencies alphabetically.
+const ERC2612_PERMIT_ENCODE_TYPE: &str =
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)";
+const PERMIT2_SINGLE_ENCODE_TYPE: &str = "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)";
+const PERMIT2_TRANSFER_ENCODE_TYPE: &str = "PermitTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline)TokenPermissions(address token,uint256 amount)";
+
+/// "Unlimited" for a Permit2 `uint160` amount: the same 2^152 the approval
+/// guard caps at (`approval_guard::UNLIMITED_CAP_160`), so the sheet and the
+/// cap editor call the same number unlimited.
+const UNLIMITED_160: &str = "0x100000000000000000000000000000000000000";
+/// The same threshold for a `uint256` amount (2^255), as the interface
+/// descriptors have always used.
+const UNLIMITED_256: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
 
 /// USD-pegged stablecoins valued at ~$1 with no price lookup
 /// (`clear-signing.ts STABLE_SYMBOLS`).
@@ -535,6 +563,53 @@ pub enum ClearSignType {
     Signature,
 }
 
+/// Where the description of this request came from (spec 081 FR-008).
+///
+/// The wallet used to call a description "verified" whenever it was
+/// contract-specific, and a contract-specific descriptor is usually one the
+/// chain-data server just handed us over plain HTTP, with no signature, from
+/// a base URL the person can edit in Settings. Nobody authenticated it. This
+/// enum is the honest answer to "who said so", and `verified` is nothing more
+/// than a name for its top two values.
+///
+/// It grades the SOURCE OF THE BYTES, not how well they fit: `partial` and
+/// `to_own_token` still say their own piece about a built-in descriptor that
+/// resolved badly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearProvenance"))]
+pub enum ClearProvenance {
+    /// Compiled into this build — the app's own word, and the only kind of
+    /// descriptor an attacker would have to ship a new release to change.
+    BuiltIn,
+    /// Fetched, and equal (as parsed JSON) to the built-in descriptor for the
+    /// same contract. Nothing about it is taken on trust: the copy on disk
+    /// says the same thing, so it is as good as built in.
+    PinnedMatch,
+    /// Fetched from the descriptor service and believed. Accurate almost
+    /// always, authenticated never — which is exactly what the sheet must say.
+    Fetched,
+    /// A token-standard shape compiled into the app (ERC-20/721/1155): it
+    /// describes the standard's method, not this contract, so it can name no
+    /// contract and vouch for nothing.
+    Standard,
+    /// Recovered from the public 4-byte database and decoded generically —
+    /// a shape that parsed, not a description anybody published.
+    SelectorDb,
+    /// No descriptor took part: the app wrote this sheet from the call's own
+    /// shape (a CREATE2 deployment). It describes what the call IS, and
+    /// claims nothing about what the deployed code will do.
+    None,
+}
+
+impl ClearProvenance {
+    /// The one place the word "verified" is defined: a description is
+    /// verified when changing it would mean changing the app.
+    pub fn is_verified(self) -> bool {
+        matches!(self, Self::BuiltIn | Self::PinnedMatch)
+    }
+}
+
 /// One resolved display field (`ClearSignField` in TS; optional booleans
 /// became plain flags). `value` keywords ("Unlimited") are descriptor-borne
 /// vocabulary the shell localizes exactly as it localizes `intent`.
@@ -571,7 +646,16 @@ pub struct ClearSignResult {
     pub fields: Vec<ClearSignField>,
     pub risk: ClearRisk,
     pub contract_address: Option<String>,
+    /// Whether the description may be called "verified".
+    ///
+    /// PROJECTION, not resolution state, exactly like [`Self::to_own_token`]:
+    /// [`ClearProvenance::is_verified`] decides it in [`ClearSigning::view`],
+    /// so no builder can grant the word by hand and none has to remember to
+    /// withhold it. Builders write `false` here and set `provenance`.
     pub verified: bool,
+    /// Where the description came from — the ground the `verified` flag and
+    /// every shell's source label stand on (spec 081 FR-008).
+    pub provenance: ClearProvenance,
     pub sign_type: ClearSignType,
     /// Descriptor declared more fields than resolved — loud "incomplete".
     pub partial: bool,
@@ -872,6 +956,57 @@ impl Req {
     }
 }
 
+/// The two things the ladder knows about the descriptor it is about to use,
+/// and the only two the finished result may repeat.
+///
+/// They are separate questions and the old single `is_specific` bool ran them
+/// together: the fetched ERC-20 file IS about token transfers and is NOT
+/// about this contract, while the contract descriptor is about this contract
+/// and still nobody's signed word. `specific` decides whether the sheet may
+/// print the descriptor's `contractName` and `owner`; `provenance` decides
+/// what the sheet may say about where the words came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DescriptorSource {
+    /// This descriptor is about THIS contract, so its name and owner belong
+    /// to the contract on screen.
+    specific: bool,
+    provenance: ClearProvenance,
+}
+
+impl DescriptorSource {
+    /// A descriptor compiled into this build, for this contract.
+    const fn built_in(specific: bool) -> Self {
+        Self {
+            specific,
+            provenance: ClearProvenance::BuiltIn,
+        }
+    }
+
+    /// A token-standard shape compiled into the app: never contract-specific.
+    const fn standard() -> Self {
+        Self {
+            specific: false,
+            provenance: ClearProvenance::Standard,
+        }
+    }
+
+    /// A descriptor the chain-data server just handed us. `built_in` is the
+    /// copy this build ships for the same target, when it ships one: a
+    /// fetched descriptor that says exactly what our own copy says is pinned,
+    /// because believing it costs nothing we have not already committed to.
+    fn fetched(specific: bool, fetched: &Value, built_in: Option<&Value>) -> Self {
+        let provenance = if built_in == Some(fetched) {
+            ClearProvenance::PinnedMatch
+        } else {
+            ClearProvenance::Fetched
+        };
+        Self {
+            specific,
+            provenance,
+        }
+    }
+}
+
 /// What `resolveCalldataDescriptor` / `resolveEip712*` should do after the
 /// decimals warm completes, and where the pipeline goes on a null result.
 #[derive(Clone, Debug)]
@@ -879,13 +1014,13 @@ enum WarmThen {
     Calldata {
         descriptor: Value,
         matched_sig: String,
-        is_specific: bool,
+        source: DescriptorSource,
         next: TxNext,
     },
     Eip712 {
         descriptor: Value,
         matched_sig: String,
-        contract_specific: bool,
+        source: DescriptorSource,
         next: TypedNext,
     },
 }
@@ -905,7 +1040,11 @@ enum TxNext {
 
 #[derive(Clone, Copy, Debug)]
 enum TypedNext {
-    /// The contract-specific eip712 entry didn't resolve — try ERC-2612.
+    /// The built-in typed descriptor didn't cover this message — ask the
+    /// server for one about the verifying contract.
+    AfterLocal,
+    /// The contract-specific eip712 entry didn't resolve — try the published
+    /// ERC-2612 file.
     AfterEntry,
     Final,
 }
@@ -1117,9 +1256,12 @@ impl App for ClearSigning {
             resolved: model.resolved,
             // The burn verdict is graded HERE, on the finished result, so every
             // builder — descriptor, typed data, best-effort, deploy — is covered
-            // by one rule and a future fifth builder cannot forget it.
+            // by one rule and a future fifth builder cannot forget it. The word
+            // "verified" is graded in the same breath and for the same reason:
+            // it is a reading of `provenance`, never a claim a builder makes.
             result: model.result.clone().map(|mut r| {
                 r.to_own_token = to_own_token(&r);
+                r.verified = r.provenance.is_verified();
                 r
             }),
             message: model.message.clone(),
@@ -1435,7 +1577,12 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
             let path = contract_descriptor_path(&run.req);
             match model.descriptor_cache.get(&path).cloned().flatten() {
                 Some(descriptor) => {
-                    try_calldata(model, run, descriptor, true, TxNext::AfterContract)
+                    let built_in = match &run.req {
+                        Req::Tx { to: Some(to), .. } => local_descriptor(to),
+                        _ => None,
+                    };
+                    let source = DescriptorSource::fetched(true, &descriptor, built_in.as_ref());
+                    try_calldata(model, run, descriptor, source, TxNext::AfterContract)
                 }
                 None => tx_continue(model, run, TxNext::AfterContract),
             }
@@ -1567,7 +1714,11 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
                 .cloned()
                 .flatten()
             {
-                Some(descriptor) => try_eip712(model, run, descriptor, false, TypedNext::Final),
+                Some(descriptor) => {
+                    let source =
+                        DescriptorSource::fetched(false, &descriptor, Some(&permit_descriptor()));
+                    try_eip712(model, run, descriptor, source, TypedNext::Final)
+                }
                 None => conclude(model, None),
             }
         }
@@ -1594,7 +1745,13 @@ fn tx_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
         _ => return conclude(model, None),
     };
     if let Some(local) = local_descriptor(&to) {
-        return try_calldata(model, run, local, true, TxNext::AfterLocal);
+        return try_calldata(
+            model,
+            run,
+            local,
+            DescriptorSource::built_in(true),
+            TxNext::AfterLocal,
+        );
     }
     tx_continue(model, run, TxNext::AfterLocal)
 }
@@ -1611,7 +1768,14 @@ fn tx_continue(
             match model.descriptor_cache.get(&path) {
                 Some(Some(descriptor)) => {
                     let descriptor = descriptor.clone();
-                    try_calldata(model, run, descriptor, true, TxNext::AfterContract)
+                    // The server's word about this contract, unless it is
+                    // word for word the copy we ship for the same address.
+                    let built_in = match &run.req {
+                        Req::Tx { to: Some(to), .. } => local_descriptor(to),
+                        _ => None,
+                    };
+                    let source = DescriptorSource::fetched(true, &descriptor, built_in.as_ref());
+                    try_calldata(model, run, descriptor, source, TxNext::AfterContract)
                 }
                 Some(None) => tx_continue(model, run, TxNext::AfterContract),
                 None => {
@@ -1675,7 +1839,13 @@ fn resolve_token_standard(
     };
     if let Some(kind) = kind {
         let descriptor = interface_descriptor(kind);
-        return try_calldata(model, run, descriptor, false, TxNext::AfterTokenStd);
+        return try_calldata(
+            model,
+            run,
+            descriptor,
+            DescriptorSource::standard(),
+            TxNext::AfterTokenStd,
+        );
     }
 
     // transferFrom / approve / setApprovalForAll — query the chain.
@@ -1738,7 +1908,13 @@ fn standard_decided(
         kind
     };
     let descriptor = interface_descriptor(kind);
-    try_calldata(model, run, descriptor, false, TxNext::AfterTokenStd)
+    try_calldata(
+        model,
+        run,
+        descriptor,
+        DescriptorSource::standard(),
+        TxNext::AfterTokenStd,
+    )
 }
 
 /// Steps 3–4: ERC fallbacks then the 4-byte selector DB (`tryErcFallbacks`
@@ -1770,7 +1946,11 @@ fn erc_fallback_step(
                     });
                 if formats_match {
                     let descriptor = descriptor.clone();
-                    return try_calldata(model, run, descriptor, false, TxNext::Final);
+                    // A standard's file, but a FETCHED one: it arrived over
+                    // the same unauthenticated hop as any other, so it is
+                    // graded by where it came from, not by what it covers.
+                    let source = DescriptorSource::fetched(false, &descriptor, None);
+                    return try_calldata(model, run, descriptor, source, TxNext::Final);
                 }
                 index += 1;
             }
@@ -1800,16 +1980,20 @@ fn erc_fallback_step(
 // eth_signTypedData pipeline (resolveTypedData, clear-signing.ts:621-654)
 // ---------------------------------------------------------------------------
 
-fn typed_begin(model: &mut Model, mut run: Run) -> Command<ClearSigningEffect, Event> {
-    let path = contract_descriptor_path(&run.req);
-    match model.descriptor_cache.get(&path) {
-        Some(_) => typed_entry_lookup(model, run),
-        None => {
-            run.step = Step::AwaitTypedDescriptor;
-            model.run = Some(run);
-            requests(model, vec![ClearOperation::HttpGet { path }])
-        }
+fn typed_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
+    // 0. Typed descriptors compiled into this build, the twin of `tx_begin`'s
+    // local table (spec 081 FR-008). An off-chain signature hands out spending
+    // power with no transaction to simulate and no receipt to read afterwards,
+    // so the two messages the wallet meets most — the ERC-2612 permit and
+    // Permit2's — are described by bytes that ship with the app. They take
+    // precedence over the contract's published descriptor, which is where
+    // every "verified" permit sheet used to come from: for a message whose
+    // typehash IS the standard's, the standard's reading is the right one and
+    // it is the only one nobody can edit under us.
+    if let Some((local, source)) = local_typed_descriptor(&run.req) {
+        return try_eip712(model, run, local, source, TypedNext::AfterLocal);
     }
+    typed_continue(model, run, TypedNext::AfterLocal)
 }
 
 /// EIP-712 descriptors are keyed by the primary type's `encodeType` hash;
@@ -1830,7 +2014,13 @@ fn typed_entry_lookup(model: &mut Model, run: Run) -> Command<ClearSigningEffect
     });
 
     match entry {
-        Some(entry) => try_eip712(model, run, entry, true, TypedNext::AfterEntry),
+        Some(entry) => {
+            // The server's word about this contract's message. It is pinned
+            // only if it repeats the built-in descriptor exactly.
+            let built_in = local_typed_descriptor(&run.req).map(|(descriptor, _)| descriptor);
+            let source = DescriptorSource::fetched(true, &entry, built_in.as_ref());
+            try_eip712(model, run, entry, source, TypedNext::AfterEntry)
+        }
         None => typed_continue(model, run, TypedNext::AfterEntry),
     }
 }
@@ -1841,10 +2031,27 @@ fn typed_continue(
     next: TypedNext,
 ) -> Command<ClearSigningEffect, Event> {
     match next {
+        // 1. The contract's own descriptor, keyed by the message's typehash.
+        TypedNext::AfterLocal => {
+            let path = contract_descriptor_path(&run.req);
+            match model.descriptor_cache.get(&path) {
+                Some(_) => typed_entry_lookup(model, run),
+                None => {
+                    run.step = Step::AwaitTypedDescriptor;
+                    model.run = Some(run);
+                    requests(model, vec![ClearOperation::HttpGet { path }])
+                }
+            }
+        }
+        // 2. The published universal file — for a `Permit` that is not the
+        // standard's (DAI's takes `allowed`, not `value`), which rung 0
+        // deliberately left alone.
         TypedNext::AfterEntry => match model.descriptor_cache.get(PERMIT_FALLBACK_PATH) {
             Some(Some(descriptor)) => {
                 let descriptor = descriptor.clone();
-                try_eip712(model, run, descriptor, false, TypedNext::Final)
+                let source =
+                    DescriptorSource::fetched(false, &descriptor, Some(&permit_descriptor()));
+                try_eip712(model, run, descriptor, source, TypedNext::Final)
             }
             Some(None) => conclude(model, None),
             None => {
@@ -1944,7 +2151,7 @@ fn try_calldata(
     model: &mut Model,
     run: Run,
     descriptor: Value,
-    is_specific: bool,
+    source: DescriptorSource,
     next: TxNext,
 ) -> Command<ClearSigningEffect, Event> {
     let Req::Tx { data, .. } = &run.req else {
@@ -1961,7 +2168,7 @@ fn try_calldata(
     let ctx = calldata_context(&run.req, &matched_sig);
     let unknown = unknown_token_addrs(model, &run, &descriptor, &matched_sig, &ctx);
     if unknown.is_empty() {
-        let outcome = finish_calldata(model, &run, &descriptor, &matched_sig, is_specific);
+        let outcome = finish_calldata(model, &run, &descriptor, &matched_sig, source);
         return match outcome {
             Some(result) => conclude(model, Some(result)),
             None => tx_continue(model, run, next),
@@ -1970,7 +2177,7 @@ fn try_calldata(
     let then = WarmThen::Calldata {
         descriptor,
         matched_sig,
-        is_specific,
+        source,
         next,
     };
     begin_warm(model, run, unknown, then)
@@ -1980,7 +2187,7 @@ fn try_eip712(
     model: &mut Model,
     run: Run,
     descriptor: Value,
-    contract_specific: bool,
+    source: DescriptorSource,
     next: TypedNext,
 ) -> Command<ClearSigningEffect, Event> {
     let Req::Typed { typed, .. } = &run.req else {
@@ -2006,7 +2213,7 @@ fn try_eip712(
     let ctx = eip712_context(typed);
     let unknown = unknown_token_addrs(model, &run, &descriptor, &matched_sig, &ctx);
     if unknown.is_empty() {
-        let outcome = finish_eip712(model, &run, &descriptor, &matched_sig, contract_specific);
+        let outcome = finish_eip712(model, &run, &descriptor, &matched_sig, source);
         return match outcome {
             Some(result) => conclude(model, Some(result)),
             None => typed_continue(model, run, next),
@@ -2015,7 +2222,7 @@ fn try_eip712(
     let then = WarmThen::Eip712 {
         descriptor,
         matched_sig,
-        contract_specific,
+        source,
         next,
     };
     begin_warm(model, run, unknown, then)
@@ -2080,10 +2287,10 @@ fn warm_done(model: &mut Model, run: Run, then: WarmThen) -> Command<ClearSignin
         WarmThen::Calldata {
             descriptor,
             matched_sig,
-            is_specific,
+            source,
             next,
         } => {
-            let outcome = finish_calldata(model, &run, &descriptor, &matched_sig, is_specific);
+            let outcome = finish_calldata(model, &run, &descriptor, &matched_sig, source);
             match outcome {
                 Some(result) => conclude(model, Some(result)),
                 None => tx_continue(model, run, next),
@@ -2092,10 +2299,10 @@ fn warm_done(model: &mut Model, run: Run, then: WarmThen) -> Command<ClearSignin
         WarmThen::Eip712 {
             descriptor,
             matched_sig,
-            contract_specific,
+            source,
             next,
         } => {
-            let outcome = finish_eip712(model, &run, &descriptor, &matched_sig, contract_specific);
+            let outcome = finish_eip712(model, &run, &descriptor, &matched_sig, source);
             match outcome {
                 Some(result) => conclude(model, Some(result)),
                 None => typed_continue(model, run, next),
@@ -2133,7 +2340,7 @@ fn finish_calldata(
     run: &Run,
     descriptor: &Value,
     matched_sig: &str,
-    is_specific: bool,
+    source: DescriptorSource,
 ) -> Option<ClearSignResult> {
     let Req::Tx { to, .. } = &run.req else {
         return None;
@@ -2179,7 +2386,7 @@ fn finish_calldata(
     let risk = assess_risk(&intent, &fields, partial);
 
     Some(ClearSignResult {
-        contract_name: if is_specific {
+        contract_name: if source.specific {
             metadata
                 .get("contractName")
                 .and_then(Value::as_str)
@@ -2194,7 +2401,7 @@ fn finish_calldata(
         } else {
             None
         },
-        owner: if is_specific {
+        owner: if source.specific {
             metadata
                 .get("owner")
                 .and_then(Value::as_str)
@@ -2206,7 +2413,9 @@ fn finish_calldata(
         intent,
         fields,
         contract_address: to.clone(),
-        verified: is_specific,
+        // Graded in `view()` from `provenance` — see the field's own doc.
+        verified: false,
+        provenance: source.provenance,
         sign_type: ClearSignType::Transaction,
         partial,
         best_effort: false,
@@ -2217,14 +2426,14 @@ fn finish_calldata(
 }
 
 /// `resolveEip712Entry` / `resolveEip712Formats` post-warm halves
-/// (`clear-signing.ts:656-763`). `contract_specific` selects the entry-path
-/// naming + `verified: true`.
+/// (`clear-signing.ts:656-763`). `source.specific` selects the entry-path
+/// naming; `source.provenance` says who wrote the words.
 fn finish_eip712(
     model: &Model,
     run: &Run,
     descriptor: &Value,
     matched_sig: &str,
-    contract_specific: bool,
+    source: DescriptorSource,
 ) -> Option<ClearSignResult> {
     let Req::Typed { typed, .. } = &run.req else {
         return None;
@@ -2266,7 +2475,7 @@ fn finish_eip712(
     let risk = assess_risk(&intent, &fields, partial);
 
     Some(ClearSignResult {
-        contract_name: if contract_specific {
+        contract_name: if source.specific {
             metadata
                 .get("contractName")
                 .and_then(Value::as_str)
@@ -2283,7 +2492,7 @@ fn finish_eip712(
         } else {
             None
         },
-        owner: if contract_specific {
+        owner: if source.specific {
             metadata
                 .get("owner")
                 .and_then(Value::as_str)
@@ -2295,7 +2504,9 @@ fn finish_eip712(
         intent,
         fields,
         contract_address: verifying_contract(typed),
-        verified: contract_specific,
+        // Graded in `view()` from `provenance` — see the field's own doc.
+        verified: false,
+        provenance: source.provenance,
         sign_type: ClearSignType::Signature,
         partial,
         best_effort: false,
@@ -2353,6 +2564,7 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
             risk: ClearRisk::Caution,
             contract_address: Some(to),
             verified: false,
+            provenance: ClearProvenance::SelectorDb,
             sign_type: ClearSignType::Transaction,
             partial: false,
             best_effort: true,
@@ -2542,7 +2754,10 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
         ],
         risk: ClearRisk::Safe,
         contract_address: Some(to.to_lowercase()),
-        verified: true,
+        verified: false,
+        // Every word of this sheet is written above, by this build, from bytes
+        // it decoded itself — the strongest provenance there is.
+        provenance: ClearProvenance::BuiltIn,
         sign_type: ClearSignType::Transaction,
         partial: false,
         best_effort: false,
@@ -2597,6 +2812,10 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
         risk: ClearRisk::Normal,
         contract_address: to.map(str::to_lowercase),
         verified: false,
+        // No descriptor described this: the sheet reads the CREATE2 call's own
+        // shape and predicts an address. What the deployed code will do is
+        // exactly what nobody here can say.
+        provenance: ClearProvenance::None,
         sign_type: ClearSignType::Transaction,
         partial: false,
         best_effort: false,
@@ -4449,11 +4668,109 @@ fn local_descriptor(addr: &str) -> Option<Value> {
     })
 }
 
+/// The typed-data twin of [`local_descriptor`]: the EIP-712 messages this
+/// build describes without asking anybody (spec 081 FR-008).
+///
+/// Keyed by the verifying contract AND the message's `encodeType`, so it
+/// answers only for the exact message it was written for. Everything else
+/// falls through to the published descriptors, labelled as fetched.
+fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
+    let Req::Typed { typed, .. } = req else {
+        return None;
+    };
+    let encode_type = typed_encode_type(req)?;
+    if verifying_contract(typed).as_deref() == Some(PERMIT2_ADDRESS) {
+        // Permit2's own messages: the contract is named because the descriptor
+        // is about that one contract.
+        let descriptor = match encode_type.as_str() {
+            PERMIT2_SINGLE_ENCODE_TYPE => permit2_single_descriptor(),
+            PERMIT2_TRANSFER_ENCODE_TYPE => permit2_transfer_descriptor(),
+            _ => return None,
+        };
+        return Some((descriptor, DescriptorSource::built_in(true)));
+    }
+    // The ERC-2612 permit, on whatever token signs it: the STANDARD's message,
+    // so the sheet names no contract and borrows no owner from a descriptor —
+    // the token's symbol beside the amount comes from the chain.
+    (encode_type == ERC2612_PERMIT_ENCODE_TYPE)
+        .then(|| (permit_descriptor(), DescriptorSource::built_in(false)))
+}
+
+/// `PermitSingle` — an off-chain allowance: a spender, a cap, and the date it
+/// stops. The cap is the field the approval guard edits, so it is the field
+/// the sheet leads with.
+fn permit2_single_descriptor() -> Value {
+    json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)": {
+                "intent": "Approve",
+                "fields": [
+                    { "path": "details.amount", "label": "Amount", "format": "tokenAmount", "params": { "tokenPath": "details.token", "threshold": UNLIMITED_160 } },
+                    { "path": "spender", "label": "Spender", "format": "addressName" },
+                    { "path": "details.expiration", "label": "Expires", "format": "date", "params": { "encoding": "timestamp" } },
+                    { "path": "sigDeadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
+                ],
+            },
+        } },
+    })
+}
+
+/// `PermitTransferFrom` — a one-shot authorization to move an exact amount.
+/// Not an allowance: it names the amount it spends, so the sheet shows it as
+/// the send it is.
+fn permit2_transfer_descriptor() -> Value {
+    json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            "PermitTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,uint256 deadline)": {
+                "intent": "Approve",
+                "fields": [
+                    { "path": "permitted.amount", "label": "Amount to spend", "format": "tokenAmount", "params": { "tokenPath": "permitted.token" } },
+                    { "path": "spender", "label": "Spender", "format": "addressName" },
+                    { "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
+                ],
+            },
+        } },
+    })
+}
+
+/// The ERC-2612 `Permit` descriptor this build ships — the same reading the
+/// universal file at [`PERMIT_FALLBACK_PATH`] publishes, kept here so a permit
+/// sheet can say "verified" and mean it. `@.to` binds the amount's token to
+/// the domain's verifying contract, which for ERC-2612 is the token itself.
+fn permit_descriptor() -> Value {
+    json!({
+        "context": { "eip712": {} },
+        "display": { "formats": {
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)": {
+                "intent": "Authorize spending of tokens",
+                "fields": [
+                    { "path": "spender", "label": "Spender", "format": "addressName", "visible": "always" },
+                    { "path": "value", "label": "Max spending amount", "format": "tokenAmount", "params": { "tokenPath": "@.to", "threshold": UNLIMITED_256 }, "visible": "always" },
+                    { "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
+                    { "path": "owner", "label": "Owner", "visible": "never" },
+                    { "path": "nonce", "label": "Nonce", "visible": "never" },
+                ],
+            },
+        } },
+    })
+}
+
+/// The message's `encodeType` — the preimage of its typehash.
+fn typed_encode_type(req: &Req) -> Option<String> {
+    let Req::Typed { typed, .. } = req else {
+        return None;
+    };
+    let primary = typed.get("primaryType").and_then(Value::as_str)?;
+    Some(build_encode_type(primary, typed.get("types")?))
+}
+
 /// Interface-level token descriptors, keyed by standard
 /// (local-descriptors.ts:392-524). `0x8000…` (2^255) is the "Unlimited"
 /// threshold sentinel.
 fn interface_descriptor(kind: TokenStandard) -> Value {
-    const UNLIMITED: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
+    const UNLIMITED: &str = UNLIMITED_256;
     match kind {
         TokenStandard::Erc20 => json!({
             "metadata": { "standard": "erc20" },
@@ -5006,6 +5323,7 @@ mod to_own_token_tests {
             risk: ClearRisk::Normal,
             contract_address: contract.map(str::to_owned),
             verified: false,
+            provenance: ClearProvenance::Standard,
             sign_type: ClearSignType::Transaction,
             partial: false,
             best_effort: false,

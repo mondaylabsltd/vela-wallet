@@ -14,8 +14,9 @@ use gpui::SharedString;
 
 use vela_core::app::approval_guard::{GuardAmountError, GuardEditorMode, GuardSurface, GuardView};
 use vela_core::app::clear_signing::{
-    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearRisk, ClearSignField,
-    ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
+    ClearBlindTyped, ClearDangerClass, ClearMessageView, ClearProvenance, ClearRisk,
+    ClearSignField, ClearSignResult, ClearSigningView, ClearSiweBinding, ClearSurface,
+    UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignSurface, SignView};
@@ -880,10 +881,24 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
     }
     if result.partial {
         // The descriptor declared more fields than resolved. Saying nothing
-        // would present an incomplete reading as a complete one.
+        // would present an incomplete reading as a complete one — and saying
+        // it with `warn_verified_abi`, as this did until spec 081, said there
+        // was no descriptor for this contract when there plainly was one.
         out.push(Block::Warning {
             tone: Tone::Caution,
-            text: s.warn_verified_abi.clone(),
+            text: s.warn_partial.clone(),
+        });
+    }
+    if result.provenance == ClearProvenance::Fetched {
+        // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
+        // from a base URL the person can edit — and nothing signed the
+        // answer. The other values say nothing here: built in and pinned are
+        // what "verified" means, a token-standard shape is the standard doing
+        // its job, the 4-byte database has its own line above, and a
+        // deployment claims nothing to doubt.
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.warn_descriptor_fetched.clone(),
         });
     }
     if result.fields.iter().any(|field| field.unverified) {
@@ -1176,6 +1191,7 @@ mod tests {
             risk: ClearRisk::Normal,
             contract_address: None,
             verified: true,
+            provenance: ClearProvenance::BuiltIn,
             sign_type: ClearSignType::Transaction,
             partial: false,
             best_effort: false,
@@ -1813,6 +1829,41 @@ mod tests {
             (Tone::Danger, s.warn_token_to_contract.clone())
         );
         assert_eq!(warnings[1].0, Tone::Caution);
+    }
+
+    /// Spec 081 FR-008: each state says the sentence that is TRUE of it.
+    /// An incomplete decode said "no ERC-7730 descriptor for this contract",
+    /// which is the opposite of what happened, and a fetched descriptor said
+    /// nothing at all about never having been authenticated.
+    #[test]
+    fn an_incomplete_decode_and_a_fetched_one_say_what_they_are() {
+        let s = strings();
+        let said = |mutate: &dyn Fn(&mut ClearSignResult)| {
+            let mut result = result(vec![field("To", "0xbbb")]);
+            mutate(&mut result);
+            blocks(&view(result), &RequestFacts::default(), &s)
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Warning { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(said(&|r| r.partial = true), vec![s.warn_partial.clone()]);
+        assert_eq!(
+            said(&|r| r.provenance = ClearProvenance::Fetched),
+            vec![s.warn_descriptor_fetched.clone()]
+        );
+        // Built in, pinned, a token standard, a deployment: nothing to say.
+        for provenance in [
+            ClearProvenance::BuiltIn,
+            ClearProvenance::PinnedMatch,
+            ClearProvenance::Standard,
+            ClearProvenance::None,
+        ] {
+            assert!(said(&|r| r.provenance = provenance).is_empty());
+        }
     }
 
     /// A pristine machine — nothing presented at all — draws nothing.
