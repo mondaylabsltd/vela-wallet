@@ -86,6 +86,7 @@
       "close": "Fermer",
       "valueLabel": "Valeur",
       "bestEffortWarning": "Décodé à partir de la signature de fonction — ce n'est pas un descripteur vérifié. Vérifiez attentivement les détails.",
+      "descriptorFetchedWarning": "Cette description vient du service de descripteurs de Vela et rien ne l'authentifie — vérifiez les détails avant d'approuver.",
       "simWillSucceed": "Simulation réussie — devrait aboutir",
       "simWillFail": "Cette transaction devrait échouer — vous paieriez quand même les frais de gas.",
       "simWillFailReason": "Échec probable : {{reason}} — vous paieriez quand même les frais de gas.",

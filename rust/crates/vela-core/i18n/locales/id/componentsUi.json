@@ -86,6 +86,7 @@
       "close": "Tutup",
       "valueLabel": "Nilai",
       "bestEffortWarning": "Didekode dari signature fungsi — bukan deskriptor terverifikasi. Tinjau detailnya dengan cermat.",
+      "descriptorFetchedWarning": "Deskripsi ini berasal dari layanan deskriptor Vela dan tidak ada yang mengautentikasinya — periksa detailnya sebelum menyetujui.",
       "simWillSucceed": "Simulasi lolos — diperkirakan berhasil",
       "simWillFail": "Transaksi ini diperkirakan gagal — Anda tetap membayar gas.",
       "simWillFailReason": "Diperkirakan gagal: {{reason}} — Anda tetap membayar gas.",

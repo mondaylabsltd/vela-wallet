@@ -7,7 +7,7 @@
 			"desktopTagline": "Suas chaves, seus ativos",
 			"featureNoMnemonicTitle": "Sem frase de recuperação",
 			"featureNoMnemonicBody": "Crie e entre com uma passkey no seu dispositivo — sem 12 palavras para anotar e guardar.",
-			"featureOneAddressTitle": "Um endereço, 12+ redes",
+			"featureOneAddressTitle": "Um endereço, 24 redes",
 			"featureOneAddressBody": "O mesmo endereço funciona em todas as redes compatíveis, e você pode adicionar suas próprias redes.",
 			"featureOpenSourceTitle": "Código aberto, auto-hospedável",
 			"featureOpenSourceBody": "O app e os serviços de backend são de código aberto — você pode rodar uma infraestrutura totalmente sua.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "As chaves ficam com você",
 			"custodyBody": "Suas chaves de acesso ficam onde você as guarda: no gerenciador de senhas do aparelho ou numa chave de segurança física. A Vela não alcança nem gasta por você.",
 			"chainsTitle": "Um endereço, todas as redes",
-			"chainsBody": "O mesmo endereço vale em mais de 12 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
+			"chainsBody": "O mesmo endereço vale em 24 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — a carteira com passkey",
-				"description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em mais de 12 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
+				"description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em 24 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
 			},
 			"tagline": "Suas chaves, seus ativos",
 			"passkeyIndexLink": "Configurar o serviço de índice de passkeys",
@@ -45,7 +45,7 @@
 					"description": "Crie e entre com a passkey do seu dispositivo — sem 12 palavras para anotar e guardar."
 				},
 				"oneAddress": {
-					"title": "Um endereço, mais de 12 redes",
+					"title": "Um endereço, 24 redes",
 					"description": "O mesmo endereço funciona em todas as redes suportadas, e você pode adicionar as suas."
 				},
 				"openSource": {

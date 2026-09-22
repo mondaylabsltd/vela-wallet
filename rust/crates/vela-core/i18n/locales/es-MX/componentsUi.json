@@ -86,6 +86,7 @@
       "close": "Cerrar",
       "valueLabel": "Valor",
       "bestEffortWarning": "Decodificado a partir de la firma de la función — no es un descriptor verificado. Revisa los detalles con cuidado.",
+      "descriptorFetchedWarning": "Esta descripción viene del servicio de descriptores de Vela y nadie la autenticó — revisa los detalles antes de aprobar.",
       "simWillSucceed": "Simulación correcta — se espera que tenga éxito",
       "simWillFail": "Se espera que esta transacción falle — aun así pagarías gas.",
       "simWillFailReason": "Se espera que falle: {{reason}} — aun así pagarías gas.",

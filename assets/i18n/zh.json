@@ -95,7 +95,7 @@
    "subtitle": "删除 Vela 存在这台设备上的一切",
    "desc": "Vela 存在这台设备上的所有内容都会被删除。没有备份，也无法撤销。",
    "loses": "将失去：交易记录、联系人与分组、浏览历史、dApp 授权、自定义代币与网络、RPC 与端点设置，以及全部偏好设置。",
-   "keeps": "不会失去钱包本身。通行密钥仍保存在 Face ID / 指纹中——选择「我已有钱包」即可找回同一个地址，只是记录清空了。",
+   "keeps": "钱包不会丢。抹除碰不到你的通行密钥——它们由你的通行密钥提供方保管（面容 / 指纹、密码管理器，或你的安全密钥），不在本应用里。选择「我已有钱包」，同一个地址就会回来，只是没有历史记录。",
    "confirm": "全部清除",
    "cancel": "取消",
    "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。"
@@ -593,7 +593,7 @@
    "desktopTagline": "您的密钥，您的资产",
    "featureNoMnemonicTitle": "不用助记词",
    "featureNoMnemonicBody": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。",
-   "featureOneAddressTitle": "一个地址，12+ 网络",
+   "featureOneAddressTitle": "一个地址，24 条网络",
    "featureOneAddressBody": "同一个地址在所有支持的网络通用，也可以自己添加网络。",
    "featureOpenSourceTitle": "全部开源，可自建",
    "featureOpenSourceBody": "App 与后端服务都开源，你可以部署完全属于自己的一套。",
@@ -616,12 +616,12 @@
    "custodyTitle": "钥匙在你自己手里",
    "custodyBody": "通行密钥存在你自己手上：设备的密码管理器，或一把硬件安全密钥。Vela 接触不到，也没法替你花钱。",
    "chainsTitle": "一个地址，走遍链上",
-   "chainsBody": "同一个地址在 12+ 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
+   "chainsBody": "同一个地址在 24 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — 通行密钥钱包",
-    "description": "无助记词的通行密钥钱包：一个地址通用 12+ 网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
+    "description": "无助记词的通行密钥钱包：一个地址通用 24 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
    },
    "tagline": "您的密钥，您的资产",
    "passkeyIndexLink": "设置通行密钥索引服务",
@@ -631,7 +631,7 @@
      "description": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。"
     },
     "oneAddress": {
-     "title": "一个地址，12+ 网络",
+     "title": "一个地址，24 条网络",
      "description": "同一个地址在所有支持的网络通用，也可以自己添加网络。"
     },
     "openSource": {
@@ -1224,6 +1224,7 @@
    "signingFor": "签名对象",
    "signingAccount": "签名账户",
    "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。",
+   "descriptorFetchedWarning": "此描述来自 Vela 的描述符服务，未经任何认证 — 批准前请核对细节。",
    "bestEffortSimulated": "按函数签名解读（非验证描述符）。下方预览已显示这笔交易的实际影响。",
    "blindButSimulated": "Vela 无法读取该合约的描述，但下方预览已显示这笔交易的实际影响。",
    "simWillSucceed": "模拟通过 — 预计可成功",
@@ -1584,6 +1585,7 @@
    "retry": "重试",
    "addNetworkBtn": "添加网络",
    "incompatibleHint": "此链上尚未部署所需合约。\n请使用 Vela Wallet 链配置工具进行部署，然后回来重新检查。",
+   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
    "openChainSetupTool": "打开链配置工具",
    "recheck": "重新检查",
    "chainIdLabel": "Chain ID: {{chainId}}",

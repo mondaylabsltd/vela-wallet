@@ -86,6 +86,7 @@
       "close": "Fechar",
       "valueLabel": "Valor",
       "bestEffortWarning": "Decodificado a partir da assinatura da função — não é um descritor verificado. Revise os detalhes com atenção.",
+      "descriptorFetchedWarning": "Esta descrição veio do serviço de descritores da Vela e nada a autenticou — confira os detalhes antes de aprovar.",
       "simWillSucceed": "Simulação aprovada — deve ser bem-sucedida",
       "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
       "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",

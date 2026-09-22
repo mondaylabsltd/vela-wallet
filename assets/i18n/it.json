@@ -95,7 +95,7 @@
    "subtitle": "Elimina tutto ciò che Vela ha salvato qui",
    "desc": "Tutto ciò che Vela ha salvato su questo dispositivo viene eliminato. Non esiste un backup né un modo per annullare.",
    "loses": "Perdi: cronologia delle transazioni, contatti e gruppi, cronologia di navigazione, autorizzazioni dApp, token e reti personalizzati, impostazioni RPC e degli endpoint e ogni preferenza.",
-   "keeps": "Non perdi il wallet. La tua passkey resta in Face ID / impronta digitale: scegli «Ho già un wallet» e ritrovi lo stesso indirizzo, solo senza cronologia.",
+   "keeps": "Il wallet non si perde. La cancellazione non arriva alle tue passkey: le conserva il tuo provider di passkey (Face ID / impronta, un gestore di password o una chiave di sicurezza), non questa app. Scegli “Ho già un wallet” e torna lo stesso indirizzo, solo senza cronologia.",
    "confirm": "Cancella tutto",
    "cancel": "Annulla",
    "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova."
@@ -589,7 +589,7 @@
    "desktopTagline": "Le tue chiavi, i tuoi asset",
    "featureNoMnemonicTitle": "Niente frase di recupero",
    "featureNoMnemonicBody": "Crea e accedi con una passkey sul tuo dispositivo — niente 12 parole da trascrivere e custodire.",
-   "featureOneAddressTitle": "Un indirizzo, 12+ reti",
+   "featureOneAddressTitle": "Un indirizzo, 24 reti",
    "featureOneAddressBody": "Lo stesso indirizzo funziona su tutte le reti supportate e puoi aggiungerne di tue.",
    "featureOpenSourceTitle": "Open source e self-hostable",
    "featureOpenSourceBody": "L'app e i servizi backend sono open source — puoi far girare uno stack interamente tuo.",
@@ -612,12 +612,12 @@
    "custodyTitle": "Le chiavi restano a te",
    "custodyBody": "Le tue passkey restano dove le tieni tu: nel gestore di password del dispositivo o su una chiave di sicurezza fisica. Vela non può toccarle né spendere al posto tuo.",
    "chainsTitle": "Un indirizzo, tutte le chain",
-   "chainsBody": "Lo stesso indirizzo vale su 12+ reti e le commissioni si pagano in stablecoin — niente scorte di moneta nativa per ogni chain."
+   "chainsBody": "Lo stesso indirizzo vale su 24 reti e le commissioni si pagano in stablecoin — niente scorte di moneta nativa per ogni chain."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — il wallet con passkey",
-    "description": "Un wallet con passkey e senza frase di recupero: un solo indirizzo su oltre 12 reti, contratti Safe v1.4.1 sottoposti ad audit, gas pagabile in stablecoin, tutto open source e auto-ospitabile."
+    "description": "Un wallet con passkey e senza frase di recupero: un solo indirizzo su 24 reti, contratti Safe v1.4.1 sottoposti ad audit, gas pagabile in stablecoin, tutto open source e auto-ospitabile."
    },
    "tagline": "Le tue chiavi, i tuoi asset",
    "passkeyIndexLink": "Configura il servizio indice passkey",
@@ -627,7 +627,7 @@
      "description": "Crea il wallet e accedi con la passkey del tuo dispositivo — nessuna lista di 12 parole da trascrivere e custodire."
     },
     "oneAddress": {
-     "title": "Un indirizzo, oltre 12 reti",
+     "title": "Un indirizzo, 24 reti",
      "description": "Lo stesso indirizzo funziona su tutte le reti supportate, e puoi aggiungerne di tue."
     },
     "openSource": {
@@ -1236,6 +1236,7 @@
    "close": "Chiudi",
    "valueLabel": "Valore",
    "bestEffortWarning": "Decodificato dalla firma della funzione — non è un descrittore verificato. Controlla i dettagli con attenzione.",
+   "descriptorFetchedWarning": "Questa descrizione arriva dal servizio di descrittori di Vela e nessuno l'ha autenticata — controlla i dettagli prima di approvare.",
    "simWillSucceed": "Simulazione superata — ci si aspetta che vada a buon fine",
    "simWillFail": "Ci si aspetta che questa transazione fallisca — pagheresti comunque il gas.",
    "simWillFailReason": "Ci si aspetta che fallisca: {{reason}} — pagheresti comunque il gas.",
@@ -1577,6 +1578,7 @@
    "retry": "Riprova",
    "addNetworkBtn": "Aggiungi rete",
    "incompatibleHint": "Alcuni contratti necessari non sono ancora stati deployati su questa rete.\nEseguine il deploy con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
+   "singleKeyOnly": "Un wallet con più di una passkey non può essere creato su questa rete: la factory dei signer passkey di Safe non è deployata qui.\nUn wallet con una sola passkey funziona normalmente.",
    "openChainSetupTool": "Apri Chain Setup Tool",
    "recheck": "Ricontrolla",
    "chainIdLabel": "Chain ID: {{chainId}}",

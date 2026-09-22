@@ -7,7 +7,7 @@
 			"desktopTagline": "Khóa của bạn, tài sản của bạn",
 			"featureNoMnemonicTitle": "Không cần cụm từ khôi phục",
 			"featureNoMnemonicBody": "Tạo ví và đăng nhập bằng passkey trên thiết bị của bạn — không có 12 từ phải chép lại và cất giữ.",
-			"featureOneAddressTitle": "Một địa chỉ, 12+ mạng",
+			"featureOneAddressTitle": "Một địa chỉ, 24 mạng",
 			"featureOneAddressBody": "Cùng một địa chỉ hoạt động trên mọi mạng được hỗ trợ, và bạn cũng có thể tự thêm mạng riêng.",
 			"featureOpenSourceTitle": "Mã nguồn mở, tự triển khai được",
 			"featureOpenSourceBody": "Ứng dụng và các dịch vụ backend đều là mã nguồn mở — bạn có thể vận hành một hệ thống hoàn toàn của riêng mình.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "Chìa khoá nằm trong tay bạn",
 			"custodyBody": "Passkey được giữ ở nơi của bạn: trình quản lý mật khẩu của thiết bị, hoặc một khoá bảo mật phần cứng. Vela không chạm tới được và cũng không thể tiêu thay bạn.",
 			"chainsTitle": "Một địa chỉ, mọi chuỗi",
-			"chainsBody": "Cùng một địa chỉ dùng được trên hơn 12 mạng, và phí có thể trả bằng stablecoin — không cần trữ sẵn đồng gốc cho từng chuỗi."
+			"chainsBody": "Cùng một địa chỉ dùng được trên 24 mạng, và phí có thể trả bằng stablecoin — không cần trữ sẵn đồng gốc cho từng chuỗi."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — ví passkey",
-				"description": "Ví passkey không cần cụm từ khôi phục: một địa chỉ dùng trên hơn 12 mạng, dựa trên hợp đồng Safe v1.4.1 đã được kiểm toán, trả gas bằng stablecoin, mã nguồn mở hoàn toàn và có thể tự vận hành."
+				"description": "Ví passkey không cần cụm từ khôi phục: một địa chỉ dùng trên 24 mạng, dựa trên hợp đồng Safe v1.4.1 đã được kiểm toán, trả gas bằng stablecoin, mã nguồn mở hoàn toàn và có thể tự vận hành."
 			},
 			"tagline": "Khóa của bạn, tài sản của bạn",
 			"passkeyIndexLink": "Thiết lập dịch vụ chỉ mục passkey",
@@ -45,7 +45,7 @@
 					"description": "Tạo và đăng nhập bằng passkey trên thiết bị — không có 12 từ phải chép lại và cất giữ."
 				},
 				"oneAddress": {
-					"title": "Một địa chỉ, hơn 12 mạng",
+					"title": "Một địa chỉ, 24 mạng",
 					"description": "Cùng một địa chỉ dùng được trên mọi mạng được hỗ trợ, và bạn có thể tự thêm mạng."
 				},
 				"openSource": {

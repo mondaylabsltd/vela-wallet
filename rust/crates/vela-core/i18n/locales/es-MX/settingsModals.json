@@ -60,6 +60,7 @@
       "retry": "Reintentar",
       "addNetworkBtn": "Agregar red",
       "incompatibleHint": "Algunos contratos requeridos aún no están desplegados en esta cadena.\nUsa la herramienta Vela Wallet Chain Setup para desplegarlos, luego regresa y vuelve a verificar.",
+      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
       "openChainSetupTool": "Abrir herramienta Chain Setup",
       "recheck": "Volver a verificar",
       "chainIdLabel": "Chain ID: {{chainId}}",

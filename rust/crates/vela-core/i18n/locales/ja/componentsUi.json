@@ -86,6 +86,7 @@
       "close": "閉じる",
       "valueLabel": "金額",
       "bestEffortWarning": "関数シグネチャからデコードした内容です — 検証済みのディスクリプターではありません。詳細を慎重にご確認ください。",
+      "descriptorFetchedWarning": "この説明は Vela のディスクリプターサービスから取得したもので、認証はされていません — 承認する前に詳細をご確認ください。",
       "simWillSucceed": "シミュレーション成功 — 成功する見込みです",
       "simWillFail": "この取引は失敗する見込みです — それでも Gas 手数料はかかります。",
       "simWillFailReason": "失敗する見込み：{{reason}} — それでも Gas 手数料はかかります。",

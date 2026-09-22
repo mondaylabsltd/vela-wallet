@@ -60,6 +60,7 @@
       "retry": "Yeniden Dene",
       "addNetworkBtn": "Ağ Ekle",
       "incompatibleHint": "Bu zincirde gerekli bazı sözleşmeler henüz dağıtılmamış.\nBunları dağıtmak için Vela Wallet Chain Setup aracını kullanın, ardından geri dönüp yeniden kontrol edin.",
+      "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
       "openChainSetupTool": "Chain Setup Aracını Aç",
       "recheck": "Yeniden kontrol et",
       "chainIdLabel": "Zincir ID: {{chainId}}",

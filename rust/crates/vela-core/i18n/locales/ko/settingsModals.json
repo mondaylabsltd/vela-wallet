@@ -60,6 +60,7 @@
       "retry": "재시도",
       "addNetworkBtn": "네트워크 추가",
       "incompatibleHint": "이 체인에 필요한 일부 컨트랙트가 아직 배포되지 않았습니다.\nVela Wallet 체인 설정 도구로 배포한 후 돌아와서 다시 확인하세요.",
+      "singleKeyOnly": "이 네트워크에서는 패스키가 둘 이상인 지갑을 만들 수 없습니다. Safe의 패스키 서명자 팩토리가 배포되어 있지 않기 때문입니다.\n패스키가 하나인 지갑은 정상적으로 작동합니다.",
       "openChainSetupTool": "체인 설정 도구 열기",
       "recheck": "다시 확인",
       "chainIdLabel": "체인 ID: {{chainId}}",

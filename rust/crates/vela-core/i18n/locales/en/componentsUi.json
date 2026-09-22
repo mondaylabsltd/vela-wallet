@@ -96,6 +96,7 @@
       "signingFor": "Signing for",
       "signingAccount": "Signing account",
       "bestEffortWarning": "Decoded from the function signature — not a verified descriptor. Review the details carefully.",
+      "descriptorFetchedWarning": "This description came from Vela's descriptor service and nothing authenticated it — check the details before approving.",
       "bestEffortSimulated": "Decoded from the function signature (not a verified descriptor). The preview below shows the actual effect.",
       "blindButSimulated": "Vela couldn't read this contract's details, but the preview below shows exactly what this transaction does.",
       "simWillSucceed": "Simulation passed — expected to succeed",

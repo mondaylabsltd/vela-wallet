@@ -7,7 +7,7 @@
 			"desktopTagline": "Le tue chiavi, i tuoi asset",
 			"featureNoMnemonicTitle": "Niente frase di recupero",
 			"featureNoMnemonicBody": "Crea e accedi con una passkey sul tuo dispositivo — niente 12 parole da trascrivere e custodire.",
-			"featureOneAddressTitle": "Un indirizzo, 12+ reti",
+			"featureOneAddressTitle": "Un indirizzo, 24 reti",
 			"featureOneAddressBody": "Lo stesso indirizzo funziona su tutte le reti supportate e puoi aggiungerne di tue.",
 			"featureOpenSourceTitle": "Open source e self-hostable",
 			"featureOpenSourceBody": "L'app e i servizi backend sono open source — puoi far girare uno stack interamente tuo.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "Le chiavi restano a te",
 			"custodyBody": "Le tue passkey restano dove le tieni tu: nel gestore di password del dispositivo o su una chiave di sicurezza fisica. Vela non può toccarle né spendere al posto tuo.",
 			"chainsTitle": "Un indirizzo, tutte le chain",
-			"chainsBody": "Lo stesso indirizzo vale su 12+ reti e le commissioni si pagano in stablecoin — niente scorte di moneta nativa per ogni chain."
+			"chainsBody": "Lo stesso indirizzo vale su 24 reti e le commissioni si pagano in stablecoin — niente scorte di moneta nativa per ogni chain."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — il wallet con passkey",
-				"description": "Un wallet con passkey e senza frase di recupero: un solo indirizzo su oltre 12 reti, contratti Safe v1.4.1 sottoposti ad audit, gas pagabile in stablecoin, tutto open source e auto-ospitabile."
+				"description": "Un wallet con passkey e senza frase di recupero: un solo indirizzo su 24 reti, contratti Safe v1.4.1 sottoposti ad audit, gas pagabile in stablecoin, tutto open source e auto-ospitabile."
 			},
 			"tagline": "Le tue chiavi, i tuoi asset",
 			"passkeyIndexLink": "Configura il servizio indice passkey",
@@ -45,7 +45,7 @@
 					"description": "Crea il wallet e accedi con la passkey del tuo dispositivo — nessuna lista di 12 parole da trascrivere e custodire."
 				},
 				"oneAddress": {
-					"title": "Un indirizzo, oltre 12 reti",
+					"title": "Un indirizzo, 24 reti",
 					"description": "Lo stesso indirizzo funziona su tutte le reti supportate, e puoi aggiungerne di tue."
 				},
 				"openSource": {

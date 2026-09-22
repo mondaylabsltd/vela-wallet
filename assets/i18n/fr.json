@@ -95,7 +95,7 @@
    "subtitle": "Supprime tout ce que Vela a enregistré ici",
    "desc": "Tout ce que Vela a enregistré sur cet appareil est supprimé. Il n'y a ni sauvegarde ni retour en arrière.",
    "loses": "Vous perdez : l'historique des transactions, les contacts et les groupes, l'historique de navigation, les autorisations dApp, les jetons et réseaux personnalisés, les réglages RPC et de points de terminaison, et toutes les préférences.",
-   "keeps": "Vous ne perdez pas le portefeuille. Votre clé d'accès reste dans Face ID / empreinte digitale : choisissez « J'ai déjà un portefeuille » et la même adresse revient, sans l'historique.",
+   "keeps": "Vous ne perdez pas le portefeuille. L’effacement n’atteint pas vos clés d’accès : elles sont conservées par votre fournisseur de clés d’accès (Face ID / empreinte, un gestionnaire de mots de passe ou une clé de sécurité), pas par cette application. Choisissez « J’ai déjà un portefeuille » et la même adresse revient, sans historique.",
    "confirm": "Tout effacer",
    "cancel": "Annuler",
    "failed": "L'effacement ne s'est pas terminé. Des données sont encore sur cet appareil et vous êtes toujours connecté — réessayez."
@@ -589,7 +589,7 @@
    "desktopTagline": "Vos clés, vos actifs",
    "featureNoMnemonicTitle": "Sans phrase de récupération",
    "featureNoMnemonicBody": "Créez votre portefeuille et connectez-vous avec une clé d'accès sur votre appareil — aucune phrase de 12 mots à noter et à protéger.",
-   "featureOneAddressTitle": "Une adresse, 12+ réseaux",
+   "featureOneAddressTitle": "Une adresse, 24 réseaux",
    "featureOneAddressBody": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres.",
    "featureOpenSourceTitle": "Open source, auto-hébergeable",
    "featureOpenSourceBody": "L'application et les services backend sont open source — vous pouvez déployer une infrastructure entièrement à vous.",
@@ -612,12 +612,12 @@
    "custodyTitle": "Les clés restent chez vous",
    "custodyBody": "Vos clés d'accès restent là où vous les gardez : le gestionnaire de mots de passe de l'appareil, ou une clé de sécurité physique. Vela n'y touche pas et ne peut rien dépenser.",
    "chainsTitle": "Une adresse, toutes les chaînes",
-   "chainsBody": "La même adresse fonctionne sur plus de 12 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
+   "chainsBody": "La même adresse fonctionne sur 24 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — le portefeuille à clé d'accès",
-    "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur plus de 12 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
+    "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur 24 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
    },
    "tagline": "Vos clés, vos actifs",
    "passkeyIndexLink": "Configurer le service d'index des clés d'accès",
@@ -627,7 +627,7 @@
      "description": "Créez votre portefeuille et connectez-vous avec la clé d'accès de votre appareil — pas de 12 mots à recopier et à garder."
     },
     "oneAddress": {
-     "title": "Une adresse, plus de 12 réseaux",
+     "title": "Une adresse, 24 réseaux",
      "description": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres."
     },
     "openSource": {
@@ -1236,6 +1236,7 @@
    "close": "Fermer",
    "valueLabel": "Valeur",
    "bestEffortWarning": "Décodé à partir de la signature de fonction — ce n'est pas un descripteur vérifié. Vérifiez attentivement les détails.",
+   "descriptorFetchedWarning": "Cette description vient du service de descripteurs de Vela et rien ne l'authentifie — vérifiez les détails avant d'approuver.",
    "simWillSucceed": "Simulation réussie — devrait aboutir",
    "simWillFail": "Cette transaction devrait échouer — vous paieriez quand même les frais de gas.",
    "simWillFailReason": "Échec probable : {{reason}} — vous paieriez quand même les frais de gas.",
@@ -1577,6 +1578,7 @@
    "retry": "Réessayer",
    "addNetworkBtn": "Ajouter le réseau",
    "incompatibleHint": "Certains contrats requis ne sont pas encore déployés sur cette chaîne.\nUtilisez l'outil Vela Wallet Chain Setup pour les déployer, puis revenez et revérifiez.",
+   "singleKeyOnly": "Un portefeuille avec plusieurs clés d'accès ne peut pas être créé sur ce réseau : la fabrique de signataires de clés d'accès de Safe n'y est pas déployée.\nUn portefeuille avec une seule clé d'accès fonctionne normalement.",
    "openChainSetupTool": "Ouvrir l'outil Chain Setup",
    "recheck": "Revérifier",
    "chainIdLabel": "Chain ID : {{chainId}}",

@@ -60,6 +60,7 @@
       "retry": "Erneut versuchen",
       "addNetworkBtn": "Netzwerk hinzufügen",
       "incompatibleHint": "Einige erforderliche Contracts sind auf dieser Chain noch nicht bereitgestellt.\nNutzen Sie das Vela-Wallet-Chain-Setup-Tool, um sie bereitzustellen, und prüfen Sie dann erneut.",
+      "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
       "openChainSetupTool": "Chain-Setup-Tool öffnen",
       "recheck": "Erneut prüfen",
       "chainIdLabel": "Chain-ID: {{chainId}}",

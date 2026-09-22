@@ -63,6 +63,7 @@
       "valueLabel": "金額",
       "signingFor": "簽署對象",
       "bestEffortWarning": "根據函式簽章解析得出 — 非經過驗證的描述符，請仔細核對細節。",
+      "descriptorFetchedWarning": "呢段描述嚟自 Vela 嘅描述符服務，冇經過任何認證 — 批准前請核對細節。",
       "simWillSucceed": "模擬通過 — 預計可成功",
       "simWillFail": "此筆交易預計會失敗 — 但仍會扣除 gas。",
       "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",

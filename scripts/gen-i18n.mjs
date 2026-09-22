@@ -334,8 +334,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `selfCallBlockedTitle`, `...Body`, `...LegBody` (the batch wording, with
 //   the 1-based step) and `...SafeTx` (the typed-data case, which names no
 //   function). No new branch: 1687 + 4 = 1691 = 1603 leaf + 88 branch.
-if (PATHS.length !== 1691) fail(`expected 1691 paths (1603 leaf + 88 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1603) fail(`expected 1603 leaf paths, got ${leafSet.size}`);
+// 1692 (spec 081, FR-009): + `settingsModals.addNetwork.singleKeyOnly`. The
+//   network check now asks for Safe's passkey signer factory too, which only a
+//   wallet with more than one key needs — so a chain can be genuinely usable
+//   and still refuse such a wallet. One sentence for that state; without it a
+//   person reads "Compatible" beside two red crosses. 1691 + 1 = 1692.
+// 1693 (spec 081, FR-008): + `componentsUi.signing.descriptorFetchedWarning`.
+//   A descriptor fetched from the chain-data service was shown as "verified"
+//   with nothing having authenticated it. Now only a built-in descriptor — or
+//   a fetched one byte-equal to the built-in copy — earns that word, and this
+//   is the sentence the other case needs. 1692 + 1 = 1693.
+if (PATHS.length !== 1693) fail(`expected 1693 paths (1605 leaf + 88 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1605) fail(`expected 1605 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 88) fail(`expected 88 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

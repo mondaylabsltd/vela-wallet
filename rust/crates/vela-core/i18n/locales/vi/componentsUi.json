@@ -86,6 +86,7 @@
       "close": "Đóng",
       "valueLabel": "Giá trị",
       "bestEffortWarning": "Được giải mã từ chữ ký hàm — không phải bộ mô tả đã xác minh. Hãy xem xét kỹ các chi tiết.",
+      "descriptorFetchedWarning": "Mô tả này đến từ dịch vụ bộ mô tả của Vela và không có gì xác thực nó — hãy kiểm tra chi tiết trước khi phê duyệt.",
       "simWillSucceed": "Mô phỏng thành công — dự kiến sẽ thành công",
       "simWillFail": "Giao dịch này dự kiến sẽ thất bại — bạn vẫn phải trả phí gas.",
       "simWillFailReason": "Dự kiến thất bại: {{reason}} — bạn vẫn phải trả phí gas.",

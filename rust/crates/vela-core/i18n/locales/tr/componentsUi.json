@@ -86,6 +86,7 @@
       "close": "Kapat",
       "valueLabel": "Değer",
       "bestEffortWarning": "Fonksiyon imzasından çözümlendi — doğrulanmış bir tanımlayıcı değil. Ayrıntıları dikkatlice inceleyin.",
+      "descriptorFetchedWarning": "Bu açıklama Vela'nın tanımlayıcı servisinden geldi ve kimse doğrulamadı — onaylamadan önce ayrıntıları kontrol edin.",
       "simWillSucceed": "Simülasyon geçti — başarılı olması bekleniyor",
       "simWillFail": "Bu işlemin başarısız olması bekleniyor — gas ücretini yine de ödersiniz.",
       "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersiniz.",

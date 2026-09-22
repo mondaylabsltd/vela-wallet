@@ -60,6 +60,7 @@
       "retry": "Tentar de novo",
       "addNetworkBtn": "Adicionar rede",
       "incompatibleHint": "Alguns contratos necessários ainda não foram implantados nesta chain.\nUse a ferramenta Vela Wallet Chain Setup para implantá-los e depois volte para verificar de novo.",
+      "singleKeyOnly": "Uma carteira com mais de uma passkey não pode ser criada nesta rede: a fábrica de signatários de passkeys da Safe não está implantada aqui.\nUma carteira com uma única passkey funciona normalmente.",
       "openChainSetupTool": "Abrir ferramenta de Chain Setup",
       "recheck": "Verificar de novo",
       "chainIdLabel": "Chain ID: {{chainId}}",

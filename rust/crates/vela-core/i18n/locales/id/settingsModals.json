@@ -60,6 +60,7 @@
       "retry": "Coba Lagi",
       "addNetworkBtn": "Tambah Jaringan",
       "incompatibleHint": "Beberapa kontrak yang diperlukan belum di-deploy di chain ini.\nGunakan alat Vela Wallet Chain Setup untuk men-deploy-nya, lalu kembali dan periksa ulang.",
+      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
       "openChainSetupTool": "Buka Chain Setup Tool",
       "recheck": "Periksa ulang",
       "chainIdLabel": "Chain ID: {{chainId}}",

@@ -7,7 +7,7 @@
 			"desktopTagline": "Kunci Anda, aset Anda",
 			"featureNoMnemonicTitle": "Tanpa seed phrase",
 			"featureNoMnemonicBody": "Buat dan masuk dengan passkey di perangkat Anda — tanpa 12 kata yang harus dicatat dan dijaga.",
-			"featureOneAddressTitle": "Satu alamat, 12+ jaringan",
+			"featureOneAddressTitle": "Satu alamat, 24 jaringan",
 			"featureOneAddressBody": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda dapat menambahkan jaringan sendiri.",
 			"featureOpenSourceTitle": "Open source, bisa di-host sendiri",
 			"featureOpenSourceBody": "Aplikasi dan layanan backend-nya sama-sama open source — Anda dapat menjalankan stack yang sepenuhnya milik Anda sendiri.",
@@ -30,12 +30,12 @@
 			"custodyTitle": "Kuncinya ada di tangan Anda",
 			"custodyBody": "Passkey tersimpan di tempat Anda: pengelola kata sandi perangkat, atau kunci keamanan perangkat keras. Vela tidak bisa menyentuhnya, apalagi membelanjakannya.",
 			"chainsTitle": "Satu alamat, semua jaringan",
-			"chainsBody": "Alamat yang sama berlaku di 12+ jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
+			"chainsBody": "Alamat yang sama berlaku di 24 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
 		},
 		"welcomeWeb": {
 			"meta": {
 				"title": "Vela Wallet — dompet passkey",
-				"description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 12+ jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
+				"description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 24 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
 			},
 			"tagline": "Kunci Anda, aset Anda",
 			"passkeyIndexLink": "Siapkan layanan indeks passkey",
@@ -45,7 +45,7 @@
 					"description": "Buat dan masuk dengan passkey di perangkat Anda — tidak ada 12 kata yang harus dicatat dan dijaga."
 				},
 				"oneAddress": {
-					"title": "Satu alamat, 12+ jaringan",
+					"title": "Satu alamat, 24 jaringan",
 					"description": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda bisa menambah jaringan sendiri."
 				},
 				"openSource": {

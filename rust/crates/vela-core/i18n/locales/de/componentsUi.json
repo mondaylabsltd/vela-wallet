@@ -86,6 +86,7 @@
       "close": "Schließen",
       "valueLabel": "Wert",
       "bestEffortWarning": "Aus der Funktionssignatur dekodiert — kein verifizierter Deskriptor. Prüfen Sie die Details sorgfältig.",
+      "descriptorFetchedWarning": "Diese Beschreibung stammt von Velas Deskriptor-Dienst und wurde von niemandem authentifiziert — prüfen Sie die Details vor dem Genehmigen.",
       "simWillSucceed": "Simulation bestanden — sollte erfolgreich sein",
       "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
       "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
