@@ -511,10 +511,20 @@ class AppContainer(private val app: Application) {
      * The record keeps no per-key label, so only key 0 — whose name IS the
      * wallet's — arrives named; the registry's metadata names the rest.
      */
-    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> =
-        StoreAccountPort(AccountStore(app)).keysOf(address).mapIndexed { index, key ->
-            WalletKeys.DeviceKey(key.publicKeyHex, if (index == 0) walletName else "", "")
+    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
+        val port = StoreAccountPort(AccountStore(app))
+        // Spec 075: a key minted on a Clear Signer page lives behind it, and
+        // only the record knows that — the registry does not store it.
+        val pages = port.pagesOf(address)
+        return port.keysOf(address).mapIndexed { index, key ->
+            WalletKeys.DeviceKey(
+                publicKeyHex = key.publicKeyHex,
+                name = if (index == 0) walletName else "",
+                transports = "",
+                signerOrigin = pages[key.publicKeyHex.removePrefix("0x").lowercase()].orEmpty(),
+            )
         }
+    }
 
     /** The active account's FIRST founding key — the one the registry files its groups under. */
     suspend fun foundingKeyOf(address: String): String? =

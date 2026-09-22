@@ -972,6 +972,10 @@ object SettingsLive {
                     KeyDetailModel(strings.t(k.KEYS_PUBLIC_KEY), if (row.publicKeyHex.isEmpty()) "" else "0x${row.publicKeyHex.removePrefix("0x")}", mono = true, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_CREDENTIAL), row.credentialId, mono = true, copy = true),
                     KeyDetailModel("AAGUID", row.key.aaguid, mono = true, copy = false),
+                    // Spec 075: WHICH page, when the key lives behind one —
+                    // the holder line above says it is the Clear Signer, and a
+                    // person running their own deployment needs to see which.
+                    KeyDetailModel(strings.t("componentsUi.signing.clearSignerTitle"), row.signerOrigin, mono = false, copy = true),
                     KeyDetailModel(strings.t(k.KEYS_TRANSPORT), listOf(row.key.authenticatorAttachment, row.key.transports).filter { it.isNotEmpty() }.joinToString(" · "), mono = false, copy = false),
                     KeyDetailModel(strings.t(k.KEYS_ATTESTATION), row.attestationHex, mono = true, copy = false),
                 ).filter { it.value.isNotEmpty() },

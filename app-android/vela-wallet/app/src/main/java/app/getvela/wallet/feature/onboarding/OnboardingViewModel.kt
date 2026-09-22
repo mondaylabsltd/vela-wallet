@@ -245,6 +245,18 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         // Read at failure time, so a language change needs no new executor.
         if (strings != null) this.strings = strings
+        // The endpoint again, because Settings may have changed it since this
+        // view model was built: the device pass of 2026-09-22 set a passkey
+        // index in Settings, created a wallet without restarting, and watched
+        // the ceremony query the PREVIOUS index. Re-read on entry, never
+        // mid-flow — one wallet must not be asked of two registries.
+        viewModelScope.launch {
+            val stored = session.registryUrl()
+            if (stored != endpointUrl) {
+                endpointUrl = stored
+                registry.baseUrl = stored
+            }
+        }
         if (passkey == null) {
             val isRealActivity = activityContext is app.getvela.wallet.MainActivity
             passkey = PasskeyExecutor(

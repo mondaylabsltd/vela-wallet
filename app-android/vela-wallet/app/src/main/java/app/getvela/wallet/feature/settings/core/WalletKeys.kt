@@ -36,7 +36,19 @@ class WalletKeys(
     }
 
     /** One key as the account record holds it, in founding order. */
-    data class DeviceKey(val publicKeyHex: String, val name: String, val transports: String)
+    /**
+     * Spec 075: [signerOrigin] is the Clear Signer page this key lives behind,
+     * empty when it lives on an authenticator this device can reach itself.
+     * Without it the core cannot tell a key minted on a page from the built-in
+     * passkey — a page runs the ceremony in a browser and so reports
+     * `platform` (the device pass of 2026-09-22).
+     */
+    data class DeviceKey(
+        val publicKeyHex: String,
+        val name: String,
+        val transports: String,
+        val signerOrigin: String = "",
+    )
 
     data class Row(
         /** In the create flow's shape — what `PasskeyProviderMark` draws from. */
@@ -46,6 +58,8 @@ class WalletKeys(
         val publicKeyHex: String,
         /** base64url, as the registry explorer prints it; empty from the device. */
         val credentialId: String = "",
+        /** Spec 075: the Clear Signer page this key lives behind; empty when none. */
+        val signerOrigin: String = "",
         /** The registry's 20-byte attestation summary, `0x`-hex; empty from the device. */
         val attestationHex: String = "",
         /** The authenticator verified the person at registration; `null` = nobody can vouch. */
@@ -56,7 +70,15 @@ class WalletKeys(
 
     suspend fun read(address: String, device: List<DeviceKey>): Result {
         val deviceJson = JSONArray().apply {
-            device.forEach { put(JSONObject().put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", it.transports)) }
+            device.forEach {
+                put(
+                    JSONObject()
+                        .put("public_key_hex", it.publicKeyHex)
+                        .put("name", it.name)
+                        .put("transports", it.transports)
+                        .put("signer_origin", it.signerOrigin),
+                )
+            }
         }.toString()
         val answers = JSONArray()
         repeat(MAX_ROUNDS) {
@@ -108,6 +130,7 @@ class WalletKeys(
                 synced = synced,
                 publicKeyHex = key.optString("public_key_hex"),
                 credentialId = key.optString("credential_id"),
+                signerOrigin = key.optString("signer_origin"),
                 attestationHex = key.optString("attestation_hex"),
                 userVerified = if (key.isNull("user_verified")) null else key.optBoolean("user_verified"),
             )

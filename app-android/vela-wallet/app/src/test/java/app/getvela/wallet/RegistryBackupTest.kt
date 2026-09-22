@@ -124,6 +124,32 @@ class RegistryBackupTest {
         assertSame(model.sections, SettingsLive.withWalletKeys(model, registry, null, strings).sections)
     }
 
+    /**
+     * Spec 075: a key minted on the Clear Signer page lives behind that page.
+     * The page signs in a browser and so reports `platform`; before the core's
+     * rule moved, the row called it the built-in passkey of this phone — the
+     * one side of the page the wallet cannot reach (device pass, 2026-09-22).
+     */
+    @Test
+    fun `the keys block - a key behind a page names the page, not this device`() {
+        val behind = key(name = "On the page", method = KeyMethod.ClearSigner)
+            .copy(signerOrigin = "http://localhost:8140")
+        val block = SettingsLive.withWalletKeys(
+            model,
+            WalletKeys.Result(WalletKeys.Source.Device, listOf(behind, key("Built in"))),
+            RegistryBackup.State.NotBackedUp,
+            strings,
+        ).keys!!
+        assertEquals(listOf("Clear Signer", "Built-in passkey"), block.rows.map { it.holder })
+        // …and WHICH page, for somebody running their own deployment.
+        assertEquals(
+            "http://localhost:8140",
+            block.rows.first().details.firstOrNull { it.label == "Clear Signer" }?.value,
+        )
+        // A key that lives on an authenticator this device can reach says nothing about pages.
+        assertTrue(block.rows[1].details.none { it.label == "Clear Signer" })
+    }
+
     @Test
     fun `the keys block - still asking, registry silent, and registry empty are three different things`() {
         val asking = SettingsLive.withWalletKeys(model, null, null, strings).keys!!

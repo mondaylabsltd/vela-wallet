@@ -537,6 +537,24 @@ class StoreAccountPort(private val store: AccountStore) : SendExecutor.AccountPo
         }
     }
 
+    /**
+     * Spec 075: the Clear Signer page each key lives behind, by public key
+     * (lowercase, `0x`-less). The keys view needs it to say where a key lives;
+     * [keysOf] speaks the core's `WalletKeyRecord`, which has no room for it.
+     */
+    suspend fun pagesOf(address: String): Map<String, String> {
+        val record = record { it.optString("address").equals(address, ignoreCase = true) } ?: return emptyMap()
+        val keys = record.optJSONArray("keys") ?: return emptyMap()
+        val out = mutableMapOf<String, String>()
+        for (index in 0 until keys.length()) {
+            val key = keys.optJSONObject(index) ?: continue
+            val origin = key.optString("signer_origin").ifBlank { continue }
+            val pk = key.optString("public_key_hex").removePrefix("0x").lowercase().ifBlank { continue }
+            out[pk] = origin
+        }
+        return out
+    }
+
     override suspend fun routingOf(address: String): Pair<String, KeyMethod> {
         val record = record { it.optString("address").equals(address, ignoreCase = true) }
         val transports = record?.optJSONArray("keys")?.optJSONObject(0)?.optString("transports").orEmpty()
