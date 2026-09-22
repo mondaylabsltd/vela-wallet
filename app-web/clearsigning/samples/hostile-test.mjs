@@ -10,8 +10,20 @@
 // The point is that grit stops being something a human has to spot. Add a new
 // display field and forget where it came from, and this goes red.
 //
+// The second half (spec 075) attacks the key ceremonies on the live page:
+//
+//   · a sign-in, a proof or a member proof whose challenge the requester tried
+//     to supply — refused before any passkey prompt;
+//   · a create (and a member proof) from a site that is not a Vela wallet,
+//     even one that dresses its context up as an app channel;
+//   · a relay requester whose key does not hash to the link's `rk` — the page
+//     shows no code, sends nothing sealed, and leaves the room;
+//   · a member proof whose registry answer is not the challenge for the
+//     inputs on the card — refused, never signable.
+//
 //   CHROME_BIN=… SB=… node samples/hostile-test.mjs
 import { spawn } from 'node:child_process';
+import { webcrypto } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -30,6 +42,10 @@ for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
   (0, eval)(readFileSync(join(root, file), 'utf8'));
 }
 const lib = globalThis.VelaCS;
+
+import { Page, b64url, loopbackWallet, relayWallet, startBrowser } from './test-kit.mjs';
+import { startRegistry } from './mock-registry.mjs';
+import { startRelay } from './mock-relay.mjs';
 
 const results = [];
 function check(name, pass, detail) {
@@ -180,7 +196,169 @@ try {
   chrome.kill();
   tls.kill();
   try { rmSync(profile, { recursive: true, force: true }); } catch { /* ignore */ }
+}
+
+// === the key ceremonies under attack (075) =====================================
+
+// Counts every passkey prompt the page opens: a refusal must come before one.
+const COUNT_WEBAUTHN = `(() => {
+  window.__webauthnCalls = 0;
+  const c = navigator.credentials;
+  const get = c.get.bind(c), create = c.create.bind(c);
+  c.get = (o) => { window.__webauthnCalls++; return get(o); };
+  c.create = (o) => { window.__webauthnCalls++; return create(o); };
+})();`;
+
+const SIGNER = 'https://getvela.app/sign.html';
+const SAFE_OP_HASH = '0x' + 'a1'.repeat(32); // stands for any 32 bytes a Safe would accept
+const ns075 = globalThis.VelaCS;
+for (const file of ['lib/signer.js', 'lib/ceremony.js', 'lib/transport/secure.js']) {
+  (0, eval)(readFileSync(join(root, file), 'utf8'));
+}
+Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
+
+const browser = await startBrowser({ cdp: 9397, tlsPort: 8447, hosts: ['evil.test'] });
+const registry = await startRegistry({ ns: ns075 });
+const relay = await startRelay();
+try {
+  const page = await Page.open(9397, 'about:blank');
+  await page.send('Page.enable');
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_WEBAUTHN });
+  await page.addAuthenticator();
+
+  // --- 1. challenges the requester tried to supply, over the wallet's own channel
+  {
+    const wallet = loopbackWallet({ token: 'tok-hostile' });
+    await wallet.listening;
+    await page.navigate(`${SIGNER}?ch=ws&lang=en#p=${wallet.port}&t=tok-hostile`);
+    await wallet.hello;
+    const credentialId = b64url(new Uint8Array(16).fill(7));
+    const attempts = [
+      ['a sign-in carrying params[0].challenge', { method: 'vela_signIn', params: [{ challenge: b64url(Buffer.from(SAFE_OP_HASH.slice(2), 'hex')) }], origin: '' }, {}],
+      ['a sign-in carrying context.challenge', { method: 'vela_signIn', params: [{}], origin: '' }, { challenge: SAFE_OP_HASH }],
+      ['a sign-in carrying a digest', { method: 'vela_signIn', params: [{ digest: SAFE_OP_HASH }], origin: '' }, {}],
+      ['a proof with the bytes as a second parameter', { method: 'vela_proof', params: [{ credentialId, purpose: 'verify' }, SAFE_OP_HASH], origin: '' }, {}],
+      ['a member proof carrying its own challenge', { method: 'vela_memberProof', params: [{ credentialId, publicKey: '04' + '11'.repeat(64), groupPublicKey: '04' + '22'.repeat(64), registry: registry.url, challenge: SAFE_OP_HASH }], origin: '' }, {}],
+    ];
+    const before = registry.requests.length;
+    let n = 0;
+    for (const [what, intent, context] of attempts) {
+      const answer = await wallet.request('h' + (++n), intent, context);
+      await page.waitFor("window.__velaState.phase === 'refused'");
+      const text = await page.text();
+      check(`supplied challenge: ${what} — refused, and the page says why`,
+        answer.t === 'error' && answer.code === 'refused' && /tried to supply the challenge/.test(text) &&
+        !(await page.ev('!!window.__slider')));
+    }
+    check('supplied challenge: not one passkey prompt was opened', (await page.ev('window.__webauthnCalls')) === 0);
+    check('supplied challenge: the registry was never even asked', registry.requests.length === before);
+
+    // --- 4. the registry's answer is not the challenge for the inputs shown
+    const inputs = { credentialId, publicKey: '04' + '11'.repeat(64), groupPublicKey: '04' + '22'.repeat(64), attestation: '', registry: registry.url };
+    for (const [lie, what] of [
+      ['otherGroup', 'the challenge for another group key'],
+      ['otherKey', 'the challenge for another member key'],
+      ['safeOp', '32 bytes that are no registry challenge (a Safe digest)'],
+      ['binding', 'the right challenge beside a wrong binding'],
+    ]) {
+      registry.state.lie = lie;
+      const answer = await wallet.request('m' + (++n), { method: 'vela_memberProof', params: [inputs], origin: '' }, { walletName: 'Mine' });
+      await page.waitFor("window.__velaState.phase === 'refused'");
+      check(`member proof: a registry answering ${what} is refused`,
+        answer.t === 'error' && answer.code === 'refused' &&
+        /not the one these keys give/.test(await page.text()) && !(await page.ev('!!window.__slider')));
+    }
+    registry.state.lie = 'down';
+    const down = await wallet.request('m' + (++n), { method: 'vela_memberProof', params: [inputs], origin: '' }, {});
+    check('member proof: a registry that does not answer is "unavailable", never signed',
+      down.t === 'error' && down.code === 'unavailable' && /did not answer/.test(await page.text()));
+    registry.state.lie = null;
+    check('member proof: still not one passkey prompt', (await page.ev('window.__webauthnCalls')) === 0);
+    wallet.bye();
+    await wallet.stop();
+  }
+
+  // --- 2. a create from a site that is not a Vela wallet
+  {
+    const signerUrl = encodeURIComponent(`${SIGNER}?ch=post&lang=en`);
+    const evil = await Page.open(9397, `https://evil.test/samples/wallet-sim.html?signer=${signerUrl}`);
+    await evil.waitFor('!!window.__open');
+    await evil.ev('window.__open().then(() => true)', true);
+    const popup = await Page.find(9397, (u) => u.includes('sign.html?ch=post'));
+    await popup.addAuthenticator();
+    // It even dresses its context up as the wallet's own app channel.
+    await evil.ev(`window.__request('e1', { method: 'vela_createPasskey', params: [{ name: 'Evil' }], origin: '' },
+      { walletName: 'Your Vela wallet', channel: 'ws', originVerified: true, requester: 'https://getvela.app' }); true`);
+    await evil.waitFor('window.__answers.length === 1', 10000);
+    const refusedCreate = await evil.ev('window.__answers[0]');
+    const text = await popup.text();
+    check('create from evil.test: refused, and the site hears "refused"',
+      refusedCreate && refusedCreate.vela === 'error' && refusedCreate.code === 'refused');
+    check('create from evil.test: the card says only a Vela wallet may ask, and names the real site',
+      /Only a Vela wallet may ask this page to create a key/.test(text) && text.includes('evil.test'));
+    const made = await popup.send('WebAuthn.getCredentials', { authenticatorId: popup.authenticatorId });
+    check('create from evil.test: no key exists afterwards', made.credentials.length === 0 && !(await popup.ev('!!window.__slider')));
+
+    await evil.ev(`window.__request('e2', { method: 'vela_memberProof', params: [{ credentialId: '${b64url(new Uint8Array(16))}', publicKey: '04${'11'.repeat(64)}', groupPublicKey: '04${'22'.repeat(64)}', registry: '${registry.url}' }], origin: '' }, {}); true`);
+    await evil.waitFor('window.__answers.length === 2', 10000);
+    check('member proof from evil.test: refused as well', (await evil.ev('window.__answers[1].code')) === 'refused' &&
+      /registry confirmation/.test(await popup.text()));
+
+    await evil.ev(`window.__request('e3', { method: 'vela_signIn', params: [{}], origin: '' }, {}); true`);
+    await popup.waitFor("window.__velaState.phase === 'card' && window.__velaState.kind === 'signIn'");
+    check('a sign-in from evil.test is shown — with a warning that no Vela wallet is asking',
+      /did not come from a Vela wallet/.test(await popup.text()));
+    await popup.close();
+    await evil.close();
+
+    // Over the URL fragment any site can open the page: never a wallet channel.
+    const payload = Buffer.from(JSON.stringify({
+      intent: { method: 'vela_createPasskey', params: [{ name: 'X' }], origin: '' },
+      context: { channel: 'ws', walletName: 'X' },
+    })).toString('base64url');
+    const viaUrl = await Page.open(9397, `${SIGNER}?ch=url&lang=en#i=${payload}`);
+    await viaUrl.waitFor("window.__velaState && window.__velaState.phase === 'refused'");
+    check('create over a URL fragment: refused, whatever its context claims',
+      /Only a Vela wallet may ask/.test(await viaUrl.text()) &&
+      (await viaUrl.ev("document.querySelector('.slide').classList.contains('slide-off')")));
+    await viaUrl.close();
+  }
+
+  // --- 3. a relay requester whose key does not match the link
+  {
+    const room = b64url(webcrypto.getRandomValues(new Uint8Array(16)));
+    const someoneElse = await ns075.transport.secure.handshake({ role: 'requester' });
+    const linkRk = await ns075.transport.secure.fingerprint(someoneElse.publicKey);
+    const impostor = await relayWallet({ ns: ns075, relayUrl: relay.url, room, rk: linkRk });
+    await impostor.connect();
+    await page.navigate(`${SIGNER}?ch=relay&lang=en&s=h#relay=${encodeURIComponent(relay.url)}&room=${room}&rk=${linkRk}&v=1`);
+    const ended = await page.waitFor("window.__velaState.phase === 'ended'", 10000);
+    const text = await page.text();
+    check('wrong rk: the page refuses the requester and says so',
+      ended && /not the wallet that made this link/.test(text), (await page.status()) || '');
+    check('wrong rk: no code is ever shown', !(await page.ev('window.__velaState.code')) &&
+      !(await page.ev("!!document.querySelector('.pairing-code')")));
+    const fromPage = relay.tap.filter((f) => f.room === room && f.from === 'signer');
+    check('wrong rk: the page sent its hello and nothing sealed', fromPage.length === 1 && !fromPage[0].isBinary);
+    check('wrong rk: the page left the room', await (async () => {
+      for (let i = 0; i < 40; i++) {
+        if (impostor.relayFrames.includes('left')) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    })());
+    impostor.leave();
+  }
+  const errors = page.console.filter((line) => !/favicon|ERR_NAME_NOT_RESOLVED|Failed to load resource/.test(line));
+  check('the page threw nothing along the way', errors.length === 0, errors.slice(0, 2).join(' | '));
+} catch (error) {
+  console.log('FAILED: ' + (error.stack || error.message));
+  results.push(false);
+} finally {
+  browser.kill();
+  await registry.close();
+  await relay.close();
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} checks passed`);
-  if (passed !== results.length) process.exitCode = 1;
+  process.exit(passed === results.length ? 0 : 1);
 }
