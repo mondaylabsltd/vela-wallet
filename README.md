@@ -82,7 +82,7 @@ and shipped: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 | [`rust/`](rust/README.md) | `vela-core`: state machines, crypto, ABI, WebAuthn/CTAP, i18n; UniFFI and wasm bindings | `cargo test --workspace --features vela-core/i18n-all` in `rust/` |
 | [`app-desktop/vela-wallet`](app-desktop/vela-wallet/README.md) | Desktop app on gpui (macOS, Windows, Linux) | `cargo run` |
 | [`app-web/vela-wallet`](app-web/vela-wallet/README.md) | Web wallet and the Chrome extension | `pnpm install && pnpm dev` |
-| [`app-ios/VelaWallet`](app-ios/VelaWallet) | iOS app, SwiftUI | `./rust/scripts/build-ios-xcframework.sh`, then Xcode |
+| [`app-ios/VelaWallet`](app-ios/VelaWallet) | iOS app, SwiftUI | `./rust/scripts/build-ios-xcframework.sh`, then Xcode — and `./rust/scripts/check-ios-core-fresh.sh` before any device test, because `xcodebuild` never rebuilds the Rust |
 | [`app-android/vela-wallet`](app-android/vela-wallet) | Android app, Jetpack Compose | generate the bindings ([ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
 | [`app-web/getvela.app`](app-web/getvela.app) | The website and the user docs | `bun install && bun run dev` |
 | [`app-web/clearsigning`](app-web/clearsigning/README.md) | Standalone signing page, zero build | `python3 -m http.server`, or open `index.html` |

@@ -63,4 +63,8 @@ echo "build-ios-xcframework: refreshing the committed Swift bindings"
 mkdir -p "$KIT_DIR/Sources/VelaCore"
 cp bindings/swift/vela_core_uniffi.swift "$KIT_DIR/Sources/VelaCore/vela_core_uniffi.swift"
 
+# Stamp WHAT was built, so check-ios-core-fresh.sh can answer the only
+# question a device test needs answered first: is this the core in my tree?
+"$RUST_DIR/scripts/core-fingerprint.sh" > "$KIT_DIR/Artifacts/.core-fingerprint"
+
 echo "build-ios-xcframework: done — $XCFRAMEWORK"
