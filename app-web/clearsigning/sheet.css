@@ -535,10 +535,54 @@ body {
 }
 
 .pairing-code b {
-  font: 600 20px/1 var(--mono);
-  letter-spacing: 0.18em;
+  font: 600 26px/1 var(--mono);
+  letter-spacing: 0.2em;
   color: var(--fg);
 }
+
+/* --- key ceremonies and the session between requests (spec 075) --------- */
+
+.hero-ceremony {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0 4px;
+  padding: 14px;
+  background: var(--card);
+  border-radius: 14px;
+}
+
+.ceremony-glyph {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ceremony-title {
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.challenge-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tech-note { margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+.sheet-waiting .waiting-title {
+  margin-top: 18px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.sheet-waiting .waiting-note { color: var(--muted); }
+.sheet-waiting.sheet-ended .waiting-title { color: var(--muted); }
 
 .slide-knob { touch-action: none; cursor: grab; }
 .slide-knob:active { cursor: grabbing; }

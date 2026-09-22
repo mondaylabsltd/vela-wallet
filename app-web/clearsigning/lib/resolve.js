@@ -811,6 +811,220 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
+  // --- key ceremonies (spec 075) -----------------------------------------------
+  //
+  // The page is a passkey route of its own, so besides signing intents it takes
+  // four requests a Vela wallet builds for its own flows: create a key, sign
+  // in, prove a key (verify / recover), and confirm a key's membership in the
+  // registry. Each gets its own card. The challenge each one signs is derived
+  // by the page (lib/ceremony.js) — a request that tries to hand one over is
+  // refused outright, because a "sign-in" over bytes the requester chose could
+  // be a transaction hash in disguise.
+
+  // A 16-byte-or-longer credential id, base64url, as the page's wire carries it.
+  var CREDENTIAL_ID = /^[A-Za-z0-9_-]{16,1400}$/;
+  var P256_POINT = /^(0x)?04[0-9a-fA-F]{128}$/;
+  var LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/;
+
+  function hostOf(url) {
+    try { return new URL(url).hostname.toLowerCase(); } catch (e) { return ''; }
+  }
+
+  function schemeOf(url) {
+    try { return new URL(url).protocol; } catch (e) { return ''; }
+  }
+
+  /**
+   * Is the requester a Vela wallet? Only two kinds of evidence count:
+   *
+   *  · an app channel: the loopback WebSocket (the app that opened this page
+   *    proved it with its one-time token), the relay (the wallet's key matches
+   *    the link's `rk`, and the person compares the code), BLE (proximity and
+   *    the code);
+   *  · an origin the BROWSER vouches for (postMessage, the extension port)
+   *    that is https://getvela.app or a subdomain — or this machine's loopback,
+   *    where the web wallet runs in development and in tests.
+   *
+   * A URL fragment is no evidence: any site can open this page with one.
+   */
+  function walletRequester(ctx) {
+    if (ctx.channel === 'ws' || ctx.channel === 'relay' || ctx.channel === 'ble') return true;
+    if (ctx.originVerified !== true || typeof ctx.requester !== 'string') return false;
+    var host = hostOf(ctx.requester);
+    if (LOOPBACK_HOST.test(host)) return true;
+    return schemeOf(ctx.requester) === 'https:' && (host === 'getvela.app' || /\.getvela\.app$/.test(host));
+  }
+
+  function suppliedChallenge(intent, ctx) {
+    var params = intent.params || [];
+    if (params.length > 1) return true;
+    var first = params[0];
+    if (first === undefined || first === null) return false;
+    if (typeof first !== 'object' || Array.isArray(first)) return true;
+    return ['challenge', 'digest', 'hash', 'message'].some(function (name) {
+      return Object.prototype.hasOwnProperty.call(first, name);
+    }) || ctx.challenge !== undefined || ctx.digest !== undefined;
+  }
+
+  // A name a person gave their wallet: shown, because it is how they recognise
+  // it, but only if it is readable text of a sane length.
+  function displayName(value) {
+    if (typeof value !== 'string') return null;
+    var trimmed = value.trim();
+    if (!trimmed || trimmed.length > 64 || UNREADABLE.test(trimmed)) return null;
+    // Bidirectional overrides can make a name read as something else.
+    if (/[‪-‮⁦-⁩]/.test(trimmed)) return null;
+    return trimmed;
+  }
+
+  function registryUrl(value) {
+    if (value === undefined || value === null || value === '') return ns.ceremony.DEFAULT_REGISTRY;
+    if (typeof value !== 'string') return null;
+    var scheme = schemeOf(value);
+    var host = hostOf(value);
+    if (scheme === 'https:' && host) return value.replace(/\/+$/, '');
+    if (scheme === 'http:' && LOOPBACK_HOST.test(host)) return value.replace(/\/+$/, '');
+    return null;
+  }
+
+  function shortKey(hexKey) {
+    var body = String(hexKey).replace(/^0x/i, '').toLowerCase();
+    return body.slice(0, 8) + '…' + body.slice(-6);
+  }
+
+  // Who is asking, in words the person can check: the verified site, or the
+  // kind of channel the request came over.
+  function requesterLine(ctx) {
+    if (ctx.originVerified === true && ctx.requester) {
+      return { origin: hostOf(ctx.requester) || ctx.requester, verified: true };
+    }
+    var byChannel = { ws: 'value.viaApp', relay: 'value.viaRelay', ble: 'value.viaBle' }[ctx.channel];
+    return { originKey: byChannel || 'value.viaUnknown', verified: false };
+  }
+
+  function resolveCeremony(kind, intent, ctx, view) {
+    var p = (intent.params && intent.params[0]) || {};
+    if (typeof p !== 'object' || Array.isArray(p)) p = {};
+    var wallet = displayName(ctx.walletName);
+    var rpId = ctx.rpId || null;
+    var fromWallet = walletRequester(ctx);
+    var bad = false;
+
+    view.kind = 'ceremony';
+    view.intentKey = 'intent.' + kind;
+    view.risk = 'normal';
+    view.level = 1;
+    view.account = null;
+    view.ceremony = { kind: kind, walletName: wallet, fromWallet: fromWallet };
+
+    // The head names the wallet, not a site: these are the wallet's own flows.
+    var who = requesterLine(ctx);
+    view.dapp.name = null;
+    view.dapp.nameKey = 'tag.velaWallet';
+    view.dapp.letter = 'V';
+    view.dapp.tone = '#ff6a1a';
+    view.dapp.icon = null;
+    view.dapp.origin = who.origin || null;
+    view.dapp.originKey = who.originKey || null;
+    view.dapp.originVerified = who.verified;
+
+    view.hero = { kind: 'ceremony', ceremony: kind, title: wallet, titleKey: wallet ? null : 'value.yourWallet' };
+    view.fields.push({ label: 'field.wallet', value: wallet, valueKey: wallet ? null : 'value.unnamedWallet' });
+
+    var params = [];
+    if (kind === 'create') {
+      var name = p.name === undefined ? (wallet || 'Vela') : displayName(p.name);
+      var exclude = p.excludeCredentialIds === undefined ? [] : p.excludeCredentialIds;
+      if (!name || !Array.isArray(exclude) || !exclude.every(function (id) {
+        return typeof id === 'string' && CREDENTIAL_ID.test(id);
+      })) bad = true;
+      view.ceremony.name = name;
+      view.ceremony.excludeCredentialIds = Array.isArray(exclude) ? exclude : [];
+      view.sentence = text(wallet ? 'sentence.create' : 'sentence.createUnnamed', { wallet: wallet });
+      if (name && name !== wallet) view.fields.push({ label: 'field.passkeyName', value: name });
+      params.push({ name: 'challenge', valueKey: 'value.randomChallenge' });
+      params.push({ name: 'pubKeyCredParams', value: 'ES256 (P-256)' });
+      params.push({ name: 'residentKey', value: 'required' });
+      params.push({ name: 'userVerification', value: 'required' });
+      if (view.ceremony.excludeCredentialIds.length) {
+        params.push({ name: 'excludeCredentials', value: String(view.ceremony.excludeCredentialIds.length) });
+      }
+    } else if (kind === 'signIn') {
+      view.sentence = text('sentence.signIn');
+      params.push({ name: 'allowCredentials', valueKey: 'value.anyKey' });
+    } else if (kind === 'proof') {
+      var purpose = p.purpose;
+      if (!ns.ceremony.proofChallenge(purpose)) bad = true;
+      if (p.credentialId !== undefined && !(typeof p.credentialId === 'string' && CREDENTIAL_ID.test(p.credentialId))) bad = true;
+      view.ceremony.purpose = purpose;
+      view.ceremony.credentialId = typeof p.credentialId === 'string' ? p.credentialId : null;
+      view.intentKey = purpose === 'verify' ? 'intent.proofVerify' : 'intent.proofRecover';
+      view.badge = purpose === 'recover_first' ? 'tag.stepOne' : purpose === 'recover_second' ? 'tag.stepTwo' : null;
+      view.sentence = text(purpose === 'verify' ? 'sentence.proofVerify' : 'sentence.proofRecover', { wallet: wallet });
+      if (view.ceremony.credentialId) {
+        view.fields.push({ label: 'field.credential', value: view.ceremony.credentialId.slice(0, 10) + '…' });
+      }
+    } else if (kind === 'memberProof') {
+      var member = {
+        credentialId: p.credentialId,
+        publicKey: p.publicKey,
+        groupPublicKey: p.groupPublicKey,
+        attestation: p.attestation === undefined || p.attestation === null ? '' : p.attestation,
+        registry: registryUrl(p.registry),
+      };
+      if (typeof member.credentialId !== 'string' || !CREDENTIAL_ID.test(member.credentialId)) bad = true;
+      if (typeof member.publicKey !== 'string' || !P256_POINT.test(member.publicKey)) bad = true;
+      if (typeof member.groupPublicKey !== 'string' || !P256_POINT.test(member.groupPublicKey)) bad = true;
+      if (typeof member.attestation !== 'string' || !/^(0x)?([0-9a-fA-F]{40})?$/.test(member.attestation)) bad = true;
+      if (!member.registry) bad = true;
+      if (!bad && member.publicKey.replace(/^0x/i, '').toLowerCase() ===
+        member.groupPublicKey.replace(/^0x/i, '').toLowerCase()) bad = true;
+      view.ceremony.credentialId = member.credentialId;
+      view.ceremony.member = bad ? null : {
+        publicKey: member.publicKey.replace(/^0x/i, '').toLowerCase(),
+        groupPublicKey: member.groupPublicKey.replace(/^0x/i, '').toLowerCase(),
+        attestation: member.attestation.replace(/^0x/i, '').toLowerCase(),
+        registry: member.registry,
+      };
+      view.sentence = text(wallet ? 'sentence.memberProof' : 'sentence.memberProofUnnamed', { wallet: wallet });
+      if (!bad) {
+        view.fields.push({ label: 'field.key', value: shortKey(view.ceremony.member.publicKey) });
+        view.fields.push({ label: 'field.groupKey', value: shortKey(view.ceremony.member.groupPublicKey) });
+        view.fields.push({ label: 'field.registry', value: hostOf(member.registry) });
+        params.push({ name: 'publicKey', value: view.ceremony.member.publicKey });
+        params.push({ name: 'groupPublicKey', value: view.ceremony.member.groupPublicKey });
+        params.push({ name: 'attestation', value: view.ceremony.member.attestation || '—' });
+        params.push({ name: 'registry', value: member.registry });
+      }
+    }
+
+    view.fields.push({ label: 'field.relyingParty', value: rpId || '—' });
+    view.tech = techFor(kind === 'create' ? 'WebAuthn · navigator.credentials.create' : 'WebAuthn · navigator.credentials.get',
+      null, null, { params: params });
+
+    // The refusals, most fundamental first.
+    if (suppliedChallenge(intent, ctx)) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.suppliedChallenge' });
+    } else if ((kind === 'create' || kind === 'memberProof') && !fromWallet) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: kind === 'create' ? 'refuse.createNotWallet' : 'refuse.memberNotWallet' });
+    } else if (bad) {
+      view.refuse = true;
+      view.risk = 'danger';
+      view.warnings.push({ tone: 'danger', key: 'refuse.badCeremony' });
+    } else if (!fromWallet) {
+      view.risk = 'caution';
+      view.warnings.push({ tone: 'caution', key: 'warn.notWalletAsks' });
+    }
+    if (!view.refuse && kind === 'create' && rpId && rpId !== 'getvela.app') {
+      view.warnings.push({ tone: 'caution', key: 'warn.foreignPageKey', params: { rpId: rpId } });
+    }
+    return view;
+  }
+
   // --- entry point -----------------------------------------------------------
 
   /**
@@ -858,6 +1072,8 @@ window.VelaCS = window.VelaCS || {};
   function resolve(requested, ctx) {
     ctx = ctx || {};
     var view = baseView(requested, ctx);
+    var ceremony = ns.ceremony && ns.ceremony.kindOf(requested && requested.method);
+    if (ceremony) return resolveCeremony(ceremony, requested, ctx, view);
     var intent = operationSubject(requested, ctx, view);
     view.method = intent.method;
 
@@ -908,5 +1124,6 @@ window.VelaCS = window.VelaCS || {};
   }
 
   ns.resolve = resolve;
+  ns.resolve.walletRequester = walletRequester;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };
 })(window.VelaCS);

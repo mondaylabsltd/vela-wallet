@@ -2,7 +2,9 @@
 //
 // The challenge is always a digest this page derived itself (lib/digest.js),
 // never bytes handed over by the requester. And there is no way to create a
-// key from here: see lib/enrol.js.
+// key from here: creating is a request of its own (`vela_createPasskey`, a
+// Vela wallet asking), performed by lib/ceremony.js on its own card — never a
+// step inside a signature.
 window.VelaCS = window.VelaCS || {};
 (function (ns) {
   'use strict';
@@ -146,9 +148,9 @@ window.VelaCS = window.VelaCS || {};
     relyingPartyId: relyingPartyId,
     isExtension: isExtension,
     sign: sign,
-    // Deliberately absent: any way to CREATE a key. Enrolment lives in
-    // lib/enrol.js, which the signing page does not load, so "signing never
-    // creates" is a property of the build rather than of anyone's memory.
+    // Deliberately absent: any way to CREATE a key. `sign()` is what a signing
+    // intent reaches, and it can only assert. Creation is lib/ceremony.js,
+    // reached only by a vela_createPasskey request resolve.js let through.
     _derToRaw: derToRaw,
     _b64url: b64url,
     _unb64url: unb64url,
