@@ -109,7 +109,13 @@
 
   function waiting(update) {
     waitingState = Object.assign({}, waitingState || {}, update || {});
-    waitingState.code = session && session.comparisonCode;
+    // `state.code` first: the handshake derives the six digits BEFORE
+    // `intake.open()` resolves, so `session` is still null the first time this
+    // draws. Reading only the session meant the page showed nothing to compare
+    // until a request arrived — which is after the person has already
+    // confirmed on the other device, i.e. after the only moment the comparison
+    // was for (found on the radio, spec 075 T043).
+    waitingState.code = state.code || (session && session.comparisonCode);
     window.__slider = null;
     draw(ns.render.waiting(waitingState));
     phase('waiting');
@@ -401,9 +407,21 @@
   });
 
   say('ui.waitingRequest');
-  ns.intake
-    .open({
+
+  /**
+   * Start the session — but BLE first asks the person to press something.
+   *
+   * `navigator.bluetooth.requestDevice` refuses without user activation, so a
+   * page that calls it on load cannot ever pair: the first radio pass (spec
+   * 075 T043) found this page showing Chrome's own exception text where the
+   * device chooser should have been. The button IS the gesture; nothing else
+   * on this page needs one.
+   */
+  function startSession() {
+    ns.intake
+      .open({
       onCode: function (code) {
+        state.code = code;
         if (!current) {
           waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConfirm', originKey: channelLine() });
           say('ui.relayConfirm');
@@ -411,7 +429,6 @@
           var codes = slot.querySelectorAll('.pairing-code b');
           for (var i = 0; i < codes.length; i++) codes[i].textContent = code;
         }
-        state.code = code;
       },
       onState: function (name) {
         if (current) return;
@@ -440,16 +457,56 @@
         setTimeout(loop, 0);
       },
     })
-    .then(function (opened) {
-      session = opened;
-      state.channel = opened.channel;
-      if (opened.channel === 'relay' && !opened.ended) {
-        waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConnecting', originKey: 'value.viaRelay' });
-        say('ui.relayConnecting');
-      }
-      loop();
-    })
-    .catch(function (error) {
-      say(String(error.message || error));
+      .then(function (opened) {
+        session = opened;
+        state.channel = opened.channel;
+        if (opened.channel === 'relay' && !opened.ended) {
+          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConnecting', originKey: 'value.viaRelay' });
+          say('ui.relayConnecting');
+        }
+        loop();
+      })
+      .catch(function (error) {
+        // A person cannot act on "Failed to execute 'requestDevice' on
+        // 'Bluetooth'". Say what happened and leave the way back.
+        if (nearby) {
+          phase('waiting');
+          say(/gesture/i.test(String(error && error.message)) ? 'ui.bleNeedsPress' : 'ui.bleNoDevice');
+          offerToConnect();
+          return;
+        }
+        say(String(error.message || error));
+      });
+  }
+
+  // `?ch=ble` is the wallet saying "I am advertising" — the page answers with
+  // the one affordance Web Bluetooth requires.
+  var nearby = new URLSearchParams(location.search).get('ch') === 'ble';
+
+  function offerToConnect() {
+    var existing = document.getElementById('ble-connect');
+    if (existing) existing.remove();
+    var button = document.createElement('button');
+    button.id = 'ble-connect';
+    button.type = 'button';
+    button.className = 'primary';
+    button.textContent = t('ui.bleConnect');
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      say('ui.bleConnecting');
+      startSession();
     });
+    slot.appendChild(button);
+    // The tests press this the way a person does.
+    window.__bleConnect = button;
+  }
+
+  if (nearby) {
+    phase('waiting');
+    say('ui.blePress');
+    waiting({ titleKey: 'ui.bleTitle', noteKey: 'ui.blePress', originKey: 'value.viaBle' });
+    offerToConnect();
+  } else {
+    startSession();
+  }
 })(window.VelaCS);

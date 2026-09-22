@@ -14,10 +14,17 @@
     <script src="../lib/identicon-features.js"></script>
     <script src="../lib/identicon.js"></script>
     <script src="../lib/abi.js"></script>
+    <script src="../lib/encode.js"></script>
     <script src="../lib/fee.js"></script>
     <script src="../lib/logos.js"></script>
     <script src="../lib/registry.js"></script>
     <script src="../lib/safeop.js"></script>
+    <script src="../lib/digest.js"></script>
+    <script src="../lib/signer.js"></script>
+    <!-- Without this, `resolve` cannot recognise the four key
+         ceremonies (075) and draws a create or a sign-in as an
+         unknown request — which is what the first radio pass saw. -->
+    <script src="../lib/ceremony.js"></script>
     <script src="../lib/resolve.js"></script>
     <script src="../lib/render.js"></script>
     <script src="../lib/transport/secure.js"></script>
