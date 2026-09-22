@@ -65,10 +65,11 @@
 				<strong>Transaction fees.</strong> Every transaction pays a fee to the relay that submits
 				it, taken from your wallet in the network's coin or a supported stablecoin. The amount is
 				shown before you sign, is part of what you sign, and covers the network's gas plus the relay
-				operator's margin; it is usually several times the transaction's on-chain cost. How it is
+				operator's margin, so it is more than the transaction's on-chain cost. How it is
 				calculated is described in
-				<a href="/docs/networks-and-fees">networks &amp; fees</a>. When you use our relay, the fee
-				is paid to us. Fees are not refundable.
+				<a href="/docs/networks-and-fees#fee">networks &amp; fees</a>. When you use our relay, the
+				fee is paid to us; when you use another relay, or one you run, it is paid to that relay's
+				operator. Fees are not refundable.
 			</li>
 			<li>
 				<strong>Relay top-ups.</strong> If a relay's own gas runs out on a network, the app may offer

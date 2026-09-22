@@ -117,6 +117,7 @@ const STABLE_ANCHORS: Record<string, string[]> = {
 		'web-app'
 	],
 	install: ['dapps'],
+	'networks-and-fees': ['fee'],
 	'create-wallet': ['what-is-public']
 };
 

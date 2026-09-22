@@ -180,9 +180,13 @@ export const en = {
 			 * we can actually stand behind — and the device is the half a reader
 			 * checks first. All fifteen locales were realigned to it the same day
 			 * (reviews/single-string.md).
+			 *
+			 * 2026-09-22 (founder): "receives your passkey" read oddly to anyone
+			 * who knows WebAuthn — a passkey is never sent anywhere; the precise
+			 * claim is about its private key.
 			 */
 			headline: 'An Ethereum wallet you actually own',
-			subtitle: 'Signing happens on your device. Vela never receives your passkey.',
+			subtitle: 'Signing is done on your device. Your passkey’s private key never goes to Vela.',
 			ctaCreate: 'Getting started',
 			ctaCode: 'Read the code',
 			/**
@@ -215,6 +219,13 @@ export const en = {
 			 * slogan wall. A claim a reader is invited to CHECK has to be stated,
 			 * not performed; #3 also picked up the hedge it always needed, since
 			 * "isn't necessarily" is the true version and "is another" is not.
+			 *
+			 * 2026-09-22 (founder): #3 now states what Vela does rather than the
+			 * threat — the confirm screen is decoded from the exact bytes that are
+			 * signed, which is the checkable half. #4 is the 059 string again: with
+			 * the relay's chain directory configurable (vela-relay#12) nothing a
+			 * running wallet needs is left that only Vela can serve; the linked
+			 * section lists the ways in without getvela.app.
 			 */
 			facts: [
 				{
@@ -226,12 +237,12 @@ export const en = {
 					link: 'Up to seven keys, set at creation — hardware keys included'
 				},
 				{
-					term: 'What you see on screen isn’t necessarily what gets signed.',
-					link: 'How Bybit lost $1.5B, and what Vela does about it'
+					term: 'What you see is what you sign: Vela decodes the exact transaction before you approve it.',
+					link: 'How Bybit lost $1.5B, and how Vela shows you what you sign'
 				},
 				{
-					term: 'Everything Vela runs for your wallet is open source, and you can run it yourself.',
-					link: 'What to run, what still works without getvela.app, and what still depends on us'
+					term: 'Access to your wallet doesn’t depend on Vela staying online.',
+					link: 'How to keep using your wallet if Vela goes away'
 				}
 			]
 		},
@@ -302,7 +313,7 @@ export const en = {
 			items: [
 				{
 					title: 'Every transaction pays a relay fee on top of the gas',
-					body: 'A Vela transaction verifies your passkey signature on-chain and runs through ERC-4337, so it uses several times the gas of a plain transfer.\n\nThe wallet reserves more gas than the transaction needs and charges three times that, at the higher of its own gas reading and the relay’s price for your speed — often ten times or more the real on-chain cost, more on your first send on a network, with a $0.01 minimum. The exact amount is shown before you sign and can’t change afterwards.\n\nYou can point the wallet at another relay or <a href="/docs/self-hosting#relay">run your own</a> — the fee then goes to whoever runs it.'
+					body: 'A Vela transaction verifies your passkey signature on-chain and runs through ERC-4337, so it uses several times the gas of a plain transfer.\n\nYou pay one fee, to the relay that submits your transaction — Vela’s unless you change it. It is three times the gas the wallet reserves, priced for the speed you choose, with a $0.01 minimum (<a href="/docs/networks-and-fees#fee">how it’s worked out</a>); the relay pays the gas from it and keeps the rest. You see the exact amount before you sign, and it can’t change afterwards.\n\nYou can point the wallet at another relay or <a href="/docs/self-hosting#relay">run your own</a>, and the fee then goes to whoever runs it.'
 				},
 				{
 					title: 'Every key is a way into your wallet',
@@ -504,7 +515,7 @@ export const en = {
 				},
 				{
 					q: 'What if Vela shuts down or getvela.app goes offline?',
-					a: 'Your funds stay in your Safe on-chain. Every service Vela runs is open source for anyone to run \u2014 the relay needs a code change to stop reading chain data from Vela\u2019s server.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
+					a: 'Your funds stay in your Safe on-chain. Every service Vela runs is open source, and you can run each one yourself \u2014 the relay, the public-key index, chain data and exchange rates.\n\nIf getvela.app goes offline, the Vela browser extension still signs with your existing keys \u2014 this device\u2019s passkey, a security key, or a phone by QR code \u2014 and so do apps you build yourself, with a phone or a security key.'
 				}
 			]
 		}
@@ -569,7 +580,7 @@ export const en = {
 			},
 			{
 				title: 'Every app honouring your own services',
-				body: 'Today some apps ignore parts of Settings → Service Endpoints — the iPhone app entirely, the web app when creating a wallet or signing in, and Android when looking up names. They should all honour it, and the relay should be able to read chain data from your own server.'
+				body: 'Today some apps ignore parts of Settings → Service Endpoints — the iPhone app entirely, the web app when creating a wallet or signing in, and Android when looking up names. They should all honour it.'
 			},
 			{
 				title: 'The independent signing page, connected',

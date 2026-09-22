@@ -1,7 +1,7 @@
 ---
 title: 自托管指南
 description: "Vela 替你运行的每一样东西、各自的用途，以及如何换成你自己的——中继、公钥索引、链数据、汇率和各个 App；还有唯一无法替换的那一样，以及没有 getvela.app 时怎么办。"
-source: 24c423d10c89
+source: de484cb33065
 ---
 
 <script>
@@ -16,8 +16,7 @@ Vela 运行的，是让钱包用起来方便的那套机器：替你提交交易
 
 这一页把这些部件逐一列出来：每样是做什么的、没有它会怎样、怎么换成你自己的。
 也讲清楚唯一无法替换的那一样——你的通行密钥所属的域名——以及 getvela.app
-不在了该怎么办。先说一个限制：目前中继从 Vela 的服务器读取链数据，所以要完全不依赖
-Vela 的基础设施发送交易，需要改中继代码里的一个地址。
+不在了该怎么办。
 
 <Callout type="info" title="这一页写给谁">
 你需要会用终端、会用 Docker 或 Cloudflare Workers，也会给链上地址充值。
@@ -129,6 +128,7 @@ git clone https://github.com/mondaylabsltd/vela-relay
 cd vela-relay
 cp .env.example .env
 # 在 .env 中填写 VELA_RELAY_IGGY_URL、VELA_RELAY_REDIS_URL、OPERATOR_SECRET，
+# 自己运行链数据的话再填 VELA_RELAY_CHAIN_DIRECTORY_URL，
 # 并把 VELA_RELAY_IMAGE 设为你信任的发布镜像（见 docs/docker.md）
 docker compose pull relay
 docker compose up -d --no-build
@@ -145,6 +145,7 @@ cd vela-relay/vela-relay-cf
 npx wrangler queues create vela-relay-ops
 npx wrangler queues create vela-relay-dlq
 npx wrangler secret put OPERATOR_SECRET
+# 自己的链数据：在 wrangler.jsonc 的 "vars" 里加上 "VELA_RELAY_CHAIN_DIRECTORY_URL"
 npx wrangler deploy
 ```
 
@@ -162,9 +163,9 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的金库地址，�
 - 钱包支付的手续费进入你的金库。无论用哪个中继，钱包计算手续费的方式都一样
   （见[网络与手续费](/zh/docs/networks-and-fees)）。
 - 在更换中继之前添加的自定义网络，会继续使用添加时记录的中继地址。
-- 中继从 `ethereum-data.getvela.app` 读取每条链的信息和稳定币列表。这个地址目前
-  写死在中继的代码里（`src/utils/rpc.rs` 和 `vela-relay-cf/src/arms/market.rs`）；要换掉它，
-  就得改这两行并自己编译中继。
+- 中继从链目录读取每条链的信息和它接受的稳定币：默认是 `ethereum-data.getvela.app`，
+  把 `VELA_RELAY_CHAIN_DIRECTORY_URL` 设为[你自己的链数据](#chain-data)即可替换。这个设置在
+  2026 年 9 月加入；更早的中继版本只会读 Vela 的那一份。
 
 ## 运行你自己的公钥索引
 
@@ -227,8 +228,9 @@ curl http://localhost:3000/api/health   # "service":"ethereum-data","status":"ok
 它的 README 也讲了如何从源码构建和部署到 Cloudflare。用 HTTPS 对外提供服务，然后把地址
 填进 **链数据** 字段。
 
-中继还依赖这些文件里 Vela 专有的字段（`stables` 列表决定哪些稳定币能付手续费），而且——
-如上所述——读的是 Vela 的那一份。
+中继也读取这些文件，包括一个 Vela 专有的字段（`stables` 列表决定哪些稳定币能付手续费）。
+用 `VELA_RELAY_CHAIN_DIRECTORY_URL=https://your-chain-data` 让它读你的这一份；每条网络的信息
+它会缓存一小时。
 
 ## 运行你自己的汇率服务
 
@@ -274,7 +276,6 @@ Safe 的通行密钥签名器工厂，而目前的检查还不会查它——没
 
 把上面的都换成你自己的，还会剩下这些：
 
-- **中继的链目录**——在中继代码里写死为 `ethereum-data.getvela.app`。
 - **显示安全密钥型号的认证器目录**——只影响显示；连不上时 App 会显示通用名称。
 - **getvela.app 上的关联文件**——商店版 App 使用“本设备”通行密钥时需要它们。扫码手机和
   安全密钥用不到。

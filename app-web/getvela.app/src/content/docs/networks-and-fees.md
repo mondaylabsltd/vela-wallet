@@ -65,6 +65,7 @@ sponsorship policy.
 
 ### What the fee is
 
+<span id="fee"></span>
 The confirm screen shows one amount, in the fee coin and in your display
 currency. It is calculated like this:
 
@@ -80,12 +81,17 @@ currency. It is calculated like this:
 - **Fee = 3 × reserved gas × gas price**, with a minimum of about $0.01. On Tempo
   the multiple is 2 and the fee is paid in pathUSD.
 
-Because the reserve is padded well above what the transaction will use and the
-price includes headroom, **the fee is often ten times or more what the
-transaction actually costs on-chain**, and more for the first transaction on a
-network. The relay pays the real cost and keeps the rest; nothing is refunded. On
-cheap networks this is cents; on Ethereum mainnet it can be a real amount. The exact amount is on the confirm screen
-before you sign.
+The reserve is padded well above what the transaction will use and the price
+includes headroom, so the fee is more than the transaction costs on-chain — more
+again for your first transaction on a network, which also deploys your wallet.
+The relay pays the real cost and keeps the rest; nothing is refunded. On cheap
+networks this is cents; on Ethereum mainnet it can be a real amount. You never
+have to guess: the exact amount is on the confirm screen before you sign.
+
+**Who gets it.** The fee goes to whoever runs the relay the wallet is set to —
+Vela's unless you change it. Any vela-relay deployment works, including
+[one you run yourself](/docs/self-hosting#relay), and the wallet uses the same
+formula whichever relay you pick.
 
 <Callout type="info" title="What you see is what you pay">
 The fee amount and the address it goes to are part of the operation you sign. A

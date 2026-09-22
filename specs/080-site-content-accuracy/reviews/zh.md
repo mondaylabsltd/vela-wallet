@@ -49,3 +49,15 @@ were not touched.
 ## Result
 
 reviewed — no open High or Medium findings
+
+## Update 2026-09-22 (founder follow-up)
+
+| String / section | Change | Note |
+| --- | --- | --- |
+| 首页副标题 | 签名在你的设备上完成。通行密钥的私钥绝不会交给 Vela。 | founder wording; kept the site term 通行密钥 instead of "Passkey" (terminology axis) |
+| 事实 #3 | 所见即所签：Vela 在你确认前，解码出你实际要签的那笔交易。 | positive; no "签名通道" — the independent signing page isn't published |
+| 事实 #4 | 即使 Vela 停止服务，你仍然可以访问自己的钱包。 | the 059 string, restored; link 「Vela 不在了，怎样继续使用你的钱包」 |
+| 取舍 #1、网络与手续费、FAQ、白皮书 | no multiple of the on-chain cost; 签名前显示确切金额，付给中继，可换中继或自己部署 | C-fee-1 |
+| 自托管指南、白皮书、FAQ、首页 FAQ、路线图 | relay chain directory via `VELA_RELAY_CHAIN_DIRECTORY_URL` | vela-relay#12 |
+
+Result: reviewed — no open High or Medium findings.

@@ -44,11 +44,12 @@ network. See [networks & fees](/docs/networks-and-fees).
 - **The apps:** the web wallet, the browser extension and the desktop apps are
   free. The iOS and Android apps will be a one-time purchase in the stores; you
   can also build any app from source for free.
-- **Each transaction:** a fee paid from your wallet to the relay that submits it.
-  It covers the gas plus the relay's margin and is often ten times or more the
-  transaction's on-chain cost, with a minimum of about $0.01. The exact amount is
-  on the confirm screen and is part of what you sign. There is no deposit and no
-  subscription. [How the fee is calculated](/docs/networks-and-fees).
+- **Each transaction:** a fee paid from your wallet to the relay that submits it
+  — Vela's, unless you point the wallet at another relay or run your own. It
+  covers the gas plus the relay's margin, with a minimum of about $0.01. The exact
+  amount is on the confirm screen before you sign and is part of what you sign.
+  There is no deposit and no subscription.
+  [How the fee is calculated](/docs/networks-and-fees#fee).
 - **No token.** Vela has none and plans none.
 
 ## Can I use Vela with dApps?
@@ -85,8 +86,7 @@ EntryPoint — are audited. Vela's own code is not, and no audit is scheduled. S
 
 Your funds stay in your Safe on-chain. For an existing wallet, the Vela browser
 extension and apps you build yourself keep working without getvela.app, and every
-service is open source for someone else to run (the relay needs a code change to
-stop reading chain data from Vela's server). The
+service is open source for someone else to run. The
 [self-hosting guide](/docs/self-hosting#if-getvela-app-disappears) lists the
 paths and their limits.
 

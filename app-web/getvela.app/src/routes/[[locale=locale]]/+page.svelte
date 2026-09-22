@@ -45,7 +45,7 @@
 		{ href: '/docs/account-contract', external: false },
 		{ href: '/docs/signers', external: false },
 		{ href: '/docs/bybit-attack', external: false },
-		{ href: '/docs/self-hosting', external: false }
+		{ href: '/docs/self-hosting#if-getvela-app-disappears', external: false }
 	] as const;
 
 	/**

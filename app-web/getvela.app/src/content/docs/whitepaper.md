@@ -29,8 +29,7 @@ Vela, the company, never holds your keys and has no role on your Safe, so it
 **cannot move, freeze or seize your funds** by itself. It does write and serve the
 software that asks your keys to sign — which is why the threat model below
 matters. The apps, the relay that submits transactions, and the supporting
-services are open source, and you can run your own copy of each; today the relay
-still reads chain data from Vela's server unless you change its code. What you
+services are open source, and you can run your own copy of each. What you
 trust, in short: the contracts, the authenticators that hold your keys, the code
 of the app you sign with, the domain your passkeys belong to, and the services you
 point the app at.
@@ -140,10 +139,12 @@ makes them phishing-resistant; it is also a dependency this paper returns to bel
 - The fee is **three times the gas the wallet reserves for the operation**
   (the simulated estimates raised by half, with minimums), **priced at the higher
   of the wallet's own gas-price reading and the relay's price for the chosen
-  speed**, with a minimum of about $0.01. On Tempo the multiple is two. Because of
-  the padding and the headroom in the price, the fee is often ten times or more the
-  operation's actual on-chain cost, and more for the first transaction on a network;
-  the relay keeps the difference.
+  speed**, with a minimum of about $0.01. On Tempo the multiple is two. The padding
+  and the headroom in the price put the fee above the operation's actual on-chain
+  cost, more so for the first transaction on a network; the relay keeps the
+  difference. The exact amount is on the confirm screen before you sign.
+- The fee goes to whichever relay the wallet is set to: Vela's by default, or any
+  vela-relay deployment, including one you run.
 - The fee is paid in the network's coin or in a USD stablecoin the relay accepts
   (pathUSD on Tempo, which has no native coin). There is **no paymaster**: nobody
   sponsors gas, and nobody can filter transactions through a sponsorship policy.
@@ -265,8 +266,7 @@ Details: [recovery & sign-in](/docs/recovery).
 ## If Vela disappears
 
 Your funds stay in your Safe on-chain. The contracts don't depend on Vela, and
-every service Vela runs is open source for someone else to run — the relay needs
-a code change to stop reading chain data from Vela's server. The one thing that cannot move is the
+every service Vela runs is open source for someone else to run. The one thing that cannot move is the
 passkeys' relying party, `getvela.app`: a copy of the web wallet on another
 domain creates a different wallet. For existing wallets, the Vela browser
 extension (which can use `getvela.app` passkeys by permission) and apps you build
