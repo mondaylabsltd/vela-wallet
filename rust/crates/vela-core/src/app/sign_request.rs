@@ -1154,6 +1154,16 @@ fn swipe_action(model: &Model) -> SignSwipeAction {
     if model.funding.is_some() {
         return SignSwipeAction::FundingCancel;
     }
+    // Spec 081: a REFUSED request must still be answered, and dismissing the
+    // sheet is how a person closes it. `sign_error` is set on a refusal too,
+    // so without this the check below turned the dismissal into `Dismiss` —
+    // which sends nothing. The dApp then waited forever and every later
+    // request got "another request is open", app-wide, until the process was
+    // killed. Found on a device (FR-019); the shells send `SwipeDismissed`,
+    // not `RejectTapped`, which is why the unit test missed it.
+    if model.blocked.is_some() {
+        return SignSwipeAction::Reject;
+    }
     if model.sign_error.is_some() || model.pending_op_hash.is_some() || {
         model.inflight_matches_pending()
             && matches!(

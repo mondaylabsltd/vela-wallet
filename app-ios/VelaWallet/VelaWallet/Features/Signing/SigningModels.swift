@@ -147,6 +147,14 @@ struct TechModel {
     var raw: (label: String, hex: String)?
     let copyLabel: String
     let explorerLabel: String
+
+    /// Nothing to disclose. A refused request nulls every field this card
+    /// would show (spec 081); drawing the row anyway promises content and then
+    /// opens on an empty panel. Found on an Android device, fixed on both.
+    var isEmpty: Bool {
+        summary == nil && fn == nil && params.isEmpty && identities.isEmpty
+            && simResult == nil && raw == nil
+    }
 }
 
 struct FeeTokenOption: Identifiable {
@@ -179,11 +187,16 @@ struct SigningModel {
     let tech: TechModel
     /// cs29 ships the disclosure open — the whole point of that mock.
     let techOpen: Bool
-    let fee: FeeModel
+    /// `nil` under a refusal (spec 081): a fee for a transaction nobody will
+    /// send is a number about nothing.
+    let fee: FeeModel?
     var signer: (label: String, name: String, seed: String)
     /// The slide. There is no reject button anywhere in this vocabulary:
     /// closing the sheet is the rejection (product contract, SPEC 签名).
-    let confirm: (hint: String, action: String, enabled: Bool)
+    ///
+    /// `nil` under a refusal: a dead slide reads as an option somebody merely
+    /// failed to use, rather than one the wallet never offered.
+    let confirm: (hint: String, action: String, enabled: Bool)?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
     /// The wallet asking ITSELF (the key backup): its own mark and name, and

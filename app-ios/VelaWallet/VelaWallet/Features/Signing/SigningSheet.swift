@@ -50,19 +50,28 @@ struct SigningSheet: View {
 
                 Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
 
-                TechDetailsView(tech: model.tech, open: techOpen)
-                SigningFeeView(fee: model.fee, onToggle: onFee, onPick: onFeePick,
-                               speed: model.feeSpeed, onSpeed: onSpeed)
+                if !model.tech.isEmpty {
+                    TechDetailsView(tech: model.tech, open: techOpen)
+                }
+                if let fee = model.fee {
+                    SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
+                                   speed: model.feeSpeed, onSpeed: onSpeed)
+                }
                 SigningSignerRow(label: model.signer.label, name: model.signer.name,
                                  seed: model.signer.seed)
                 if let signWith = model.signWith {
                     SignWithRow(model: signWith, onSelect: onSignWith)
                 }
-                SlideToConfirmView(
-                    hint: model.confirm.hint, action: model.confirm.action,
-                    enabled: model.confirm.enabled, onConfirm: onConfirm
-                )
-                .padding(.bottom, Tokens.Space.s16)
+                // Spec 081: a refused request offers no confirm control at
+                // all. It is not disabled — it is absent, because the wallet
+                // never offered it.
+                if let confirm = model.confirm {
+                    SlideToConfirmView(
+                        hint: confirm.hint, action: confirm.action,
+                        enabled: confirm.enabled, onConfirm: onConfirm
+                    )
+                    .padding(.bottom, Tokens.Space.s16)
+                }
             }
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
         }

@@ -146,7 +146,18 @@ data class TechModel(
     val rawHex: String? = null,
     val copyLabel: String,
     val explorerLabel: String,
-)
+) {
+    /**
+     * Nothing to disclose. A refused request nulls every field this card would
+     * show (spec 081), and the row still drew itself — expanding it opened an
+     * empty panel, which tells a person there is something here and then does
+     * not show it. Found on the Xiaomi.
+     */
+    val isEmpty: Boolean
+        get() = summary == null && functionLabel == null && signature == null &&
+            params.isEmpty() && identities.isEmpty() && simResult == null &&
+            rawLabel == null && rawHex == null
+}
 
 @Immutable
 data class FeeTokenOption(
@@ -219,16 +230,20 @@ data class SigningScreenModel(
     val tech: TechModel,
     /** cs29 ships the disclosure open — the whole point of that mock. */
     val techOpen: Boolean,
-    val fee: FeeModel,
+    /** `null` under a refusal (spec 081): a fee for a transaction nobody will send. */
+    val fee: FeeModel?,
     val signerLabel: String,
     val signerName: String,
     val signerSeed: String,
     /**
      * The slide. There is no reject button anywhere in this vocabulary:
      * dismissing the sheet is the rejection (product contract, SPEC 签名).
+     *
+     * `null` under a refusal: a dead slide reads as an option somebody merely
+     * failed to use, rather than one the wallet never offered.
      */
-    val confirmHint: String,
-    val confirmAction: String,
+    val confirmHint: String?,
+    val confirmAction: String?,
     val confirmEnabled: Boolean,
     val panelTitle: String,
 )

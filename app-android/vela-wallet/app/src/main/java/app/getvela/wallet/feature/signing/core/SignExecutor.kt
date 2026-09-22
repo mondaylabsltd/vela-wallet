@@ -245,8 +245,24 @@ class SignExecutor(
         /** The page's answer in the wire's shape; the core chose `ok`/`err` and the code. */
         fun responseJson(id: String, payload: SignResponsePayload): JSONObject = when (payload) {
             is SignResponsePayload.Ok -> BrowserExecutor.resultJson(id, payload.result)
-            is SignResponsePayload.Err -> BrowserExecutor.errorJson(id, payload.code, payload.message ?: defaultMessage(payload.kind))
+            is SignResponsePayload.Err -> BrowserExecutor.errorJson(
+                id,
+                payload.code,
+                // A refusal's `message` is the refused FUNCTION name, which on
+                // its own reads as a label rather than an answer. Say what
+                // happened, then name it (spec 081, device-found).
+                when {
+                    payload.kind == SignErrorKind.SelfCallBlocked && payload.message != null ->
+                        "${defaultMessage(payload.kind)} (${payload.message})"
+                    else -> payload.message ?: defaultMessage(payload.kind)
+                },
+                kindWireName(payload.kind),
+            )
         }
+
+        /** The core's snake_case name for a kind — what `@SerialName` writes. */
+        fun kindWireName(kind: SignErrorKind): String =
+            SignErrorKind.serializer().descriptor.getElementName(kind.ordinal)
 
         fun defaultMessage(kind: SignErrorKind): String = when (kind) {
             SignErrorKind.UserRejected -> "User rejected the request"

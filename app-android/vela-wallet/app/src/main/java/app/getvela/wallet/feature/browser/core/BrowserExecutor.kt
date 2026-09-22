@@ -101,8 +101,18 @@ class BrowserExecutor(
         fun resultJson(id: String, result: Any?): JSONObject =
             JSONObject().put("dir", "res").put("id", id).put("result", result ?: JSONObject.NULL)
 
-        fun errorJson(id: String, code: Int, message: String): JSONObject =
-            JSONObject().put("dir", "res").put("id", id).put("error", JSONObject().put("code", code).put("message", message))
+        /**
+         * `kind` is the core's own vocabulary, passed through when there is
+         * one (spec 081, matching the web shell's `error.kind`). A refused
+         * self-call answers `-32603` with the refused function as its message,
+         * which tells a page WHAT but not WHY; the kind is the machine-readable
+         * half, and a page that does not know the field simply ignores it.
+         */
+        fun errorJson(id: String, code: Int, message: String, kind: String? = null): JSONObject {
+            val error = JSONObject().put("code", code).put("message", message)
+            if (kind != null) error.put("kind", kind)
+            return JSONObject().put("dir", "res").put("id", id).put("error", error)
+        }
 
         /** An EIP-1193 event, in the envelope the provider already listens for. */
         fun eventJson(event: DpermPageEvent): JSONObject = when (event) {

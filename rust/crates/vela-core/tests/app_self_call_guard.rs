@@ -275,14 +275,48 @@ fn a_blocked_request_explains_itself_before_it_answers() {
     // Closing it answers the dApp — and says the WALLET refused, not the
     // person, who was never offered the choice.
     let ops = sut.dispatch(Event::RejectTapped);
-    let answered = ops.iter().any(|op| {
+    assert!(
+        answered_with_the_refusal(&ops),
+        "an explicit reject answers with the refusal, never 4001"
+    );
+}
+
+/// The event the SHELLS actually send when the sheet is closed.
+///
+/// This test exists because the one above did not catch a bug that bricked
+/// signing on a phone. Android and iOS dismiss a sheet with `SwipeDismissed`
+/// (web's close button is the only `RejectTapped` in the product), and
+/// `dismiss()` deliberately sends no response — so a refused request was never
+/// answered, the dApp waited forever, and every later request came back
+/// "another request is open" until the app was killed. Found on the Xiaomi,
+/// invisible to a suite that only ever pressed the button web uses.
+#[test]
+fn closing_a_blocked_sheet_the_way_a_phone_does_still_answers() {
+    let mut sut = boot();
+    arrive(
+        &mut sut,
+        "eth_sendTransaction",
+        &tx(SAFE, &enable_module_calldata()),
+    );
+
+    let ops = sut.dispatch(Event::SwipeDismissed);
+    assert!(
+        answered_with_the_refusal(&ops),
+        "a swipe-dismissed refusal must answer too, or the transport never reopens"
+    );
+
+    // And the sheet is gone, so the next request can take the slot.
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+}
+
+fn answered_with_the_refusal(ops: &[Op]) -> bool {
+    ops.iter().any(|op| {
         matches!(
             op,
             Op::SendResponse { payload: SignResponsePayload::Err { code, kind, .. }, .. }
                 if *code == CODE_INTERNAL && *kind == SignErrorKind::SelfCallBlocked
         )
-    });
-    assert!(answered, "dismissal answers with the refusal, never 4001");
+    })
 }
 
 #[test]

@@ -164,21 +164,31 @@ fun SigningSheetContent(
                 .background(colors.borderBase),
         )
 
-        TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
-        SigningFee(
-            model.fee,
-            onFee = onFee,
-            onPick = onFeePick,
-            onToggleSpeed = onToggleSpeed,
-            onPickSpeed = onPickSpeed,
-        )
+        if (!model.tech.isEmpty) {
+            TechDetails(model.tech, techOpen, onToggle = { techOverride = !techOpen })
+        }
+        model.fee?.let { fee ->
+            SigningFee(
+                fee,
+                onFee = onFee,
+                onPick = onFeePick,
+                onToggleSpeed = onToggleSpeed,
+                onPickSpeed = onPickSpeed,
+            )
+        }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)
         model.signWith?.let { SignWithRow(it, onSignWith) }
-        SlideToConfirm(
-            hint = model.confirmHint,
-            action = model.confirmAction,
-            enabled = model.confirmEnabled,
-            onConfirm = onConfirm,
-        )
+        // Spec 081: a refused request offers no confirm control at all. It is
+        // not disabled — it is absent, because the wallet never offered it.
+        val hint = model.confirmHint
+        val action = model.confirmAction
+        if (hint != null && action != null) {
+            SlideToConfirm(
+                hint = hint,
+                action = action,
+                enabled = model.confirmEnabled,
+                onConfirm = onConfirm,
+            )
+        }
     }
 }

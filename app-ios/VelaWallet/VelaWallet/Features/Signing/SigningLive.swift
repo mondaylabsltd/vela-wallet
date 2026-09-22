@@ -119,14 +119,21 @@ enum SigningLive {
         let facts = SigningController.firstCall(paramsJson: request.paramsJson)
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
-        let blocks = statusBlocks(sign: sign, loc: loc)
-            + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
-                          dataBytes: dataBytes, context: context)
-            // Only a TRANSACTION has balances to change. A message moves
-            // nothing, and a balance block on a signature would answer a
-            // question nobody asked.
-            + balanceBlocks(isTransaction: facts != nil, context: context)
-            + guardBlocks(guardView, loc: loc)
+        // Spec 081: a refused request gets the refusal and nothing else. The
+        // decoded body, the balances and the guard all describe a transaction
+        // that will never be signed, and reading them invites the question
+        // "so why can't I?" — which the sentence above already answers.
+        let refused = sign.blocked != nil
+        let blocks = refused
+            ? statusBlocks(sign: sign, loc: loc)
+            : statusBlocks(sign: sign, loc: loc)
+                + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
+                              dataBytes: dataBytes, context: context)
+                // Only a TRANSACTION has balances to change. A message moves
+                // nothing, and a balance block on a signature would answer a
+                // question nobody asked.
+                + balanceBlocks(isTransaction: facts != nil, context: context)
+                + guardBlocks(guardView, loc: loc)
 
         var model = SigningModel(
             id: fallback.id,
@@ -141,24 +148,32 @@ enum SigningLive {
             blocks: blocks,
             tech: TechModel(
                 title: fallback.tech.title,
-                summary: clear.result?.contractName,
-                fn: clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
+                summary: refused ? nil : clear.result?.contractName,
+                fn: refused
+                    ? nil
+                    : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
                 params: [],
                 identities: [],
                 simResult: nil,
-                raw: dataBytes > 0 ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil : nil,
+                raw: !refused && dataBytes > 0
+                    ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil
+                    : nil,
                 copyLabel: fallback.tech.copyLabel,
                 explorerLabel: fallback.tech.explorerLabel
             ),
             techOpen: false,
-            fee: feeModel(clear: clear, fee: fee, context: context, speedTier: speed?.view.tier),
+            fee: refused
+                ? nil
+                : feeModel(clear: clear, fee: fee, context: context, speedTier: speed?.view.tier),
             signer: (label: s(loc, "signingAccount"),
                      name: context.walletName,
                      seed: context.walletAddress),
-            confirm: (hint: s(loc, "slideToConfirm"),
-                      action: confirmLabel(clear: clear, loc: loc),
-                      enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
-                                              speedTier: speed?.view.tier)),
+            confirm: refused
+                ? nil
+                : (hint: s(loc, "slideToConfirm"),
+                   action: confirmLabel(clear: clear, loc: loc),
+                   enabled: confirmEnabled(sign: sign, guard: guardView, fee: fee, clear: clear,
+                                           speedTier: speed?.view.tier)),
             panelTitle: s(loc, "signatureRequest")
         )
         // The wallet's own request (the key backup) is not a site: its own mark
@@ -470,6 +485,15 @@ enum SigningLive {
         }
         if result.bestEffort { blocks.append(.warning(tone: .caution, text: s(loc, "bestEffortWarning"))) }
         if result.partial { blocks.append(.warning(tone: .caution, text: s(loc, "partialWarning"))) }
+        // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
+        // from a base URL the person can edit, and nothing signed the answer.
+        // The other sources say nothing here: built in and pinned are what
+        // "verified" means, a token-standard shape is the standard doing its
+        // job, the 4-byte database has its own line above, and a deployment
+        // claims nothing to doubt.
+        if result.provenance == .fetched {
+            blocks.append(.warning(tone: .caution, text: s(loc, "descriptorFetchedWarning")))
+        }
         if result.fields.contains(where: \.unverified) {
             blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))
         }

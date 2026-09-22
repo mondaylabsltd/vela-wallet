@@ -660,7 +660,7 @@ struct SigningLiveTests {
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
             pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
             reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
-            notice: nil, globalChainId: 100
+            notice: nil, globalChainId: 100, blocked: nil
         )
         let readyFee = FeeViewWire(
             busy: false, failed: nil, fee: nil, stale: false, feeToken: nil,
@@ -700,7 +700,7 @@ struct SigningLiveTests {
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
             pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
             reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
-            notice: nil, globalChainId: 100
+            notice: nil, globalChainId: 100, blocked: nil
         )
         func estimate(_ tier: String, _ wei: String) -> FeeEstimateWire {
             FeeEstimateWire(
@@ -754,11 +754,11 @@ struct SigningLiveTests {
         #expect(feeValue(open) == "~" + (control?.options.first?.value ?? ""))
         #expect(control?.options[1].value == "…")
         #expect(control?.options.first?.gasPrice == "1 ~ 2 gwei")
-        #expect(open.confirm.enabled)
+        #expect(open.confirm?.enabled == true)
 
         let picked = model(feeAtFast, speed("slow", picked: true, options: []))
         #expect(feeValue(picked) == loc.t("componentsUi.gas.estimating"))
-        #expect(!picked.confirm.enabled, "the slide never signs the speed walked away from")
+        #expect(picked.confirm?.enabled == false, "the slide never signs the speed walked away from")
 
         let feeAtSlow = FeeViewWire(
             busy: false, failed: nil, fee: estimate("slow", "1000000000000000"), stale: false,
@@ -766,7 +766,7 @@ struct SigningLiveTests {
         )
         let landed = model(feeAtSlow, speed("slow", picked: true, options: []))
         #expect(feeValue(landed)?.hasPrefix("~") == true)
-        #expect(landed.confirm.enabled)
+        #expect(landed.confirm?.enabled == true)
     }
 
     // -- Issue #262: the coin that pays -------------------------------------

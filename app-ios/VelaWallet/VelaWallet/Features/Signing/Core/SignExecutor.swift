@@ -355,10 +355,21 @@ final class SignExecutor {
             return BrowserExecutor.resultJson(id: id, result: payload["result"] as? String)
         case "err":
             let kind = payload["kind"] as? String ?? ""
+            let detail = payload["message"] as? String
+            // A refusal's `message` is the refused FUNCTION name, which on its
+            // own reads as a label rather than an answer. Say what happened,
+            // then name it (spec 081, found on an Android device).
+            let message: String
+            if kind == "self_call_blocked", let detail {
+                message = "\(defaultMessage(kind)) (\(detail))"
+            } else {
+                message = detail ?? defaultMessage(kind)
+            }
             return BrowserExecutor.errorJson(
                 id: id,
                 code: (payload["code"] as? NSNumber)?.intValue ?? -32603,
-                message: (payload["message"] as? String) ?? defaultMessage(kind)
+                message: message,
+                kind: kind
             )
         default:
             return BrowserExecutor.errorJson(id: id, code: -32603, message: "The wallet produced no answer")

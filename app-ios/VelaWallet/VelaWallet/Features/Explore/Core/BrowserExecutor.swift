@@ -179,8 +179,17 @@ final class BrowserExecutor {
         ["dir": "res", "id": id, "result": result ?? NSNull()]
     }
 
-    static func errorJson(id: String, code: Int, message: String) -> [String: Any] {
-        ["dir": "res", "id": id, "error": ["code": code, "message": message]]
+    /// `kind` is the core's own vocabulary, passed through when there is one
+    /// (spec 081, matching the web shell's `error.kind`). A refused self-call
+    /// answers `-32603` with the refused function as its message, which tells
+    /// a page WHAT but not WHY; the kind is the machine-readable half, and a
+    /// page that does not know the field simply ignores it.
+    static func errorJson(
+        id: String, code: Int, message: String, kind: String? = nil
+    ) -> [String: Any] {
+        var error: [String: Any] = ["code": code, "message": message]
+        if let kind, !kind.isEmpty { error["kind"] = kind }
+        return ["dir": "res", "id": id, "error": error]
     }
 
     static func eventJson(_ event: [String: Any]) -> [String: Any] {
