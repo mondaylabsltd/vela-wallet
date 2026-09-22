@@ -510,7 +510,6 @@ struct SettingsScreenModel {
     var keys: WalletKeysModel?
     var sections: [SettingsSectionModel]
     var theme: SegmentedModel
-    var avatar: SegmentedModel
     var textScale: TextScaleModel
     let signOutLabel: String
     let eraseTitle: String

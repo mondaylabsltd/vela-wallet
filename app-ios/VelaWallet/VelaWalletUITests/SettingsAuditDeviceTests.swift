@@ -9,6 +9,8 @@
 //  和图形头像也没有理解生效". A hermetic test cannot answer that, because what
 //  is in question is not what a builder returns — it is whether the SCREEN
 //  redraws when a stored preference changes. Only a running app can say.
+//  (The avatar half of that report is moot since spec 074: the 首字母 /
+//  图形头像 choice is gone and every avatar is the identicon.)
 //
 //      xcodebuild test -project app-ios/VelaWallet/VelaWallet.xcodeproj \
 //        -scheme VelaWallet -destination 'platform=iOS,id=<device>' \
@@ -55,50 +57,6 @@ final class SettingsAuditDeviceTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["设置"].waitForExistence(timeout: 6),
                       "系统 did not return the app to the device's language")
         app.terminate()
-    }
-
-    /// 头像样式 — 首字母 and 图形头像 draw DIFFERENT art for the same address.
-    ///
-    /// Read on the CONTACTS page, not on the settings page that owns the
-    /// control: the settings account row has no address unless a wallet is
-    /// signed in, so its avatar is an empty circle under both choices and a
-    /// comparison there proves nothing. (It passed that way once, which is how
-    /// this defect survived 057.)
-    ///
-    /// The choice is made in one launch and read in the next, so what this
-    /// asserts is the part a person actually complained about: **the style
-    /// reaches avatars on other screens.** Same-session redraw is the
-    /// environment's job (`\.avatarStyle`) and needs a signed-in wallet to
-    /// watch happen.
-    func testTheAvatarStyleReachesEveryAvatar() throws {
-        func avatarBytes(after style: String) -> Data? {
-            let settings = launch()
-            XCTAssertTrue(settings.staticTexts["设置"].waitForExistence(timeout: 20))
-            settle()
-            tap(settings.staticTexts[style], in: settings)
-            settle(0.8)
-            settings.terminate()
-
-            let contacts = launch(page: "contacts")
-            XCTAssertTrue(contacts.staticTexts["Alice"].waitForExistence(timeout: 20),
-                          "the fixture address book never appeared")
-            settle()
-            attach(contacts.screenshot(), named: "audit-avatar-\(style)")
-            let row = contacts.staticTexts["Alice"].frame
-            // The row's leading edge, where every contact avatar is drawn.
-            let art = CGRect(x: 16, y: row.midY - 24, width: 56, height: 48)
-            let bytes = crop(contacts.screenshot(), to: art)
-            contacts.terminate()
-            return bytes
-        }
-
-        let initials = avatarBytes(after: "首字母")
-        let identicon = avatarBytes(after: "图形头像")
-        XCTAssertNotNil(initials)
-        XCTAssertNotEqual(
-            initials, identicon,
-            "a contact's avatar is identical under both styles — the choice does not reach the artwork"
-        )
     }
 
     /// 数字格式 — every figure on the page, in the chosen shape.
@@ -388,17 +346,6 @@ final class SettingsAuditDeviceTests: XCTestCase {
     /// Past the launch animation, or past a sheet's own transition.
     private func settle(_ seconds: TimeInterval = 2.5) {
         Thread.sleep(forTimeInterval: seconds)
-    }
-
-    /// The bytes of one region of a screenshot, for comparing artwork rather
-    /// than screens.
-    private func crop(_ screenshot: XCUIScreenshot, to rect: CGRect) -> Data? {
-        let image = screenshot.image
-        let scale = image.scale
-        let scaled = CGRect(x: rect.minX * scale, y: rect.minY * scale,
-                            width: rect.width * scale, height: rect.height * scale)
-        guard let cg = image.cgImage?.cropping(to: scaled) else { return nil }
-        return UIImage(cgImage: cg).pngData()
     }
 
     private func attach(_ screenshot: XCUIScreenshot, named name: String) {

@@ -259,7 +259,7 @@ struct SettingsUrlField: View {
 }
 
 /// The product's ONE segmented control (design review 2026-07): three-up for
-/// the theme picker, two-up for the avatar style.
+/// the theme picker. (Its two-up avatar-style use was retired in spec 074.)
 struct SettingsSegmentedControl: View {
     @Environment(\.theme) private var theme
     let model: SegmentedModel
