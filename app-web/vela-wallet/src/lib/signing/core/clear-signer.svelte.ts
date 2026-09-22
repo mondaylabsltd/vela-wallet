@@ -113,18 +113,31 @@ class ClearSignerSession {
 			this.view = { ...this.view, asking: false, pairing: null };
 			return this.#channel;
 		}
-		const relay = await openRelayChannel({
-			relayUrl: signPreference.view.relay_url,
-			signerUrl,
-			onLink: (link) => {
-				this.view = { ...this.view, asking: false, pairing: { link, code: null } };
-			},
-			onCode: (code) => {
-				const pairing = this.view.pairing;
-				if (pairing !== null) this.view = { ...this.view, pairing: { ...pairing, code } };
-			},
-			sockets: this.sockets
-		});
+		// A relay that cannot even be addressed is the likeliest failure of the
+		// whole route, and the person gets its own sentence rather than "something
+		// went wrong": the room is what could not be reached, and this device's
+		// own page is still there.
+		let relay: RelayChannel;
+		try {
+			relay = await openRelayChannel({
+				relayUrl: signPreference.view.relay_url,
+				signerUrl,
+				onLink: (link) => {
+					this.view = { ...this.view, asking: false, pairing: { link, code: null } };
+				},
+				onCode: (code) => {
+					const pairing = this.view.pairing;
+					if (pairing !== null) this.view = { ...this.view, pairing: { ...pairing, code } };
+				},
+				sockets: this.sockets
+			});
+		} catch (error) {
+			this.#page = '';
+			throw new ClearSignerRefusedError(
+				'relay_down',
+				error instanceof Error ? error.message : String(error)
+			);
+		}
 		this.#relay = relay;
 		this.#channel = relay;
 		return relay;
@@ -170,7 +183,20 @@ class ClearSignerSession {
 		request: { intent: unknown; context: unknown },
 		signerUrl: string
 	): Promise<{ reply: ClearSignerReply; signerOrigin: string }> {
-		const channel = await this.#channelFor(signerUrl);
+		let channel: ClearSignerChannel | null;
+		try {
+			channel = await this.#channelFor(signerUrl);
+		} catch (error) {
+			// The channel could not be opened at all (an unreachable relay). Its
+			// sentence is shown, and the request is answered rather than hanging.
+			const refused = error instanceof ClearSignerRefusedError ? error : null;
+			const code = refused?.code ?? 'malformed';
+			this.noteRefusal(code);
+			return {
+				reply: { kind: 'refused', code, detail: refused?.detail ?? String(error) },
+				signerOrigin: ''
+			};
+		}
 		if (channel === null) {
 			// They backed out of the question: a cancelled sheet, nothing more.
 			this.#cancelled = true;
@@ -228,7 +254,19 @@ class ClearSignerSession {
 		this.#closeChannel();
 		const url = signerUrl && signerUrl !== '' ? signerUrl : await this.#defaultUrl();
 		const request = clearSignerRequest(input);
-		const channel = await this.#channelFor(url);
+		// A channel that cannot be opened (an unreachable relay) rejects with its
+		// own sentence; every caller already treats that as "nothing was signed".
+		let channel: ClearSignerChannel | null;
+		try {
+			channel = await this.#channelFor(url);
+		} catch (error) {
+			const refused =
+				error instanceof ClearSignerRefusedError
+					? error
+					: new ClearSignerRefusedError('malformed', String(error));
+			this.noteRefusal(refused.code);
+			throw refused;
+		}
 		if (channel === null) {
 			this.view = IDLE;
 			throw new ClearSignerRefusedError('declined', 'no signer chosen');
