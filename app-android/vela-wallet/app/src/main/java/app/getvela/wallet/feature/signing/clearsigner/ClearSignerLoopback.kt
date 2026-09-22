@@ -71,12 +71,28 @@ class ClearSignerLoopback(
     @Volatile
     private var over = false
 
+    /**
+     * Cancel is sticky. It can arrive in the breath between this wire being
+     * built and the first request waiting on anything — the Where sheet's
+     * Cancel does exactly that — and a cancel dropped there left the person
+     * looking at a sheet that answered nothing for five minutes.
+     */
+    @Volatile
+    private var stopped = false
+
     private var opened = false
+
+    /** Guards the one socket's output, and who the session belongs to. */
+    private val lock = Any()
 
     private class Held(val connection: ClearSignerConnection, val socket: Socket)
 
     override suspend fun ask(ask: ClearSignerAsk): ClearSignerAnswer {
         if (over) return ClearSignerAnswer.Cancelled
+        if (stopped) {
+            end()
+            return ClearSignerAnswer.Cancelled
+        }
         val done = CompletableDeferred<ClearSignerAnswer>()
         pending = done
         // Every request of the flow is a request the person is being waited on
@@ -130,6 +146,7 @@ class ClearSignerLoopback(
     }
 
     override fun cancel() {
+        stopped = true
         pending?.complete(ClearSignerAnswer.Cancelled)
     }
 
@@ -160,6 +177,12 @@ class ClearSignerLoopback(
             val socket = try {
                 server.accept()
             } catch (_: IOException) {
+                break
+            }
+            // The session was taken while this one was connecting: it is a
+            // stranger now, and the listener's work is done.
+            if (held != null) {
+                runCatching { socket.close() }
                 break
             }
             sockets += socket
@@ -203,9 +226,11 @@ class ClearSignerLoopback(
                 if (!write(socket, step)) break
                 val verdict = step.outcome?.let { ClearSignerAnswer.Signed(it) }
                     ?: step.ceremony?.let { ClearSignerAnswer.Ceremonial(it) }
-                if (verdict != null) {
-                    // Whichever connection answers first IS the session's.
-                    if (held == null) held = Held(connection, socket)
+                // Whichever connection answers FIRST is the session's, and
+                // only that one may answer the request that is waiting: a
+                // stranger that proved itself late must not settle somebody
+                // else's ceremony.
+                if (verdict != null && claim(connection, socket)) {
                     pending?.complete(verdict)
                 }
                 if (step.close) break
@@ -227,11 +252,31 @@ class ClearSignerLoopback(
         }
     }
 
+    /** Is this connection the session's — claiming it if nobody has yet? */
+    private fun claim(connection: ClearSignerConnection, socket: Socket): Boolean =
+        synchronized(lock) {
+            val current = held
+            if (current == null) {
+                held = Held(connection, socket)
+                true
+            } else {
+                current.socket === socket
+            }
+        }
+
+    /**
+     * Frames go out under the lock. Three threads write this socket — the
+     * request coroutine sending the next intent, the read loop answering the
+     * core's handshake and pings, and [end]'s `bye` — and two frames spliced
+     * together is a session the page can only close.
+     */
     private fun write(socket: Socket, step: ClearSignerStep): Boolean = runCatching {
         if (step.write.isNotEmpty()) {
-            val output = socket.getOutputStream()
-            output.write(step.write)
-            output.flush()
+            synchronized(lock) {
+                val output = socket.getOutputStream()
+                output.write(step.write)
+                output.flush()
+            }
         }
         true
     }.getOrDefault(false)

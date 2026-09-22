@@ -449,6 +449,17 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         finished = false
     }
 
+    /**
+     * The ViewModel is going: whatever was mid-flight is cancelled with
+     * `viewModelScope`, and a Clear Signer page left open would keep a bound
+     * loopback socket and a Custom Tab in front of an app that is no longer
+     * asking it for anything (spec 075).
+     */
+    override fun onCleared() {
+        container.clearSigner.endFlow()
+        super.onCleared()
+    }
+
     private fun executor(): OnboardingExecutor {
         val ceremonies = passkey ?: error("onboarding executor used before attach()")
         return OnboardingExecutor(

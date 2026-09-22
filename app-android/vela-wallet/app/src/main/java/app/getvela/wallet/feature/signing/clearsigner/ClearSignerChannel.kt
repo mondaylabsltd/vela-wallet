@@ -6,6 +6,7 @@ import app.getvela.wallet.feature.onboarding.core.FailureKind
 import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import app.getvela.wallet.feature.send.core.ClearSigner
 import app.getvela.wallet.feature.send.core.ClearSignerLabels
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -176,9 +177,12 @@ class ClearSignerChannel(
     ): Assertion {
         // A signature asked for on its own opens and closes its own flow; one
         // asked for inside a create or a sign-in belongs to that flow's visit.
-        val standalone = wire == null
+        // WHICH it is can only be decided under the lock — two callers reading
+        // `wire` from outside it would both think they owned the flow, or
+        // neither would.
+        val put = put(ClearSignerAsk.Signature(requestJson, digest, keys), signerOrigin)
         try {
-            val answer = put(ClearSignerAsk.Signature(requestJson, digest, keys), signerOrigin)
+            val answer = put.answer
             val outcome = (answer as? ClearSignerAnswer.Signed)?.outcome
                 // Nothing signed: a cancelled ceremony, so the request stays open.
                 ?: refuse(FailureKind.Cancelled, sentenceFor(answer))
@@ -194,7 +198,7 @@ class ClearSignerChannel(
                 is ClearSignerOutcome.Refused -> refuse(FailureKind.Cancelled, told(outcome.refusal))
             }
         } finally {
-            if (standalone) endFlow()
+            if (put.ownsFlow) endFlow()
         }
     }
 
@@ -219,7 +223,7 @@ class ClearSignerChannel(
         val answer = put(
             ClearSignerAsk.Ceremony(requestJson, operationJson, expectedMemberChallenge),
             signerOrigin,
-        )
+        ).answer
         val outcome = (answer as? ClearSignerAnswer.Ceremonial)?.outcome
             ?: refuse(kindOf(answer), sentenceFor(answer))
         if (outcome is ClearSignerCeremonyOutcome.Refused) {
@@ -237,17 +241,30 @@ class ClearSignerChannel(
 
     // -- the machinery --------------------------------------------------------
 
-    private suspend fun put(ask: ClearSignerAsk, signerOrigin: String): ClearSignerAnswer =
+    /** One request's verdict, and whether this caller opened the flow it rode. */
+    private class Put(val answer: ClearSignerAnswer, val ownsFlow: Boolean)
+
+    private suspend fun put(ask: ClearSignerAsk, signerOrigin: String): Put =
         one.withLock {
             notice.value = null
             val existing = wire
-            val live = existing ?: open(signerOrigin) ?: return@withLock ClearSignerAnswer.Cancelled
+            val mine = existing == null
+            val live = existing ?: open(signerOrigin) ?: return@withLock Put(ClearSignerAnswer.Cancelled, true)
             // A later request of the same flow raises no sheet of its own. The
             // loopback names its page again from inside `ask` (its sheet offers
             // "open it again"); a paired device has no page of ours to name, so
             // the wait is said here.
-            if (existing != null && onThisDevice == false) _state.value = State.Paired
-            val answer = live.ask(ask)
+            if (!mine && onThisDevice == false) _state.value = State.Paired
+            val answer = try {
+                live.ask(ask)
+            } catch (cancellation: CancellationException) {
+                // The caller went away mid-request: a screen left, a ViewModel
+                // cleared, a scope torn down. Nothing was signed, and a page
+                // left open would hold a bound socket and a tab in front of an
+                // app that is no longer asking for anything.
+                endFlow()
+                throw cancellation
+            }
             if (answer !is ClearSignerAnswer.Signed && answer !is ClearSignerAnswer.Ceremonial) {
                 // A flow that did not answer has no session left to reuse.
                 endFlow()
@@ -259,7 +276,7 @@ class ClearSignerChannel(
                 // needs to read, not our waiting card.)
                 _state.value = State.Idle
             }
-            answer
+            Put(answer, mine)
         }
 
     /**

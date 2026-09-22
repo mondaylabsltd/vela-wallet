@@ -273,6 +273,27 @@ class ClearSignerChannelTest {
     }
 
     @Test
+    fun `a cancel that arrives before the request is waiting still ends it`() {
+        var opened = 0
+        val wire = ClearSignerLoopback(
+            base = "https://sign.getvela.app/",
+            openPage = { opened += 1; true },
+            timeoutMs = 20_000L,
+            random = SecureRandom(),
+        )
+        // The Where sheet's Cancel lands in the breath between the wire being
+        // built and the first request waiting on anything. Before this was
+        // sticky, it was dropped and the person watched a dead sheet for five
+        // minutes.
+        wire.cancel()
+        val answer = runBlocking {
+            withTimeout(5_000L) { wire.ask(ClearSignerAsk.Signature(request, digest, keys)) }
+        }
+        assertEquals(ClearSignerAnswer.Cancelled, answer)
+        assertEquals("no page was opened", 0, opened)
+    }
+
+    @Test
     fun `nothing opens until the person says where the signer is`() {
         var opened = 0
         val channel = channel { _, _ -> opened += 1 }
