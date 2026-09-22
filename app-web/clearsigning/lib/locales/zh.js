@@ -209,7 +209,7 @@ window.VelaCS.i18n.register('zh', {
   'intent.proofRecover': '用你的钥匙恢复',
   'intent.memberProof': '确认钥匙加入',
   'tag.someWallet': '某个钱包',
-  'tag.selfReported': '这是它自报的名字',
+  'tag.selfReported': '名字和图标都是它自报的',
   'tag.velaWallet': 'Vela 钱包',
   'tag.stepOne': '第 1 步 / 共 2 步',
   'tag.stepTwo': '第 2 步 / 共 2 步',

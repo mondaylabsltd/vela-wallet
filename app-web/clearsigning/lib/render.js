@@ -40,7 +40,11 @@ window.VelaCS = window.VelaCS || {};
   // A logo the request asked us to show. Cosmetic only, sandboxed to an <img>,
   // and it silently disappears if it fails to load or is not an https URL.
   function remoteLogo(url, letter, tone) {
-    if (!url || !/^https:\/\//.test(url)) return avatar(letter, tone);
+    // An inline mark a peer sent for itself is allowed (the transport has
+    // already refused anything but a small raster `data:` URI); a remote URL
+    // is only ever this page's own catalogue.
+    var inline = typeof url === 'string' && url.indexOf('data:image/') === 0;
+    if (!url || !(inline || /^https:\/\//.test(url))) return avatar(letter, tone);
     var wrap = el('span', 'avatar avatar-logo');
     if (tone) wrap.style.setProperty('--tone', tone);
     var img = document.createElement('img');
@@ -406,7 +410,11 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(
       state.requesterVerified
         ? avatar('V', '#ff6a1a')
-        : avatar((named || '?').slice(0, 1).toUpperCase(), '#6b7280'),
+        : remoteLogo(
+          state.requesterIcon || null,
+          (named || '?').slice(0, 1).toUpperCase(),
+          ns.resolve.toneFor(named),
+        ),
     );
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name',
@@ -430,7 +438,7 @@ window.VelaCS = window.VelaCS || {};
     sheet.appendChild(el('div', 'grabber'));
 
     var head = el('header', 'sheet-head');
-    head.appendChild(avatar(view.dapp.letter, view.dapp.tone));
+    head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
     if (view.dapp.nameClaimed) {

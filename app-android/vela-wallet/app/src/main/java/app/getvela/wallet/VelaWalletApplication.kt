@@ -120,6 +120,38 @@ class AppContainer(private val app: Application) {
     val accountStore = AccountStore(app)
 
     /**
+     * This app's own mark, as the small inline PNG the signer page accepts.
+     *
+     * Rendered once and kept: it cannot change while the app is installed, and
+     * a handshake travels in the clear in 244-byte frames, so the size matters
+     * more than the fidelity — 64 px is what the page draws.
+     */
+    private val appMarkOnce: String by lazy {
+        runCatching {
+            val size = 64
+            val drawable = app.packageManager.getApplicationIcon(app.packageName)
+            val bitmap = android.graphics.Bitmap.createBitmap(
+                size, size, android.graphics.Bitmap.Config.ARGB_8888,
+            )
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, size, size)
+            drawable.draw(canvas)
+            val bytes = java.io.ByteArrayOutputStream()
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+            bitmap.recycle()
+            val encoded = android.util.Base64.encodeToString(
+                bytes.toByteArray(), android.util.Base64.NO_WRAP,
+            )
+            val uri = "data:image/png;base64,\u0024encoded"
+            // The core refuses anything over its cap anyway; not building a
+            // useless string is cheaper than having it dropped there.
+            if (uri.length <= 6144) uri else ""
+        }.getOrDefault("")
+    }
+
+    fun appMark(): String = appMarkOnce
+
+    /**
      * The session machine lives HERE, not in a ViewModel.
      *
      * It is the route guard for the whole app and it outlives every screen. A
@@ -334,7 +366,13 @@ class AppContainer(private val app: Application) {
             // Spec 075: the relay a cross-device pairing goes through, and how
             // this app names itself to the page.
             relayUrl = { settings.signPref.value.relay_url },
-            appName = "vela-android/" + BuildConfig.VERSION_NAME,
+            // Read by a person on the signer page, beside "the name and mark
+            // it gave for itself" — so both are written for a person, not for
+            // a log. Neither is proof of anything and the page says so; what
+            // they buy is telling THIS wallet apart from another one that
+            // connected to the same page.
+            appName = "Vela Wallet " + BuildConfig.VERSION_NAME,
+            appIcon = { appMark() },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 ClearSignerLabels(

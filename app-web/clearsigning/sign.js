@@ -120,6 +120,7 @@
     // postMessage and extension channels are verified by the browser itself;
     // a socket, a radio and a relay are not.
     waitingState.requesterApp = (session && session.requesterApp) || '';
+    waitingState.requesterIcon = (session && session.requesterIcon) || '';
     waitingState.requesterVerified = !!(session && session.channel === 'post')
       || !!(session && session.channel === 'ext');
     window.__slider = null;
@@ -349,6 +350,7 @@
       // signer anything can connect to, so painting Vela's mark on whatever
       // dialled in would be the page vouching for something it cannot check.
       requesterApp: session.requesterApp || '',
+      requesterIcon: session.requesterIcon || '',
       rpId: ns.signer.relyingPartyId(),
     });
     var view = ns.resolve(request.intent, context);

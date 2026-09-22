@@ -526,11 +526,13 @@ impl ClearSignerHandshake {
         self.public_key.clone()
     }
 
-    /// This side's hello text frame.
-    pub fn hello(&self, app: Option<String>) -> String {
+    /// This side's hello text frame. `icon` is an optional mark for the page
+    /// to draw beside the name — inline raster `data:` only, small; anything
+    /// else is dropped rather than sent to be refused.
+    pub fn hello(&self, app: Option<String>, icon: Option<String>) -> String {
         lock(&self.inner)
             .as_ref()
-            .map(|h| h.hello(app.as_deref()))
+            .map(|h| h.hello_with(app.as_deref(), icon.as_deref()))
             .unwrap_or_default()
     }
 

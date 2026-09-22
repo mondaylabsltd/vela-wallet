@@ -96,6 +96,8 @@ window.VelaCS = window.VelaCS || {};
     this.comparisonCode = null;
     /** The requester's own name for itself, where a channel carries one. */
     this.requesterApp = '';
+    /** And its own mark: inline, raster, unverified. */
+    this.requesterIcon = '';
     this.close = null;       // how the channel says goodbye, set by the channel
     this.idleTimer = null;
     this.armIdle();
@@ -435,6 +437,7 @@ window.VelaCS = window.VelaCS || {};
       // What the peer calls itself, from its hello. Nothing verifies it on
       // this channel, so it travels as a claim and is drawn as one.
       session.requesterApp = channel.session.peerApp || '';
+      session.requesterIcon = channel.session.peerIcon || '';
       channel.onMessage(function (message) {
         if (message.t === 'bye') {
           session.finish('bye');

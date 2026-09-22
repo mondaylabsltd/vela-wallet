@@ -59,7 +59,9 @@ class ClearSignerChannel(
     private val labels: (chainId: Int, account: String) -> ClearSignerLabels = { _, _ -> ClearSignerLabels() },
     private val timeoutMs: Long = 5 * 60_000L,
     private val random: SecureRandom = SecureRandom(),
-    /** `vela-android/<version>` — what the page shows as the requester. */
+    /** This app's own mark, inline PNG, for the page to draw beside the name. */
+    private val appIcon: () -> String = { "" },
+    /** `Vela Wallet <version>` — what the page shows as the requester, marked there as self-reported. */
     private val appName: String = "vela-android",
     /** The relay transport; a fake one in tests. */
     private val sockets: RelaySockets = OkHttpRelaySockets(),
@@ -433,6 +435,7 @@ class ClearSignerChannel(
                     signerUrl = page,
                     sockets = sockets,
                     appName = appName,
+                    appIcon = appIcon(),
                     timeoutMs = timeoutMs,
                     random = random,
                     onLink = { link -> _state.value = State.Pairing(link) },
@@ -442,6 +445,7 @@ class ClearSignerChannel(
                     radio = radio ?: error("the Bluetooth route was taken without a radio"),
                     signerUrl = page,
                     appName = appName,
+                    appIcon = appIcon(),
                     timeoutMs = timeoutMs,
                     random = random,
                     onAdvertising = { name -> _state.value = State.Nearby(name) },

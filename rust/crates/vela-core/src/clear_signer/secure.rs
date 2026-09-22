@@ -100,6 +100,28 @@ pub struct Handshake {
     role: Role,
 }
 
+/// A `data:` URI the page will accept for a peer's mark: inline, raster, and
+/// small enough that a handshake stays a handshake (the hello is plaintext and
+/// framed). SVG is not a picture but a document — scripts and external
+/// references — so it is not one of these.
+fn is_inline_raster(icon: &str) -> bool {
+    const MAX: usize = 6144;
+    if icon.len() > MAX {
+        return false;
+    }
+    let Some(rest) = icon
+        .strip_prefix("data:image/png;base64,")
+        .or_else(|| icon.strip_prefix("data:image/jpeg;base64,"))
+        .or_else(|| icon.strip_prefix("data:image/webp;base64,"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+}
+
 impl Handshake {
     /// # Errors
     /// [`SecureError::BadSecret`] when `secret` is not a non-zero P-256 scalar —
@@ -126,6 +148,18 @@ impl Handshake {
     /// This side's hello, as the plaintext text frame (`{"v":1,"t":"hello",…}`).
     #[must_use]
     pub fn hello(&self, app: Option<&str>) -> String {
+        self.hello_with(app, None)
+    }
+
+    /// The same, plus a mark for the peer to draw beside the name.
+    ///
+    /// Both are CLAIMS — this handshake proves a shared secret, never an
+    /// identity — and the page says so beside them. The mark must be a small
+    /// inline raster `data:` URI: a remote URL would make the page fetch from
+    /// a third party on a stranger's say-so, and the hello travels in the
+    /// clear, in frames, before there is a session to seal it. Anything else
+    /// is dropped here rather than sent to be refused there.
+    pub fn hello_with(&self, app: Option<&str>, icon: Option<&str>) -> String {
         let mut hello = json!({
             "v": 1,
             "t": "hello",
@@ -133,8 +167,13 @@ impl Handshake {
             "pk": b64url(&self.public),
             "nonce": b64url(&self.nonce),
         });
-        if let (Some(app), Some(object)) = (app, hello.as_object_mut()) {
-            object.insert("app".to_owned(), Value::String(app.to_owned()));
+        if let Some(object) = hello.as_object_mut() {
+            if let Some(app) = app {
+                object.insert("app".to_owned(), Value::String(app.to_owned()));
+            }
+            if let Some(icon) = icon.filter(|icon| is_inline_raster(icon)) {
+                object.insert("icon".to_owned(), Value::String(icon.to_owned()));
+            }
         }
         hello.to_string()
     }
@@ -339,6 +378,40 @@ impl Session {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+
+    /// A peer's mark is a claim, so the only question here is what shape of
+    /// claim may travel: inline, raster, small. A remote URL would make the
+    /// page fetch from a third party on a stranger's say-so; an SVG is a
+    /// document, not a picture.
+    #[test]
+    fn a_peer_may_send_a_small_inline_raster_mark_and_nothing_else() {
+        let handshake = Handshake::new(&[7u8; 32], [9u8; 16], Role::Requester).unwrap();
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+        let hello: serde_json::Value =
+            serde_json::from_str(&handshake.hello_with(Some("Vela Wallet 0.9.4"), Some(png)))
+                .unwrap();
+        assert_eq!(hello["app"], "Vela Wallet 0.9.4");
+        assert_eq!(hello["icon"], png);
+
+        for refused in [
+            "https://example.com/logo.png",
+            "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+            "data:text/html;base64,PGh0bWw+",
+            "data:image/png;base64,",
+            "data:image/png;base64,not base64!",
+        ] {
+            let hello: serde_json::Value =
+                serde_json::from_str(&handshake.hello_with(None, Some(refused))).unwrap();
+            assert!(hello.get("icon").is_none(), "{refused} must not travel");
+        }
+
+        // And a mark too big for a plaintext, framed handshake.
+        let huge = format!("data:image/png;base64,{}", "A".repeat(7000));
+        let hello: serde_json::Value =
+            serde_json::from_str(&handshake.hello_with(None, Some(&huge))).unwrap();
+        assert!(hello.get("icon").is_none(), "6 KiB is the cap");
+    }
+
     use super::*;
 
     const SIGNER_SECRET: [u8; 32] = [0x11; 32];

@@ -905,6 +905,21 @@ window.VelaCS = window.VelaCS || {};
     return { originKey: byChannel || 'value.viaUnknown', verified: false };
   }
 
+  /**
+   * A stable colour for a name nobody verified: the same name always gets the
+   * same one, and two different names almost never collide. Hues only, at one
+   * saturation and lightness, so every unverified peer reads as the same KIND
+   * of thing — a stranger who told us a name — and never as a brand.
+   */
+  function toneFor(name) {
+    var text = String(name || '');
+    var hash = 0;
+    for (var i = 0; i < text.length; i++) {
+      hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+    return 'hsl(' + (Math.abs(hash) % 360) + ', 34%, 46%)';
+  }
+
   function resolveCeremony(kind, intent, ctx, view) {
     var p = (Array.isArray(intent.params) && intent.params[0]) || {};
     if (typeof p !== 'object' || Array.isArray(p)) p = {};
@@ -938,11 +953,25 @@ window.VelaCS = window.VelaCS || {};
     view.dapp.icon = null;
     if (!who.verified) {
       // A name it gave for itself, said as such; otherwise no name at all.
+      //
+      // The mark is a monogram in a colour DERIVED from that name, never an
+      // image the peer sent. A logo is the strongest thing a person reads
+      // before trusting a screen and the easiest to forge — hand the peer a
+      // picture slot and an impostor simply sends Vela's. Derived, the mark is
+      // a fingerprint of the name that is printed right next to it: to look
+      // the same, something has to BE called the same.
       view.dapp.name = claimed || null;
       view.dapp.nameKey = claimed ? null : 'tag.someWallet';
       view.dapp.nameClaimed = !!claimed;
       view.dapp.letter = (claimed || '?').slice(0, 1).toUpperCase();
-      view.dapp.tone = '#6b7280';
+      view.dapp.tone = toneFor(claimed);
+      // The mark it sent for itself, if it sent one the transport allowed
+      // (inline, raster, small). Drawn beside the line that says both the
+      // name and the mark are its own claim — this channel cannot check
+      // either, and the page must not look like it did.
+      view.dapp.icon = typeof ctx.requesterIcon === 'string' && ctx.requesterIcon
+        ? ctx.requesterIcon
+        : null;
     }
     view.dapp.origin = who.origin || null;
     view.dapp.originKey = who.originKey || null;
@@ -1145,5 +1174,7 @@ window.VelaCS = window.VelaCS || {};
 
   ns.resolve = resolve;
   ns.resolve.walletRequester = walletRequester;
+  // The waiting card draws the same mark as the request card.
+  ns.resolve.toneFor = toneFor;
   ns.format = { units: formatUnits, date: formatDate, short: shortAddress, group: group, amountPhrase: amountPhrase };
 })(window.VelaCS);

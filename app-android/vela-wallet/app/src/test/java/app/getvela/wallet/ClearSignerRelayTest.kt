@@ -89,7 +89,15 @@ class ClearSignerRelayTest {
             assertEquals(
                 "${vector.getString("name")}: our hello",
                 sortedJson(requester.getString("hello")),
-                sortedJson(handshake.hello(requester.optString("app").ifEmpty { null })),
+                sortedJson(
+                    handshake.hello(
+                        requester.optString("app").ifEmpty { null },
+                        // The vectors predate the peer's mark (spec 075) and
+                        // carry no icon; an absent one is a hello without the
+                        // field, which is what they pin.
+                        requester.optString("icon").ifEmpty { null },
+                    ),
+                ),
             )
 
             val session = handshake.complete(signer.getString("hello"), relay)

@@ -153,6 +153,24 @@ window.VelaCS = window.VelaCS || {};
    * no link, passes nothing. Rejects with `.code`:
    * `bad_hello`, `wrong_role`, `foreign_peer`.
    */
+  /**
+   * A mark the peer sent for itself, or ''.
+   *
+   * INLINE ONLY, and only a raster type. A remote URL would make this page
+   * fetch from a third party the moment a stranger asked it to — handing that
+   * host the session's timing and this device's address — and the picture
+   * could be swapped after it was seen. SVG is refused because it is a
+   * document, not a picture: scripts, external references, and a parser
+   * surface nothing here needs.
+   *
+   * The cap keeps a handshake a handshake: the hello travels in the clear, in
+   * 244-byte frames, before there is a session to seal it.
+   */
+  function safeIcon(value) {
+    if (typeof value !== 'string' || value.length > 6144) return '';
+    return /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value) ? value : '';
+  }
+
   Handshake.prototype.complete = function (peerHello, label, expectedFingerprint) {
     var self = this;
     var hello = peerHello;
@@ -210,6 +228,7 @@ window.VelaCS = window.VelaCS || {};
             // channel cannot — so it travels labelled as self-reported and is
             // shown that way, never as a brand the page vouches for.
             peerApp: typeof hello.app === 'string' ? hello.app.slice(0, 64) : '',
+            peerIcon: safeIcon(hello.icon),
           });
         });
     });
@@ -241,6 +260,8 @@ window.VelaCS = window.VelaCS || {};
     this.peerPublicKey = config.peerPublicKey;
     /** The peer's own name for itself, unverified and possibly empty. */
     this.peerApp = config.peerApp || '';
+    /** Its own mark, inline and raster-only, unverified and possibly empty. */
+    this.peerIcon = config.peerIcon || '';
     this.sent = 0n;
     this.received = 0n;
     // Seals and opens run one at a time, in call order. Otherwise two messages

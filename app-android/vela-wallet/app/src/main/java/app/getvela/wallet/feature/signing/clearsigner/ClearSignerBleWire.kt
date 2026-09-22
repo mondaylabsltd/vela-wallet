@@ -45,8 +45,10 @@ class ClearSignerBleWire(
     private val radio: BlePeripheral,
     /** The page the answer must have come from — a key's own, or Settings'. */
     private val signerUrl: String,
-    /** `vela-android/<version>`, for the page's own display. */
+    /** `Vela Wallet <version>`, shown on the page as a name it gave for itself. */
     private val appName: String,
+    /** This app's mark, inline PNG; empty when it could not be rendered. */
+    private val appIcon: String = "",
     private val timeoutMs: Long,
     random: SecureRandom,
     private val now: () -> Long = System::currentTimeMillis,
@@ -215,7 +217,7 @@ class ClearSignerBleWire(
         }
 
         VelaLog.event("clearsigner.ble", "the page said hello")
-        if (!sendPlain(handshake.hello(appName.ifEmpty { null }))) {
+        if (!sendPlain(handshake.hello(appName.ifEmpty { null }, appIcon.ifEmpty { null }))) {
             return ClearSignerAnswer.Unreachable(
                 "the wallet's hello would not go out",
                 Unreachability.Channel,

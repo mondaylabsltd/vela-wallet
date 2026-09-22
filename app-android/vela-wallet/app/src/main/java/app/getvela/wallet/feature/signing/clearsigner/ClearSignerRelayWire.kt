@@ -39,8 +39,10 @@ class ClearSignerRelayWire(
     /** The page the link opens — a key's own `signer_origin`, or Settings'. */
     private val signerUrl: String,
     private val sockets: RelaySockets,
-    /** `vela-android/<version>`, for the page's own display. */
+    /** `Vela Wallet <version>`, shown on the page as a name it gave for itself. */
     private val appName: String,
+    /** This app's mark, inline PNG; empty when it could not be rendered. */
+    private val appIcon: String = "",
     private val timeoutMs: Long,
     private val random: SecureRandom,
     /** The QR + copyable link, the moment there is one. */
@@ -188,7 +190,7 @@ class ClearSignerRelayWire(
         }
         // Our own hello answers the page's, then both sides derive the same key
         // and the same six digits from the two nonces and the two keys.
-        opened.send(handshake.hello(appName.ifEmpty { null }))
+        opened.send(handshake.hello(appName.ifEmpty { null }, appIcon.ifEmpty { null }))
         val live = runCatching { handshake.complete(peerHello, true) }.getOrElse { error ->
             VelaLog.failure("clearsigner.relay", "handshake refused", error)
             return ClearSignerAnswer.Unreachable(
