@@ -137,7 +137,10 @@ pub struct SigningStrings {
     pub blocked_body: String,
     pub blocked_leg_body: String,
     pub blocked_safe_tx: SharedString,
-    pub funding_lead: String,
+    pub funding_lead: SharedString,
+    /// Non-refundable, and it goes to the bundler operator rather than Vela.
+    /// The surface had no such sentence at all.
+    pub funding_disclaimer: SharedString,
     /// The gas-account top-up, drawn IN the sheet (never a second modal).
     pub funding_title: SharedString,
     pub funding_address_label: SharedString,
@@ -342,12 +345,24 @@ impl SigningStrings {
                 .t("componentsUi.signing.selfCallBlockedLegBody")
                 .to_string(),
             blocked_safe_tx: s("selfCallBlockedSafeTx"),
-            funding_lead: loc.t("componentsUi.funding.lead").to_string(),
-            funding_title: loc.t("componentsUi.funding.title"),
-            funding_address_label: loc.t("componentsUi.funding.addressLabel"),
-            funding_amount_label: loc.t("componentsUi.funding.amountLabel"),
-            funding_check_now: loc.t("componentsUi.funding.checkNow"),
-            funding_confirming: loc.t("componentsUi.funding.statusConfirming"),
+            // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON
+            // THIS CHAIN — not "your wallet needs a fee reserve". The
+            // `componentsUi.funding.*` vocabulary it used to wear describes
+            // the retired per-wallet deposit, and two of its sentences were
+            // false under the real meaning: the money does not go into a
+            // reserve Vela holds for you, and it is not refundable. The
+            // treasury vocabulary already existed, already translated, and is
+            // what web/Android/iOS use for the same situation on the send side.
+            funding_lead: loc.t("componentsUi.treasuryBootstrap.lead"),
+            funding_disclaimer: loc.t("componentsUi.treasuryBootstrap.disclaimer"),
+            funding_title: loc.t("componentsUi.treasuryBootstrap.title"),
+            funding_address_label: loc.t("componentsUi.treasuryBootstrap.addressLabel"),
+            funding_amount_label: loc.t("componentsUi.treasuryBootstrap.suggested"),
+            funding_check_now: loc.t("componentsUi.treasuryBootstrap.retryBtn"),
+            // Not "your network fee is on its way": whose money it is, is the
+            // one thing this surface was getting wrong. This says only what
+            // the wallet will do, which is true either way.
+            funding_confirming: loc.t("componentsUi.funding.autoCheckNote"),
             decimals_unverified: a("decimalsUnverified"),
             resulting_total_unknown: loc
                 .t("componentsUi.signingApprove.resultingTotalUnknown")

@@ -6806,7 +6806,16 @@ impl WalletPage {
     fn settings_appearance(&mut self, theme: &Theme) -> Div {
         let s = &self.settings;
         let language = s.language.clone();
-        let language_value = gpui::SharedString::from(format!("简体中文 · {}", s.note_system));
+        // The locale this window is ACTUALLY in. This line was the mock's
+        // literal — it told a German reader their language was 简体中文, in a
+        // panel whose whole job is to say what the app is set to. The endonym
+        // comes from the core beside `SUPPORTED`, so the fifteen names are one
+        // list rather than one per client.
+        let language_value = gpui::SharedString::from(format!(
+            "{} · {}",
+            vela_core::i18n::resolve::endonym(&self.locale),
+            s.note_system
+        ));
         let scale_label = s.text_scale.clone();
         let theme_label = s.theme_title.clone();
         let avatar_label = s.avatar_title.clone();
@@ -7929,6 +7938,14 @@ impl WalletPage {
                 .justify_center()
                 .bg(theme.bg_base.opacity(0.55))
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                // The wheel stops at the modal too. Once the body became a
+                // scroll region, a notch over the dialog scrolled the settings
+                // list behind the scrim as well — measured at ~7,700 changed
+                // background pixels for one notch, with rows visibly moving
+                // under a dialog that is supposed to have taken over. The body
+                // is a child and handles the event first; this only stops what
+                // is left from reaching the page.
+                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                 .child(card)
                 .into_any_element(),
         )

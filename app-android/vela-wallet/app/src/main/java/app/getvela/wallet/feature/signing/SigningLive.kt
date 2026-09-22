@@ -305,8 +305,16 @@ object SigningLive {
             add(SigningBlock.Warning(SigningTone.Danger, text))
             return@buildList
         }
-        sign.funding?.let { funding ->
-            add(SigningBlock.Warning(SigningTone.Caution, s.t("componentsUi.funding.lead", mapOf("symbol" to funding.data.native_symbol))))
+        // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON THIS
+        // CHAIN. The `componentsUi.funding.*` line it used to show —
+        // "your transactions run on a small fee reserve… later transactions
+        // top it back up" — describes the retired per-wallet deposit, and was
+        // false about whose money this is. The second line is the one the
+        // surface never had: it is non-refundable and it goes to the bundler
+        // operator, not to Vela.
+        sign.funding?.let { _ ->
+            add(SigningBlock.Warning(SigningTone.Caution, s.t("componentsUi.treasuryBootstrap.lead")))
+            add(SigningBlock.Warning(SigningTone.Caution, s.t("componentsUi.treasuryBootstrap.disclaimer")))
         }
         sign.error?.let { error ->
             val text = when (error.kind) {
