@@ -1031,7 +1031,7 @@ pub fn publish(
     // Spec 075: every member that had to sign live signed on one page visit;
     // it is over now, whether or not any of them used it.
     if method == vela_core::app::KeyMethod::ClearSigner {
-        crate::executor::clear_signer::end_flow();
+        ceremony.clear_signer.end_flow();
     }
 
     // The group key silently closes over the content hash.

@@ -24,7 +24,7 @@
 
 use std::io;
 use std::net::TcpStream;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde_json::{Value, json};
 use tungstenite::stream::MaybeTlsStream;
@@ -276,13 +276,20 @@ fn set_poll_timeout(socket: &mut Socket) {
 }
 
 fn send(socket: &mut Socket, message: Message) -> Result<(), Refusal> {
-    socket
-        .send(message)
-        .and_then(|()| socket.flush())
-        .map_err(|error| {
+    // Written out rather than chained: tungstenite's own error is 136 bytes,
+    // and a closure that carried it would put that in every `Result` on this
+    // path for a value nobody outside this function ever reads.
+    let mut trouble = socket.send(message).err();
+    if trouble.is_none() {
+        trouble = socket.flush().err();
+    }
+    match trouble {
+        None => Ok(()),
+        Some(error) => {
             eprintln!("[vela-wallet] clear signer relay: could not write: {error}");
-            Refusal::Unreachable
-        })
+            Err(Refusal::Unreachable)
+        }
+    }
 }
 
 /// The next message from the room, waiting on the clock and the screen.
@@ -361,6 +368,7 @@ mod tests {
     use std::io::{Read as _, Write as _};
     use std::net::{Ipv4Addr, TcpListener};
     use std::sync::Arc;
+    use std::time::Duration;
 
     use vela_core::primitives::{from_hex, to_hex};
 
@@ -693,11 +701,11 @@ mod tests {
         // not exist yet, so nothing can be asked over it.
         let mut showed = None;
         for _ in 0..1200 {
-            if let Some(pairing) = channel.pairing() {
-                if pairing.code.is_some() {
-                    showed = pairing.code.clone();
-                    break;
-                }
+            if let Some(pairing) = channel.pairing()
+                && pairing.code.is_some()
+            {
+                showed = pairing.code.clone();
+                break;
             }
             std::thread::sleep(Duration::from_millis(5));
         }

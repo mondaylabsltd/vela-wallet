@@ -33,6 +33,11 @@ use crate::ui::{ButtonVariant, vela_button, vela_button_opts};
 /// and the module divides into it.
 const PAIR_QR: f32 = 232.;
 
+/// What a screen does when the person says where their Clear Signer is. An
+/// `Arc` rather than a closure per row: the card draws two rows from one
+/// handler, and gpui's own listeners are not `Clone`.
+pub type PickPlace = std::sync::Arc<dyn Fn(Place, &mut Window, &mut App)>;
+
 /// "Where is your Clear Signer?" — asked whenever the route is chosen, because
 /// both answers are real on every desktop (contract §2): this computer's own
 /// browser over a loopback socket, or the phone in the person's hand over the
@@ -44,7 +49,7 @@ const PAIR_QR: f32 = 232.;
 pub fn where_card(
     theme: &Theme,
     loc: &Loc,
-    on_pick: std::sync::Arc<dyn Fn(Place, &mut Window, &mut App)>,
+    on_pick: PickPlace,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
     let row = |place: Place, id: &'static str, key: &str| {

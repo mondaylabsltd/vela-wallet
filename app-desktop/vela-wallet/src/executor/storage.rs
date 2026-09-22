@@ -691,6 +691,72 @@ pub(crate) mod tests {
         }
     }
 
+    /// Spec 075: a key that lives behind a signer page must come back
+    /// remembering which one.
+    ///
+    /// The field is written by the create and the sign-in that minted or
+    /// found the key, and read by `sign_route` to decide where the NEXT
+    /// signature goes. A record that loses it on a rewrite leaves a key
+    /// reachable only through somebody's own deployment being routed to a
+    /// platform sheet that cannot see it — a wallet that has quietly
+    /// forgotten where its key is. Written on its own key, absent when there
+    /// is none, and carried through to the device keys the signing sheet
+    /// routes by.
+    #[test]
+    fn a_key_behind_a_page_comes_back_remembering_it() {
+        with_temp_state("signer-origin-round-trip", || {
+            let mut record = account("cred0", 2);
+            record.keys[0].signer_origin = Some("https://sign.example.test".to_owned());
+            if save_account(&record).is_err() {
+                unreachable!("save");
+            }
+
+            // On disk: the field is there, and only on the key that has one.
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            let keys = raw[0]["keys"].as_array().cloned().unwrap_or_default();
+            assert_eq!(keys[0]["signer_origin"], "https://sign.example.test");
+            assert!(
+                keys[1].get("signer_origin").is_none(),
+                "an ordinary key carries no page: {}",
+                keys[1]
+            );
+
+            let loaded = load_accounts().unwrap_or_default();
+            assert_eq!(
+                loaded[0].keys[0].signer_origin.as_deref(),
+                Some("https://sign.example.test")
+            );
+            assert_eq!(loaded[0].keys[1].signer_origin, None);
+
+            // And through the mirror the signing sheet actually routes by: a
+            // `DeviceKey` that dropped it would send the next signature to a
+            // sheet that cannot reach the key.
+            let context = crate::executor::send::SendContext::new(
+                &loaded[0],
+                crate::ceremony::CeremonyChannel::new().ceremony(0),
+            );
+            assert_eq!(
+                context.device_keys[0].signer_origin.as_deref(),
+                Some("https://sign.example.test")
+            );
+            assert_eq!(context.device_keys[1].signer_origin, None);
+
+            // `auto` therefore follows the key to its page rather than to the
+            // route the first key's transports would suggest.
+            let route = crate::executor::send::sign_route_of(
+                &context.device_keys,
+                "auto",
+                "https://sign.getvela.app/",
+            );
+            assert_eq!(
+                route,
+                Some(crate::executor::send::Route::ClearSigner(
+                    "https://sign.example.test".to_owned()
+                ))
+            );
+        });
+    }
+
     /// THE invariant. A multi-key account that comes back with fewer keys is a
     /// different, wrong, single-key Safe at an address nothing can deploy — and
     /// it fails silently, on the next launch, after the wallet was funded.

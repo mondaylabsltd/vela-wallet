@@ -926,16 +926,23 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
 fn method_picker(host: &FlowHost<'_>) -> Div {
     let theme = host.theme;
     let loc = host.loc;
-    // See `hardware::signin_method_card`: only Windows has a platform
-    // authenticator this shell can reach, and only when Hello is enrolled.
-    let this_device = crate::executor::passkey::platform_supported();
 
     let palette = Palette {
         ink: theme.fg_muted,
         muted: theme.fg_subtle,
         paper: theme.bg_base,
     };
-    let entry = |method: KeyMethod, title_key: &str, body: SharedString, available: bool| {
+    // The routes, their words and which of them can run here are
+    // `hardware`'s — the same list the sign-in chooser reads, so the two
+    // cannot come to disagree about what a passkey route is.
+    let entry = |method: KeyMethod| {
+        let available = crate::hardware::method_available(method);
+        let (title_key, body_key) = crate::hardware::method_words(method);
+        let body = loc.t(if available {
+            body_key
+        } else {
+            "onboarding.create.securityKeyRequiredBody"
+        });
         let sink = host.sink.clone();
         let event = if available {
             FlowEvent::AddKey(method)
@@ -986,45 +993,15 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         }
     };
 
-    div()
+    let mut list = div()
         .w_full()
         .flex()
         .flex_col()
-        .child(caption(theme, loc.t("onboarding.create.addMethodLabel")))
-        .child(entry(
-            KeyMethod::SecurityKey,
-            "onboarding.create.methodSecurityKeyTitle",
-            loc.t("onboarding.create.methodSecurityKeyBody"),
-            true,
-        ))
-        .child(entry(
-            KeyMethod::Platform,
-            "onboarding.create.methodPlatformTitle",
-            loc.t(if this_device {
-                "onboarding.create.methodPlatformBody"
-            } else {
-                "onboarding.create.securityKeyRequiredBody"
-            }),
-            this_device,
-        ))
-        .child(entry(
-            // The scan method is live on desktop now: it shows a QR, and a phone
-            // that scans it becomes the authenticator over caBLE.
-            KeyMethod::Hybrid,
-            "onboarding.create.methodHybridTitle",
-            loc.t("onboarding.create.methodHybridBody"),
-            true,
-        ))
-        // Spec 075: the fourth route, and the only one that is OURS. Never
-        // greyed: a signer page is reachable from every desktop, on this
-        // machine's own browser over a loopback socket or on the phone in the
-        // person's hand over the relay — the ceremony asks which.
-        .child(entry(
-            KeyMethod::ClearSigner,
-            "componentsUi.signing.clearSignerTitle",
-            loc.t("componentsUi.signing.clearSignerBody"),
-            true,
-        ))
+        .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
+    for method in crate::hardware::CREATE_ROUTES {
+        list = list.child(entry(method));
+    }
+    list
 }
 
 // ---------------------------------------------------------------------------

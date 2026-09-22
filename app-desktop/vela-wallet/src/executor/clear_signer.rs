@@ -188,6 +188,10 @@ struct State {
 /// the screen — no polling.
 pub struct Channel {
     state: Mutex<State>,
+    /// The page visit a ceremony flow holds open between operations (contract
+    /// §1.5). Its OWN lock, never `state`'s: a ceremony holds the line for
+    /// minutes while the screen reads and writes `state` on every frame.
+    flow: Mutex<Option<Flow>>,
     wake: UnboundedSender<()>,
 }
 
@@ -199,6 +203,7 @@ impl Channel {
         (
             Arc::new(Self {
                 state: Mutex::default(),
+                flow: Mutex::default(),
                 wake,
             }),
             woken,
@@ -332,8 +337,29 @@ impl Channel {
             state.closed = true;
             state.asking_place = false;
         });
-        end_flow();
+        self.end_flow();
         self.announce();
+    }
+
+    /// End the page visit this channel's flow was holding open, if any — the
+    /// page leaves its waiting card for its done card and the port, or the
+    /// relay room, goes. Called when a flow finishes, when anything refuses,
+    /// and when the screen goes away.
+    pub fn end_flow(&self) {
+        if let Some(mut open) = self.take_flow() {
+            open.line.end();
+        }
+    }
+
+    fn take_flow(&self) -> Option<Flow> {
+        self.flow
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    fn keep_flow(&self, flow: Flow) {
+        *self.flow.lock().unwrap_or_else(PoisonError::into_inner) = Some(flow);
     }
 
     // -- the attempt's half ---------------------------------------------------
@@ -557,12 +583,6 @@ impl Loopback {
         })
     }
 
-    /// The URL the screen hands the browser.
-    #[must_use]
-    pub fn url(&self) -> &str {
-        &self.url
-    }
-
     /// Take every connection waiting, up to the cap. A connection arriving
     /// when nothing is being asked for is not this visit's and is dropped.
     fn accept(&mut self) {
@@ -756,20 +776,6 @@ struct Flow {
     /// cannot ride on it.
     page: String,
     line: Box<dyn Line>,
-}
-
-static FLOW: Mutex<Option<Flow>> = Mutex::new(None);
-
-fn flow() -> std::sync::MutexGuard<'static, Option<Flow>> {
-    FLOW.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// End the flow's page visit, if one is open. Called when a flow finishes, when
-/// anything refuses, and when the screen goes away.
-pub fn end_flow() {
-    if let Some(mut open) = flow().take() {
-        open.line.end();
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -966,11 +972,11 @@ fn ceremony_on_flow(
     let deadline = Instant::now() + TIMEOUT;
     // The flow's visit, when it is a visit to this same page; otherwise a new
     // one, and the old one is told goodbye rather than left open.
-    let mut open = flow().take();
-    if open.as_ref().is_some_and(|flow| flow.page != page) {
-        if let Some(mut stale) = open.take() {
-            stale.line.end();
-        }
+    let mut open = channel.take_flow();
+    if open.as_ref().is_some_and(|flow| flow.page != page)
+        && let Some(mut stale) = open.take()
+    {
+        stale.line.end();
     }
     let mut visit = match open {
         Some(visit) => visit,
@@ -1000,7 +1006,7 @@ fn ceremony_on_flow(
             } else {
                 // The page stays on its waiting card for the next request of
                 // the same flow; so does this wallet's sheet.
-                *flow() = Some(visit);
+                channel.keep_flow(visit);
             }
             Ok(answer)
         }
@@ -1386,7 +1392,7 @@ pub(crate) mod tests {
             .local_addr()
             .unwrap_or_else(|e| unreachable!("{e}"));
         assert!(local.ip().is_loopback());
-        let (port, token) = launch_of(loopback.url());
+        let (port, token) = launch_of(&loopback.url);
         assert_eq!(port, local.port());
         assert_eq!(token.len(), 22, "16 random bytes, base64url");
     }
@@ -1736,6 +1742,228 @@ pub(crate) mod tests {
             method: KeyMethod::ClearSigner,
         };
         assert_eq!(signer_page_for(&anywhere), signer_url());
+    }
+
+    // -- the ceremonies ------------------------------------------------------
+
+    /// A registration the page could really have returned: `fmt:"none"`, an
+    /// authData carrying the credential id and the key as a COSE_Key, over a
+    /// `webauthn.create` client data from the signer page's origin. The core
+    /// parses the attestation to a P-256 key before it accepts anything, so a
+    /// hand-waved blob would not do.
+    fn page_registration(signing: &SigningKey, credential: &[u8]) -> Value {
+        let point = signing.verifying_key().to_encoded_point(false);
+        let (x, y) = (
+            point.x().unwrap_or_else(|| unreachable!("x")),
+            point.y().unwrap_or_else(|| unreachable!("y")),
+        );
+        let mut cose = vec![0xa5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20];
+        cose.extend_from_slice(x);
+        cose.extend_from_slice(&[0x22, 0x58, 0x20]);
+        cose.extend_from_slice(y);
+
+        let mut auth_data = sha256(b"getvela.app");
+        // UP | UV | AT
+        auth_data.push(0x45);
+        auth_data.extend_from_slice(&[0, 0, 0, 1]);
+        auth_data.extend_from_slice(&[0u8; 16]);
+        auth_data.extend_from_slice(&[
+            (credential.len() >> 8) as u8,
+            u8::try_from(credential.len()).unwrap_or(0),
+        ]);
+        auth_data.extend_from_slice(credential);
+        auth_data.extend_from_slice(&cose);
+
+        let cbor_text = |text: &str| {
+            let mut out = vec![0x60 | u8::try_from(text.len()).unwrap_or(0)];
+            out.extend_from_slice(text.as_bytes());
+            out
+        };
+        let mut attestation = vec![0xa3];
+        attestation.extend(cbor_text("fmt"));
+        attestation.extend(cbor_text("none"));
+        attestation.extend(cbor_text("attStmt"));
+        attestation.push(0xa0);
+        attestation.extend(cbor_text("authData"));
+        attestation.extend_from_slice(&[0x59, (auth_data.len() >> 8) as u8, auth_data.len() as u8]);
+        attestation.extend_from_slice(&auth_data);
+
+        let client = format!(
+            r#"{{"type":"webauthn.create","challenge":"{}","origin":"https://sign.getvela.app","crossOrigin":false}}"#,
+            to_base64url(&[0x5c; 32])
+        );
+        json!({
+            "credentialId": to_base64url(credential),
+            "attestationObject": to_hex(&attestation, false),
+            "clientDataJSON": to_hex(client.as_bytes(), false),
+            "authenticatorAttachment": "platform",
+            "transports": "internal",
+        })
+    }
+
+    /// **One page visit, two ceremonies** — the whole reason the desktop left
+    /// the URL fragment behind.
+    ///
+    /// A create asks the page for a key and then, on the SAME socket, for the
+    /// member proof that puts it in the registry. The person answers one
+    /// passkey prompt per ceremony and the browser opens one tab, not two;
+    /// the wallet says `bye` once, at the end.
+    ///
+    /// Both answers are reported as a platform ceremony's would be, carrying
+    /// the page the key now lives behind.
+    #[test]
+    fn a_create_and_its_member_proof_share_one_page_visit() {
+        use vela_core::app::KeyMethod;
+
+        let (channel, _changed) = Channel::new();
+        let signing = signing_key(7);
+        let key = to_hex(
+            signing.verifying_key().to_encoded_point(false).as_bytes(),
+            false,
+        );
+        let challenge = [0x33_u8; 32];
+
+        let register = ShellOperation::RegisterPasskey {
+            name: "Everyday wallet".to_owned(),
+            exclude_credential_ids: vec![],
+            method: KeyMethod::ClearSigner,
+        };
+        let member = ShellOperation::SignMemberProof {
+            credential_id: to_hex(&CREDENTIAL, false),
+            public_key_hex: key.clone(),
+            attestation_hex: String::new(),
+            transports: String::new(),
+            method: KeyMethod::ClearSigner,
+            group_public_key_hex: "04aa".to_owned(),
+            signer_origin: None,
+        };
+
+        let flow = {
+            let channel = Arc::clone(&channel);
+            std::thread::spawn(move || {
+                let first = run_ceremony(&register, None, "https://registry.test", &channel, false)
+                    .unwrap_or_else(|| unreachable!("a create is a ceremony"));
+                let second = run_ceremony(
+                    &member,
+                    Some(&challenge),
+                    "https://registry.test",
+                    &channel,
+                    ends_the_flow(&member),
+                )
+                .unwrap_or_else(|| unreachable!("a member proof is a ceremony"));
+                (first, second)
+            })
+        };
+
+        // The person: on this device.
+        let answered = here(&channel);
+        let url = page_of_channel(&channel);
+        let (port, token) = launch_of(&url);
+        let mut page = FakePage::connect(port, &token, "https://sign.getvela.app");
+
+        let create = page.next().unwrap_or_else(|| unreachable!("no create"));
+        assert_eq!(create["intent"]["method"], "vela_createPasskey");
+        assert_eq!(create["intent"]["params"][0]["name"], "Everyday wallet");
+        assert_eq!(create["context"]["walletName"], "Everyday wallet");
+        page.say(&json!({
+            "v": 1, "t": "result", "n": 1, "id": create["id"],
+            "registration": page_registration(&signing, &CREDENTIAL),
+            "origin": "https://sign.getvela.app",
+        }));
+
+        // The SAME socket carries the next request — no second tab, no
+        // second launch URL.
+        let proof = page
+            .next()
+            .unwrap_or_else(|| unreachable!("no member proof"));
+        assert_eq!(proof["intent"]["method"], "vela_memberProof");
+        assert_eq!(
+            proof["intent"]["params"][0]["registry"],
+            "https://registry.test"
+        );
+        assert_eq!(proof["intent"]["params"][0]["publicKey"], key.as_str());
+        assert_ne!(proof["id"], create["id"], "each request has its own id");
+        assert_eq!(
+            channel.take_page(),
+            None,
+            "the page was never asked for a second time"
+        );
+        page.say(&json!({
+            "v": 1, "t": "result", "n": 2, "id": proof["id"],
+            "assertion": page_assertion(&signing, &CREDENTIAL, &challenge),
+            "origin": "https://sign.getvela.app",
+        }));
+
+        let (first, second) = flow
+            .join()
+            .unwrap_or_else(|_| unreachable!("the flow panicked"));
+        let registration = match first.unwrap_or_else(|failure| unreachable!("{failure:?}")) {
+            Answer::Registration(registration) => registration,
+            Answer::Assertion(_) => unreachable!("a create returns a key"),
+        };
+        assert_eq!(registration.credential_id, "112233");
+        assert_eq!(
+            registration.signer_origin.as_deref(),
+            Some("https://sign.getvela.app"),
+            "the key remembers the page it was made behind"
+        );
+        let assertion = match second.unwrap_or_else(|failure| unreachable!("{failure:?}")) {
+            Answer::Assertion(assertion) => assertion,
+            Answer::Registration(_) => unreachable!("a member proof returns a signature"),
+        };
+        assert_eq!(assertion.credential_id, "112233");
+
+        // The flow is over: `bye`, then the close frame.
+        assert_eq!(
+            page.next().as_ref().and_then(|m| m["t"].as_str()),
+            Some("bye")
+        );
+        assert_eq!(page.next(), None);
+        assert!(!channel.waiting());
+        assert_eq!(channel.ended(), None);
+        let _ = answered.join();
+    }
+
+    /// A member proof over a challenge the WALLET did not fetch is refused
+    /// before it can be used — the page's own fetch has to agree with ours,
+    /// or "confirm this key joins your wallet" could be confirming something
+    /// else entirely.
+    #[test]
+    fn a_member_proof_over_another_challenge_is_refused() {
+        use vela_core::app::KeyMethod;
+
+        let (channel, _changed) = Channel::new();
+        let signing = signing_key(7);
+        let member = ShellOperation::SignMemberProof {
+            credential_id: to_hex(&CREDENTIAL, false),
+            public_key_hex: "04aa".to_owned(),
+            attestation_hex: String::new(),
+            transports: String::new(),
+            method: KeyMethod::ClearSigner,
+            group_public_key_hex: "04bb".to_owned(),
+            signer_origin: None,
+        };
+        let asked = [0x33_u8; 32];
+        let answering = answers_once(&channel, move |intent| {
+            json!({
+                "v": 1, "t": "result", "n": 1, "id": intent["id"],
+                // The page signed a challenge of its own instead of the one
+                // this wallet was given.
+                "assertion": page_assertion(&signing, &CREDENTIAL, &[0x77; 32]),
+                "origin": "https://sign.getvela.app",
+            })
+        });
+        let outcome = run_ceremony(
+            &member,
+            Some(&asked),
+            "https://registry.test",
+            &channel,
+            true,
+        )
+        .unwrap_or_else(|| unreachable!("a member proof is a ceremony"));
+        assert!(outcome.is_err(), "a foreign challenge was accepted");
+        assert_eq!(channel.ended(), Some(Refusal::Mismatch));
+        let _ = answering.join();
     }
 
     /// Which ceremony closes its flow: a create ends at the member proof, a
