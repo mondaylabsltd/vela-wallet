@@ -586,6 +586,113 @@ impl ClearSignerSession {
     }
 }
 
+// --- BLE framing (PROTOCOL.md §2) -------------------------------------------
+
+/// The GATT identifiers a peripheral serves and advertises. Read from here
+/// rather than retyped: a wrong digit is a device that never appears in the
+/// page's chooser, which is the hardest way to find a typo.
+#[uniffi::export]
+pub fn clear_signer_ble_uuids() -> Vec<String> {
+    vec![
+        clear_signer::ble::SERVICE_UUID.to_owned(),
+        clear_signer::ble::C2P_UUID.to_owned(),
+        clear_signer::ble::P2C_UUID.to_owned(),
+    ]
+}
+
+/// Cuts messages into frames, and hands out the `msgId` the session seals
+/// into its AAD. One per connection.
+#[derive(uniffi::Object)]
+pub struct ClearSignerFramer {
+    inner: Mutex<clear_signer::ble::Framer>,
+}
+
+#[uniffi::export]
+impl ClearSignerFramer {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::new(clear_signer::ble::Framer::new()),
+        })
+    }
+
+    /// Payload bytes per frame, as it stands (244 until a write is refused).
+    pub fn chunk(&self) -> u32 {
+        u32::try_from(lock(&self.inner).chunk()).unwrap_or(u32::MAX)
+    }
+
+    /// The id for the next message. Take it BEFORE sealing: the frames and
+    /// the AAD must carry the same one.
+    pub fn next_id(&self) -> u8 {
+        lock(&self.inner).next_id()
+    }
+
+    /// A write the central refused: halve the chunk. `false` when there is
+    /// nothing left to give up — report the failure instead of looping.
+    pub fn halve(&self) -> bool {
+        lock(&self.inner).halve()
+    }
+
+    /// The frames for one message, in order. `sealed` sets the flag bit that
+    /// says this is not a handshake hello.
+    pub fn frames(&self, msg_id: u8, payload: Vec<u8>, sealed: bool) -> Vec<Vec<u8>> {
+        let flags = if sealed {
+            clear_signer::ble::FLAG_SEALED
+        } else {
+            0
+        };
+        lock(&self.inner).frames(flags, msg_id, &payload)
+    }
+}
+
+/// A message that arrived whole.
+#[derive(uniffi::Record)]
+pub struct ClearSignerBleMessage {
+    pub msg_id: u8,
+    pub payload: Vec<u8>,
+    /// `false` for the handshake hellos, which travel in the clear.
+    pub sealed: bool,
+}
+
+/// Collects frames until a message is whole. Out-of-order arrival is fine;
+/// the same frame twice is not two frames.
+#[derive(uniffi::Object)]
+pub struct ClearSignerReassembler {
+    inner: Mutex<clear_signer::ble::Reassembler>,
+}
+
+#[uniffi::export]
+impl ClearSignerReassembler {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::new(clear_signer::ble::Reassembler::new()),
+        })
+    }
+
+    /// Take one frame; `Some` when it completed a message.
+    pub fn accept(&self, frame: Vec<u8>, now_ms: u64) -> Option<ClearSignerBleMessage> {
+        lock(&self.inner)
+            .accept(&frame, now_ms)
+            .map(|message| ClearSignerBleMessage {
+                msg_id: message.msg_id,
+                sealed: message.sealed(),
+                payload: message.payload,
+            })
+    }
+
+    /// Drop what has waited too long, and say which ids went. A half-arrived
+    /// message is reported, not waited out.
+    pub fn sweep(&self, now_ms: u64) -> Vec<u8> {
+        lock(&self.inner).sweep(now_ms)
+    }
+
+    /// How many messages are half-arrived.
+    pub fn pending(&self) -> u32 {
+        u32::try_from(lock(&self.inner).pending()).unwrap_or(u32::MAX)
+    }
+}
+
 fn tail(msg_id: Option<u8>) -> clear_signer::secure::Tail {
     msg_id.map_or(
         clear_signer::secure::Tail::Counter,

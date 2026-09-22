@@ -2321,6 +2321,205 @@ public func FfiConverterTypeClearSignerConnection_lower(_ value: ClearSignerConn
 
 
 /**
+ * Cuts messages into frames, and hands out the `msgId` the session seals
+ * into its AAD. One per connection.
+ */
+public protocol ClearSignerFramerProtocol: AnyObject, Sendable {
+    
+    /**
+     * Payload bytes per frame, as it stands (244 until a write is refused).
+     */
+    func chunk()  -> UInt32
+    
+    /**
+     * The frames for one message, in order. `sealed` sets the flag bit that
+     * says this is not a handshake hello.
+     */
+    func frames(msgId: UInt8, payload: Data, sealed: Bool)  -> [Data]
+    
+    /**
+     * A write the central refused: halve the chunk. `false` when there is
+     * nothing left to give up — report the failure instead of looping.
+     */
+    func halve()  -> Bool
+    
+    /**
+     * The id for the next message. Take it BEFORE sealing: the frames and
+     * the AAD must carry the same one.
+     */
+    func nextId()  -> UInt8
+    
+}
+/**
+ * Cuts messages into frames, and hands out the `msgId` the session seals
+ * into its AAD. One per connection.
+ */
+open class ClearSignerFramer: ClearSignerFramerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_clearsignerframer(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_clearsignerframer_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_clearsignerframer(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Payload bytes per frame, as it stands (244 until a write is refused).
+     */
+open func chunk() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_chunk(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The frames for one message, in order. `sealed` sets the flag bit that
+     * says this is not a handshake hello.
+     */
+open func frames(msgId: UInt8, payload: Data, sealed: Bool) -> [Data]  {
+    return try!  FfiConverterSequenceData.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_frames(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt8.lower(msgId),
+        FfiConverterData.lower(payload),
+        FfiConverterBool.lower(sealed),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * A write the central refused: halve the chunk. `false` when there is
+     * nothing left to give up — report the failure instead of looping.
+     */
+open func halve() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_halve(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The id for the next message. Take it BEFORE sealing: the frames and
+     * the AAD must carry the same one.
+     */
+open func nextId() -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_next_id(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerFramer: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ClearSignerFramer
+
+    public static func lift(_ handle: UInt64) throws -> ClearSignerFramer {
+        return ClearSignerFramer(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ClearSignerFramer) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerFramer {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ClearSignerFramer, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerFramer_lift(_ handle: UInt64) throws -> ClearSignerFramer {
+    return try FfiConverterTypeClearSignerFramer.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerFramer_lower(_ value: ClearSignerFramer) -> UInt64 {
+    return FfiConverterTypeClearSignerFramer.lower(value)
+}
+
+
+
+
+
+
+/**
  * The wallet's side of the end-to-end session (relay and BLE), before the
  * page's hello. The shell draws the 32 secret bytes and the 16-byte nonce.
  */
@@ -2493,6 +2692,184 @@ public func FfiConverterTypeClearSignerHandshake_lift(_ handle: UInt64) throws -
 #endif
 public func FfiConverterTypeClearSignerHandshake_lower(_ value: ClearSignerHandshake) -> UInt64 {
     return FfiConverterTypeClearSignerHandshake.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Collects frames until a message is whole. Out-of-order arrival is fine;
+ * the same frame twice is not two frames.
+ */
+public protocol ClearSignerReassemblerProtocol: AnyObject, Sendable {
+    
+    /**
+     * Take one frame; `Some` when it completed a message.
+     */
+    func accept(frame: Data, nowMs: UInt64)  -> ClearSignerBleMessage?
+    
+    /**
+     * How many messages are half-arrived.
+     */
+    func pending()  -> UInt32
+    
+    /**
+     * Drop what has waited too long, and say which ids went. A half-arrived
+     * message is reported, not waited out.
+     */
+    func sweep(nowMs: UInt64)  -> Data
+    
+}
+/**
+ * Collects frames until a message is whole. Out-of-order arrival is fine;
+ * the same frame twice is not two frames.
+ */
+open class ClearSignerReassembler: ClearSignerReassemblerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_clearsignerreassembler(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_clearsignerreassembler_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_clearsignerreassembler(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Take one frame; `Some` when it completed a message.
+     */
+open func accept(frame: Data, nowMs: UInt64) -> ClearSignerBleMessage?  {
+    return try!  FfiConverterOptionTypeClearSignerBleMessage.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerreassembler_accept(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(frame),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * How many messages are half-arrived.
+     */
+open func pending() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerreassembler_pending(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Drop what has waited too long, and say which ids went. A half-arrived
+     * message is reported, not waited out.
+     */
+open func sweep(nowMs: UInt64) -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerreassembler_sweep(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerReassembler: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ClearSignerReassembler
+
+    public static func lift(_ handle: UInt64) throws -> ClearSignerReassembler {
+        return ClearSignerReassembler(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ClearSignerReassembler) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerReassembler {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ClearSignerReassembler, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerReassembler_lift(_ handle: UInt64) throws -> ClearSignerReassembler {
+    return try FfiConverterTypeClearSignerReassembler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerReassembler_lower(_ value: ClearSignerReassembler) -> UInt64 {
+    return FfiConverterTypeClearSignerReassembler.lower(value)
 }
 
 
@@ -7376,6 +7753,73 @@ public func FfiConverterTypeCableAdvert_lower(_ value: CableAdvert) -> RustBuffe
 
 
 /**
+ * A message that arrived whole.
+ */
+public struct ClearSignerBleMessage: Equatable, Hashable {
+    public var msgId: UInt8
+    public var payload: Data
+    /**
+     * `false` for the handshake hellos, which travel in the clear.
+     */
+    public var sealed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(msgId: UInt8, payload: Data, 
+        /**
+         * `false` for the handshake hellos, which travel in the clear.
+         */sealed: Bool) {
+        self.msgId = msgId
+        self.payload = payload
+        self.sealed = sealed
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ClearSignerBleMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClearSignerBleMessage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClearSignerBleMessage {
+        return
+            try ClearSignerBleMessage(
+                msgId: FfiConverterUInt8.read(from: &buf), 
+                payload: FfiConverterData.read(from: &buf), 
+                sealed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ClearSignerBleMessage, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.msgId, into: &buf)
+        FfiConverterData.write(value.payload, into: &buf)
+        FfiConverterBool.write(value.sealed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerBleMessage_lift(_ buf: RustBuffer) throws -> ClearSignerBleMessage {
+    return try FfiConverterTypeClearSignerBleMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeClearSignerBleMessage_lower(_ value: ClearSignerBleMessage) -> RustBuffer {
+    return FfiConverterTypeClearSignerBleMessage.lower(value)
+}
+
+
+/**
  * What the shell holds when it would sign.
  */
 public struct ClearSignerInput: Equatable, Hashable {
@@ -10677,6 +11121,30 @@ fileprivate struct FfiConverterOptionTypeCableAdvert: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeClearSignerBleMessage: FfiConverterRustBuffer {
+    typealias SwiftType = ClearSignerBleMessage?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeClearSignerBleMessage.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeClearSignerBleMessage.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeP256PublicKey: FfiConverterRustBuffer {
     typealias SwiftType = P256PublicKey?
 
@@ -10912,6 +11380,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
+    typealias SwiftType = [Data]
+
+    public static func write(_ value: [Data], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterData.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Data] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Data]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterData.read(from: &buf))
         }
         return seq
     }
@@ -12434,6 +12927,18 @@ public func wrappedNativeIsTheNative(chainId: UInt32, address: String) -> Bool  
 })
 }
 /**
+ * The GATT identifiers a peripheral serves and advertises. Read from here
+ * rather than retyped: a wrong digit is a device that never appears in the
+ * page's chooser, which is the hardest way to find a typo.
+ */
+public func clearSignerBleUuids() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_clear_signer_ble_uuids(uniffiCallStatus
+    )
+})
+}
+/**
  * The page request for a machine operation (`RegisterPasskey`,
  * `AuthenticatePasskey`, `SignProof`, `SignMemberProof` as their wire JSON)
  * with `method = clear_signer`; `None` for anything else. `registry` is the
@@ -13245,6 +13750,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_wrapped_native_is_the_native() != 56849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ble_uuids() != 31894) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_clear_signer_ceremony_request() != 37720) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13404,6 +13912,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerconnection_send_signature() != 44764) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_chunk() != 24969) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_frames() != 19504) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_halve() != 36759) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_next_id() != 35232) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_complete() != 10649) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13411,6 +13931,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerhandshake_public_key() != 28879) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerreassembler_accept() != 60647) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerreassembler_pending() != 60670) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerreassembler_sweep() != 49099) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignersession_code() != 15698) {
@@ -13725,7 +14254,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_constructor_clearsignerconnection_new_ceremony() != 22643) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_constructor_clearsignerframer_new() != 17685) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_constructor_clearsignerhandshake_new() != 48812) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_clearsignerreassembler_new() != 39952) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
