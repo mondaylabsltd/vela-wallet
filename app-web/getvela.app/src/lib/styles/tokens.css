@@ -86,9 +86,22 @@
 
 	/* ── Type ── */
 	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-	--font-serif: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+	--font-serif-latin: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+	--font-serif: var(--font-serif-latin);
 	--font-mono:
 		ui-monospace, 'SF Mono', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+/* Chinese, Japanese and Korean pages set headings in each platform's own CJK
+   sans — PingFang, Hiragino, Apple SD Gothic Neo on Apple; Microsoft YaHei /
+   JhengHei, Yu Gothic, Malgun Gothic on Windows; Noto Sans CJK on Android and
+   Linux — through the sans stack, and load no web font (founder, 2026-09-22).
+   None of the serif faces above has CJK glyphs, so without this the
+   characters fell back to the system serif (Songti, SimSun), which looked
+   different on every platform. `lang` follows the page (hooks.server.ts, and
+   the root layout on client-side navigation). */
+:root:is([lang^='zh'], [lang='ja'], [lang='ko']) {
+	--font-serif: var(--font-sans);
 }
 
 /* Explicit user choice pins one side of every light-dark() token. */
