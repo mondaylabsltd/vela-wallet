@@ -65,7 +65,13 @@
       "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
       "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
       "pageReset": "公式ページを使う",
-      "pageSave": "保存"
+      "pageSave": "保存",
+      "relayTitle": "リレー",
+      "relaySubtitle": "別のデバイスとのペアリングはこのリレーを経由します。リレーが中継するのは暗号化されたメッセージだけです。",
+      "relayOfficial": "公式",
+      "relayInvalid": "リレーのアドレスではありません。",
+      "relayInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
+      "relayReset": "公式のリレーを使う"
     },
     "advanced": {
       "networksTitle": "ネットワーク",

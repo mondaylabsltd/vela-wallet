@@ -203,7 +203,17 @@
       "clearSignerReopen": "Mở lại trang",
       "clearSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
       "viewOnExplorer": "Xem trên explorer",
-      "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
+      "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
+      "clearSignerWhere": "Clear Signer của bạn ở đâu?",
+      "clearSignerThisDevice": "Trên thiết bị này",
+      "clearSignerOtherDevice": "Trên thiết bị khác",
+      "clearSignerPair": "Mở Clear Signer trên thiết bị kia của bạn",
+      "clearSignerPairHint": "Quét mã này bằng thiết bị có khóa truy cập của bạn, hoặc mở liên kết trên thiết bị đó.",
+      "clearSignerPairWaiting": "Đang chờ thiết bị kia…",
+      "clearSignerCode": "Kiểm tra thiết bị kia hiển thị cùng một mã: {{code}}",
+      "clearSignerCodeConfirm": "Hai mã khớp nhau",
+      "clearSignerCopyLink": "Sao chép liên kết",
+      "clearSignerRelayDown": "Không kết nối được bộ chuyển tiếp. Hãy thử lại hoặc dùng Clear Signer trên thiết bị này."
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",

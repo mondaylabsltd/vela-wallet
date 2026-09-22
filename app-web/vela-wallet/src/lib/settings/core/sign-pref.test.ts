@@ -47,7 +47,8 @@ describe('the store', () => {
 		expect(signPrefOperationFailure({ id: 1, operation: { type: 'read_stored' } })).toEqual({
 			type: 'stored',
 			method: null,
-			signer_url: null
+			signer_url: null,
+			relay_url: null
 		});
 	});
 
@@ -121,6 +122,9 @@ describe('the rows and sheets', () => {
 		signer_url_is_default: true,
 		signer_url_error: null,
 		signer_uses_wallet_passkeys: true,
+		relay_url: 'wss://relay.getvela.app',
+		relay_url_is_default: true,
+		relay_url_error: null,
 		...patch
 	});
 	const rows = (model: ReturnType<typeof buildMobileState>) =>

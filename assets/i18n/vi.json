@@ -65,7 +65,13 @@
    "pageInsecure": "Hãy dùng trang https, hoặc trang trên loopback của chính thiết bị này — trình duyệt sẽ không ký ở nơi nào khác.",
    "pageForeign": "Passkey của bạn thuộc về getvela.app. Trang trên tên miền khác có thể hiển thị yêu cầu nhưng không thể ký.",
    "pageReset": "Dùng trang chính thức",
-   "pageSave": "Lưu"
+   "pageSave": "Lưu",
+   "relayTitle": "Bộ chuyển tiếp",
+   "relaySubtitle": "Ghép nối với thiết bị khác đi qua bộ chuyển tiếp này. Nó chỉ chuyển tiếp tin nhắn đã mã hóa.",
+   "relayOfficial": "Chính thức",
+   "relayInvalid": "Đây không phải địa chỉ bộ chuyển tiếp.",
+   "relayInsecure": "Dùng địa chỉ wss://, hoặc ws:// trên loopback của chính thiết bị này.",
+   "relayReset": "Dùng bộ chuyển tiếp chính thức"
   },
   "advanced": {
    "networksTitle": "Mạng lưới",
@@ -1362,7 +1368,17 @@
    "clearSignerReopen": "Mở lại trang",
    "clearSignerDoneTab": "Đã ký. Bạn có thể đóng thẻ này và quay lại Vela.",
    "viewOnExplorer": "Xem trên explorer",
-   "sendingToTokenContract": "Gửi tới chính hợp đồng của token"
+   "sendingToTokenContract": "Gửi tới chính hợp đồng của token",
+   "clearSignerWhere": "Clear Signer của bạn ở đâu?",
+   "clearSignerThisDevice": "Trên thiết bị này",
+   "clearSignerOtherDevice": "Trên thiết bị khác",
+   "clearSignerPair": "Mở Clear Signer trên thiết bị kia của bạn",
+   "clearSignerPairHint": "Quét mã này bằng thiết bị có khóa truy cập của bạn, hoặc mở liên kết trên thiết bị đó.",
+   "clearSignerPairWaiting": "Đang chờ thiết bị kia…",
+   "clearSignerCode": "Kiểm tra thiết bị kia hiển thị cùng một mã: {{code}}",
+   "clearSignerCodeConfirm": "Hai mã khớp nhau",
+   "clearSignerCopyLink": "Sao chép liên kết",
+   "clearSignerRelayDown": "Không kết nối được bộ chuyển tiếp. Hãy thử lại hoặc dùng Clear Signer trên thiết bị này."
   },
   "signingApprove": {
    "resultingTotal": "Tổng hạn mức mới",

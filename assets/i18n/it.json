@@ -65,7 +65,13 @@
    "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
    "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
    "pageReset": "Usa la pagina ufficiale",
-   "pageSave": "Salva"
+   "pageSave": "Salva",
+   "relayTitle": "Relay",
+   "relaySubtitle": "L'abbinamento con un altro dispositivo passa da questo relay, che inoltra solo messaggi cifrati.",
+   "relayOfficial": "Ufficiale",
+   "relayInvalid": "Questo non è un indirizzo di relay.",
+   "relayInsecure": "Usa un indirizzo wss://, oppure ws:// sul loopback di questo dispositivo.",
+   "relayReset": "Usa il relay ufficiale"
   },
   "advanced": {
    "networksTitle": "Reti",
@@ -1365,7 +1371,17 @@
    "clearSignerReopen": "Riapri la pagina",
    "clearSignerDoneTab": "Firmato. Puoi chiudere questa scheda e tornare a Vela.",
    "viewOnExplorer": "Vedi sull’explorer",
-   "sendingToTokenContract": "Inviato al contratto del token stesso"
+   "sendingToTokenContract": "Inviato al contratto del token stesso",
+   "clearSignerWhere": "Dov'è il tuo Clear Signer?",
+   "clearSignerThisDevice": "Su questo dispositivo",
+   "clearSignerOtherDevice": "Su un altro dispositivo",
+   "clearSignerPair": "Apri il Clear Signer sull'altro dispositivo",
+   "clearSignerPairHint": "Scansiona questo codice con il dispositivo che ha la tua passkey, oppure apri lì il link.",
+   "clearSignerPairWaiting": "In attesa dell'altro dispositivo…",
+   "clearSignerCode": "Controlla che l'altro dispositivo mostri lo stesso codice: {{code}}",
+   "clearSignerCodeConfirm": "I codici coincidono",
+   "clearSignerCopyLink": "Copia link",
+   "clearSignerRelayDown": "Impossibile raggiungere il relay. Riprova, oppure usa il Clear Signer di questo dispositivo."
   },
   "signingApprove": {
    "resultingTotal": "Nuovo limite totale",

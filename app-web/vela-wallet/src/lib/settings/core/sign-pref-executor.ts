@@ -29,6 +29,8 @@ export type SignPrefEffect = { id: number; operation: SignPrefOperation };
 export const SIGN_METHOD_KEY = 'vela.signMethod';
 /** The Clear Signer page a person chose; absent = the official one. */
 export const CLEAR_SIGNER_URL_KEY = 'vela.clearSignerUrl';
+/** Spec 075: the relay a cross-device pairing goes through; absent = the official one. */
+export const CLEAR_SIGNER_RELAY_KEY = 'vela.clearSignerRelay';
 
 export async function executeSignPrefOperation(
 	effect: SignPrefEffect
@@ -36,11 +38,17 @@ export async function executeSignPrefOperation(
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_stored': {
-			const [method, signerUrl] = await Promise.all([
+			const [method, signerUrl, relayUrl] = await Promise.all([
 				getItem(SIGN_METHOD_KEY),
-				getItem(CLEAR_SIGNER_URL_KEY)
+				getItem(CLEAR_SIGNER_URL_KEY),
+				getItem(CLEAR_SIGNER_RELAY_KEY)
 			]);
-			return { type: 'stored', method: method ?? null, signer_url: signerUrl ?? null };
+			return {
+				type: 'stored',
+				method: method ?? null,
+				signer_url: signerUrl ?? null,
+				relay_url: relayUrl ?? null
+			};
 		}
 		case 'write_method':
 			await setItem(SIGN_METHOD_KEY, operation.method);
@@ -48,6 +56,10 @@ export async function executeSignPrefOperation(
 		case 'write_signer_url':
 			if (operation.url === null) await removeItem(CLEAR_SIGNER_URL_KEY);
 			else await setItem(CLEAR_SIGNER_URL_KEY, operation.url);
+			return { type: 'written' };
+		case 'write_relay_url':
+			if (operation.url === null) await removeItem(CLEAR_SIGNER_RELAY_KEY);
+			else await setItem(CLEAR_SIGNER_RELAY_KEY, operation.url);
 			return { type: 'written' };
 		default: {
 			const never: never = operation;
@@ -63,9 +75,10 @@ export function signPrefOperationFailure(effect: SignPrefEffect): SignPrefShellR
 			// An unreadable preference means "the person never chose": `auto` and
 			// the official page — exactly how this wallet signed before the
 			// preference existed. It must never read as a page nobody picked.
-			return { type: 'stored', method: null, signer_url: null };
+			return { type: 'stored', method: null, signer_url: null, relay_url: null };
 		case 'write_method':
 		case 'write_signer_url':
+		case 'write_relay_url':
 			// Best effort, as every preference write is. What is on screen stays;
 			// the next launch reads the old value.
 			return { type: 'written' };

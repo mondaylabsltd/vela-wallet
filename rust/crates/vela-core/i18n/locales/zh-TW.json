@@ -65,7 +65,13 @@
       "pageInsecure": "請使用 https 頁面，或這台裝置本機回環位址上的頁面——瀏覽器不會在其他地方簽署。",
       "pageForeign": "你的通行密鑰屬於 getvela.app。其他網域上的頁面可以顯示請求，但無法簽署。",
       "pageReset": "使用官方頁面",
-      "pageSave": "儲存"
+      "pageSave": "儲存",
+      "relayTitle": "中繼",
+      "relaySubtitle": "與另一台裝置配對時經由這個中繼。它只轉發加密後的訊息。",
+      "relayOfficial": "官方",
+      "relayInvalid": "這不是一個中繼位址。",
+      "relayInsecure": "請使用 wss:// 位址，或本機回送位址上的 ws://。",
+      "relayReset": "使用官方中繼"
     },
     "advanced": {
       "networksTitle": "網路",

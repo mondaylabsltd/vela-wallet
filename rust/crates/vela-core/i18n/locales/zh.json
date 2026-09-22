@@ -65,7 +65,13 @@
       "pageInsecure": "请使用 https 页面，或本机回环地址上的页面——浏览器不会在其他地方签名。",
       "pageForeign": "你的通行密钥属于 getvela.app。其他域名上的页面可以显示请求，但无法签名。",
       "pageReset": "使用官方页面",
-      "pageSave": "保存"
+      "pageSave": "保存",
+      "relayTitle": "中继",
+      "relaySubtitle": "与另一台设备配对时经由这个中继。它只转发加密后的消息。",
+      "relayOfficial": "官方",
+      "relayInvalid": "这不是一个中继地址。",
+      "relayInsecure": "请使用 wss:// 地址，或本机回环地址上的 ws://。",
+      "relayReset": "使用官方中继"
     },
     "advanced": {
       "networksTitle": "网络",

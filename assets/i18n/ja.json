@@ -65,7 +65,13 @@
    "pageInsecure": "https のページ、またはこの端末のループバック上のページを使ってください。ブラウザはそれ以外の場所では署名しません。",
    "pageForeign": "パスキーは getvela.app のものです。他のドメインのページはリクエストを表示できても、署名はできません。",
    "pageReset": "公式ページを使う",
-   "pageSave": "保存"
+   "pageSave": "保存",
+   "relayTitle": "リレー",
+   "relaySubtitle": "別のデバイスとのペアリングはこのリレーを経由します。リレーが中継するのは暗号化されたメッセージだけです。",
+   "relayOfficial": "公式",
+   "relayInvalid": "リレーのアドレスではありません。",
+   "relayInsecure": "wss:// のアドレス、またはこのデバイス自身のループバック上の ws:// を使ってください。",
+   "relayReset": "公式のリレーを使う"
   },
   "advanced": {
    "networksTitle": "ネットワーク",
@@ -1362,7 +1368,17 @@
    "clearSignerReopen": "ページをもう一度開く",
    "clearSignerDoneTab": "署名しました。このタブを閉じて Vela に戻ってください。",
    "viewOnExplorer": "エクスプローラーで表示",
-   "sendingToTokenContract": "トークン自身のコントラクトへの送金"
+   "sendingToTokenContract": "トークン自身のコントラクトへの送金",
+   "clearSignerWhere": "Clear Signer はどこにありますか？",
+   "clearSignerThisDevice": "このデバイス",
+   "clearSignerOtherDevice": "別のデバイス",
+   "clearSignerPair": "別のデバイスで Clear Signer を開く",
+   "clearSignerPairHint": "パスキーのあるデバイスでこのコードをスキャンするか、そのデバイスでリンクを開いてください。",
+   "clearSignerPairWaiting": "別のデバイスを待っています…",
+   "clearSignerCode": "別のデバイスに同じコードが表示されていることを確認してください：{{code}}",
+   "clearSignerCodeConfirm": "コードが一致しています",
+   "clearSignerCopyLink": "リンクをコピー",
+   "clearSignerRelayDown": "リレーに接続できませんでした。もう一度試すか、このデバイスの Clear Signer を使ってください。"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",

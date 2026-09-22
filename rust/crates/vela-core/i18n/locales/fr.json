@@ -65,7 +65,13 @@
       "pageInsecure": "Utilisez une page https, ou une page sur la boucle locale de cet appareil — un navigateur ne signera nulle part ailleurs.",
       "pageForeign": "Vos clés d'accès appartiennent à getvela.app. Une page sur un autre domaine peut afficher une demande, mais pas la signer.",
       "pageReset": "Utiliser la page officielle",
-      "pageSave": "Enregistrer"
+      "pageSave": "Enregistrer",
+      "relayTitle": "Relais",
+      "relaySubtitle": "L'appairage avec un autre appareil passe par ce relais. Il ne transmet que des messages chiffrés.",
+      "relayOfficial": "Officiel",
+      "relayInvalid": "Ce n'est pas une adresse de relais.",
+      "relayInsecure": "Utilisez une adresse wss://, ou ws:// sur la boucle locale de cet appareil.",
+      "relayReset": "Utiliser le relais officiel"
     },
     "advanced": {
       "networksTitle": "Réseaux",

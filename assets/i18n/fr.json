@@ -65,7 +65,13 @@
    "pageInsecure": "Utilisez une page https, ou une page sur la boucle locale de cet appareil — un navigateur ne signera nulle part ailleurs.",
    "pageForeign": "Vos clés d'accès appartiennent à getvela.app. Une page sur un autre domaine peut afficher une demande, mais pas la signer.",
    "pageReset": "Utiliser la page officielle",
-   "pageSave": "Enregistrer"
+   "pageSave": "Enregistrer",
+   "relayTitle": "Relais",
+   "relaySubtitle": "L'appairage avec un autre appareil passe par ce relais. Il ne transmet que des messages chiffrés.",
+   "relayOfficial": "Officiel",
+   "relayInvalid": "Ce n'est pas une adresse de relais.",
+   "relayInsecure": "Utilisez une adresse wss://, ou ws:// sur la boucle locale de cet appareil.",
+   "relayReset": "Utiliser le relais officiel"
   },
   "advanced": {
    "networksTitle": "Réseaux",
@@ -1365,7 +1371,17 @@
    "clearSignerReopen": "Rouvrir la page",
    "clearSignerDoneTab": "Signé. Vous pouvez fermer cet onglet et revenir à Vela.",
    "viewOnExplorer": "Voir dans l’explorateur",
-   "sendingToTokenContract": "Envoyé au contrat du jeton lui-même"
+   "sendingToTokenContract": "Envoyé au contrat du jeton lui-même",
+   "clearSignerWhere": "Où est votre Clear Signer ?",
+   "clearSignerThisDevice": "Sur cet appareil",
+   "clearSignerOtherDevice": "Sur un autre appareil",
+   "clearSignerPair": "Ouvrez le Clear Signer sur votre autre appareil",
+   "clearSignerPairHint": "Scannez ce code avec l'appareil qui détient votre clé d'accès, ou ouvrez le lien sur celui-ci.",
+   "clearSignerPairWaiting": "En attente de l'autre appareil…",
+   "clearSignerCode": "Vérifiez que l'autre appareil affiche le même code : {{code}}",
+   "clearSignerCodeConfirm": "Les codes correspondent",
+   "clearSignerCopyLink": "Copier le lien",
+   "clearSignerRelayDown": "Le relais est injoignable. Réessayez, ou utilisez le Clear Signer de cet appareil."
   },
   "signingApprove": {
    "resultingTotal": "Nouvelle autorisation totale",

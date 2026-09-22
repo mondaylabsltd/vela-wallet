@@ -203,7 +203,17 @@
       "clearSignerReopen": "Seite erneut öffnen",
       "clearSignerDoneTab": "Signiert. Sie können diesen Tab schließen und zu Vela zurückkehren.",
       "viewOnExplorer": "Im Explorer ansehen",
-      "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet"
+      "sendingToTokenContract": "An den eigenen Vertrag des Tokens gesendet",
+      "clearSignerWhere": "Wo ist dein Clear Signer?",
+      "clearSignerThisDevice": "Auf diesem Gerät",
+      "clearSignerOtherDevice": "Auf einem anderen Gerät",
+      "clearSignerPair": "Öffne den Clear Signer auf deinem anderen Gerät",
+      "clearSignerPairHint": "Scanne diesen Code mit dem Gerät, auf dem dein Passkey liegt, oder öffne den Link dort.",
+      "clearSignerPairWaiting": "Warte auf das andere Gerät…",
+      "clearSignerCode": "Prüfe, ob das andere Gerät denselben Code zeigt: {{code}}",
+      "clearSignerCodeConfirm": "Die Codes stimmen überein",
+      "clearSignerCopyLink": "Link kopieren",
+      "clearSignerRelayDown": "Das Relay ist nicht erreichbar. Versuche es erneut oder nutze den Clear Signer auf diesem Gerät."
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

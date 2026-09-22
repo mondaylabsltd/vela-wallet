@@ -65,7 +65,13 @@
       "pageInsecure": "Gunakan halaman https, atau halaman di loopback perangkat ini sendiri — browser tidak akan menandatangani di tempat lain.",
       "pageForeign": "Passkey Anda milik getvela.app. Halaman di domain lain dapat menampilkan permintaan tetapi tidak dapat menandatanganinya.",
       "pageReset": "Gunakan halaman resmi",
-      "pageSave": "Simpan"
+      "pageSave": "Simpan",
+      "relayTitle": "Relay",
+      "relaySubtitle": "Penyandingan dengan perangkat lain melewati relay ini. Relay hanya meneruskan pesan yang terenkripsi.",
+      "relayOfficial": "Resmi",
+      "relayInvalid": "Itu bukan alamat relay.",
+      "relayInsecure": "Gunakan alamat wss://, atau ws:// di loopback perangkat ini sendiri.",
+      "relayReset": "Gunakan relay resmi"
     },
     "advanced": {
       "networksTitle": "Jaringan",

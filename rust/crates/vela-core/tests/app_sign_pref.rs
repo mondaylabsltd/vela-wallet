@@ -10,7 +10,7 @@ use support::DomainDriver;
 use vela_core::app::sign_pref::{
     Event, SignPref, SignPrefOperation as Op, SignPrefShellResult as Res,
 };
-use vela_core::clear_signer::DEFAULT_SIGNER_URL;
+use vela_core::clear_signer::{DEFAULT_RELAY_URL, DEFAULT_SIGNER_URL};
 
 type Sut = DomainDriver<SignPref>;
 
@@ -18,6 +18,7 @@ fn stored(method: Option<&str>, url: Option<&str>) -> Res {
     Res::Stored {
         method: method.map(str::to_owned),
         signer_url: url.map(str::to_owned),
+        relay_url: None,
     }
 }
 
@@ -167,4 +168,60 @@ fn a_read_that_lands_after_a_choice_is_dropped() {
         stored(Some("platform"), None),
     );
     assert_eq!(sut.view().method, "hybrid");
+}
+
+/// Spec 075: the relay a cross-device pairing goes through — the official
+/// one unless a person names their own, and only an address both ends can
+/// open (wss, or ws on this device's loopback).
+#[test]
+fn the_relay_is_official_until_a_usable_one_is_named() {
+    let mut sut = loaded(None, None);
+    assert_eq!(sut.view().relay_url, DEFAULT_RELAY_URL);
+    assert!(sut.view().relay_url_is_default);
+
+    assert!(sut
+        .dispatch(Event::RelayUrlSubmitted {
+            text: "ws://192.168.1.4:8787".to_owned(),
+        })
+        .is_empty());
+    assert_eq!(sut.view().relay_url_error.as_deref(), Some("insecure"));
+    assert_eq!(sut.view().relay_url, DEFAULT_RELAY_URL, "nothing stored");
+
+    assert_eq!(
+        sut.dispatch(Event::RelayUrlSubmitted {
+            text: "relay.example.org".to_owned(),
+        }),
+        vec![Op::WriteRelayUrl {
+            url: Some("wss://relay.example.org".to_owned()),
+        }]
+    );
+    assert_eq!(sut.view().relay_url, "wss://relay.example.org");
+    assert_eq!(sut.view().relay_url_error, None);
+
+    assert_eq!(
+        sut.dispatch(Event::RelayUrlReset),
+        vec![Op::WriteRelayUrl { url: None }]
+    );
+    assert!(sut.view().relay_url_is_default);
+}
+
+#[test]
+fn a_stored_relay_is_read_back_and_a_bad_one_reads_as_official() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(Res::Stored {
+        method: None,
+        signer_url: None,
+        relay_url: Some("wss://relay.example.org".to_owned()),
+    });
+    assert_eq!(sut.view().relay_url, "wss://relay.example.org");
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Refresh);
+    sut.resolve(Res::Stored {
+        method: None,
+        signer_url: None,
+        relay_url: Some("http://relay.example.org".to_owned()),
+    });
+    assert!(sut.view().relay_url_is_default);
 }

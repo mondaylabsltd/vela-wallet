@@ -203,7 +203,17 @@
       "clearSignerReopen": "ページをもう一度開く",
       "clearSignerDoneTab": "署名しました。このタブを閉じて Vela に戻ってください。",
       "viewOnExplorer": "エクスプローラーで表示",
-      "sendingToTokenContract": "トークン自身のコントラクトへの送金"
+      "sendingToTokenContract": "トークン自身のコントラクトへの送金",
+      "clearSignerWhere": "Clear Signer はどこにありますか？",
+      "clearSignerThisDevice": "このデバイス",
+      "clearSignerOtherDevice": "別のデバイス",
+      "clearSignerPair": "別のデバイスで Clear Signer を開く",
+      "clearSignerPairHint": "パスキーのあるデバイスでこのコードをスキャンするか、そのデバイスでリンクを開いてください。",
+      "clearSignerPairWaiting": "別のデバイスを待っています…",
+      "clearSignerCode": "別のデバイスに同じコードが表示されていることを確認してください：{{code}}",
+      "clearSignerCodeConfirm": "コードが一致しています",
+      "clearSignerCopyLink": "リンクをコピー",
+      "clearSignerRelayDown": "リレーに接続できませんでした。もう一度試すか、このデバイスの Clear Signer を使ってください。"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

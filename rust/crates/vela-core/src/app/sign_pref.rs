@@ -6,13 +6,15 @@
 //! url_submitted ─┬─ an https / loopback page ─► persist + commit
 //!                └─ anything else ─► refused, nothing stored, the old page stands
 //! url_reset ─► remove + back to the official page
+//! relay_submitted / relay_reset ─► the same, for the relay (spec 075)
 //! ```
 //!
 //! Two preferences that belong together: the "Sign with" a signing sheet
 //! starts at (`auto`, a place a passkey is, or the Clear Signer), and which
 //! Clear Signer page the wallet opens. Shaped on [`super::fee_tier_pref`],
 //! this codebase's committed-preference machine, for the same reasons: the
-//! shell owns the keys (`vela.signMethod`, `vela.clearSignerUrl`, under the
+//! shell owns the keys (`vela.signMethod`, `vela.clearSignerUrl`, and since
+//! spec 075 `vela.clearSignerRelay` — the relay a pairing goes through — under the
 //! `vela.` prefix that survives sign-out — how a person signs belongs to them
 //! and the device, not to one account) and the words; the core decides what
 //! may be stored and what shows when nothing can be.
@@ -53,12 +55,15 @@ pub fn parse_method(raw: &str) -> Option<&'static str> {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignPrefOperation"))]
 pub enum SignPrefOperation {
-    /// Read `vela.signMethod` and `vela.clearSignerUrl`, raw.
+    /// Read `vela.signMethod`, `vela.clearSignerUrl` and
+    /// `vela.clearSignerRelay`, raw.
     ReadStored,
     /// Persist the default method (best effort).
     WriteMethod { method: String },
     /// Persist the signer page; `None` removes the key — the official page.
     WriteSignerUrl { url: Option<String> },
+    /// Spec 075: persist the relay; `None` removes the key — the official one.
+    WriteRelayUrl { url: Option<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +73,9 @@ pub enum SignPrefShellResult {
     Stored {
         method: Option<String>,
         signer_url: Option<String>,
+        /// Spec 075; absent from a shell that predates the relay.
+        #[serde(default)]
+        relay_url: Option<String>,
     },
     Written,
 }
@@ -95,6 +103,10 @@ pub enum Event {
     SignerUrlSubmitted { text: String },
     /// Settings: back to the official page.
     SignerUrlReset,
+    /// Spec 075 — Settings: the relay a pairing goes through, as typed.
+    RelayUrlSubmitted { text: String },
+    /// Spec 075 — Settings: back to the official relay.
+    RelayUrlReset,
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -121,6 +133,9 @@ pub struct Model {
     /// Why the last submitted address was refused, until the next submit or
     /// reset.
     url_error: Option<SignerUrlError>,
+    /// Spec 075: a relay the person chose, normalised. `None` ⇒ the official one.
+    relay_url: Option<String>,
+    relay_error: Option<SignerUrlError>,
     phase: Phase,
     attempt: u64,
 }
@@ -145,6 +160,12 @@ pub struct SignPrefView {
     /// `getvela.app` keys). A page elsewhere can show a request but not sign
     /// it, and Settings says so beside the address.
     pub signer_uses_wallet_passkeys: bool,
+    /// Spec 075: the relay a cross-device pairing goes through. Always usable.
+    pub relay_url: String,
+    /// `true` ⇒ the official relay.
+    pub relay_url_is_default: bool,
+    /// `"invalid"` | `"insecure"` — the last submitted relay was refused.
+    pub relay_url_error: Option<String>,
 }
 
 #[derive(Default)]
@@ -204,13 +225,41 @@ impl App for SignPref {
                 model.signer_url = None;
                 shell(model, SignPrefOperation::WriteSignerUrl { url: None })
             }
+            Event::RelayUrlSubmitted { text } => match clear_signer::relay_url(&text) {
+                Ok(url) => {
+                    model.attempt += 1;
+                    model.phase = Phase::Idle;
+                    model.relay_error = None;
+                    let chosen = (url != clear_signer::DEFAULT_RELAY_URL).then_some(url);
+                    model.relay_url.clone_from(&chosen);
+                    shell(model, SignPrefOperation::WriteRelayUrl { url: chosen })
+                }
+                Err(error) => {
+                    model.relay_error = Some(error);
+                    render()
+                }
+            },
+            Event::RelayUrlReset => {
+                model.attempt += 1;
+                model.phase = Phase::Idle;
+                model.relay_error = None;
+                model.relay_url = None;
+                shell(model, SignPrefOperation::WriteRelayUrl { url: None })
+            }
             Event::ShellCompleted { attempt, result } => {
                 if attempt != model.attempt {
                     // Superseded — a stored value that arrived after a choice.
                     return Command::done();
                 }
                 match (model.phase, result) {
-                    (Phase::LoadingStored, SignPrefShellResult::Stored { method, signer_url }) => {
+                    (
+                        Phase::LoadingStored,
+                        SignPrefShellResult::Stored {
+                            method,
+                            signer_url,
+                            relay_url,
+                        },
+                    ) => {
                         model.phase = Phase::Idle;
                         model.method = method.as_deref().and_then(parse_method);
                         // Validated again: a key someone else wrote (or an
@@ -220,6 +269,10 @@ impl App for SignPref {
                             .as_deref()
                             .and_then(|raw| clear_signer::signer_url(raw).ok())
                             .filter(|url| url != clear_signer::DEFAULT_SIGNER_URL);
+                        model.relay_url = relay_url
+                            .as_deref()
+                            .and_then(|raw| clear_signer::relay_url(raw).ok())
+                            .filter(|url| url != clear_signer::DEFAULT_RELAY_URL);
                         render()
                     }
                     _ => Command::done(),
@@ -233,6 +286,13 @@ impl App for SignPref {
             .signer_url
             .clone()
             .unwrap_or_else(|| clear_signer::DEFAULT_SIGNER_URL.to_owned());
+        let error_name = |error: SignerUrlError| {
+            match error {
+                SignerUrlError::Invalid => "invalid",
+                SignerUrlError::Insecure => "insecure",
+            }
+            .to_owned()
+        };
         SignPrefView {
             method: model.method.unwrap_or(FACTORY_METHOD).to_owned(),
             method_committed: model.method.is_some(),
@@ -240,13 +300,13 @@ impl App for SignPref {
             signer_uses_wallet_passkeys: clear_signer::uses_wallet_passkeys(&signer_url),
             signer_url_is_default: model.signer_url.is_none(),
             signer_url,
-            signer_url_error: model.url_error.map(|error| {
-                match error {
-                    SignerUrlError::Invalid => "invalid",
-                    SignerUrlError::Insecure => "insecure",
-                }
-                .to_owned()
-            }),
+            signer_url_error: model.url_error.map(error_name),
+            relay_url: model
+                .relay_url
+                .clone()
+                .unwrap_or_else(|| clear_signer::DEFAULT_RELAY_URL.to_owned()),
+            relay_url_is_default: model.relay_url.is_none(),
+            relay_url_error: model.relay_error.map(error_name),
         }
     }
 }

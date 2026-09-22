@@ -203,7 +203,17 @@
       "clearSignerReopen": "Sayfayı yeniden aç",
       "clearSignerDoneTab": "İmzalandı. Bu sekmeyi kapatıp Vela'ya dönebilirsiniz.",
       "viewOnExplorer": "Gezginde görüntüle",
-      "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor"
+      "sendingToTokenContract": "Token’ın kendi sözleşmesine gönderiliyor",
+      "clearSignerWhere": "Clear Signer'ınız nerede?",
+      "clearSignerThisDevice": "Bu cihazda",
+      "clearSignerOtherDevice": "Başka bir cihazda",
+      "clearSignerPair": "Clear Signer'ı diğer cihazınızda açın",
+      "clearSignerPairHint": "Bu kodu geçiş anahtarınızın bulunduğu cihazla tarayın veya bağlantıyı orada açın.",
+      "clearSignerPairWaiting": "Diğer cihaz bekleniyor…",
+      "clearSignerCode": "Diğer cihazda aynı kodun göründüğünü kontrol edin: {{code}}",
+      "clearSignerCodeConfirm": "Kodlar eşleşiyor",
+      "clearSignerCopyLink": "Bağlantıyı kopyala",
+      "clearSignerRelayDown": "Aktarıcıya ulaşılamadı. Tekrar deneyin ya da bu cihazdaki Clear Signer'ı kullanın."
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

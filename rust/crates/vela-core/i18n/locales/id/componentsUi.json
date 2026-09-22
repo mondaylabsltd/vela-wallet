@@ -203,7 +203,17 @@
       "clearSignerReopen": "Buka halaman lagi",
       "clearSignerDoneTab": "Sudah ditandatangani. Anda dapat menutup tab ini dan kembali ke Vela.",
       "viewOnExplorer": "Lihat di explorer",
-      "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri"
+      "sendingToTokenContract": "Dikirim ke kontrak token itu sendiri",
+      "clearSignerWhere": "Di mana Clear Signer Anda?",
+      "clearSignerThisDevice": "Di perangkat ini",
+      "clearSignerOtherDevice": "Di perangkat lain",
+      "clearSignerPair": "Buka Clear Signer di perangkat Anda yang lain",
+      "clearSignerPairHint": "Pindai kode ini dengan perangkat yang menyimpan kunci sandi Anda, atau buka tautannya di sana.",
+      "clearSignerPairWaiting": "Menunggu perangkat lain…",
+      "clearSignerCode": "Pastikan perangkat lain menampilkan kode yang sama: {{code}}",
+      "clearSignerCodeConfirm": "Kodenya cocok",
+      "clearSignerCopyLink": "Salin tautan",
+      "clearSignerRelayDown": "Relay tidak dapat dijangkau. Coba lagi, atau gunakan Clear Signer di perangkat ini."
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

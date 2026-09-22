@@ -349,8 +349,13 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1717 (spec 072, 2026-09-22): +4 `settingsModals.endpoints.reset*` leaves —
 //   resetting the service endpoints is destructive (FR-010) and asks first on
 //   every shell; the corpus had the button and no question. No new branch.
-if (PATHS.length !== 1717) fail(`expected 1717 paths (1628 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1628) fail(`expected 1628 leaf paths, got ${leafSet.size}`);
+// 1733 (spec 075, 2026-09-22): the Clear Signer across devices. +10
+//   `componentsUi.signing.clearSigner*` leaves (where the signer is — this
+//   device or another — the pairing sheet, its waiting line, the six-digit
+//   code and its confirmation, copy link, the relay unreachable) and +6
+//   `settings.signing.relay*` (the Settings row, as the page row). No new branch.
+if (PATHS.length !== 1733) fail(`expected 1733 paths (1644 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1644) fail(`expected 1644 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

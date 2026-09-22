@@ -203,7 +203,17 @@
       "clearSignerReopen": "重新開啟頁面",
       "clearSignerDoneTab": "已簽署。你可以關閉呢個分頁，返去 Vela。",
       "viewOnExplorer": "喺區塊瀏覽器睇",
-      "sendingToTokenContract": "傳送到代幣自己嘅合約"
+      "sendingToTokenContract": "傳送到代幣自己嘅合約",
+      "clearSignerWhere": "清晰簽署器在哪裡？",
+      "clearSignerThisDevice": "在這部裝置上",
+      "clearSignerOtherDevice": "在另一部裝置上",
+      "clearSignerPair": "在另一部裝置上開啟清晰簽署器",
+      "clearSignerPairHint": "用存有你通行密鑰的裝置掃描此碼，或在那部裝置上開啟這條連結。",
+      "clearSignerPairWaiting": "正在等待另一部裝置…",
+      "clearSignerCode": "請確認另一部裝置顯示的是同一個碼：{{code}}",
+      "clearSignerCodeConfirm": "兩邊的碼一致",
+      "clearSignerCopyLink": "複製連結",
+      "clearSignerRelayDown": "無法連接中繼。請重試，或改用這部裝置上的清晰簽署器。"
     },
     "currency": {
       "title": "顯示貨幣",

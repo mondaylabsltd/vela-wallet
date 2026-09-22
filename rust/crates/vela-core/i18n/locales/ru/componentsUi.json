@@ -203,7 +203,17 @@
       "clearSignerReopen": "Открыть страницу снова",
       "clearSignerDoneTab": "Подписано. Можно закрыть эту вкладку и вернуться в Vela.",
       "viewOnExplorer": "Открыть в обозревателе",
-      "sendingToTokenContract": "Отправляется на собственный контракт токена"
+      "sendingToTokenContract": "Отправляется на собственный контракт токена",
+      "clearSignerWhere": "Где ваш Clear Signer?",
+      "clearSignerThisDevice": "На этом устройстве",
+      "clearSignerOtherDevice": "На другом устройстве",
+      "clearSignerPair": "Откройте Clear Signer на другом устройстве",
+      "clearSignerPairHint": "Отсканируйте этот код устройством, на котором хранится ваш ключ доступа, или откройте ссылку на нём.",
+      "clearSignerPairWaiting": "Ожидание другого устройства…",
+      "clearSignerCode": "Убедитесь, что на другом устройстве тот же код: {{code}}",
+      "clearSignerCodeConfirm": "Коды совпадают",
+      "clearSignerCopyLink": "Скопировать ссылку",
+      "clearSignerRelayDown": "Не удалось связаться с ретранслятором. Повторите попытку или используйте Clear Signer на этом устройстве."
     },
     "signingApprove": {
       "resultingTotal": "Новый общий лимит",

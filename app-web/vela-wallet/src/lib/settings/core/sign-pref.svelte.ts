@@ -36,7 +36,10 @@ const INITIAL: SignPrefView = {
 	signer_url: 'https://sign.getvela.app/',
 	signer_url_is_default: true,
 	signer_url_error: null,
-	signer_uses_wallet_passkeys: true
+	signer_uses_wallet_passkeys: true,
+	relay_url: 'wss://relay.getvela.app',
+	relay_url_is_default: true,
+	relay_url_error: null
 };
 
 class SignPreference {

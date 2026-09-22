@@ -203,7 +203,17 @@
       "clearSignerReopen": "Abrir a página de novo",
       "clearSignerDoneTab": "Assinado. Você pode fechar esta aba e voltar ao Vela.",
       "viewOnExplorer": "Ver no explorador",
-      "sendingToTokenContract": "Enviado ao contrato do próprio token"
+      "sendingToTokenContract": "Enviado ao contrato do próprio token",
+      "clearSignerWhere": "Onde está o seu Clear Signer?",
+      "clearSignerThisDevice": "Neste dispositivo",
+      "clearSignerOtherDevice": "Em outro dispositivo",
+      "clearSignerPair": "Abra o Clear Signer no seu outro dispositivo",
+      "clearSignerPairHint": "Escaneie este código com o dispositivo que tem sua chave de acesso, ou abra o link nele.",
+      "clearSignerPairWaiting": "Aguardando o outro dispositivo…",
+      "clearSignerCode": "Confira se o outro dispositivo mostra o mesmo código: {{code}}",
+      "clearSignerCodeConfirm": "Os códigos são iguais",
+      "clearSignerCopyLink": "Copiar link",
+      "clearSignerRelayDown": "Não foi possível alcançar o relay. Tente de novo ou use o Clear Signer deste dispositivo."
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",

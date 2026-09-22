@@ -65,7 +65,13 @@
       "pageInsecure": "Usa una pagina https o una sul loopback di questo dispositivo: altrove il browser non firmerà.",
       "pageForeign": "Le tue passkey appartengono a getvela.app. Una pagina su un altro dominio può mostrare una richiesta ma non firmarla.",
       "pageReset": "Usa la pagina ufficiale",
-      "pageSave": "Salva"
+      "pageSave": "Salva",
+      "relayTitle": "Relay",
+      "relaySubtitle": "L'abbinamento con un altro dispositivo passa da questo relay, che inoltra solo messaggi cifrati.",
+      "relayOfficial": "Ufficiale",
+      "relayInvalid": "Questo non è un indirizzo di relay.",
+      "relayInsecure": "Usa un indirizzo wss://, oppure ws:// sul loopback di questo dispositivo.",
+      "relayReset": "Usa il relay ufficiale"
     },
     "advanced": {
       "networksTitle": "Reti",
