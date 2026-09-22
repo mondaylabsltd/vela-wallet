@@ -141,7 +141,8 @@
     request.refusalCode = 'refused';
     window.__refused = true;
     window.__slider = null;
-    say('ui.cannotSign');
+    // On a session the wallet is told at once; elsewhere, closing tells it.
+    say(session.persistent ? 'ui.refusedSent' : 'ui.cannotSign');
     phase('refused');
     if (session.persistent) {
       request.reject(code || 'refused');
@@ -369,7 +370,10 @@
       return;
     }
     // bye, or the channel closed. A refusal on screen keeps its reasons.
-    if (window.__refused) return;
+    if (window.__refused) {
+      say('ui.sessionOver');
+      return;
+    }
     if (session.answered) {
       say('ui.sessionDone');
       waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionDone' });
@@ -393,8 +397,10 @@
   ns.intake
     .open({
       onCode: function (code) {
-        if (!current) waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConfirm', originKey: channelLine() });
-        else {
+        if (!current) {
+          waiting({ titleKey: 'ui.waitingForWallet', noteKey: 'ui.relayConfirm', originKey: channelLine() });
+          say('ui.relayConfirm');
+        } else {
           var codes = slot.querySelectorAll('.pairing-code b');
           for (var i = 0; i < codes.length; i++) codes[i].textContent = code;
         }
@@ -402,7 +408,7 @@
       },
       onState: function (name) {
         if (current) return;
-        var notes = { relayWaiting: 'ui.relayWaiting', relayJoined: 'ui.relayWaiting', relayLeft: 'ui.relayLeft' };
+        var notes = { relayWaiting: 'ui.relayWaiting', relayJoined: 'ui.relayJoined', relayLeft: 'ui.relayLeft' };
         if (notes[name]) {
           waiting({ titleKey: 'ui.waitingForWallet', noteKey: notes[name], originKey: 'value.viaRelay' });
           say(notes[name]);

@@ -262,4 +262,7 @@ window.VelaCS.i18n.register('zh', {
   'ui.relayClosed': '中继关闭了连接。',
   'ui.openerSilent': '打开这一页的页面始终没有发来请求。',
   'ui.sessionEnded': '会话已结束',
+  'ui.refusedSent': '已拒绝 —— 理由见上，钱包已收到。',
+  'ui.sessionOver': '钱包已结束会话。可以关掉这一页了。',
+  'ui.relayJoined': '钱包已到，正在建立加密连接…',
 });

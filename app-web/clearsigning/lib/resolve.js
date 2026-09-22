@@ -929,7 +929,7 @@ window.VelaCS = window.VelaCS || {};
     view.dapp.originVerified = who.verified;
 
     view.hero = { kind: 'ceremony', ceremony: kind, title: wallet, titleKey: wallet ? null : 'value.yourWallet' };
-    view.fields.push({ label: 'field.wallet', value: wallet, valueKey: wallet ? null : 'value.unnamedWallet' });
+    if (wallet) view.fields.push({ label: 'field.wallet', value: wallet });
 
     var params = [];
     if (kind === 'create') {

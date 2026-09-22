@@ -256,4 +256,7 @@ window.VelaCS.i18n.register('en', {
   'ui.relayClosed': 'The relay closed the connection.',
   'ui.openerSilent': 'The page that opened this one never sent a request.',
   'ui.sessionEnded': 'Session ended',
+  'ui.refusedSent': 'Refused — the reasons are listed above, and the wallet has been told.',
+  'ui.sessionOver': 'The wallet ended the session. You can close this page.',
+  'ui.relayJoined': 'The wallet is here. Securing the connection…',
 });
