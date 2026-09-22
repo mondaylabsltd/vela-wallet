@@ -35,6 +35,9 @@ use crate::types::ClientDataKind;
 use crate::user_op::{UserOperation, WalletKey};
 use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
+/// The BLE channel's framing — no state machines, so no `crux` needed: three
+/// shells run the peripheral side and must frame it identically.
+pub mod ble;
 #[cfg(feature = "crux")]
 pub mod ceremony;
 pub mod secure;
