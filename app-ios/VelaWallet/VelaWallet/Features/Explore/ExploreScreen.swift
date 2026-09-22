@@ -189,7 +189,7 @@ struct ExploreScreen: View {
             share(target)
         case "copy":
             guard !url.isEmpty else { return }
-            UIPasteboard.general.string = url
+            velaCopy(url)
             show(toast: loc.t("explore.linkCopied"))
         case "favorite":
             controller.toggleFavorite()

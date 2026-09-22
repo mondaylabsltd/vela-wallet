@@ -10,7 +10,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct WalletScreen: View {
     @Environment(\.theme) private var theme
@@ -127,7 +126,8 @@ struct WalletScreen: View {
             BalanceDisplay(model: model.balance, onStatusTap: onStatusTap)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    // A switch that takes effect: Select, not a button press.
+                    VelaHaptic.select.play()
                     onToggleBalance()
                 }
                 .accessibilityAddTraits(.isButton)

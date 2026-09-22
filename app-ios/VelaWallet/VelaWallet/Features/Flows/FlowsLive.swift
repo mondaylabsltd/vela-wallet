@@ -390,6 +390,7 @@ enum FlowsLive {
         guard !address.isEmpty else { return model }
         let networks = ChainCatalog.chains
         var live = model
+        live.address = address
         live.subtitle = loc.t("receive.networksLine", vars: ["count": String(networks.count)])
         live.rows = networks.map { chain in
             NetworkRowModel(

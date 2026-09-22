@@ -114,7 +114,7 @@ final class ReceiveWatchStore {
             ])
 
         case "signal_deposit":
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            VelaHaptic.success.play()
             onDeposit()
             return CoreJSON.string(["type": "signalled"])
 
