@@ -62,7 +62,7 @@
   |---|---|
   | E1 create through the page | **pass** — the Custom Tab opens it, the card names the wallet, says nothing is signed and that the key will belong to `localhost`; the key comes back and the draft row reads 清晰签名器 |
   | E2 member proof | **pass only with the rpId gap worked around** — see F-1 |
-  | E3 the key's row names its page | **fail** — see F-2 |
+  | E3 the key's row names its page | **fail, then fixed and re-run** — the row now reads 清晰签名器 · 95a0…263d and its detail names `http://localhost:8140`, while a platform key's row is unchanged (核心 `28239a5c`, Android `8f0888e5`) |
   | E4 send from that wallet | not run — the test wallet has no funds and none were moved to it |
   | E5 sign out, sign in through the page | not run — sign-out clears every account on the device (see F-3), and the owner's other passkeys cannot be re-authenticated from here |
 
@@ -97,17 +97,25 @@
   rule deriving a member's rpId from its `signer_origin` (the core already
   stores it), and a registry `/api/challenge` that takes rpId per member — the
   group mode sends one for the whole set, which cannot serve a mixed set.
-- **F-2 · the key list never names the page a key lives behind.** After creation
-  the row and its detail caption a Clear Signer key 内置通行密钥 (the
+- **F-2 · the key list never names the page a key lives behind.** ~~After
+  creation the row and its detail caption a Clear Signer key 内置通行密钥 (the
   authenticator's own report — a page reports `platform`), and nothing shows
-  `signer_origin`, which the core does store. iOS reports the same (它 captions
-  这台设备). The draft row during create gets it right.
+  `signer_origin`, which the core does store.~~ **Fixed.** The rule moved into
+  the core (`28239a5c`): a `signer_origin` outranks the authenticator's report
+  in both row builders, and `WalletKeyRow` carries the origin so a row can name
+  the page. A shell still has to pass each key's origin INTO the keys view —
+  Android did not (`8f0888e5`), and the same one-field gap was handed to the
+  other three shells. Re-run on the phone: the row reads 清晰签名器 and its
+  detail names the page.
 - **F-3 · 退出登录 clears every account on the device.** `clearSignedInWallet()`
   removes `vela.accounts` and `vela.activeAccountIndex` wholesale, while the
   sheet says 「地址不变，交易记录、联系人、代币和各项设置也都还在」 — true of one
   wallet, misleading on a device holding six. There is also no way to remove a
   single account.
 - **F-4 · a Settings endpoint change does not reach a flow already in memory.**
-  `OnboardingViewModel.init` reads the passkey index once; changing it in
+  ~~`OnboardingViewModel.init` reads the passkey index once; changing it in
   Settings and creating a wallet without restarting still queries the previous
-  index (observed: the page was handed the production index after the change).
+  index (observed: the page was handed the production index after the change).~~
+  **Fixed on Android** (`8f0888e5`): re-read on entry, never mid-flow, so one
+  wallet is still never asked of two registries. Worth checking on the other
+  three shells.
