@@ -1381,6 +1381,7 @@
    "clearSignerBluetoothNeeded": "Vela necesita permiso de Bluetooth para que la página de firma encuentre este dispositivo.",
    "clearSignerBluetoothOff": "Activa el Bluetooth para vincular de esta forma.",
    "clearSignerBluetoothUnsupported": "Este dispositivo no puede vincularse de esta forma. Usa el Clear Signer en este dispositivo, o en otro.",
+   "clearSignerNearbyLost": "La página de firma se desconectó. Mantén los dos dispositivos cerca y Vela abierto, luego inténtalo de nuevo.",
    "clearSignerPair": "Abre el Clear Signer en tu otro dispositivo",
    "clearSignerPairHint": "Escanea este código con el dispositivo que tiene tu llave de acceso, o abre el enlace ahí.",
    "clearSignerPairWaiting": "Esperando al otro dispositivo…",

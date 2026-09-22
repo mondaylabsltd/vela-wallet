@@ -242,6 +242,7 @@
       "clearSignerBluetoothNeeded": "Vela needs Bluetooth permission so the signing page can find this device.",
       "clearSignerBluetoothOff": "Turn Bluetooth on to pair this way.",
       "clearSignerBluetoothUnsupported": "This device cannot pair this way. Use the Clear Signer on this device, or another device.",
+      "clearSignerNearbyLost": "The signing page disconnected. Keep both devices close and Vela open, then try again.",
       "clearSignerPair": "Open the Clear Signer on your other device",
       "clearSignerPairHint": "Scan this code with the device that has your passkey, or open the link there.",
       "clearSignerPairWaiting": "Waiting for the other device…",

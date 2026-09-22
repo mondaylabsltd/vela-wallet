@@ -1378,6 +1378,7 @@
    "clearSignerBluetoothNeeded": "İmza sayfasının bu cihazı bulabilmesi için Vela'nın Bluetooth iznine ihtiyacı var.",
    "clearSignerBluetoothOff": "Bu şekilde eşleştirmek için Bluetooth'u açın.",
    "clearSignerBluetoothUnsupported": "Bu cihaz bu şekilde eşleştirilemiyor. Clear Signer'ı bu cihazda kullanın veya başka bir cihaz deneyin.",
+   "clearSignerNearbyLost": "İmza sayfasının bağlantısı kesildi. İki cihazı yakın tutun ve Vela açık kalsın, sonra tekrar deneyin.",
    "clearSignerPair": "Clear Signer'ı diğer cihazınızda açın",
    "clearSignerPairHint": "Bu kodu geçiş anahtarınızın bulunduğu cihazla tarayın veya bağlantıyı orada açın.",
    "clearSignerPairWaiting": "Diğer cihaz bekleniyor…",

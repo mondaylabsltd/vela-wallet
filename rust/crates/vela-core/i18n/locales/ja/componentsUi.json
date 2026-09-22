@@ -213,6 +213,7 @@
       "clearSignerBluetoothNeeded": "署名ページがこのデバイスを見つけられるよう、Vela には Bluetooth の許可が必要です。",
       "clearSignerBluetoothOff": "この方法でペアリングするには Bluetooth をオンにしてください。",
       "clearSignerBluetoothUnsupported": "このデバイスはこの方法でペアリングできません。このデバイスの Clear Signer を使うか、別のデバイスをお試しください。",
+      "clearSignerNearbyLost": "署名ページとの接続が切れました。2 台のデバイスを近づけ、Vela を開いたままでもう一度お試しください。",
       "clearSignerPair": "別のデバイスで Clear Signer を開く",
       "clearSignerPairHint": "パスキーのあるデバイスでこのコードをスキャンするか、そのデバイスでリンクを開いてください。",
       "clearSignerPairWaiting": "別のデバイスを待っています…",

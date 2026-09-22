@@ -178,8 +178,17 @@ window.VelaCS = window.VelaCS || {};
   Channel.prototype.write = function (bytes) {
     var self = this;
     var characteristic = this.c2p;
-    var write = characteristic.writeValueWithoutResponse
-      ? characteristic.writeValueWithoutResponse.bind(characteristic)
+    // WITH a response, deliberately, even though the characteristic offers
+    // both. An unacknowledged write resolves as soon as the browser has taken
+    // the bytes — whether or not they reach the air — and CoreBluetooth on
+    // macOS silently drops them once its transmit queue fills, which is
+    // exactly a burst of back-to-back frames. The first radio pass (spec 075
+    // T043) lost the tail of every multi-frame answer that way: this page
+    // reported the signature sent, the phone waited out its whole timeout.
+    // An acknowledged write is slower by a round trip per frame and is paced
+    // by the link itself, which is the property that matters here.
+    var write = characteristic.writeValueWithResponse
+      ? characteristic.writeValueWithResponse.bind(characteristic)
       : characteristic.writeValue.bind(characteristic);
     return write(bytes).catch(function (error) {
       if (self.chunk <= MIN_CHUNK) throw error;

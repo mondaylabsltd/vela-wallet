@@ -1378,6 +1378,7 @@
    "clearSignerBluetoothNeeded": "Vela 需要藍牙權限，簽署頁面才能找到這台裝置。",
    "clearSignerBluetoothOff": "請開啟藍牙，才能用這種方式配對。",
    "clearSignerBluetoothUnsupported": "這台裝置不支援這種配對方式。請在本機使用清晰簽署器，或改用另一台裝置。",
+   "clearSignerNearbyLost": "簽署頁面已中斷連線。請讓兩台裝置保持靠近、Vela 保持在前景，然後重試。",
    "clearSignerPair": "在另一台裝置上開啟清晰簽署器",
    "clearSignerPairHint": "用存有你通行金鑰的裝置掃描此碼，或在那台裝置上開啟這個連結。",
    "clearSignerPairWaiting": "正在等待另一台裝置…",
