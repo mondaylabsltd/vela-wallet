@@ -183,6 +183,15 @@ enum I18nKeys {
         static let code = "componentsUi.signing.clearSignerCode"
         static let codeConfirm = "componentsUi.signing.clearSignerCodeConfirm"
         static let relayDown = "componentsUi.signing.clearSignerRelayDown"
+
+        /// Spec 075 T041, the nearby route. These two borrow `connect.dapp.*`
+        /// — true sentences, but generic ones, and they are the wrong
+        /// namespace for this surface. The catalogs live in the core, so the
+        /// iOS branch cannot add the right words; `ClearSignerBle.swift`'s
+        /// header lists the four `componentsUi.signing.*` keys this route
+        /// still needs.
+        static let nearbyDevice = "connect.dapp.connectBleTitle"
+        static let nearbyWaiting = "connect.dapp.waiting"
     }
 
     enum Settings {
@@ -223,7 +232,7 @@ enum I18nKeys {
         ClearSigner.thisDevice, ClearSigner.otherDevice,
         ClearSigner.pair, ClearSigner.pairHint, ClearSigner.pairWaiting,
         ClearSigner.copyLink, ClearSigner.code, ClearSigner.codeConfirm,
-        ClearSigner.relayDown,
+        ClearSigner.relayDown, ClearSigner.nearbyDevice, ClearSigner.nearbyWaiting,
         Create.progressTitle, Create.progressSubtitle, Create.progressMeterLabel,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,

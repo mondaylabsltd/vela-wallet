@@ -142,12 +142,15 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     private let relayUrl: () -> String?
     /// The relay conversation, as a seam for tests.
     private let makeRelay: (_ signerUrl: String, _ relay: String) -> ClearSignerRelayConversation?
+    /// The nearby (BLE) conversation, as a seam for tests.
+    private let makeBle: (_ signerUrl: String) -> ClearSignerBleConversation?
 
     /// The flow's live session, while one is open.
     private var conversation: ClearSignerConversation?
     /// The same session when it is the loopback one — it alone has a tab.
     private var channel: ClearSignerChannel?
     private var relay: ClearSignerRelayConversation?
+    private var ble: ClearSignerBleConversation?
     /// The page this session is talking to; every answer's origin is checked
     /// against it by the core.
     private var openPage: String?
@@ -171,12 +174,16 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         relayUrl: @escaping () -> String? = { nil },
         makeRelay: @escaping (String, String) -> ClearSignerRelayConversation? = { signer, relay in
             ClearSignerRelayConversation(signerUrl: signer, relay: relay)
+        },
+        makeBle: @escaping (String) -> ClearSignerBleConversation? = { signer in
+            ClearSignerBleConversation(signerUrl: signer)
         }
     ) {
         self.loc = loc
         self.signerUrl = signerUrl
         self.relayUrl = relayUrl
         self.makeRelay = makeRelay
+        self.makeBle = makeBle
         super.init()
     }
 
@@ -232,6 +239,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         conversation = nil
         channel = nil
         relay = nil
+        ble = nil
         openPage = nil
         launchUrl = nil
         finishAsk(pick: nil)
@@ -257,10 +265,10 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         let model = ClearSignerSheetModel()
         self.model = model
         model.cancel = { [weak self] in self?.cancelled() }
-        model.pick = { [weak self] here in self?.finishAsk(pick: here) }
+        model.pick = { [weak self] route in self?.finishAsk(pick: route) }
         model.confirmCode = { [weak self] in
             VelaHaptic.success.play()
-            self?.finishAsk(pick: true)
+            self?.finishAsk(pick: .agreed)
         }
         model.copyLink = { [weak self] in
             guard let self, let link = self.relay?.link else { return }
@@ -273,19 +281,33 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         while true {
             // Where is it? A cancel here is a decline, exactly as a dismissed
             // passkey sheet is.
-            guard await awaitAnswer(), let here = lastPick else {
+            guard await awaitAnswer(), let route = lastPick else {
                 return .outcome(.refused(refusal: .declined))
             }
-            if here {
+            switch route {
+            case .thisDevice:
                 return await onThisDevice(ask, page: wanted, model: model)
+            case .otherDevice:
+                if let ending = await onAnotherDevice(ask, page: wanted, model: model) {
+                    return ending
+                }
+                if declined { return .outcome(.refused(refusal: .declined)) }
+                // The relay would not come up. The choice is offered again
+                // with the reason under it, rather than dying on a spinner.
+                model.stage = .relayDown
+            case .nearby:
+                if let ending = await onNearbyDevice(ask, page: wanted, model: model) {
+                    return ending
+                }
+                if declined { return .outcome(.refused(refusal: .declined)) }
+                // `onNearbyDevice` has already put what is missing on the
+                // sheet, with the other two routes under it.
+            case .agreed:
+                // Only the code screen asks this, and only it reads the
+                // answer; reaching the where-choice with it is a bug, not a
+                // route, and a decline is the safe reading.
+                return .outcome(.refused(refusal: .declined))
             }
-            if let ending = await onAnotherDevice(ask, page: wanted, model: model) {
-                return ending
-            }
-            if declined { return .outcome(.refused(refusal: .declined)) }
-            // The relay would not come up. The choice is offered again with
-            // the reason under it, rather than dying on a spinner.
-            model.stage = .relayDown
         }
     }
 
@@ -325,7 +347,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         model.stage = .code(code)
         // NOTHING is sent until the person says both screens show the same
         // digits: that is the whole defence against a stand-in page.
-        guard await awaitAnswer() else {
+        guard await awaitAnswer(), lastPick == .agreed else {
             relay.cancel()
             self.relay = nil
             return .outcome(.refused(refusal: .declined))
@@ -335,11 +357,48 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         return await relay.begin(ask)
     }
 
+    /// Nearby, over Bluetooth (spec 075 T041): this phone advertises as a GATT
+    /// peripheral and the page on a computer in the room connects to it.
+    /// `nil` when the radio cannot carry a session — the sheet then shows what
+    /// is missing and offers the other two routes.
+    private func onNearbyDevice(
+        _ ask: ClearSignerAsk, page: String, model: ClearSignerSheetModel
+    ) async -> ClearSignerChannel.Ending? {
+        guard let ble = makeBle(page) else {
+            model.stage = .bleTrouble(.unavailable)
+            return nil
+        }
+        self.ble = ble
+        model.localName = ble.localName
+        model.offScreen = false
+        model.stage = .nearby
+        ble.onForegroundChanged = { [weak model] away in model?.offScreen = away }
+        guard let code = await ble.advertise() else {
+            let trouble = ble.trouble ?? .unavailable
+            ble.cancel()
+            self.ble = nil
+            model.stage = .bleTrouble(trouble)
+            return nil
+        }
+        model.stage = .code(code)
+        // There is no pairing link on this channel and so no `rk`: proximity
+        // and these six digits are the whole defence. Nothing sealed has left
+        // this phone yet, and `confirm()` below is what lets any of it.
+        guard await awaitAnswer(), lastPick == .agreed else {
+            ble.cancel()
+            self.ble = nil
+            return .outcome(.refused(refusal: .declined))
+        }
+        ble.confirm()
+        conversation = ble
+        model.stage = .waiting
+        return await ble.begin(ask)
+    }
+
     // MARK: - Waiting for the person
 
-    /// What the last answered question picked — `true` for this device, and
-    /// `true` for a confirmed code. `nil` when it was cancelled.
-    private var lastPick: Bool?
+    /// What the last answered question picked. `nil` when it was cancelled.
+    private var lastPick: ClearSignerPick?
 
     /// Suspends until a button on the sheet answers. `false` means the person
     /// cancelled rather than chose; WHAT they chose is `lastPick`.
@@ -350,7 +409,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         }
     }
 
-    private func finishAsk(pick: Bool?) {
+    private func finishAsk(pick: ClearSignerPick?) {
         guard let continuation = asking else { return }
         asking = nil
         lastPick = pick
@@ -371,6 +430,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         declined = true
         channel?.cancel()
         relay?.cancel()
+        ble?.cancel()
     }
 
     /// The same URL, the same port, the same token: the core accepts a new

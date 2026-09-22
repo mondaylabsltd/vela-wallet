@@ -201,7 +201,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
     func send(_ ask: ClearSignerAsk) async -> ClearSignerChannel.Ending {
         guard !ended, let socket, let session else { return .unavailable }
         let id = nextId()
-        guard let intent = Self.intent(ask, id: id, n: next()),
+        guard let intent = ClearSignerAnswer.intent(ask, id: id, n: next()),
               await socket.send(.binary(session.seal(plaintext: intent, msgId: nil)))
         else { return .unavailable }
         return await answer(to: ask, id: id)
@@ -212,7 +212,7 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         guard !ended else { return }
         ended = true
         if let socket, let session {
-            let bye = Self.body(["v": 1, "t": "bye", "n": next(), "reason": "done"])
+            let bye = ClearSignerAnswer.body(["v": 1, "t": "bye", "n": next(), "reason": "done"])
             let sealed = session.seal(plaintext: bye ?? Data(), msgId: nil)
             Task { [socket] in
                 _ = await socket.send(.binary(sealed))
@@ -235,20 +235,6 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
         return counter
     }
 
-    /// `{v,t:"intent",n,id,intent,context}` — the request the core built,
-    /// unwrapped into the session's envelope.
-    private static func intent(_ ask: ClearSignerAsk, id: String, n: UInt64) -> Data? {
-        let requestJson = switch ask {
-        case .ceremony(let request, _, _): request
-        case .signature(let request, _, _): request
-        }
-        guard let request = json(requestJson) else { return nil }
-        var message: [String: Any] = ["v": 1, "t": "intent", "n": n, "id": id]
-        message["intent"] = request["intent"] ?? NSNull()
-        message["context"] = request["context"] ?? NSNull()
-        return body(message)
-    }
-
     /// Wait for the page's answer to `id`, opened and judged by the core.
     private func answer(to ask: ClearSignerAsk, id: String) async -> ClearSignerChannel.Ending {
         guard let socket, let session else { return .unavailable }
@@ -269,70 +255,22 @@ final class ClearSignerRelayConversation: ClearSignerConversation {
                 else { continue }
                 if let n = (message["n"] as? NSNumber)?.uint64Value, n > counter { counter = n }
                 guard message["id"] as? String == id || message["t"] as? String == "bye" else { continue }
-                if let verdict = judge(message, ask: ask) { return verdict }
+                if let verdict = ClearSignerAnswer.verdict(message, ask: ask, signerUrl: signerUrl) {
+                    return verdict
+                }
             }
         }
         return .unavailable
     }
 
-    /// The core's verdict on one answer; `nil` for a message that is not one.
-    private func judge(_ message: [String: Any], ask: ClearSignerAsk) -> ClearSignerChannel.Ending? {
-        switch message["t"] as? String {
-        case "bye":
-            // The page hung up holding the request: closed without signing.
-            return refusal(.declined, for: ask)
-        case "error":
-            switch ask {
-            case .ceremony(_, let operationJson, let memberChallenge):
-                // The core reads an `error` envelope itself, so the page's
-                // own code reaches the machine unedited.
-                return .ceremony(clearSignerVerifyCeremony(
-                    operationJson: operationJson, answerJson: Self.body(message).map(Self.text) ?? "{}",
-                    signerOrigin: signerUrl, expectedMemberChallenge: memberChallenge
-                ))
-            case .signature:
-                return refusal(Self.refusal(code: message["code"] as? String ?? ""), for: ask)
-            }
-        case "result":
-            switch ask {
-            case .ceremony(_, let operationJson, let memberChallenge):
-                return .ceremony(clearSignerVerifyCeremony(
-                    operationJson: operationJson, answerJson: Self.body(message).map(Self.text) ?? "{}",
-                    signerOrigin: signerUrl, expectedMemberChallenge: memberChallenge
-                ))
-            case .signature(_, let digest, let keys):
-                guard let result = message["result"] as? [String: Any],
-                      let json = Self.body(result).map(Self.text)
-                else { return refusal(.malformed(detail: "no result"), for: ask) }
-                return .outcome(clearSignerVerify(resultJson: json, digest: digest, keys: keys))
-            }
-        default:
-            return nil
-        }
-    }
-
-    private func refusal(_ refusal: ClearSignerRefusal, for ask: ClearSignerAsk) -> ClearSignerChannel.Ending {
-        switch ask {
-        case .ceremony: .ceremony(.refused(refusal: refusal))
-        case .signature: .outcome(.refused(refusal: refusal))
-        }
-    }
-
-    /// The page's `code`, in the core's vocabulary — `clear_signer::refusal`,
-    /// which the bindings do not export on its own. A signing answer is the
-    /// only place this shell needs it: a ceremony's `error` envelope goes to
-    /// `clearSignerVerifyCeremony`, which reads the code itself.
+    /// The page's `code`, in the core's vocabulary. Kept as a name here
+    /// because it is the relay's own vocabulary too; the one implementation
+    /// is `ClearSignerAnswer`'s, shared with the BLE peripheral.
     static func refusal(code: String) -> ClearSignerRefusal {
-        code.isEmpty || code == "user_rejected" ? .declined : .pageRefused(code: code)
+        ClearSignerAnswer.refusal(code: code)
     }
 
     private static func json(_ text: String) -> [String: Any]? {
-        (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+        ClearSignerAnswer.json(text)
     }
-
-    private static func body(_ object: Any) -> Data? {
-        try? JSONSerialization.data(withJSONObject: object)
-    }
-
-    private static func text(_ data: Data) -> String { String(decoding: data, as: UTF8.self) }
 }
