@@ -794,6 +794,147 @@ mod tests {
         assert!(!relay_said_left("not json"));
     }
 
+    /// The same pairing against a **real relay**, when one is running.
+    ///
+    /// Opt-in: `VELA_RELAY_URL=ws://127.0.0.1:8787` and
+    /// `cargo test relay_conformance -- --ignored`. Start one with
+    /// `cd rust && PORT=8787 cargo run -p vela-relay-server`.
+    ///
+    /// The fake relay above is faithful to relay.md §1 by construction, which
+    /// means it cannot catch a disagreement about the contract. This can: the
+    /// room id this shell writes, the role in the query, `joined` arriving only
+    /// once both ends are in, and both kinds of frame reaching the other end
+    /// byte for byte are all the RELAY's to get right, and it is the one thing
+    /// here nobody on this side controls.
+    #[test]
+    #[ignore = "needs a relay: VELA_RELAY_URL=ws://127.0.0.1:8787"]
+    fn relay_conformance_against_a_real_relay() {
+        let Ok(relay) = std::env::var("VELA_RELAY_URL") else {
+            eprintln!("VELA_RELAY_URL is not set — see this test's note");
+            return;
+        };
+        let cases = vectors();
+        let case = cases["cases"]
+            .as_array()
+            .and_then(|cases| cases.iter().find(|case| case["name"] == "relay-a"))
+            .unwrap_or_else(|| unreachable!("the relay-a vector"));
+        let seed = seeded(case);
+        let room = clear_signer::relay_room(&seed.room);
+        let expected_code = case["code"].as_str().unwrap_or_default().to_owned();
+        let expected_rk = case["rk"].as_str().unwrap_or_default().to_owned();
+        let (channel, _changed) = Channel::new();
+
+        // The person: confirm the six digits once both screens have them.
+        let watcher = {
+            let channel = Arc::clone(&channel);
+            let code = expected_code.clone();
+            std::thread::spawn(move || {
+                for _ in 0..2400 {
+                    if let Some(pairing) = channel.pairing()
+                        && pairing.code.as_deref() == Some(code.as_str())
+                    {
+                        channel.confirm_code();
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            })
+        };
+
+        let paired = {
+            let (channel, relay) = (Arc::clone(&channel), relay.clone());
+            std::thread::spawn(move || {
+                open(
+                    "https://sign.getvela.app/",
+                    &relay,
+                    seed,
+                    &channel,
+                    Instant::now() + Duration::from_secs(30),
+                )
+            })
+        };
+
+        // The page's end of the same room, on the same real relay.
+        let url = clear_signer::relay_room_url(&relay, &room, "signer");
+        let (mut socket, response) = tungstenite::connect(&url)
+            .unwrap_or_else(|e| unreachable!("the relay refused {url}: {e}"));
+        assert_eq!(response.status().as_u16(), 101, "{url}");
+        let read = |socket: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>| loop {
+            match socket.read() {
+                Ok(Message::Ping(_) | Message::Pong(_)) => {}
+                Ok(message) => return message,
+                Err(error) => unreachable!("the relay stopped talking: {error}"),
+            }
+        };
+        let Message::Text(joined) = read(&mut socket) else {
+            unreachable!("the relay's first frame is text");
+        };
+        assert_eq!(joined, r#"{"v":1,"relay":"joined"}"#, "relay.md §1");
+
+        let signer = Handshake::new(
+            &bytes::<32>(case["signer"]["secretHex"].as_str().unwrap_or_default()),
+            bytes::<16>(case["signer"]["nonceHex"].as_str().unwrap_or_default()),
+            Role::Signer,
+        )
+        .unwrap_or_else(|e| unreachable!("{e:?}"));
+        let _ = socket.send(Message::text(signer.hello(None)));
+        let _ = socket.flush();
+        let Message::Text(hello) = read(&mut socket) else {
+            unreachable!("the wallet's hello is a text frame");
+        };
+        // The page's own check: a requester whose key does not hash to the
+        // link's `rk` is refused before anything is derived.
+        let mut signer = signer
+            .complete(&hello, Label::Relay, Some(&expected_rk))
+            .unwrap_or_else(|e| unreachable!("the wallet's hello: {e:?}"));
+        assert_eq!(signer.code(), expected_code);
+
+        let mut line = paired
+            .join()
+            .unwrap_or_else(|_| unreachable!("the pairing panicked"))
+            .unwrap_or_else(|refusal| unreachable!("the pairing failed: {refusal:?}"));
+        let _ = watcher.join();
+
+        let id = line.next_id();
+        let answering = std::thread::spawn(move || {
+            let Message::Binary(sealed) = read(&mut socket) else {
+                unreachable!("a request is a binary frame");
+            };
+            let plain = signer
+                .open(&sealed, Tail::Counter)
+                .unwrap_or_else(|e| unreachable!("{e:?}"));
+            let intent: Value =
+                serde_json::from_str(&String::from_utf8_lossy(&plain)).unwrap_or_default();
+            let answer = json!({
+                "v": 1, "t": "result", "n": 2, "id": intent["id"],
+                "assertion": page_assertion(&signing_key(7), &[0x11, 0x22, 0x33], b"vela-signin-1-0123456789abcdef"),
+                "origin": "https://sign.getvela.app",
+            });
+            let _ = socket.send(Message::binary(
+                signer.seal(answer.to_string().as_bytes(), Tail::Counter),
+            ));
+            let _ = socket.flush();
+            socket
+        });
+        let answer = line
+            .ask(
+                &id,
+                &json!({
+                    "intent": { "method": "vela_signIn", "params": [{}], "origin": "" },
+                    "context": { "walletName": "Everyday" },
+                }),
+                &channel,
+                Instant::now() + Duration::from_secs(30),
+            )
+            .unwrap_or_else(|refusal| unreachable!("{refusal:?}"));
+        assert!(answer.get("assertion").is_some(), "{answer}");
+        let mut socket = answering
+            .join()
+            .unwrap_or_else(|_| unreachable!("the page panicked"));
+        line.end();
+        let _ = socket.close(None);
+    }
+
     /// A stray helper the tests above lean on: reading a whole HTTP head.
     #[test]
     fn the_fake_relay_speaks_websocket() {
