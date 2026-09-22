@@ -58,7 +58,7 @@
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress } from '$lib/wallet/identity';
 	import { fill } from '$lib/wallet/messages';
 	import { encodeQr } from '$lib/wallet/qr';
@@ -181,7 +181,7 @@
 
 	const model = $derived.by(() => {
 		if (view === null) return null;
-		const built = buildContactsLive(view, m, avatarSvgForClient, ui, extras);
+		const built = buildContactsLive(view, m, identiconSvgForClient, ui, extras);
 		switch (sheet.kind) {
 			case 'confirm-delete':
 				return {
@@ -227,7 +227,7 @@
 				name,
 				addressDisplay: shortenAddress(sessionView.address),
 				addressFull: sessionView.address,
-				identiconSvg: avatarSvgForClient(sessionView.address, name)
+				identiconSvg: identiconSvgForClient(sessionView.address)
 			}
 		};
 	});
@@ -236,7 +236,7 @@
 	const desktopModel = $derived(
 		view === null
 			? null
-			: buildContactsDesktopLive(view, m, avatarSvgForClient, ui, sidebar, extras)
+			: buildContactsDesktopLive(view, m, identiconSvgForClient, ui, sidebar, extras)
 	);
 
 	/** The import's outcome, in the corpus's words, until acknowledged. */
@@ -252,7 +252,7 @@
 		return {
 			name,
 			address: contact.address,
-			identiconSvg: avatarSvgForClient(contact.address, name),
+			identiconSvg: identiconSvgForClient(contact.address),
 			// The address, encoded — what the receive card does for our own.
 			code: encodeQr(contact.address)
 		};
@@ -735,7 +735,7 @@
 		>
 			{#key sheet.id}
 				<PickList
-					model={memberPickModel(view, sheet.id, m, avatarSvgForClient)}
+					model={memberPickModel(view, sheet.id, m, identiconSvgForClient)}
 					onsave={saveMembers}
 				/>
 			{/key}

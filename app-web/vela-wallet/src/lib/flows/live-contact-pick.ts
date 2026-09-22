@@ -18,7 +18,7 @@ import type { ContactPickModel } from './model';
 export interface ContactPickLiveInputs {
 	view: ContactsView;
 	m: WalletFlowMessages;
-	identicon: (seed: string, name?: string) => string;
+	identicon: (seed: string) => string;
 }
 
 /** The two-disc group swatch cycles the chain palette — decoration, not identity. */
@@ -45,7 +45,7 @@ export function liveContactPick(
 			group: view.groups.find((g) => g.members.some((mb) => mb.address === contact.address))?.name,
 			addressDisplay: shortenAddress(contact.address),
 			addressFull: contact.address,
-			identiconSvg: identicon(contact.address, displayName(contact))
+			identiconSvg: identicon(contact.address)
 		}))
 	};
 }

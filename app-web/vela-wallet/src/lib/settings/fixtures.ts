@@ -1120,14 +1120,6 @@ export function buildMobileState(
 					{ id: 'auto', label: m.appearance.themeAuto, icon: 'monitor' }
 				]
 			},
-			avatar: {
-				label: m.appearance.avatarTitle,
-				selected: 'identicon',
-				segments: [
-					{ id: 'initials', label: m.appearance.avatarInitials },
-					{ id: 'identicon', label: m.appearance.avatarIdenticon }
-				]
-			},
 			// Six stops, standard in the third — `src/constants/text-scale.ts`, which
 			// the boards had rounded to seven.
 			textScale: { label: m.appearance.textScale, steps: 6, index: 2 }
@@ -1264,19 +1256,6 @@ export function buildDesktopState(
 						{ id: 'light', label: m.appearance.themeLight, icon: 'sun' },
 						{ id: 'dark', label: m.appearance.themeDark, icon: 'moon' },
 						{ id: 'auto', label: m.appearance.themeAuto, icon: 'monitor' }
-					]
-				}
-			},
-			avatar: {
-				id: 'avatar',
-				label: m.appearance.avatarTitle,
-				kind: 'segmented',
-				segmented: {
-					label: m.appearance.avatarTitle,
-					selected: 'identicon',
-					segments: [
-						{ id: 'initials', label: m.appearance.avatarInitials },
-						{ id: 'identicon', label: m.appearance.avatarIdenticon }
 					]
 				}
 			}

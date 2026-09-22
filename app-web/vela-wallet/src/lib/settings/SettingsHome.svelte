@@ -335,7 +335,7 @@
 							{/each}
 						{/if}
 
-						<!-- The three appearance controls are not rows: they are the
+						<!-- The two appearance controls are not rows: they are the
 						     control itself, shown inline under 语言 (ST1). -->
 						{#if section.appearanceControls === true}
 							<TextScaleSlider
@@ -346,12 +346,6 @@
 								<SegmentedControl
 									model={model.appearance.theme}
 									onselect={(id) => onprefevent?.({ kind: 'theme', id })}
-								/>
-							</div>
-							<div class="control">
-								<SegmentedControl
-									model={model.appearance.avatar}
-									onselect={(id) => onprefevent?.({ kind: 'avatar', id })}
 								/>
 							</div>
 						{/if}

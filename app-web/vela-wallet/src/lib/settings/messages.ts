@@ -30,9 +30,6 @@ export interface SettingsMessages {
 		themeLight: string;
 		themeDark: string;
 		themeAuto: string;
-		avatarTitle: string;
-		avatarInitials: string;
-		avatarIdenticon: string;
 		textScale: string;
 	};
 	language: {
@@ -422,9 +419,6 @@ export const SETTINGS_KEYS = [
 	'settings.appearance.themeLight',
 	'settings.appearance.themeDark',
 	'settings.appearance.themeAuto',
-	'settings.appearance.avatarTitle',
-	'settings.appearance.avatarInitials',
-	'settings.appearance.avatarIdenticon',
 	'settings.appearance.textScale',
 	'language.title',
 	'language.pickerTitle',

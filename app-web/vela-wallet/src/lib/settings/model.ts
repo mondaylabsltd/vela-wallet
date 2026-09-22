@@ -606,7 +606,7 @@ export interface SettingsHomeModel {
 	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 	keys?: WalletKeysModel;
 	sections: SettingsSectionModel[];
-	appearance: { theme: SegmentedModel; avatar: SegmentedModel; textScale: TextScaleModel };
+	appearance: { theme: SegmentedModel; textScale: TextScaleModel };
 	signOut: { label: string };
 	erase: { title: string; subtitle: string };
 	/** Pages, all pre-built so the state switcher is a pure choice. */
@@ -760,7 +760,6 @@ export interface SettingsDesktopModel {
 		language: FormRowModel;
 		textScale: FormRowModel & { scale: TextScaleModel };
 		theme: FormRowModel & { segmented: SegmentedModel };
-		avatar: FormRowModel & { segmented: SegmentedModel };
 	};
 	localization: {
 		title: string;

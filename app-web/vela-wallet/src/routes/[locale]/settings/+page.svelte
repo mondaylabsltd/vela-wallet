@@ -22,7 +22,7 @@
 	 * - **Live**: the network list, its detail editor and the add-network
 	 *   wizard (024); the display currency (024); the connected sites (027);
 	 *   and, since 028, the theme, the language row, the number / date / time
-	 *   presets, the avatar style and "erase this device".
+	 *   presets and "erase this device".
 	 * - **Still canon data**: the latency figures, the storage accounting and
 	 *   the RPC-provider panel's health — those wait for the features that
 	 *   measure them.
@@ -85,7 +85,7 @@
 	import type { SettingsPrefEvent } from '$lib/settings/pref-events';
 	import { LOCALE_ENDONYMS } from '$lib/settings/fixtures';
 	import type { SettingsNetEvent } from '$lib/settings/net-events';
-	import { avatarSvgForClient } from '$lib/wallet/identicon';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
 	import { balance } from '$lib/wallet/core/balance.svelte';
@@ -107,10 +107,7 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: avatarSvgForClient(
-						view.address,
-						view.accounts[view.active_index]?.account.name ?? ''
-					)
+					identiconSvg: identiconSvgForClient(view.address)
 				}
 			: null
 	);
@@ -267,11 +264,6 @@
 				if (choice !== undefined) preferences.setTheme(choice);
 				return;
 			}
-			case 'avatar':
-				if (event.id === 'initials' || event.id === 'identicon') {
-					preferences.setAvatarStyle(event.id);
-				}
-				return;
 			case 'language': {
 				// `system` unpins and follows the browser again; anything else is a
 				// locale, and on the web a locale is a route.
@@ -407,7 +399,7 @@
 			activeIndex: view.active_index,
 			balances,
 			currency: currency.view,
-			identicon: (address: string, name: string) => avatarSvgForClient(address, name)
+			identicon: identiconSvgForClient
 		};
 	});
 

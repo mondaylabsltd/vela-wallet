@@ -6,17 +6,15 @@
  * place to read to know what every control does — and a component that has to
  * be handed six callbacks does not grow a seventh quietly.
  *
- * Unlike the network events, none of these reaches a core. Theme, language,
- * the three formats and the avatar style are shell state with no rule behind
- * them (research D48); `erase` is the exception that has a rule, and it is a
+ * Unlike the network events, none of these reaches a core. Theme, language
+ * and the three formats are shell state with no rule behind them
+ * (research D48); `erase` is the exception that has a rule, and it is a
  * SHELL rule — a namespace sweep over three key-value stores, which no core has
  * a port to perform.
  */
 export type SettingsPrefEvent =
 	/** A segment id from the drawn control: `light` / `dark` / `auto`. */
 	| { kind: 'theme'; id: string }
-	/** `initials` or `identicon`. */
-	| { kind: 'avatar'; id: string }
 	/** `system`, or a shipped locale code. */
 	| { kind: 'language'; id: string }
 	/** The slider's stop, 0-based — `TEXT_SCALE_LEVELS` names what it means. */
