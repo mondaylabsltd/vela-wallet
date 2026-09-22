@@ -79,6 +79,9 @@ struct VelaStore {
         static let signMethod = "vela.signMethod"
         /// The Clear Signer page; absent is the official one.
         static let clearSignerUrl = "vela.clearSignerUrl"
+        /// Spec 075: the relay a cross-device pairing goes through; absent is
+        /// the official one.
+        static let clearSignerRelay = "vela.clearSignerRelay"
 
         // Owned by the read path (spec 051).
         /// `address → { usd, at }`, 24-hour TTL. The last total the wallet

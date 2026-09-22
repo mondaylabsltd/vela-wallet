@@ -495,10 +495,19 @@ struct SendAccountPort: UserOpSpine.AccountPort {
     func keyRoutesJson(of address: String) async -> String {
         guard let record = await record(for: address) else { return "[]" }
         let routes = (record["keys"] as? [[String: Any]] ?? []).map { key -> [String: String] in
-            [
+            var route = [
                 "credential_id": key["credential_id"] as? String ?? key["credentialId"] as? String ?? "",
                 "transports": key["transports"] as? String ?? "",
             ]
+            // Spec 075: a key minted or found through the Clear Signer lives
+            // behind that page, and `sign_route` will not find its way back
+            // there without this. Dropping it here would silently send the
+            // ceremony to a platform sheet that cannot see the key.
+            if let origin = key["signer_origin"] as? String ?? key["signerOrigin"] as? String,
+               !origin.isEmpty {
+                route["signer_origin"] = origin
+            }
+            return route
         }
         let data = (try? JSONSerialization.data(withJSONObject: routes)) ?? Data("[]".utf8)
         return String(decoding: data, as: UTF8.self)

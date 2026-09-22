@@ -279,7 +279,15 @@ struct ClearSignerChannelTests {
         #expect(assertion.signatureDer.first == 0x30, "DER, as the Safe envelope takes")
         let envelope = try eip1271Signature(assertion: assertion, credentialId: credentialIdHex, keys: fixture.keys)
         #expect(!envelope.isEmpty)
-        // The conversation is over and the page is told so.
+        // Spec 075: an answer no longer ends the session — the page waits,
+        // open, for the flow's next request. The FLOW's end is what closes
+        // it, and the page is told so with a `bye` before the close frame.
+        channel.end()
+        let bye = try #require(await page.frame())
+        #expect(bye.opcode == 0x1)
+        let byeMessage = (try? JSONSerialization.jsonObject(with: bye.payload)) as? [String: Any]
+        #expect(byeMessage?["t"] as? String == "bye")
+        #expect(byeMessage?["reason"] as? String == "done")
         #expect(await page.frame()?.opcode == 0x8)
     }
 
@@ -441,15 +449,17 @@ struct ClearSignerChannelTests {
 @MainActor
 final class ScriptedClearSigner: ClearSignerPort {
     var answer: (_ digest: Data) -> ClearSignerChannel.Ending
-    private(set) var asked: [(request: [String: Any], digest: Data)] = []
+    private(set) var asked: [(request: [String: Any], digest: Data, page: String?)] = []
 
     init(answer: @escaping (_ digest: Data) -> ClearSignerChannel.Ending) {
         self.answer = answer
     }
 
-    func sign(requestJson: String, digest: Data, keys: [WalletKeyRecord]) async -> ClearSignerChannel.Ending {
+    func sign(
+        requestJson: String, digest: Data, keys: [WalletKeyRecord], signerOrigin: String?
+    ) async -> ClearSignerChannel.Ending {
         let request = (try? JSONSerialization.jsonObject(with: Data(requestJson.utf8))) as? [String: Any] ?? [:]
-        asked.append((request, digest))
+        asked.append((request, digest, signerOrigin))
         return answer(digest)
     }
 }

@@ -78,17 +78,26 @@ final class OnboardingExecutor {
     private let registry: RegistryClient
     private let store: AccountStore
     private weak var deps: OnboardingExecutorDeps?
+    /// Spec 075: the fourth route. `nil` on a surface with no screen to open
+    /// a page on (previews, the gallery), where choosing it fails closed.
+    private let clearSigner: ClearSignerCeremonyPort?
+    /// The wallet the page's card names.
+    private let walletName: () -> String
 
     init(
         passkey: PasskeyExecutor,
         registry: RegistryClient,
         store: AccountStore,
-        deps: OnboardingExecutorDeps
+        deps: OnboardingExecutorDeps,
+        clearSigner: ClearSignerCeremonyPort? = nil,
+        walletName: @escaping () -> String = { "" }
     ) {
         self.passkey = passkey
         self.registry = registry
         self.store = store
         self.deps = deps
+        self.clearSigner = clearSigner
+        self.walletName = walletName
     }
 
     /// Perform one operation and return the result JSON the core is waiting for.
@@ -107,6 +116,9 @@ final class OnboardingExecutor {
             return ["type": "passkey_support", "supported": passkey.supported()]
 
         case "register_passkey":
+            if let answer = try await onTheClearSigner(operation) {
+                return ["type": "passkey_registered", "registration": answer, "now_iso": Self.nowISO()]
+            }
             let registration = try await passkey.register(
                 name: operation["name"] as? String ?? "",
                 excludeCredentialIds: operation["exclude_credential_ids"] as? [String] ?? [],
@@ -125,6 +137,9 @@ final class OnboardingExecutor {
             ]
 
         case "sign_proof":
+            if let answer = try await onTheClearSigner(operation) {
+                return ["type": "proof_signed", "assertion": answer, "now_iso": Self.nowISO()]
+            }
             let assertion = try await passkey.assert(
                 challenge: Self.challenge(for: operation["purpose"] as? String ?? ""),
                 credentialIdHex: operation["credential_id"] as? String,
@@ -158,6 +173,14 @@ final class OnboardingExecutor {
                 attestation: operation["attestation_hex"] as? String ?? "",
                 rpId: passkey.relyingPartyId
             )
+            // Spec 075: the page fetches its own challenge for the same
+            // inputs and the core demands the two be EQUAL — which is why
+            // the bytes the wallet fetched ride along.
+            if let answer = try await onTheClearSigner(
+                operation, memberChallenge: try fromHex(s: Self.stripHex(challenge))
+            ) {
+                return ["type": "member_proof_signed", "proof": try Self.memberProof(answer)]
+            }
             let assertion = try await passkey.assert(
                 challenge: try fromHex(s: Self.stripHex(challenge)),
                 credentialIdHex: operation["credential_id"] as? String,
@@ -175,6 +198,9 @@ final class OnboardingExecutor {
             return ["type": "legacy_name", "name": name ?? NSNull()]
 
         case "authenticate_passkey":
+            if let answer = try await onTheClearSigner(operation) {
+                return ["type": "passkey_authenticated", "assertion": answer, "now_iso": Self.nowISO()]
+            }
             let assertion = try await passkey.assert(
                 challenge: PasskeyExecutor.random(Self.challengeBytes),
                 credentialIdHex: nil,
@@ -305,8 +331,21 @@ final class OnboardingExecutor {
                     network: false
                 )
             }
+            let bytes = try fromHex(s: Self.stripHex(memberChallenge))
+            // Spec 075: a member that lives behind a signer page signs there,
+            // on the page the CORE named for it — never on whichever page
+            // Settings happens to hold, and never on a platform sheet that
+            // cannot see the key. `member.signer_origin` is the whole answer;
+            // this end does not look the key up.
+            if let answer = try await onTheClearSigner(
+                Self.memberProofOperation(member, groupPublicKey: groupPublicKey),
+                memberChallenge: bytes
+            ) {
+                proven.append(ProvenMember(member: member, proof: try Self.memberProof(answer)))
+                continue
+            }
             let assertion = try await passkey.assert(
-                challenge: try fromHex(s: Self.stripHex(memberChallenge)),
+                challenge: bytes,
                 credentialIdHex: member.credentialIdHex,
                 method: method
             )
@@ -340,6 +379,84 @@ final class OnboardingExecutor {
             throw RegistryFailure(message: "register was accepted without a task id", network: false)
         }
         try await registry.awaitTask(id: id)
+    }
+
+    // MARK: - Spec 075: the Clear Signer as a passkey route
+
+    /// Runs `operation` on the Clear Signer when that is the route the person
+    /// chose, and answers the core's own `Registration` / `Assertion` as the
+    /// object the shell result carries. `nil` means "not this route" and the
+    /// caller goes on to the OS sheet.
+    ///
+    /// The whole operation is handed over verbatim: `clearSignerCeremonyRequest`
+    /// reads the fields it needs out of the same wire JSON the machine sent,
+    /// so no field is copied here and none can be copied wrongly.
+    private func onTheClearSigner(
+        _ operation: [String: Any], memberChallenge: Data? = nil
+    ) async throws -> [String: Any]? {
+        guard Self.routesToTheClearSigner(operation) else { return nil }
+        guard let clearSigner else {
+            // Chosen where no page can be opened: fail closed rather than
+            // silently signing with something else.
+            throw PasskeyFailure(kind: .notSupported, message: "The Clear Signer cannot be opened here.")
+        }
+        let step = await clearSigner.ceremony(
+            operationJson: CoreJSON.string(operation),
+            walletName: walletName(),
+            registry: await registry.base(),
+            expectedMemberChallenge: memberChallenge,
+            // A key that already exists names the page it lives behind; a
+            // key being created has none yet and opens the one from Settings.
+            page: operation["signer_origin"] as? String
+        )
+        switch step {
+        case .registered(let json), .asserted(let json):
+            return try CoreJSON.object(json)
+        case .failed(let kind, let message):
+            throw PasskeyFailure(kind: kind, message: message ?? "")
+        }
+    }
+
+    /// Whether this operation's route is the Clear Signer — the ONE branch
+    /// this file makes for it, and the only one worth testing on its own: the
+    /// negative case must not be checked by RUNNING the other route, because
+    /// the other route raises the system passkey sheet and a unit test has
+    /// nobody to answer it.
+    static func routesToTheClearSigner(_ operation: [String: Any]) -> Bool {
+        KeyMethod(rawValue: operation["method"] as? String ?? "") == .clearSigner
+    }
+
+    /// A `sign_member_proof` for one publish member, in the wire shape
+    /// `clear_signer::ceremony` reads — the page then asks the registry for
+    /// the challenge these same inputs bind, and the core demands it match the
+    /// one the wallet fetched.
+    ///
+    /// `method` is the member's own route rather than the publish's: a set can
+    /// mix, and only a member the core named a page for goes to a page.
+    static func memberProofOperation(
+        _ member: PublishMember, groupPublicKey: String
+    ) -> [String: Any] {
+        [
+            "type": "sign_member_proof",
+            "credential_id": member.credentialIdHex,
+            "public_key_hex": member.publicKeyHex,
+            "attestation_hex": member.attestationHex,
+            "transports": member.transports,
+            "method": member.signerOrigin.isEmpty ? "" : "clear_signer",
+            "group_public_key_hex": groupPublicKey,
+            "signer_origin": member.signerOrigin,
+        ]
+    }
+
+    /// The core's `Assertion` JSON, as the registry proof the machine wants.
+    private static func memberProof(_ assertion: [String: Any]) throws -> [String: Any] {
+        try CoreJSON.object(
+            try registryBuildMemberProof(
+                authenticatorDataHex: assertion["authenticator_data_hex"] as? String ?? "",
+                clientDataJsonHex: assertion["client_data_json_hex"] as? String ?? "",
+                signatureDerHex: assertion["signature_der_hex"] as? String ?? ""
+            )
+        )
     }
 
     private static func memberProof(_ assertion: Assertion) throws -> [String: Any] {

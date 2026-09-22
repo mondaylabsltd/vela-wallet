@@ -49,10 +49,18 @@ enum SubmitLabel: String, Decodable, CaseIterable {
 /// The CHOICE, not the report: `CreateKeyRow` separately carries what the
 /// authenticator said about itself, and the two can legitimately disagree. The
 /// ceremony follows the choice; the row's provider line shows the report.
+///
+/// Spec 075 adds a FOURTH, and it is a peer of the other three rather than a
+/// special case: the Clear Signer is our own passkey route — a page that shows
+/// what is being signed and runs the ceremony itself — offered wherever "this
+/// device", "a nearby device" and "a security key" are. `allCases` is what the
+/// create and sign-in choosers list, so it is also what makes it appear on
+/// both of them.
 enum KeyMethod: String, Decodable, CaseIterable {
     case platform
     case hybrid
     case securityKey = "security_key"
+    case clearSigner = "clear_signer"
 }
 
 /// `SessionRoute` — where the app is allowed to be.

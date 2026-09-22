@@ -53,6 +53,38 @@ extension UserOpSpine.AccountPort {
     func name(of address: String) async -> String? { nil }
 }
 
+/// `wallet_keys::SignRoute` — where one signing ceremony goes.
+///
+/// `signer_origin` is `skip_serializing_if = "String::is_empty"` on the Rust
+/// side, so it is ABSENT rather than empty on every route but the Clear
+/// Signer's. `decodeIfPresent` is what keeps a wire that grows a field from
+/// failing to decode on a shell that predates it — the rule every mirror in
+/// this app follows.
+struct SignRouteWire: Decodable, Equatable {
+    let credentialId: String
+    let transports: String
+    /// `platform` | `hybrid` | `security_key` | `clear_signer`.
+    let method: String
+    /// Spec 075: the page a Clear Signer key lives behind. Empty means the
+    /// person's page from Settings.
+    let signerOrigin: String
+
+    /// Spelled out because a hand-written `init(from:)` suppresses the
+    /// synthesized set. The names are the decoder's post-`convertFromSnakeCase`
+    /// ones, which is the strategy every mirror in this app decodes with.
+    private enum CodingKeys: String, CodingKey {
+        case credentialId, transports, method, signerOrigin
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        credentialId = try values.decodeIfPresent(String.self, forKey: .credentialId) ?? ""
+        transports = try values.decodeIfPresent(String.self, forKey: .transports) ?? ""
+        method = try values.decodeIfPresent(String.self, forKey: .method) ?? ""
+        signerOrigin = try values.decodeIfPresent(String.self, forKey: .signerOrigin) ?? ""
+    }
+}
+
 @MainActor
 final class UserOpSpine {
 
@@ -427,8 +459,13 @@ final class UserOpSpine {
         challenge: Data,
         buildRequest: (_ accountName: String?) throws -> String?
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
-        guard signMethod() == Self.clearSignerMethod else {
-            let assertion = try await assert(account: account, pinned: pinned, challenge: challenge)
+        // The route is the CORE's, for `auto` as much as for a name the
+        // person picked (spec 075): a key minted behind a signer page is
+        // reachable nowhere else, so `auto` answers `clear_signer` for it and
+        // says which page. The person's own pick reaches the same place.
+        let route = await route(account: account)
+        guard signMethod() == Self.clearSignerMethod || route?.method == Self.clearSignerMethod else {
+            let assertion = try await assert(account: account, pinned: pinned, route: route, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
         guard let clearSigner else {
@@ -438,11 +475,20 @@ final class UserOpSpine {
         guard let request = try? buildRequest(accountName) else {
             throw other("The Clear Signer's request could not be built.")
         }
-        switch await clearSigner.sign(requestJson: request, digest: challenge, keys: keys) {
+        let ending = await clearSigner.sign(
+            requestJson: request, digest: challenge, keys: keys,
+            // Empty means the page from Settings; a key behind somebody's own
+            // page names it, and that is the one that opens.
+            signerOrigin: route?.signerOrigin
+        )
+        switch ending {
         case .outcome(.accepted(let credentialIdHex, let assertion)):
             return (assertion, credentialIdHex)
         case .outcome(.refused(let refusal)):
             throw Refused(failure: .clearSigner(ClearSignerNotice(refusal)))
+        case .ceremony:
+            // A signature was asked for; a ceremony verdict is a shell bug.
+            throw other("The Clear Signer answered the wrong kind of request.")
         case .timedOut:
             throw Refused(failure: .clearSigner(.timeout))
         case .unavailable:
@@ -475,28 +521,34 @@ final class UserOpSpine {
         )
     }
 
-    /// The credential a ceremony is pinned to, its transports and method: the
-    /// person's choice when they made one, the stored route otherwise.
-    private func route(account: String, first: WalletKeyRecord) async -> (credentialId: String, transports: String, method: KeyMethod) {
-        let chosen = signMethod()
-        if chosen != "auto",
-           let json = signRoute(deviceKeysJson: await accounts.keyRoutesJson(of: account), method: chosen),
-           let picked = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
-           let credential = picked["credential_id"] as? String, !credential.isEmpty,
-           let method = (picked["method"] as? String).flatMap(KeyMethod.init(rawValue:))
-        {
-            return (credential, picked["transports"] as? String ?? "", method)
-        }
-        let stored = await accounts.routing(of: account)
-        return (first.credentialId, stored.transports, stored.method)
+    /// `wallet_keys::sign_route` for the "Sign with" in force: the credential
+    /// a ceremony is pinned to, how it is reached, and — for a Clear Signer
+    /// key — the page it lives behind. `nil` is "do what you always did".
+    ///
+    /// Asked for `auto` too since spec 075: a key created or found through
+    /// the Clear Signer routes itself back there, which is the whole of
+    /// "a key that lives behind a page signs through it".
+    private func route(account: String) async -> SignRouteWire? {
+        guard let json = signRoute(
+            deviceKeysJson: await accounts.keyRoutesJson(of: account), method: signMethod()
+        ) else { return nil }
+        return try? CoreJSON.decoder.decode(SignRouteWire.self, from: Data(json.utf8))
     }
 
     private func assert(
         account: String,
         pinned: WalletKeyRecord,
+        route: SignRouteWire?,
         challenge: Data
     ) async throws -> Assertion {
-        let routing = await route(account: account, first: pinned)
+        let routing: (credentialId: String, transports: String, method: KeyMethod)
+        if let route, !route.credentialId.isEmpty,
+           let method = KeyMethod(rawValue: route.method), method != .clearSigner {
+            routing = (route.credentialId, route.transports, method)
+        } else {
+            let stored = await accounts.routing(of: account)
+            routing = (pinned.credentialId, stored.transports, stored.method)
+        }
         do {
             return try await signer().sign(
                 challenge: challenge,

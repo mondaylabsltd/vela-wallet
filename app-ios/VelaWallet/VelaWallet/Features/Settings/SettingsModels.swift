@@ -48,6 +48,9 @@ enum SettingsOverlay: Equatable, Identifiable {
     case signWith
     /// The Clear Signer page (spec 071): an address, saved or refused.
     case signerPage
+    /// The relay a cross-device pairing goes through (spec 075): the same
+    /// sheet, against the other key.
+    case signerRelay
     /// A custom network's bin, asked before it happens (spec 072 FR-010): the
     /// tap used to be a drawing of a bin, and the other shells removed on it.
     case removeNetwork
@@ -542,6 +545,9 @@ struct SettingsScreenModel {
     /// Spec 071: the default "Sign with" and the Clear Signer page.
     var signWithSheet = SelectSheetModel(title: "", rows: [])
     var signerPage: SignerPageModel?
+    /// Spec 075: the relay row's sheet — `SignerPageModel` again, because it
+    /// is the same shape with another value behind it.
+    var relay: SignerPageModel?
     var numberSheet: SelectSheetModel
     var dateSheet: SelectSheetModel
     var timeSheet: SelectSheetModel

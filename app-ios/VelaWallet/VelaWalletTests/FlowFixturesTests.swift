@@ -126,12 +126,23 @@ struct FlowFixturesTests {
         for label in SubmitLabel.allCases {
             #expect(submitLabelToI18n(label).hasPrefix("onboarding."))
         }
+        // Spec 075: the fourth route's two lines come from the SIGNING
+        // namespace on purpose — they are the same sentences the "Sign with"
+        // sheet shows, and one route must not have two pairs of words. Both
+        // namespaces are corpus paths, which is what this checks.
+        let namespaces = ["onboarding.", "componentsUi.signing."]
+        let corpus = { (key: String) in namespaces.contains { key.hasPrefix($0) } }
         for method in KeyMethod.allCases {
-            #expect(providerLineFor(method).hasPrefix("onboarding."))
+            #expect(corpus(providerLineFor(method)))
             let copy = methodCopy(method)
-            #expect(copy.title.hasPrefix("onboarding."))
-            #expect(copy.body.hasPrefix("onboarding."))
+            #expect(corpus(copy.title))
+            #expect(corpus(copy.body))
+            // …and the words are really there, in a real catalog.
+            let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+            #expect(loc.t(copy.title) != copy.title, "\(copy.title) has no zh translation")
+            #expect(loc.t(copy.body) != copy.body, "\(copy.body) has no zh translation")
         }
+        #expect(methodCopy(.clearSigner).title == "componentsUi.signing.clearSignerTitle")
     }
 
     /// Issue #207: a key row's badge claims only what somebody verified, and
