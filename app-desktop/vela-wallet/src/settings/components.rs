@@ -152,6 +152,14 @@ pub fn settings_nav_row(
         .child(icon_img(icons, icon, false, tint, GLYPH_SM))
         .child(
             div()
+                // Truncate inside the pill rather than draw outside it. At
+                // `xlarge` the selected pill's last letter was being painted
+                // past its own white background and over the column divider;
+                // in German the whole label crossed into the panel beside it.
+                .flex_1()
+                .min_w(px(0.))
+                .whitespace_nowrap()
+                .truncate()
                 .text_size(theme::text_row_sub())
                 .text_color(tint)
                 .when(selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))

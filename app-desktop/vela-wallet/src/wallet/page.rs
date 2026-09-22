@@ -69,8 +69,8 @@ use crate::signing::live as signing_live;
 use crate::theme::{
     self, CONTACTS_BODY_PAD_TOP, CONTACTS_BUTTON_H, CONTACTS_HEADER_H, CONTACTS_HERO_AVATAR,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_RAIL_W, GALLERY_BAR_H, SETTINGS_DIALOG_W,
-    SETTINGS_NAV_W, SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W,
-    THIRD_PANEL_W, Theme, ThemeMode, WALLET_PAD_TOP, WALLET_PAD_X,
+    SETTINGS_PANEL_PAD_X, SETTINGS_PANEL_W, SIDEBAR_PAD, SIDEBAR_TOP, SIDEBAR_W, THIRD_PANEL_W,
+    Theme, ThemeMode, WALLET_PAD_TOP, WALLET_PAD_X,
 };
 use crate::wallet::live as wallet_live;
 use crate::wallet::money::{self, SendHost};
@@ -5568,6 +5568,14 @@ impl WalletPage {
             div()
                 .px(px(12.))
                 .pb(px(16.))
+                // One line, truncated if it must be. Wrapping broke
+                // "Einstellungen" into "Einstellung" / "en" at `xlarge` — a
+                // hyphenless break inside a word, which reads as a rendering
+                // fault rather than a long title.
+                .w_full()
+                .min_w(px(0.))
+                .whitespace_nowrap()
+                .truncate()
                 .text_size(theme::text_panel_title())
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme.fg_base)
@@ -5600,7 +5608,7 @@ impl WalletPage {
         }
 
         div()
-            .w(px(SETTINGS_NAV_W))
+            .w(px(theme::settings_nav_w()))
             .h_full()
             .flex_none()
             // `.flex()` is load-bearing, not decoration: without it `h_full`
@@ -6048,7 +6056,13 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(identicon_avatar(&mut self.identicons, &seed, 40.))
+                .child(crate::wallet::components::person_avatar(
+                    theme,
+                    &mut self.identicons,
+                    &seed,
+                    &name,
+                    40.,
+                ))
                 .child(
                     div()
                         .flex_1()

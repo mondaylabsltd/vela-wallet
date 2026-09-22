@@ -157,7 +157,7 @@ pub fn wallet_header(
         .flex()
         .items_center()
         .gap(px(10.))
-        .child(identicon_avatar(identicons, seed, WALLET_AVATAR))
+        .child(person_avatar(theme, identicons, seed, &name, WALLET_AVATAR))
         .child(
             div()
                 .flex()

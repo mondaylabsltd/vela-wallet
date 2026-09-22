@@ -316,6 +316,18 @@ pub const CONTACTS_RAIL_W: f32 = 216.;
 /// reason — it is the same column, doing the same job, one section over.
 pub const SETTINGS_NAV_W: f32 = 216.;
 
+/// The same column, at the person's text size.
+///
+/// This column exists to hold labels and nothing else, so it grows with them.
+/// Left at 216 it could not: at `xlarge` in German,
+/// "Transaktionsgeschwindigkeit" ran out of the column, across the divider and
+/// onto the network list behind it — measured, not imagined. Truncation in the
+/// row is still the backstop; this is what stops it having to.
+#[must_use]
+pub fn settings_nav_w() -> f32 {
+    (SETTINGS_NAV_W * crate::executor::appearance_prefs::text_factor()).round()
+}
+
 /// One row of that column.
 pub const SETTINGS_NAV_ROW_H: f32 = 36.;
 
