@@ -77,13 +77,28 @@ class ClearSignerBleWire(
         class Frame(val bytes: ByteArray) : Incoming
         class Mtu(val mtu: Int) : Incoming
         class Gone(val reason: String) : Incoming
+
+        /**
+         * A message gave up waiting for frames that never came (PROTOCOL §2's
+         * ten seconds). Not an arrival, but the end of one.
+         */
+        data object Dropped : Incoming
     }
 
     private val inbox = Channel<Incoming>(Channel.UNLIMITED)
 
     private val events = object : BlePeripheralEvents {
         override fun onFrame(bytes: ByteArray) {
-            inbox.trySend(Incoming.Frame(bytes))
+            // Dropped rather than queued once this wire is done with: a frame
+            // reaching a session nobody is waiting on is the shape of bug the
+            // T043 pass went looking for.
+            if (over) {
+                VelaLog.event("clearsigner.ble", "a frame arrived after the session ended")
+                return
+            }
+            if (inbox.trySend(Incoming.Frame(bytes)).isFailure) {
+                VelaLog.event("clearsigner.ble", "a frame could not be queued", "bytes" to bytes.size.toString())
+            }
         }
 
         override fun onMtu(mtu: Int) {
@@ -91,6 +106,7 @@ class ClearSignerBleWire(
         }
 
         override fun onGone(reason: String) {
+            VelaLog.event("clearsigner.ble", "the radio says the link is gone", "why" to reason)
             inbox.trySend(Incoming.Gone(reason))
         }
     }
@@ -113,9 +129,17 @@ class ClearSignerBleWire(
         if (session == null) pair()?.let { return it }
         val live = session ?: return ClearSignerAnswer.Cancelled
         val id = nextRequestId()
-        if (!seal(live, envelopes.intent(id, ask.requestJson))) return ClearSignerAnswer.Cancelled
-        val answer = awaitAnswer(live, id) ?: return timedOutOrCancelled()
-        return judgeClearSignerAnswer(ask, answer, signerUrl)
+        VelaLog.event("clearsigner.ble", "sending a request", "id" to id)
+        if (!seal(live, envelopes.intent(id, ask.requestJson))) {
+            VelaLog.event("clearsigner.ble", "the request would not go out", "id" to id)
+            return ClearSignerAnswer.Cancelled
+        }
+        val answer = awaitAnswer(live, id) ?: return timedOutOrCancelled().also {
+            VelaLog.event("clearsigner.ble", "no answer", "id" to id, "verdict" to it.javaClass.simpleName)
+        }
+        val verdict = judgeClearSignerAnswer(ask, answer, signerUrl)
+        VelaLog.event("clearsigner.ble", "verdict", "id" to id, "verdict" to verdict.javaClass.simpleName)
+        return verdict
     }
 
     override fun cancel() {
@@ -155,8 +179,9 @@ class ClearSignerBleWire(
             false
         }
         if (!advertising) {
-            return ClearSignerAnswer.Unreachable("this phone would not advertise")
+            return ClearSignerAnswer.Unreachable("this phone would not advertise", Unreachability.Channel)
         }
+        VelaLog.event("clearsigner.ble", "advertising", "name" to radio.deviceName)
         onAdvertising(radio.deviceName)
 
         // PROTOCOL §3: the central speaks first, in the clear.
@@ -166,8 +191,12 @@ class ClearSignerBleWire(
                 is Incoming.Gone -> return if (cancelled) {
                     ClearSignerAnswer.Cancelled
                 } else {
-                    ClearSignerAnswer.Unreachable(next.reason)
+                    ClearSignerAnswer.Unreachable(next.reason, Unreachability.PeerGone)
                 }
+                // A hello that never finished arriving is a handshake that
+                // cannot happen; waiting out the full clock would tell the
+                // person nothing they can act on.
+                Incoming.Dropped -> return ClearSignerAnswer.TimedOut
                 is Incoming.Mtu -> fitChunk(next.mtu)
                 is Incoming.Frame -> {
                     val message = take(next.bytes) ?: continue
@@ -182,20 +211,30 @@ class ClearSignerBleWire(
             }
         }
 
+        VelaLog.event("clearsigner.ble", "the page said hello")
         if (!sendPlain(handshake.hello(appName.ifEmpty { null }))) {
-            return ClearSignerAnswer.Unreachable("the wallet's hello would not go out")
+            return ClearSignerAnswer.Unreachable(
+                "the wallet's hello would not go out",
+                Unreachability.Channel,
+            )
         }
         // `relay = false` picks the BLE label (`vela-ble/1`), whose AAD binds
         // each message's frame id rather than the session's counter.
         val live = runCatching { handshake.complete(peerHello, false) }.getOrElse { error ->
             VelaLog.failure("clearsigner.ble", "handshake refused", error)
-            return ClearSignerAnswer.Unreachable(error.message ?: "the handshake failed")
+            return ClearSignerAnswer.Unreachable(
+                error.message ?: "the handshake failed",
+                Unreachability.Channel,
+            )
         }
+        VelaLog.event("clearsigner.ble", "the session is open; waiting on the code")
         val confirmed = withTimeoutOrNull(timeoutMs) { confirmCode(live.code()) } ?: false
         if (!confirmed) {
+            VelaLog.event("clearsigner.ble", "the code was not confirmed")
             end()
             return ClearSignerAnswer.Cancelled
         }
+        VelaLog.event("clearsigner.ble", "the codes match; the request may go")
         session = live
         return null
     }
@@ -220,15 +259,54 @@ class ClearSignerBleWire(
     }
 
     /** One frame into the core's reassembler; non-null when a message is whole. */
-    private fun take(frame: ByteArray): ClearSignerBleMessage? = runCatching {
-        // A message whose remaining frames never arrived is dropped rather
-        // than waited out, and said out loud — a half-arrived intent that sat
-        // in memory would come back as somebody else's `msgId` later.
-        for (id in reassembler.sweep(now().toULong())) {
-            VelaLog.event("clearsigner.ble", "a message never completed", "msgId" to (id.toInt() and 0xff).toString())
+    private fun take(frame: ByteArray): ClearSignerBleMessage? {
+        VelaLog.event("clearsigner.ble", "frame in", "bytes" to frame.size.toString())
+        val message = runCatching { reassembler.accept(frame, now().toULong()) }.getOrElse { error ->
+            VelaLog.failure("clearsigner.ble", "a frame could not be taken", error)
+            null
         }
-        reassembler.accept(frame, now().toULong())
-    }.getOrNull()
+        if (message == null) {
+            VelaLog.event("clearsigner.ble", "message still incomplete", "pending" to pendingCount())
+        } else {
+            VelaLog.event(
+                "clearsigner.ble",
+                "message complete",
+                "msgId" to message.msgId.toString(),
+                "sealed" to message.sealed.toString(),
+                "bytes" to message.payload.size.toString(),
+            )
+        }
+        return message
+    }
+
+    /**
+     * PROTOCOL §2's ten seconds, on a clock of its own.
+     *
+     * Sweeping only when the next frame arrives looks sufficient until the
+     * frames that go missing are the LAST ones — and those are exactly the
+     * ones that go missing, because a central writing a long answer without
+     * response can have its tail dropped by its own stack. Then no frame ever
+     * arrives to trigger the sweep, the half-built message sits there, and the
+     * person watches a spinner for five minutes with nothing in the log. The
+     * T043 radio pass is what that looks like from the outside.
+     *
+     * `true` when something was dropped: this end has nothing left to wait for
+     * on the request it is holding.
+     */
+    private fun sweep(): Boolean {
+        val dropped = runCatching { reassembler.sweep(now().toULong()) }.getOrNull() ?: return false
+        for (id in dropped) {
+            VelaLog.event(
+                "clearsigner.ble",
+                "a message never completed",
+                "msgId" to (id.toInt() and 0xff).toString(),
+            )
+        }
+        return dropped.isNotEmpty()
+    }
+
+    private fun pendingCount(): String =
+        runCatching { reassembler.pending().toString() }.getOrDefault("?")
 
     /**
      * One whole message out on `p2c`.
@@ -246,6 +324,13 @@ class ClearSignerBleWire(
             var delivered = false
             while (!delivered) {
                 val frames = runCatching { framer.frames(msgId, payload, sealed) }.getOrNull() ?: break
+                VelaLog.event(
+                    "clearsigner.ble",
+                    "sending frames",
+                    "msgId" to msgId.toString(),
+                    "frames" to frames.size.toString(),
+                    "bytes" to payload.size.toString(),
+                )
                 delivered = frames.all { radio.notify(it) }
                 if (!delivered && !runCatching { framer.halve() }.getOrDefault(false)) {
                     VelaLog.event("clearsigner.ble", "a frame would not go out at the smallest chunk")
@@ -276,14 +361,24 @@ class ClearSignerBleWire(
         while (true) {
             when (val next = receive() ?: return null) {
                 is Incoming.Gone -> {
+                    VelaLog.event("clearsigner.ble", "the link went away while waiting", "why" to next.reason)
                     gone = true
+                    return null
+                }
+                // §2: the answer's last frames never came. Report it now —
+                // the alternative is a spinner with no clock behind it.
+                Incoming.Dropped -> {
+                    VelaLog.event("clearsigner.ble", "the answer never arrived whole", "id" to id)
                     return null
                 }
                 is Incoming.Mtu -> fitChunk(next.mtu)
                 is Incoming.Frame -> {
                     val message = take(next.bytes) ?: continue
                     // The hellos are over; a plaintext message now is noise.
-                    if (!message.sealed) continue
+                    if (!message.sealed) {
+                        VelaLog.event("clearsigner.ble", "a plaintext message after the hellos was dropped")
+                        continue
+                    }
                     val opened = runCatching { live.open(message.payload, message.msgId) }.getOrElse { error ->
                         // A replay, a reflection or a tampered frame. The
                         // session's counters never go backwards, so the only
@@ -292,15 +387,34 @@ class ClearSignerBleWire(
                         gone = true
                         return null
                     }
-                    val json = runCatching { JSONObject(String(opened, Charsets.UTF_8)) }.getOrNull() ?: continue
+                    val json = runCatching { JSONObject(String(opened, Charsets.UTF_8)) }.getOrNull()
+                    if (json == null) {
+                        VelaLog.event("clearsigner.ble", "an opened message was not JSON")
+                        continue
+                    }
+                    val kind = json.optString("t")
+                    VelaLog.event(
+                        "clearsigner.ble",
+                        "message opened",
+                        "t" to kind,
+                        "n" to json.optLong("n", 0).toString(),
+                        "mine" to (json.optString("id") == id).toString(),
+                    )
                     // PROTOCOL §4: `n` only ever rises.
-                    if (!envelopes.accept(json.optLong("n", 0))) continue
-                    when (json.optString("t")) {
+                    if (!envelopes.accept(json.optLong("n", 0))) {
+                        VelaLog.event("clearsigner.ble", "a message whose n did not rise was dropped")
+                        continue
+                    }
+                    when (kind) {
                         "bye" -> {
+                            VelaLog.event("clearsigner.ble", "the page said bye")
                             gone = true
                             return null
                         }
-                        "result", "error" -> if (json.optString("id") == id) return json
+                        "result", "error" -> if (json.optString("id") == id) {
+                            VelaLog.event("clearsigner.ble", "the answer is in", "t" to kind)
+                            return json
+                        }
                         else -> Unit
                     }
                 }
@@ -308,8 +422,27 @@ class ClearSignerBleWire(
         }
     }
 
-    private suspend fun receive(): Incoming? =
-        withTimeoutOrNull(timeoutMs) { runCatching { inbox.receive() }.getOrNull() }
+    /**
+     * The next thing to happen, or `null` when the request's own clock runs
+     * out. Wakes every [SWEEP_TICK_MS] whatever the radio is doing, so
+     * [sweep]'s ten seconds are real rather than dependent on another frame
+     * arriving to notice them.
+     */
+    private suspend fun receive(): Incoming? {
+        val deadline = now() + timeoutMs
+        while (true) {
+            val left = deadline - now()
+            if (left <= 0) return null
+            // `receiveCatching` rather than `receive`: a closed inbox answers
+            // at once instead of throwing, so an ended session leaves this
+            // loop immediately rather than ticking to the deadline.
+            val arrived = withTimeoutOrNull(minOf(left, SWEEP_TICK_MS)) { inbox.receiveCatching() }
+            if (arrived != null) return arrived.getOrNull()
+            // Nothing arrived this tick. Anything half-built and out of time
+            // is dropped now, and the caller is told rather than left waiting.
+            if (sweep()) return Incoming.Dropped
+        }
+    }
 
     /**
      * Nothing came back. A person who cancelled, a page that left and a radio
@@ -324,5 +457,12 @@ class ClearSignerBleWire(
     private companion object {
         /** What BLE promises before a central asks for more. */
         const val DEFAULT_MTU = 23u
+
+        /**
+         * How often a wait wakes to check the reassembler's clock. Short
+         * enough that PROTOCOL §2's ten seconds are honoured within a second,
+         * long enough to cost nothing while nothing is happening.
+         */
+        const val SWEEP_TICK_MS = 1_000L
     }
 }

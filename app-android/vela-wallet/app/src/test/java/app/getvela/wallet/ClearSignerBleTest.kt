@@ -14,6 +14,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -85,6 +88,11 @@ class ClearSignerBleTest {
         relayDown = "the relay is down",
         bluetoothNeeded = "Vela needs Bluetooth permission so the signing page can find this device.",
         bluetoothOff = "Turn Bluetooth on to pair this way.",
+        // Distinct on purpose: these default to each other in production, and
+        // an assertion that passes because two sentences are the same string
+        // would not notice the route picking the wrong one.
+        bluetoothUnsupported = "This device cannot pair this way.",
+        nearbyLost = "The signing page disconnected.",
     )
 
     /** Every key this route renders, in the order the person meets them. */
@@ -112,6 +120,15 @@ class ClearSignerBleTest {
         )
         .put("context", JSONObject().put("chainId", 100))
         .toString()
+
+    /** A clock the tests move by hand, for PROTOCOL §2's ten seconds. */
+    private class TestClock(@Volatile var millis: Long = 1_000_000L) : () -> Long {
+        override fun invoke(): Long = millis
+
+        fun advance(ms: Long) {
+            millis += ms
+        }
+    }
 
     private val repoRoot = File(
         System.getProperty("vela.repo.root")
@@ -277,6 +294,51 @@ class ClearSignerBleTest {
             val answer = withTimeout(5_000L) { asking.await() }
             assertEquals(ClearSignerAnswer.TimedOut, answer)
             wire.end()
+        }
+    }
+
+    // -- an answer whose tail never arrives (T043 defect 1) -------------------
+
+    /**
+     * The radio pass' shape: the page reports it answered, and the wallet
+     * waits for five minutes with nothing in the log.
+     *
+     * A central writing a long answer over `writeValueWithoutResponse` gets an
+     * unacknowledged write — the promise resolves locally whether or not the
+     * bytes reach the air — so its stack can drop the tail and both ends
+     * believe they are done. The half-built message then sits in the
+     * reassembler, and PROTOCOL §2's ten seconds only bite if something
+     * notices them. Sweeping when the NEXT frame arrives cannot notice, since
+     * the missing frames are the last ones: there is no next frame.
+     *
+     * So the wait has a clock of its own, and a dropped message ends the
+     * request instead of outliving the person's patience.
+     */
+    @Test
+    fun `an answer whose last frame never comes ends the request, and says so`() {
+        val clock = TestClock()
+        session(clock = clock) { run ->
+            val intent = run.handshakeAndOpenFirstIntent()
+            run.answerLosingItsTail(intent.getString("id"), "user_rejected")
+            // Nothing else will ever arrive. Before the clock moves, the wire
+            // is still entitled to wait.
+            // A clock that RUNS, rather than one jump: the message's ten
+            // seconds start when its first frame lands, and the wire may not
+            // have taken that frame yet when a single jump would have fired.
+            val answer = withTimeout(20_000L) {
+                val ticking = launch {
+                    while (isActive) {
+                        clock.advance(2_000L)
+                        delay(50)
+                    }
+                }
+                try {
+                    run.answered()
+                } finally {
+                    ticking.cancel()
+                }
+            }
+            assertEquals(ClearSignerAnswer.TimedOut, answer)
         }
     }
 
@@ -473,6 +535,74 @@ class ClearSignerBleTest {
         Unit
     }
 
+    /**
+     * T043 defect 2: on the nearby route the wallet said "the relay could not
+     * be reached" and advised switching to a route the person had not chosen.
+     * The relay was never involved — only the words were.
+     */
+    @Test
+    fun `a Bluetooth link that drops is not told as a relay that is down`() = runBlocking {
+        val host = FakeHost(BleReadiness.Ready)
+        val channel = channel(host = host)
+        val asking = scope.async(Dispatchers.Default) {
+            runCatching { channel.sign("{}", ByteArray(32), emptyList()) }
+        }
+        withTimeout(4_000L) { channel.state.first { it is ClearSignerChannel.State.Where } }
+        channel.chooseWhere(ClearSignerChannel.Route.Nearby)
+        withTimeout(4_000L) { channel.state.first { it is ClearSignerChannel.State.Nearby } }
+        host.radio.gone("the page disconnected")
+
+        val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
+        assertTrue("$failure", failure is PasskeyFailure)
+        assertEquals("the pairing dropped, and the sentence says so", WORDS.nearbyLost, failure!!.message)
+        assertNotEquals("nothing here went near a relay", WORDS.relayDown, failure.message)
+        assertEquals(WORDS.nearbyLost, channel.notice.value)
+    }
+
+    @Test
+    fun `a radio that will not advertise is told as a phone that cannot pair this way`() = runBlocking {
+        val host = FakeHost(BleReadiness.Ready, startable = false)
+        val channel = channel(host = host)
+        val asking = scope.async(Dispatchers.Default) {
+            runCatching { channel.sign("{}", ByteArray(32), emptyList()) }
+        }
+        withTimeout(4_000L) { channel.state.first { it is ClearSignerChannel.State.Where } }
+        channel.chooseWhere(ClearSignerChannel.Route.Nearby)
+        val failure = withTimeout(6_000L) { asking.await() }.exceptionOrNull()
+        assertEquals(WORDS.bluetoothUnsupported, (failure as PasskeyFailure).message)
+        assertNotEquals(WORDS.relayDown, failure.message)
+    }
+
+    /**
+     * T043 defect 1's other half: a peripheral outliving the wire that
+     * attached to it. A frame delivered after a session ended must not be
+     * taken as an answer — and must not be taken INSTEAD of one, which is how
+     * a waiting wire hears nothing while the page believes it was heard.
+     */
+    @Test
+    fun `a frame arriving after the session ended changes nothing`() {
+        val radio = FakeRadio()
+        val page = page()
+        runBlocking {
+            val wire = wire(radio, timeoutMs = 2_000L) { true }
+            val asking = async(Dispatchers.Default) { wire.ask(signature()) }
+            framesFor(page.hello, sealed = false).forEach { radio.deliver(it) }
+            radio.await() ?: error("the wallet did not answer the hello")
+            wire.cancel()
+            wire.end()
+            assertEquals(ClearSignerAnswer.Cancelled, withTimeout(4_000L) { asking.await() })
+
+            // The radio is stopped and the wire is done; late frames are noise.
+            assertTrue(radio.awaitStop())
+            framesFor(page.hello, sealed = false).forEach { radio.deliver(it) }
+            assertEquals(
+                "an ended session answers nothing more",
+                ClearSignerAnswer.Cancelled,
+                withTimeout(4_000L) { wire.ask(signature()) },
+            )
+        }
+    }
+
     private fun channel(host: ClearSignerBleHost?) = ClearSignerChannel(
         signerUrl = { "https://sign.getvela.app/" },
         openPage = { false },
@@ -483,9 +613,12 @@ class ClearSignerBleTest {
     )
 
     /** The platform, with a scripted answer (or two) about the radio. */
-    private class FakeHost(vararg answers: BleReadiness) : ClearSignerBleHost {
+    private class FakeHost(
+        vararg answers: BleReadiness,
+        startable: Boolean = true,
+    ) : ClearSignerBleHost {
         private val queue = ArrayDeque(answers.toList())
-        val radio = FakeRadio()
+        val radio = FakeRadio(startable)
 
         @Volatile
         var asked = 0
@@ -567,6 +700,11 @@ class ClearSignerBleTest {
             listening().onMtu(mtu)
         }
 
+        /** The central walked out of range, or closed the tab. */
+        fun gone(reason: String) {
+            listening().onGone(reason)
+        }
+
         /**
          * The wire starts advertising from the coroutine that took the
          * request, so a test writing frames can genuinely get there first —
@@ -644,6 +782,7 @@ class ClearSignerBleTest {
             while (it.chunk().toInt() > 20) it.halve()
         }
         private var shuffle = false
+        private var losing = false
 
         fun shuffled(on: Boolean) {
             shuffle = on
@@ -682,6 +821,18 @@ class ClearSignerBleTest {
 
         suspend fun answered(): ClearSignerAnswer = withTimeout(6_000L) { pending.await() }
 
+        /**
+         * The page's verdict, framed and then TRUNCATED: every frame but the
+         * last. This is what a central whose stack dropped the tail of a
+         * write-without-response looks like from here — and the page believes
+         * it answered, because an unacknowledged write resolves locally.
+         */
+        fun answerLosingItsTail(id: String, code: String) {
+            losing = true
+            answer(id, code)
+            losing = false
+        }
+
         /** The page's verdict, sealed and framed back to the wallet. */
         fun answer(id: String, code: String) {
             val body = JSONObject()
@@ -712,12 +863,13 @@ class ClearSignerBleTest {
             write(text.toByteArray(Charsets.UTF_8), sealed, framer.nextId())
 
         private fun write(payload: ByteArray, sealed: Boolean, msgId: UByte) {
-            val frames = framer.frames(msgId, payload, sealed)
-            assertTrue("a message worth reassembling", frames.size > 2)
+            val built = framer.frames(msgId, payload, sealed)
+            assertTrue("a message worth reassembling", built.size > 2)
             // Backwards is the harshest order a radio can deliver in, and the
             // one that shows the reassembler is not quietly appending.
-            val order = if (shuffle) frames.reversed() else frames
-            order.forEach(radio::deliver)
+            val ordered = if (shuffle) built.reversed() else built
+            val frames = if (losing) ordered.dropLast(1) else ordered
+            frames.forEach(radio::deliver)
         }
     }
 
@@ -730,6 +882,7 @@ class ClearSignerBleTest {
         /** What a modern phone negotiates; the size the frames must fit. */
         mtu: Int = 247,
         requestJson: String = SMALL_REQUEST,
+        clock: () -> Long = System::currentTimeMillis,
         body: suspend (Run) -> Unit,
     ) = runBlocking {
         val radio = FakeRadio()
@@ -738,6 +891,7 @@ class ClearSignerBleTest {
         val advertised = CompletableDeferred<String>()
         val wire = wire(
             radio,
+            clock = clock,
             onAdvertising = { name -> advertised.complete(name) },
         ) { code ->
             shown.complete(code)
@@ -761,6 +915,7 @@ class ClearSignerBleTest {
     private fun wire(
         radio: BlePeripheral,
         timeoutMs: Long = 6_000L,
+        clock: () -> Long = System::currentTimeMillis,
         onAdvertising: (String) -> Unit = {},
         confirmCode: suspend (String) -> Boolean,
     ): ClearSignerBleWire {
@@ -774,6 +929,7 @@ class ClearSignerBleTest {
                 unhex(requester.getString("secretHex")),
                 unhex(requester.getString("nonceHex")),
             ),
+            now = clock,
             onAdvertising = onAdvertising,
             confirmCode = confirmCode,
         )

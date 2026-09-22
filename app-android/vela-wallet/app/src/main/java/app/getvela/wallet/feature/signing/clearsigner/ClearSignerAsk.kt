@@ -58,8 +58,30 @@ sealed interface ClearSignerAnswer {
 
     data object TimedOut : ClearSignerAnswer
 
-    /** The channel itself could not be used (the relay was unreachable). */
-    data class Unreachable(val detail: String) : ClearSignerAnswer
+    /**
+     * The channel itself could not be used. [detail] is for the log; [why] is
+     * the SHAPE of the failure, which the channel turns into words alongside
+     * the route it was on.
+     *
+     * Both halves are needed. "The relay could not be reached" told to
+     * somebody who picked Bluetooth — and then advised to try a route they did
+     * not choose — is a sentence about the wrong thing, and a person reading
+     * it has no way to tell that the app is confused rather than the radio
+     * (device-found on the T043 pass).
+     */
+    data class Unreachable(
+        val detail: String,
+        val why: Unreachability = Unreachability.Channel,
+    ) : ClearSignerAnswer
+}
+
+/** The shape of a channel failure — never its words, which the route picks. */
+enum class Unreachability {
+    /** It never opened: a relay that would not answer, a radio that would not advertise. */
+    Channel,
+
+    /** It opened and then the other end left — a closed socket, a dropped link. */
+    PeerGone,
 }
 
 /**
