@@ -863,6 +863,7 @@ mod tests {
                     public_key_hex: format!("04{i:02x}"),
                     name: String::new(),
                     transports: String::new(),
+                    signer_origin: None,
                 })
                 .collect(),
         }
@@ -1050,7 +1051,7 @@ mod tests {
     #[test]
     fn the_clear_signers_answer_becomes_the_same_envelope() {
         use crate::executor::clear_signer::tests::{
-            callback_of, http, page_of, page_result, result_query, signing_key, wallet_key,
+            answers_once, page_result, signing_key, wallet_key,
         };
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![
@@ -1078,22 +1079,22 @@ mod tests {
         let digest = calculate_safe_op_hash(&op, 100).unwrap_or_else(|e| unreachable!("{e}"));
         let (channel, _changed) = Channel::new();
         let ask = Ask::own(None);
-        let signed = std::thread::scope(|scope| {
-            let ceremony = scope.spawn(|| {
-                let mut signer = Signer::ClearSigner {
-                    ask: &ask,
-                    page: "https://sign.getvela.app/",
-                    channel: &channel,
-                };
-                signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
-            });
-            let (port, token) = callback_of(&page_of(&channel));
-            let result = page_result(&signing_key(7), &credential, &digest);
-            http(port, "GET", &result_query(&token, &result));
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        let signed_over = digest.clone();
+        let answering = answers_once(&channel, move |intent| {
+            serde_json::json!({
+                "v": 1, "t": "result", "n": 1, "id": intent["id"],
+                "result": page_result(&signing_key(7), &credential, &signed_over),
+            })
         });
+        let signed = {
+            let mut signer = Signer::ClearSigner {
+                ask: &ask,
+                page: "https://sign.getvela.app/",
+                channel: &channel,
+            };
+            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+        };
+        let _ = answering.join();
         let assertion = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
         let signature = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
         // The second key signed, so its own proxy verifies — not the shared
@@ -1109,25 +1110,20 @@ mod tests {
 
         // Closed without signing: the request stays open, as for a
         // dismissed passkey sheet — and the sheet has its sentence.
-        let declined = std::thread::scope(|scope| {
-            let ceremony = scope.spawn(|| {
-                let mut signer = Signer::ClearSigner {
-                    ask: &ask,
-                    page: "https://sign.getvela.app/",
-                    channel: &channel,
-                };
-                signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
-            });
-            let (port, token) = callback_of(&page_of(&channel));
-            http(
-                port,
-                "POST",
-                &format!("/vela?t={token}&error=user_rejected"),
-            );
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        let declining = answers_once(&channel, |intent| {
+            serde_json::json!({
+                "v": 1, "t": "error", "n": 1, "id": intent["id"], "code": "user_rejected",
+            })
         });
+        let declined = {
+            let mut signer = Signer::ClearSigner {
+                ask: &ask,
+                page: "https://sign.getvela.app/",
+                channel: &channel,
+            };
+            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+        };
+        let _ = declining.join();
         assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
         assert_eq!(
             channel.ended(),
@@ -1142,7 +1138,7 @@ mod tests {
     #[test]
     fn a_message_through_the_clear_signer_is_the_same_1271_signature() {
         use crate::executor::clear_signer::tests::{
-            callback_of, http, page_of, page_result, result_query, signing_key, wallet_key,
+            answers_once, page_result, signing_key, wallet_key,
         };
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let credential = [0x11_u8, 0x22, 0x33];
@@ -1162,27 +1158,24 @@ mod tests {
         assert_eq!(request["intent"]["method"], "personal_sign");
         assert!(request["context"].get("operation").is_none());
 
-        let signed = std::thread::scope(|scope| {
-            let ceremony = scope.spawn(|| {
-                sign_message(
-                    100,
-                    SAFE,
-                    &original,
-                    &keys,
-                    Signer::ClearSigner {
-                        ask: &ask,
-                        page: "https://sign.getvela.app/",
-                        channel: &channel,
-                    },
-                )
-            });
-            let (port, token) = callback_of(&page_of(&channel));
-            let result = page_result(&signing_key(7), &credential, &challenge);
-            http(port, "GET", &result_query(&token, &result));
-            ceremony
-                .join()
-                .unwrap_or_else(|_| unreachable!("the ceremony panicked"))
+        let answering = answers_once(&channel, move |intent| {
+            serde_json::json!({
+                "v": 1, "t": "result", "n": 1, "id": intent["id"],
+                "result": page_result(&signing_key(7), &credential, &challenge),
+            })
         });
+        let signed = sign_message(
+            100,
+            SAFE,
+            &original,
+            &keys,
+            Signer::ClearSigner {
+                ask: &ask,
+                page: "https://sign.getvela.app/",
+                channel: &channel,
+            },
+        );
+        let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
         assert!(signature.starts_with("0x"));
         // A one-key wallet signs through the shared WebAuthn signer.

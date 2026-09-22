@@ -576,6 +576,10 @@ pub struct WalletPage {
     /// per keystroke: half an address is not an error yet.
     signer_page_draft: Option<String>,
     signer_page_focus: Option<gpui::FocusHandle>,
+    /// Spec 075: the relay, the same way — typed until Save, and the core
+    /// says whether it is one (https/wss only, loopback allowed).
+    relay_draft: Option<String>,
+    relay_focus: Option<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
     /// once rather than on every frame.
     settings_probed_network: Option<u32>,
@@ -965,6 +969,8 @@ impl WalletPage {
             endpoint_focuses: Vec::new(),
             signer_page_draft: None,
             signer_page_focus: None,
+            relay_draft: None,
+            relay_focus: None,
             settings_probed_network: None,
             settings_probed_panel: None,
             settings_fix_chain: None,
@@ -4001,10 +4007,11 @@ impl WalletPage {
         })
     }
 
-    /// The Clear Signer's wait and its last word (spec 071), over whichever
-    /// flow started the ceremony — the signing column or the send. The
-    /// buttons speak to the ceremony through its channel; the host redraws
-    /// when the channel answers.
+    /// The Clear Signer's four dialogs (specs 071 and 075), over whichever flow
+    /// started the attempt — the signing column or the send: where the signer
+    /// is, the cross-device pairing, the wait, and its last word. The buttons
+    /// speak to the attempt through its channel; the host redraws when the
+    /// channel answers.
     fn clear_signer_prompt(
         &mut self,
         theme: &Theme,
@@ -4018,10 +4025,40 @@ impl WalletPage {
         if let Some(host) = self.send_host.as_ref() {
             channels.push(host.read(cx).clear_signer());
         }
-        let channel = channels
-            .into_iter()
-            .find(|channel| channel.waiting() || channel.ended().is_some())?;
-        let card = if channel.waiting() {
+        let channel = channels.into_iter().find(|channel| {
+            channel.asking_place() || channel.waiting() || channel.ended().is_some()
+        })?;
+        let card = if channel.asking_place() {
+            // Asked before a port is bound or a relay room is taken: the
+            // answer decides which of the two even starts.
+            let answering = Arc::clone(&channel);
+            let cancel = Arc::clone(&channel);
+            signing_clear_signer::where_card(
+                theme,
+                &self.loc,
+                Arc::new(move |place, _window: &mut Window, _cx: &mut gpui::App| {
+                    answering.answer_place(Some(place));
+                }),
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
+                    cancel.answer_place(None);
+                },
+            )
+        } else if let Some(pairing) = channel.pairing() {
+            let (confirm, cancel) = (Arc::clone(&channel), Arc::clone(&channel));
+            let link = pairing.link.clone();
+            signing_clear_signer::pair_card(
+                theme,
+                &self.loc,
+                &pairing,
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+                },
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
+                    confirm.confirm_code()
+                },
+                move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
+            )
+        } else if channel.waiting() {
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_clear_signer::waiting_card(
                 theme,
@@ -6571,6 +6608,7 @@ impl WalletPage {
                 public_key_hex: account.public_key_hex.clone(),
                 name: account.name.clone(),
                 transports: String::new(),
+                signer_origin: None,
             }]
         } else {
             account
@@ -6581,6 +6619,7 @@ impl WalletPage {
                     public_key_hex: key.public_key_hex.clone(),
                     name: key.name.clone(),
                     transports: key.transports.clone(),
+                    signer_origin: key.signer_origin.clone(),
                 })
                 .collect()
         };
@@ -7069,21 +7108,7 @@ impl WalletPage {
         let Some(account) = money::active_account() else {
             return;
         };
-        let params = serde_json::json!([{
-            "from": account.address,
-            "to": call.to,
-            "value": "0x0",
-            "data": call.data,
-        }]);
-        let request = crate::wallet::signing_host::IncomingRequest {
-            id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
-            method: "eth_sendTransaction".to_owned(),
-            params_json: params.to_string(),
-            origin: "https://getvela.app".to_owned(),
-            transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
-            chain_id: call.chain_id,
-            granted_address: None,
-        };
+        let request = backup_request(&account.address, &call);
         // After it closes, ask again: the row should say what is true now.
         self.backup_for = None;
         self.open_signing_request(&account, request, None, cx);
@@ -8385,6 +8410,7 @@ impl WalletPage {
                     ),
             );
         }
+        let relay = self.settings_relay_row(theme, &view, window, cx);
         div()
             .flex()
             .flex_col()
@@ -8392,6 +8418,146 @@ impl WalletPage {
             .max_w(px(560.))
             .child(list)
             .child(section.child(actions))
+            .child(relay)
+    }
+
+    /// Spec 075: the relay a cross-device pairing goes through — the Clear
+    /// Signer page row's twin, and deliberately so.
+    ///
+    /// They are two addresses with one rule (https/wss, or this device's own
+    /// loopback), one badge ("Official", or the host a person named), one
+    /// field, one Save that asks the core and one reset that appears only once
+    /// the value is not the default. A person who has moved one has not moved
+    /// the other: the page is where they read a request, the relay is only
+    /// what carries the sealed bytes to it, and it never sees either.
+    fn settings_relay_row(
+        &mut self,
+        theme: &Theme,
+        view: &vela_core::app::sign_pref::SignPrefView,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use vela_core::app::sign_pref::{Event as SignPrefEvent, SignPref};
+        let s = &self.settings;
+        let badge = pill(
+            Tone::Neutral,
+            if view.relay_url_is_default {
+                s.relay_official.clone()
+            } else {
+                SharedString::from(page_host(&view.relay_url))
+            },
+        );
+        let refused = match view.relay_url_error.as_deref() {
+            Some("insecure") => Some(s.relay_insecure.clone()),
+            Some(_) => Some(s.relay_invalid.clone()),
+            None => None,
+        };
+        let (title, subtitle, save, reset) = (
+            s.relay_title.clone(),
+            s.relay_subtitle.clone(),
+            s.signer_page_save.clone(),
+            s.relay_reset.clone(),
+        );
+        let focus = self
+            .relay_focus
+            .get_or_insert_with(|| cx.focus_handle())
+            .clone();
+        let typed = self
+            .relay_draft
+            .clone()
+            .unwrap_or_else(|| view.relay_url.clone());
+        let page = cx.entity();
+        let mut section = div()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .child(editable_url_field(
+                "settings-signer-relay",
+                theme,
+                Some(title),
+                &typed,
+                SharedString::from(vela_core::clear_signer::DEFAULT_RELAY_URL),
+                Some(&badge),
+                Some(subtitle),
+                refused.is_some().then_some(Tone::Error),
+                &focus,
+                window,
+                move |text: String, _window: &mut Window, cx: &mut gpui::App| {
+                    page.update(cx, |page, cx| {
+                        page.relay_draft = Some(text);
+                        cx.notify();
+                    });
+                },
+                |_, _| {},
+            ));
+        if let Some(refused) = refused {
+            section = section.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.error_base)
+                    .child(refused),
+            );
+        }
+        let mut actions = div().flex().items_center().gap(px(16.)).child(
+            div()
+                .id("settings-signer-relay-save")
+                .h(px(36.))
+                .px(px(16.))
+                .rounded(px(10.))
+                .flex()
+                .flex_none()
+                .items_center()
+                .cursor_pointer()
+                .bg(theme.bg_raised)
+                .border_1()
+                .border_color(theme.divider)
+                .hover(|el| el.bg(theme.bg_sunken))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(save)
+                .on_click(cx.listener(move |page, _, _, cx| {
+                    let text = page.relay_draft.clone().unwrap_or_else(|| typed.clone());
+                    let stored = resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                        pref.dispatch(SignPrefEvent::RelayUrlSubmitted { text }, cx);
+                        pref.view().relay_url_error.is_none()
+                    });
+                    if stored {
+                        page.relay_draft = None;
+                    }
+                    cx.notify();
+                })),
+        );
+        if !view.relay_url_is_default {
+            actions = actions.child(
+                div()
+                    .id("settings-signer-relay-reset")
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|page, _, _, cx| {
+                        resident::resident::<SignPref>(cx).update(cx, |pref, cx| {
+                            pref.dispatch(SignPrefEvent::RelayUrlReset, cx);
+                        });
+                        page.relay_draft = None;
+                        cx.notify();
+                    }))
+                    .child(icon_img(
+                        &mut self.icons,
+                        Icon::RefreshCw,
+                        false,
+                        theme.accent,
+                        14.,
+                    ))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.accent)
+                            .child(reset),
+                    ),
+            );
+        }
+        section.child(actions)
     }
 
     fn settings_storage(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
@@ -12976,6 +13142,35 @@ impl Render for WalletPage {
     }
 }
 
+/// The Ethereum key backup, as a request for the SHARED signing sheet.
+///
+/// A pure function so the sheet it goes to can be pinned by a test: the backup
+/// is an ordinary `eth_sendTransaction` on the wallet's own transport, which
+/// means it gets the same "Sign with" row every other signature gets — the
+/// core's five routes, the Clear Signer among them (spec 075). A backup with a
+/// sheet of its own would be the one signature a person could not route.
+#[cfg(not(target_os = "linux"))]
+fn backup_request(
+    address: &str,
+    call: &vela_core::registry_backup::BackupCall,
+) -> crate::wallet::signing_host::IncomingRequest {
+    let params = serde_json::json!([{
+        "from": address,
+        "to": call.to,
+        "value": "0x0",
+        "data": call.data,
+    }]);
+    crate::wallet::signing_host::IncomingRequest {
+        id: format!("vela-ethereum-backup-{}", crate::executor::now_ms()),
+        method: "eth_sendTransaction".to_owned(),
+        params_json: params.to_string(),
+        origin: "https://getvela.app".to_owned(),
+        transport_id: crate::wallet::signing_host::WALLET_TRANSPORT.to_owned(),
+        chain_id: call.chain_id,
+        granted_address: None,
+    }
+}
+
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
 fn page_host(url: &str) -> String {
@@ -12989,6 +13184,45 @@ fn page_host(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The Ethereum key backup gets the Clear Signer too** (spec 075: "创建/
+    /// 登录/转账/dapp签名/公钥备份 等" — the owner listed the backup with the rest).
+    ///
+    /// It gets it by being an ordinary request on the shared signing sheet
+    /// rather than a sheet of its own: the same `eth_sendTransaction` on the
+    /// wallet's own transport that a send is, so the same "Sign with" row with
+    /// the same five routes. If this ever grew its own sheet, the backup would
+    /// be the one signature a person could not route — and the backup is the
+    /// signature that matters most to a wallet living behind a signer page.
+    #[test]
+    fn the_key_backup_goes_to_the_shared_signing_sheet() {
+        let call = vela_core::registry_backup::BackupCall {
+            chain_id: 1,
+            to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
+            value: "0".to_owned(),
+            data: "0xabcdef".to_owned(),
+        };
+        let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let request = backup_request(address, &call);
+        assert_eq!(request.method, "eth_sendTransaction");
+        assert_eq!(
+            request.transport_id,
+            crate::wallet::signing_host::WALLET_TRANSPORT,
+            "the backup is the wallet's own request, not a site's"
+        );
+        assert_eq!(request.granted_address, None);
+        assert_eq!(request.chain_id, 1);
+        // The calls the sheet reads out of it are the backup's own.
+        let calls = vela_core::sign_message::is_message_method(&request.method);
+        assert!(!calls, "a backup is submitted, not signed as a message");
+        assert!(request.params_json.contains(&call.data));
+        assert!(request.params_json.contains(address));
+        // And the row it lands under offers every route the core knows.
+        assert!(
+            vela_core::wallet_keys::SIGN_METHODS.contains(&vela_core::clear_signer::METHOD),
+            "the shared sheet does not offer the Clear Signer"
+        );
+    }
 
     /// The save button is available exactly when the address is one.
     ///

@@ -154,6 +154,9 @@ fn provider_line(key: &CreateKeyRow) -> &'static str {
         KeyMethod::Platform => "onboarding.create.methodPlatformTitle",
         KeyMethod::Hybrid => "onboarding.create.methodHybridTitle",
         KeyMethod::SecurityKey => "onboarding.create.providerSecurityKey",
+        // Spec 075: a key the Clear Signer minted lives behind its page, and
+        // the row says so in the picker's own words.
+        KeyMethod::ClearSigner => "componentsUi.signing.clearSignerTitle",
     }
 }
 
@@ -914,26 +917,32 @@ fn key_row(host: &FlowHost<'_>, index: usize, key: &CreateKeyRow) -> Div {
     row
 }
 
-/// The three ways to mint a founding key.
+/// The four ways to mint a founding key (spec 075 added the Clear Signer).
 ///
-/// **Two of them cannot run here, and both say so.** `Platform` needs a system
-/// passkey service, which no desktop in this app's reach provides; `Hybrid`
-/// needs the QR transport a later feature adds. Hiding them would leave a
-/// person wondering whether their laptop's fingerprint reader was supposed to
-/// work; showing them greyed with a reason answers that in one line.
+/// **One of them may not run here, and it says so.** `Platform` needs a system
+/// passkey service, which only Windows provides in this app's reach. Hiding it
+/// would leave a person wondering whether their laptop's fingerprint reader was
+/// supposed to work; showing it greyed with a reason answers that in one line.
 fn method_picker(host: &FlowHost<'_>) -> Div {
     let theme = host.theme;
     let loc = host.loc;
-    // See `hardware::signin_method_card`: only Windows has a platform
-    // authenticator this shell can reach, and only when Hello is enrolled.
-    let this_device = crate::executor::passkey::platform_supported();
 
     let palette = Palette {
         ink: theme.fg_muted,
         muted: theme.fg_subtle,
         paper: theme.bg_base,
     };
-    let entry = |method: KeyMethod, title_key: &str, body: SharedString, available: bool| {
+    // The routes, their words and which of them can run here are
+    // `hardware`'s — the same list the sign-in chooser reads, so the two
+    // cannot come to disagree about what a passkey route is.
+    let entry = |method: KeyMethod| {
+        let available = crate::hardware::method_available(method);
+        let (title_key, body_key) = crate::hardware::method_words(method);
+        let body = loc.t(if available {
+            body_key
+        } else {
+            "onboarding.create.securityKeyRequiredBody"
+        });
         let sink = host.sink.clone();
         let event = if available {
             FlowEvent::AddKey(method)
@@ -984,35 +993,15 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         }
     };
 
-    div()
+    let mut list = div()
         .w_full()
         .flex()
         .flex_col()
-        .child(caption(theme, loc.t("onboarding.create.addMethodLabel")))
-        .child(entry(
-            KeyMethod::SecurityKey,
-            "onboarding.create.methodSecurityKeyTitle",
-            loc.t("onboarding.create.methodSecurityKeyBody"),
-            true,
-        ))
-        .child(entry(
-            KeyMethod::Platform,
-            "onboarding.create.methodPlatformTitle",
-            loc.t(if this_device {
-                "onboarding.create.methodPlatformBody"
-            } else {
-                "onboarding.create.securityKeyRequiredBody"
-            }),
-            this_device,
-        ))
-        .child(entry(
-            // The scan method is live on desktop now: it shows a QR, and a phone
-            // that scans it becomes the authenticator over caBLE.
-            KeyMethod::Hybrid,
-            "onboarding.create.methodHybridTitle",
-            loc.t("onboarding.create.methodHybridBody"),
-            true,
-        ))
+        .child(caption(theme, loc.t("onboarding.create.addMethodLabel")));
+    for method in crate::hardware::CREATE_ROUTES {
+        list = list.child(entry(method));
+    }
+    list
 }
 
 // ---------------------------------------------------------------------------

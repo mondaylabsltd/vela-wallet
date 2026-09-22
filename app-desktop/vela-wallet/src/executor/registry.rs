@@ -948,6 +948,57 @@ pub fn publish(
         READ_TIMEOUT,
     )?;
 
+    // Spec 075: the members that have to sign live share ONE page visit, and
+    // it has to be closed however this loop leaves — a `?` between a signed
+    // member and the end of it would otherwise leave the page's tab waiting
+    // on a wallet that had given up two frames ago. Collected into a result
+    // first, so the goodbye is not on the happy path alone.
+    let proven = prove_members(members, &challenge, &group_public_key, method, ceremony);
+    if method == vela_core::app::KeyMethod::ClearSigner {
+        ceremony.clear_signer.end_flow();
+    }
+    let proven = proven?;
+
+    // The group key silently closes over the content hash.
+    let group = build_group_proof(
+        &seed_hex,
+        RELYING_PARTY,
+        strip_hex(&challenge.group_challenge.challenge),
+    )
+    .map_err(|error| RegistryError::answered(format!("group proof: {error}")))?;
+
+    let accepted: Accepted = post_json(
+        "/api/register",
+        json!({
+            "rpId": RELYING_PARTY,
+            "metadata": metadata_hex,
+            "groupPublicKey": group_public_key,
+            "groupProof": group.proof,
+            "members": proven,
+        }),
+        "Register",
+        WRITE_TIMEOUT,
+    )?;
+    // `done` up front means the identical group was already on-chain —
+    // idempotent by content hash, and just as landed as a fresh one.
+    if accepted.status == "done" {
+        return Ok(());
+    }
+    let id = accepted
+        .id
+        .ok_or_else(|| RegistryError::answered("register was accepted without a task id"))?;
+    await_task(&id)
+}
+
+/// Every member's possession proof: the one it brought from its own creation,
+/// or one signed live here.
+fn prove_members(
+    members: &[RegistryPublishMember],
+    challenge: &GroupChallenge,
+    group_public_key: &str,
+    method: vela_core::app::KeyMethod,
+    ceremony: &Ceremony,
+) -> Result<Vec<ApiMember>> {
     let mut proven = Vec::with_capacity(members.len());
     for member in members {
         let proof = match &member.proof {
@@ -978,12 +1029,26 @@ pub fn publish(
                 // its possession proof over caBLE (a fresh QR), a USB one on the
                 // key in the port. Hardcoding SecurityKey here was why a caBLE
                 // recovery silently entered the wallet unpublished.
-                let assertion = passkey::assert(
-                    &challenge_bytes,
-                    Some(&member.credential_id),
-                    method,
-                    ceremony,
-                )
+                // Spec 075: a wallet signed in through the Clear Signer
+                // re-publishes through it too. The page fetches this same
+                // member challenge itself and will not sign unless the two
+                // agree, so what is passed here is what the wallet was given.
+                let assertion = if method == vela_core::app::KeyMethod::ClearSigner {
+                    crate::executor::clear_signer::member_proof(
+                        member,
+                        group_public_key,
+                        &challenge_bytes,
+                        &registry_url(),
+                        &ceremony.clear_signer,
+                    )
+                } else {
+                    passkey::assert(
+                        &challenge_bytes,
+                        Some(&member.credential_id),
+                        method,
+                        ceremony,
+                    )
+                }
                 .map_err(|failure| {
                     // A ceremony failure inside a publish is not a
                     // network failure. It is reported as an answered
@@ -1012,37 +1077,7 @@ pub fn publish(
             proof,
         });
     }
-
-    // The group key silently closes over the content hash.
-    let group = build_group_proof(
-        &seed_hex,
-        RELYING_PARTY,
-        strip_hex(&challenge.group_challenge.challenge),
-    )
-    .map_err(|error| RegistryError::answered(format!("group proof: {error}")))?;
-
-    let accepted: Accepted = post_json(
-        "/api/register",
-        json!({
-            "rpId": RELYING_PARTY,
-            "metadata": metadata_hex,
-            "groupPublicKey": group_public_key,
-            "groupProof": group.proof,
-            "members": proven,
-        }),
-        "Register",
-        WRITE_TIMEOUT,
-    )?;
-
-    // `done` up front means the identical group was already on-chain —
-    // idempotent by content hash, and just as landed as a fresh one.
-    if accepted.status == "done" {
-        return Ok(());
-    }
-    let id = accepted
-        .id
-        .ok_or_else(|| RegistryError::answered("register was accepted without a task id"))?;
-    await_task(&id)
+    Ok(proven)
 }
 
 /// Poll until terminal.
@@ -1181,6 +1216,7 @@ mod tests {
             public_key_hex: recorded()["publicKey"].as_str().unwrap().to_owned(),
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
+            signer_origin: None,
         }];
         let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device);
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);

@@ -116,13 +116,20 @@ impl SignContext {
     /// a wallet with no usable credential — leaves the stored route in force
     /// rather than guessing.
     pub fn choose_method(&self, method: &str, page: &str) {
-        let route = crate::executor::send::passkey_route(&self.device_keys, method);
+        use crate::executor::send::Route;
+        let route = crate::executor::send::sign_route_of(&self.device_keys, method, page);
+        let (pinned, page) = match route {
+            Some(Route::Passkey(credential, key_method)) => (Some((credential, key_method)), None),
+            // Spec 075: the page the KEY lives behind when it has one, and the
+            // person's page from Settings when it does not.
+            Some(Route::ClearSigner(page)) => (None, Some(page)),
+            None => (None, None),
+        };
         *self
             .route_override
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = route;
-        self.clear_signer
-            .choose((method == vela_core::clear_signer::METHOD).then(|| page.to_owned()));
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = pinned;
+        self.clear_signer.choose(page);
     }
 
     /// This request as the Clear Signer's page is told it (contract §1): a
@@ -707,6 +714,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 name: String::new(),
                 transports: "internal".to_owned(),
+                signer_origin: None,
             }],
         };
         let mut ctx = SignContext::new(

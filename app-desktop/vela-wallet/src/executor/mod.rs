@@ -42,6 +42,8 @@ pub mod clear_signer;
 /// The Clear Signer against the real page in a real browser — local only.
 #[cfg(test)]
 mod clear_signer_e2e;
+/// Spec 075: the Clear Signer across devices, through a blind relay.
+pub mod clear_signer_relay;
 pub mod clear_signing;
 pub mod contacts;
 pub mod custom_tokens;
@@ -81,9 +83,9 @@ pub mod user_op;
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use vela_core::app::FailureKind;
 use vela_core::app::session::{SessionOperation, SessionShellResult};
 use vela_core::app::shell::{ProofPurpose, ShellOperation, ShellResult};
+use vela_core::app::{FailureKind, KeyMethod};
 use vela_core::l10n::datetime::Civil;
 use vela_core::primitives;
 use vela_core::registry_proof::{build_member_proof, group_public_key_from_seed};
@@ -107,17 +109,27 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             supported: passkey::supported(),
         },
 
+        // Spec 075: the Clear Signer is a peer of the three authenticator
+        // routes, so it is answered HERE, before the ceremony reaches any
+        // cable. The verdict comes back in the same result variant, which is
+        // what keeps the machines from being able to tell the routes apart.
         ShellOperation::RegisterPasskey {
             name,
             exclude_credential_ids,
             method,
-        } => match passkey::register(name, exclude_credential_ids, *method, ceremony) {
-            Ok(registration) => ShellResult::PasskeyRegistered {
-                registration,
-                now_iso: now_iso(),
-            },
-            Err(failure) => passkey_failed(failure),
-        },
+        } => {
+            if *method == KeyMethod::ClearSigner {
+                clear_signer_ceremony(operation, None, ceremony)
+            } else {
+                match passkey::register(name, exclude_credential_ids, *method, ceremony) {
+                    Ok(registration) => ShellResult::PasskeyRegistered {
+                        registration,
+                        now_iso: now_iso(),
+                    },
+                    Err(failure) => passkey_failed(failure),
+                }
+            }
+        }
 
         ShellOperation::SignProof {
             credential_id,
@@ -131,18 +143,27 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             // show no QR.
             method,
             purpose,
-        } => match passkey::assert(
-            &challenge_for(*purpose),
-            Some(credential_id),
-            *method,
-            ceremony,
-        ) {
-            Ok(assertion) => ShellResult::ProofSigned {
-                assertion,
-                now_iso: now_iso(),
-            },
-            Err(failure) => passkey_failed(failure),
-        },
+            // Spec 075: read by `clear_signer::run_ceremony` — the page the
+            // key lives behind, which is where its proof has to be signed.
+            signer_origin: _,
+        } => {
+            if *method == KeyMethod::ClearSigner {
+                clear_signer_ceremony(operation, None, ceremony)
+            } else {
+                match passkey::assert(
+                    &challenge_for(*purpose),
+                    Some(credential_id),
+                    *method,
+                    ceremony,
+                ) {
+                    Ok(assertion) => ShellResult::ProofSigned {
+                        assertion,
+                        now_iso: now_iso(),
+                    },
+                    Err(failure) => passkey_failed(failure),
+                }
+            }
+        }
 
         ShellOperation::GenerateGroupKey => {
             // The one-time software group key — the only randomness in the flow
@@ -172,6 +193,9 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             transports: _,
             method,
             group_public_key_hex,
+            // Spec 075: as on `SignProof` — the page the key was minted
+            // behind, read by `clear_signer::run_ceremony`.
+            signer_origin: _,
         } => {
             // Mixed failure modes: the challenge fetch and the ceremony can each
             // fail, and the core branches differently on the two. Classify by
@@ -184,6 +208,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                         message: format!("the registry challenge is not hex: {error}"),
                         network: false,
                     },
+                    // Spec 075: the page fetches its OWN member challenge and
+                    // must agree with these bytes; the core refuses an answer
+                    // over anything else.
+                    Ok(bytes) if *method == KeyMethod::ClearSigner => {
+                        clear_signer_ceremony(operation, Some(&bytes), ceremony)
+                    }
                     Ok(bytes) => {
                         match passkey::assert(&bytes, Some(credential_id), *method, ceremony) {
                             Err(failure) => passkey_failed(failure),
@@ -214,12 +244,19 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
         // method signs in through a phone over caBLE, every other method through
         // the plugged-in security key. `passkey::assert` owns the branch.
         ShellOperation::AuthenticatePasskey { method } => {
-            match passkey::assert(&passkey::random(32), None, *method, ceremony) {
-                Ok(assertion) => ShellResult::PasskeyAuthenticated {
-                    assertion,
-                    now_iso: now_iso(),
-                },
-                Err(failure) => passkey_failed(failure),
+            // Spec 075: on this route the CHALLENGE is the page's too — it
+            // derives `vela-signin-<ms>-<hex>` itself, so the wallet's random
+            // 32 bytes never leave this process.
+            if *method == KeyMethod::ClearSigner {
+                clear_signer_ceremony(operation, None, ceremony)
+            } else {
+                match passkey::assert(&passkey::random(32), None, *method, ceremony) {
+                    Ok(assertion) => ShellResult::PasskeyAuthenticated {
+                        assertion,
+                        now_iso: now_iso(),
+                    },
+                    Err(failure) => passkey_failed(failure),
+                }
             }
         }
 
@@ -363,6 +400,87 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
 // ---------------------------------------------------------------------------
 // The small conversions
 // ---------------------------------------------------------------------------
+
+/// Spec 075: one passkey ceremony on the Clear Signer's page rather than on
+/// the OS sheet — a create, a sign-in, a proof, a member proof.
+///
+/// The verdict is reported in the SAME result variant a platform ceremony's
+/// would be (`PasskeyRegistered`, `PasskeyAuthenticated`, `ProofSigned`,
+/// `MemberProofSigned`), and a refusal in the same `PasskeyFailed` — the
+/// machines branch on the route nowhere, which is what makes this a fourth
+/// route and not a fourth flow.
+///
+/// `expected_member_challenge` is the bytes the WALLET fetched from the
+/// registry for this member; the page fetches its own and the core refuses an
+/// answer over anything else.
+fn clear_signer_ceremony(
+    operation: &ShellOperation,
+    expected_member_challenge: Option<&[u8]>,
+    ceremony: &Ceremony,
+) -> ShellResult {
+    use vela_core::clear_signer::ceremony::Answer;
+
+    let last = clear_signer::ends_the_flow(operation);
+    let answered = clear_signer::run_ceremony(
+        operation,
+        expected_member_challenge,
+        &registry::registry_url(),
+        &ceremony.clear_signer,
+        last,
+    );
+    let answer = match answered {
+        // Only the four ceremonies reach here; anything else is this file
+        // having grown an arm the Clear Signer cannot run.
+        None => {
+            return passkey_failed(PasskeyFailure::other(
+                "the Clear Signer was asked for a ceremony it does not run",
+            ));
+        }
+        Some(Err(failure)) => return passkey_failed(failure),
+        Some(Ok(answer)) => answer,
+    };
+    match (operation, answer) {
+        (ShellOperation::RegisterPasskey { .. }, Answer::Registration(registration)) => {
+            ShellResult::PasskeyRegistered {
+                registration,
+                now_iso: now_iso(),
+            }
+        }
+        (ShellOperation::AuthenticatePasskey { .. }, Answer::Assertion(assertion)) => {
+            ShellResult::PasskeyAuthenticated {
+                assertion,
+                now_iso: now_iso(),
+            }
+        }
+        (ShellOperation::SignProof { .. }, Answer::Assertion(assertion)) => {
+            ShellResult::ProofSigned {
+                assertion,
+                now_iso: now_iso(),
+            }
+        }
+        (ShellOperation::SignMemberProof { .. }, Answer::Assertion(assertion)) => {
+            // Assembled exactly as the platform path assembles it, from the
+            // same three fields — the proof is the core's either way.
+            match build_member_proof(
+                &assertion.authenticator_data_hex,
+                &assertion.client_data_json_hex,
+                &assertion.signature_der_hex,
+            ) {
+                Ok(proof) => ShellResult::MemberProofSigned { proof },
+                Err(error) => ShellResult::IndexFailed {
+                    message: format!("could not assemble the member proof: {error}"),
+                    network: false,
+                },
+            }
+        }
+        // A registration where an assertion was asked for, or the other way
+        // round: the core's verifier already refused everything but the right
+        // shape, so this is a build mismatch rather than a page's doing.
+        _ => passkey_failed(PasskeyFailure::other(
+            "the Clear Signer answered a different ceremony than the one asked for",
+        )),
+    }
+}
 
 fn passkey_failed(failure: PasskeyFailure) -> ShellResult {
     ShellResult::PasskeyFailed {

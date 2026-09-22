@@ -191,6 +191,7 @@ mod tests {
                 public_key_hex: "04aa".to_owned(),
                 name: "Everyday wallet".to_owned(),
                 transports: "usb".to_owned(),
+                signer_origin: None,
             }],
         }
     }

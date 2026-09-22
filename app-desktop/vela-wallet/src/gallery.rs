@@ -62,6 +62,15 @@ enum Fixture {
     Touch(TouchRequest),
     Pin(PinRequest),
     Pick(Vec<CredentialChoice>),
+    /// Spec 075's four Clear Signer dialogs, here for the same reason: each
+    /// needs a browser, a socket or a second device in a particular state, so
+    /// they are among the screens a reviewer is least able to reach on
+    /// purpose. `None` is the "where is it?" question; a `Pairing` is the
+    /// cross-device sheet, before and after the code; a `Refusal` is how an
+    /// attempt ended.
+    ClearSignerWhere,
+    ClearSignerPair(crate::executor::clear_signer::Pairing),
+    ClearSignerEnded(crate::executor::clear_signer::Refusal),
 }
 
 struct Entry {
@@ -361,6 +370,49 @@ fn entries() -> Vec<Entry> {
     // The failure sheet, one row per outcome the catalog names. The two that
     // carry a detail string are driven through the refinement rather than
     // around it, so this list is also a check on it.
+    // Spec 075: the Clear Signer's own dialogs, in their own group — they are
+    // not the cable's, and a reviewer looking for "the page route" should find
+    // them together.
+    let mut signer = |code: &'static str, fixture: Fixture| {
+        out.push(Entry {
+            group: "Clear Signer",
+            code,
+            fixture,
+        });
+    };
+    signer("where · this device or another", Fixture::ClearSignerWhere);
+    signer(
+        "pair · waiting for the other device",
+        Fixture::ClearSignerPair(crate::executor::clear_signer::Pairing {
+            // A link of the real shape and the real length: a shorter one would
+            // draw a smaller QR than any person will ever be shown.
+            link: vela_core::clear_signer::relay_link(
+                vela_core::clear_signer::DEFAULT_SIGNER_URL,
+                vela_core::clear_signer::DEFAULT_RELAY_URL,
+                "AAECAwQFBgcICQoLDA0ODw",
+                "b8ZqkEhhccpptRK-GF1mpw",
+            ),
+            code: None,
+            confirmed: false,
+        }),
+    );
+    signer(
+        "pair · do these two screens agree?",
+        Fixture::ClearSignerPair(crate::executor::clear_signer::Pairing {
+            link: vela_core::clear_signer::relay_link(
+                vela_core::clear_signer::DEFAULT_SIGNER_URL,
+                vela_core::clear_signer::DEFAULT_RELAY_URL,
+                "AAECAwQFBgcICQoLDA0ODw",
+                "b8ZqkEhhccpptRK-GF1mpw",
+            ),
+            code: Some("082567".to_owned()),
+            confirmed: false,
+        }),
+    );
+    signer(
+        "ended · the relay could not be reached",
+        Fixture::ClearSignerEnded(crate::executor::clear_signer::Refusal::Unreachable),
+    );
     let mut sheet = |code: &'static str, kind: PromptKind, confirmable: bool| {
         out.push(Entry {
             group: "Failures",
@@ -669,6 +721,24 @@ impl GalleryView {
             ),
             Fixture::Pick(choices) => {
                 crate::hardware::pick_card(theme, &self.loc, choices, |_, _, _| {}, |_, _, _| {})
+            }
+            // Spec 075: bare, like the cable's — the gallery IS the backdrop.
+            Fixture::ClearSignerWhere => crate::signing::clear_signer::where_card(
+                theme,
+                &self.loc,
+                std::sync::Arc::new(|_, _, _| {}),
+                |_, _, _| {},
+            ),
+            Fixture::ClearSignerPair(pairing) => crate::signing::clear_signer::pair_card(
+                theme,
+                &self.loc,
+                pairing,
+                |_, _, _| {},
+                |_, _, _| {},
+                |_, _, _| {},
+            ),
+            Fixture::ClearSignerEnded(refusal) => {
+                crate::signing::clear_signer::ended_card(theme, &self.loc, *refusal, |_, _, _| {})
             }
             Fixture::Sheet { kind, confirmable } => {
                 let mut prompt = Prompt::new(kind.clone(), *confirmable, 0);
