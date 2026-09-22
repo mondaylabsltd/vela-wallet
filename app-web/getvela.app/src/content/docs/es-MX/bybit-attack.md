@@ -1,7 +1,7 @@
 ---
 title: El ataque a Bybit y el camino que usó
 description: "En febrero de 2025, Bybit perdió unos 1,500 millones de dólares. Los contratos de Safe no fallaron; la interfaz sí. Esta página explica el camino que siguió el ataque y qué parte del diseño de Vela lo cierra."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # El ataque a Bybit y el camino que usó
@@ -68,17 +68,20 @@ dirección de implementación; es justo el tipo de cosa que debería frenar en s
 un firmante, y esconderla detrás de un resumen amigable es la razón por la que no lo
 hizo.
 
-Hay dos límites que conviene precisar. Una dApp no puede pedirle a Vela un
+Hay dos cosas que conviene precisar. Una dApp no puede pedirle a Vela un
 `delegatecall` directamente (las solicitudes que puede hacer una página producen
 llamadas normales), así que la carga de Bybit en sí no podría llegar por ese camino.
-Pero una página *sí* puede pedir una llamada de tu Safe a sí mismo:
-`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`.
-Cualquiera de ellas, firmada una sola vez, entrega la cuenta tan completamente como
-lo hizo la carga de Bybit: un módulo habilitado puede luego ejecutar un
-`delegatecall` propio. Vela decodifica esas llamadas pero todavía no las bloquea;
-**rechaza cualquier solicitud cuyo destino sea la dirección de tu propia wallet.** Y
-si el código de Vela se reemplazara, como pasó con el de `Safe{Wallet}`, la
-decodificación también sería la del atacante; para eso es el siguiente punto.
+Y una página que pide una llamada de tu Safe a sí mismo **se rechaza, no solo se
+decodifica**: `enableModule`, `addOwnerWithThreshold`, `swapOwner`,
+`setFallbackHandler`, `setGuard` y el resto de esa familia se bloquean cuando el
+destino es tu propia wallet, también dentro de un lote y dentro de un `MultiSend`,
+igual que cualquier tramo que lleve un `delegatecall`, sea cual sea su destino, y una
+firma de datos tipados `SafeTx`. La wallet dice qué llamada rechazó y no ofrece nada
+que firmar. Cualquiera de ellas, firmada una sola vez, entregaría la cuenta tan
+completamente como lo hizo la carga de Bybit: un módulo habilitado puede luego
+ejecutar un `delegatecall` propio. Y si el código de Vela se reemplazara, como pasó
+con el de `Safe{Wallet}`, la decodificación también sería la del atacante; para eso
+es el siguiente punto.
 
 **Un camino independiente que puede revisar la interfaz.** Vela construyó una
 [página de firma](/es-MX/docs/clear-signing-self-host) sin compilación y sin

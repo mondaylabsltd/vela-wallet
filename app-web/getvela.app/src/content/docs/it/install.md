@@ -1,7 +1,7 @@
 ---
 title: Installare Vela
 description: "Tutti i modi per usare Vela — web, estensione del browser, desktop e telefono — quanto costa ciascuno, cosa può fare e cosa serve al tuo dispositivo."
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -62,7 +62,8 @@ ARM), **macOS** 11 o successivo e **Linux** (.deb, .rpm o Flatpak, x64 e ARM).
 
 Su macOS e Windows l'app desktop ha un browser integrato per le dApp. I checksum
 di ogni pacchetto sono sulla
-[pagina delle release di GitHub](https://github.com/mondaylabsltd/vela-wallet/releases).
+[pagina delle release di GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) —
+e puoi controllare più di un checksum, vedi qui sotto.
 
 ## iPhone e Android
 
@@ -72,6 +73,46 @@ store**. Il codice è aperto, quindi puoi compilarle tu gratis — con una
 differenza: una build firmata da te non può usare le passkey del telefono stesso
 per i wallet getvela.app, mentre la scansione con un altro telefono e le chiavi di
 sicurezza USB funzionano. Vedi [compilare le app da te](/it/docs/self-hosting#web-app).
+
+## Verifica quello che hai scaricato
+
+Un checksum ti dice che due file sono identici. Non può dirti chi ha prodotto il
+file — e l'elenco dei checksum sta sulla stessa pagina del download. Per questo
+ogni pacchetto che alleghiamo a una release è anche **attestato**: l'esecuzione
+del workflow che l'ha compilato firma una dichiarazione che nomina il file, il
+commit e l'esecuzione stessa, e GitHub la conserva. Controllarla richiede un solo
+comando con la [CLI di GitHub](https://cli.github.com) (accedi una volta con
+`gh auth login`; il controllo è gratuito):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+Stampa chi ha compilato il file e da quale commit, oppure fallisce. Per quella
+risposta nulla sul tuo computer deve fidarsi di noi: la firma è di GitHub, fatta
+al momento della compilazione, e non può produrla chi si limita a ricaricare un
+file da qualche parte.
+
+Le immagini per Mac sono firmate con il nostro Developer ID e notarizzate da
+Apple, cosa che macOS controlla per te quando ne apri una. Per chiederlo tu
+stesso:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="L'avviso di Windows resta">
+L'attestazione non è una firma del codice. Il programma di installazione per
+Windows non ha una firma del codice, quindi SmartScreen lo ferma comunque una
+volta con «Windows ha protetto il PC» — scegli <strong>Ulteriori
+informazioni</strong>, poi <strong>Esegui comunque</strong>. Verificare
+l'attestazione è il controllo che ti dice che il file è davvero nostro; l'avviso
+riguarda un certificato che non abbiamo comprato.
+</Callout>
+
+I pacchetti pubblicati prima che questo venisse attivato hanno solo i loro
+checksum.
 
 ## Usare Vela con le dApp
 

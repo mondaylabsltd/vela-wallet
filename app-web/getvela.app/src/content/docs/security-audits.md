@@ -115,10 +115,10 @@ them. So if one operation removes an owner, an operation signed by that owner an
 placed later in the same bundle still passes validation and runs. Safe
 acknowledged this and did not change v0.3.0.
 
-Vela's apps never build owner changes, so Vela itself never triggers this. It
-still matters: a dApp can ask your wallet to change its own owners (see "Gaps"
-below), and anyone removing a compromised key through other Safe tooling could not
-rely on it being cut off within the same bundle.
+Vela's apps never build owner changes, and a dApp that asks for one is refused
+outright, so Vela itself never triggers this. It still matters for anyone
+removing a compromised key through other Safe tooling: they could not rely on
+that key being cut off within the same bundle.
 
 ### Interception of a signed operation (EntryPoint before v0.9)
 
@@ -144,20 +144,10 @@ module supporting v0.9, and this page will say when it happens.
 Not contract findings, but places where the wallet protects you less than you
 might assume. Each is tracked for a fix:
 
-- **Calls from your wallet to itself are not blocked.** A dApp can request
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` or `setGuard` on
-  your own Safe; any one of them, signed once, hands over the account. Vela decodes
-  these calls but does not stop them. Reject any request whose target is your own
-  address.
 - **The approval guard stops only "unlimited" amounts** (2^200 or more; 2^152 for
   Permit2). A large finite approval, a signed permit, or an NFT
   `setApprovalForAll` gets a caution, not a block.
-- **Fetched descriptors are not authenticated.** A descriptor from the chain-data
-  server is shown as "verified" if it matches the contract; it is only as
-  trustworthy as that server.
 - **The independent signing page is not connected** to any app yet.
-- **The network check doesn't look for Safe's passkey signer factory**, which keys
-  two to seven need; on a network added without it, only the first key can sign.
 - **The website loads a third-party analytics script** on the same domain as the
   passkeys. The site forbids its pages from using passkeys (a Permissions-Policy
   header), and keeps the script off the page that holds a key.

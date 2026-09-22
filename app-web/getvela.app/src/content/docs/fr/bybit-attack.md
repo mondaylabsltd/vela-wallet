@@ -1,7 +1,7 @@
 ---
 title: L'attaque de Bybit, et le chemin qu'elle a emprunté
 description: "En février 2025, Bybit a perdu environ 1,5 milliard de dollars. Les contrats Safe n'ont pas été cassés — c'est l'interface qui l'a été. Cette page explique le chemin emprunté, et ce qui, dans la conception de Vela, le ferme."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # L'attaque de Bybit, et le chemin qu'elle a emprunté
@@ -69,18 +69,21 @@ remplaçait une adresse d'implémentation ; c'est précisément le genre de chos
 devrait arrêter net un signataire, et c'est en la cachant derrière un résumé
 rassurant qu'on l'en a empêché.
 
-Deux limites à préciser. Une dApp ne peut pas demander directement un
+Deux choses à préciser. Une dApp ne peut pas demander directement un
 `delegatecall` à Vela — les demandes qu'une page peut faire produisent des appels
 ordinaires —, donc la charge utile de Bybit elle-même ne pourrait pas arriver par
-ce chemin. Mais une page *peut* demander un appel de votre Safe vers lui-même :
-`enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`.
-N'importe lequel de ces appels, signé une seule fois, livre le compte aussi
-complètement que la charge utile de Bybit — un module activé peut ensuite exécuter son
-propre `delegatecall`. Vela décode ces appels mais ne les bloque pas encore ;
-**refusez toute demande dont la cible est l'adresse de votre propre portefeuille.**
-Et si le code de Vela lui-même était remplacé, comme l'a été celui de
-`Safe{Wallet}`, le décodage serait lui aussi celui de l'attaquant — c'est à cela que
-sert le point suivant.
+ce chemin. Et une page qui demande un appel de votre Safe vers lui-même est
+**refusée, pas seulement décodée** : `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` et le reste de cette famille sont
+bloqués quand la cible est votre propre portefeuille, à l'intérieur d'un lot comme
+à l'intérieur d'un `MultiSend`, tout comme n'importe quelle branche portant un
+`delegatecall`, quelle qu'en soit la cible, et une signature de données typées
+`SafeTx`. Le portefeuille indique quel appel il a refusé et ne propose rien à
+signer. N'importe lequel de ces appels, signé une seule fois, livrerait le compte
+aussi complètement que la charge utile de Bybit — un module activé peut ensuite
+exécuter son propre `delegatecall`. Et si le code de Vela lui-même était remplacé,
+comme l'a été celui de `Safe{Wallet}`, le décodage serait lui aussi celui de
+l'attaquant — c'est à cela que sert le point suivant.
 
 **Un chemin indépendant capable de contrôler l'interface.** Vela a construit une
 [page de signature](/fr/docs/clear-signing-self-host) sans build ni dépendances,

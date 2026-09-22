@@ -1,7 +1,7 @@
 ---
 title: Enviar e receber
 description: "Como receber e enviar com a Vela — um endereço em todas as redes, envio para uma ou várias pessoas, de onde vêm os nomes dos destinatários, o que você confirma e como o relay movimenta seus fundos."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -48,8 +48,14 @@ próprio registro (o nome de outra carteira Vela), depois nos registros reversos
 `.bnb`, `.arb`, `.g`, Basename e ENS, lidos direto de cada rede. Isso funciona num
 sentido só — dá nome a um endereço que você informou. Digitar um nome como
 `alice.eth` não busca um endereço. Os seus **contatos** salvos também mostram seus
-nomes. Trate um nome como uma pista, não como prova: um registro reverso ou o nome
-de uma carteira Vela é escolhido por quem controla aquele endereço.
+nomes.
+
+Um nome vindo desses registros reversos só é mostrado se ele **resolver de volta para
+o mesmo endereço**. Qualquer pessoa pode colocar o que quiser no próprio registro
+reverso, então o registro sozinho não prova nada; a carteira pergunta ao serviço de
+nomes para qual endereço aquele nome aponta e só mostra o nome quando os dois batem.
+Se a conferência não puder ser feita — um endpoint que não responde, um resolver que
+falha —, você vê o endereço e nenhum nome, nunca um nome não conferido.
 
 ### Moeda da taxa e velocidade
 

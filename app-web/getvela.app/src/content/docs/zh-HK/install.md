@@ -1,7 +1,7 @@
 ---
 title: 安裝 Vela
 description: "運行 Vela 的每一種方式——網頁版、瀏覽器擴充功能、桌面版和手機——各自的費用、各自能做甚麼，以及你的裝置需要甚麼。"
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -49,7 +49,7 @@ source: f88fdfac1001
 - **Linux**：要使用 USB 安全密鑰，你的系統必須允許 App 存取它——.deb 和 .rpm 套件會自動為你安裝這條規則。
 
 在 macOS 和 Windows 上，桌面版內置了用來開啟 dApp 的瀏覽器。每個套件的校驗碼都在
-[GitHub 發佈頁面](https://github.com/mondaylabsltd/vela-wallet/releases)上。
+[GitHub 發佈頁面](https://github.com/mondaylabsltd/vela-wallet/releases)上——可以核對的不只是校驗碼，見下文。
 
 ## iPhone 及 Android
 
@@ -57,6 +57,36 @@ source: f88fdfac1001
 Google Play 發售，目前**尚未上架**。程式碼是開源的，所以你可以免費自行編譯——只有一點不同：你自己
 簽署的版本不能用手機本身的通行密鑰為 getvela.app 錢包簽署，但用另一部手機掃描 QR 碼和用 USB 安全密鑰
 都可以。見[自行編譯 App](/zh-HK/docs/self-hosting#web-app)。
+
+## 核對你下載到的東西
+
+校驗碼只能告訴你兩個檔案一模一樣，卻無法告訴你這個檔案是誰做的——
+何況那份校驗碼清單，就放在下載連結的同一個頁面上。所以我們在每個發佈版本附上的套件，
+都另外帶一份**建置證明**：建置它的那次工作流程運行會簽署一份聲明，寫明檔案、提交和這次運行，由 GitHub 保存。
+用 [GitHub CLI](https://cli.github.com) 一條指令就能核對（先用 `gh auth login` 登入一次；核對本身免費）：
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+它會列出這個檔案由誰、從哪一個提交建置出來，核不過就報錯。
+這個答案不需要你的電腦先相信我們：簽名是 GitHub 在建置當下做的，
+別人只是把檔案重新上載到某個地方，是簽不出來的。
+
+Mac 的映像用我們的 Developer ID 簽署，並經 Apple 公證，你開啟時 macOS 會為你檢查。想自己問一次：
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows 的提示依然會出現">
+建置證明不是程式碼簽署。
+Windows 安裝程式沒有做程式碼簽署，所以 SmartScreen 仍然會攔一次「已保護您的電腦」——請按<strong>其他資訊</strong>，再按<strong>仍要執行</strong>。
+真正能告訴你這個檔案確實來自我們的，是核對建置證明；那個提示講的是一張我們還沒有買的憑證。
+</Callout>
+
+在這項功能啟用之前發佈的套件，只有校驗碼。
 
 ## 用 Vela 連接 dApp
 

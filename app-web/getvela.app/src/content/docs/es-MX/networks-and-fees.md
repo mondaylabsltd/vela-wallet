@@ -1,7 +1,7 @@
 ---
 title: Redes y comisiones
 description: "Las 24 redes integradas en Vela, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ calcula a partir de tus llaves, no de la cadena.
 ## Agregar otra red
 
 Puedes agregar cualquier red EVM en **Ajustes → Redes**, siempre que tenga lo que
-necesita una wallet de Vela: once contratos estándar (el EntryPoint v0.7 de
+necesita una wallet de Vela: doce contratos estándar (el EntryPoint v0.7 de
 ERC-4337, los contratos de Safe v1.4.1, los módulos 4337 y de passkey de Safe,
 MultiSend, Multicall3 y dos desplegadores deterministas) y el precompilado
 **EIP-7951 / RIP-7212** que verifica las firmas de passkey en la dirección `0x100`.
@@ -52,10 +52,12 @@ El precompilado es un requisito indispensable. Su dirección forma parte de cóm
 calcula cada dirección de Vela, así que no hay verificador de respaldo ni forma de
 desplegar uno después. Si una cadena tiene el precompilado pero le faltan algunos
 contratos, la página de [configuración de cadenas](/es-MX/chain-setup) te muestra
-qué falta y despliega lo que cualquiera puede desplegar. La revisión tiene un hueco:
-una wallet con más de una llave también necesita en la red la fábrica de firmantes
-de passkey de Safe, que todavía no se revisa; sin ella, ahí solo puede firmar la
-primera llave.
+qué falta y despliega lo que cualquiera puede desplegar. Dos de los doce contratos
+que revisa, la fábrica de firmantes de passkey de Safe y el código de firmante que
+esa fábrica despliega, solo le importan a una wallet con más de una llave, y la
+revisión lo dice contrato por contrato: sin ellos una wallet de una sola llave
+funciona con normalidad, mientras que una wallet cuya dirección salió de dos a siete
+llaves no se puede desplegar en esa red.
 
 ## Cómo se paga una transacción
 

@@ -1,7 +1,7 @@
 ---
 title: Kiểm toán & vấn đề đã biết
 description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
@@ -116,10 +116,10 @@ Vì vậy, nếu một thao tác gỡ bỏ một chủ sở hữu, thì một th
 và nằm phía sau trong cùng bundle vẫn qua được bước xác thực và vẫn chạy. Safe đã ghi nhận
 điều này và không thay đổi v0.3.0.
 
-Các ứng dụng Vela không bao giờ dựng thao tác thay đổi chủ sở hữu, nên bản thân Vela không
-bao giờ kích hoạt vấn đề này. Nó vẫn quan trọng: một dApp có thể yêu cầu ví của bạn tự
-thay đổi chủ sở hữu của nó (xem "Những chỗ hở" bên dưới), và bất kỳ ai gỡ bỏ một khóa bị lộ
-bằng công cụ Safe khác cũng không thể trông vào việc khóa đó bị chặn ngay trong cùng bundle.
+Các ứng dụng Vela không bao giờ dựng thao tác thay đổi chủ sở hữu, và một dApp xin làm việc
+đó thì bị từ chối thẳng, nên bản thân Vela không bao giờ kích hoạt vấn đề này. Nó vẫn quan
+trọng với bất kỳ ai gỡ bỏ một khóa bị lộ bằng công cụ Safe khác: họ không thể trông vào việc
+khóa đó bị chặn ngay trong cùng bundle.
 
 ### Chặn bắt một thao tác đã ký (EntryPoint trước v0.9)
 
@@ -146,19 +146,10 @@ trang này sẽ thông báo khi điều đó diễn ra.
 Đây không phải phát hiện về hợp đồng, mà là những chỗ ví bảo vệ bạn ít hơn bạn có thể
 tưởng. Mỗi mục đều đang được theo dõi để sửa:
 
-- **Lệnh gọi từ ví tới chính nó không bị chặn.** Một dApp có thể yêu cầu `enableModule`,
-  `addOwnerWithThreshold`, `setFallbackHandler` hoặc `setGuard` trên chính Safe của bạn;
-  bất kỳ lệnh nào trong số đó, chỉ cần ký một lần, cũng trao tài khoản đi. Vela giải mã
-  những lệnh gọi này nhưng không ngăn chúng. Hãy từ chối mọi yêu cầu có đích là chính địa
-  chỉ của bạn.
 - **Lớp chặn cấp quyền chỉ chặn số lượng "không giới hạn"** (từ 2^200 trở lên; 2^152 với
   Permit2). Một lệnh cấp quyền lớn nhưng hữu hạn, một permit dạng chữ ký, hoặc
   `setApprovalForAll` cho NFT chỉ nhận cảnh báo thận trọng, không bị chặn.
-- **Bộ mô tả lấy về không được xác thực.** Một bộ mô tả từ máy chủ dữ liệu chuỗi được hiện
-  là "đã xác minh" nếu nó khớp với hợp đồng; nó chỉ đáng tin bằng chính máy chủ đó.
 - **Trang ký độc lập chưa được kết nối** với ứng dụng nào.
-- **Bước kiểm tra mạng không tìm factory tạo bộ ký passkey của Safe**, thứ mà khóa thứ hai
-  tới thứ bảy cần; trên một mạng được thêm vào khi thiếu nó, chỉ khóa đầu tiên ký được.
 - **Trang web tải một script phân tích của bên thứ ba** trên cùng tên miền với passkey.
   Trang web cấm chính các trang của mình dùng passkey (bằng header Permissions-Policy), và
   không tải script đó trên trang đang giữ khóa.

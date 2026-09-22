@@ -70,7 +70,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **13. "Does less on purpose" — deliberate minimalism.** No NFT gallery, no built-in swaps, no DeFi dashboard, no in-app dApp browser. "Fewer paths to attack, fewer moving parts to audit." dApp connection is delegated to WalletPair rather than an embedded browser. Source: `+page.svelte`. Turns a feature gap into a security virtue.
 
-**14. 12 EVM networks + custom networks.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, **Unichain, Tempo, Monad, World Chain** — plus user-added custom chains. Source: [src/models/chains.ts](../src/models/chains.ts):42-119. (README's "8 networks" is stale.)
+**14. 24 EVM networks + custom networks.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM — plus any chain that passes the wallet's own admission check. Source: [app-web/vela-wallet/src/lib/services/chains.ts](../app-web/vela-wallet/src/lib/services/chains.ts). (Counted, not remembered: it was 12 when this file was written and "8" before that.)
 
 **15. Web-first, MIT-licensed, native apps coming.** Runs in the browser with nothing to download (web wallet free); native iOS/Android share one React Native + Expo codebase and are in device testing ahead of store release. License: MIT. Source: [README.md](../README.md), `roadmap/+page.svelte`. **Keywords:** browser wallet, no download, open source crypto wallet.
 

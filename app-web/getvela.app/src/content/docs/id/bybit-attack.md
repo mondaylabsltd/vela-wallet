@@ -1,7 +1,7 @@
 ---
 title: Serangan Bybit, dan jalur yang dipakainya
 description: "Pada Februari 2025 Bybit kehilangan sekitar $1,5 miliar. Yang jebol bukan kontrak Safe — melainkan antarmukanya. Halaman ini menjelaskan jalurnya, dan bagian mana dari desain Vela yang menutupnya."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # Serangan Bybit, dan jalur yang dipakainya
@@ -65,17 +65,21 @@ tidak ada masalah. Payload Bybit adalah `delegatecall` yang menukar alamat imple
 bentuk seperti itulah yang semestinya membuat penanda tangan langsung berhenti, dan
 menyembunyikannya di balik ringkasan yang ramah adalah alasan hal itu tidak terjadi.
 
-Ada dua batasan yang perlu dijelaskan dengan tepat. dApp tidak bisa meminta Vela
+Ada dua hal yang perlu dijelaskan dengan tepat. dApp tidak bisa meminta Vela
 melakukan `delegatecall` secara langsung — permintaan yang bisa dibuat sebuah halaman
 hanya menghasilkan panggilan biasa — jadi payload Bybit itu sendiri tidak bisa masuk
-lewat jalur ini. Tetapi sebuah halaman *bisa* meminta panggilan dari Safe Anda ke Safe
-itu sendiri: `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`.
-Salah satu saja dari panggilan itu, sekali ditandatangani, menyerahkan akun Anda
-sepenuhnya, sama seperti payload Bybit — modul yang sudah diaktifkan kemudian bisa
-menjalankan `delegatecall`-nya sendiri. Vela mendekode panggilan semacam itu tetapi belum
-memblokirnya; **tolak setiap permintaan yang targetnya alamat dompet Anda sendiri.** Dan
-kalau kode Vela sendiri diganti, seperti yang terjadi pada `Safe{Wallet}`, hasil dekodenya
-pun akan menjadi milik penyerang — untuk itulah poin berikutnya.
+lewat jalur ini. Dan halaman yang meminta panggilan dari Safe Anda ke Safe itu sendiri
+**ditolak, bukan sekadar didekode**: `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` dan sisa keluarga itu diblokir ketika
+targetnya adalah dompet Anda sendiri, termasuk di dalam sebuah batch dan di dalam
+`MultiSend`, begitu pula setiap bagian yang membawa `delegatecall` ke mana pun
+tujuannya, dan tanda tangan typed data `SafeTx`. Dompet menyebut panggilan mana yang
+ditolaknya dan tidak menawarkan apa pun untuk ditandatangani. Salah satu saja dari
+panggilan itu, sekali ditandatangani, akan menyerahkan akun Anda sepenuhnya, sama
+seperti payload Bybit — modul yang sudah diaktifkan kemudian bisa menjalankan
+`delegatecall`-nya sendiri. Dan kalau kode Vela sendiri diganti, seperti yang terjadi
+pada `Safe{Wallet}`, hasil dekodenya pun akan menjadi milik penyerang — untuk itulah
+poin berikutnya.
 
 **Jalur independen yang bisa memeriksa antarmuka.** Vela sudah membuat
 [halaman tanda tangan](/id/docs/clear-signing-self-host) tanpa langkah build dan tanpa

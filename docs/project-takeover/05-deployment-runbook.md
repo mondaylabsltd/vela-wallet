@@ -59,10 +59,12 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 ## 官网/API 发布(getvela.app)
 
 1. `cd app-web/getvela.app && bun run deploy`
-2. 生产密钥(只需一次/轮换时):`wrangler secret put ALCHEMY_API_KEY / PIMLICO_API_KEY / GITHUB_BUG_TOKEN`
-3. Smoke:`curl -s https://getvela.app/api/exchange-rate?...`;`curl -s https://getvela.app/.well-known/apple-app-site-association`
+2. 生产密钥(只需一次/轮换时):`wrangler secret put GITHUB_BUG_TOKEN`
+3. Smoke:`curl -s "https://getvela.app/api/exchange-rate?currency=CNY"`;`curl -s https://getvela.app/.well-known/apple-app-site-association`
 4. 回滚:`wrangler rollback` 或重发上一个 commit 的构建
-5. **注意**:API 部署影响钱包壳的 bundler 代理路径——发布后立刻在钱包里做一次小额估算(不需提交)确认 `/api/bundler` 正常
+5. **注意**:官网发布**不影响钱包发交易**。现存 API 只有 `og` / `downloads` / `bug-report` / `exchange-rate` 四条,全部是官网自用或反馈通道。
+
+> **勘误(2026-09-22,spec 081 FR-015)**:本节原写「生产密钥 `ALCHEMY_API_KEY` / `PIMLICO_API_KEY`」与「发布后立刻在钱包里做一次小额估算确认 `/api/bundler` 正常」——两条都作废。`api/{wallet,transactions,nft,bundler,proxy}` 五条路由零调用方,已删除,那两枚 key 也不再被任何代码读取。钱包的 bundler 一直是自营中继 `https://vela-relay-cf.getvela.app`(核心 `rust/crates/vela-core/src/app/network_admin.rs:154`),它在**另一个仓库**(vela-relay),与官网发布无关。
 
 ## GitHub Releases 发布(桌面 + 扩展)
 

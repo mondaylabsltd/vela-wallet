@@ -1,7 +1,7 @@
 ---
 title: Vela をインストールする
 description: "ウェブ、ブラウザ拡張、デスクトップ、スマートフォン——Vela を使うすべての方法と、それぞれの費用、できること、端末に必要なもの。"
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -43,11 +43,34 @@ Chromium 系のブラウザ（Chrome、Edge、Brave。Chrome は 116 以降）�
 - **macOS** 版は Apple による署名と公証を別の手順で受けるため、ほかのプラットフォームより遅れることがあります。Mac のボタンに「まもなく公開」と表示されているときは、公証済みの最新の Mac 版が GitHub のリリースページにあります。
 - **Linux** で USB セキュリティキーを使うには、システムがアプリにそのキーへのアクセスを許可している必要があります。.deb と .rpm のパッケージは、そのためのルールを自動でインストールします。
 
-macOS と Windows では、デスクトップアプリに dApp 用のブラウザが内蔵されています。すべてのパッケージのチェックサムは [GitHub のリリースページ](https://github.com/mondaylabsltd/vela-wallet/releases)にあります。
+macOS と Windows では、デスクトップアプリに dApp 用のブラウザが内蔵されています。すべてのパッケージのチェックサムは [GitHub のリリースページ](https://github.com/mondaylabsltd/vela-wallet/releases)にあります。確かめられるのはチェックサムだけではありません。下を参照してください。
 
 ## iPhone と Android
 
 iOS 17.4 以降と Android 10 以降に対応したネイティブアプリです。App Store と Google Play で買い切りアプリとして販売する予定ですが、**まだストアには公開していません**。コードは公開されているので、自分で無料でビルドできます。ただし違いがひとつあります。自分で署名したビルドでは、getvela.app のウォレットにスマートフォン自身のパスキーを使えません。別のスマートフォンでの QR 読み取りと USB セキュリティキーは使えます。[アプリを自分でビルドする](/ja/docs/self-hosting#web-app)を参照してください。
+
+## ダウンロードしたものを確かめる
+
+チェックサムでわかるのは、2 つのファイルが同一だということだけです。誰がそのファイルを作ったのかはわかりませんし、そのチェックサムの一覧はダウンロードと同じページに載っています。そこで、リリースに添付するパッケージには**証明（attestation）**も付けています。それをビルドしたワークフローの実行が、ファイル・コミット・実行を記した文書に署名し、GitHub がそれを保管します。確認は [GitHub CLI](https://cli.github.com) のコマンド 1 つで済みます（最初に `gh auth login` でサインインしてください。確認自体は無料です）。
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+誰がどのコミットからそのファイルをビルドしたのかが表示されるか、さもなければ失敗します。この答えのために、あなたの端末が私たちを信頼する必要はありません。署名は GitHub のもので、ビルド時に作られ、ファイルをどこかに再アップロードしただけの人には作れません。
+
+Mac のイメージは私たちの Developer ID で署名され、Apple の公証を受けています。開くときには macOS が代わりに確認しますが、自分で確かめるなら次のとおりです。
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows の警告は出たままです">
+証明はコード署名ではありません。Windows のインストーラーはコード署名されていないので、SmartScreen は今までどおり「Windows によって PC が保護されました」と一度止めます。<strong>詳細情報</strong>を選び、<strong>実行</strong>を押してください。そのファイルが本当に私たちのものだと教えてくれるのは証明の確認のほうで、この警告は、私たちがまだ買っていない証明書についてのものです。
+</Callout>
+
+これが有効になる前に公開されたパッケージには、チェックサムしかありません。
 
 ## dApp で Vela を使う
 

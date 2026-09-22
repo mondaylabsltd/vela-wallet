@@ -1,7 +1,7 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
@@ -121,11 +121,10 @@ doğrular. Dolayısıyla bir işlem bir sahibi kaldırırsa, o sahibin imzaladı
 paketin ilerisine yerleştirilmiş bir işlem yine de doğrulamadan geçer ve yürütülür.
 Safe bunu kabul etti ve v0.3.0'ı değiştirmedi.
 
-Vela'nın uygulamaları hiçbir zaman sahip değişikliği oluşturmaz; yani Vela bunu kendi
-başına hiçbir zaman tetiklemez. Yine de önemlidir: bir dApp cüzdanınızdan kendi
-sahiplerini değiştirmesini isteyebilir (aşağıdaki "Eksikler" bölümüne bakın) ve ele
-geçirilmiş bir anahtarı başka Safe araçlarıyla kaldıran biri, o anahtarın aynı paket
-içinde devre dışı kalacağına güvenemez.
+Vela'nın uygulamaları hiçbir zaman sahip değişikliği oluşturmaz ve bunu isteyen bir dApp
+doğrudan reddedilir; yani Vela bunu kendi başına hiçbir zaman tetiklemez. Yine de ele
+geçirilmiş bir anahtarı başka Safe araçlarıyla kaldıran herkes için önemlidir: o
+anahtarın aynı paket içinde devre dışı kalacağına güvenemezler.
 
 ### İmzalı bir işlemin araya girilerek yürütülmesi (v0.9 öncesi EntryPoint)
 
@@ -152,21 +151,10 @@ bağlı; olduğunda bu sayfa bunu yazacak.
 Bunlar sözleşme bulguları değil, cüzdanın sizi sandığınızdan daha az koruduğu yerler.
 Her biri düzeltilmek üzere takip ediliyor:
 
-- **Cüzdanınızdan yine cüzdanınıza yapılan çağrılar engellenmiyor.** Bir dApp kendi
-  Safe'iniz üzerinde `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` ya
-  da `setGuard` isteyebilir; bunlardan herhangi biri, bir kez imzalandığında hesabı
-  devreder. Vela bu çağrıları çözer ama durdurmaz. Hedefi kendi adresiniz olan her
-  isteği reddedin.
 - **Onay koruması yalnızca "sınırsız" tutarları durdurur** (2^200 ya da daha fazla;
   Permit2 için 2^152). Büyük ama sınırlı bir onay, imzalı bir izin (permit) ya da bir NFT
   `setApprovalForAll` engellenmez, yalnızca uyarı alır.
-- **Alınan tanımlayıcılar doğrulanmış değil.** Zincir verisi sunucusundan gelen bir
-  tanımlayıcı, sözleşmeyle eşleşirse "doğrulanmış" olarak gösterilir; ancak o sunucu
-  kadar güvenilirdir.
 - **Bağımsız imza sayfası** henüz hiçbir uygulamaya **bağlı değil**.
-- **Ağ kontrolü, ikinci ila yedinci anahtarların ihtiyaç duyduğu Safe'in geçiş
-  anahtarı imzalayıcı fabrikasına bakmıyor**; o fabrika olmadan eklenen bir ağda
-  yalnızca ilk anahtar imzalayabilir.
 - **Web sitesi, geçiş anahtarlarıyla aynı alan adında üçüncü taraf bir analitik
   betiği yükler.** Site kendi sayfalarının geçiş anahtarı kullanmasını yasaklar (bir
   Permissions-Policy başlığıyla) ve betiği anahtar barındıran sayfanın dışında tutar.

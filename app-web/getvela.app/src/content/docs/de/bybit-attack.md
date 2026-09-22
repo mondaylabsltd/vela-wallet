@@ -1,7 +1,7 @@
 ---
 title: Der Bybit-Angriff und der Weg, den er nahm
 description: "Im Februar 2025 verlor Bybit rund 1,5 Milliarden US-Dollar. Nicht die Safe-Verträge waren kaputt, sondern die Oberfläche. Diese Seite erklärt den Angriffsweg und womit Velas Design ihn schließt."
-source: ac56b16b531f
+source: 14ae76da6694
 ---
 
 # Der Bybit-Angriff und der Weg, den er nahm
@@ -69,17 +69,20 @@ Implementierungsadresse austauschte; genau so etwas sollte einen Unterzeichner
 schlagartig innehalten lassen – und dass es hinter einer freundlichen Zusammenfassung
 verborgen war, ist der Grund, warum es das nicht tat.
 
-Zwei Grenzen, die man genau benennen muss. Eine dApp kann von Vela nicht direkt einen
+Zwei Dinge, die man genau benennen muss. Eine dApp kann von Vela nicht direkt einen
 `delegatecall` verlangen – die Anfragen, die eine Seite stellen kann, erzeugen
 gewöhnliche Aufrufe –, die Bybit-Payload selbst könnte also nicht auf diesem Weg
-ankommen. Aber eine Seite *kann* einen Aufruf von deinem Safe an sich selbst
-anfordern: `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard`.
-Jeder davon übergibt, einmal signiert, das Konto so vollständig wie die
+ankommen. Und eine Seite, die einen Aufruf von deinem Safe an sich selbst anfordert,
+wird **abgelehnt und nicht bloß dekodiert**: `enableModule`, `addOwnerWithThreshold`,
+`swapOwner`, `setFallbackHandler`, `setGuard` und der Rest dieser Familie werden
+blockiert, wenn das Ziel deine eigene Wallet ist – auch innerhalb eines Batches und
+innerhalb eines `MultiSend` –, ebenso jeder Teilaufruf, der einen `delegatecall` trägt,
+gleich worauf er zielt, und eine `SafeTx`-Signatur über typisierte Daten. Die Wallet
+nennt den Aufruf, den sie abgelehnt hat, und bietet nichts zum Signieren an. Jeder
+davon würde, einmal signiert, das Konto so vollständig übergeben wie die
 Bybit-Payload – ein aktiviertes Modul kann danach selbst einen `delegatecall`
-ausführen. Vela dekodiert solche Aufrufe, blockiert sie aber noch nicht; **lehne jede
-Anfrage ab, deren Ziel deine eigene Wallet-Adresse ist.** Und würde Velas eigener Code
-ersetzt, wie der von `Safe{Wallet}`, dann wäre auch die Dekodierung die des
-Angreifers – dafür ist der nächste Punkt da.
+ausführen. Und würde Velas eigener Code ersetzt, wie der von `Safe{Wallet}`, dann wäre
+auch die Dekodierung die des Angreifers – dafür ist der nächste Punkt da.
 
 **Ein unabhängiger Weg, der die Oberfläche prüfen kann.** Vela hat eine
 [Signaturseite](/de/docs/clear-signing-self-host) ohne Build-Schritt und ohne

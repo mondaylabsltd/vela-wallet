@@ -40,7 +40,13 @@
 	const d = $derived(m.getStarted.downloads);
 
 	const RELEASES = 'https://github.com/mondaylabsltd/vela-wallet/releases';
-	const BUILD_FROM_SOURCE = 'https://github.com/mondaylabsltd/vela-wallet#where-to-get-it';
+	// The phone row's "build it from source". It used to point at a README
+	// anchor (#where-to-get-it) that no longer exists, so the link landed at the
+	// top of the README and said nothing about phones. This section does: what a
+	// self-signed phone build can and cannot do, and the two ways in that still
+	// work ("scan with another phone", a security key).
+	const BUILD_FROM_SOURCE =
+		'https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/ARCHITECTURE.md#a-phone-app-you-built-yourself';
 	const WEB_WALLET = 'https://wallet.getvela.app/';
 
 	const fill = (s: string, vars: Record<string, string | number>) =>

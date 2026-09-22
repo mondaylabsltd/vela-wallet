@@ -1,7 +1,7 @@
 ---
 title: Hướng dẫn tự triển khai
 description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -107,16 +107,14 @@ báo `status: "ok"`. Dù thế nào ví cũng lưu những gì bạn nhập — 
 | Dữ liệu chuỗi | `ethereum-data` |
 | Tỷ giá | không kiểm tra theo tên — phải trả về danh sách tỷ giá theo USD |
 
-Mức độ mỗi ứng dụng tuân theo các thiết lập này hiện nay:
+Cả bốn ứng dụng đều tuân theo cả bốn trường, và một điểm cuối vừa đổi sẽ có hiệu lực
+ngay ở lần gọi tiếp theo chứ không phải lần khởi động tiếp theo: mọi đường đi — tạo ví,
+đăng nhập, tra tên cho một địa chỉ — đều đọc điểm cuối ngay lúc dùng đến nó. Trên iOS,
+chỉ mục passkey còn đổi được ở màn hình đăng nhập khi không kết nối được chỉ mục mặc
+định.
 
-| Ứng dụng | Điểm cuối dịch vụ | RPC theo từng mạng |
-| --- | --- | --- |
-| Web và tiện ích | Dữ liệu chuỗi, relay và tỷ giá fiat. Chỉ mục passkey được dùng để tra tên, nhưng việc tạo ví và đăng nhập vẫn dùng chỉ mục của Vela | Có |
-| Máy tính | Cả bốn; chỉ mục passkey mới có hiệu lực sau khi bạn khởi động lại hoặc đăng xuất | Có |
-| Android | Cả bốn, trừ việc tra tên cho địa chỉ vẫn hỏi chỉ mục của Vela | Có |
-| iOS | **Chưa hỗ trợ**: trang này hiện giá trị giữ chỗ và không lưu. Có thể đổi chỉ mục passkey ở màn hình đăng nhập khi không kết nối được chỉ mục mặc định | Chỉ đọc |
-
-Những chỗ thiếu này là lỗi, và đều đang được theo dõi.
+(Cho tới tháng 9/2026, điều đó có bốn ngoại lệ; tệ nhất là trang trên iOS chỉ hiện giá
+trị giữ chỗ và không lưu gì cả. Tất cả đã được sửa.)
 
 ## Tự chạy relay của bạn
 
@@ -152,9 +150,9 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Nên dùng image đã phát hành: build từ mã nguồn bằng `docker compose up --build` có thể thất
-bại với Dockerfile hiện tại. Nếu không dùng Docker, `cargo run --release --bin vela-relay`
-chạy trực tiếp relay.
+Cách nào cũng được: image đã phát hành là nhanh nhất, còn `docker compose up --build` dựng
+đúng thứ đó từ mã nguồn mà bạn đọc được. Nếu không dùng Docker,
+`cargo run --release --bin vela-relay` chạy trực tiếp relay.
 
 **Cloudflare Workers**
 
@@ -213,9 +211,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` là bắt buộc, dù tệp ví dụ của máy chủ bỏ nó ra: thiếu nó, máy
-chủ sẽ phát ra những thử thách (challenge) mà hợp đồng từ chối, và mọi lần đăng ký đều thất
-bại.
+`P256_INDEX_DOMAIN_REGISTRY` là thứ người ta hay bỏ sót: thiếu nó, máy chủ sẽ phát ra
+những thử thách (challenge) mà hợp đồng từ chối, và mọi lần đăng ký đều thất bại. Nó có
+trong `.env.example`, và phải trùng với `DOMAIN_REGISTRY` của chính hợp đồng đã triển
+khai — từ VERSION 12 của sổ đăng ký, miền thử thách được cố định ngay lúc triển khai, nên
+nó không đổi khi hợp đồng được triển khai lại.
 
 **Chạy và kiểm tra**
 
@@ -227,8 +227,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 Máy chủ lắng nghe qua HTTP thường (mặc định cổng 11256); hãy đặt một proxy TLS phía trước,
-vì ví chỉ chấp nhận điểm cuối `https://`. Vào thời điểm viết bài này, Dockerfile trong mã
-nguồn có thể không build được; build bằng Cargo thì được.
+vì ví chỉ chấp nhận điểm cuối `https://`. Lệnh `docker build -f
+p256-index-server/Dockerfile .` cũng chạy được từ một bản clone sạch; nếu dùng Compose,
+hãy chép `.env.example` thành `p256-index-server/.env` trước.
 
 **Nếu không có chỉ mục nào trả lời**, các ví đã có vẫn hoạt động: khi đăng nhập, ứng dụng
 đọc hợp đồng sổ đăng ký trên Gnosis (rồi đến Ethereum) qua các nút RPC của bạn. Một ví chỉ
@@ -297,9 +298,8 @@ getvela.app: Apple và Google chỉ cho những ứng dụng do Vela ký dùng p
 Vela chạy trên bất kỳ chuỗi EVM nào có precompile P-256 và các hợp đồng tiêu chuẩn mà nó
 kiểm tra. [Thiết lập chuỗi](/vi/chain-setup) cho bạn biết một chuỗi còn thiếu gì và triển
 khai những gì ai cũng triển khai được; [mạng & phí](/vi/docs/networks-and-fees) giải thích
-các yêu cầu. Còn một chỗ hở: ví có nhiều hơn một khóa còn cần factory tạo bộ ký passkey của
-Safe trên chuỗi đó, thứ mà bước kiểm tra chưa tìm — nếu thiếu nó, chỉ khóa đầu tiên ký được
-trên chuỗi đó.
+các yêu cầu. Bước kiểm tra có bao gồm hai hợp đồng mà ví nhiều hơn một khóa cần, và đánh
+dấu rõ chúng là như vậy — một chuỗi thiếu chúng vẫn chạy được ví một khóa.
 
 ## Những gì vẫn trỏ về Vela sau tất cả
 

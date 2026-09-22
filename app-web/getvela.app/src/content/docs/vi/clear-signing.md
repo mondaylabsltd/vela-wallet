@@ -1,7 +1,7 @@
 ---
 title: Ký minh bạch
 description: "Vela giải mã giao dịch thành ngôn ngữ dễ hiểu trước khi bạn duyệt — ý định, số tiền, địa chỉ và rủi ro — thay vì một chuỗi hex khó hiểu. Khi không giải mã được một lệnh gọi, nó cảnh báo bạn chứ không giả vờ đã hiểu."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -41,10 +41,12 @@ Vela tìm bộ mô tả theo thứ tự sau:
 3. **Các dạng tiêu chuẩn** — token ERC-20, NFT ERC-721 và ERC-1155, vault ERC-4626 và
    permit ERC-2612 — nên phần lớn thao tác hằng ngày vẫn giải mã được.
 
-Khi khớp với một bộ mô tả được viết riêng cho đúng hợp đồng đó, giao dịch được gắn nhãn
-**đã xác minh** kèm tên hợp đồng. "Đã xác minh" nghĩa là *đã tìm thấy bộ mô tả cho hợp
-đồng này*, không phải đã được kiểm tra bằng mật mã: bộ mô tả lấy từ máy chủ dữ liệu
-chuỗi không được ký, nên chúng chỉ đáng tin bằng chính máy chủ đó — một trong những lý do
+**Đã xác minh** chỉ dành cho nguồn thứ nhất. Một giao dịch chỉ được gắn nhãn đã xác minh
+khi phần mô tả đến từ một bộ mô tả có sẵn trong chính ứng dụng bạn đang chạy — hoặc đến
+từ máy chủ dữ liệu chuỗi và giống hệt bản có sẵn, điều này chứng minh không có gì bị thay
+đổi trên đường truyền. Mọi thứ khác mà máy chủ gửi về vẫn được giải mã và vẫn được hiển
+thị, kèm một dòng nói rằng nó đến từ dịch vụ bộ mô tả và không có gì xác thực nó. Dịch vụ
+đó không được ký, nên nó chỉ đáng tin bằng chính người vận hành nó — một trong những lý do
 bạn có thể [tự chạy máy chủ của mình](/vi/docs/self-hosting#chain-data).
 
 Số lượng token được định dạng theo **số chữ số thập phân thật trên chuỗi** của token đó.

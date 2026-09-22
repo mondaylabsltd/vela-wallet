@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -176,10 +176,12 @@ Aufrufe und EIP-712-Nachrichten werden mit **ERC-7730**-Deskriptoren dekodiert �
 gängige Verträge in die App eingebaut, vom Chain-Daten-Dienst abgerufen oder
 Standardformen von Token zugeordnet –, dann, als letzter Ausweg, über eine öffentliche
 Selektor-Datenbank, gekennzeichnet als „ohne Gewähr“. Was übrig bleibt, bekommt eine
-ausdrückliche Blindsignatur-Warnung. Abgerufene Deskriptoren sind nicht kryptografisch
-authentifiziert. Eine On-Chain-Freigabe in „unbegrenzter“ Höhe (2^200 oder mehr) lässt
-sich erst absenden, wenn du sie verringerst; eine große, aber begrenzte Freigabe und
-signierte Permits werden mit einem Vorsichtshinweis angezeigt, aber nicht blockiert.
+ausdrückliche Blindsignatur-Warnung. Ein abgerufener Deskriptor wird nie als
+verifiziert gekennzeichnet – dieses Wort verdient nur einer, der in die App eingebaut
+ist, oder ein abgerufener, der mit ihm identisch ist. Eine On-Chain-Freigabe in
+„unbegrenzter“ Höhe (2^200 oder mehr) lässt sich erst absenden, wenn du sie
+verringerst; eine große, aber begrenzte Freigabe und signierte Permits werden mit
+einem Vorsichtshinweis angezeigt, aber nicht blockiert.
 Details: [Klartext-Signatur](/de/docs/clear-signing).
 
 ### Netzwerke
@@ -187,9 +189,10 @@ Details: [Klartext-Signatur](/de/docs/clear-signing).
 Vela hat 24 eingebaute Netzwerke – Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
 Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume und XRPL EVM – und
-akzeptiert jedes EVM-Netzwerk, das die elf Verträge hat, auf die es prüft, sowie das
-EIP-7951/RIP-7212-Precompile. (Die Schlüssel zwei bis sieben brauchen in diesem Netzwerk
-außerdem die Passkey-Signer-Factory von Safe, die die Prüfung noch nicht abdeckt.)
+akzeptiert jedes EVM-Netzwerk, das die zwölf Verträge hat, auf die es prüft, sowie das
+EIP-7951/RIP-7212-Precompile. Zwei der zwölf sind die Passkey-Signer-Factory von Safe
+und der Signer-Code, den sie bereitstellt; die braucht nur eine Wallet mit mehr als
+einem Schlüssel, und die Prüfung weist sie gesondert aus.
 
 ## Sicherheitsmodell
 
@@ -238,26 +241,32 @@ Was dir Selbstverwahrung gibt: Vela ist keine zweite Partei, die das kann.
   Schlüssel in jedem Netzwerk weiter verfügen.
 - **Phishing** – ein Passkey lässt sich nicht auf einer gefälschten Seite eintippen,
   und Browser bieten ihn nur Seiten auf getvela.app und ihren Subdomains an.
-- **Bösartige dApp** – abgedeckt durch Klartext-Signatur und Freigabesperre, mit einer
-  ernsten Lücke: Eine dApp kann einen Aufruf von deinem Safe an sich selbst anfordern –
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` –, und
-  jeder davon übergibt, einmal signiert, das Konto so vollständig wie die
-  Bybit-Payload. Vela dekodiert diese Aufrufe, blockiert sie aber noch nicht. Lehne
-  jede Anfrage ab, deren Ziel deine eigene Wallet-Adresse ist.
+- **Bösartige dApp** – abgedeckt durch Klartext-Signatur, Freigabesperre und eine
+  Ablehnung: Eine Anfrage nach einem Aufruf von deinem Safe an sich selbst –
+  `enableModule`, `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`,
+  `setGuard` und der Rest dieser Familie – wird blockiert, auch innerhalb eines Batches
+  oder eines `MultiSend`, ebenso jeder Teilaufruf, der einen `delegatecall` trägt, und
+  eine `SafeTx`-Signatur über typisierte Daten. Jeder davon würde, einmal signiert, das
+  Konto so vollständig übergeben wie die Bybit-Payload, deshalb bietet die Wallet sie
+  gar nicht erst zum Signieren an.
 - **Kompromittierter Backend-Dienst** (Relay, Index, Chain-Daten, Wechselkurse) – keine
   Macht zu signieren, aber echter Einfluss: Dienstverweigerung, irreführende
   Deskriptoren oder Token-Listen, falsche Wechselkurse, die ändern, wie viel ein
   Fiat-Betrag tatsächlich sendet, und (beim Relay) Zeitpunkt und Gaspreis wie oben.
-  Abgerufene Deskriptoren werden nicht als authentifiziert behandelt, und jeder Dienst
-  lässt sich ersetzen.
+  Eine vom Chain-Daten-Dienst abgerufene Beschreibung wird nie verifiziert genannt –
+  dieses Wort verdient nur eine in die App eingebaute oder eine abgerufene, die mit ihr
+  identisch ist; alle übrigen werden mit einer Zeile angezeigt, die sagt, dass nichts
+  sie authentifiziert hat. Jeder Dienst lässt sich ersetzen.
 - **Kompromittierte App-Auslieferung** – eine manipulierte Web-Bereitstellung, ein
   manipuliertes Erweiterungs-Update oder ein manipulierter App-Build könnte dir eine
   bösartige Transaktion zum Signieren vorlegen. Das ist die Angriffsklasse von
   [Bybit](/de/docs/bybit-attack). Die Gegenmaßnahmen sind heute begrenzt: die
   Dekodierung und die Freigabesperre in der App selbst, notarisierte macOS-Builds und
   das eigene Bauen der Erweiterung oder der Apps aus dem Quellcode (Release-Pakete
-  haben SHA-256-Prüfsummen, keine Signaturen). Eine unabhängige Signaturseite, die den
-  Code der App nicht teilt, ist gebaut, aber noch nicht angebunden.
+  haben SHA-256-Prüfsummen und GitHub-Build-Provenance-Attestierungen, die Commit und
+  Workflow-Lauf benennen; das Windows-Installationsprogramm ist weiterhin nicht
+  codesigniert). Eine unabhängige Signaturseite, die den Code der App nicht teilt, ist
+  gebaut, aber noch nicht angebunden.
 - **Alles, was von der Domain ausgeliefert wird** – jede Seite auf getvela.app oder
   ihren Subdomains, einschließlich eines Skripts, das sie lädt, könnte Signaturen von
   Vela-Passkeys anfordern, und die Abfrage zeigt nur „getvela.app“. Die Website

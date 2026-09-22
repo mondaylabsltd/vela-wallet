@@ -1,7 +1,7 @@
 ---
 title: Jaringan & biaya
 description: "24 jaringan bawaan Vela, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ dari kunci Anda, bukan dari chain-nya.
 ## Menambahkan jaringan lain
 
 Anda bisa menambahkan jaringan EVM apa pun di **Pengaturan → Jaringan**, asalkan
-jaringan itu punya semua yang dibutuhkan dompet Vela: sebelas kontrak standar
+jaringan itu punya semua yang dibutuhkan dompet Vela: dua belas kontrak standar
 (EntryPoint ERC-4337 v0.7, kontrak Safe v1.4.1, modul 4337 dan modul passkey milik Safe,
 MultiSend, Multicall3, dan dua deployer deterministik) serta precompile **EIP-7951 / RIP-7212**
 yang memverifikasi tanda tangan passkey di alamat `0x100`. Dompet memeriksa semuanya,
@@ -51,9 +51,12 @@ Precompile ini syarat mutlak. Alamatnya adalah bagian dari cara setiap alamat Ve
 dihitung, jadi tidak ada verifier cadangan dan tidak ada cara untuk men-deploy-nya
 belakangan. Kalau sebuah chain punya precompile itu tetapi kekurangan sebagian kontrak,
 [penyiapan chain](/id/chain-setup) menunjukkan apa yang kurang dan men-deploy yang bisa
-di-deploy siapa saja. Ada satu celah dalam pemeriksaannya: dompet dengan lebih dari satu
-kunci juga membutuhkan factory signer passkey milik Safe di jaringan itu, yang belum
-diperiksa; tanpanya, hanya kunci pertama yang bisa menandatangani di sana.
+di-deploy siapa saja. Dua dari dua belas kontrak yang diperiksanya — factory signer
+passkey milik Safe dan kode signer yang di-deploy factory itu — hanya penting bagi
+dompet yang memegang lebih dari satu kunci, dan pemeriksaannya menyatakan hal itu per
+kontrak: tanpa keduanya, dompet satu kunci bekerja normal, sedangkan dompet yang
+alamatnya berasal dari dua sampai tujuh kunci sama sekali tidak bisa di-deploy di
+jaringan itu.
 
 ## Bagaimana transaksi dibayar
 

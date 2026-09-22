@@ -1,7 +1,7 @@
 ---
 title: Assinatura legível
 description: "A Vela decodifica as transações em linguagem clara antes de você aprovar — intenção, valores, endereços e risco — em vez de um hexadecimal opaco. Quando não consegue decodificar uma chamada, ela avisa em vez de fingir que entendeu."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -46,12 +46,14 @@ A Vela procura um descritor nesta ordem:
    permits ERC-2612 —, para que a maioria das ações do dia a dia continue sendo
    decodificada.
 
-Quando um descritor escrito para aquele contrato específico corresponde, a
-transação recebe o rótulo **Verificado**, com o nome do contrato. “Verificado”
-significa *foi encontrado um descritor para este contrato*, não que ele tenha sido
-conferido criptograficamente: os descritores buscados no servidor de dados de chain
-não são assinados, então são tão confiáveis quanto esse servidor — e esse é um dos
-motivos pelos quais você pode [rodar o seu](/pt-BR/docs/self-hosting#chain-data).
+**Verificado** é reservado à primeira fonte. Uma transação só recebe o rótulo
+verificado quando a descrição veio de um descritor embutido no app que você está
+usando — ou veio do servidor de dados de chain e é idêntica à cópia embutida, o que
+prova que nada foi alterado no caminho. Todo o resto que o servidor manda continua
+sendo decodificado e continua sendo mostrado, com uma linha dizendo que veio do
+serviço de descritores e que nada o autenticou. Esse serviço não é assinado, então é
+tão confiável quanto quem o opera — e esse é um dos motivos pelos quais você pode
+[rodar o seu](/pt-BR/docs/self-hosting#chain-data).
 
 Os valores de tokens são formatados com as **casas decimais reais do token
 on-chain**. Se a Vela não consegue confirmar as casas decimais de um token, ela

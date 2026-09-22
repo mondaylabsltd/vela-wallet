@@ -1,7 +1,7 @@
 ---
 title: Vela 설치
 description: "웹, 브라우저 확장 프로그램, 데스크톱, 휴대폰까지 Vela를 쓰는 모든 방법. 각각의 비용과 할 수 있는 일, 기기에 필요한 조건을 정리했습니다."
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -59,6 +59,7 @@ Chromium 기반 브라우저인 Chrome, Edge, Brave에서 쓸 수 있습니다(C
 macOS와 Windows용 데스크톱 앱에는 dApp을 쓰기 위한 내장 브라우저가 있습니다. 모든
 패키지의 체크섬은
 [GitHub 릴리스 페이지](https://github.com/mondaylabsltd/vela-wallet/releases)에 있습니다.
+확인할 수 있는 것은 체크섬만이 아닙니다. 아래를 보세요.
 
 ## iPhone과 Android
 
@@ -67,6 +68,40 @@ Play에서 1회 구매로 판매할 예정이며, **아직 스토어에는 없�
 무료로 직접 빌드할 수 있습니다. 차이는 하나입니다. 직접 서명한 빌드로는 휴대폰 자체의
 패스키로 getvela.app 지갑에 서명할 수 없습니다. 다른 휴대폰으로 스캔하는 방법과 USB 보안
 키는 쓸 수 있습니다. [앱 직접 빌드하기](/ko/docs/self-hosting#web-app)를 참고하세요.
+
+## 내려받은 것을 확인하기
+
+체크섬으로 알 수 있는 것은 두 파일이 같다는 사실뿐입니다. 누가 그 파일을 만들었는지는 알 수
+없고, 체크섬 목록은 내려받기와 같은 페이지에 올라가 있습니다. 그래서 릴리스에 붙이는 모든
+패키지에는 **증명(attestation)**도 함께 붙습니다. 그것을 빌드한 워크플로 실행이 파일과 커밋,
+실행을 밝힌 진술에 서명하고, GitHub가 이를 보관합니다. 확인은 [GitHub
+CLI](https://cli.github.com) 명령 한 줄이면 됩니다(`gh auth login`으로 한 번 로그인하세요.
+확인 자체는 무료입니다).
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+누가 어느 커밋에서 그 파일을 빌드했는지 알려 주거나, 아니면 실패합니다. 이 답을 얻기 위해 내
+컴퓨터가 우리를 믿어야 할 필요는 없습니다. 서명은 GitHub의 것이고 빌드 시점에 만들어지며,
+파일을 어딘가에 다시 올리기만 한 사람은 만들어 낼 수 없습니다.
+
+Mac 이미지는 우리 Developer ID로 서명하고 Apple의 공증을 받았으며, 열 때 macOS가 대신
+확인해 줍니다. 직접 물어보려면 이렇게 하세요.
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows 경고는 그대로입니다">
+증명은 코드 서명이 아닙니다. Windows 설치 프로그램에는 코드 서명이 없어서 SmartScreen이
+여전히 "Windows의 PC 보호"로 한 번 막습니다. <strong>추가 정보</strong>를 누른 다음
+<strong>실행</strong>을 누르세요. 그 파일이 정말 우리 것인지 알려 주는 것은 증명 확인
+쪽이고, 이 경고는 우리가 아직 사지 않은 인증서에 관한 것입니다.
+</Callout>
+
+이 기능을 켜기 전에 게시한 패키지에는 체크섬만 붙어 있습니다.
 
 ## dApp에서 Vela 쓰기
 

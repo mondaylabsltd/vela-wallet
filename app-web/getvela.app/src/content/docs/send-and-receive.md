@@ -45,9 +45,14 @@ When you enter an address, Vela looks up a name for it: first in its own
 registry (the name of another Vela wallet), then in `.bnb`, `.arb`, `.g`,
 Basename and ENS reverse records, read directly from each chain. This goes one
 way — it names an address you've entered. Typing a name such as `alice.eth` does
-not look up an address. Your saved **contacts** show their names too. Treat a name
-as a hint, not proof: a reverse record or a Vela wallet name is chosen by whoever
-controls that address.
+not look up an address. Your saved **contacts** show their names too.
+
+A name from those reverse records is shown only if it **resolves forward to the
+same address**. Anyone can set their own reverse record to any string, so the
+record alone proves nothing; the wallet asks the name service which address that
+name points at, and shows the name only when the two agree. If the check cannot
+be made — an endpoint that does not answer, a resolver that fails — you see the
+address and no name, never an unchecked one.
 
 ### Fee coin and speed
 

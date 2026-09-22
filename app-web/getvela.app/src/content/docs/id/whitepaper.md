@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -165,10 +165,12 @@ Panggilan dan pesan EIP-712 didekode dengan deskriptor **ERC-7730** — bawaan a
 untuk kontrak yang umum, diambil dari layanan data chain, atau dicocokkan dengan bentuk
 token standar — lalu, sebagai jalan terakhir, basis data selector publik, dengan label
 upaya terbaik (best effort). Sisanya mendapat peringatan tanda tangan buta yang tegas.
-Deskriptor yang diambil tidak diautentikasi secara kriptografis. Persetujuan on-chain di
-tingkat "tanpa batas" (2^200 atau lebih) tidak bisa dikirim sampai Anda menurunkannya;
-persetujuan besar yang terbatas dan permit yang ditandatangani ditampilkan dengan
-peringatan hati-hati tetapi tidak diblokir. Detailnya:
+Deskriptor yang diambil tidak pernah diberi label terverifikasi — hanya deskriptor bawaan
+aplikasi, atau deskriptor yang diambil dan identik dengannya, yang berhak atas kata itu.
+Persetujuan on-chain di tingkat "tanpa batas" (2^200 atau lebih) tidak bisa dikirim
+sampai Anda menurunkannya; persetujuan besar yang terbatas dan permit yang
+ditandatangani ditampilkan dengan peringatan hati-hati tetapi tidak diblokir.
+Detailnya:
 [clear signing](/id/docs/clear-signing).
 
 ### Jaringan
@@ -176,9 +178,10 @@ peringatan hati-hati tetapi tidak diblokir. Detailnya:
 Vela punya 24 jaringan bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — dan menerima
-jaringan EVM apa pun yang punya sebelas kontrak yang diperiksanya dan precompile
-EIP-7951 / RIP-7212. (Kunci kedua sampai ketujuh juga membutuhkan factory signer passkey milik Safe
-di jaringan itu, yang belum tercakup dalam pemeriksaannya.)
+jaringan EVM apa pun yang punya dua belas kontrak yang diperiksanya dan precompile
+EIP-7951 / RIP-7212. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
+kode signer yang di-deploy factory itu, yang hanya dibutuhkan dompet dengan lebih dari
+satu kunci; pemeriksaannya melaporkan keduanya secara terpisah.
 
 ## Model keamanan
 
@@ -229,23 +232,29 @@ kedua yang bisa melakukannya.
   karena alamat lama tetap bisa dibelanjakan oleh kunci itu di setiap jaringan.
 - **Phishing** — passkey tidak bisa diketik di situs palsu, dan browser hanya
   menawarkannya ke halaman di getvela.app dan subdomainnya.
-- **dApp berbahaya** — ditangani dengan clear signing dan pengaman persetujuan, dengan
-  satu celah serius: dApp bisa meminta panggilan dari Safe Anda ke Safe itu sendiri —
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — dan salah
-  satu saja, sekali ditandatangani, menyerahkan akun Anda sepenuhnya, sama seperti payload
-  Bybit. Vela mendekode panggilan ini tetapi belum memblokirnya. Tolak setiap permintaan
-  yang targetnya alamat dompet Anda sendiri.
+- **dApp berbahaya** — ditangani dengan clear signing, pengaman persetujuan, dan sebuah
+  penolakan: permintaan panggilan dari Safe Anda ke Safe itu sendiri — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` dan sisa keluarga
+  itu — diblokir, termasuk ketika berada di dalam sebuah batch atau `MultiSend`, begitu
+  pula setiap bagian yang membawa `delegatecall` dan tanda tangan typed data `SafeTx`.
+  Salah satu saja, sekali ditandatangani, akan menyerahkan akun Anda sepenuhnya, sama
+  seperti payload Bybit, jadi dompet sama sekali tidak menawarkannya untuk
+  ditandatangani.
 - **Layanan backend yang dibobol** (relay, indeks, data chain, kurs) — tidak punya
   kewenangan menandatangani, tetapi punya pengaruh nyata: menolak layanan, deskriptor atau
   daftar token yang menyesatkan, kurs yang salah sehingga mengubah berapa yang terkirim
-  untuk suatu jumlah fiat, dan (untuk relay) waktu dan harga gas di atas. Deskriptor yang
-  diambil tidak dianggap terautentikasi, dan setiap layanan bisa diganti.
+  untuk suatu jumlah fiat, dan (untuk relay) waktu dan harga gas di atas. Deskripsi yang
+  diambil dari layanan data chain tidak pernah disebut terverifikasi — hanya deskripsi
+  bawaan aplikasi, atau deskripsi yang diambil dan identik dengannya, yang berhak atas
+  kata itu, sedangkan sisanya ditampilkan dengan satu baris yang menyatakan tidak ada yang
+  mengautentikasinya. Setiap layanan bisa diganti.
 - **Distribusi aplikasi yang dibobol** — deployment web, pembaruan ekstensi, atau build
   aplikasi yang dimanipulasi bisa menyodorkan transaksi berbahaya untuk Anda tandatangani.
   Ini jenis serangan [Bybit](/id/docs/bybit-attack). Mitigasinya saat ini terbatas: dekode
   dan pengaman persetujuan di aplikasi itu sendiri, build macOS yang dinotarisasi, dan
   mengompilasi ekstensi atau aplikasinya sendiri dari kode sumber (paket rilis disertai
-  checksum SHA-256, bukan tanda tangan). Halaman tanda tangan independen yang tidak
+  checksum SHA-256 dan atestasi build-provenance GitHub yang menyebut commit serta proses
+  workflow-nya; penginstal Windows masih belum ditandatangani kodenya). Halaman tanda tangan independen yang tidak
   berbagi kode dengan aplikasi sudah dibuat, tetapi belum terhubung.
 - **Apa pun yang disajikan dari domain itu** — halaman mana pun di getvela.app atau
   subdomainnya, termasuk skrip yang dimuatnya, bisa meminta tanda tangan dari passkey

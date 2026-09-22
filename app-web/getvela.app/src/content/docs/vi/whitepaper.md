@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -153,20 +153,22 @@ Chi tiết: [mạng & phí](/vi/docs/networks-and-fees).
 Các lệnh gọi và thông điệp EIP-712 được giải mã bằng bộ mô tả **ERC-7730** — có sẵn trong
 ứng dụng cho các hợp đồng phổ biến, lấy từ dịch vụ dữ liệu chuỗi, hoặc khớp với các dạng
 token tiêu chuẩn — rồi, như phương án cuối cùng, một cơ sở dữ liệu selector công khai, được
-gắn nhãn giải mã tốt nhất có thể. Những gì còn lại đều nhận cảnh báo ký mù rõ ràng. Bộ mô
-tả lấy về không được xác thực bằng mật mã. Một lệnh cấp quyền trên chuỗi ở mức "không giới
-hạn" (từ 2^200 trở lên) không thể gửi đi cho đến khi bạn giảm nó xuống; một lệnh cấp quyền
-lớn nhưng hữu hạn và các permit dạng chữ ký thì hiện kèm cảnh báo thận trọng nhưng không bị
-chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
+gắn nhãn giải mã tốt nhất có thể. Những gì còn lại đều nhận cảnh báo ký mù rõ ràng. Một bộ
+mô tả lấy về không bao giờ được gắn nhãn đã xác minh — chỉ bộ mô tả có sẵn trong ứng dụng,
+hoặc bộ lấy về mà giống hệt bản có sẵn, mới xứng với chữ đó. Một lệnh cấp quyền trên chuỗi
+ở mức "không giới hạn" (từ 2^200 trở lên) không thể gửi đi cho đến khi bạn giảm nó xuống;
+một lệnh cấp quyền lớn nhưng hữu hạn và các permit dạng chữ ký thì hiện kèm cảnh báo thận
+trọng nhưng không bị chặn. Chi tiết: [ký minh bạch](/vi/docs/clear-signing).
 
 ### Mạng
 
 Vela có 24 mạng tích hợp sẵn — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — và chấp nhận bất kỳ
-mạng EVM nào có mười một hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. (Khóa thứ hai tới
-thứ bảy còn cần factory tạo bộ ký passkey của Safe trên mạng đó, thứ mà bước kiểm tra chưa
-bao gồm.)
+mạng EVM nào có mười hai hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. Hai trong số
+mười hai hợp đồng đó là factory tạo bộ ký passkey của Safe và mã bộ ký mà factory này
+triển khai; chỉ ví có nhiều hơn một khóa mới cần chúng, và bước kiểm tra báo riêng hai
+hợp đồng này.
 
 ## Mô hình bảo mật
 
@@ -211,23 +213,27 @@ lưu ký mang lại cho bạn là Vela không phải một bên thứ hai có đ
   bằng khóa đó trên mọi mạng.
 - **Lừa đảo** — không thể gõ passkey vào một trang giả, và trình duyệt chỉ đưa nó cho các trang
   trên getvela.app và các tên miền con của nó.
-- **dApp độc hại** — được xử lý bằng ký minh bạch và lớp chặn cấp quyền, nhưng còn một chỗ hở
-  nghiêm trọng: một dApp có thể yêu cầu một lệnh gọi từ Safe của bạn tới chính nó —
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — và bất kỳ lệnh
-  nào trong số đó, chỉ cần ký một lần, cũng trao tài khoản đi trọn vẹn như dữ liệu trong vụ
-  Bybit. Vela giải mã những lệnh gọi này nhưng chưa chặn chúng. Hãy từ chối mọi yêu cầu có đích
-  là chính địa chỉ ví của bạn.
+- **dApp độc hại** — được xử lý bằng ký minh bạch, lớp chặn cấp quyền và một lần từ chối
+  thẳng: yêu cầu một lệnh gọi từ Safe của bạn tới chính nó — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` và những lệnh còn lại
+  trong họ đó — đều bị chặn, kể cả khi nằm trong một giao dịch gộp hay một `MultiSend`; mọi
+  nhánh mang `delegatecall` và chữ ký dữ liệu có cấu trúc `SafeTx` cũng vậy. Bất kỳ lệnh nào
+  trong số đó, chỉ cần ký một lần, cũng sẽ trao tài khoản đi trọn vẹn như dữ liệu trong vụ
+  Bybit, nên ví không hề đưa chúng ra để ký.
 - **Dịch vụ phía sau bị xâm nhập** (relay, chỉ mục, dữ liệu chuỗi, tỷ giá) — không có quyền ký,
   nhưng có ảnh hưởng thật: từ chối phục vụ, bộ mô tả hoặc danh sách token gây hiểu lầm, tỷ giá
   sai làm thay đổi số tiền thực gửi đi khi bạn nhập theo tiền pháp định, và (với relay) thời
-  điểm cùng giá gas đã nêu ở trên. Bộ mô tả lấy về không được coi là đã xác thực, và mỗi dịch
-  vụ đều thay được.
+  điểm cùng giá gas đã nêu ở trên. Một phần mô tả lấy từ dịch vụ dữ liệu chuỗi không bao giờ
+  được gọi là đã xác minh — chỉ phần mô tả có sẵn trong ứng dụng, hoặc phần lấy về mà giống
+  hệt bản có sẵn, mới xứng với chữ đó; phần còn lại vẫn hiện kèm một dòng nói rằng không có
+  gì xác thực chúng. Mỗi dịch vụ đều thay được.
 - **Kênh phân phối ứng dụng bị xâm nhập** — một bản triển khai web, bản cập nhật tiện ích hay
   bản build ứng dụng bị sửa đổi có thể đưa ra một giao dịch độc hại để bạn ký. Đây là lớp tấn
   công kiểu [Bybit](/vi/docs/bybit-attack). Biện pháp giảm nhẹ hiện nay còn hạn chế: phần giải
   mã và lớp chặn cấp quyền trong chính ứng dụng, các bản build macOS đã công chứng, và việc tự
-  biên dịch tiện ích hoặc ứng dụng từ mã nguồn (các gói phát hành có checksum SHA-256, không
-  có chữ ký). Một trang ký độc lập không dùng chung mã với ứng dụng đã được làm xong nhưng
+  biên dịch tiện ích hoặc ứng dụng từ mã nguồn (các gói phát hành có checksum SHA-256 và các
+  attestation nguồn gốc bản dựng của GitHub nêu rõ commit và lần chạy workflow; trình cài
+  đặt Windows vẫn chưa được ký mã). Một trang ký độc lập không dùng chung mã với ứng dụng đã được làm xong nhưng
   chưa được kết nối.
 - **Bất cứ thứ gì được phục vụ từ tên miền** — bất kỳ trang nào trên getvela.app hoặc các tên
   miền con của nó, kể cả một script mà trang đó tải, đều có thể xin chữ ký từ passkey của Vela,

@@ -1,7 +1,7 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
@@ -123,11 +123,11 @@ dieser Eigentümer signiert hat und die später im selben Bundle steht, trotzdem
 Validierung und wird ausgeführt. Safe hat das zur Kenntnis genommen und v0.3.0 nicht
 geändert.
 
-Velas Apps bauen nie Eigentümerwechsel, Vela selbst löst das also nie aus. Relevant
-bleibt es trotzdem: Eine dApp kann deine Wallet bitten, ihre eigenen Eigentümer zu
-ändern (siehe „Lücken“ unten), und wer einen kompromittierten Schlüssel über andere
-Safe-Werkzeuge entfernt, kann sich nicht darauf verlassen, dass dieser Schlüssel im
-selben Bundle schon ausgesperrt ist.
+Velas Apps bauen nie Eigentümerwechsel, und eine dApp, die einen anfordert, wird
+rundweg abgelehnt – Vela selbst löst das also nie aus. Relevant bleibt es für alle,
+die einen kompromittierten Schlüssel über andere Safe-Werkzeuge entfernen: Sie können
+sich nicht darauf verlassen, dass dieser Schlüssel im selben Bundle schon ausgesperrt
+ist.
 
 ### Abfangen einer signierten Operation (EntryPoint vor v0.9)
 
@@ -155,21 +155,10 @@ wann es so weit ist.
 Keine Vertragsbefunde, sondern Stellen, an denen die Wallet dich weniger schützt, als
 du vielleicht annimmst. Jede ist erfasst und soll behoben werden:
 
-- **Aufrufe deiner Wallet an sich selbst werden nicht blockiert.** Eine dApp kann
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` oder `setGuard` auf
-  deinem eigenen Safe anfordern; jeder davon übergibt, einmal signiert, das Konto.
-  Vela dekodiert diese Aufrufe, hält sie aber nicht auf. Lehne jede Anfrage ab, deren
-  Ziel deine eigene Adresse ist.
 - **Die Freigabesperre stoppt nur „unbegrenzte“ Beträge** (2^200 oder mehr; 2^152 bei
   Permit2). Eine große, aber begrenzte Freigabe, ein signiertes Permit oder ein
   NFT-`setApprovalForAll` bekommen einen Vorsichtshinweis, keine Sperre.
-- **Abgerufene Deskriptoren sind nicht authentifiziert.** Ein Deskriptor vom
-  Chain-Daten-Server wird als „verifiziert“ angezeigt, wenn er zum Vertrag passt; er
-  ist nur so vertrauenswürdig wie dieser Server.
 - **Die unabhängige Signaturseite ist noch an keine App angebunden.**
-- **Die Netzwerkprüfung sucht nicht nach der Passkey-Signer-Factory von Safe**, die
-  die Schlüssel zwei bis sieben brauchen; in einem Netzwerk, das ohne sie hinzugefügt
-  wurde, kann nur der erste Schlüssel signieren.
 - **Die Website lädt ein Analyse-Skript eines Drittanbieters** auf derselben Domain
   wie die Passkeys. Die Website verbietet ihren Seiten die Nutzung von Passkeys (über
   einen Permissions-Policy-Header) und hält das Skript von der Seite fern, auf der ein

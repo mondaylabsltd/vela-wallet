@@ -1,7 +1,7 @@
 ---
 title: Auditorías y problemas conocidos
 description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 «Auditado» es una afirmación sobre un código específico en una versión específica,
@@ -122,11 +122,10 @@ cualquiera de ellas. Así que, si una operación quita a un dueño, una operaci�
 firmada por ese dueño y colocada después en el mismo bundle sigue pasando la
 validación y se ejecuta. Safe lo reconoció y no cambió v0.3.0.
 
-Las apps de Vela nunca arman cambios de dueños, así que Vela por sí misma nunca
-provoca esto. Aun así importa: una dApp puede pedirle a tu wallet que cambie sus
-propios dueños (consulta «Huecos» más abajo), y quien quite una llave comprometida
-con otras herramientas de Safe no podría contar con que quede bloqueada dentro del
-mismo bundle.
+Las apps de Vela nunca arman cambios de dueños, y una dApp que pida uno se rechaza
+de plano, así que Vela por sí misma nunca provoca esto. Aun así importa para quien
+quite una llave comprometida con otras herramientas de Safe: no podría contar con que
+esa llave quede bloqueada dentro del mismo bundle.
 
 ### Intercepción de una operación firmada (EntryPoint anterior a v0.9)
 
@@ -155,21 +154,10 @@ página dirá cuándo ocurra.
 No son hallazgos en los contratos, sino lugares donde la wallet te protege menos de
 lo que podrías suponer. Cada uno tiene seguimiento para corregirse:
 
-- **Las llamadas de tu wallet a sí misma no se bloquean.** Una dApp puede pedir
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler` o `setGuard` sobre tu
-  propio Safe; cualquiera de ellas, firmada una sola vez, entrega la cuenta. Vela
-  decodifica esas llamadas pero no las detiene. Rechaza cualquier solicitud cuyo
-  destino sea tu propia dirección.
 - **La protección de aprobaciones solo detiene los montos «ilimitados»** (2^200 o
   más; 2^152 para Permit2). Una aprobación finita grande, un permiso firmado o un
   `setApprovalForAll` de NFT reciben una advertencia, no un bloqueo.
-- **Los descriptores obtenidos no están autenticados.** Un descriptor del servidor
-  de datos de cadena se muestra como «verificado» si coincide con el contrato; es
-  tan confiable como ese servidor.
 - **La página de firma independiente no está conectada** a ninguna app todavía.
-- **La revisión de redes no busca la fábrica de firmantes de passkey de Safe**, que
-  necesitan las llaves de la dos a la siete; en una red agregada sin ella, solo puede
-  firmar la primera llave.
 - **El sitio web carga un script de analítica de terceros** en el mismo dominio que
   las passkeys. El sitio prohíbe que sus páginas usen passkeys (con un encabezado
   Permissions-Policy) y mantiene el script fuera de la página que guarda una llave.

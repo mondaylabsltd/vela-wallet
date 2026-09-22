@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -164,10 +164,12 @@ Ayrıntılar: [ağlar ve ücretler](/tr/docs/networks-and-fees).
 sözleşmeler için uygulamaya yerleşik olanlar, zincir verisi servisinden alınanlar ya da
 standart token biçimleriyle eşleştirilenler — ve son çare olarak, "elden gelen en iyi
 çözümleme" olarak etiketlenen herkese açık bir seçici veritabanı kullanılır. Geriye
-kalan her şey açık bir kör imzalama uyarısı alır. Alınan tanımlayıcılar kriptografik
-olarak doğrulanmaz. "Sınırsız" düzeydeki (2^200 ya da daha fazla) zincir üstü bir
-onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı bir onay ve imzalı izinler
-(permit) bir uyarıyla gösterilir ama engellenmez. Ayrıntılar:
+kalan her şey açık bir kör imzalama uyarısı alır. Alınan bir tanımlayıcı asla
+doğrulanmış olarak etiketlenmez; bu sözü yalnızca uygulamaya yerleşik olan ya da alınıp
+onunla birebir aynı çıkan bir tanımlayıcı hak eder. "Sınırsız" düzeydeki (2^200 ya da
+daha fazla) zincir üstü bir onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı
+bir onay ve imzalı izinler (permit) bir uyarıyla gösterilir ama engellenmez.
+Ayrıntılar:
 [açık imzalama](/tr/docs/clear-signing).
 
 ### Ağlar
@@ -175,9 +177,10 @@ onay, siz onu düşürene kadar gönderilemez; büyük ama sınırlı bir onay v
 Vela'da 24 yerleşik ağ var — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
 MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve kontrol ettiği
-on bir sözleşmeye ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. (İkinci ila
-yedinci anahtarlar o ağda Safe'in geçiş anahtarı imzalayıcı fabrikasına da ihtiyaç
-duyar; kontrol bunu henüz kapsamıyor.)
+on iki sözleşmeye ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. On ikiden
+ikisi, Safe'in geçiş anahtarı imzalayıcı fabrikası ve onun dağıttığı imzalayıcı kodudur;
+bunlara yalnızca birden fazla anahtarı olan bir cüzdan ihtiyaç duyar ve kontrol bunları
+ayrıca bildirir.
 
 ## Güvenlik modeli
 
@@ -227,23 +230,29 @@ olmamasıdır.
   eder.
 - **Oltalama** — geçiş anahtarı sahte bir siteye yazılamaz ve tarayıcılar onu yalnızca
   getvela.app ve alt alan adlarındaki sayfalara sunar.
-- **Kötü niyetli dApp** — açık imzalama ve onay korumasıyla karşılanır, ama ciddi bir
-  eksik var: bir dApp, Safe'inizden yine Safe'inize bir çağrı isteyebilir —
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — ve
-  bunlardan herhangi biri, bir kez imzalandığında hesabı Bybit'in yükü kadar eksiksiz
-  biçimde devreder. Vela bu çağrıları çözer ama henüz engellemez. Hedefi kendi cüzdan
-  adresiniz olan her isteği reddedin.
+- **Kötü niyetli dApp** — açık imzalama, onay koruması ve bir reddetmeyle karşılanır:
+  Safe'inizden yine Safe'inize bir çağrı isteği — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` ve o ailenin
+  geri kalanı — bir toplu işlemin ya da bir `MultiSend`'in içinde olsa bile engellenir;
+  `delegatecall` taşıyan her adım ve bir `SafeTx` tipli veri imzası da öyle. Bunlardan
+  herhangi biri bir kez imzalansaydı hesabı Bybit'in yükü kadar eksiksiz biçimde
+  devrederdi; bu yüzden cüzdan onları imzalanmak üzere hiç sunmaz.
 - **Ele geçirilmiş arka uç servisi** (relay, dizin, zincir verisi, döviz kurları) —
   imzalama gücü yoktur ama gerçek bir etkisi vardır: hizmeti reddetmek, yanıltıcı
   tanımlayıcılar ya da token listeleri, bir itibari para tutarının ne kadar gönderdiğini
   değiştiren yanlış döviz kurları ve (relay için) yukarıdaki zamanlama ve gas fiyatı.
-  Alınan tanımlayıcılar doğrulanmış kabul edilmez ve her servis değiştirilebilir.
+  Zincir verisi servisinden alınan bir açıklamaya asla doğrulanmış denmez; bu sözü
+  yalnızca uygulamaya yerleşik olan ya da alınıp onunla birebir aynı çıkan bir açıklama
+  hak eder, geri kalanlar ise hiçbir şeyin onları doğrulamadığını söyleyen bir satırla
+  gösterilir. Her servis değiştirilebilir.
 - **Ele geçirilmiş uygulama dağıtımı** — değiştirilmiş bir web dağıtımı, uzantı
   güncellemesi ya da uygulama derlemesi, size imzalatmak için kötü niyetli bir işlem
   sunabilir. Bu, [Bybit](/tr/docs/bybit-attack) sınıfı bir saldırıdır. Bugünkü
   önlemler sınırlı: uygulamanın kendi içindeki çözümleme ve onay koruması, onaylanmış
   (notarized) macOS derlemeleri ve uzantıyı ya da uygulamaları kaynak koddan kendiniz
-  derlemeniz (sürüm paketleri imza değil, SHA-256 sağlama toplamı taşır). Uygulamanın
+  derlemeniz (sürüm paketleri SHA-256 sağlama toplamları ve commit ile iş akışı
+  çalışmasını adlandıran GitHub derleme kökeni attestation'larını taşır; Windows
+  yükleyicisi hâlâ kod imzalı değil). Uygulamanın
   kodunu paylaşmayan bağımsız bir imza sayfası hazır ama henüz bağlanmadı.
 - **Alan adından sunulan her şey** — getvela.app ya da alt alan adlarındaki herhangi bir
   sayfa, yüklediği bir betik dahil, Vela geçiş anahtarlarından imza isteyebilir ve istem

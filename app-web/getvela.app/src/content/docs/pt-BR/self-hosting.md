@@ -1,7 +1,7 @@
 ---
 title: Guia de auto-hospedagem
 description: "Tudo o que a Vela roda para você, o que cada peça faz e como substituí-la pela sua — o relay, o índice de chaves públicas, os dados de chain, as cotações e os apps —, além da única coisa que você não pode substituir e de como viver sem o getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -114,16 +114,14 @@ digitar de qualquer forma — espere ficar verde.
 | Dados de chain | `ethereum-data` |
 | Cotações | não é conferido pelo nome — precisa retornar uma lista de cotações com base em USD |
 
-Até que ponto cada app respeita essas configurações hoje:
+Os quatro apps respeitam os quatro campos, e um endpoint alterado passa a valer já
+na chamada seguinte, e não na próxima abertura: cada caminho — criar uma carteira,
+fazer login, buscar um nome para um endereço — lê o endpoint no momento em que o usa.
+No iOS, o índice de passkey também pode ser alterado na tela de login quando o padrão
+está inacessível.
 
-| App | Endpoints de serviço | RPC por rede |
-| --- | --- | --- |
-| Web e extensão | Dados de chain, relay e cotações fiat. O índice de passkey é usado para buscar nomes, mas criar uma carteira e fazer login ainda usam o índice da Vela | Sim |
-| Desktop | Os quatro; um novo índice de passkey passa a valer depois que você reinicia ou sai da conta | Sim |
-| Android | Os quatro, exceto que a busca de nomes para endereços ainda consulta o índice da Vela | Sim |
-| iOS | **Ainda não**: a página mostra valores de exemplo e não salva. O índice de passkey pode ser alterado na tela de login quando o padrão está inacessível | Somente leitura |
-
-Essas lacunas são bugs, e estão sendo acompanhadas.
+(Até setembro de 2026, havia quatro exceções a isso, a pior delas uma página de iOS
+que mostrava valores de exemplo e não salvava nada. Elas foram corrigidas.)
 
 ## Rode o seu próprio relay
 
@@ -160,9 +158,9 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Prefira a imagem publicada: compilar a partir do código-fonte com `docker compose up
---build` pode falhar com o Dockerfile atual. Sem Docker,
-`cargo run --release --bin vela-relay` roda o relay diretamente.
+Os dois caminhos funcionam: a imagem publicada é o mais rápido, e `docker compose up
+--build` compila a mesma coisa a partir do código-fonte que você pode ler. Sem
+Docker, `cargo run --release --bin vela-relay` roda o relay diretamente.
 
 **Cloudflare Workers**
 
@@ -223,9 +221,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-O `P256_INDEX_DOMAIN_REGISTRY` é importante, mesmo que o arquivo de exemplo do
-servidor o deixe de fora: sem ele, o servidor distribui desafios que o contrato
-rejeita, e todo registro falha.
+O `P256_INDEX_DOMAIN_REGISTRY` é o que todo mundo esquece: sem ele, o servidor
+distribui desafios que o contrato rejeita, e todo registro falha. Ele está no
+`.env.example`, e precisa bater com o `DOMAIN_REGISTRY` do próprio contrato
+implantado — a partir da VERSION 12 do registro, o domínio do desafio é fixado na
+implantação, então ele não muda quando o contrato é implantado de novo.
 
 **Rode e confira**
 
@@ -237,9 +237,10 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 O servidor escuta em HTTP simples (porta 11256 por padrão); coloque um proxy TLS na
-frente dele, já que a carteira só aceita endpoints `https://`. No momento em que
-escrevemos isto, o Dockerfile do código-fonte pode não compilar; compilar com o
-Cargo funciona.
+frente dele, já que a carteira só aceita endpoints `https://`. O
+`docker build -f p256-index-server/Dockerfile .` também funciona a partir de um clone
+limpo; se você usar o Compose, copie antes o `.env.example` para
+`p256-index-server/.env`.
 
 **Se nenhum índice responder**, as carteiras existentes continuam funcionando: no
 login, o app lê o contrato de registro na Gnosis (e depois no Ethereum) pelos seus
@@ -310,10 +311,9 @@ do `getvela.app`.
 A Vela roda em qualquer rede EVM que tenha o pré-compilado P-256 e os contratos
 padrão que ela verifica. A [configuração de rede](/pt-BR/chain-setup) diz o que
 falta numa rede e implanta o que qualquer pessoa pode implantar;
-[redes e taxas](/pt-BR/docs/networks-and-fees) explica os requisitos. Uma lacuna:
-uma carteira com mais de uma chave também precisa da fábrica de signatários de
-passkey da Safe nessa rede, e a verificação ainda não procura por ela — sem ela, só a
-primeira chave consegue assinar ali.
+[redes e taxas](/pt-BR/docs/networks-and-fees) explica os requisitos. A verificação
+inclui os dois contratos de que uma carteira com mais de uma chave precisa, e os
+marca como tais — uma rede sem eles ainda roda uma carteira de chave única.
 
 ## O que ainda aponta para a Vela depois de tudo isso
 

@@ -60,11 +60,13 @@ specs/               按落地顺序编号的功能规格(spec/plan/tasks/result
 |---|---|---|---|
 | vela-relay(**独立仓库**) | 自营 4337 bundler,gas 报价权威 | `app-web/vela-wallet/src/lib/services/dapp-submit.ts`、`safe-transaction.ts` | `app-desktop/vela-wallet/src/executor/relay.rs` |
 | p256-index.getvela.app(**独立仓库** biubiu-projects) | 公钥索引(跨设备恢复),CF Worker + D1 + DO 队列 | `src/lib/onboarding/core/` | `executor/` |
-| getvela.app/api/* | Alchemy/Pimlico 代理、bug-report GitHub 代理 | `app-web/getvela.app/src/routes/api/` | — |
+| getvela.app/api/* | bug-report GitHub 代理、汇率(`/api/exchange-rate`)、下载镜像(`/api/downloads`)、OG 图(`/api/og`) | `app-web/getvela.app/src/routes/api/` | — |
 | 公共 RPC 池 | 每链多端点评分/封禁/故障转移(规则在核心 `rpc_pool.rs`) | `src/lib/services/rpc-pool-endpoints.ts` | `executor/` |
 | Chainlink / DEX quoter | 价格 | `src/lib/services/wallet-api.ts` | `executor/balance_dashboard.rs` |
 
 WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec 027 裁定不做);Web 的 dApp 通路是 Chrome 扩展注入的 EIP-1193/6963 provider。
+
+> **勘误(2026-09-22,spec 081 FR-015)**:官网曾有五条 `api/{wallet,transactions,nft,bundler,proxy}` 代理路由(Alchemy/Pimlico 转发 + 一个开放 fetch-and-pipe),经全仓 + vela-relay + p256-index 复核**零调用方**,已删除。**钱包从来不走 `getvela.app/api/bundler`**:bundler 的真实默认是 `https://vela-relay-cf.getvela.app`(核心 `rust/crates/vela-core/src/app/network_admin.rs:154` 的 `DEFAULT_BUNDLER_SERVICE_URL`,用户可在设置里覆盖)。官网现存的 API 只有 `og` / `downloads` / `bug-report` / `exchange-rate` 四条。
 
 ## 关键数据流
 
@@ -77,7 +79,7 @@ WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec
 ## 配置体系
 
 - **没有 .env / EXPO_PUBLIC_* 体系**:壳内全部配置为代码内常量 + 用户在设置里的覆盖(RPC/bundler/服务端点,键 `vela.serviceEndpoints`)。
-- getvela.app 子项目:本地密钥在 `.dev.vars`(已 gitignore),生产密钥走 `wrangler secret put`(GITHUB_BUG_TOKEN / ALCHEMY_API_KEY / PIMLICO_API_KEY)。
+- getvela.app 子项目:本地密钥在 `.dev.vars`(已 gitignore),生产密钥走 `wrangler secret put`。spec 081 删掉五条代理路由后,**唯一还被读的 secret 是 `GITHUB_BUG_TOKEN`**(可选 `GITHUB_BUG_REPO`);`ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 已无代码引用,可在 Cloudflare 面板删除。
 - 设计 token 唯一来源 `docs/design-tokens.json`(Penpot 导出),各壳生成自己的 token 文件并有漂移闸门。
 
 ## 环境差异

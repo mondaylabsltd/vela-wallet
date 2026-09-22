@@ -762,10 +762,10 @@ export const en = {
 		meta: {
 			title: 'Set up a chain for Vela',
 			description:
-				'Check whether an EVM chain has everything Vela needs — the eleven contracts and the P-256 precompile — and deploy what is missing.'
+				'Check whether an EVM chain has everything Vela needs — the twelve contracts and the P-256 precompile — and deploy what is missing.'
 		},
 		heading: 'Set up a chain for Vela',
-		lede: 'Vela runs on any EVM chain that has eleven known contracts and one precompile. Enter a chain and this page will tell you which of those it has, which it lacks, and who can put them there. (A wallet with more than one key also needs Safe’s passkey signer factory, which this page doesn’t check yet.)',
+		lede: 'Vela runs on any EVM chain that has twelve known contracts and one precompile. Enter a chain and this page will tell you which of those it has, which it lacks, and who can put them there. Two of the twelve are needed only by a wallet holding more than one passkey; the list says which.',
 		input: {
 			label: 'Chain, by name, ID or symbol — or an RPC URL',
 			placeholder: 'e.g. Arc, 5042, USDC — or https://rpc.example.org',
@@ -788,11 +788,11 @@ export const en = {
 		verdict: {
 			ready: {
 				title: 'Vela works here',
-				body: 'Every contract this page checks is deployed and the P-256 precompile answers. Add this chain in the wallet and it will work — same address as everywhere else. (For a wallet with more than one key, Safe’s passkey signer factory must also be on the chain; this page doesn’t check it yet.)',
+				body: 'Every contract this page checks is deployed and the P-256 precompile answers. Add this chain in the wallet and it will work — same address as everywhere else, with one passkey or with seven.',
 				action: 'How to add it in Vela'
 			},
 			needsSetup: {
-				title: '{{count}} of 11 contracts missing',
+				title: '{{count}} of 12 contracts missing',
 				body: 'The P-256 precompile is present, so this chain can be made ready. The steps below are exactly what is missing, in the order they have to happen, each with who can do it.'
 			},
 			blocked: {
@@ -887,8 +887,8 @@ export const en = {
 			heading: 'What this page checks, and why',
 			items: [
 				{
-					q: 'Why these eleven contracts?',
-					a: 'They are the exact set the wallet itself checks before it lets you add a network: the account contract and its factory, the ERC-4337 EntryPoint and Safe’s module for it, the passkey signer, and the two CREATE2 factories everything else is deployed through. The list on this page is read from the wallet’s source, so the two cannot disagree.'
+					q: 'Why these twelve contracts?',
+					a: 'They are the exact set the wallet itself checks before it lets you add a network: the account contract and its factory, the ERC-4337 EntryPoint and Safe’s module for it, the passkey signer, the two CREATE2 factories everything else is deployed through, and the passkey signer factory a wallet with more than one key needs. The list on this page is read from the wallet’s source, so the two cannot disagree.'
 				},
 				{
 					q: 'Why is the same address used on every chain?',

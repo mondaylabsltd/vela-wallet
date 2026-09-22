@@ -1,7 +1,7 @@
 ---
 title: Klartext-Signatur
 description: "Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -46,11 +46,14 @@ Vela sucht einen Deskriptor in dieser Reihenfolge:
    ERC-2612-Permits –, damit die meisten alltäglichen Aktionen trotzdem dekodiert
    werden.
 
-Passt ein Deskriptor, der für genau diesen Vertrag geschrieben wurde, wird die
-Transaktion als **verifiziert** mit dem Namen des Vertrags gekennzeichnet.
-„Verifiziert“ heißt: *Für diesen Vertrag wurde ein Deskriptor gefunden* – nicht, dass
-er kryptografisch geprüft wurde. Deskriptoren vom Chain-Daten-Server sind nicht
-signiert und damit nur so vertrauenswürdig wie dieser Server – ein Grund, warum du
+**Verifiziert** ist der ersten Quelle vorbehalten. Als verifiziert gekennzeichnet
+wird eine Transaktion nur, wenn die Beschreibung aus einem Deskriptor stammt, der in
+die App eingebaut ist, die du gerade nutzt – oder vom Chain-Daten-Server kommt und mit
+der eingebauten Kopie identisch ist, was belegt, dass unterwegs nichts verändert wurde.
+Alles andere, was der Server schickt, wird trotzdem dekodiert und trotzdem angezeigt,
+mit einer Zeile, die sagt, dass es vom Deskriptor-Dienst stammt und nichts es
+authentifiziert hat. Dieser Dienst ist nicht signiert und damit nur so
+vertrauenswürdig wie derjenige, der ihn betreibt – ein Grund, warum du
 [einen eigenen betreiben](/de/docs/self-hosting#chain-data) kannst.
 
 Token-Beträge werden mit den **echten On-Chain-Dezimalstellen** des Tokens

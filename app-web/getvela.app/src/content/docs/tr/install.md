@@ -1,7 +1,7 @@
 ---
 title: Vela'yı kurun
 description: "Vela'yı çalıştırmanın bütün yolları — web, tarayıcı uzantısı, masaüstü ve telefon — her birinin maliyeti, neler yapabildiği ve cihazınızın neye ihtiyacı olduğu."
-source: f88fdfac1001
+source: fa80f5cfdb95
 ---
 
 <script>
@@ -60,7 +60,8 @@ ARM), **macOS** 11 ya da sonrası ve **Linux** (.deb, .rpm ya da Flatpak; x64 ve
 
 macOS ve Windows'ta masaüstü uygulamasının dApp'ler için yerleşik bir tarayıcısı var.
 Her paketin sağlama toplamı
-[GitHub sürümler sayfasında](https://github.com/mondaylabsltd/vela-wallet/releases).
+[GitHub sürümler sayfasında](https://github.com/mondaylabsltd/vela-wallet/releases) —
+ve bir sağlama toplamından fazlasını da kontrol edebilirsiniz, aşağıya bakın.
 
 ## iPhone ve Android
 
@@ -71,6 +72,43 @@ farkla: kendi imzaladığınız bir derleme, getvela.app cüzdanları için tele
 kendi geçiş anahtarlarını kullanamaz; ama başka bir telefonla QR kod okutmak ve USB
 güvenlik anahtarları çalışır. Bkz.
 [uygulamaları kendiniz derleyin](/tr/docs/self-hosting#web-app).
+
+## İndirdiğinizi doğrulayın
+
+Bir sağlama toplamı size yalnızca iki dosyanın aynı olduğunu söyler. Dosyayı kimin
+yaptığını söyleyemez — üstelik sağlama toplamlarının listesi indirmeyle aynı sayfada
+durur. Bu yüzden bir sürüme eklediğimiz her paket aynı zamanda **attestation**
+taşır: onu derleyen iş akışı çalışması, dosyayı, commit'i ve çalışmayı adlandıran bir
+beyanı imzalar ve GitHub bunu saklar. Kontrol etmek,
+[GitHub CLI](https://cli.github.com) ile tek bir komut alır (`gh auth login` ile bir
+kez oturum açın; kontrol ücretsizdir):
+
+```bash
+gh attestation verify vela-wallet_0.9.4_amd64.deb --repo mondaylabsltd/vela-wallet
+```
+
+Dosyayı kimin, hangi commit'ten derlediğini yazdırır ya da başarısız olur. Bu yanıt
+için makinenizin bize güvenmesi gerekmez: imza GitHub'ındır, derleme anında atılmıştır
+ve dosyayı bir yere yeniden yükleyen biri tarafından üretilemez.
+
+Mac imajları Developer ID'mizle imzalanır ve Apple tarafından onaylanır
+(notarization); siz bir imajı açtığınızda macOS bunu sizin için kontrol eder. Kendiniz
+sormak için:
+
+```bash
+xcrun stapler validate VelaWallet-0.9.4-macos-arm64.dmg
+spctl -a -t open --context context:primary-signature -v VelaWallet-0.9.4-macos-arm64.dmg
+```
+
+<Callout type="warning" title="Windows uyarısı yerinde kalıyor">
+Attestation, kod imzalama değildir. Windows yükleyicisi kod imzalı olmadığı için
+SmartScreen onu bir kez yine "Windows bilgisayarınızı korudu" diyerek durdurur —
+<strong>Ek bilgi</strong>'yi, ardından <strong>Yine de çalıştır</strong>'ı seçin.
+Dosyanın gerçekten bize ait olduğunu söyleyen kontrol, attestation doğrulamasıdır;
+uyarı ise satın almadığımız bir sertifikayla ilgilidir.
+</Callout>
+
+Bu açılmadan önce yayımlanan paketler yalnızca sağlama toplamlarını taşır.
 
 ## Vela'yı dApp'lerle kullanma
 

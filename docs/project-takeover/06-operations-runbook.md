@@ -6,7 +6,8 @@
 
 - **客户端无远程遥测/崩溃上报**(设计取向:隐私+单人团队)。诊断依赖:用户一键 bug-report(→ GitHub issues,含脱敏诊断信息)+ 控制台日志(带 `[Module]` 前缀)
 - **getvela.app Worker**:Cloudflare 自带请求分析;建议开启 Workers Logs / Logpush(未配置,TODO)
-- **告警:不存在**。建议最低配置:CF 上对 `/api/bundler` 5xx 率、Alchemy/Pimlico 用量阈值、p256-index 健康做告警
+- **告警:不存在**。建议最低配置:CF 上对 vela-relay(`vela-relay-cf.getvela.app`)5xx 率、官网 `/api/bug-report` 5xx 率、p256-index 健康做告警
+  - **勘误(2026-09-22,spec 081 FR-015)**:原文写「对 `/api/bundler` 5xx 率、Alchemy/Pimlico 用量阈值做告警」。那条路由零调用方,已随 `api/{wallet,transactions,nft,proxy}` 一并删除;钱包的 bundler 一直是自营中继 `https://vela-relay-cf.getvela.app`(核心 `network_admin.rs:154` 的 `DEFAULT_BUNDLER_SERVICE_URL`),要配告警就配它。项目**不再有** Alchemy/Pimlico 用量可言。
 
 ## 依赖服务与故障影响矩阵
 
@@ -15,7 +16,7 @@
 | 某链 RPC | 该链余额停更 | 缓存余额+多端点转移+封禁(`rpc-pool.ts`);429 只静默用缓存 | 通常自愈;必要时在设置里换 RPC 或推荐用户自配 |
 | 所有内置 RPC(某链) | "网络异常"横幅 | `rpcFailedChains` 驱动 UI;缓存兜底 | 检查公共端点池;更新内置列表发版 |
 | vela-relay | 发送失败(明确报错)、估算失败拒绝提交 | 3 重试+existingHash 恢复;大 calldata 直接拒绝 | 查 bundler 仓库/宿主;**gas 报价与错误文案都以它为权威** |
-| getvela.app/api | bundler 代理断 → 同上;汇率/NFT 缺失 | 服务端点可在 App 设置覆盖(`vela.serviceEndpoints`) | `wrangler tail` 看 Worker 日志;`wrangler rollback` |
+| getvela.app/api | **钱包发钱不受影响**(它不经过官网);官网下载页失效、一键 bug 反馈失败 | bug-report 失败自动回退到预填 GitHub issue URL;下载页可直接去 GitHub Releases | `wrangler tail` 看 Worker 日志;`wrangler rollback` |
 | p256-index | 新钱包创建时"同步失败"(可重试);**新设备恢复找不到钱包** | 创建时 3 重试+pending 队列自动补传 | 独立仓库排障;确认 D1/DO 状态。**资金不受影响**,可安抚用户 |
 | WalletPair relay | dApp 连接断 | 60s reconnecting 宽限+会话持久化自动重连 | 检查 relay 服务 |
 | ERC-7730 registry | 清晰签名退化为 blind-sign 硬警告 | 本地描述符缓存 | 无需紧急处理(安全默认) |
@@ -51,7 +52,7 @@
 
 | 凭据 | 位置 | 轮换 |
 |---|---|---|
-| ALCHEMY_API_KEY / PIMLICO_API_KEY | CF Worker secrets(生产);`getvela.app/.dev.vars`(本地,已 gitignore,从未入库) | 提供商控制台生成新 key → `wrangler secret put` → 验证 → 废旧 |
+| ~~ALCHEMY_API_KEY / PIMLICO_API_KEY~~ | **已作废(2026-09-22,spec 081 FR-015)**:读它们的五条路由 `api/{wallet,transactions,nft,bundler,proxy}` 零调用方,已删除 | 无需轮换;若 CF 面板里还留着,直接 `wrangler secret delete` |
 | GITHUB_BUG_TOKEN | CF Worker secret(fine-grained PAT,只有 issues 权限) | GitHub 设置轮换 |
 | Android upload keystore | 本地/密码管理器(**绝不入库**,gitignore 已覆盖 `*.jks`/keystore.properties) | 丢失 = 走 Play 重置流程(有 Play App Signing 所以可恢复) |
 | Apple 分发证书 | 开发者账号(Team F9W689P9NE) | Xcode 管理 |

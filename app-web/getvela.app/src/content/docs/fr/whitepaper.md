@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: 5bfc38a16ccb
+source: 60d297b650ac
 ---
 
 <script>
@@ -181,8 +181,9 @@ Les appels et les messages EIP-712 sont décodés avec des descripteurs **ERC-77
 — intégrés à l'app pour les contrats courants, récupérés sur le service de données
 de chaîne, ou rapprochés de formes standards de jetons —, puis, en dernier recours,
 à l'aide d'une base publique de sélecteurs, avec la mention « au mieux ». Tout ce
-qui reste reçoit un avertissement explicite de signature à l'aveugle. Les
-descripteurs récupérés ne sont pas authentifiés cryptographiquement. Une
+qui reste reçoit un avertissement explicite de signature à l'aveugle. Un
+descripteur récupéré n'est jamais étiqueté vérifié — seul un descripteur intégré à
+l'app, ou un descripteur récupéré identique à celui-ci, mérite ce mot. Une
 approbation on-chain au niveau « illimité » (2^200 ou plus) ne peut pas être soumise
 tant que vous ne l'avez pas réduite ; une approbation finie mais élevée et les
 permits signés s'affichent avec un avertissement, sans être bloqués. Détails :
@@ -193,10 +194,10 @@ permits signés s'affichent avec un avertissement, sans être bloqués. Détails
 Vela intègre 24 réseaux — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
 Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
 Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume et XRPL EVM — et
-accepte tout réseau EVM qui dispose des onze contrats qu'il vérifie et du
-précompilé EIP-7951 / RIP-7212. (Les clés deux à sept ont aussi besoin de la fabrique de
-signataires passkey de Safe sur ce réseau, ce que la vérification ne couvre pas
-encore.)
+accepte tout réseau EVM qui dispose des douze contrats qu'il vérifie et du
+précompilé EIP-7951 / RIP-7212. Deux de ces douze sont la fabrique de signataires
+passkey de Safe et le code de signataire qu'elle déploie, dont seul un portefeuille
+à plusieurs clés a besoin ; la vérification les signale séparément.
 
 ## Modèle de sécurité
 
@@ -251,29 +252,34 @@ seconde partie capable de le faire.
   utilisable par cette clé sur tous les réseaux.
 - **Hameçonnage** — une passkey ne peut pas être tapée sur un faux site, et les
   navigateurs ne la proposent qu'aux pages de getvela.app et de ses sous-domaines.
-- **dApp malveillante** — traitée par la signature lisible et le garde-fou sur les
-  approbations, avec une lacune sérieuse : une dApp peut demander un appel de votre
-  Safe vers lui-même — `enableModule`, `addOwnerWithThreshold`,
-  `setFallbackHandler`, `setGuard` —, et n'importe lequel de ces appels, signé une
-  seule fois, livre le compte aussi complètement que la charge utile de Bybit. Vela
-  décode ces appels mais ne les bloque pas encore. Refusez toute demande dont la
-  cible est l'adresse de votre propre portefeuille.
+- **dApp malveillante** — traitée par la signature lisible, le garde-fou sur les
+  approbations et un refus : une demande d'appel de votre Safe vers lui-même —
+  `enableModule`, `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`,
+  `setGuard` et le reste de cette famille — est bloquée, y compris à l'intérieur
+  d'un lot ou d'un `MultiSend`, tout comme n'importe quelle branche portant un
+  `delegatecall` et une signature de données typées `SafeTx`. N'importe lequel de
+  ces appels, signé une seule fois, livrerait le compte aussi complètement que la
+  charge utile de Bybit : le portefeuille ne les propose donc pas du tout à la
+  signature.
 - **Service backend compromis** (relais, index, données de chaîne, taux de change)
   — aucun pouvoir de signature, mais une influence réelle : refus de service,
   descripteurs ou listes de jetons trompeurs, taux de change faux qui modifient ce
   qu'un montant en monnaie fiduciaire envoie réellement, et (pour le relais) le
-  moment d'inclusion et le prix du gas évoqués plus haut. Les descripteurs
-  récupérés ne sont pas considérés comme authentifiés, et chaque service peut être
-  remplacé.
+  moment d'inclusion et le prix du gas évoqués plus haut. Une description récupérée
+  sur le service de données de chaîne n'est jamais dite vérifiée — seule une
+  description intégrée à l'app, ou une description récupérée identique à celle-ci,
+  mérite ce mot, et les autres sont affichées avec une ligne indiquant que rien ne
+  les a authentifiées. Chaque service peut être remplacé.
 - **Distribution de l'app compromise** — un déploiement web, une mise à jour de
   l'extension ou une version d'app altérés pourraient vous présenter une transaction
   malveillante à signer. C'est la classe d'attaque de [Bybit](/fr/docs/bybit-attack).
   Les parades actuelles sont limitées : le décodage et le garde-fou sur les
   approbations dans l'app elle-même, des versions macOS notariées, et la compilation
   de l'extension ou des apps depuis les sources par vous-même (les paquets publiés
-  sont accompagnés de sommes de contrôle SHA-256, pas de signatures). Une page de
-  signature indépendante, qui ne partage pas le code de l'app, est construite mais
-  pas encore reliée.
+  sont accompagnés de sommes de contrôle SHA-256 et d'attestations de provenance de
+  build GitHub nommant le commit et l'exécution du workflow ; l'installateur Windows
+  n'est toujours pas signé). Une page de signature indépendante, qui ne partage pas
+  le code de l'app, est construite mais pas encore reliée.
 - **Tout ce qui est servi depuis le domaine** — n'importe quelle page de
   getvela.app ou de ses sous-domaines, y compris un script qu'elle charge, pourrait
   demander des signatures aux passkeys Vela, et l'invite n'affiche que

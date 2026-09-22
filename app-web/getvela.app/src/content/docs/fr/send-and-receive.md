@@ -1,7 +1,7 @@
 ---
 title: Envoyer et recevoir
 description: "Recevoir et envoyer avec Vela — une seule adresse sur tous les réseaux, envoyer à une ou plusieurs personnes, d'où viennent les noms des destinataires, ce que vous confirmez, et comment le relais transmet vos fonds."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -52,9 +52,15 @@ registre (le nom d'un autre portefeuille Vela), puis dans les enregistrements
 inverses `.bnb`, `.arb`, `.g`, Basename et ENS, lus directement sur chaque chaîne.
 Cela ne fonctionne que dans un sens — Vela nomme une adresse que vous avez saisie.
 Taper un nom comme `alice.eth` ne permet pas de trouver une adresse. Vos
-**contacts** enregistrés affichent aussi leur nom. Voyez un nom comme un indice,
-pas comme une preuve : un enregistrement inverse ou un nom de portefeuille Vela est
-choisi par celui qui contrôle cette adresse.
+**contacts** enregistrés affichent aussi leur nom.
+
+Un nom issu de ces enregistrements inverses n'est affiché que s'il **résout à
+l'endroit vers la même adresse**. N'importe qui peut donner à son propre
+enregistrement inverse la chaîne de caractères de son choix : l'enregistrement seul
+ne prouve donc rien ; le portefeuille demande au service de noms vers quelle adresse
+ce nom pointe, et n'affiche le nom que si les deux concordent. Si la vérification ne
+peut pas être faite — un point d'accès qui ne répond pas, un resolver qui échoue —,
+vous voyez l'adresse et aucun nom, jamais un nom non vérifié.
 
 ### Monnaie des frais et vitesse
 

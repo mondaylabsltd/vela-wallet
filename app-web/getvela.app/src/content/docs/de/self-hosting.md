@@ -1,7 +1,7 @@
 ---
 title: Anleitung zum Selbsthosten
 description: "Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -116,16 +116,14 @@ ist.
 | Chain-Daten | `ethereum-data` |
 | Wechselkurse | nicht nach Namen geprüft – muss eine USD-basierte Kursliste liefern |
 
-Wie gut jede App diese Einstellungen heute berücksichtigt:
+Alle vier Apps berücksichtigen alle vier Felder, und ein geänderter Endpunkt greift ab
+dem nächsten Aufruf statt erst beim nächsten Start: Jeder Weg – eine Wallet erstellen,
+sich anmelden, einen Namen zu einer Adresse nachschlagen – liest den Endpunkt in dem
+Moment, in dem er ihn nutzt. Unter iOS lässt sich der Passkey-Index außerdem auf dem
+Anmeldebildschirm ändern, wenn der Standard nicht erreichbar ist.
 
-| App | Dienst-Endpunkte | RPC pro Netzwerk |
-| --- | --- | --- |
-| Web und Erweiterung | Chain-Daten, Relay und Fiat-Kurse. Der Passkey-Index wird zum Nachschlagen von Namen genutzt, aber das Erstellen einer Wallet und die Anmeldung nutzen weiterhin Velas Index | Ja |
-| Desktop | Alle vier; ein neuer Passkey-Index greift nach einem Neustart oder Abmelden | Ja |
-| Android | Alle vier, nur fragt das Nachschlagen von Namen für Adressen weiterhin Velas Index | Ja |
-| iOS | **Noch nicht**: Die Seite zeigt Platzhalterwerte und speichert nicht. Der Passkey-Index lässt sich auf dem Anmeldebildschirm ändern, wenn der Standard nicht erreichbar ist | Nur lesend |
-
-Diese Lücken sind Bugs, und sie sind erfasst.
+(Bis September 2026 gab es dazu vier Ausnahmen, die schlimmste davon eine iOS-Seite,
+die Platzhalterwerte zeigte und nichts speicherte. Sie sind behoben.)
 
 ## Ein eigenes Relay betreiben
 
@@ -163,9 +161,9 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Nimm lieber das veröffentlichte Image: Aus dem Quellcode mit
-`docker compose up --build` zu bauen, kann mit dem aktuellen Dockerfile fehlschlagen.
-Ohne Docker startet `cargo run --release --bin vela-relay` es direkt.
+Beides funktioniert: Am schnellsten geht es mit dem veröffentlichten Image, und
+`docker compose up --build` baut dasselbe aus dem Quellcode, den du lesen kannst. Ohne
+Docker startet `cargo run --release --bin vela-relay` es direkt.
 
 **Cloudflare Workers**
 
@@ -226,9 +224,12 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` ist wichtig, auch wenn die Beispieldatei des Servers es
-weglässt: Ohne diese Einstellung verteilt der Server Challenges, die der Vertrag
-ablehnt, und jede Registrierung schlägt fehl.
+`P256_INDEX_DOMAIN_REGISTRY` ist das, was die meisten übersehen: Ohne diese
+Einstellung verteilt der Server Challenges, die der Vertrag ablehnt, und jede
+Registrierung schlägt fehl. Sie steht in `.env.example`, und sie muss dem
+`DOMAIN_REGISTRY` des bereitgestellten Vertrags entsprechen – ab VERSION 12 des
+Registers wird die Challenge-Domain beim Deployment festgelegt und wandert nicht mit,
+wenn der Vertrag neu bereitgestellt wird.
 
 **Starten und prüfen**
 
@@ -240,9 +241,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 Der Server lauscht auf einfachem HTTP (standardmäßig Port 11256); setz einen
-TLS-Proxy davor, denn die Wallet akzeptiert nur `https://`-Endpunkte. Das Dockerfile im
-Quellcode lässt sich zum Zeitpunkt dieses Textes möglicherweise nicht bauen; mit Cargo
-zu bauen funktioniert.
+TLS-Proxy davor, denn die Wallet akzeptiert nur `https://`-Endpunkte. `docker build
+-f p256-index-server/Dockerfile .` funktioniert auch aus einem frischen Klon; kopiere
+dafür zuerst `.env.example` nach `p256-index-server/.env`, wenn du Compose nutzt.
 
 **Wenn überhaupt kein Index antwortet**, funktionieren bestehende Wallets trotzdem: Bei
 der Anmeldung liest die App den Registervertrag auf Gnosis (dann auf Ethereum) über
@@ -313,10 +314,10 @@ getvela.app-Wallets: Apple und Google lassen nur von Vela signierte Apps
 Vela läuft auf jeder EVM-Chain, die das P-256-Precompile und die Standardverträge hat,
 auf die es prüft. Die [Chain-Einrichtung](/de/chain-setup) sagt dir, was einer Chain
 fehlt, und stellt bereit, was jeder bereitstellen kann;
-[Netzwerke und Gebühren](/de/docs/networks-and-fees) erklärt die Anforderungen. Eine
-Lücke: Eine Wallet mit mehr als einem Schlüssel braucht auf dieser Chain außerdem die
-Passkey-Signer-Factory von Safe, nach der die Prüfung noch nicht sucht – ohne sie kann
-dort nur der erste Schlüssel signieren.
+[Netzwerke und Gebühren](/de/docs/networks-and-fees) erklärt die Anforderungen. Die
+Prüfung schließt die beiden Verträge ein, die eine Wallet mit mehr als einem Schlüssel
+braucht, und kennzeichnet sie als solche – eine Chain ohne sie betreibt eine Wallet mit
+einem Schlüssel trotzdem.
 
 ## Was danach noch auf Vela zeigt
 

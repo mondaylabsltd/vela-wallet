@@ -1,5 +1,7 @@
 > **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
 
+> **勘误（2026-09-22，spec 081 FR-015）**：官网的五条代理路由 `api/{wallet,transactions,nft,bundler,proxy}` 经全仓 + vela-relay + p256-index 复核**零调用方**，已删除；`ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 随之作废。受影响的题目是 **D11-D12-ops-external-Q3 / Q5 / Q6**，各自就地标了勘误。最重要的一条事实纠正：**钱包从来没有走过 `getvela.app/api/bundler`**——bundler 的默认端点是自营中继 `https://vela-relay-cf.getvela.app`（核心 `rust/crates/vela-core/src/app/network_admin.rs:154` 的 `DEFAULT_BUNDLER_SERVICE_URL`，用户可在设置里覆盖），在**另一个仓库**（vela-relay）。那条同名路由是从未接线的死代码，答案库里"官网 Worker 挂了 → 发不出交易"的推理链因此是错的。判分时：若受训者指出这一点，加分；照着旧答案背"走 /api/bundler 代理"的，按事实错误处理。正文按原样保留，作为历史记录。
+
 <!-- ⚠️⚠️⚠️ 面试官专用文件。模拟面试期间不得向受训者展示本文件。 -->
 <!-- 受训者在完成全部模拟面试并出分之前,阅读本文件即视为泄题,该轮面试作废。 -->
 
@@ -1307,6 +1309,8 @@
 
 **题干**:有人(可能是过去的你)说:"我们钱包是非托管的,服务端都是转发公开链上数据,所以没什么密钥要管。"请逐项反驳:这套系统实际存在哪些密钥/凭据?每一枚存放在哪里、通过什么命令进入生产、本地开发时放哪、泄漏或丢失分别是什么后果?
 
+> **勘误(2026-09-22,spec 081 FR-015)**:要点 1、2 和对应的代码证据已作废。读 `ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 的五条路由 `api/{wallet,transactions,nft,bundler,proxy}` 零调用方,已删除,两枚 key 不再被任何代码读取。**现在 getvela.app Worker 只剩一枚 secret:`GITHUB_BUG_TOKEN`**(外加可选的非密 `GITHUB_BUG_REPO`)。要点 2 里"钱包必须走 /api/bundler 代理"从来不成立:bundler 一直是自营中继 `https://vela-relay-cf.getvela.app`(核心 `network_admin.rs:154`)。题目本身仍然成立且更干净——密钥全景现在是:Worker 的 `GITHUB_BUG_TOKEN`(要点 3)、vela-relay 的 gas account EOA 私钥(要点 4,唯一直接控制真钱的)、Android keystore(要点 5)、Apple 证书、p256-index 服务端 key(要点 6)。追问 1、3 需据此重出;追问 2("为什么 bug-report 能无密钥运行而 bundler 不能")已无对照物,可改问"为什么删掉一条路由比给它加限流更彻底"。
+
 **标准答案要点**:
 1. getvela.app Worker 有三枚 secret:ALCHEMY_API_KEY、PIMLICO_API_KEY、GITHUB_BUG_TOKEN;生产通过 wrangler secret put 写入,本地放 getvela.app/.dev.vars(已 gitignore、从未入库)。
 2. ALCHEMY/PIMLICO key 被 bundler 代理直接拼进上游 URL(api.pimlico.io/v2/{chainId}/rpc?apikey=… 和 {slug}.g.alchemy.com/v2/{key}),这正是钱包 App 不直连提供商、必须走 /api/bundler 代理的原因——key 泄漏=配额被烧/被封,钱包估算与发送直接受损。
@@ -1390,6 +1394,11 @@
 
 **题干**:凌晨两点,一键 bug report 进来一条 issue:"发不出交易,一直失败"。请给出你的诊断序列——每一步查什么、用什么工具/命令、什么现象指向什么结论。禁止"重启试试/看看日志"这类通用答案。追加:如果 getvela.app Worker 此刻整个挂了,钱包哪些功能死、哪些活?
 
+> **勘误(2026-09-22,spec 081 FR-015)**:**要点 4 整条删除**——"第三层:getvela.app /api/bundler 代理"从来不在发送链路上,那条路由是从未接线的死代码,已随 `api/{wallet,transactions,nft,proxy}` 一并删除。正确的分层是:underfunded → Gnosis gas price → **vela-relay 本身**(`https://vela-relay-cf.getvela.app`,独立仓库,核心 `network_admin.rs:154` 是其默认值)→ 链 RPC;官网 Worker 不在这条链上。
+> 追加题(要点 8)的答案随之改写:**getvela.app Worker 全挂,发交易完全不受影响**。死的是:官网页面、下载页镜像(`/api/downloads`)、一键 bug 反馈的后端(自动降级为预填 GitHub issue URL)、`/api/exchange-rate`(但钱包的法币换算走用户可配的 `fiatRatesURL`,不是这条)。活的是:资金、余额、passkey 登录、估算与发送、Web 钱包本体(独立部署单元)。
+> 要点 9 的告警建议改为:vela-relay 5xx 率 + 官网 `/api/bug-report` 5xx 率 + p256-index 健康。代码证据里 `05-deployment-runbook.md:51`(发布后小额估算确认 /api/bundler)与"8 条路由同住一个 Worker"两条均已作废——现存路由是 4 条:`og` / `downloads` / `bug-report` / `exchange-rate`。
+> 这题的教学价值反而变高了:**能看穿"官网挂了就发不出交易"是错的,正是本题现在要考的东西**。
+
 **标准答案要点**:
 1. 第 0 步读 issue 本身:一键 bug report 自带脱敏 environment(App 版本+commit、平台、RPC unreachable 链列表)和 diagnostics(metrics 的 recentFailures,含 service/outcome/status)——先看最近失败的是哪个 service、什么状态码,直接缩小范围。
 2. 第一嫌疑(高频):bundler gas account underfunded——正常应弹充值 modal;若用户看到的是原始报错文案,查 parseBundlerUnderfunded 与 vela-relay 当前文案是否还匹配(两仓文案同步问题,06 手册专门条目)。
@@ -1433,6 +1442,10 @@
 **考察目标**:修改影响题:落实 08-B3(代理滥用防护)——判断"照抄 bug-report 限流"方案的适用边界与已知缺陷,选对"不改代码"的推荐路径,并给出完整的验证与发布序列。
 
 **题干**:未决事项 B3:bundler/wallet/nft/transactions 四条代理路由没有任何速率限制(只有 bug-report 有)。假设你决定动手:(a) bug-report 现有的限流是怎么实现的,它有什么在注释里写明的已知缺陷?(b) 直接把这套照抄到 /api/bundler 会出什么问题?(c) 08 手册实际推荐的方案是什么,为什么不用改代码?(d) 无论选哪条路,完整的验证+发布+回滚序列是什么?
+
+> **勘误(2026-09-22,spec 081 FR-015)**:**B3 的现实答案是第三条路:把路由删掉**。全仓 + vela-relay + p256-index 复核确认这四条(加 `/api/proxy`)**零调用方**,已删除,`ALCHEMY_API_KEY` / `PIMLICO_API_KEY` / `BUNDLER_PROVIDER` 随之作废——没有路由就不需要限流,也没有配额可烧。
+> 要点 3、4、6、8 与"常见错误"里"烧的是你的 Alchemy/Pimlico 配额"均已作废:那些路由的调用频率论证(要点 3)建立在"钱包走 /api/bundler"这个**从来不成立**的前提上。要点 1、2(bug-report 的 isolate 内存 limiter 与它注释里写明的"isolate 不共享、KV/DO 才是 production upgrade")、要点 7、9(CORS 挡不住 curl)仍然成立且仍是本题的核心。
+> **重出本题的建议**:把 (b)(c) 换成"在给一条服务端路由加限流之前,你先要回答的是什么问题?"——正确答案是"先证明它有调用方"。这正是本次审计里那条 SSRF 黑名单补了也没用、直接删更彻底的教训:**给死代码加防护是最贵的一种安全工作**。
 
 **标准答案要点**:
 1. bug-report 现状:isolate 内存 Map<ip, timestamps[]>,RATE_LIMIT=5 次/RATE_WINDOW_MS=10 分钟,getClientAddress() 取 IP(可 throw 则降级共享桶),超限返回 429 {error:'rate_limited'};另有 MAX_BODY_CHARS=16000 的体积上限。

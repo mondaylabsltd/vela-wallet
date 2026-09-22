@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
 description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: b58f2cec8d4f
+source: 8f8059955244
 ---
 
 <script>
@@ -38,7 +38,7 @@ anahtarlarınızdan hesaplanır.
 ## Başka bir ağ eklemek
 
 **Ayarlar → Ağlar** bölümünden herhangi bir EVM ağını ekleyebilirsiniz; yeter ki
-ağda bir Vela cüzdanının ihtiyaç duyduğu her şey olsun: on bir standart sözleşme
+ağda bir Vela cüzdanının ihtiyaç duyduğu her şey olsun: on iki standart sözleşme
 (ERC-4337 EntryPoint v0.7, Safe v1.4.1 sözleşmeleri, Safe'in 4337 ve geçiş anahtarı
 modülleri, MultiSend, Multicall3 ve iki deterministik dağıtıcı) ve geçiş anahtarı
 imzalarını `0x100` adresinde doğrulayan **EIP-7951 / RIP-7212** ön derlemesi. Cüzdan, ağı
@@ -51,9 +51,11 @@ aynıdır; cüzdan ikisini de kabul eder.
 parçasıdır; bu yüzden yedek bir doğrulayıcı yoktur ve sonradan bir tane dağıtmanın
 da yolu yoktur. Bir zincirde ön derleme var ama sözleşmelerin bir kısmı eksikse,
 [zincir kurulumu](/tr/chain-setup) neyin eksik olduğunu gösterir ve herkesin
-dağıtabileceği olanları dağıtır. Kontrolde bir boşluk var: birden fazla anahtarı olan
-bir cüzdan, ağda Safe'in geçiş anahtarı imzalayıcı fabrikasına da ihtiyaç duyar ve bu
-henüz kontrol edilmiyor; o fabrika yoksa orada yalnızca ilk anahtar imzalayabilir.
+dağıtabileceği olanları dağıtır. Kontrol ettiği on iki sözleşmeden ikisi — Safe'in
+geçiş anahtarı imzalayıcı fabrikası ve o fabrikanın dağıttığı imzalayıcı kodu —
+yalnızca birden fazla anahtar tutan bir cüzdanı ilgilendirir ve kontrol bunu sözleşme
+bazında söyler: bunlar olmadan tek anahtarlı bir cüzdan normal çalışır, adresi iki ila
+yedi anahtardan gelen bir cüzdan ise o ağda hiç dağıtılamaz.
 
 ## Bir işlemin bedeli nasıl ödenir
 

@@ -1,7 +1,7 @@
 ---
 title: Signature lisible
 description: "Vela décode les transactions en langage clair avant que vous ne les approuviez — intention, montants, adresses et risque — plutôt qu'en hexadécimal opaque. Quand il ne parvient pas à décoder un appel, il vous prévient au lieu de faire semblant."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -49,12 +49,14 @@ Vela cherche un descripteur dans cet ordre :
    et permits ERC-2612 —, pour que la plupart des actions courantes se décodent
    quand même.
 
-Quand un descripteur écrit pour ce contrat précis correspond, la transaction est
-marquée **vérifiée**, avec le nom du contrat. « Vérifiée » signifie *qu'un
-descripteur a été trouvé pour ce contrat*, pas qu'il a été contrôlé
-cryptographiquement : les descripteurs récupérés sur le serveur de données de
-chaîne ne sont pas signés, ils ne sont donc fiables qu'autant que ce serveur —
-c'est l'une des raisons pour lesquelles vous pouvez
+**Vérifiée** est réservé à la première source. Une transaction n'est marquée
+vérifiée que si la description vient d'un descripteur intégré à l'app que vous
+utilisez — ou du serveur de données de chaîne et qu'elle est identique à la copie
+intégrée, ce qui prouve que rien n'a été modifié en chemin. Tout le reste de ce que
+le serveur envoie est quand même décodé et quand même affiché, avec une ligne
+indiquant que cela vient du service de descripteurs et que rien ne l'a authentifié.
+Ce service n'est pas signé : il n'est donc fiable qu'autant que celui qui le fait
+tourner — c'est l'une des raisons pour lesquelles vous pouvez
 [faire tourner le vôtre](/fr/docs/self-hosting#chain-data).
 
 Les montants de jetons sont formatés avec les **décimales réelles on-chain** du

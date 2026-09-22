@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -115,16 +115,14 @@ olur. Yazdığınızı her durumda kaydeder — yeşili bekleyin.
 | Zincir verisi | `ethereum-data` |
 | Döviz kurları | adla kontrol edilmez — USD tabanlı bir kur listesi döndürmelidir |
 
-Uygulamaların bu ayarlara bugün ne kadar uyduğu:
+Dört uygulama da dört alanın dördüne birden uyar ve değiştirilen bir uç nokta, bir
+sonraki açılışta değil bir sonraki çağrıda geçerli olur: her yol — cüzdan oluşturma,
+giriş yapma, bir adres için ad arama — uç noktayı tam kullanacağı anda okur. iOS'ta
+geçiş anahtarı dizini, varsayılana ulaşılamadığında giriş ekranından da
+değiştirilebilir.
 
-| Uygulama | Servis uç noktaları | Ağ başına RPC |
-| --- | --- | --- |
-| Web ve uzantı | Zincir verisi, relay ve itibari para kurları. Geçiş anahtarı dizini adres adlarını aramak için kullanılır; ama cüzdan oluşturma ve giriş hâlâ Vela'nın dizinini kullanır | Evet |
-| Masaüstü | Dördü de; yeni bir geçiş anahtarı dizini, yeniden başlattıktan ya da oturumu kapattıktan sonra geçerli olur | Evet |
-| Android | Dördü de; yalnızca adresler için ad arama hâlâ Vela'nın dizinine sorar | Evet |
-| iOS | **Henüz değil**: sayfa yer tutucu değerler gösterir ve kaydetmez. Varsayılana ulaşılamadığında geçiş anahtarı dizini giriş ekranında değiştirilebilir | Salt okunur |
-
-Bu eksikler birer hatadır ve takip ediliyor.
+(Eylül 2026'ya kadar bunun dört istisnası vardı; en kötüsü, yer tutucu değerler
+gösterip hiçbir şey kaydetmeyen bir iOS sayfasıydı. Hepsi düzeltildi.)
 
 ## Kendi relay'inizi çalıştırın
 
@@ -161,8 +159,8 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Yayımlanmış imajı tercih edin: `docker compose up --build` ile kaynak koddan derlemek,
-mevcut Dockerfile ile başarısız olabilir. Docker olmadan
+İkisi de çalışır: yayımlanmış imaj en hızlısıdır, `docker compose up --build` ise aynı
+şeyi okuyabileceğiniz kaynak koddan derler. Docker olmadan
 `cargo run --release --bin vela-relay` onu doğrudan çalıştırır.
 
 **Cloudflare Workers**
@@ -223,9 +221,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-Sunucunun örnek dosyası `P256_INDEX_DOMAIN_REGISTRY` değişkenini içermese de bu değişken
-önemlidir: o olmadan sunucu, sözleşmenin reddettiği sınamalar (challenge) üretir ve her
-kayıt başarısız olur.
+`P256_INDEX_DOMAIN_REGISTRY`, insanların en çok atladığı değişkendir: o olmadan sunucu,
+sözleşmenin reddettiği sınamalar (challenge) üretir ve her kayıt başarısız olur.
+`.env.example` içinde vardır ve dağıtılmış sözleşmenin kendi `DOMAIN_REGISTRY`
+değeriyle eşleşmelidir — kayıt defterinin VERSION 12'sinden itibaren sınama alanı
+dağıtım anında sabitlenir, yani sözleşme yeniden dağıtıldığında yerinden oynamaz.
 
 **Çalıştırın ve kontrol edin**
 
@@ -237,8 +237,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 Sunucu düz HTTP üzerinden dinler (varsayılan port 11256); cüzdan yalnızca `https://`
-uç noktalarını kabul ettiği için önüne bir TLS vekil sunucusu koyun. Bu yazının
-yazıldığı sırada kaynak koddaki Dockerfile derlenmeyebilir; Cargo ile derlemek çalışır.
+uç noktalarını kabul ettiği için önüne bir TLS vekil sunucusu koyun. `docker build -f
+p256-index-server/Dockerfile .` temiz bir klondan da çalışır; Compose kullanıyorsanız
+önce `.env.example` dosyasını `p256-index-server/.env` olarak kopyalayın.
 
 **Hiçbir dizin yanıt vermezse** mevcut cüzdanlar yine çalışır: giriş sırasında uygulama
 Gnosis'teki (ardından Ethereum'daki) kayıt defteri sözleşmesini sizin RPC
@@ -308,10 +309,10 @@ imzalanmış uygulamaların kullanmasına izin verir.
 Vela, P-256 ön derlemesi ve kontrol ettiği standart sözleşmeler bulunan her EVM
 zincirinde çalışır. [Zincir kurulumu](/tr/chain-setup) bir zincirde neyin eksik
 olduğunu söyler ve herkesin dağıtabileceği olanları dağıtır;
-[ağlar ve ücretler](/tr/docs/networks-and-fees) gereksinimleri açıklar. Bir eksik var:
-birden fazla anahtarı olan bir cüzdan, o zincirde Safe'in geçiş anahtarı imzalayıcı
-fabrikasına da ihtiyaç duyar ve kontrol henüz buna bakmıyor — o fabrika yoksa orada
-yalnızca ilk anahtar imzalayabilir.
+[ağlar ve ücretler](/tr/docs/networks-and-fees) gereksinimleri açıklar. Kontrol, birden
+fazla anahtarı olan bir cüzdanın ihtiyaç duyduğu iki sözleşmeyi de kapsar ve onları
+böyle işaretler — bu sözleşmeler olmayan bir zincir tek anahtarlı bir cüzdanı yine de
+çalıştırır.
 
 ## Bütün bunlardan sonra hâlâ Vela'ya işaret edenler
 

@@ -1,7 +1,7 @@
 ---
 title: Clear signing
 description: "Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -44,11 +44,14 @@ Vela mencari deskriptor dengan urutan ini:
 3. **Bentuk standar** — token ERC-20, NFT ERC-721 dan ERC-1155, vault ERC-4626, dan
    permit ERC-2612 — jadi sebagian besar tindakan sehari-hari tetap bisa didekode.
 
-Kalau deskriptor yang ditulis khusus untuk kontrak itu cocok, transaksinya diberi label
-**terverifikasi** beserta nama kontraknya. "Terverifikasi" berarti *deskriptor untuk
-kontrak ini ditemukan*, bukan bahwa deskriptor itu diperiksa secara kriptografis:
-deskriptor yang diambil dari server data chain tidak ditandatangani, jadi tingkat
-kepercayaannya hanya setinggi server itu — itulah salah satu alasan Anda bisa
+**Terverifikasi** hanya untuk sumber pertama. Sebuah transaksi diberi label
+terverifikasi hanya kalau deskripsinya berasal dari deskriptor bawaan aplikasi yang
+sedang Anda jalankan — atau dari server data chain dan isinya identik dengan salinan
+bawaan itu, yang membuktikan tidak ada yang diubah di perjalanan. Apa pun selain itu
+yang dikirim server tetap didekode dan tetap ditampilkan, dengan satu baris yang
+menyatakan bahwa isinya datang dari layanan deskriptor dan tidak ada yang
+mengautentikasinya. Layanan itu tidak ditandatangani, jadi tingkat kepercayaannya hanya
+setinggi siapa pun yang menjalankannya — itulah salah satu alasan Anda bisa
 [menjalankan server sendiri](/id/docs/self-hosting#chain-data).
 
 Jumlah token diformat dengan **desimal on-chain token yang sebenarnya**. Kalau Vela

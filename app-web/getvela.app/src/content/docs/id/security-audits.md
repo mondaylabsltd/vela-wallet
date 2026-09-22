@@ -1,7 +1,7 @@
 ---
 title: Audit & masalah yang diketahui
 description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
-source: c4c50ad89f2f
+source: d0bb95c016da
 ---
 
 "Sudah diaudit" adalah klaim tentang kode tertentu pada versi tertentu, jadi halaman ini
@@ -120,11 +120,10 @@ satunya. Jadi kalau satu operasi menghapus seorang pemilik, operasi yang ditanda
 pemilik itu dan ditempatkan lebih belakang dalam bundle yang sama tetap lolos validasi
 dan dijalankan. Safe mengakui hal ini dan tidak mengubah v0.3.0.
 
-Aplikasi Vela tidak pernah menyusun penggantian pemilik, jadi Vela sendiri tidak pernah
-memicu masalah ini. Meski begitu, masalah ini tetap penting: sebuah dApp bisa meminta
-dompet Anda mengganti pemiliknya sendiri (lihat "Celah" di bawah), dan siapa pun yang
-menghapus kunci yang bocor lewat alat Safe lainnya tidak bisa mengandalkan kunci itu
-langsung terputus dalam bundle yang sama.
+Aplikasi Vela tidak pernah menyusun penggantian pemilik, dan dApp yang memintanya langsung
+ditolak, jadi Vela sendiri tidak pernah memicu masalah ini. Masalah ini tetap penting bagi
+siapa pun yang menghapus kunci yang bocor lewat alat Safe lainnya: mereka tidak bisa
+mengandalkan kunci itu langsung terputus dalam bundle yang sama.
 
 ### Penyadapan operasi yang sudah ditandatangani (EntryPoint sebelum v0.9)
 
@@ -152,21 +151,10 @@ untuk v0.9, dan halaman ini akan memberi tahu kapan itu terjadi.
 Ini bukan temuan kontrak, melainkan tempat-tempat di mana dompet melindungi Anda lebih
 sedikit daripada yang mungkin Anda kira. Masing-masing sudah dicatat untuk diperbaiki:
 
-- **Panggilan dari dompet Anda ke dompet itu sendiri tidak diblokir.** Sebuah dApp bisa
-  meminta `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, atau `setGuard`
-  pada Safe Anda sendiri; salah satu saja, sekali ditandatangani, menyerahkan akun Anda.
-  Vela mendekode panggilan ini tetapi tidak menghentikannya. Tolak setiap permintaan yang
-  targetnya alamat Anda sendiri.
 - **Pengaman persetujuan hanya menghentikan jumlah "tanpa batas"** (2^200 atau lebih;
   2^152 untuk Permit2). Persetujuan besar yang terbatas, permit yang ditandatangani, atau
   `setApprovalForAll` untuk NFT mendapat peringatan, bukan pemblokiran.
-- **Deskriptor yang diambil tidak diautentikasi.** Deskriptor dari server data chain
-  ditampilkan sebagai "terverifikasi" kalau cocok dengan kontraknya; tingkat
-  kepercayaannya hanya setinggi server itu.
 - **Halaman tanda tangan independen belum terhubung** ke aplikasi mana pun.
-- **Pemeriksaan jaringan tidak mencari factory signer passkey milik Safe**, yang
-  dibutuhkan kunci kedua sampai ketujuh; di jaringan yang ditambahkan tanpa factory itu,
-  hanya kunci pertama yang bisa menandatangani.
 - **Situs web memuat skrip analitik pihak ketiga** di domain yang sama dengan passkey.
   Situs itu melarang halamannya sendiri memakai passkey (lewat header Permissions-Policy),
   dan tidak memuat skrip tersebut di halaman yang memegang kunci.

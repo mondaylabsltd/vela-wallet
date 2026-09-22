@@ -1,7 +1,7 @@
 ---
 title: Guía de autoalojamiento
 description: "Todo lo que Vela opera por ti, qué hace cada pieza y cómo reemplazarla por la tuya (el relay, el índice de llaves públicas, los datos de cadena, los tipos de cambio y las apps), además de lo único que no puedes reemplazar y cómo arreglártelas sin getvela.app."
-source: a093c30db3fb
+source: 3617d6d07f71
 ---
 
 <script>
@@ -114,16 +114,14 @@ Guarda lo que escribas de cualquier forma, así que espera a que se ponga en ver
 | Datos de cadena | `ethereum-data` |
 | Tipos de cambio | no se revisa por nombre; tiene que devolver una lista de tipos de cambio con base en USD |
 
-Qué tan bien respeta hoy cada app estos ajustes:
+Las cuatro apps respetan los cuatro campos, y un endpoint que cambias se aplica
+desde la siguiente llamada, no desde el siguiente arranque: cada camino (crear una
+wallet, iniciar sesión, buscar el nombre de una dirección) lee el endpoint en el
+momento en que lo usa. En iOS, además, el índice de passkey se puede cambiar en la
+pantalla de inicio de sesión cuando el predeterminado no responde.
 
-| App | Endpoints de servicio | RPC por red |
-| --- | --- | --- |
-| Web y extensión | Datos de cadena, relay y tipos de cambio. El índice de passkey se usa para buscar nombres, pero crear una wallet e iniciar sesión siguen usando el índice de Vela | Sí |
-| Escritorio | Los cuatro; un índice de passkey nuevo se aplica después de reiniciar o cerrar sesión | Sí |
-| Android | Los cuatro, salvo que buscar nombres para direcciones todavía consulta el índice de Vela | Sí |
-| iOS | **Todavía no**: la página muestra valores de ejemplo y no guarda. El índice de passkey se puede cambiar en la pantalla de inicio de sesión cuando el predeterminado no responde | Solo lectura |
-
-Estos huecos son bugs, y tienen seguimiento.
+(Hasta septiembre de 2026 había cuatro excepciones a esto; la peor era una página de
+iOS que mostraba valores de ejemplo y no guardaba nada. Ya están corregidas.)
 
 ## Opera tu propio relay
 
@@ -160,9 +158,9 @@ docker compose up -d --no-build
 curl --fail http://127.0.0.1:4567/readyz
 ```
 
-Mejor usa la imagen publicada: compilar desde el código fuente con
-`docker compose up --build` puede fallar con el Dockerfile actual. Sin Docker,
-`cargo run --release --bin vela-relay` lo ejecuta directamente.
+Cualquiera de las dos sirve: la imagen publicada es la más rápida, y
+`docker compose up --build` compila lo mismo desde el código fuente que puedes leer.
+Sin Docker, `cargo run --release --bin vela-relay` lo ejecuta directamente.
 
 **Cloudflare Workers**
 
@@ -223,9 +221,11 @@ P256_INDEX_DOMAIN_REGISTRY=0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf
 PRIVATE_KEY=0x…
 ```
 
-`P256_INDEX_DOMAIN_REGISTRY` importa aunque el archivo de ejemplo del servidor no lo
-incluya: sin él, el servidor entrega desafíos que el contrato rechaza, y todos los
-registros fallan.
+`P256_INDEX_DOMAIN_REGISTRY` es el que más se olvida: sin él, el servidor entrega
+desafíos que el contrato rechaza, y todos los registros fallan. Está en
+`.env.example`, y tiene que coincidir con el `DOMAIN_REGISTRY` del propio contrato
+desplegado: desde la VERSION 12 del registro, el dominio de los desafíos queda fijado
+al desplegarlo, así que no cambia cuando se vuelve a desplegar el contrato.
 
 **Ejecútalo y compruébalo**
 
@@ -237,9 +237,9 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 El servidor escucha en HTTP simple (en el puerto 11256 por defecto); ponle enfrente
-un proxy con TLS, porque la wallet solo acepta endpoints `https://`. Al momento de
-escribir esto, puede que el Dockerfile del código fuente no compile; compilar con
-Cargo sí funciona.
+un proxy con TLS, porque la wallet solo acepta endpoints `https://`. También
+funciona `docker build -f p256-index-server/Dockerfile .` desde un clon limpio; si
+usas Compose, copia primero `.env.example` a `p256-index-server/.env`.
 
 **Si no responde ningún índice**, las wallets existentes siguen funcionando: al
 iniciar sesión, la app lee el contrato de registro en Gnosis (y luego en Ethereum) a
@@ -310,10 +310,10 @@ usen passkeys de `getvela.app`.
 Vela funciona en cualquier cadena EVM que tenga el precompilado P-256 y los
 contratos estándar que revisa. La página de [configuración de cadenas](/es-MX/chain-setup)
 te dice qué le falta a una cadena y despliega lo que cualquiera puede desplegar;
-[redes y comisiones](/es-MX/docs/networks-and-fees) explica los requisitos. Un
-hueco: una wallet con más de una llave también necesita en esa cadena la fábrica de
-firmantes de passkey de Safe, que la revisión todavía no busca; sin ella, ahí solo
-puede firmar la primera llave.
+[redes y comisiones](/es-MX/docs/networks-and-fees) explica los requisitos. La
+revisión incluye los dos contratos que necesita una wallet con más de una llave, y
+los marca como tales: una cadena que no los tenga sigue sirviendo para una wallet de
+una sola llave.
 
 ## Lo que sigue apuntando a Vela después de todo esto
 

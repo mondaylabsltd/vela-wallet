@@ -1,7 +1,7 @@
 ---
 title: Firma leggibile
 description: "Vela decodifica le transazioni in linguaggio chiaro prima che tu le approvi — intento, importi, indirizzi e rischio — invece di esadecimale incomprensibile. Quando non riesce a decodificare una chiamata, ti avvisa invece di fingere."
-source: 858d8631b7e5
+source: 7232328b724e
 ---
 
 <script>
@@ -46,12 +46,14 @@ Vela cerca un descrittore in quest'ordine:
    permit ERC-2612 — così la maggior parte delle azioni quotidiane si decodifica
    comunque.
 
-Quando corrisponde un descrittore scritto per quel contratto specifico, la
-transazione viene etichettata come **verificata** con il nome del contratto.
-«Verificata» significa *che è stato trovato un descrittore per questo contratto*,
-non che sia stato controllato crittograficamente: i descrittori scaricati dal
-server dei dati delle chain non sono firmati, quindi sono affidabili quanto quel
-server — ed è uno dei motivi per cui puoi
+**Verificata** è riservata alla prima fonte. Una transazione viene etichettata
+come verificata solo quando la descrizione arriva da un descrittore integrato
+nell'app che stai usando — oppure dal server dei dati delle chain ed è identica
+alla copia integrata, il che dimostra che per strada non è stato cambiato nulla.
+Tutto il resto di ciò che il server manda viene comunque decodificato e comunque
+mostrato, con una riga che dice che arriva dal servizio dei descrittori e che
+nulla lo ha autenticato. Quel servizio non è firmato, quindi è affidabile solo
+quanto chi lo gestisce — ed è uno dei motivi per cui puoi
 [gestirne uno tuo](/it/docs/self-hosting#chain-data).
 
 Gli importi dei token sono formattati con i **decimali reali on-chain** del token.

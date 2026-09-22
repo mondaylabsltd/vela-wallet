@@ -159,7 +159,8 @@ Calls and EIP-712 messages are decoded with **ERC-7730** descriptors — built i
 the app for common contracts, fetched from the chain-data service, or matched to
 standard token shapes — then, as a last resort, a public selector database,
 labelled best effort. Anything left gets an explicit blind-signing warning.
-Fetched descriptors are not cryptographically authenticated. An on-chain approval
+A fetched descriptor is never labelled verified — only one built into the app,
+or a fetched one identical to it, earns that word. An on-chain approval
 at the "unlimited" level (2^200 or more) cannot be submitted until you reduce it;
 a large finite approval and signed permits are shown with a caution but not
 blocked. Details:
@@ -170,9 +171,10 @@ blocked. Details:
 Vela has 24 built-in networks — Ethereum, BNB Chain, Polygon, Arbitrum,
 Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc,
 X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink,
-Plume and XRPL EVM — and accepts any EVM network that has the eleven contracts
-it checks for and the EIP-7951 / RIP-7212 precompile. (Keys two to seven also need Safe's
-passkey signer factory on that network, which the check does not cover yet.)
+Plume and XRPL EVM — and accepts any EVM network that has the twelve contracts
+it checks for and the EIP-7951 / RIP-7212 precompile. Two of the twelve are
+Safe's passkey signer factory and the signer code it deploys, which only a
+wallet with more than one key needs; the check reports them separately.
 
 ## Security model
 
@@ -218,24 +220,29 @@ self-custody gives you is that Vela is not a second party who can.
   stays spendable by that key on every network.
 - **Phishing** — a passkey cannot be typed into a fake site, and browsers offer it
   only to pages on getvela.app and its subdomains.
-- **Malicious dApp** — addressed by clear signing and the approval guard, with a
-  serious gap: a dApp can request a call from your Safe to itself —
-  `enableModule`, `addOwnerWithThreshold`, `setFallbackHandler`, `setGuard` — and
-  any one of them, signed once, hands over the account as completely as the Bybit
-  payload did. Vela decodes these calls but does not block them yet. Reject any
-  request whose target is your own wallet address.
+- **Malicious dApp** — addressed by clear signing, the approval guard, and a
+  refusal: a request for a call from your Safe to itself — `enableModule`,
+  `addOwnerWithThreshold`, `swapOwner`, `setFallbackHandler`, `setGuard` and the
+  rest of that family — is blocked, including inside a batch or a `MultiSend`,
+  as is any leg carrying a `delegatecall` and a `SafeTx` typed-data signature.
+  Any one of them, signed once, would hand over the account as completely as the
+  Bybit payload did, so the wallet does not offer them to be signed at all.
 - **Compromised backend service** (relay, index, chain data, exchange rates) — no
   signing power, but real influence: refusing service, misleading descriptors or
   token lists, wrong exchange rates that change how much a fiat amount sends, and
-  (for the relay) the timing and gas price above. Fetched descriptors are not
-  treated as authenticated, and each service can be replaced.
+  (for the relay) the timing and gas price above. A description fetched from the
+  chain-data service is never called verified — only one built into the app, or
+  a fetched one identical to it, earns that word, and the rest are shown with a
+  line saying nothing authenticated them. Each service can be replaced.
 - **Compromised app delivery** — a tampered web deployment, extension update or
   app build could present a malicious transaction for you to sign. This is the
   [Bybit](/docs/bybit-attack) class of attack. Mitigations today are limited: the
   decoding and approval guard in the app itself, notarized macOS builds, and
   building the extension or apps from source yourself (release packages carry
-  SHA-256 checksums, not signatures). An independent signing page that does not
-  share the app's code is built but not yet connected.
+  SHA-256 checksums and GitHub build-provenance attestations naming the commit
+  and workflow run; the Windows installer is still not code-signed). An
+  independent signing page that does not share the app's code is built but not
+  yet connected.
 - **Anything served from the domain** — any page on getvela.app or its
   subdomains, including a script it loads, could request signatures from Vela
   passkeys, and the prompt shows only "getvela.app". The website therefore forbids

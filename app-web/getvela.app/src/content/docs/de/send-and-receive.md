@@ -1,7 +1,7 @@
 ---
 title: Senden und empfangen
 description: "Wie du mit Vela empfängst und sendest – eine Adresse in jedem Netzwerk, Senden an eine oder viele Personen, woher Empfängernamen kommen, was du bestätigst und wie das Relay dein Geld bewegt."
-source: c23b205bcd8b
+source: 9e280dfc853b
 ---
 
 <script>
@@ -50,8 +50,15 @@ Register (der Name einer anderen Vela-Wallet), dann in den Reverse-Einträgen vo
 `.bnb`, `.arb`, `.g`, Basename und ENS, jeweils direkt von der Chain gelesen. Das geht
 nur in eine Richtung – es benennt eine Adresse, die du eingegeben hast. Tippst du einen
 Namen wie `alice.eth` ein, wird keine Adresse nachgeschlagen. Auch deine gespeicherten
-**Kontakte** zeigen ihre Namen. Nimm einen Namen als Hinweis, nicht als Beweis: Einen
-Reverse-Eintrag oder einen Vela-Wallet-Namen legt fest, wer diese Adresse kontrolliert.
+**Kontakte** zeigen ihre Namen.
+
+Ein Name aus diesen Reverse-Einträgen wird nur angezeigt, wenn er **vorwärts auf
+dieselbe Adresse auflöst**. Jeder kann seinen eigenen Reverse-Eintrag auf eine
+beliebige Zeichenfolge setzen, der Eintrag allein beweist also nichts; die Wallet fragt
+den Namensdienst, auf welche Adresse dieser Name zeigt, und zeigt den Namen nur, wenn
+beide übereinstimmen. Lässt sich die Prüfung nicht durchführen – ein Endpunkt, der
+nicht antwortet, ein Resolver, der fehlschlägt –, siehst du die Adresse und keinen
+Namen, nie einen ungeprüften.
 
 ### Gebühren-Coin und Geschwindigkeit
 
