@@ -962,14 +962,6 @@ object SettingsFixtures {
                     SegmentModel("auto", s.t(I18nKeys.SettingsUi.THEME_AUTO), SettingsIcon.Monitor),
                 ),
             ),
-            avatar = SegmentedModel(
-                label = s.t(I18nKeys.SettingsUi.AVATAR_TITLE),
-                selected = "identicon",
-                segments = listOf(
-                    SegmentModel("initials", s.t(I18nKeys.SettingsUi.AVATAR_INITIALS)),
-                    SegmentModel("identicon", s.t(I18nKeys.SettingsUi.AVATAR_IDENTICON)),
-                ),
-            ),
             textScale = TextScaleModel(s.t(I18nKeys.SettingsUi.TEXT_SCALE), steps = 7, index = 3),
             signOutLabel = s.t(I18nKeys.SettingsUi.SIGN_OUT_BUTTON),
             eraseTitle = s.t(I18nKeys.SettingsUi.ERASE_TITLE),

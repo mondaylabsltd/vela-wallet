@@ -206,7 +206,7 @@ fun FactRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             is FactLead.Identicon -> {
-                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg, name = lead.name)
+                IdenticonImage(seed = lead.seed, size = VelaIconSize.lg)
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             null -> Unit
@@ -306,7 +306,7 @@ fun RecipientCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2, name = recipient.name)
+        IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         if (onPick != null) {
             Icon(
@@ -538,7 +538,7 @@ fun ContactPickRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2, name = contact.name)
+        IdenticonImage(seed = contact.identiconSeed, size = VelaIconSize.xl2)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

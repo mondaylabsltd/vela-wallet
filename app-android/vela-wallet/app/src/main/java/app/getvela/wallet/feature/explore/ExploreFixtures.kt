@@ -208,7 +208,6 @@ object ExploreFixtures {
                 canBack = true,
                 canForward = false,
                 bookmarked = false,
-                accountName = WalletFixtures.NAME,
                 accountSeed = WalletFixtures.ADDRESS_FULL,
                 tabCount = 2,
                 page = demoPage,
@@ -252,7 +251,7 @@ object ExploreFixtures {
  * what it just granted.
  */
 fun ExploreScreenModel.withIdentity(name: String, address: String): ExploreScreenModel = copy(
-    browser = browser.copy(accountName = name, accountSeed = address),
+    browser = browser.copy(accountSeed = address),
     connection = connection.copy(
         accountName = name,
         accountAddress = shortenAddress(address),

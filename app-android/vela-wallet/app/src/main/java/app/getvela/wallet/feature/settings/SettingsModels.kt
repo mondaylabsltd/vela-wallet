@@ -514,7 +514,6 @@ data class SettingsScreenModel(
     val keys: WalletKeysModel? = null,
     val sections: List<SettingsSectionModel>,
     val theme: SegmentedModel,
-    val avatar: SegmentedModel,
     val textScale: TextScaleModel,
     val signOutLabel: String,
     val eraseTitle: String,
