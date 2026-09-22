@@ -127,6 +127,17 @@ Founder asked: fee copy must follow the code; don't lead with "ten times or more
 - [x] T105 13 locales carry T101–T103 (parallel agents, same brief) + review notes
 - [x] T106 Gates (check, vitest, i18n stamp + status --gate, build, crawl), commit, push, PR #304 note: merge vela-relay#12 first
 
+## Phase 11: Written for the buyer (2026-09-22)
+
+Founder: the paying customer is the technical user who self-hosts and compiles; positioning must be vertical for them. Also: p256-index gets an MIT licence; the README should hold a developer, not document everything.
+
+- [x] T110 p256-index: MIT `LICENSE`, crate `license` fields, README sections — mondaylabsltd/p256-index#7
+- [x] T111 en + zh landing: hero "self-host the whole stack" link, comparison led by self-hosting/source/custom networks, builder-first FAQ (run it all, shutdown, own relay → fee to own treasury, keys, losing one), meta, get-started lede
+- [x] T112 en + zh docs: sidebar "Run it yourself" second; docs home leads with self-hosting (+ "run my own relay, who gets the fee"); every "index has no licence" line → MIT
+- [x] T113 13 locales carry T111–T112 (the same five agents; "Update 2026-09-22 (audience)" in each review); relay "address" → "URL" everywhere (an agent's catch)
+- [x] T114 README rewritten for developers (138 lines: pitch, what's worth reading, diagram, repository map, run the whole stack, security, status, contributing); the detail moved to `docs/ARCHITECTURE.md`
+- [x] T115 Gates: check 0/0, vitest 845, i18n gate 0, build, crawl 333 pages, README/ARCHITECTURE links resolve, expo-residue ok
+
 ## Dependencies & execution order
 
 - Phase 1 → Phase 2 → Phases 3–7 → Phase 8 → Phase 9.

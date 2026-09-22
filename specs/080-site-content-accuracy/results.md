@@ -124,3 +124,14 @@ See audit-report.md "For the founder" and "Not fixed here". The most important:
 | Hero subtitle | "Signing is done on your device. Your passkey's private key never goes to Vela." / 签名在你的设备上完成。通行密钥的私钥绝不会交给 Vela。 (C-sign-1) |
 | Fact #3 positive | "What you see is what you sign: Vela decodes the exact transaction before you approve it." — not "a signing channel": the independent signing page is unpublished (C-clear-2) |
 | Fact #4 wordy | 059 string restored; link → `/docs/self-hosting#if-getvela-app-disappears` |
+
+## Written for the buyer, 2026-09-22 (founder)
+
+The paying customer is the technical user who self-hosts and compiles, so the copy is now vertical for them (claim ledger C-aud-1):
+
+- **Landing:** "Or self-host the whole stack" under the hero buttons; the comparison opens with self-hosting, source (all MIT) and custom networks; the FAQ opens with "Can I run all of it myself?", the shutdown answer and "Can I run my own relay?" (the fee then goes to your own treasury). The old key and loss answers are folded into two, with every rule kept.
+- **Docs:** "Run it yourself" is the second sidebar group; the docs home leads with self-hosting and a new "run my own relay, who gets the fee" row.
+- **Licence:** p256-index is MIT (mondaylabsltd/p256-index#7); every "no licence yet" line is gone.
+- **README:** 252 → 138 lines, written to keep a developer: what's worth reading in the code, the architecture diagram, a repository map with run commands, the four services to self-host, the security model and status. Architecture history, tooling, distribution, platform notes, web deployment, endpoints, fee formula and name resolution moved to `docs/ARCHITECTURE.md`.
+
+**Merge order before this site goes live:** mondaylabsltd/vela-relay#12 and mondaylabsltd/p256-index#7.
