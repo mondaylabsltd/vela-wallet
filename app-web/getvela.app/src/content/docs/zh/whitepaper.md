@@ -1,7 +1,7 @@
 ---
 title: 白皮书
 description: "Vela 如何运作，以及使用它时你需要信任什么、不需要信任什么：账户、钥匙、手续费、威胁模型、恢复，以及 Vela 消失了会怎样。"
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>

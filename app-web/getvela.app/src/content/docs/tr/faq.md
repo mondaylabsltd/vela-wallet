@@ -1,7 +1,7 @@
 ---
 title: SSS
 description: "Saklama, anahtarlar, kurtarma, ağlar, ücretler, Vela'nın neleri görebildiği, açık kaynak ve Vela ortadan kalkarsa ne olacağı hakkında kısa yanıtlar."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # SSS
@@ -73,10 +73,10 @@ listeleniyor. Eksiksiz ve bağlayıcı sürüm [gizlilik politikasıdır](/priva
 
 ## Vela açık kaynak mı?
 
-Cüzdan uygulamaları, relay ve döviz kuru servisi
-[GitHub'da](https://github.com/orgs/mondaylabsltd/repositories) MIT lisanslıdır;
-zincir verisi dizini de MIT'dir. Açık anahtar dizini herkese açık ama henüz bir lisans
-dosyası yok. Her servisi kendiniz çalıştırabilirsiniz — bkz.
+Evet, tamamı MIT lisanslıdır: cüzdan uygulamaları ve çekirdek, relay, açık anahtar
+dizini, döviz kuru servisi ve zincir verisi dizini. Kod
+[GitHub'da](https://github.com/orgs/mondaylabsltd/repositories). Her servisi kendiniz
+çalıştırabilirsiniz — bkz.
 [kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting).
 
 ## Vela denetlendi mi?

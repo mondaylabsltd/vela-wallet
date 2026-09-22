@@ -1,7 +1,7 @@
 ---
 title: Câu hỏi thường gặp
 description: "Những câu trả lời ngắn về quyền lưu ký, khóa, khôi phục, mạng, phí, những gì Vela thấy được, mã nguồn mở, và chuyện gì xảy ra nếu Vela không còn nữa."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # Câu hỏi thường gặp
@@ -69,9 +69,9 @@ kê ở [tạo ví của bạn](/vi/docs/create-wallet#what-is-public).
 
 ## Vela có phải mã nguồn mở không?
 
-Các ứng dụng ví, relay và dịch vụ tỷ giá đều theo giấy phép MIT trên
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories); danh mục dữ liệu chuỗi cũng theo
-MIT. Chỉ mục khóa công khai được công khai nhưng chưa có tệp giấy phép. Bạn có thể tự chạy từng
+Có, toàn bộ đều theo giấy phép MIT: các ứng dụng ví và phần lõi, relay, chỉ mục khóa công khai,
+dịch vụ tỷ giá và danh mục dữ liệu chuỗi, trên
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories). Bạn có thể tự chạy từng
 dịch vụ — xem [hướng dẫn tự triển khai](/vi/docs/self-hosting).
 
 ## Vela đã được kiểm toán chưa?

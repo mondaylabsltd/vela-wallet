@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 如何運作，以及使用它時你需要信任甚麼、不需要信任甚麼：帳戶、鑰匙、手續費、威脅模型、復原，以及 Vela 消失時會怎樣。"
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -214,8 +214,7 @@ Kaia、Celo、Ink、Plume 和 XRPL EVM——並接受任何具備它所檢查的
 
 ## 開源
 
-錢包（所有 App 和核心）、中繼和匯率服務均採用 MIT 授權；鏈數據目錄同樣採用 MIT 授權。公鑰索引的程式碼是
-公開的，但暫時還沒有授權條款檔案。程式碼：
+全部均採用 MIT 授權：錢包（所有 App 和核心）、中繼、公鑰索引、匯率服務和鏈數據目錄。程式碼：
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories)。
 
 ## 沒有代幣

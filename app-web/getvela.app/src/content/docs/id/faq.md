@@ -1,7 +1,7 @@
 ---
 title: Tanya jawab
 description: "Jawaban singkat tentang kustodi, kunci, pemulihan, jaringan, biaya, apa yang bisa dilihat Vela, open source, dan apa yang terjadi kalau Vela tidak ada lagi."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # Tanya jawab
@@ -73,10 +73,10 @@ yang menjadi publik on-chain tercantum di
 
 ## Apakah Vela open source?
 
-Aplikasi dompet, relay, dan layanan kurs berlisensi MIT di
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories); direktori data chain juga
-MIT. Indeks kunci publik terbuka untuk publik tetapi belum punya file lisensi. Setiap
-layanan bisa Anda jalankan sendiri — lihat [panduan hosting sendiri](/id/docs/self-hosting).
+Ya, semuanya berlisensi MIT: aplikasi dompet dan intinya, relay, indeks kunci publik,
+layanan kurs, dan direktori data chain; kodenya ada di
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories). Setiap layanan bisa Anda
+jalankan sendiri — lihat [panduan hosting sendiri](/id/docs/self-hosting).
 
 ## Apakah Vela sudah diaudit?
 

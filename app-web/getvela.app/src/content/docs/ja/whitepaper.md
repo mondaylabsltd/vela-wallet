@@ -1,7 +1,7 @@
 ---
 title: ホワイトペーパー
 description: "Vela がどう動くのか、そして使うために何を信頼する必要があり、何を信頼しなくていいのか。アカウント、鍵、手数料、脅威モデル、復旧、そして Vela がなくなったらどうなるか。"
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -152,7 +152,7 @@ Vela には 24 のネットワークが内蔵されています。Ethereum、BNB
 
 ## オープンソース
 
-ウォレット（すべてのアプリとコア）、リレー、為替レートのサービスは MIT ライセンスで、チェーンデータのディレクトリも MIT です。公開鍵インデックスは公開されていますが、まだライセンスファイルがありません。コードは [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories) にあります。
+ウォレット（すべてのアプリとコア）、リレー、公開鍵インデックス、為替レートのサービス、チェーンデータのディレクトリは、すべて MIT ライセンスです。コードは [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories) にあります。
 
 ## トークンはありません
 

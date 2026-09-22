@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Un portefeuille Ethereum qui vous appartient vraiment",
-			"description": "Un portefeuille Ethereum open source que vous pouvez faire fonctionner sans nous. Signez avec des passkeys ou des clés de sécurité — sans phrase de récupération. Votre compte est un Safe non modifié, et tous les services sur lesquels il s'appuie sont open source.",
+			"description": "Un portefeuille Ethereum open source que vous pouvez compiler et héberger vous-même — les apps, le relais, l'index des clés publiques et les données de chaîne. Un Safe non modifié, signé avec des passkeys ou des clés de sécurité matérielles, sans phrase de récupération.",
 			"ogTitle": "Vela Wallet — Un portefeuille Ethereum qui vous appartient vraiment",
-			"ogDescription": "Portefeuille Ethereum open source bâti sur un Safe non modifié. Passkeys ou clés de sécurité, sans phrase de récupération, et des services open source que vous pouvez héberger vous-même.",
-			"organization": "Un portefeuille Ethereum open source, en auto-conservation, bâti sur un Safe non modifié, qui signe avec des passkeys ou des clés de sécurité, sans phrase de récupération."
+			"ogDescription": "Compilez-le et faites-le tourner vous-même : un portefeuille Ethereum sous licence MIT, bâti sur un Safe non modifié, avec des passkeys ou des clés de sécurité et tous ses services open source.",
+			"organization": "Un portefeuille Ethereum open source et auto-hébergeable, bâti sur un Safe non modifié, qui signe avec des passkeys ou des clés de sécurité, sans phrase de récupération."
 		},
 		"hero": {
 			"headline": "Un portefeuille Ethereum qui vous appartient vraiment",
 			"subtitle": "La signature se fait sur votre appareil. La clé privée de votre passkey n'est jamais transmise à Vela.",
 			"ctaCreate": "Commencer",
 			"ctaCode": "Lire le code",
+			"ctaSelfHost": "Ou hébergez vous-même toute la stack",
 			"facts": [
 				{
 					"term": "Votre compte est un Safe v1.4.1 non modifié.",
@@ -136,7 +137,7 @@
 			"heading": "Pourquoi nous l'avons créé",
 			"p1": "Nous utilisions <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (qui fait désormais partie de Coinbase Wallet) tous les jours, et nous l'aimions bien. Puis nous nous sommes heurtés aux limites : une phrase de récupération générée sur un site web auquel il faut simplement faire confiance, pas de réseaux personnalisés, rien que l'on puisse héberger soi-même, et un service de signature dont le code n'est pas public — s'il disparaît, aucune méthode publiée ne permet à votre passkey d'atteindre votre compte.",
 			"p2": "Vela, c'est la version dans laquelle nous étions prêts à laisser de l'argent. Nous avons gardé la signature par passkey, mais fait en sorte que le portefeuille ne dépende pas de nous.",
-			"more": "La version longue — où est-on censé ranger douze mots ?"
+			"more": "La version longue — ce que nous ne pouvions pas accepter dans d'autres portefeuilles, et le compromis que nous avons choisi"
 		},
 		"tradeoffs": {
 			"heading": "Les compromis, tout de suite",
@@ -167,10 +168,40 @@
 					"base": "Compte intelligent Coinbase"
 				},
 				{
+					"feature": "Auto-hébergement complet",
+					"vela": "Apps et services backend, avec les lacunes listées dans le guide d'auto-hébergement ; les passkeys restent liées à getvela.app",
+					"metamask": "Le client et le RPC sont à vous de choisir ou d'héberger",
+					"base": "Non disponible"
+				},
+				{
+					"feature": "Code source",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps et services publics</a>, tous sous licence MIT",
+					"metamask": "Public, sous une licence qui n'autorise qu'un usage non commercial",
+					"base": "Contrats et SDK ouverts ; le service de signature ne l'est pas"
+				},
+				{
+					"feature": "Réseaux personnalisés",
+					"vela": "Tout réseau EVM qui remplit les conditions de Vela ; vous pouvez déployer vous-même la plupart des contrats manquants",
+					"metamask": "Réseaux EVM et RPC personnalisés",
+					"base": "Une liste fixe de réseaux"
+				},
+				{
 					"feature": "Clé de signature",
 					"vela": "Passkeys ou clés de sécurité, jusqu'à sept",
 					"metamask": "La clé privée derrière une phrase de récupération ; portefeuilles matériels pris en charge",
 					"base": "Passkey ou phrase de récupération"
+				},
+				{
+					"feature": "Ajouter une clé plus tard",
+					"vela": "Impossible — les clés sont fixées à la création",
+					"metamask": "Impossible — une seule clé par compte",
+					"base": "Pris en charge"
+				},
+				{
+					"feature": "Si vous perdez une clé",
+					"vela": "Signer avec une autre clé ajoutée ou synchronisée",
+					"metamask": "Restaurer depuis la phrase de récupération",
+					"base": "Signer avec une autre clé ajoutée ou synchronisée"
 				},
 				{
 					"feature": "Gas par transaction",
@@ -183,24 +214,6 @@
 					"vela": "Non proposé",
 					"metamask": "Sur certains réseaux",
 					"base": "Quand l'app le sponsorise"
-				},
-				{
-					"feature": "Réseaux personnalisés",
-					"vela": "Tout réseau EVM qui remplit les conditions de Vela ; vous pouvez déployer vous-même la plupart des contrats manquants",
-					"metamask": "Réseaux EVM et RPC personnalisés",
-					"base": "Une liste fixe de réseaux"
-				},
-				{
-					"feature": "Si vous perdez une clé",
-					"vela": "Signer avec une autre clé ajoutée ou synchronisée",
-					"metamask": "Restaurer depuis la phrase de récupération",
-					"base": "Signer avec une autre clé ajoutée ou synchronisée"
-				},
-				{
-					"feature": "Ajouter une clé plus tard",
-					"vela": "Impossible — les clés sont fixées à la création",
-					"metamask": "Impossible — une seule clé par compte",
-					"base": "Pris en charge"
 				},
 				{
 					"feature": "Transactions groupées",
@@ -219,18 +232,6 @@
 					"vela": "Une page de signature indépendante, prête mais pas encore reliée aux apps",
 					"metamask": "Alertes de risque fournies par un tiers",
 					"base": "—"
-				},
-				{
-					"feature": "Auto-hébergement complet",
-					"vela": "Apps et services backend, avec les lacunes listées dans le guide d'auto-hébergement ; les passkeys restent liées à getvela.app",
-					"metamask": "Le client et le RPC sont à vous de choisir ou d'héberger",
-					"base": "Non disponible"
-				},
-				{
-					"feature": "Code source",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps et services publics</a> ; MIT, sauf l'index, dont la licence est en attente",
-					"metamask": "Public, sous une licence qui n'autorise qu'un usage non commercial",
-					"base": "Contrats et SDK ouverts ; le service de signature ne l'est pas"
 				},
 				{
 					"feature": "Maturité",
@@ -267,32 +268,32 @@
 			"heading": "FAQ",
 			"items": [
 				{
-					"q": "De quoi ai-je besoin pour créer un portefeuille ?",
-					"a": "Un téléphone ou un ordinateur compatible avec les passkeys, ou des clés de sécurité matérielles — deux, si vous n'utilisez que des clés de sécurité. Ni phrase de récupération, ni e-mail, ni solde de départ.\n\nChoisissez toutes vos clés, jusqu'à sept, au moment de créer le portefeuille. Vous ne pourrez pas en ajouter ensuite."
+					"q": "Puis-je tout faire tourner moi-même ?",
+					"a": "Oui, sauf le domaine auquel appartiennent vos passkeys. Les apps et tous les services sur lesquels elles s'appuient — le relais, l'index des clés publiques, les données de chaîne et les taux de change — sont sous licence MIT et tournent sur Docker ou Cloudflare Workers, et les apps ont des réglages pour pointer vers vos propres services. Le guide d'auto-hébergement les passe en revue un par un, y compris les lacunes que certaines apps ont encore.\n\nLes passkeys sont liées à getvela.app : une copie du portefeuille web sur votre propre domaine est donc un autre portefeuille. L'extension de navigateur et les apps que vous compilez vous-même signent toujours pour votre portefeuille existant."
+				},
+				{
+					"q": "Que se passe-t-il si Vela ferme, ou si getvela.app tombe ?",
+					"a": "Vos fonds restent dans votre Safe, on-chain. Tous les services que Vela fait tourner sont open source, et vous pouvez faire tourner chacun d'eux vous-même — le relais, l'index des clés publiques, les données de chaîne et les taux de change.\n\nSi getvela.app est hors ligne, l'extension Vela pour navigateur signe toujours avec vos clés existantes — la passkey de cet appareil, une clé de sécurité ou un téléphone via QR code —, tout comme les apps que vous compilez vous-même, avec un téléphone ou une clé de sécurité."
+				},
+				{
+					"q": "Puis-je faire tourner mon propre relais ?",
+					"a": "Oui : vela-relay, écrit en Rust, sur Docker ou Cloudflare Workers. Approvisionnez sa trésorerie avec la monnaie de chaque chaîne et saisissez son URL dans le portefeuille. Les frais que vous signez vont alors à votre propre trésorerie : entre votre portefeuille et votre relais, vous payez donc à peu près le gas réel.\n\nIl doit s'agir de vela-relay : le portefeuille obtient son devis de frais via une méthode que les bundlers ERC-4337 génériques n'implémentent pas."
+				},
+				{
+					"q": "Quelles clés puis-je utiliser ?",
+					"a": "Des passkeys — synchronisées par le trousseau iCloud, le gestionnaire de mots de passe Google ou un autre gestionnaire de mots de passe —, un autre téléphone via QR code et des clés de sécurité matérielles FIDO2 : d'une à sept, choisies à la création du portefeuille et figées ensuite. N'importe laquelle peut signer (1-of-n). Si vous n'avez qu'une clé non synchronisée, comme une seule clé de sécurité, il vous en faut une deuxième.\n\nNi phrase de récupération, ni e-mail, ni solde de départ."
+				},
+				{
+					"q": "Et si je perds une clé, ou si mon compte Apple ou Google est compromis ?",
+					"a": "Une passkey synchronisée revient sur votre nouvel appareil. Une clé non synchronisée perdue l'est pour de bon : vous signez alors avec une autre clé que vous avez ajoutée ; si c'était votre seule clé, le portefeuille est perdu.\n\nSi un compte qui synchronise l'une de vos passkeys est compromis, quiconque le contrôle peut être en mesure de dépenser depuis votre portefeuille — et les clés ne peuvent pas être retirées. Transférez vos fonds vers un nouveau portefeuille créé avec des clés qui ne dépendent pas de ce compte. Les clés de sécurité matérielles évitent cette dépendance dès le départ."
 				},
 				{
 					"q": "Puis-je utiliser Vela avec des dApps ?",
 					"a": "Oui. Les dApps voient Vela comme n'importe quel portefeuille de navigateur.\n\nCela fonctionne dans l'extension Vela pour navigateur et dans le navigateur intégré aux apps bureau (macOS, Windows), iPhone et Android. Le portefeuille web, lui, ne se connecte pas aux dApps."
 				},
 				{
-					"q": "Et si je perds mon téléphone ?",
-					"a": "Si votre passkey est synchronisée avec le trousseau iCloud ou le gestionnaire de mots de passe Google, vous la récupérez sur un nouvel appareil et continuez avec le même portefeuille.\n\nSi elle ne l'était pas, il vous faudra une autre clé — une de celles ajoutées à la création du portefeuille."
-				},
-				{
-					"q": "Et si je supprime ma passkey ?",
-					"a": "Cette clé est perdue définitivement. Si c'était votre seule clé, vous perdez l'accès au portefeuille."
-				},
-				{
-					"q": "Et si mon compte Apple ou Google est compromis ?",
-					"a": "Quiconque contrôle ce compte peut être en mesure d'utiliser une passkey synchronisée par son biais et de dépenser depuis votre portefeuille — et une clé ne peut pas être retirée. Transférez vos fonds vers un nouveau portefeuille créé avec des clés qui ne dépendent pas de ce compte.\n\nPour ne pas dépendre d'Apple ou de Google dès le départ, créez votre portefeuille avec des clés de sécurité matérielles."
-				},
-				{
 					"q": "Que peut faire Vela de mon argent, et que sait-il de moi ?",
 					"a": "Vela ne détient aucune clé ni aucun rôle sur votre portefeuille ; il ne peut donc ni déplacer ni geler vos fonds de lui-même. C'est en revanche Vela qui écrit le logiciel qui demande à vos clés de signer.\n\nNi e-mail ni compte. Vos clés publiques, le type d'authentificateur derrière chacune, les noms de vos clés, le nom et l'adresse du portefeuille sont publics on-chain ; les services de Vela voient votre adresse IP et les transactions que vous envoyez par leur intermédiaire. Les émetteurs de jetons peuvent toujours mettre des adresses sur liste noire."
-				},
-				{
-					"q": "Que se passe-t-il si Vela ferme, ou si getvela.app tombe ?",
-					"a": "Vos fonds restent dans votre Safe, on-chain. Tous les services que Vela fait tourner sont open source, et vous pouvez faire tourner chacun d'eux vous-même — le relais, l'index des clés publiques, les données de chaîne et les taux de change.\n\nSi getvela.app est hors ligne, l'extension Vela pour navigateur signe toujours avec vos clés existantes — la passkey de cet appareil, une clé de sécurité ou un téléphone via QR code —, tout comme les apps que vous compilez vous-même, avec un téléphone ou une clé de sécurité."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "Vela fonctionne dans votre navigateur dès aujourd'hui, avec une extension de navigateur et des apps de bureau à télécharger maintenant, et des apps mobiles en préparation. Choisissez celle qui vous convient."
 		},
 		"heading": "Obtenir Vela",
-		"lede": "Un portefeuille et une adresse, où que vous l'ouvriez. Commencez dans votre navigateur — rien à installer — ou emmenez le même portefeuille dans la barre d'outils de votre navigateur ou sur votre ordinateur, et bientôt sur votre téléphone.",
+		"lede": "Un portefeuille et une adresse, où que vous l'ouvriez. Commencez dans votre navigateur — rien à installer — ou emmenez le même portefeuille dans la barre d'outils de votre navigateur ou sur votre ordinateur, et bientôt sur votre téléphone. Chaque app se compile aussi depuis les sources.",
 		"recommended": "Recommandé",
 		"availableNow": "Disponible",
 		"comingSoon": "Bientôt",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

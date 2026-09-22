@@ -1,7 +1,7 @@
 ---
 title: Kendi sunucunuzda barındırma kılavuzu
 description: "Vela'nın sizin için çalıştırdığı her şey, her parçanın ne yaptığı ve onu kendinizinkiyle nasıl değiştireceğiniz — relay, açık anahtar dizini, zincir verisi, döviz kurları ve uygulamalar — ayrıca değiştiremeyeceğiniz tek şey ve getvela.app olmadan nasıl idare edeceğiniz."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -200,7 +200,7 @@ Ardından `https://your-relay` adresini **Vela Relay** alanına girin.
 
 <span id="index"></span>
 
-Dizin, [p256-index](https://github.com/mondaylabsltd/p256-index)'tir (Rust). Bir cüzdan
+Dizin, [p256-index](https://github.com/mondaylabsltd/p256-index)'tir (Rust, MIT). Bir cüzdan
 oluşturulduğunda her anahtarın kanıtını kontrol eder, ardından grubu Gnosis'teki
 **kayıt defteri sözleşmesine** yazar ve gas bedelini öder.
 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` adresindeki mevcut kayıt defterini
@@ -240,7 +240,6 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 Sunucu düz HTTP üzerinden dinler (varsayılan port 11256); cüzdan yalnızca `https://`
 uç noktalarını kabul ettiği için önüne bir TLS vekil sunucusu koyun. Bu yazının
 yazıldığı sırada kaynak koddaki Dockerfile derlenmeyebilir; Cargo ile derlemek çalışır.
-Deponun henüz bir lisans dosyası yok.
 
 **Hiçbir dizin yanıt vermezse** mevcut cüzdanlar yine çalışır: giriş sırasında uygulama
 Gnosis'teki (ardından Ethereum'daki) kayıt defteri sözleşmesini sizin RPC

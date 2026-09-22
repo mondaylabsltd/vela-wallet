@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -279,9 +279,8 @@ chỉ IP của bạn. Trang web dùng công cụ phân tích không dùng cookie
 
 ## Mã nguồn mở
 
-Chiếc ví (mọi ứng dụng và phần lõi), relay và dịch vụ tỷ giá đều theo giấy phép MIT; danh mục
-dữ liệu chuỗi cũng theo MIT. Chỉ mục khóa công khai được công khai nhưng chưa có tệp giấy phép.
-Mã nguồn: [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
+Mọi thứ đều theo giấy phép MIT: chiếc ví (mọi ứng dụng và phần lõi), relay, chỉ mục khóa
+công khai, dịch vụ tỷ giá và danh mục dữ liệu chuỗi. Mã nguồn: [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Không có token
 

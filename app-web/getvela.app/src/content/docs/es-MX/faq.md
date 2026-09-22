@@ -1,7 +1,7 @@
 ---
 title: Preguntas frecuentes
 description: "Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # Preguntas frecuentes
@@ -75,10 +75,10 @@ pregunta tu app. Lo que se vuelve público on-chain está en
 
 ## ¿Vela es de código abierto?
 
-Las apps de la wallet, el relay y el servicio de tipos de cambio tienen licencia MIT
-en [GitHub](https://github.com/orgs/mondaylabsltd/repositories); el directorio de
-datos de cadena también es MIT. El índice de llaves públicas es público, pero
-todavía no tiene archivo de licencia. Cada servicio lo puedes operar tú; consulta la
+Sí, todo, con licencia MIT: las apps de la wallet y el núcleo, el relay, el índice de
+llaves públicas, el servicio de tipos de cambio y el directorio de datos de cadena,
+en [GitHub](https://github.com/orgs/mondaylabsltd/repositories). Cada servicio lo
+puedes operar tú; consulta la
 [guía de autoalojamiento](/es-MX/docs/self-hosting).
 
 ## ¿Vela está auditada?

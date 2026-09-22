@@ -138,3 +138,22 @@ on the five single-string axes; no High or Medium left open.
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; "Toma en cuenta" bullet; chain-data paragraph; relay line removed from the final list | — | *directorio de cadenas*, as the removed list line named it |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the audience pass (commit 66a3c789: copy for the reader who self-hosts and
+builds from source; p256-index now MIT) into es-MX. Each changed string checked on
+the five single-string axes; `messages.test.ts -t es-MX` passes.
+
+| String / section | Change | Severity fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `ogDescription` / `organization` | build-and-host meaning; «autoalojable» replaces «de autocustodia» in `organization` | — | "key index" rendered as the locale's *índice de llaves públicas*; "run it yourself" = *ejecútala* (a program), per the terminology table |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | «O aloja tú mismo todo el stack» | — | *stack* is the everyday Mexican developer word; *infraestructura* would lose "the whole stack" |
+| `home.why.more` | «…lo que no podíamos aceptar en otras wallets y la concesión que elegimos» | — | *concesión* = the locale's "trade-off" (tradeoffs heading, intro "Para leer a fondo") |
+| `home.compare.rows` | reordered to the new en order (mapped from the old indices); Source code `vela` cell «…</a>, todos con licencia MIT» | — | `<a>` unchanged |
+| `home.faq.items` | new 7-item order; three new answers (run it all / own relay / which keys / lose a key or account compromised) | — | reused old wording («la recuperas en un dispositivo nuevo», «si era tu única llave», «las llaves no se pueden quitar»); "put its address in the wallet" → «pon su URL en la wallet», since *dirección* next to *tesorería* reads as an on-chain address; `1-of-n` kept as in `signers.md` |
+| `getStarted.lede` | + «Todas las apps también se pueden compilar desde el código fuente.» | — | |
+| docs `introduction` | opening «wallet de código abierto y autoalojable»; "Funciona sin nosotros" first and rewritten; table reordered + relay/fee row | — | parentheses instead of dashes (es-MX docs style) |
+| docs `faq`, `whitepaper`, `self-hosting` | all MIT incl. the index; «(Rust, MIT)»; no-licence sentence deleted | — | no "licence pending" line left in es-MX |
+
+Nothing fixed beyond the brief.

@@ -179,3 +179,22 @@ five single-string axes; no High or Medium left open.
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; 알아 둘 것 bullet; chain-data paragraph; relay line removed from the final list | — | 체인 디렉터리 / Vela의 사본 as the file already said |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the en + zh audience revision (commit 66a3c789: copy for the reader who self-hosts
+and builds from source; p256-index now MIT) into ko. Each changed string checked on the five
+single-string axes; no High or Medium left open. `messages.test.ts -t "ko"` passes.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `.ogDescription` / `.organization` | build-and-host framing; organization 자기 수탁형 → 셀프 호스팅 가능한 | — | |
+| `home.hero.ctaSelfHost` (new) | 또는 전체 스택을 직접 운영하기 | — | inserted after `ctaCode`; matches the 「… 직접 운영하기」 headings |
+| `home.why.more` | 긴 버전 — 다른 지갑에서 받아들일 수 없었던 것, 그리고 우리가 택한 트레이드오프 | — | |
+| `home.compare.rows` | reordered to the new en order; Source code cell → 「…공개</a>, 모두 MIT」 | — | anchor unchanged |
+| `home.faq.items` | new order; three new answers and the merged lose-a-key/account answer | — | 합니다체 answers; the new first answer avoids a 해요체 "빼고요" and says 「…만 빼면 모두 가능합니다」; questions keep the file's 「…면요?」 form |
+| `getStarted.lede` | + 모든 앱은 소스에서 빌드할 수도 있습니다. | — | |
+| docs `introduction` | opening now 셀프 호스팅할 수 있는 … 오픈소스 지갑; 「우리 없이도 돌아갑니다」 bullet first and rewritten; table reordered with the new relay/fee row | — | re-wrapped at spaces only |
+| docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; (Rust, MIT); licence-file sentence deleted | — | |
+
+Nothing fixed beyond the brief.

@@ -1,7 +1,7 @@
 ---
 title: Panduan hosting sendiri
 description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -196,7 +196,7 @@ Lalu isikan `https://your-relay` di kolom **Vela Relay**.
 
 <span id="index"></span>
 
-Indeksnya adalah [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust). Saat
+Indeksnya adalah [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust, MIT). Saat
 sebuah dompet dibuat, indeks ini memeriksa bukti setiap kunci, lalu menulis kelompok
 kunci itu ke **kontrak registri** di Gnosis dan membayar gasnya. Tetap pakai registri
 yang sudah ada di `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`: registri itu tidak punya
@@ -236,7 +236,6 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 Server ini mendengarkan di HTTP biasa (port 11256 secara bawaan); pasang proxy TLS di
 depannya, karena dompet hanya menerima endpoint `https://`. Saat tulisan ini dibuat,
 Dockerfile dari kode sumber mungkin tidak bisa di-build; build dengan Cargo berhasil.
-Repositori ini belum punya file lisensi.
 
 **Kalau tidak ada indeks sama sekali yang menjawab**, dompet yang sudah ada tetap
 berfungsi: saat masuk, aplikasi membaca kontrak registri di Gnosis (lalu Ethereum) lewat

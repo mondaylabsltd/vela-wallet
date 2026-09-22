@@ -1,7 +1,7 @@
 ---
 title: Guia de auto-hospedagem
 description: "Tudo o que a Vela roda para você, o que cada peça faz e como substituí-la pela sua — o relay, o índice de chaves públicas, os dados de chain, as cotações e os apps —, além da única coisa que você não pode substituir e de como viver sem o getvela.app."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -200,7 +200,7 @@ Depois, coloque `https://your-relay` no campo **Vela Relay**.
 
 <span id="index"></span>
 
-O índice é o [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust).
+O índice é o [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust, MIT).
 Quando uma carteira é criada, ele confere a prova de cada chave, depois grava o
 grupo no **contrato de registro** na Gnosis e paga o gas. Continue usando o registro
 existente em `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`: ele não tem dono,
@@ -240,7 +240,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 O servidor escuta em HTTP simples (porta 11256 por padrão); coloque um proxy TLS na
 frente dele, já que a carteira só aceita endpoints `https://`. No momento em que
 escrevemos isto, o Dockerfile do código-fonte pode não compilar; compilar com o
-Cargo funciona. O repositório ainda não tem arquivo de licença.
+Cargo funciona.
 
 **Se nenhum índice responder**, as carteiras existentes continuam funcionando: no
 login, o app lê o contrato de registro na Gnosis (e depois no Ethereum) pelos seus

@@ -1,7 +1,7 @@
 ---
 title: Häufige Fragen
 description: "Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # Häufige Fragen
@@ -79,10 +79,10 @@ on-chain öffentlich wird, steht unter
 
 ## Ist Vela Open Source?
 
-Die Wallet-Apps, das Relay und der Wechselkursdienst stehen unter der MIT-Lizenz auf
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories); das
-Chain-Daten-Verzeichnis ebenfalls. Der Public-Key-Index ist öffentlich, hat aber noch
-keine Lizenzdatei. Jeden Dienst kannst du selbst betreiben – siehe die
+Ja, komplett, unter der MIT-Lizenz: die Wallet-Apps und der Kern, das Relay, der
+Public-Key-Index, der Wechselkursdienst und das Chain-Daten-Verzeichnis, auf
+[GitHub](https://github.com/orgs/mondaylabsltd/repositories). Jeden Dienst kannst du
+selbst betreiben – siehe die
 [Anleitung zum Selbsthosten](/de/docs/self-hosting).
 
 ## Ist Vela auditiert?

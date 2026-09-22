@@ -277,7 +277,7 @@
 				},
 				{
 					"q": "能运行自己的中继吗？",
-					"a": "可以：vela-relay，用 Rust 写的，可以跑在 Docker 或 Cloudflare Workers 上。给它的金库转入各条链的原生币，再把它的地址填进钱包。之后你签的手续费就进了你自己的金库，算上钱包和中继两头，你实际付的大致就是真实的 gas。\n\n必须是 vela-relay：钱包用一个通用 ERC-4337 bundler 没有实现的方法来获取手续费报价。"
+					"a": "可以：vela-relay，用 Rust 写的，可以跑在 Docker 或 Cloudflare Workers 上。给它的金库转入各条链的原生币，再把它的网址填进钱包。之后你签的手续费就进了你自己的金库，算上钱包和中继两头，你实际付的大致就是真实的 gas。\n\n必须是 vela-relay：钱包用一个通用 ERC-4337 bundler 没有实现的方法来获取手续费报价。"
 				},
 				{
 					"q": "可以用哪些钥匙？",
@@ -487,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

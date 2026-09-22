@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Wie Vela funktioniert und worauf du vertrauen musst – und worauf nicht –, um es zu nutzen: das Konto, die Schlüssel, die Gebühr, das Bedrohungsmodell, die Wiederherstellung und was passiert, wenn Vela verschwindet."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -317,9 +317,8 @@ Analyse ohne Cookies. Maßgeblich ist die [Datenschutzerklärung](/privacy).
 
 ## Open Source
 
-Die Wallet (alle Apps und der Kern), das Relay und der Wechselkursdienst stehen unter
-der MIT-Lizenz; das Chain-Daten-Verzeichnis ebenfalls. Der Public-Key-Index ist
-öffentlich, hat aber noch keine Lizenzdatei. Code:
+Alles steht unter der MIT-Lizenz: die Wallet (alle Apps und der Kern), das Relay,
+der Public-Key-Index, der Wechselkursdienst und das Chain-Daten-Verzeichnis. Code:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Kein Token

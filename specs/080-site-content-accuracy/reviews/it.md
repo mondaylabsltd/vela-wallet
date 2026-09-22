@@ -157,3 +157,25 @@ unchanged from the table above: *relay*, *archivio delle chain*, *dati delle cha
 | docs `self-hosting` | intro limit removed; two code comments; «Da sapere» bullet; chain-data paragraph; relay line removed from «Cosa punta ancora a Vela» | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy written for the reader who self-hosts and builds from
+source; p256-index now MIT) into `it.json` and four docs. Register stays technical
+*tu*; terms as in the table above (*relay*, *tesoreria*, *indice delle chiavi
+pubbliche*, *dati delle chain*, *ospitare in proprio*, Portachiavi iCloud, Gestore
+delle password di Google). "Self-hostable" is rendered with the verb («che puoi
+ospitare in proprio») rather than an adjective like «ospitabile», which reads badly.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+|---|---|---|---|
+| `home.meta.*` | description/og/organization now "build and host it yourself"; organization «in autocustodia» → «che puoi ospitare in proprio» | – | og opens «Compilalo tu, gestiscilo tu:» to match zh 自己编译，自己运行 |
+| `home.hero.ctaSelfHost` (new) | «Oppure ospita tu l'intero stack» | – | imperative, like «Inizia», «Leggi il codice»; echoes the 059 link «Ospita tu l'app, il relay…»; inserted after `ctaCode` |
+| `home.why.more` | «… cosa non potevamo accettare negli altri wallet, e il compromesso che abbiamo scelto» | – | |
+| `home.compare.rows` | reordered to the new en order by old index; Source code cell «…, tutti con licenza MIT» | – | `<a>` unchanged |
+| `home.faq.items` | new order; three new answers (run it all, own relay, keys) plus the merged lose-a-key / compromised-account answer | – | old wording reused where it carried over («Sposta i fondi in un nuovo wallet…», «Niente seed phrase, email o saldo iniziale»); the password-manager aside goes in parentheses, since Italian doesn't take a comma after a closing dash |
+| `getStarted.lede` | + «Ogni app si può anche compilare dal codice sorgente.» | – | |
+| docs `introduction` | new opening; «Funziona senza di noi» first and rewritten; table reordered + relay/fee row | – | |
+| docs `faq`, `whitepaper`, `self-hosting` | all-MIT wording; «(Rust, MIT)»; licence-file sentence deleted | – | |
+
+No High or Medium findings open.

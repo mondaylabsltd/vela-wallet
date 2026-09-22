@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Uma carteira Ethereum que é realmente sua",
-			"description": "Uma carteira Ethereum de código aberto que você pode usar sem depender de nós. Assine com passkeys ou chaves de segurança — sem frase de recuperação. Sua conta é um Safe sem modificações, e todos os serviços por trás dela são de código aberto.",
+			"description": "Uma carteira Ethereum de código aberto que você mesmo pode compilar e hospedar — os apps, o relay, o índice de chaves públicas e os dados de chain. Um Safe sem modificações, assinado com passkeys ou chaves de segurança físicas, sem frase de recuperação.",
 			"ogTitle": "Vela Wallet — Uma carteira Ethereum que é realmente sua",
-			"ogDescription": "Carteira Ethereum de código aberto sobre um Safe sem modificações. Passkeys ou chaves de segurança, sem frase de recuperação, e serviços de código aberto que você mesmo pode rodar.",
-			"organization": "Uma carteira Ethereum de autocustódia e código aberto, construída sobre um Safe sem modificações, com assinatura por passkeys ou chaves de segurança e sem frase de recuperação."
+			"ogDescription": "Compile e rode você mesmo: uma carteira Ethereum com licença MIT sobre um Safe sem modificações, com passkeys ou chaves de segurança e todos os serviços de código aberto.",
+			"organization": "Uma carteira Ethereum de código aberto e auto-hospedável, construída sobre um Safe sem modificações, com assinatura por passkeys ou chaves de segurança e sem frase de recuperação."
 		},
 		"hero": {
 			"headline": "Uma carteira Ethereum que é realmente sua",
 			"subtitle": "A assinatura é feita no seu aparelho. A chave privada da sua passkey nunca chega à Vela.",
 			"ctaCreate": "Começar",
 			"ctaCode": "Ler o código",
+			"ctaSelfHost": "Ou hospede você mesmo a stack inteira",
 			"facts": [
 				{
 					"term": "Sua conta é um Safe v1.4.1 sem modificações.",
@@ -136,7 +137,7 @@
 			"heading": "Por que a criamos",
 			"p1": "Usávamos a <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (hoje parte da Coinbase Wallet) todo dia e gostávamos dela. Aí esbarramos nos limites: uma frase de recuperação criada num site em que você simplesmente precisa confiar, nada de redes personalizadas, nada que você possa hospedar por conta própria e um serviço de assinatura cujo código não é público — se ele sair do ar, não existe nenhum caminho publicado para a sua passkey chegar à sua conta.",
 			"p2": "A Vela é a versão em que nós mesmos aceitamos deixar dinheiro. Mantivemos a assinatura com passkey, mas fizemos questão de que a carteira não dependa de nós.",
-			"more": "A versão longa — onde é que você deveria guardar doze palavras?"
+			"more": "A versão longa — o que não conseguíamos aceitar em outras carteiras, e a contrapartida que escolhemos"
 		},
 		"tradeoffs": {
 			"heading": "As contrapartidas, logo de cara",
@@ -167,10 +168,40 @@
 					"base": "Conta inteligente da Coinbase"
 				},
 				{
+					"feature": "Auto-hospedagem completa",
+					"vela": "Apps e serviços de backend, com as lacunas que o guia de auto-hospedagem lista; as passkeys continuam vinculadas ao getvela.app",
+					"metamask": "O cliente e o RPC são você quem escolhe ou roda",
+					"base": "Não disponível"
+				},
+				{
+					"feature": "Código-fonte",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps e serviços públicos</a>, todos com licença MIT",
+					"metamask": "Público, sob uma licença que só permite uso não comercial",
+					"base": "Contratos e SDK abertos; o serviço de assinatura, não"
+				},
+				{
+					"feature": "Redes personalizadas",
+					"vela": "Qualquer rede EVM que atenda aos requisitos da Vela; você mesmo pode implantar a maioria dos contratos que faltarem",
+					"metamask": "Redes EVM e RPCs personalizados",
+					"base": "Uma lista fixa de redes"
+				},
+				{
 					"feature": "Chave de assinatura",
 					"vela": "Passkeys ou chaves de segurança, até sete",
 					"metamask": "A chave privada por trás de uma frase de recuperação; compatível com carteiras de hardware",
 					"base": "Passkey ou frase de recuperação"
+				},
+				{
+					"feature": "Adicionar uma chave depois",
+					"vela": "Não é possível — as chaves são definidas na criação",
+					"metamask": "Não é possível — uma chave por conta",
+					"base": "Disponível"
+				},
+				{
+					"feature": "Se você perder uma chave",
+					"vela": "Assina com outra chave que você adicionou ou sincronizou",
+					"metamask": "Restaura pela frase de recuperação",
+					"base": "Assina com outra chave que você adicionou ou sincronizou"
 				},
 				{
 					"feature": "Gas por transação",
@@ -183,24 +214,6 @@
 					"vela": "Não oferecido",
 					"metamask": "Em algumas redes",
 					"base": "Quando o app patrocina"
-				},
-				{
-					"feature": "Redes personalizadas",
-					"vela": "Qualquer rede EVM que atenda aos requisitos da Vela; você mesmo pode implantar a maioria dos contratos que faltarem",
-					"metamask": "Redes EVM e RPCs personalizados",
-					"base": "Uma lista fixa de redes"
-				},
-				{
-					"feature": "Se você perder uma chave",
-					"vela": "Assina com outra chave que você adicionou ou sincronizou",
-					"metamask": "Restaura pela frase de recuperação",
-					"base": "Assina com outra chave que você adicionou ou sincronizou"
-				},
-				{
-					"feature": "Adicionar uma chave depois",
-					"vela": "Não é possível — as chaves são definidas na criação",
-					"metamask": "Não é possível — uma chave por conta",
-					"base": "Disponível"
 				},
 				{
 					"feature": "Transações em lote",
@@ -219,18 +232,6 @@
 					"vela": "Uma página de assinatura independente, pronta, mas ainda não conectada aos apps",
 					"metamask": "Alertas de risco de terceiros",
 					"base": "—"
-				},
-				{
-					"feature": "Auto-hospedagem completa",
-					"vela": "Apps e serviços de backend, com as lacunas que o guia de auto-hospedagem lista; as passkeys continuam vinculadas ao getvela.app",
-					"metamask": "O cliente e o RPC são você quem escolhe ou roda",
-					"base": "Não disponível"
-				},
-				{
-					"feature": "Código-fonte",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps e serviços públicos</a>; MIT, exceto o índice, cuja licença está pendente",
-					"metamask": "Público, sob uma licença que só permite uso não comercial",
-					"base": "Contratos e SDK abertos; o serviço de assinatura, não"
 				},
 				{
 					"feature": "Maturidade",
@@ -267,32 +268,32 @@
 			"heading": "Perguntas frequentes",
 			"items": [
 				{
-					"q": "Do que eu preciso para criar uma carteira?",
-					"a": "Um celular ou computador compatível com passkeys, ou chaves de segurança físicas — duas, se você usar só chaves de segurança. Sem frase de recuperação, sem e-mail e sem saldo inicial.\n\nEscolha todas as suas chaves, até sete, ao criar a carteira. Não dá para adicionar outras depois."
+					"q": "Dá para rodar tudo por conta própria?",
+					"a": "Sim, exceto o domínio ao qual as suas passkeys pertencem. Os apps e todos os serviços por trás deles — o relay, o índice de chaves públicas, os dados de chain e as cotações — têm licença MIT e rodam em Docker ou Cloudflare Workers, e os apps têm configurações para apontar para os seus próprios serviços. O guia de auto-hospedagem explica cada um, inclusive as lacunas que alguns apps ainda têm.\n\nAs passkeys são vinculadas ao getvela.app, então uma cópia da carteira web no seu próprio domínio é outra carteira. A extensão de navegador e os apps que você mesmo compilar continuam assinando pela sua carteira atual."
+				},
+				{
+					"q": "O que acontece se a Vela fechar, ou se o getvela.app cair?",
+					"a": "Seus fundos continuam no seu Safe, on-chain. Todos os serviços que a Vela opera são de código aberto, e você pode rodar cada um por conta própria — o relay, o índice de chaves públicas, os dados de chain e as cotações.\n\nSe o getvela.app sair do ar, a extensão da Vela para navegador continua assinando com as chaves que você já tem — a passkey deste aparelho, uma chave de segurança ou um celular por QR code — e o mesmo vale para apps que você mesmo compilar, com um celular ou uma chave de segurança."
+				},
+				{
+					"q": "Dá para rodar o meu próprio relay?",
+					"a": "Sim: o vela-relay, escrito em Rust, em Docker ou Cloudflare Workers. Abasteça a tesouraria dele com a moeda de cada rede e coloque a URL dele na carteira. Aí a taxa que você assina vai para a sua própria tesouraria; somando carteira e relay, você paga mais ou menos o gas real.\n\nTem que ser o vela-relay: a carteira pede a cotação da taxa por um método que bundlers ERC-4337 genéricos não implementam."
+				},
+				{
+					"q": "Quais chaves eu posso usar?",
+					"a": "Passkeys — sincronizadas pelas Chaves do iCloud, pelo Gerenciador de senhas do Google ou por outro gerenciador de senhas —, outro celular por QR code e chaves de segurança físicas FIDO2: de uma a sete, escolhidas ao criar a carteira e fixas depois disso. Qualquer uma delas pode assinar (1-of-n). Se você tiver uma única chave não sincronizada, como uma chave de segurança sozinha, precisa de uma segunda.\n\nSem frase de recuperação, sem e-mail e sem saldo inicial."
+				},
+				{
+					"q": "E se eu perder uma chave, ou minha conta Apple ou Google for comprometida?",
+					"a": "Se a sua passkey está sincronizada, você a recupera no aparelho novo. Se você perder uma chave não sincronizada, ela se perde de vez, e aí você assina com outra chave que adicionou; se era a sua única chave, você perde a carteira.\n\nSe uma conta que sincroniza uma das suas passkeys for comprometida, quem a controla talvez consiga gastar da sua carteira — e as chaves não podem ser removidas. Transfira seus fundos para uma carteira nova, criada com chaves que não dependam dessa conta. Chaves de segurança físicas evitam essa dependência desde o início."
 				},
 				{
 					"q": "Dá para usar a Vela com dApps?",
 					"a": "Sim. Os dApps enxergam a Vela do mesmo jeito que enxergam qualquer carteira de navegador.\n\nIsso funciona na extensão da Vela para navegador e no navegador embutido nos apps de desktop (macOS, Windows), iPhone e Android. A carteira web não se conecta a dApps."
 				},
 				{
-					"q": "E se eu perder o celular?",
-					"a": "Se a sua passkey está sincronizada com as Chaves do iCloud ou com o Gerenciador de senhas do Google, você a recupera num aparelho novo e continua usando a mesma carteira.\n\nSe ela não estava sincronizada, você vai precisar de outra chave — uma das que adicionou ao criar a carteira."
-				},
-				{
-					"q": "E se eu apagar a minha passkey?",
-					"a": "Essa chave se perde de vez. Se era a sua única chave, você perde o acesso à carteira."
-				},
-				{
-					"q": "E se minha conta Apple ou Google for comprometida?",
-					"a": "Quem controla essa conta talvez consiga usar uma passkey sincronizada por ela e gastar da sua carteira — e uma chave não pode ser removida. Transfira seus fundos para uma carteira nova, criada com chaves que não dependam dessa conta.\n\nPara não depender da Apple nem do Google desde o início, crie sua carteira com chaves de segurança físicas."
-				},
-				{
 					"q": "O que a Vela pode fazer com meu dinheiro, e o que ela sabe sobre mim?",
 					"a": "A Vela não tem nenhuma chave nem papel na sua carteira, então não consegue mover nem congelar seus fundos por conta própria. Mas é ela que escreve o software que pede às suas chaves para assinar.\n\nNão há e-mail nem cadastro. Suas chaves públicas, o tipo de autenticador por trás de cada uma, os nomes das chaves, o nome e o endereço da carteira são públicos on-chain; os serviços da Vela veem seu endereço IP e as transações que você envia por eles. Emissores de tokens continuam podendo bloquear endereços."
-				},
-				{
-					"q": "O que acontece se a Vela fechar, ou se o getvela.app cair?",
-					"a": "Seus fundos continuam no seu Safe, on-chain. Todos os serviços que a Vela opera são de código aberto, e você pode rodar cada um por conta própria — o relay, o índice de chaves públicas, os dados de chain e as cotações.\n\nSe o getvela.app sair do ar, a extensão da Vela para navegador continua assinando com as chaves que você já tem — a passkey deste aparelho, uma chave de segurança ou um celular por QR code — e o mesmo vale para apps que você mesmo compilar, com um celular ou uma chave de segurança."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "A Vela roda no seu navegador hoje, com uma extensão de navegador e apps de desktop que você pode baixar agora, e apps de celular a caminho. Escolha o que preferir."
 		},
 		"heading": "Obter a Vela",
-		"lede": "Uma carteira e um endereço, onde quer que você a abra. Comece no navegador — nada para instalar — ou leve a mesma carteira para a barra de ferramentas do navegador ou para o seu computador e, em breve, para o seu celular.",
+		"lede": "Uma carteira e um endereço, onde quer que você a abra. Comece no navegador — nada para instalar — ou leve a mesma carteira para a barra de ferramentas do navegador ou para o seu computador e, em breve, para o seu celular. Todos os apps também podem ser compilados a partir do código-fonte.",
 		"recommended": "Recomendado",
 		"availableNow": "Disponível agora",
 		"comingSoon": "Em breve",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

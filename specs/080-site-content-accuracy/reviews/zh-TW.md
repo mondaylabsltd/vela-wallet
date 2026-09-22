@@ -147,3 +147,25 @@ facts #3 and #4) into zh-TW. Terms unchanged from the table above: 中繼、密�
 
 Checks: JSON parses, `_fingerprints` untouched; `id="fee"` ×1; no 十倍 in networks-and-fees / faq / whitepaper;
 `rpc.rs` ×0; no unprefixed `](/docs` links.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy rewritten for the technical reader who self-hosts; p256-index now MIT) into zh-TW.
+Register kept precise and technical. Terms as in the table above, plus 金庫 (treasury), bundler (kept in
+English, as networks-and-fees does), iCloud 鑰匙圈 / Google 密碼管理工具, FIDO2 硬體安全金鑰.
+
+| String / section | Change | Severity of fixes beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `.ogDescription` / `.organization` | rewritten: 可以自己建置、自己架設…都包括在內 / 自己建置，自己架設：…採用 MIT 授權 / 開源、可以自己架設 | — | 自我保管 dropped from `organization`, as en dropped "self-custodial" |
+| `home.hero.ctaSelfHost` (new) | 或者，整套自己架設 | — | inserted after `ctaCode`, key order = en |
+| `home.why.more` | 長一點的版本——別的錢包有哪些地方我們無法接受，以及我們選擇的取捨 | — | |
+| `home.compare.rows` | reordered to the new en order by mapping the old rows; Source code `vela` cell → …全部公開</a>，一律採用 MIT 授權 | — | `<a>` unchanged; 一律 avoids zh's 全部…全部 repetition |
+| `home.faq.items` | new order; three new answers (可以全部自己架設嗎？ / 可以架設自己的中繼嗎？ / 可以用哪些金鑰？) and the merged 弄丟一把金鑰，或 Apple、Google 帳號被盜了怎麼辦？; old shutdown, dApp and "what can Vela do" answers carried over unchanged | — | every rule from the retired answers kept: keys fixed at creation, a single unsynced key needs a second, a synced passkey comes back, keys can't be removed |
+| `getStarted.lede` | + 每一個應用程式也都能從原始碼建置。 | — | |
+| introduction.md | new opening (開源、可以自己架設); 沒有我們也能運作 bullet moved first and rewritten (four services, MIT, build and host with the guide, limits); table reordered to en + new row 怎麼架設自己的中繼，手續費歸誰 → `/zh-TW/docs/self-hosting#relay` · `/zh-TW/docs/networks-and-fees#fee` | — | |
+| faq.md | 是的，全部都開源，一律採用 MIT 授權：…公鑰索引… | — | |
+| self-hosting.md | index intro （Rust，MIT 授權）, same form as the relay line; "no licence file" sentence deleted | — | |
+| whitepaper.md | 開源 paragraph: 全部採用 MIT 授權, index included | — | |
+
+Checks: `bunx vitest run src/lib/i18n/messages.test.ts -t "zh-TW"` 11/11 pass; `docs.test.ts` passes; no unprefixed
+`](/docs` links; no index-licence-pending sentence left in the catalog or docs.

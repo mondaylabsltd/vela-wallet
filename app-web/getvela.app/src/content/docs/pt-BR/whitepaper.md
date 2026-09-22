@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Como a Vela funciona e em que você precisa — e não precisa — confiar para usá-la: a conta, as chaves, a taxa, o modelo de ameaças, a recuperação e o que acontece se a Vela deixar de existir."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -310,9 +310,8 @@ análise sem cookies. A [política de privacidade](/privacy) é a lista oficial.
 
 ## Código aberto
 
-A carteira (todos os apps e o núcleo), o relay e o serviço de cotações têm licença
-MIT; o diretório de dados de chain também é MIT. O índice de chaves públicas é
-público, mas ainda não tem arquivo de licença. Código:
+Tudo tem licença MIT: a carteira (todos os apps e o núcleo), o relay, o índice de
+chaves públicas, o serviço de cotações e o diretório de dados de chain. Código:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Sem token

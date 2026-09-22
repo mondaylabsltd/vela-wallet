@@ -146,3 +146,24 @@ unchanged from the table above: *Relay*, *Chain-Verzeichnis*, *Chain-Daten*,
 | docs `self-hosting` | intro limit removed; two code comments; „Gut zu wissen“ bullet; chain-data paragraph; relay line removed from „Was danach noch auf Vela zeigt“ | – | Docker comment's verb moved into the lead („in .env setzen: …“) so the added line stays grammatical |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy written for the reader who self-hosts and builds from
+source; p256-index now MIT) into `de.json` and four docs. Register stays technical
+*du*; terms as in the table above (*Relay*, *Treasury*, *Public-Key-Index*,
+*Chain-Daten*, *selbst hosten*, *Coin* masc., *Google Passwortmanager* as the
+catalog already wrote it). New adjective: *selbst hostbar* for "self-hostable".
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.*` | description/og/organization now "build and host it yourself"; organization *zur Selbstverwahrung* → *selbst hostbar* | – | the list after the colon is article-less so it doesn't need a case |
+| `home.hero.ctaSelfHost` (new) | „Oder den ganzen Stack selbst hosten“ | – | infinitive, like the other CTAs („Loslegen“, „Code lesen“); inserted after `ctaCode` |
+| `home.why.more` | „… was wir bei anderen Wallets nicht akzeptieren konnten und für welchen Kompromiss wir uns entschieden haben“ | – | |
+| `home.compare.rows` | reordered to the new en order by old index; Source code cell „…, alle unter MIT-Lizenz“ | – | `<a>` unchanged |
+| `home.faq.items` | new order; three new answers (run it all, own relay, keys) plus the merged lose-a-key / compromised-account answer | – | old answers mined for wording: iCloud-Schlüsselbund, „Verschieb dein Guthaben …“, „Keine Seed-Phrase, keine E-Mail, kein Startguthaben“; every rule en carries is there (1-of-n, fixed at creation, single unsynced key needs a second, keys can't be removed) |
+| `getStarted.lede` | + „Jede App lässt sich außerdem aus dem Quellcode bauen.“ | – | |
+| docs `introduction` | opening „quelloffene, selbst hostbare Wallet“; „Läuft ohne uns“ first and rewritten; table reordered + relay/fee row | – | |
+| docs `faq`, `whitepaper`, `self-hosting` | all-MIT wording; „(Rust, MIT)“; licence-file sentence deleted | – | |
+
+No High or Medium findings open.

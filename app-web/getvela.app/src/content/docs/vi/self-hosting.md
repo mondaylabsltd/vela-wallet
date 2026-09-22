@@ -1,7 +1,7 @@
 ---
 title: Hướng dẫn tự triển khai
 description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -191,7 +191,7 @@ Sau đó nhập `https://your-relay` vào trường **Vela Relay**.
 
 <span id="index"></span>
 
-Chỉ mục là [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust). Khi một ví
+Chỉ mục là [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust, MIT). Khi một ví
 được tạo, nó kiểm tra bằng chứng của từng khóa, rồi ghi cả nhóm khóa vào **hợp đồng sổ đăng
 ký** trên Gnosis và trả gas. Hãy tiếp tục dùng sổ đăng ký hiện có tại
 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`: nó không có chủ sở hữu, bất kỳ địa chỉ nào có
@@ -229,7 +229,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 
 Máy chủ lắng nghe qua HTTP thường (mặc định cổng 11256); hãy đặt một proxy TLS phía trước,
 vì ví chỉ chấp nhận điểm cuối `https://`. Vào thời điểm viết bài này, Dockerfile trong mã
-nguồn có thể không build được; build bằng Cargo thì được. Kho mã này chưa có tệp giấy phép.
+nguồn có thể không build được; build bằng Cargo thì được.
 
 **Nếu không có chỉ mục nào trả lời**, các ví đã có vẫn hoạt động: khi đăng nhập, ứng dụng
 đọc hợp đồng sổ đăng ký trên Gnosis (rồi đến Ethereum) qua các nút RPC của bạn. Một ví chỉ

@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Gerçekten size ait bir Ethereum cüzdanı",
-			"description": "Bize ihtiyaç duymadan çalıştırabileceğiniz, açık kaynaklı bir Ethereum cüzdanı. Geçiş anahtarları ya da güvenlik anahtarlarıyla imzalayın — kurtarma ifadesi yok. Hesabınız değiştirilmemiş bir Safe ve arkasındaki her servis açık kaynak.",
+			"description": "Kendiniz derleyip barındırabileceğiniz açık kaynaklı bir Ethereum cüzdanı — uygulamalar, relay, açık anahtar dizini ve zincir verisi. Değiştirilmemiş bir Safe; geçiş anahtarları ya da donanım güvenlik anahtarlarıyla imzalanır, kurtarma ifadesi yok.",
 			"ogTitle": "Vela Wallet — Gerçekten size ait bir Ethereum cüzdanı",
-			"ogDescription": "Değiştirilmemiş bir Safe üzerinde çalışan açık kaynaklı Ethereum cüzdanı. Geçiş anahtarı ya da güvenlik anahtarı, kurtarma ifadesi yok; servisleri açık kaynak ve kendiniz çalıştırabilirsiniz.",
-			"organization": "Değiştirilmemiş bir Safe üzerine kurulu, geçiş anahtarları ya da güvenlik anahtarlarıyla imzalanan, kurtarma ifadesi olmayan, açık kaynaklı ve kendi saklamanızda duran bir Ethereum cüzdanı."
+			"ogDescription": "Kendiniz derleyin, kendiniz çalıştırın: değiştirilmemiş bir Safe üzerinde MIT lisanslı bir Ethereum cüzdanı; geçiş anahtarı ya da güvenlik anahtarıyla imzalanır ve her servisi açık kaynaktır.",
+			"organization": "Değiştirilmemiş bir Safe üzerine kurulu, geçiş anahtarları ya da güvenlik anahtarlarıyla imzalanan, kurtarma ifadesi olmayan, açık kaynaklı ve kendi sunucunuzda barındırılabilen bir Ethereum cüzdanı."
 		},
 		"hero": {
 			"headline": "Gerçekten size ait bir Ethereum cüzdanı",
 			"subtitle": "İmzalama cihazınızda yapılır. Geçiş anahtarınızın özel anahtarı hiçbir zaman Vela'ya gitmez.",
 			"ctaCreate": "Başlayın",
 			"ctaCode": "Kodu okuyun",
+			"ctaSelfHost": "Ya da her şeyi kendiniz barındırın",
 			"facts": [
 				{
 					"term": "Hesabınız, değiştirilmemiş bir Safe v1.4.1.",
@@ -136,7 +137,7 @@
 			"heading": "Bunu neden yaptık",
 			"p1": "Her gün <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (artık Coinbase Wallet bünyesinde) kullanıyorduk ve seviyorduk da. Sonra duvara tosladık: yalnızca güvenmek zorunda olduğunuz bir web sitesinde oluşturulan bir kurtarma ifadesi, özel ağ ekleyememe, kendiniz barındırabileceğiniz hiçbir parça olmaması ve kodu açık olmayan bir imzalama servisi — o servis ortadan kalkarsa geçiş anahtarınızın hesabınıza ulaşmasının yayımlanmış bir yolu yok.",
 			"p2": "Vela, kendi paramızı içinde tutmaya razı olduğumuz sürüm. Geçiş anahtarıyla imzalamayı koruduk ama cüzdanın bize bağımlı olmamasını sağladık.",
-			"more": "Uzun hâli — o on iki kelimeyi tam olarak nerede saklayacaksınız?"
+			"more": "Uzun hâli — diğer cüzdanlarda kabul edemediklerimiz ve seçtiğimiz bedel"
 		},
 		"tradeoffs": {
 			"heading": "Bedeli baştan söylüyoruz",
@@ -167,10 +168,40 @@
 					"base": "Coinbase akıllı hesabı"
 				},
 				{
+					"feature": "Her şeyi kendiniz barındırma",
+					"vela": "Uygulamalar ve arka uç servisleri, kendi sunucunuzda barındırma kılavuzunun listelediği eksiklerle; geçiş anahtarları getvela.app'e bağlı kalır",
+					"metamask": "İstemci ve RPC sizin seçiminiz ya da kendi sunucunuz",
+					"base": "Mümkün değil"
+				},
+				{
+					"feature": "Kaynak kod",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Uygulamalar ve servisler herkese açık</a>, hepsi MIT",
+					"metamask": "Açık, ama yalnızca ticari olmayan kullanıma izin veren bir lisansla",
+					"base": "Sözleşmeler ve SDK açık; imzalama servisi değil"
+				},
+				{
+					"feature": "Özel ağlar",
+					"vela": "Vela'nın gereksinimlerini karşılayan her EVM ağı; eksik sözleşmelerin çoğunu kendiniz dağıtabilirsiniz",
+					"metamask": "Özel EVM ağları ve RPC'ler",
+					"base": "Sabit bir ağ listesi"
+				},
+				{
 					"feature": "İmzalama anahtarı",
 					"vela": "Geçiş anahtarları ya da güvenlik anahtarları, en fazla yedi",
 					"metamask": "Kurtarma ifadesinin arkasındaki özel anahtar; donanım cüzdanları desteklenir",
 					"base": "Geçiş anahtarı ya da kurtarma ifadesi"
+				},
+				{
+					"feature": "Sonradan anahtar eklemek",
+					"vela": "Mümkün değil — anahtarlar oluşturma anında sabitlenir",
+					"metamask": "Mümkün değil — hesap başına tek anahtar",
+					"base": "Destekleniyor"
+				},
+				{
+					"feature": "Bir anahtarı kaybetmek",
+					"vela": "Eklediğiniz ya da eşitlediğiniz başka bir anahtarla imzalayın",
+					"metamask": "Kurtarma ifadesinden geri yükleyin",
+					"base": "Eklediğiniz ya da eşitlediğiniz başka bir anahtarla imzalayın"
 				},
 				{
 					"feature": "İşlem gas ücreti",
@@ -183,24 +214,6 @@
 					"vela": "Sunulmuyor",
 					"metamask": "Bazı ağlarda",
 					"base": "Uygulama sponsor olduğunda"
-				},
-				{
-					"feature": "Özel ağlar",
-					"vela": "Vela'nın gereksinimlerini karşılayan her EVM ağı; eksik sözleşmelerin çoğunu kendiniz dağıtabilirsiniz",
-					"metamask": "Özel EVM ağları ve RPC'ler",
-					"base": "Sabit bir ağ listesi"
-				},
-				{
-					"feature": "Bir anahtarı kaybetmek",
-					"vela": "Eklediğiniz ya da eşitlediğiniz başka bir anahtarla imzalayın",
-					"metamask": "Kurtarma ifadesinden geri yükleyin",
-					"base": "Eklediğiniz ya da eşitlediğiniz başka bir anahtarla imzalayın"
-				},
-				{
-					"feature": "Sonradan anahtar eklemek",
-					"vela": "Mümkün değil — anahtarlar oluşturma anında sabitlenir",
-					"metamask": "Mümkün değil — hesap başına tek anahtar",
-					"base": "Destekleniyor"
 				},
 				{
 					"feature": "Toplu işlemler",
@@ -219,18 +232,6 @@
 					"vela": "Bağımsız bir imza sayfası; hazır ama henüz uygulamalara bağlanmadı",
 					"metamask": "Üçüncü taraf risk uyarıları",
 					"base": "—"
-				},
-				{
-					"feature": "Her şeyi kendiniz barındırma",
-					"vela": "Uygulamalar ve arka uç servisleri, kendi sunucunuzda barındırma kılavuzunun listelediği eksiklerle; geçiş anahtarları getvela.app'e bağlı kalır",
-					"metamask": "İstemci ve RPC sizin seçiminiz ya da kendi sunucunuz",
-					"base": "Mümkün değil"
-				},
-				{
-					"feature": "Kaynak kod",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Uygulamalar ve servisler herkese açık</a>; dizin dışında hepsi MIT, dizinin lisansı henüz eklenmedi",
-					"metamask": "Açık, ama yalnızca ticari olmayan kullanıma izin veren bir lisansla",
-					"base": "Sözleşmeler ve SDK açık; imzalama servisi değil"
 				},
 				{
 					"feature": "Olgunluk",
@@ -267,32 +268,32 @@
 			"heading": "Sık sorulanlar",
 			"items": [
 				{
-					"q": "Cüzdan oluşturmak için neye ihtiyacım var?",
-					"a": "Geçiş anahtarlarını destekleyen bir telefon ya da bilgisayar veya donanım güvenlik anahtarları — yalnızca güvenlik anahtarı kullanacaksanız iki tane. Kurtarma ifadesi, e-posta ya da başlangıç bakiyesi gerekmez.\n\nAnahtarlarınızın hepsini — en fazla yedi tane — cüzdanı oluştururken seçin. Sonradan yenisini ekleyemezsiniz."
+					"q": "Hepsini kendim çalıştırabilir miyim?",
+					"a": "Evet, geçiş anahtarlarınızın ait olduğu alan adı dışında. Uygulamalar ve arkalarındaki her servis — relay, açık anahtar dizini, zincir verisi ve döviz kurları — MIT lisanslıdır ve Docker ya da Cloudflare Workers üzerinde çalışır; uygulamalarda da kendi servislerinize yönlendirmek için ayarlar var. Kendi sunucunuzda barındırma kılavuzu her birini tek tek anlatıyor, bazı uygulamalarda hâlâ bulunan eksikler de dahil.\n\nGeçiş anahtarları getvela.app'e bağlıdır; bu yüzden web cüzdanının sizin alan adınızdaki bir kopyası başka bir cüzdandır. Tarayıcı uzantısı ve kendi derlediğiniz uygulamalar mevcut cüzdanınız için imzalamaya devam eder."
+				},
+				{
+					"q": "Vela kapanırsa ya da getvela.app erişilemez olursa ne olur?",
+					"a": "Paranız zincir üstünde, kendi Safe'inizde kalır. Vela'nın çalıştırdığı her servis açık kaynaktır ve her birini kendiniz çalıştırabilirsiniz — relay, açık anahtar dizini, zincir verisi ve döviz kurları.\n\ngetvela.app çevrimdışı olursa Vela tarayıcı uzantısı mevcut anahtarlarınızla imzalamayı sürdürür — bu cihazdaki geçiş anahtarı, bir güvenlik anahtarı ya da QR kodla bağlanan bir telefon; kendiniz derlediğiniz uygulamalar da bir telefon ya da güvenlik anahtarıyla aynısını yapar."
+				},
+				{
+					"q": "Kendi relay'imi çalıştırabilir miyim?",
+					"a": "Evet: Rust ile yazılmış vela-relay, Docker ya da Cloudflare Workers üzerinde. Kasasına her zincirin coinini yükleyin ve URL'sini cüzdana girin. İmzaladığınız ücret o zaman kendi kasanıza gider; yani cüzdanınızla relay'inizi birlikte düşündüğünüzde kabaca gerçek gas bedelini ödersiniz.\n\nRelay'in vela-relay olması gerekir: cüzdan ücret teklifini, genel ERC-4337 bundler'larının uygulamadığı bir yöntemle ister."
+				},
+				{
+					"q": "Hangi anahtarları kullanabilirim?",
+					"a": "Geçiş anahtarları (iCloud Anahtar Zinciri, Google Şifre Yöneticisi ya da başka bir parola yöneticisiyle eşitlenen), QR kodla bağlanan başka bir telefon ve FIDO2 donanım güvenlik anahtarları: bir ile yedi arası; cüzdanı oluştururken seçilir ve sonradan değiştirilemez. Herhangi biri imzalayabilir (1-of-n). Eşitlenmeyen tek bir anahtar, örneğin tek bir güvenlik anahtarı, ikinci bir anahtar gerektirir.\n\nKurtarma ifadesi, e-posta ya da başlangıç bakiyesi gerekmez."
+				},
+				{
+					"q": "Bir anahtarı kaybedersem ya da Apple veya Google hesabım ele geçirilirse ne olur?",
+					"a": "Eşitlenmiş bir geçiş anahtarı yeni cihazınızda geri gelir. Eşitlenmemiş bir anahtar kaybolursa kalıcı olarak gider; bu durumda eklediğiniz başka bir anahtarla imzalarsınız. Tek anahtarınız o idiyse cüzdan da kaybolur.\n\nGeçiş anahtarlarınızdan birini eşitleyen bir hesap ele geçirilirse, o hesabı kontrol eden kişi cüzdanınızdan harcama yapabilir — ve anahtarlar kaldırılamaz. Paranızı, o hesaba bağlı olmayan anahtarlarla oluşturulmuş yeni bir cüzdana taşıyın. Donanım güvenlik anahtarları bu bağımlılığı baştan ortadan kaldırır."
 				},
 				{
 					"q": "Vela'yı dApp'lerle kullanabilir miyim?",
 					"a": "Evet. dApp'ler Vela'yı herhangi bir tarayıcı cüzdanı gibi görür.\n\nBu, Vela tarayıcı uzantısında ve masaüstü (macOS, Windows), iPhone ve Android uygulamalarının yerleşik tarayıcısında çalışır. Web cüzdanı dApp'lere bağlanmaz."
 				},
 				{
-					"q": "Telefonumu kaybedersem ne olur?",
-					"a": "Geçiş anahtarınız iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi ile eşitlendiyse, onu yeni bir cihazda geri alır ve aynı cüzdanı kullanmayı sürdürürsünüz.\n\nEşitlenmediyse, cüzdanı oluştururken eklediğiniz başka bir anahtar gerekir."
-				},
-				{
-					"q": "Geçiş anahtarımı silersem ne olur?",
-					"a": "O anahtar kalıcı olarak kaybolur. Tek anahtarınız o idiyse cüzdana erişiminizi de kaybedersiniz."
-				},
-				{
-					"q": "Apple ya da Google hesabım ele geçirilirse ne olur?",
-					"a": "O hesabı kontrol eden kişi, hesap üzerinden eşitlenen bir geçiş anahtarını kullanıp cüzdanınızdan harcama yapabilir — ve bir anahtar kaldırılamaz. Paranızı, o hesaba bağlı olmayan anahtarlarla oluşturulmuş yeni bir cüzdana taşıyın.\n\nBaştan itibaren Apple'a ya da Google'a bağlı kalmamak için cüzdanınızı donanım güvenlik anahtarlarıyla oluşturun."
-				},
-				{
 					"q": "Vela paramla ne yapabilir, benim hakkımda ne biliyor?",
 					"a": "Vela'nın cüzdanınızda ne bir anahtarı ne de bir rolü var; bu yüzden paranızı kendi başına taşıyamaz ya da donduramaz. Ancak anahtarlarınızdan imza isteyen yazılımı yazan Vela'dır.\n\nE-posta ya da hesap yok. Açık anahtarlarınız, her birinin arkasındaki kimlik doğrulayıcı türü, anahtar etiketleriniz, cüzdan adınız ve adresiniz zincir üstünde herkese açıktır; Vela'nın servisleri IP adresinizi ve onlar üzerinden gönderdiğiniz işlemleri görür. Token ihraççıları yine de adresleri kara listeye alabilir."
-				},
-				{
-					"q": "Vela kapanırsa ya da getvela.app erişilemez olursa ne olur?",
-					"a": "Paranız zincir üstünde, kendi Safe'inizde kalır. Vela'nın çalıştırdığı her servis açık kaynaktır ve her birini kendiniz çalıştırabilirsiniz — relay, açık anahtar dizini, zincir verisi ve döviz kurları.\n\ngetvela.app çevrimdışı olursa Vela tarayıcı uzantısı mevcut anahtarlarınızla imzalamayı sürdürür — bu cihazdaki geçiş anahtarı, bir güvenlik anahtarı ya da QR kodla bağlanan bir telefon; kendiniz derlediğiniz uygulamalar da bir telefon ya da güvenlik anahtarıyla aynısını yapar."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "Vela bugün tarayıcınızda çalışıyor; tarayıcı uzantısı ve masaüstü uygulamaları hemen indirilebilir, telefon uygulamaları da yolda. İstediğinizi seçin."
 		},
 		"heading": "Vela'yı edinin",
-		"lede": "Nerede açarsanız açın tek cüzdan, tek adres. Tarayıcınızda başlayın — kurulacak bir şey yok — ya da aynı cüzdanı tarayıcınızın araç çubuğuna veya masaüstünüze taşıyın; yakında telefonunuza da.",
+		"lede": "Nerede açarsanız açın tek cüzdan, tek adres. Tarayıcınızda başlayın — kurulacak bir şey yok — ya da aynı cüzdanı tarayıcınızın araç çubuğuna veya masaüstünüze taşıyın; yakında telefonunuza da. Her uygulama kaynak koddan da derlenebilir.",
 		"recommended": "Önerilen",
 		"availableNow": "Şimdi kullanılabilir",
 		"comingSoon": "Yakında",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

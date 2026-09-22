@@ -146,3 +146,22 @@ the five single-string axes; no High or Medium left open.
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; « À savoir » bullet; chain-data paragraph; relay line removed from the final list | — | « Cette variable existe depuis septembre 2026 » rather than *réglage*, which the locale reserves for the app's Réglages |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the audience pass (commit 66a3c789: copy for the reader who self-hosts and
+builds from source; p256-index now MIT) into fr. Each changed string checked on the
+five single-string axes; `messages.test.ts -t fr` passes.
+
+| String / section | Change | Severity fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `ogDescription` / `organization` | build-and-host meaning; « auto-hébergeable » replaces « en auto-conservation » in `organization` | — | "key index" rendered as the locale's *index des clés publiques* |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | « Ou hébergez vous-même toute la stack » | — | *la stack* is what French developers say; *pile logicielle* reads as a textbook term on a hero link |
+| `home.why.more` | « …ce que nous ne pouvions pas accepter dans d'autres portefeuilles, et le compromis que nous avons choisi » | — | *compromis* = the locale's "trade-off" |
+| `home.compare.rows` | reordered to the new en order (mapped from the old indices); Source code `vela` cell « …</a>, tous sous licence MIT » | — | `<a>` unchanged |
+| `home.faq.items` | new 7-item order; three new answers | — | reused old wording (« trousseau iCloud », « une clé ne peut pas être retirée », « Transférez vos fonds… »); "put its address in the wallet" → « saisissez son URL dans le portefeuille », matching the guide's « Saisissez `https://your-relay` »; `1-of-n` kept as in `signers.md` |
+| `getStarted.lede` | + « Chaque app se compile aussi depuis les sources. » | — | |
+| docs `introduction` | opening « portefeuille open source et auto-hébergeable »; "Fonctionne sans nous" first and rewritten; table reordered + relay/fee row | — | |
+| docs `faq`, `whitepaper`, `self-hosting` | all MIT incl. the index; « (Rust, MIT) »; no-licence sentence deleted | — | no "licence pending" line left in fr |
+
+Nothing fixed beyond the brief.

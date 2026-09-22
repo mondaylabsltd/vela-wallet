@@ -1,7 +1,7 @@
 ---
 title: Guida al self-hosting
 description: "Tutto ciò che Vela gestisce per te, a cosa serve ogni parte e come sostituirla con la tua — il relay, l'indice delle chiavi pubbliche, i dati delle chain, i tassi di cambio e le app — più l'unica cosa che non puoi sostituire e come fare a meno di getvela.app."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -202,7 +202,7 @@ Poi inserisci `https://your-relay` nel campo **Vela Relay**.
 
 <span id="index"></span>
 
-L'indice è [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust).
+L'indice è [p256-index](https://github.com/mondaylabsltd/p256-index) (Rust, MIT).
 Quando viene creato un wallet, controlla la prova di ogni chiave, poi scrive il
 gruppo nel **contratto di registro** su Gnosis e paga il gas. Continua a usare il
 registro esistente a `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`: non ha un
@@ -242,8 +242,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 Il server ascolta in HTTP semplice (porta 11256 per impostazione predefinita);
 mettigli davanti un proxy TLS, perché il wallet accetta solo endpoint `https://`.
 Il Dockerfile nel codice sorgente, al momento in cui scriviamo, potrebbe non
-compilare; con Cargo la compilazione funziona. Il repository non ha ancora un file
-di licenza.
+compilare; con Cargo la compilazione funziona.
 
 **Se non risponde nessun indice**, i wallet esistenti funzionano comunque: in fase
 di accesso l'app legge il contratto di registro su Gnosis (poi su Ethereum)

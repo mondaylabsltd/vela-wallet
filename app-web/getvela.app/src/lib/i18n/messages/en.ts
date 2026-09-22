@@ -500,7 +500,7 @@ export const en = {
 				},
 				{
 					q: 'Can I run my own relay?',
-					a: 'Yes: vela-relay, in Rust, on Docker or Cloudflare Workers. Fund its treasury with each chain’s coin and put its address in the wallet. The fee you sign then goes to your own treasury, so across your wallet and your relay you pay roughly the real gas.\n\nIt has to be vela-relay: the wallet asks for its fee quote with a method generic ERC-4337 bundlers don’t implement.'
+					a: 'Yes: vela-relay, in Rust, on Docker or Cloudflare Workers. Fund its treasury with each chain’s coin and put its URL in the wallet. The fee you sign then goes to your own treasury, so across your wallet and your relay you pay roughly the real gas.\n\nIt has to be vela-relay: the wallet asks for its fee quote with a method generic ERC-4337 bundlers don’t implement.'
 				},
 				{
 					q: 'Which keys can I use?',

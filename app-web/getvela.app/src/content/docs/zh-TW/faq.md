@@ -1,7 +1,7 @@
 ---
 title: 常見問題
 description: "關於保管、金鑰、復原、網路、費用、Vela 看得到什麼、開源，以及 Vela 不在了會怎樣的簡短回答。"
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # 常見問題
@@ -59,8 +59,8 @@ Vela 讀不到你的金鑰，自己也動不了你的資金。它的服務看得
 
 ## Vela 是開源的嗎？
 
-錢包應用程式、中繼和匯率服務都以 MIT 授權公開在 [GitHub](https://github.com/orgs/mondaylabsltd/repositories)
-上；鏈資料目錄也是 MIT。公鑰索引的程式碼是公開的，但目前還沒有授權條款檔案。每一項服務你都可以自己架設——
+是的，全部都開源，一律採用 MIT 授權：錢包應用程式和核心、中繼、公鑰索引、匯率服務和鏈資料目錄，
+程式碼都在 [GitHub](https://github.com/orgs/mondaylabsltd/repositories) 上。每一項服務你都可以自己架設——
 請看[自架指南](/zh-TW/docs/self-hosting)。
 
 ## Vela 有經過稽核嗎？

@@ -1,7 +1,7 @@
 ---
 title: 自行架設指南
 description: "Vela 為你運行的一切、每個部分的用途，以及如何換成你自己的——中繼、公鑰索引、鏈數據、匯率和各個 App；還有你唯一無法替換的東西，以及沒有 getvela.app 時如何繼續使用。"
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -167,7 +167,7 @@ curl https://your-relay/v1/treasury/100   # 你在 Gnosis 上的資金庫地址�
 
 <span id="index"></span>
 
-索引就是 [p256-index](https://github.com/mondaylabsltd/p256-index)（Rust）。建立錢包時，它會檢查每把鑰匙
+索引就是 [p256-index](https://github.com/mondaylabsltd/p256-index)（Rust，MIT 授權）。建立錢包時，它會檢查每把鑰匙
 的證明，然後把這組鑰匙寫入 Gnosis 上的**註冊表合約**並支付 gas。請繼續使用現有的註冊表
 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`：它沒有擁有者，任何有餘額的地址都可以寫入，而每個 Vela App
 都會直接讀取它。你自己另建的註冊表，這些 App 是看不到的。
@@ -200,8 +200,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 ```
 
 伺服器以普通 HTTP 監聽（預設連接埠 11256）；由於錢包只接受 `https://` 端點，請在它前面加一個 TLS 代理。
-截至本文撰寫時，原始碼中的 Dockerfile 可能無法建置；用 Cargo 建置則沒有問題。這個程式碼庫暫時還沒有
-授權條款檔案。
+截至本文撰寫時，原始碼中的 Dockerfile 可能無法建置；用 Cargo 建置則沒有問題。
 
 **如果完全沒有索引回應**，現有的錢包仍然可以使用：登入時，App 會透過你的 RPC 節點讀取 Gnosis（然後是
 以太坊）上的註冊表合約。只有一把鑰匙的錢包，甚至可以不經註冊表，憑兩次簽名重建。建立新錢包則確實需要

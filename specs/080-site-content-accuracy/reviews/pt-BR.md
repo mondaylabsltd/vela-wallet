@@ -131,3 +131,22 @@ on the five single-string axes; no High or Medium left open.
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; "Saiba que" bullet; chain-data paragraph; relay line removed from the final list | — | *diretório de redes*, as the removed list line named it |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the audience pass (commit 66a3c789: copy for the reader who self-hosts and
+builds from source; p256-index now MIT) into pt-BR. Each changed string checked on
+the five single-string axes; `messages.test.ts -t pt-BR` passes.
+
+| String / section | Change | Severity fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `ogDescription` / `organization` | build-and-host meaning; “auto-hospedável” replaces “de autocustódia” in `organization` | — | "key index" rendered as the locale's *índice de chaves públicas*; hyphen as in *auto-hospedagem* |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | “Ou hospede você mesmo a stack inteira” | — | *a stack* (feminine) is the usual Brazilian developer usage |
+| `home.why.more` | “…o que não conseguíamos aceitar em outras carteiras, e a contrapartida que escolhemos” | — | *contrapartida* = the locale's "trade-off" |
+| `home.compare.rows` | reordered to the new en order (mapped from the old indices); Source code `vela` cell “…</a>, todos com licença MIT” | — | `<a>` unchanged |
+| `home.faq.items` | new 7-item order; three new answers | — | reused old wording (“você a recupera no aparelho novo”, “se era a sua única chave”, “não podem ser removidas”); "put its address in the wallet" → “coloque a URL dele na carteira”, since *endereço* next to *tesouraria* reads as an on-chain address; `1-of-n` kept as in `signers.md` |
+| `getStarted.lede` | + “Todos os apps também podem ser compilados a partir do código-fonte.” | — | |
+| docs `introduction` | opening “carteira de código aberto e auto-hospedável”; "Funciona sem nós" first and rewritten; table reordered + relay/fee row | — | |
+| docs `faq`, `whitepaper`, `self-hosting` | all MIT incl. the index; “(Rust, MIT)”; no-licence sentence deleted | — | no "licence pending" line left in pt-BR |
+
+Nothing fixed beyond the brief.

@@ -1,7 +1,7 @@
 ---
 title: 常见问题
 description: "关于托管、钥匙、恢复、网络、费用、Vela 能看到什么、开源，以及 Vela 不在了会怎样的简短回答。"
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # 常见问题

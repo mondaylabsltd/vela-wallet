@@ -190,3 +190,23 @@ unchanged from the table above: *relay*, *zincir dizini*, *zincir verisi*, *dağ
 | docs `self-hosting` | intro limit removed; two code comments; "Bilmeniz gerekenler" bullet; chain-data paragraph; relay line removed from "hâlâ Vela'ya işaret edenler" | – | Docker comment gets a comma after `OPERATOR_SECRET` so the added item joins the list before *ve* |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy written for the reader who self-hosts and compiles; p256-index
+now MIT) into `tr.json` and four docs. Terms unchanged: *kendi sunucunuzda barındırma*,
+*derlemek*, *relay*, *kasa*, *açık anahtar dizini*, *zincir verisi*, *donanım güvenlik
+anahtarı*, *ücret teklifi*, *bedel* (trade-off), *genel ERC-4337 bundler'ları*.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description`, `.ogDescription`, `.organization` | build and host it yourself; *kendi saklamanızda duran* → *kendi sunucunuzda barındırılabilen* in `organization` | – | |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | "Ya da her şeyi kendiniz barındırın" | – | "stack" has no natural Turkish word for a link line (*yığın* reads as the data structure); *her şeyi* carries "the whole stack", as zh 整套 does |
+| `home.why.more` | "Uzun hâli — diğer cüzdanlarda kabul edemediklerimiz ve seçtiğimiz bedel" | – | |
+| `home.compare.rows` | reordered to the new en order; Source code cell → "…</a>, hepsi MIT" | – | `<a>` verbatim |
+| `home.faq.items` | new 7-item order; three new answers and the merged lose-a-key/account answer | – | old wording reused (*kalıcı olarak*, *cüzdanınızdan harcama yapabilir*, *anahtarlar kaldırılamaz*); the relay answer's second paragraph starts "Relay'in vela-relay olması gerekir" so it doesn't open on a lower-case name |
+| `getStarted.lede` | + "Her uygulama kaynak koddan da derlenebilir." | – | |
+| docs `introduction` | new opening (açık kaynaklı, kendi sunucunuzda barındırabileceğiniz); "Bize ihtiyaç duymadan çalışır" first and rewritten; table reordered + relay/fee row | – | *kendi saklamanızda duran* dropped from the opening, as en dropped "self-custodial" |
+| docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
+
+No High or Medium findings open.

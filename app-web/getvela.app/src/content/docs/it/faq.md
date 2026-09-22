@@ -1,7 +1,7 @@
 ---
 title: Domande frequenti
 description: "Risposte brevi su custodia, chiavi, recupero, reti, commissioni, cosa può vedere Vela, open source e cosa succede se Vela non c'è più."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # Domande frequenti
@@ -78,10 +78,10 @@ fede.
 
 ## Vela è open source?
 
-Le app del wallet, il relay e il servizio di tassi di cambio hanno licenza MIT su
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories); anche l'archivio dei
-dati delle chain è MIT. L'indice delle chiavi pubbliche è pubblico, ma non ha
-ancora un file di licenza. Ogni servizio lo puoi gestire tu — vedi la
+Sì, tutto, con licenza MIT: le app del wallet e il core, il relay, l'indice delle
+chiavi pubbliche, il servizio di tassi di cambio e l'archivio dei dati delle chain,
+su [GitHub](https://github.com/orgs/mondaylabsltd/repositories). Ogni servizio lo
+puoi gestire tu — vedi la
 [guida al self-hosting](/it/docs/self-hosting).
 
 ## Vela ha avuto un audit?

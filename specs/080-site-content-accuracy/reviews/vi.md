@@ -146,3 +146,22 @@ five single-string axes; no High or Medium left open.
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; **Cần biết** bullet; chain-data paragraph; relay line removed from the final list | — | *danh mục chuỗi* / *bản của Vela* as the file already said; "tháng 9/2026"; older builds = *các phiên bản relay cũ hơn*, so *bản* keeps meaning "copy" |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the en + zh audience revision (commit 66a3c789: copy for the reader who self-hosts
+and builds from source; p256-index now MIT) into vi. Each changed string checked on the five
+single-string axes; no High or Medium left open. `messages.test.ts -t "vi"` passes.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `.ogDescription` / `.organization` | build-and-host framing (*tự biên dịch và tự triển khai*); organization *tự lưu ký* → *tự triển khai được* | — | en dropped "self-custodial" here, so *tự lưu ký* goes with it |
+| `home.hero.ctaSelfHost` (new) | «Hoặc tự triển khai toàn bộ hệ thống» | — | inserted after `ctaCode`; "stack" rendered as *toàn bộ hệ thống* rather than the loanword |
+| `home.why.more` | «Bản dài hơn — những điều chúng tôi không chấp nhận được ở các ví khác, và sự đánh đổi mà chúng tôi đã chọn» | — | *sự đánh đổi* as the introduction already says |
+| `home.compare.rows` | reordered to the new en order; Source code cell → «…công khai</a>, tất cả theo giấy phép MIT» | — | anchor unchanged |
+| `home.faq.items` | new order; three new answers and the merged lose-a-key/account answer | — | reused *Chuỗi khóa iCloud* / *Trình quản lý mật khẩu của Google*, «Không cần cụm từ khôi phục, email hay số dư ban đầu», «mà khóa thì không gỡ bỏ được»; *ngân quỹ*, *bundler* as the docs say |
+| `getStarted.lede` | + «Ứng dụng nào cũng có thể tự biên dịch từ mã nguồn.» | — | |
+| docs `introduction` | opening now *ví mã nguồn mở, tự triển khai được*; «Chạy được khi không có chúng tôi» bullet first and rewritten; table reordered with the new relay/fee row | — | |
+| docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; (Rust, MIT); licence-file sentence deleted | — | |
+
+Nothing fixed beyond the brief.

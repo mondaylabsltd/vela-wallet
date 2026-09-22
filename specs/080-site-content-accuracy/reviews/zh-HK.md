@@ -149,3 +149,25 @@ axes; no open High or Medium.
 
 Checks: JSON parses, `_fingerprints` untouched; `id="fee"` ×1; no 十倍 in networks-and-fees / faq / whitepaper;
 `rpc.rs` ×0; no unprefixed `](/docs` links.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy rewritten for the technical reader who self-hosts; p256-index now MIT) into zh-HK,
+in written Hong Kong Chinese. Register kept precise and technical. Terms as in the table above, plus 資金庫
+(treasury), 打包器 (bundler), iCloud 鑰匙圈 / Google 密碼管理工具, FIDO2 硬件安全密鑰, 編譯 for "build".
+
+| String / section | Change | Severity of fixes beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `.ogDescription` / `.organization` | rewritten: 可以自行編譯、自行架設…都包括在內 / 自行編譯，自行運行：…採用 MIT 授權 / 開源、可自行架設 | — | 自我託管 dropped from `organization`, as en dropped "self-custodial" |
+| `home.hero.ctaSelfHost` (new) | 或者，整套自行架設 | — | inserted after `ctaCode`, key order = en |
+| `home.why.more` | 詳細版本——我們在其他錢包中無法接受的地方，以及我們選擇的取捨 | — | |
+| `home.compare.rows` | reordered to the new en order by mapping the old rows; Source code `vela` cell → …全部公開</a>，一律採用 MIT 授權 | — | `<a>` unchanged |
+| `home.faq.items` | new order; three new answers (可以全部自行運行嗎？ / 可以運行自己的中繼嗎？ / 可以使用哪些鑰匙？) and the merged 如果我遺失了一把鑰匙，或者 Apple、Google 帳戶被盜用呢？; old shutdown, dApp and "what can Vela do" answers carried over unchanged | — | every rule from the retired answers kept (fixed at creation, single unsynced key needs a second, synced passkey returns, keys can't be removed) |
+| `getStarted.lede` | + 每個 App 亦可從原始碼編譯。 | — | |
+| introduction.md | new opening (開源、可自行架設); 不靠我們也能運作 bullet moved first and rewritten; table reordered to en + new row 怎樣運行自己的中繼，手續費歸誰 → `/zh-HK/docs/self-hosting#relay` · `/zh-HK/docs/networks-and-fees#fee` | — | |
+| faq.md | 是的，全部開源，一律採用 MIT 授權：…公鑰索引… | — | |
+| self-hosting.md | index intro （Rust，MIT 授權）, same form as the relay line; "no licence file" sentence deleted | — | |
+| whitepaper.md | 開源 paragraph: 全部均採用 MIT 授權, index included | — | |
+
+Checks: `bunx vitest run src/lib/i18n/messages.test.ts -t "zh-HK"` 11/11 pass; `docs.test.ts` passes; no unprefixed
+`](/docs` links; no index-licence-pending sentence left in the catalog or docs.

@@ -1,7 +1,7 @@
 ---
 title: 자주 묻는 질문
 description: "수탁, 키, 복구, 네트워크, 수수료, Vela가 볼 수 있는 것, 오픈소스, 그리고 Vela가 사라지면 어떻게 되는지에 대한 짧은 답변."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # 자주 묻는 질문
@@ -66,9 +66,8 @@ Vela는 키를 읽을 수 없고, 스스로 자금을 옮길 수도 없습니다
 
 ## Vela는 오픈소스인가요?
 
-지갑 앱, 릴레이, 환율 서비스는 MIT 라이선스로
-[GitHub](https://github.com/orgs/mondaylabsltd/repositories)에 공개되어 있고, 체인 데이터
-디렉터리도 MIT입니다. 공개 키 인덱스는 코드가 공개되어 있지만 아직 라이선스 파일이 없습니다. 각
+네, 전부 MIT 라이선스입니다. 지갑 앱과 코어, 릴레이, 공개 키 인덱스, 환율 서비스, 체인 데이터
+디렉터리가 [GitHub](https://github.com/orgs/mondaylabsltd/repositories)에 공개되어 있습니다. 각
 서비스는 직접 운영할 수 있습니다. [셀프 호스팅 가이드](/ko/docs/self-hosting)를 참고하세요.
 
 ## Vela는 감사를 받았나요?

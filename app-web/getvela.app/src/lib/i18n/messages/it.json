@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Un wallet Ethereum davvero tuo",
-			"description": "Un wallet Ethereum open source che puoi usare senza dipendere da noi. Firmi con passkey o chiavi di sicurezza, senza seed phrase. Il tuo account è un Safe non modificato, e ogni servizio su cui si appoggia è open source.",
+			"description": "Un wallet Ethereum open source che puoi compilare e ospitare in proprio: le app, il relay, l'indice delle chiavi pubbliche e i dati delle chain. Un Safe non modificato, con firma tramite passkey o chiavi di sicurezza hardware, senza seed phrase.",
 			"ogTitle": "Vela Wallet — Un wallet Ethereum davvero tuo",
-			"ogDescription": "Wallet Ethereum open source basato su un Safe non modificato. Passkey o chiavi di sicurezza, niente seed phrase e servizi open source che puoi gestire tu.",
-			"organization": "Un wallet Ethereum open source e in autocustodia, basato su un Safe non modificato, con firma tramite passkey o chiavi di sicurezza e senza seed phrase."
+			"ogDescription": "Compilalo tu, gestiscilo tu: un wallet Ethereum con licenza MIT basato su un Safe non modificato, con passkey o chiavi di sicurezza e ogni servizio open source.",
+			"organization": "Un wallet Ethereum open source che puoi ospitare in proprio, basato su un Safe non modificato, con firma tramite passkey o chiavi di sicurezza e senza seed phrase."
 		},
 		"hero": {
 			"headline": "Un wallet Ethereum davvero tuo",
 			"subtitle": "La firma avviene sul tuo dispositivo. La chiave privata della tua passkey non arriva mai a Vela.",
 			"ctaCreate": "Inizia",
 			"ctaCode": "Leggi il codice",
+			"ctaSelfHost": "Oppure ospita tu l'intero stack",
 			"facts": [
 				{
 					"term": "Il tuo account è un Safe v1.4.1 non modificato.",
@@ -136,7 +137,7 @@
 			"heading": "Perché l'abbiamo creato",
 			"p1": "Usavamo <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (oggi parte di Coinbase Wallet) tutti i giorni e ci piaceva. Poi abbiamo sbattuto contro il muro: una frase di recupero creata su un sito di cui devi semplicemente fidarti, niente reti personalizzate, niente che tu possa ospitare in proprio e un servizio di firma il cui codice non è pubblico — se sparisce, non esiste un modo documentato perché la tua passkey arrivi al tuo account.",
 			"p2": "Vela è la versione in cui eravamo disposti a tenere dei soldi. La firma con passkey l'abbiamo tenuta, ma abbiamo fatto in modo che il wallet non dipenda da noi.",
-			"more": "La versione lunga — dove dovresti tenere dodici parole?"
+			"more": "La versione lunga — cosa non potevamo accettare negli altri wallet, e il compromesso che abbiamo scelto"
 		},
 		"tradeoffs": {
 			"heading": "I compromessi, subito",
@@ -167,10 +168,40 @@
 					"base": "Smart account Coinbase"
 				},
 				{
+					"feature": "Self-hosting completo",
+					"vela": "App e servizi di backend, con le lacune elencate nella guida al self-hosting; le passkey restano legate a getvela.app",
+					"metamask": "Client e RPC li scegli o li gestisci tu",
+					"base": "Non disponibile"
+				},
+				{
+					"feature": "Codice sorgente",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App e servizi pubblici</a>, tutti con licenza MIT",
+					"metamask": "Pubblico, con una licenza che consente solo l'uso non commerciale",
+					"base": "Contratti e SDK aperti; il servizio di firma no"
+				},
+				{
+					"feature": "Reti personalizzate",
+					"vela": "Qualsiasi rete EVM che soddisfi i requisiti di Vela; puoi deployare tu la maggior parte dei contratti mancanti",
+					"metamask": "Reti EVM e RPC personalizzati",
+					"base": "Un elenco fisso di reti"
+				},
+				{
 					"feature": "Chiave di firma",
 					"vela": "Passkey o chiavi di sicurezza, fino a sette",
 					"metamask": "La chiave privata dietro una seed phrase; wallet hardware supportati",
 					"base": "Passkey o frase di recupero"
+				},
+				{
+					"feature": "Aggiungere una chiave dopo",
+					"vela": "Impossibile — le chiavi sono fissate alla creazione",
+					"metamask": "Impossibile — una chiave per account",
+					"base": "Possibile"
+				},
+				{
+					"feature": "Se perdi una chiave",
+					"vela": "Firmi con un'altra chiave che hai aggiunto o sincronizzato",
+					"metamask": "Ripristini dalla seed phrase",
+					"base": "Firmi con un'altra chiave che hai aggiunto o sincronizzato"
 				},
 				{
 					"feature": "Gas per transazione",
@@ -183,24 +214,6 @@
 					"vela": "Non offerto",
 					"metamask": "Su alcune reti",
 					"base": "Dove lo sponsorizza l'app"
-				},
-				{
-					"feature": "Reti personalizzate",
-					"vela": "Qualsiasi rete EVM che soddisfi i requisiti di Vela; puoi deployare tu la maggior parte dei contratti mancanti",
-					"metamask": "Reti EVM e RPC personalizzati",
-					"base": "Un elenco fisso di reti"
-				},
-				{
-					"feature": "Se perdi una chiave",
-					"vela": "Firmi con un'altra chiave che hai aggiunto o sincronizzato",
-					"metamask": "Ripristini dalla seed phrase",
-					"base": "Firmi con un'altra chiave che hai aggiunto o sincronizzato"
-				},
-				{
-					"feature": "Aggiungere una chiave dopo",
-					"vela": "Impossibile — le chiavi sono fissate alla creazione",
-					"metamask": "Impossibile — una chiave per account",
-					"base": "Possibile"
 				},
 				{
 					"feature": "Transazioni in batch",
@@ -219,18 +232,6 @@
 					"vela": "Una pagina di firma indipendente, pronta ma non ancora collegata alle app",
 					"metamask": "Avvisi di rischio di terze parti",
 					"base": "—"
-				},
-				{
-					"feature": "Self-hosting completo",
-					"vela": "App e servizi di backend, con le lacune elencate nella guida al self-hosting; le passkey restano legate a getvela.app",
-					"metamask": "Client e RPC li scegli o li gestisci tu",
-					"base": "Non disponibile"
-				},
-				{
-					"feature": "Codice sorgente",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">App e servizi pubblici</a>; licenza MIT, tranne l'indice, la cui licenza non è ancora definita",
-					"metamask": "Pubblico, con una licenza che consente solo l'uso non commerciale",
-					"base": "Contratti e SDK aperti; il servizio di firma no"
 				},
 				{
 					"feature": "Maturità",
@@ -267,32 +268,32 @@
 			"heading": "Domande frequenti",
 			"items": [
 				{
-					"q": "Che cosa serve per creare un wallet?",
-					"a": "Un telefono o un computer che supporti le passkey, oppure chiavi di sicurezza hardware — due, se usi solo chiavi di sicurezza. Niente seed phrase, email o saldo iniziale.\n\nScegli tutte le tue chiavi, fino a sette, quando crei il wallet. Dopo non puoi aggiungerne altre."
+					"q": "Posso gestire tutto in proprio?",
+					"a": "Sì, tranne il dominio a cui appartengono le tue passkey. Le app e ogni servizio su cui si appoggiano — il relay, l'indice delle chiavi pubbliche, i dati delle chain e i tassi di cambio — hanno licenza MIT e girano su Docker o Cloudflare Workers, e dalle impostazioni delle app puoi indirizzarle verso i tuoi servizi. La guida al self-hosting li affronta uno per uno, comprese le lacune che alcune app hanno ancora.\n\nLe passkey sono legate a getvela.app, quindi una copia del wallet web sul tuo dominio è un wallet diverso. L'estensione per il browser e le app che compili tu continuano a firmare per il wallet che hai già."
+				},
+				{
+					"q": "Cosa succede se Vela chiude, o se getvela.app va offline?",
+					"a": "I tuoi fondi restano nel tuo Safe, on-chain. Ogni servizio gestito da Vela è open source, e ciascuno puoi gestirlo tu — il relay, l'indice delle chiavi pubbliche, i dati delle chain e i tassi di cambio.\n\nSe getvela.app va offline, l'estensione Vela per il browser firma ancora con le chiavi che hai già — la passkey di questo dispositivo, una chiave di sicurezza o un telefono tramite codice QR — e lo stesso vale per le app che compili tu, con un telefono o una chiave di sicurezza."
+				},
+				{
+					"q": "Posso gestire il mio relay?",
+					"a": "Sì: vela-relay, in Rust, su Docker o Cloudflare Workers. Finanzia la sua tesoreria con la moneta di ogni chain e inserisci il suo URL nel wallet. La commissione che firmi finisce così nella tua tesoreria: sommando wallet e relay, paghi più o meno il gas reale.\n\nDeve essere vela-relay: il wallet chiede la quotazione della commissione con un metodo che i bundler ERC-4337 generici non implementano."
+				},
+				{
+					"q": "Quali chiavi posso usare?",
+					"a": "Passkey (sincronizzate dal Portachiavi iCloud, dal Gestore delle password di Google o da un altro gestore di password), un altro telefono tramite codice QR e chiavi di sicurezza hardware FIDO2: da una a sette, scelte quando crei il wallet e non più modificabili in seguito. Una qualsiasi può firmare (1-of-n). Una sola chiave non sincronizzata, come un'unica chiave di sicurezza, ne richiede una seconda.\n\nNiente seed phrase, email o saldo iniziale."
+				},
+				{
+					"q": "E se perdo una chiave, o il mio account Apple o Google viene compromesso?",
+					"a": "Una passkey sincronizzata ricompare sul tuo nuovo dispositivo. Una chiave non sincronizzata che perdi è persa per sempre, quindi firmi con un'altra chiave che hai aggiunto; se era la tua unica chiave, il wallet è perso.\n\nSe viene compromesso un account che sincronizza una delle tue passkey, chi lo controlla potrebbe spendere dal tuo wallet — e le chiavi non si possono rimuovere. Sposta i fondi in un nuovo wallet, creato con chiavi che non dipendono da quell'account. Le chiavi di sicurezza hardware evitano questa dipendenza fin dall'inizio."
 				},
 				{
 					"q": "Posso usare Vela con le dApp?",
 					"a": "Sì. Le dApp vedono Vela come qualsiasi altro wallet del browser.\n\nFunziona nell'estensione Vela per il browser e nel browser integrato nelle app desktop (macOS, Windows), iPhone e Android. Il wallet web non si collega alle dApp."
 				},
 				{
-					"q": "E se perdo il telefono?",
-					"a": "Se la tua passkey è sincronizzata con il Portachiavi iCloud o con il Gestore delle password di Google, la recuperi su un dispositivo nuovo e continui con lo stesso wallet.\n\nSe non era sincronizzata, ti serve un'altra chiave — una di quelle aggiunte quando hai creato il wallet."
-				},
-				{
-					"q": "E se cancello la mia passkey?",
-					"a": "Quella chiave è persa per sempre. Se era la tua unica chiave, perdi anche l'accesso al wallet."
-				},
-				{
-					"q": "E se il mio account Apple o Google viene compromesso?",
-					"a": "Chi controlla quell'account potrebbe usare una passkey sincronizzata tramite esso e spendere dal tuo wallet — e una chiave non si può rimuovere. Sposta i fondi in un nuovo wallet, creato con chiavi che non dipendono da quell'account.\n\nPer non dipendere da Apple o Google fin dall'inizio, crea il wallet con chiavi di sicurezza hardware."
-				},
-				{
 					"q": "Cosa può fare Vela con i miei soldi, e cosa sa di me?",
 					"a": "Vela non ha alcuna chiave né alcun ruolo sul tuo wallet, quindi non può spostare né congelare i tuoi fondi per conto proprio. Però scrive il software che chiede alle tue chiavi di firmare.\n\nNessuna email, nessun account. Le tue chiavi pubbliche, il tipo di autenticatore dietro ciascuna, le etichette delle chiavi, il nome e l'indirizzo del wallet sono pubblici on-chain; i servizi di Vela vedono il tuo indirizzo IP e le transazioni che invii tramite loro. Gli emittenti dei token possono comunque mettere un indirizzo in blocklist."
-				},
-				{
-					"q": "Cosa succede se Vela chiude, o se getvela.app va offline?",
-					"a": "I tuoi fondi restano nel tuo Safe, on-chain. Ogni servizio gestito da Vela è open source, e ciascuno puoi gestirlo tu — il relay, l'indice delle chiavi pubbliche, i dati delle chain e i tassi di cambio.\n\nSe getvela.app va offline, l'estensione Vela per il browser firma ancora con le chiavi che hai già — la passkey di questo dispositivo, una chiave di sicurezza o un telefono tramite codice QR — e lo stesso vale per le app che compili tu, con un telefono o una chiave di sicurezza."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "Vela funziona già nel tuo browser, con un'estensione del browser e app desktop che puoi scaricare subito, e app per telefono in arrivo. Scegli quella che preferisci."
 		},
 		"heading": "Ottieni Vela",
-		"lede": "Un wallet e un indirizzo, ovunque tu lo apra. Parti dal browser — niente da installare — oppure porta lo stesso wallet nella barra del browser o sul desktop, e presto sul telefono.",
+		"lede": "Un wallet e un indirizzo, ovunque tu lo apra. Parti dal browser — niente da installare — oppure porta lo stesso wallet nella barra del browser o sul desktop, e presto sul telefono. Ogni app si può anche compilare dal codice sorgente.",
 		"recommended": "Consigliato",
 		"availableNow": "Disponibile ora",
 		"comingSoon": "In arrivo",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

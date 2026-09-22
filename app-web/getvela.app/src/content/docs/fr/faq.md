@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: "Des réponses courtes sur la conservation des fonds, les clés, la récupération, les réseaux, les frais, ce que Vela peut voir, l'open source, et ce qui se passe si Vela disparaît."
-source: 2d38e6a0b6d9
+source: 7446e22f990d
 ---
 
 # FAQ
@@ -78,11 +78,11 @@ app l'interroge. Ce qui devient public on-chain est listé sur
 
 ## Vela est-il open source ?
 
-Les apps du portefeuille, le relais et le service de taux de change sont sous
-licence MIT sur [GitHub](https://github.com/orgs/mondaylabsltd/repositories) ;
-l'annuaire de données de chaîne est lui aussi sous MIT. L'index des clés publiques
-est public, mais n'a pas encore de fichier de licence. Vous pouvez faire tourner
-chaque service vous-même — voir le [guide d'auto-hébergement](/fr/docs/self-hosting).
+Oui, entièrement, sous licence MIT : les apps du portefeuille et le cœur, le relais,
+l'index des clés publiques, le service de taux de change et l'annuaire de données
+de chaîne, sur [GitHub](https://github.com/orgs/mondaylabsltd/repositories). Vous
+pouvez faire tourner chaque service vous-même — voir le
+[guide d'auto-hébergement](/fr/docs/self-hosting).
 
 ## Vela est-il audité ?
 

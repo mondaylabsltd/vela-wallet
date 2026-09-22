@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet — Ví Ethereum thực sự là của bạn",
-			"description": "Ví Ethereum mã nguồn mở mà bạn có thể tự vận hành, không cần đến chúng tôi. Ký bằng passkey hoặc khóa bảo mật — không có cụm từ khôi phục. Tài khoản của bạn là một Safe nguyên bản, và mọi dịch vụ phía sau đều là mã nguồn mở.",
+			"description": "Ví Ethereum mã nguồn mở mà bạn có thể tự biên dịch và tự triển khai — ứng dụng, relay, chỉ mục khóa công khai và dữ liệu chuỗi. Một Safe nguyên bản, ký bằng passkey hoặc khóa bảo mật phần cứng, không có cụm từ khôi phục.",
 			"ogTitle": "Vela Wallet — Ví Ethereum thực sự là của bạn",
-			"ogDescription": "Ví Ethereum mã nguồn mở dựng trên một Safe nguyên bản. Ký bằng passkey hoặc khóa bảo mật, không cụm từ khôi phục, cùng các dịch vụ mã nguồn mở mà bạn có thể tự vận hành.",
-			"organization": "Ví Ethereum mã nguồn mở, tự lưu ký, dựng trên một Safe nguyên bản, ký bằng passkey hoặc khóa bảo mật, không cần cụm từ khôi phục."
+			"ogDescription": "Tự biên dịch, tự vận hành: ví Ethereum theo giấy phép MIT, dựng trên một Safe nguyên bản, ký bằng passkey hoặc khóa bảo mật, và mọi dịch vụ đều là mã nguồn mở.",
+			"organization": "Ví Ethereum mã nguồn mở, tự triển khai được, dựng trên một Safe nguyên bản, ký bằng passkey hoặc khóa bảo mật, không cần cụm từ khôi phục."
 		},
 		"hero": {
 			"headline": "Ví Ethereum thực sự là của bạn",
 			"subtitle": "Việc ký được thực hiện ngay trên thiết bị của bạn. Khóa riêng tư của passkey không bao giờ được gửi tới Vela.",
 			"ctaCreate": "Bắt đầu",
 			"ctaCode": "Đọc mã nguồn",
+			"ctaSelfHost": "Hoặc tự triển khai toàn bộ hệ thống",
 			"facts": [
 				{
 					"term": "Tài khoản của bạn là một Safe v1.4.1 nguyên bản.",
@@ -136,7 +137,7 @@
 			"heading": "Vì sao chúng tôi làm nó",
 			"p1": "Chúng tôi dùng <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (nay thuộc Coinbase Wallet) mỗi ngày và thấy thích. Rồi chúng tôi vấp phải những giới hạn: một cụm từ khôi phục được tạo trên một trang web mà bạn chỉ còn cách tin, không thêm được mạng tùy chỉnh, không có gì để bạn tự triển khai, và một dịch vụ ký có mã nguồn không công khai — nếu dịch vụ đó biến mất, không còn cách nào được công bố để passkey của bạn truy cập được tài khoản.",
 			"p2": "Vela là phiên bản mà chính chúng tôi sẵn sàng để tiền vào. Chúng tôi giữ lại cách ký bằng passkey, nhưng bảo đảm chiếc ví không phụ thuộc vào chúng tôi.",
-			"more": "Bản dài hơn — mười hai từ đó thì bạn cất ở đâu?"
+			"more": "Bản dài hơn — những điều chúng tôi không chấp nhận được ở các ví khác, và sự đánh đổi mà chúng tôi đã chọn"
 		},
 		"tradeoffs": {
 			"heading": "Nói trước cái giá phải trả",
@@ -167,10 +168,40 @@
 					"base": "Tài khoản thông minh của Coinbase"
 				},
 				{
+					"feature": "Tự triển khai trọn vẹn",
+					"vela": "Ứng dụng và dịch vụ phía sau, còn vài thiếu sót được liệt kê trong hướng dẫn tự triển khai; passkey vẫn gắn với getvela.app",
+					"metamask": "Client và RPC do bạn chọn hoặc tự chạy",
+					"base": "Không có"
+				},
+				{
+					"feature": "Mã nguồn",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Ứng dụng và dịch vụ đều công khai</a>, tất cả theo giấy phép MIT",
+					"metamask": "Công khai, theo giấy phép chỉ cho phép dùng phi thương mại",
+					"base": "Hợp đồng và SDK mở; dịch vụ ký thì không"
+				},
+				{
+					"feature": "Mạng tùy chỉnh",
+					"vela": "Mọi mạng EVM đáp ứng yêu cầu của Vela; phần lớn hợp đồng còn thiếu bạn có thể tự triển khai",
+					"metamask": "Mạng EVM và RPC tùy chỉnh",
+					"base": "Danh sách mạng cố định"
+				},
+				{
 					"feature": "Khóa ký",
 					"vela": "Passkey hoặc khóa bảo mật, tối đa bảy khóa",
 					"metamask": "Khóa riêng tư đứng sau cụm từ khôi phục; hỗ trợ ví cứng",
 					"base": "Passkey hoặc cụm từ khôi phục"
+				},
+				{
+					"feature": "Thêm khóa về sau",
+					"vela": "Không được — khóa cố định từ lúc tạo ví",
+					"metamask": "Không được — mỗi tài khoản một khóa",
+					"base": "Có"
+				},
+				{
+					"feature": "Mất một khóa",
+					"vela": "Ký bằng một khóa khác bạn đã thêm hoặc đã đồng bộ",
+					"metamask": "Khôi phục từ cụm từ khôi phục",
+					"base": "Ký bằng một khóa khác bạn đã thêm hoặc đã đồng bộ"
 				},
 				{
 					"feature": "Gas mỗi giao dịch",
@@ -183,24 +214,6 @@
 					"vela": "Không có",
 					"metamask": "Trên một số mạng",
 					"base": "Khi ứng dụng tài trợ"
-				},
-				{
-					"feature": "Mạng tùy chỉnh",
-					"vela": "Mọi mạng EVM đáp ứng yêu cầu của Vela; phần lớn hợp đồng còn thiếu bạn có thể tự triển khai",
-					"metamask": "Mạng EVM và RPC tùy chỉnh",
-					"base": "Danh sách mạng cố định"
-				},
-				{
-					"feature": "Mất một khóa",
-					"vela": "Ký bằng một khóa khác bạn đã thêm hoặc đã đồng bộ",
-					"metamask": "Khôi phục từ cụm từ khôi phục",
-					"base": "Ký bằng một khóa khác bạn đã thêm hoặc đã đồng bộ"
-				},
-				{
-					"feature": "Thêm khóa về sau",
-					"vela": "Không được — khóa cố định từ lúc tạo ví",
-					"metamask": "Không được — mỗi tài khoản một khóa",
-					"base": "Có"
 				},
 				{
 					"feature": "Giao dịch gộp",
@@ -219,18 +232,6 @@
 					"vela": "Một trang ký độc lập, đã làm xong nhưng chưa kết nối với các ứng dụng",
 					"metamask": "Cảnh báo rủi ro của bên thứ ba",
 					"base": "—"
-				},
-				{
-					"feature": "Tự triển khai trọn vẹn",
-					"vela": "Ứng dụng và dịch vụ phía sau, còn vài thiếu sót được liệt kê trong hướng dẫn tự triển khai; passkey vẫn gắn với getvela.app",
-					"metamask": "Client và RPC do bạn chọn hoặc tự chạy",
-					"base": "Không có"
-				},
-				{
-					"feature": "Mã nguồn",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Ứng dụng và dịch vụ đều công khai</a>; giấy phép MIT, trừ chỉ mục (chưa có giấy phép)",
-					"metamask": "Công khai, theo giấy phép chỉ cho phép dùng phi thương mại",
-					"base": "Hợp đồng và SDK mở; dịch vụ ký thì không"
 				},
 				{
 					"feature": "Độ trưởng thành",
@@ -267,32 +268,32 @@
 			"heading": "Câu hỏi thường gặp",
 			"items": [
 				{
-					"q": "Tôi cần gì để tạo ví?",
-					"a": "Một điện thoại hoặc máy tính hỗ trợ passkey, hoặc khóa bảo mật phần cứng — cần hai chiếc nếu bạn chỉ dùng khóa bảo mật. Không cần cụm từ khôi phục, email hay số dư ban đầu.\n\nHãy chọn tất cả các khóa của bạn, tối đa bảy, ngay khi tạo ví. Sau đó không thêm được nữa."
+					"q": "Tôi có thể tự vận hành toàn bộ không?",
+					"a": "Được, trừ tên miền mà passkey của bạn thuộc về. Các ứng dụng và mọi dịch vụ phía sau — relay, chỉ mục khóa công khai, dữ liệu chuỗi và tỷ giá — đều theo giấy phép MIT và chạy trên Docker hoặc Cloudflare Workers, còn các ứng dụng có thiết lập để trỏ tới dịch vụ của riêng bạn. Hướng dẫn tự triển khai đi qua từng thành phần, kể cả những thiếu sót mà một số ứng dụng vẫn còn.\n\nPasskey gắn với getvela.app, nên một bản sao ví web trên tên miền của riêng bạn là một ví khác. Tiện ích trình duyệt và các ứng dụng bạn tự biên dịch vẫn ký được cho ví hiện có của bạn."
+				},
+				{
+					"q": "Nếu Vela đóng cửa, hoặc getvela.app ngừng hoạt động thì sao?",
+					"a": "Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Mọi dịch vụ Vela vận hành đều là mã nguồn mở, và bạn có thể tự chạy từng dịch vụ — relay, chỉ mục khóa công khai, dữ liệu chuỗi và tỷ giá.\n\nNếu getvela.app ngừng hoạt động, tiện ích trình duyệt Vela vẫn ký được bằng các khóa bạn đang có — passkey trên thiết bị này, khóa bảo mật, hoặc điện thoại quét mã QR — và các ứng dụng bạn tự biên dịch cũng vậy, với điện thoại hoặc khóa bảo mật."
+				},
+				{
+					"q": "Tôi có thể tự chạy relay của mình không?",
+					"a": "Được: vela-relay, viết bằng Rust, chạy trên Docker hoặc Cloudflare Workers. Nạp coin của từng chuỗi vào ngân quỹ của relay rồi nhập URL của relay vào ví. Khi đó khoản phí bạn ký sẽ vào ngân quỹ của chính bạn, nên tính cả ví lẫn relay, bạn chỉ trả xấp xỉ tiền gas thực.\n\nRelay phải là vela-relay: ví lấy báo giá phí qua một phương thức mà các bundler ERC-4337 thông dụng không hỗ trợ."
+				},
+				{
+					"q": "Tôi dùng được những khóa nào?",
+					"a": "Passkey — đồng bộ qua Chuỗi khóa iCloud, Trình quản lý mật khẩu của Google hoặc một trình quản lý mật khẩu khác — một điện thoại khác qua mã QR, và khóa bảo mật phần cứng FIDO2: từ một đến bảy khóa, chọn khi tạo ví và cố định từ đó. Bất kỳ khóa nào trong số đó cũng ký được (1-of-n). Một khóa duy nhất không được đồng bộ, chẳng hạn một khóa bảo mật, cần thêm một khóa thứ hai.\n\nKhông cần cụm từ khôi phục, email hay số dư ban đầu."
+				},
+				{
+					"q": "Nếu tôi mất một khóa, hoặc tài khoản Apple hay Google của tôi bị chiếm thì sao?",
+					"a": "Passkey đã đồng bộ sẽ trở lại trên thiết bị mới của bạn. Một khóa chưa đồng bộ mà bị mất thì mất hẳn, nên bạn ký bằng một khóa khác mà bạn đã thêm; nếu đó là khóa duy nhất, bạn cũng mất quyền truy cập ví.\n\nNếu một tài khoản đang đồng bộ passkey của bạn bị chiếm, người kiểm soát tài khoản đó có thể tiêu được tiền trong ví của bạn — mà khóa thì không gỡ bỏ được. Hãy chuyển tiền sang một ví mới, tạo bằng những khóa không phụ thuộc vào tài khoản đó. Khóa bảo mật phần cứng tránh được sự phụ thuộc này ngay từ đầu."
 				},
 				{
 					"q": "Tôi dùng Vela với dApp được không?",
 					"a": "Được. dApp nhìn thấy Vela giống như mọi ví trình duyệt khác.\n\nCách này hoạt động trong tiện ích trình duyệt Vela và trong trình duyệt tích hợp của ứng dụng máy tính (macOS, Windows), iPhone và Android. Ví web không kết nối với dApp."
 				},
 				{
-					"q": "Mất điện thoại thì sao?",
-					"a": "Nếu passkey của bạn đã đồng bộ qua Chuỗi khóa iCloud hoặc Trình quản lý mật khẩu của Google, bạn có thể lấy lại nó trên thiết bị mới và tiếp tục dùng đúng chiếc ví đó.\n\nNếu chưa đồng bộ, bạn sẽ cần một khóa khác mà bạn đã thêm khi tạo ví."
-				},
-				{
-					"q": "Nếu tôi xóa passkey thì sao?",
-					"a": "Khóa đó mất vĩnh viễn. Nếu nó là khóa duy nhất, bạn cũng mất quyền truy cập ví."
-				},
-				{
-					"q": "Nếu tài khoản Apple hoặc Google của tôi bị chiếm thì sao?",
-					"a": "Người đang kiểm soát tài khoản đó có thể dùng được passkey đồng bộ qua nó và tiêu tiền trong ví của bạn — mà khóa thì không gỡ bỏ được. Hãy chuyển tiền sang một ví mới, tạo bằng những khóa không phụ thuộc vào tài khoản đó.\n\nĐể không phụ thuộc vào Apple hay Google ngay từ đầu, hãy tạo ví bằng khóa bảo mật phần cứng."
-				},
-				{
 					"q": "Vela làm được gì với tiền của tôi, và biết gì về tôi?",
 					"a": "Vela không giữ khóa nào và không có vai trò gì trên ví của bạn, nên tự mình không thể chuyển hay đóng băng tiền của bạn. Nhưng phần mềm yêu cầu các khóa của bạn ký là do Vela viết.\n\nKhông cần email hay tài khoản. Khóa công khai của bạn, loại trình xác thực đứng sau mỗi khóa, tên các khóa, tên ví và địa chỉ đều công khai trên chuỗi; các dịch vụ của Vela thấy địa chỉ IP của bạn và những giao dịch bạn gửi qua chúng. Bên phát hành token vẫn có thể đưa địa chỉ vào danh sách chặn."
-				},
-				{
-					"q": "Nếu Vela đóng cửa, hoặc getvela.app ngừng hoạt động thì sao?",
-					"a": "Tiền của bạn vẫn nằm trong Safe của bạn trên chuỗi. Mọi dịch vụ Vela vận hành đều là mã nguồn mở, và bạn có thể tự chạy từng dịch vụ — relay, chỉ mục khóa công khai, dữ liệu chuỗi và tỷ giá.\n\nNếu getvela.app ngừng hoạt động, tiện ích trình duyệt Vela vẫn ký được bằng các khóa bạn đang có — passkey trên thiết bị này, khóa bảo mật, hoặc điện thoại quét mã QR — và các ứng dụng bạn tự biên dịch cũng vậy, với điện thoại hoặc khóa bảo mật."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "Vela chạy ngay trong trình duyệt của bạn, có tiện ích trình duyệt và ứng dụng máy tính tải về được ngay, còn ứng dụng điện thoại đang trên đường tới. Chọn bản bạn muốn."
 		},
 		"heading": "Tải Vela",
-		"lede": "Một chiếc ví, một địa chỉ, dù bạn mở ở đâu. Bắt đầu ngay trong trình duyệt — không phải cài gì — hoặc mang đúng chiếc ví đó lên thanh công cụ trình duyệt hay máy tính của bạn, và sắp tới là điện thoại.",
+		"lede": "Một chiếc ví, một địa chỉ, dù bạn mở ở đâu. Bắt đầu ngay trong trình duyệt — không phải cài gì — hoặc mang đúng chiếc ví đó lên thanh công cụ trình duyệt hay máy tính của bạn, và sắp tới là điện thoại. Ứng dụng nào cũng có thể tự biên dịch từ mã nguồn.",
 		"recommended": "Khuyên dùng",
 		"availableNow": "Dùng được ngay",
 		"comingSoon": "Sắp có",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Come funziona Vela e di cosa devi — e non devi — fidarti per usarlo: l'account, le chiavi, la commissione, il modello delle minacce, il recupero e cosa succede se Vela sparisce."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -318,9 +318,9 @@ L'[informativa sulla privacy](/privacy) è l'elenco che fa fede.
 
 ## Open source
 
-Il wallet (tutte le app e il core), il relay e il servizio di tassi di cambio hanno
-licenza MIT; anche l'archivio dei dati delle chain è MIT. L'indice delle chiavi
-pubbliche è pubblico, ma non ha ancora un file di licenza. Codice:
+Tutto ha licenza MIT: il wallet (tutte le app e il core), il relay, l'indice delle
+chiavi pubbliche, il servizio di tassi di cambio e l'archivio dei dati delle chain.
+Codice:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Nessun token

@@ -1,7 +1,7 @@
 ---
 title: 自托管指南
 description: "Vela 替你运行的每一样东西、各自的用途，以及如何换成你自己的——中继、公钥索引、链数据、汇率和各个 App；还有唯一无法替换的那一样，以及没有 getvela.app 时怎么办。"
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>

@@ -144,3 +144,23 @@ vela-relay*, as Indonesian developer writing borrows it.
 | docs `self-hosting` | intro limit removed; two code comments; "Perlu diketahui" bullet; chain-data paragraph; relay line removed from "Yang masih mengarah ke Vela" | – | |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy written for the reader who self-hosts and compiles; p256-index
+now MIT) into `id.json` and four docs. Terms unchanged: *hosting sendiri*, *kompilasi*,
+*relay*, *treasury*, *indeks kunci publik*, *data chain*, *kunci keamanan fisik*,
+*kuotasi*, *bundler ERC-4337 umum* (as `self-hosting.md` already says it).
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description`, `.ogDescription`, `.organization` | build and host it yourself; *non-kustodial* → *bisa di-hosting sendiri* in `organization` | – | "key index" rendered as the full *indeks kunci publik*, the site term |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | "Atau hosting sendiri seluruh stack-nya" | – | *stack* kept as the loanword Indonesian developers use |
+| `home.why.more` | new teaser | – | *kompromi yang kami pilih*, as in the docs' "Bacaan lebih dalam" |
+| `home.compare.rows` | reordered to the new en order; Source code cell → "…</a>, semuanya MIT" | – | `<a>` verbatim |
+| `home.faq.items` | new 7-item order; three new answers ("Bisakah saya menjalankan semuanya sendiri?", "…relay sendiri?", "Kunci apa saja…?") and the merged lose-a-key/account answer | – | old wording reused where it carries (*hilang selamanya*, *membelanjakan isi dompet*, *kunci tidak bisa dihapus*); `1-of-n` and FIDO2 kept |
+| `getStarted.lede` | + "Setiap aplikasi juga bisa dikompilasi dari kode sumber." | – | |
+| docs `introduction` | new opening (open source, hosting sendiri); "Tetap jalan tanpa kami" first and rewritten; table reordered + relay/fee row | – | *non-kustodial* dropped from the opening, as en dropped "self-custodial" |
+| docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
+
+No High or Medium findings open.

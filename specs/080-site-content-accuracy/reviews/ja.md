@@ -132,3 +132,22 @@ five single-string axes; no High or Medium left open. Docs keep one line per par
 | docs `self-hosting` | intro limit dropped; `VELA_RELAY_CHAIN_DIRECTORY_URL` comment lines in both code blocks; 知っておくこと bullet; chain-data paragraph; relay line removed from the final list | — | チェーンディレクトリ / Vela のコピー as the file already said |
 
 Nothing fixed beyond the brief.
+
+## Update 2026-09-22 (audience)
+
+Carried the en + zh audience revision (commit 66a3c789: copy for the reader who self-hosts
+and builds from source; p256-index now MIT) into ja. Each changed string checked on the five
+single-string axes; no High or Medium left open. `messages.test.ts -t "ja"` passes.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description` / `.ogDescription` / `.organization` | build-and-host framing; organization セルフカストディ型 → オープンソースでセルフホスト可能な | — | セルフホスト可能 as the whitepaper diagram already writes it |
+| `home.hero.ctaSelfHost` (new) | または、スタック全体を自分で動かす | — | inserted after `ctaCode`; 自分で動かす is the sidebar's verb |
+| `home.why.more` | 長い版 — ほかのウォレットで受け入れられなかったこと、そして私たちが選んだトレードオフ | — | トレードオフ as the docs say it |
+| `home.compare.rows` | reordered to the new en order; Source code cell → 「…を公開</a>。すべて MIT」 | — | anchor unchanged |
+| `home.faq.items` | new order; three new answers (すべて自分で動かせますか？ / 自分のリレーを動かせますか？ / どの鍵を使えますか？) and the merged lose-a-key/account answer | — | reused the old iCloud キーチェーン / Google パスワードマネージャー, シードフレーズもメールアドレスも…, 乗っ取られた wording; 1-of-n kept in Latin script |
+| `getStarted.lede` | + どのアプリも、ソースからビルドできます。 | — | |
+| docs `introduction` | opening now オープンソースでセルフホスト可能なウォレット; 「私たちがいなくても動く」 bullet first and rewritten; table reordered with the new relay/fee row | — | |
+| docs `faq`, `self-hosting`, `whitepaper` | all MIT including the index; （Rust、MIT）; licence-file sentence deleted | — | |
+
+Nothing fixed beyond the brief.

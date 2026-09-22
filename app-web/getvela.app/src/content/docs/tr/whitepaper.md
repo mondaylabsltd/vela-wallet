@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -300,9 +300,8 @@ servis IP adresinizi görür. Web sitesi çerezsiz bir analitik kullanır. Bağl
 
 ## Açık kaynak
 
-Cüzdan (bütün uygulamalar ve çekirdek), relay ve döviz kuru servisi MIT lisanslıdır;
-zincir verisi dizini de MIT'dir. Açık anahtar dizini herkese açıktır ama henüz bir
-lisans dosyası yoktur. Kod:
+Her şey MIT lisanslıdır: cüzdan (bütün uygulamalar ve çekirdek), relay, açık anahtar
+dizini, döviz kuru servisi ve zincir verisi dizini. Kod:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Token yok

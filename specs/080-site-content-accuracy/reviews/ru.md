@@ -144,3 +144,24 @@ service), passkey indeclinable and never the bare object of *подписыва�
 | docs `self-hosting` | intro limit removed; two code comments; «Что нужно знать» bullet; chain-data paragraph; relay line removed from «Что всё равно указывает на Vela» | – | Docker comment gets a comma after `OPERATOR_SECRET` so the added item joins the list before «и» |
 
 No High or Medium findings open.
+
+## Update 2026-09-22 (audience)
+
+Carried commit 66a3c789 (copy written for the reader who self-hosts and compiles; p256-index
+now MIT) into `ru.json` and four docs. Terms unchanged: *самостоятельное развёртывание* /
+*развернуть у себя*, *собрать*, *релей*, *казна*, *индекс публичных ключей*, *данные
+сетей*, *аппаратный ключ безопасности*, *бандлер*, *компромисс* (trade-off); passkey
+indeclinable.
+
+| String / section | Change | Severity of anything fixed beyond the brief | Note |
+| --- | --- | --- | --- |
+| `home.meta.description`, `.ogDescription`, `.organization` | build and host it yourself; *некастодиальный* → *с возможностью самостоятельного развёртывания* in `organization` | – | `organization` avoids a «который»-clause next to «Safe», which would read as "a Safe you can deploy" |
+| `home.hero.ctaSelfHost` (new, after `ctaCode`) | «Или разверните весь стек у себя» | – | *стек* is the usual Russian developer word |
+| `home.why.more` | «Длинная версия — с чем мы не смогли смириться в других кошельках и какой компромисс выбрали» | – | |
+| `home.compare.rows` | reordered to the new en order; Source code cell → «…</a>, всё под MIT» | – | `<a>` verbatim |
+| `home.faq.items` | new 7-item order; three new answers and the merged lose-a-key/account answer | – | old wording reused («удалить ключи нельзя», «тратить средства вашего кошелька»); the relay answer reuses the docs' «обычные бандлеры ERC-4337 не реализуют» |
+| `getStarted.lede` | + «Любое приложение можно также собрать из исходного кода.» | – | |
+| docs `introduction` | new opening (открытый код, можно развернуть у себя); «Работает без нас» first and rewritten; table reordered + relay/fee row | – | *некастодиальный* dropped from the opening, as en dropped "self-custodial" |
+| docs `faq`, `self-hosting`, `whitepaper` | everything MIT incl. the index; "(Rust, MIT)"; licence-file sentence deleted | – | |
+
+No High or Medium findings open.

@@ -95,16 +95,17 @@
 	"home": {
 		"meta": {
 			"title": "Vela Wallet – Eine Ethereum-Wallet, die wirklich dir gehört",
-			"description": "Eine quelloffene Ethereum-Wallet, die du auch ohne uns betreiben kannst. Signiert wird mit Passkeys oder Sicherheitsschlüsseln – ohne Seed-Phrase. Dein Konto ist ein unverändertes Safe, und jeder Dienst dahinter ist Open Source.",
+			"description": "Eine quelloffene Ethereum-Wallet, die du selbst bauen und hosten kannst: Apps, Relay, Public-Key-Index und Chain-Daten. Ein unverändertes Safe, signiert mit Passkeys oder Hardware-Sicherheitsschlüsseln, ohne Seed-Phrase.",
 			"ogTitle": "Vela Wallet – Eine Ethereum-Wallet, die wirklich dir gehört",
-			"ogDescription": "Quelloffene Ethereum-Wallet auf einem unveränderten Safe. Passkeys oder Sicherheitsschlüssel, keine Seed-Phrase und quelloffene Dienste, die du selbst betreiben kannst.",
-			"organization": "Eine quelloffene Ethereum-Wallet zur Selbstverwahrung, gebaut auf einem unveränderten Safe, signiert mit Passkeys oder Sicherheitsschlüsseln und ohne Seed-Phrase."
+			"ogDescription": "Selbst bauen, selbst betreiben: eine Ethereum-Wallet unter MIT-Lizenz auf einem unveränderten Safe, mit Passkeys oder Sicherheitsschlüsseln – und jeder Dienst ist Open Source.",
+			"organization": "Eine quelloffene, selbst hostbare Ethereum-Wallet, gebaut auf einem unveränderten Safe, signiert mit Passkeys oder Sicherheitsschlüsseln und ohne Seed-Phrase."
 		},
 		"hero": {
 			"headline": "Eine Ethereum-Wallet, die wirklich dir gehört",
 			"subtitle": "Signiert wird auf deinem Gerät. Der private Schlüssel deines Passkeys gelangt nie zu Vela.",
 			"ctaCreate": "Loslegen",
 			"ctaCode": "Code lesen",
+			"ctaSelfHost": "Oder den ganzen Stack selbst hosten",
 			"facts": [
 				{
 					"term": "Dein Konto ist ein unverändertes Safe v1.4.1.",
@@ -136,7 +137,7 @@
 			"heading": "Warum wir es gebaut haben",
 			"p1": "Wir haben <a href=\"https://docs.cdp.coinbase.com/coinbase-wallet/overview\" target=\"_blank\" rel=\"noopener\">Base Account</a> (heute Teil von Coinbase Wallet) täglich benutzt und mochten es. Dann stießen wir an die Grenzen: eine Wiederherstellungsphrase, die auf einer Website erzeugt wird, der du einfach vertrauen musst, keine eigenen Netzwerke, nichts, was du selbst hosten kannst, und ein Signaturdienst, dessen Code nicht öffentlich ist – verschwindet er, gibt es keinen veröffentlichten Weg, auf dem dein Passkey noch an dein Konto kommt.",
 			"p2": "Vela ist die Version, in der wir bereit waren, Geld liegen zu lassen. Die Passkey-Signatur haben wir behalten, aber dafür gesorgt, dass die Wallet nicht von uns abhängt.",
-			"more": "Die lange Fassung – wo soll man zwölf Wörter eigentlich aufbewahren?"
+			"more": "Die lange Fassung – was wir bei anderen Wallets nicht akzeptieren konnten und für welchen Kompromiss wir uns entschieden haben"
 		},
 		"tradeoffs": {
 			"heading": "Die Nachteile, vorweg",
@@ -167,10 +168,40 @@
 					"base": "Coinbase-Smart-Account"
 				},
 				{
+					"feature": "Vollständiges Selbsthosten",
+					"vela": "Apps und Backend-Dienste, mit Lücken, die die Anleitung zum Selbsthosten auflistet; Passkeys bleiben an getvela.app gebunden",
+					"metamask": "Client und RPC wählst oder betreibst du selbst",
+					"base": "Nicht möglich"
+				},
+				{
+					"feature": "Quellcode",
+					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps und Dienste öffentlich</a>, alle unter MIT-Lizenz",
+					"metamask": "Öffentlich, unter einer Lizenz, die nur nichtkommerzielle Nutzung erlaubt",
+					"base": "Verträge und SDK offen, der Signaturdienst nicht"
+				},
+				{
+					"feature": "Eigene Netzwerke",
+					"vela": "Jedes EVM-Netzwerk, das Velas Anforderungen erfüllt; die meisten fehlenden Verträge kannst du selbst bereitstellen",
+					"metamask": "Eigene EVM-Netzwerke und RPCs",
+					"base": "Eine feste Liste von Netzwerken"
+				},
+				{
 					"feature": "Signaturschlüssel",
 					"vela": "Passkeys oder Sicherheitsschlüssel, bis zu sieben",
 					"metamask": "Der private Schlüssel hinter einer Seed-Phrase; Hardware-Wallets werden unterstützt",
 					"base": "Passkey oder Wiederherstellungsphrase"
+				},
+				{
+					"feature": "Später einen Schlüssel hinzufügen",
+					"vela": "Nicht möglich – die Schlüssel werden beim Erstellen festgelegt",
+					"metamask": "Nicht möglich – ein Schlüssel pro Konto",
+					"base": "Unterstützt"
+				},
+				{
+					"feature": "Wenn ein Schlüssel verloren geht",
+					"vela": "Mit einem anderen hinzugefügten oder synchronisierten Schlüssel signieren",
+					"metamask": "Aus der Seed-Phrase wiederherstellen",
+					"base": "Mit einem anderen hinzugefügten oder synchronisierten Schlüssel signieren"
 				},
 				{
 					"feature": "Gas pro Transaktion",
@@ -183,24 +214,6 @@
 					"vela": "Nicht angeboten",
 					"metamask": "In manchen Netzwerken",
 					"base": "Wenn die App es übernimmt"
-				},
-				{
-					"feature": "Eigene Netzwerke",
-					"vela": "Jedes EVM-Netzwerk, das Velas Anforderungen erfüllt; die meisten fehlenden Verträge kannst du selbst bereitstellen",
-					"metamask": "Eigene EVM-Netzwerke und RPCs",
-					"base": "Eine feste Liste von Netzwerken"
-				},
-				{
-					"feature": "Wenn ein Schlüssel verloren geht",
-					"vela": "Mit einem anderen hinzugefügten oder synchronisierten Schlüssel signieren",
-					"metamask": "Aus der Seed-Phrase wiederherstellen",
-					"base": "Mit einem anderen hinzugefügten oder synchronisierten Schlüssel signieren"
-				},
-				{
-					"feature": "Später einen Schlüssel hinzufügen",
-					"vela": "Nicht möglich – die Schlüssel werden beim Erstellen festgelegt",
-					"metamask": "Nicht möglich – ein Schlüssel pro Konto",
-					"base": "Unterstützt"
 				},
 				{
 					"feature": "Gebündelte Transaktionen",
@@ -219,18 +232,6 @@
 					"vela": "Eine unabhängige Signaturseite, fertig gebaut, aber noch nicht an die Apps angebunden",
 					"metamask": "Risikowarnungen von Drittanbietern",
 					"base": "—"
-				},
-				{
-					"feature": "Vollständiges Selbsthosten",
-					"vela": "Apps und Backend-Dienste, mit Lücken, die die Anleitung zum Selbsthosten auflistet; Passkeys bleiben an getvela.app gebunden",
-					"metamask": "Client und RPC wählst oder betreibst du selbst",
-					"base": "Nicht möglich"
-				},
-				{
-					"feature": "Quellcode",
-					"vela": "<a href=\"https://github.com/orgs/mondaylabsltd/repositories\" target=\"_blank\" rel=\"noopener\">Apps und Dienste öffentlich</a>; MIT, außer dem Index, dessen Lizenz noch aussteht",
-					"metamask": "Öffentlich, unter einer Lizenz, die nur nichtkommerzielle Nutzung erlaubt",
-					"base": "Verträge und SDK offen, der Signaturdienst nicht"
 				},
 				{
 					"feature": "Reife",
@@ -267,32 +268,32 @@
 			"heading": "Häufige Fragen",
 			"items": [
 				{
-					"q": "Was brauche ich, um eine Wallet anzulegen?",
-					"a": "Ein Handy oder einen Computer, der Passkeys unterstützt, oder Hardware-Sicherheitsschlüssel – zwei, wenn du nur Sicherheitsschlüssel verwendest. Keine Seed-Phrase, keine E-Mail, kein Startguthaben.\n\nWähle alle deine Schlüssel, bis zu sieben, beim Anlegen der Wallet. Später kannst du keine weiteren hinzufügen."
+					"q": "Kann ich alles selbst betreiben?",
+					"a": "Ja, bis auf die Domain, zu der deine Passkeys gehören. Die Apps und jeder Dienst dahinter – das Relay, der Public-Key-Index, die Chain-Daten und die Wechselkurse – stehen unter der MIT-Lizenz und laufen unter Docker oder auf Cloudflare Workers, und die Apps haben Einstellungen, mit denen du sie auf deine eigenen Dienste umstellst. Die Anleitung zum Selbsthosten geht jeden einzeln durch, einschließlich der Lücken, die manche Apps noch haben.\n\nDie Passkeys sind an getvela.app gebunden; eine Kopie der Web-Wallet auf deiner eigenen Domain ist deshalb eine andere Wallet. Die Browser-Erweiterung und selbst gebaute Apps signieren weiterhin für deine bestehende."
+				},
+				{
+					"q": "Was passiert, wenn Vela dichtmacht oder getvela.app offline geht?",
+					"a": "Dein Guthaben bleibt on-chain in deinem Safe. Jeder Dienst, den Vela betreibt, ist Open Source, und du kannst jeden davon selbst betreiben – das Relay, den Public-Key-Index, die Chain-Daten und die Wechselkurse.\n\nGeht getvela.app offline, signiert die Vela-Browser-Erweiterung weiter mit deinen vorhandenen Schlüsseln – dem Passkey dieses Geräts, einem Sicherheitsschlüssel oder einem per QR-Code verbundenen Handy –, und selbst gebaute Apps tun das auch, mit einem Handy oder einem Sicherheitsschlüssel."
+				},
+				{
+					"q": "Kann ich mein eigenes Relay betreiben?",
+					"a": "Ja: vela-relay, geschrieben in Rust, unter Docker oder auf Cloudflare Workers. Lade seine Treasury mit dem Coin jeder Chain auf und trag seine URL in die Wallet ein. Die Gebühr, die du signierst, geht dann an deine eigene Treasury; über Wallet und Relay zusammengerechnet zahlst du also ungefähr die echten Gaskosten.\n\nEs muss vela-relay sein: Die Wallet fragt das Gebührenangebot über eine Methode ab, die allgemeine ERC-4337-Bundler nicht implementieren."
+				},
+				{
+					"q": "Welche Schlüssel kann ich verwenden?",
+					"a": "Passkeys – synchronisiert über den iCloud-Schlüsselbund, den Google Passwortmanager oder einen anderen Passwortmanager –, ein anderes Handy per QR-Code und FIDO2-Hardware-Sicherheitsschlüssel: einen bis sieben, beim Anlegen der Wallet gewählt und danach nicht mehr änderbar. Jeder einzelne davon kann signieren (1-of-n). Ein einziger Schlüssel ohne Synchronisierung, etwa ein Sicherheitsschlüssel allein, braucht einen zweiten.\n\nKeine Seed-Phrase, keine E-Mail, kein Startguthaben."
+				},
+				{
+					"q": "Was, wenn ich einen Schlüssel verliere oder mein Apple- oder Google-Konto kompromittiert wird?",
+					"a": "Ein synchronisierter Passkey ist auf deinem neuen Gerät wieder da. Ein nicht synchronisierter Schlüssel, der verloren geht, ist weg; dann signierst du mit einem anderen Schlüssel, den du hinzugefügt hast. War er dein einziger, ist die Wallet verloren.\n\nWird ein Konto kompromittiert, das einen deiner Passkeys synchronisiert, kann derjenige, der es kontrolliert, womöglich aus deiner Wallet ausgeben – und Schlüssel lassen sich nicht entfernen. Verschieb dein Guthaben in eine neue Wallet mit Schlüsseln, die nicht von diesem Konto abhängen. Mit Hardware-Sicherheitsschlüsseln entsteht diese Abhängigkeit gar nicht erst."
 				},
 				{
 					"q": "Kann ich Vela mit dApps nutzen?",
 					"a": "Ja. Für dApps sieht Vela aus wie jede andere Browser-Wallet.\n\nDas funktioniert in der Vela-Browser-Erweiterung und im eingebauten Browser der Desktop-App (macOS, Windows) sowie der iPhone- und der Android-App. Die Web-Wallet verbindet sich nicht mit dApps."
 				},
 				{
-					"q": "Was, wenn ich mein Handy verliere?",
-					"a": "Wenn dein Passkey mit dem iCloud-Schlüsselbund oder dem Google Passwortmanager synchronisiert ist, holst du ihn auf einem neuen Gerät zurück und nutzt dieselbe Wallet weiter.\n\nWar er nicht synchronisiert, brauchst du einen anderen Schlüssel – einen, den du beim Anlegen der Wallet hinzugefügt hast."
-				},
-				{
-					"q": "Was, wenn ich meinen Passkey lösche?",
-					"a": "Dieser Schlüssel ist endgültig weg. War er dein einziger, verlierst du den Zugang zur Wallet."
-				},
-				{
-					"q": "Was, wenn mein Apple- oder Google-Konto kompromittiert wird?",
-					"a": "Wer dieses Konto kontrolliert, kann womöglich einen darüber synchronisierten Passkey nutzen und aus deiner Wallet ausgeben – und ein Schlüssel lässt sich nicht entfernen. Verschieb dein Guthaben in eine neue Wallet mit Schlüsseln, die nicht von diesem Konto abhängen.\n\nWenn du von Anfang an nicht von Apple oder Google abhängen willst, erstelle deine Wallet mit Hardware-Sicherheitsschlüsseln."
-				},
-				{
 					"q": "Was kann Vela mit meinem Geld tun, und was weiß Vela über mich?",
 					"a": "Vela hat keinen Schlüssel und keine Rolle in deiner Wallet und kann dein Guthaben deshalb nicht von sich aus bewegen oder einfrieren. Die Software, die deine Schlüssel um eine Signatur bittet, schreibt allerdings Vela.\n\nEs gibt weder E-Mail noch Konto. Deine öffentlichen Schlüssel, die Art des Authentifikators hinter jedem davon, deine Schlüsselnamen, der Wallet-Name und die Adresse stehen öffentlich on-chain; Velas Dienste sehen deine IP-Adresse und die Transaktionen, die du über sie sendest. Token-Emittenten können Adressen weiterhin sperren."
-				},
-				{
-					"q": "Was passiert, wenn Vela dichtmacht oder getvela.app offline geht?",
-					"a": "Dein Guthaben bleibt on-chain in deinem Safe. Jeder Dienst, den Vela betreibt, ist Open Source, und du kannst jeden davon selbst betreiben – das Relay, den Public-Key-Index, die Chain-Daten und die Wechselkurse.\n\nGeht getvela.app offline, signiert die Vela-Browser-Erweiterung weiter mit deinen vorhandenen Schlüsseln – dem Passkey dieses Geräts, einem Sicherheitsschlüssel oder einem per QR-Code verbundenen Handy –, und selbst gebaute Apps tun das auch, mit einem Handy oder einem Sicherheitsschlüssel."
 				}
 			]
 		}
@@ -415,7 +416,7 @@
 			"description": "Vela läuft schon heute in deinem Browser; die Browser-Erweiterung und die Desktop-Apps kannst du jetzt herunterladen, die Handy-Apps folgen. Nimm, was zu dir passt."
 		},
 		"heading": "Vela holen",
-		"lede": "Eine Wallet und eine Adresse, wo immer du sie öffnest. Fang im Browser an – nichts zu installieren – oder nimm dieselbe Wallet mit in die Symbolleiste deines Browsers oder auf deinen Desktop und bald auch aufs Handy.",
+		"lede": "Eine Wallet und eine Adresse, wo immer du sie öffnest. Fang im Browser an – nichts zu installieren – oder nimm dieselbe Wallet mit in die Symbolleiste deines Browsers oder auf deinen Desktop und bald auch aufs Handy. Jede App lässt sich außerdem aus dem Quellcode bauen.",
 		"recommended": "Empfohlen",
 		"availableNow": "Jetzt verfügbar",
 		"comingSoon": "Demnächst",
@@ -486,9 +487,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "c775da953511",
+		"home": "cabecedf1819",
 		"about": "44b20f016140",
 		"roadmap": "ec62c4af0a9f",
-		"getStarted": "f7262f86ca9e"
+		"getStarted": "8bcd961ee0e8"
 	}
 }

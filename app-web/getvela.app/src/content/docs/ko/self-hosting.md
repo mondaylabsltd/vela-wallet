@@ -1,7 +1,7 @@
 ---
 title: 셀프 호스팅 가이드
 description: "Vela가 대신 운영하는 모든 것, 각각의 역할, 그리고 릴레이, 공개 키 인덱스, 체인 데이터, 환율, 앱을 직접 운영하는 것으로 바꾸는 방법. 바꿀 수 없는 단 하나와, getvela.app 없이 지내는 방법도 다룹니다."
-source: de484cb33065
+source: 5ae6005a9396
 ---
 
 <script>
@@ -185,7 +185,7 @@ curl https://your-relay/v1/treasury/100   # Gnosis의 트레저리 주소와 가
 
 <span id="index"></span>
 
-인덱스는 [p256-index](https://github.com/mondaylabsltd/p256-index)(Rust)입니다. 지갑이 만들어질
+인덱스는 [p256-index](https://github.com/mondaylabsltd/p256-index)(Rust, MIT)입니다. 지갑이 만들어질
 때 모든 키의 증명을 확인한 뒤, 키 묶음을 Gnosis의 **레지스트리 컨트랙트**에 기록하고 가스비를
 냅니다. 기존 레지스트리 `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`를 계속 쓰세요. 소유자가
 없고, 자금이 있는 주소라면 누구나 기록할 수 있으며, 모든 Vela 앱이 이 레지스트리를 직접
@@ -221,7 +221,7 @@ curl https://your-index/api/health   # "service":"webauthn-p256-publickey-regist
 
 서버는 일반 HTTP로 수신합니다(기본 포트 11256). 지갑은 `https://` 엔드포인트만 받으므로 앞에
 TLS 프록시를 두세요. 이 글을 쓰는 시점에 소스의 Dockerfile은 빌드되지 않을 수 있으며, Cargo로
-빌드하면 됩니다. 저장소에는 아직 라이선스 파일이 없습니다.
+빌드하면 됩니다.
 
 **응답하는 인덱스가 하나도 없을 때도** 기존 지갑은 작동합니다. 로그인할 때 앱이 RPC 노드를 통해
 Gnosis(그다음 이더리움)의 레지스트리 컨트랙트를 읽습니다. 키가 하나뿐인 지갑은 레지스트리 없이

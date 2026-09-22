@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -335,10 +335,9 @@ IP. Le site web utilise un outil d'analyse d'audience sans cookies. La
 
 ## Open source
 
-Le portefeuille (toutes les apps et le cœur), le relais et le service de taux de
-change sont sous licence MIT ; l'annuaire de données de chaîne l'est aussi.
-L'index des clés publiques est public, mais n'a pas encore de fichier de licence.
-Le code :
+Tout est sous licence MIT : le portefeuille (toutes les apps et le cœur), le
+relais, l'index des clés publiques, le service de taux de change et l'annuaire de
+données de chaîne. Le code :
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Aucun jeton

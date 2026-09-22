@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -302,9 +302,8 @@ IP Anda. Situs webnya memakai analitik tanpa cookie.
 
 ## Open source
 
-Dompetnya (semua aplikasi dan intinya), relay, dan layanan kurs berlisensi MIT; direktori
-data chain juga MIT. Indeks kunci publik terbuka untuk publik tetapi belum punya file
-lisensi. Kodenya:
+Semuanya berlisensi MIT: dompetnya (semua aplikasi dan intinya), relay, indeks kunci
+publik, layanan kurs, dan direktori data chain. Kodenya:
 [github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories).
 
 ## Tanpa token

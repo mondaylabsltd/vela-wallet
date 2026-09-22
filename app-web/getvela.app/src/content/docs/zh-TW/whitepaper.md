@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 怎麼運作，以及使用它時你需要、和不需要信任什麼：帳戶、金鑰、手續費、威脅模型、復原，以及 Vela 消失了會怎樣。"
-source: 662b69510225
+source: d3b8cf6739f8
 ---
 
 <script>
@@ -214,8 +214,8 @@ Vela 瀏覽器擴充功能（取得授權後可以使用 `getvela.app` 的密碼
 
 ## 開源
 
-錢包（所有應用程式和核心）、中繼和匯率服務採用 MIT 授權；鏈資料目錄同樣是 MIT。公鑰索引的程式碼是公開的，
-但目前還沒有授權條款檔案。程式碼：[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories)。
+全部採用 MIT 授權：錢包（所有應用程式和核心）、中繼、公鑰索引、匯率服務和鏈資料目錄。
+程式碼：[github.com/mondaylabsltd](https://github.com/orgs/mondaylabsltd/repositories)。
 
 ## 沒有代幣
 
