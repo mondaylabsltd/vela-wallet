@@ -112,6 +112,8 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionRoute
 import app.getvela.wallet.feature.onboarding.flow.CableQrSheet
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerSheets
 import app.getvela.wallet.feature.onboarding.flow.CreateFlowScreen
 import app.getvela.wallet.feature.onboarding.flow.EndpointSheet
 import app.getvela.wallet.feature.onboarding.flow.FlowSheet
@@ -662,22 +664,6 @@ fun VelaNavHost(
                     val notice = clearSignerNotice
                     if (notice != null && application.container.signing.value == null) {
                         android.widget.Toast.makeText(toastContext, notice, android.widget.Toast.LENGTH_LONG).show()
-                    }
-                }
-                // A send the person started has no signing sheet: the Clear
-                // Signer's waiting card stands on its own while the page is open.
-                if (clearSignerWaiting && signingController == null) {
-                    app.getvela.wallet.feature.signing.SigningLive.clearSignerWait(
-                        app.getvela.wallet.feature.signing.SigningLive.Context(
-                            strings = strings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
-                            nativeSymbol = "", walletName = "", walletAddress = "", clearSignerWaiting = true,
-                        ),
-                    )?.let { waitModel ->
-                        app.getvela.wallet.feature.signing.ClearSignerWaitingSheet(
-                            model = waitModel,
-                            onReopen = clearSigner::reopen,
-                            onCancel = clearSigner::cancel,
-                        )
                     }
                 }
                 BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
@@ -1927,6 +1913,8 @@ fun VelaNavHost(
                         },
                         onSignerUrlSave = settings::submitSignerUrl,
                         onSignerUrlReset = settings::resetSignerUrl,
+                        onRelayUrlSave = settings::submitRelayUrl,
+                        onRelayUrlReset = settings::resetRelayUrl,
                         // Spec 072: the providers page loads the saved keys and
                         // tests them; the endpoints page probes; the wizard starts
                         // clean — the phone web's own open events.
@@ -2005,6 +1993,39 @@ fun VelaNavHost(
     }
     onboarding.cableQr?.let { payload ->
         CableQrSheet(payload = payload)
+    }
+    // Spec 071/075: every Clear Signer sheet, hosted OUTSIDE the NavHost for
+    // the same reason the flow sheet is — a create, a sign-in, a send and a
+    // dApp request can each raise one, and the route under it moves while the
+    // page is open. The dApp sheet draws the waiting card itself, so the
+    // standalone one is only for a request no signing sheet is showing.
+    run {
+        val clearSignerHost = application.container.clearSigner
+        val clearSignerSheet by clearSignerHost.state.collectAsStateWithLifecycle()
+        val signingUp by application.container.signing.collectAsStateWithLifecycle()
+        val csStrings = LocalVelaStrings.current
+        if (clearSignerSheet is ClearSignerChannel.State.Waiting && signingUp == null) {
+            app.getvela.wallet.feature.signing.SigningLive.clearSignerWait(
+                app.getvela.wallet.feature.signing.SigningLive.Context(
+                    strings = csStrings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
+                    nativeSymbol = "", walletName = "", walletAddress = "", clearSignerWaiting = true,
+                ),
+            )?.let { waitModel ->
+                app.getvela.wallet.feature.signing.ClearSignerWaitingSheet(
+                    model = waitModel,
+                    onReopen = clearSignerHost::reopen,
+                    onCancel = clearSignerHost::cancel,
+                )
+            }
+        }
+        // Where the signer is, the pairing code for another device, and the
+        // six digits — every one of them BEFORE anything is sent.
+        ClearSignerSheets(
+            state = clearSignerSheet,
+            onWhere = clearSignerHost::chooseWhere,
+            onConfirmCode = clearSignerHost::confirmCode,
+            onCancel = clearSignerHost::cancel,
+        )
     }
     // The scan method's "Location needs to be on" explainer (API ≤30) — ABOVE
     // the QR sheet, since the ceremony that raised it is the one showing the QR.

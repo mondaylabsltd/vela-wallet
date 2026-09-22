@@ -165,6 +165,9 @@ data class SettingsActions(
     /** Spec 071: the Clear Signer page, as typed, and back to the official one. */
     val onSignerUrlSave: (String) -> Unit = {},
     val onSignerUrlReset: () -> Unit = {},
+    /** Spec 075: the relay a cross-device pairing goes through. */
+    val onRelayUrlSave: (String) -> Unit = {},
+    val onRelayUrlReset: () -> Unit = {},
     /** Spec 072: a page came on screen — the providers and endpoints pages ask the core to load and test. */
     val onPageShown: (SettingsPage) -> Unit = {},
     /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
@@ -214,6 +217,7 @@ fun SettingsRoute(
                 SettingsFixtures.FEE_SPEED_ROW -> overlay = SettingsOverlay.FeeSpeed
                 SettingsFixtures.SIGN_WITH_ROW -> overlay = SettingsOverlay.SignWith
                 SettingsFixtures.SIGNER_PAGE_ROW -> overlay = SettingsOverlay.SignerPage
+                SettingsFixtures.RELAY_ROW -> overlay = SettingsOverlay.SignerRelay
                 "number-format" -> overlay = SettingsOverlay.NumberFormat
                 "date-format" -> overlay = SettingsOverlay.DateFormat
                 "time-format" -> overlay = SettingsOverlay.TimeFormat
@@ -302,6 +306,8 @@ fun SettingsRoute(
         },
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
+        onRelayUrlSave = actions.onRelayUrlSave,
+        onRelayUrlReset = actions.onRelayUrlReset,
     )
 }
 
@@ -356,6 +362,8 @@ fun SettingsScreen(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
+    onRelayUrlSave: (String) -> Unit = {},
+    onRelayUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -472,6 +480,8 @@ fun SettingsScreen(
                 onRpcFixPrimary = onRpcFixPrimary,
                 onSignerUrlSave = onSignerUrlSave,
                 onSignerUrlReset = onSignerUrlReset,
+                onRelayUrlSave = onRelayUrlSave,
+                onRelayUrlReset = onRelayUrlReset,
             )
         }
     }
@@ -1154,6 +1164,8 @@ private fun SettingsSheet(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
+    onRelayUrlSave: (String) -> Unit = {},
+    onRelayUrlReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1206,6 +1218,13 @@ private fun SettingsSheet(
                     model.signerPage,
                     onSave = onSignerUrlSave,
                     onReset = onSignerUrlReset,
+                    onDone = onDismiss,
+                )
+                // Spec 075: the same sheet, the relay's words and events.
+                SettingsOverlay.SignerRelay -> SignerPageSheetBody(
+                    model.signerRelay,
+                    onSave = onRelayUrlSave,
+                    onReset = onRelayUrlReset,
                     onDone = onDismiss,
                 )
                 SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {

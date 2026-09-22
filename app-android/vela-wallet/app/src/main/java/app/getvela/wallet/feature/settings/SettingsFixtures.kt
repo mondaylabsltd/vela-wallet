@@ -250,6 +250,15 @@ object SettingsFixtures {
                     subtitle = s.t("settings.signing.pageSubtitle"),
                     value = s.t("settings.signing.pageOfficial"),
                 ),
+                // Spec 075: the relay a cross-device pairing goes through, beside
+                // the page it pairs with.
+                SettingsRowModel(
+                    id = RELAY_ROW,
+                    title = s.t("settings.signing.relayTitle"),
+                    icon = SettingsIcon.Zap,
+                    subtitle = s.t("settings.signing.relaySubtitle"),
+                    value = s.t("settings.signing.relayOfficial"),
+                ),
                 SettingsRowModel(
                     id = "storage",
                     title = s.t(I18nKeys.SettingsUi.STORAGE_TITLE),
@@ -691,6 +700,9 @@ object SettingsFixtures {
     /** The Settings rows of the default "Sign with" and the Clear Signer page (spec 071). */
     const val SIGN_WITH_ROW = "sign-with"
     const val SIGNER_PAGE_ROW = "signer-page"
+
+    /** Spec 075: the Clear Signer relay. */
+    const val RELAY_ROW = "signer-relay"
 
     /**
      * The default speed's sheet: the three speeds, fastest first, each with

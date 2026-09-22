@@ -75,6 +75,9 @@ interface KeyValueStore {
         /** The default "Sign with" and the Clear Signer page (spec 071). Survive sign-out. */
         const val SIGN_METHOD = "vela.signMethod"
         const val CLEAR_SIGNER_URL = "vela.clearSignerUrl"
+
+        /** Spec 075: the relay a cross-device pairing goes through. Survives sign-out. */
+        const val CLEAR_SIGNER_RELAY = "vela.clearSignerRelay"
         const val CUSTOM_NETWORKS = "vela.customNetworks"
 
         /**
