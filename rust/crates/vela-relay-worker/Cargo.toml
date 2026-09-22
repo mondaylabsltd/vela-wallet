@@ -1,0 +1,26 @@
+[package]
+name = "vela-relay-worker"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "The Clear Signer relay (vela-relay/1) as a Cloudflare Worker: one Durable Object per room, holding its two sockets on the WebSocket hibernation API."
+publish = false
+
+# Its own workspace, on purpose: this crate only builds for wasm32-unknown-unknown
+# (through worker-build), so the rust/ workspace excludes it and its
+# `cargo test --workspace` never tries to build it.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vela-relay = { path = "../vela-relay" }
+# worker-build 0.8.x builds against worker 0.8.x — bump them together.
+worker = "0.8.6"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1
