@@ -2339,6 +2339,14 @@ public protocol ClearSignerFramerProtocol: AnyObject, Sendable {
     func fitToMtu(mtu: UInt32)  -> UInt32
     
     /**
+     * The same for CoreBluetooth, which reports what a notification may
+     * carry (`CBCentral.maximumUpdateValueLength` = the MTU less three)
+     * rather than the MTU. Handing that number to `fit_to_mtu` would cost
+     * three bytes a frame and break nothing, so nothing would find it.
+     */
+    func fitToValueLen(valueLen: UInt32)  -> UInt32
+    
+    /**
      * The frames for one message, in order. `sealed` sets the flag bit that
      * says this is not a handshake hello.
      */
@@ -2451,6 +2459,22 @@ open func fitToMtu(mtu: UInt32) -> UInt32  {
     uniffi_vela_core_uniffi_fn_method_clearsignerframer_fit_to_mtu(
             self.uniffiCloneHandle(),
         FfiConverterUInt32.lower(mtu),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The same for CoreBluetooth, which reports what a notification may
+     * carry (`CBCentral.maximumUpdateValueLength` = the MTU less three)
+     * rather than the MTU. Handing that number to `fit_to_mtu` would cost
+     * three bytes a frame and break nothing, so nothing would find it.
+     */
+open func fitToValueLen(valueLen: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsignerframer_fit_to_value_len(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt32.lower(valueLen),uniffiCallStatus
     )
 })
 }
@@ -13957,6 +13981,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_fit_to_mtu() != 15787) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_fit_to_value_len() != 41531) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_clearsignerframer_frames() != 19504) {

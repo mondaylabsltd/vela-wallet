@@ -1377,6 +1377,7 @@
    "clearSignerNearbyName": "Pilih \"{{name}}\" di daftar perangkat browser pada perangkat lain Anda.",
    "clearSignerBluetoothNeeded": "Vela memerlukan izin Bluetooth agar halaman penandatanganan dapat menemukan perangkat ini.",
    "clearSignerBluetoothOff": "Aktifkan Bluetooth untuk memasangkan dengan cara ini.",
+   "clearSignerBluetoothUnsupported": "Perangkat ini tidak bisa dipasangkan dengan cara ini. Gunakan Clear Signer di perangkat ini, atau perangkat lain.",
    "clearSignerPair": "Buka Clear Signer di perangkat Anda yang lain",
    "clearSignerPairHint": "Pindai kode ini dengan perangkat yang menyimpan kunci sandi Anda, atau buka tautannya di sana.",
    "clearSignerPairWaiting": "Menunggu perangkat lain…",

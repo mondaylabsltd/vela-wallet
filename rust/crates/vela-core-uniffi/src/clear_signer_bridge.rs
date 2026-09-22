@@ -635,6 +635,15 @@ impl ClearSignerFramer {
         u32::try_from(fitted).unwrap_or(u32::MAX)
     }
 
+    /// The same for CoreBluetooth, which reports what a notification may
+    /// carry (`CBCentral.maximumUpdateValueLength` = the MTU less three)
+    /// rather than the MTU. Handing that number to `fit_to_mtu` would cost
+    /// three bytes a frame and break nothing, so nothing would find it.
+    pub fn fit_to_value_len(&self, value_len: u32) -> u32 {
+        let fitted = lock(&self.inner).fit_to_value_len(value_len as usize);
+        u32::try_from(fitted).unwrap_or(u32::MAX)
+    }
+
     /// The id for the next message. Take it BEFORE sealing: the frames and
     /// the AAD must carry the same one.
     pub fn next_id(&self) -> u8 {

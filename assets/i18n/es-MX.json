@@ -1380,6 +1380,7 @@
    "clearSignerNearbyName": "Elige \"{{name}}\" en la lista de dispositivos del navegador en tu otro dispositivo.",
    "clearSignerBluetoothNeeded": "Vela necesita permiso de Bluetooth para que la página de firma encuentre este dispositivo.",
    "clearSignerBluetoothOff": "Activa el Bluetooth para vincular de esta forma.",
+   "clearSignerBluetoothUnsupported": "Este dispositivo no puede vincularse de esta forma. Usa el Clear Signer en este dispositivo, o en otro.",
    "clearSignerPair": "Abre el Clear Signer en tu otro dispositivo",
    "clearSignerPairHint": "Escanea este código con el dispositivo que tiene tu llave de acceso, o abre el enlace ahí.",
    "clearSignerPairWaiting": "Esperando al otro dispositivo…",

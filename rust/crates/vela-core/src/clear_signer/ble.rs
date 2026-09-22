@@ -126,7 +126,20 @@ impl Framer {
     /// The result is clamped to [`MIN_CHUNK`]..=[`DEFAULT_CHUNK`]: an MTU
     /// smaller than the floor still sends, in frames the link will carry.
     pub fn fit_to_mtu(&mut self, mtu: usize) -> usize {
-        let room = mtu.saturating_sub(3 + HEADER);
+        self.fit_to_value_len(mtu.saturating_sub(3))
+    }
+
+    /// The same, for a platform that reports what a notification may CARRY
+    /// rather than the MTU it was negotiated from.
+    ///
+    /// CoreBluetooth does: `CBCentral.maximumUpdateValueLength` is already
+    /// `mtu - 3`, and two of the three peripherals are CoreBluetooth, so the
+    /// conversion belongs here instead of in each of them. Passing that number
+    /// to [`Self::fit_to_mtu`] would quietly cost three bytes per frame —
+    /// nothing breaks, so nothing would ever find it (iOS, spec 075 T041,
+    /// wrote the conversion by hand rather than risk exactly that).
+    pub fn fit_to_value_len(&mut self, value_len: usize) -> usize {
+        let room = value_len.saturating_sub(HEADER);
         self.chunk = room.clamp(MIN_CHUNK, DEFAULT_CHUNK);
         self.chunk
     }
@@ -452,6 +465,18 @@ mod tests {
             MIN_CHUNK,
             "nonsense still sends something"
         );
+
+        // CoreBluetooth reports the notification's capacity, not the MTU it
+        // came from. The two doors must land in the same place.
+        let mut core_bluetooth = Framer::new();
+        for mtu in [512, 247, 185, 67, 23] {
+            let mut from_mtu = Framer::new();
+            assert_eq!(
+                core_bluetooth.fit_to_value_len(mtu - 3),
+                from_mtu.fit_to_mtu(mtu),
+                "mtu {mtu}"
+            );
+        }
 
         // Every frame of a real message fits what the link takes.
         framer.fit_to_mtu(247);
