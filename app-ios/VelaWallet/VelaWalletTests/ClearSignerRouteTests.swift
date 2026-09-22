@@ -227,6 +227,54 @@ struct ClearSignerSessionTests {
         #expect(await socket.frame()?.opcode == 0x8)
     }
 
+    /// A page that answered the first request and then went away has closed
+    /// without signing the SECOND one — a decline, not a channel that could
+    /// not be opened. The two get different sentences on screen, and telling
+    /// somebody "the answer does not match" when they closed a tab is a lie
+    /// about what they did.
+    @Test func aPageThatLeavesBetweenRequestsIsADecline() async throws {
+        let page = ClearSignerCeremonyFixture()
+        let register = page.registerOperation()
+        let request = try #require(clearSignerCeremonyRequest(
+            operationJson: ClearSignerCeremonyFixture.json(register),
+            id: "x", walletName: "Mine", registry: "https://r.test"
+        ))
+        let channel = ClearSignerChannel(
+            signerUrl: page.signerUrl,
+            first: .ceremony(request: request,
+                             operationJson: ClearSignerCeremonyFixture.json(register),
+                             memberChallenge: nil)
+        )
+        let port = try #require(await channel.open())
+        let socket = RawPage(port: port)
+        #expect(await socket.connect())
+        let intent = try #require(await socket.hello(origin: page.origin, token: channel.token))
+        await socket.sendJSON(
+            ["v": 1, "t": "result", "id": intent["id"] as? String ?? ""]
+                .merging(page.createAnswer()) { _, new in new }
+        )
+        guard case .ceremony(.registered) = await channel.ending() else {
+            Issue.record("the registration was not accepted")
+            return
+        }
+        socket.close()
+        // Give the closed socket a turn to be noticed.
+        try await Task.sleep(for: .milliseconds(200))
+        let member = page.memberProofOperation()
+        let memberRequest = try #require(clearSignerCeremonyRequest(
+            operationJson: ClearSignerCeremonyFixture.json(member),
+            id: "y", walletName: "Mine", registry: "https://r.test"
+        ))
+        let ending = await channel.send(.ceremony(
+            request: memberRequest,
+            operationJson: ClearSignerCeremonyFixture.json(member),
+            memberChallenge: Data(repeating: 1, count: 32)
+        ))
+        #expect(ending == .ceremony(.refused(refusal: .declined)))
+        #expect(ClearSignerNotice(ending: ending) == .closed)
+        channel.end()
+    }
+
     /// A member proof over a challenge the page did NOT fetch for these
     /// inputs is refused — the one check that keeps "confirm this key joins
     /// your wallet" from being a signature over something else.
@@ -814,6 +862,39 @@ struct ClearSignerExecutorTests {
         operation["method"] = "platform"
         _ = await executor(port).perform(operation)
         #expect(port.asked.isEmpty)
+    }
+
+    /// The re-publish's LIVE member proof (recovery's third signature) goes to
+    /// the page the CORE named for that member — `RegistryPublishMember`'s own
+    /// `signer_origin`, never a lookup here and never the page Settings holds.
+    /// A member with no page is not routed to one at all.
+    @Test func aPublishMemberSignsOnThePageTheCoreNamedForIt() throws {
+        let group = "04" + String(repeating: "ab", count: 64)
+        let behindAPage = PublishMember(json: [
+            "credential_id": "cred-1", "public_key_hex": "04" + String(repeating: "11", count: 64),
+            "attestation_hex": "beef", "transports": "internal",
+            "signer_origin": "https://sign.example",
+        ])
+        #expect(behindAPage.signerOrigin == "https://sign.example",
+                "the member's own page was dropped on the way in")
+        let routed = OnboardingExecutor.memberProofOperation(behindAPage, groupPublicKey: group)
+        #expect(routed["method"] as? String == "clear_signer")
+        #expect(routed["signer_origin"] as? String == "https://sign.example")
+        #expect(routed["credential_id"] as? String == "cred-1")
+        #expect(routed["group_public_key_hex"] as? String == group)
+        // The core reads it as the ceremony it is, from this very JSON.
+        let request = clearSignerCeremonyRequest(
+            operationJson: ClearSignerCeremonyFixture.json(routed),
+            id: "x", walletName: "Mine", registry: "https://r.test"
+        )
+        #expect(request != nil)
+
+        let ordinary = PublishMember(json: [
+            "credential_id": "cred-2", "public_key_hex": "04" + String(repeating: "22", count: 64),
+        ])
+        #expect(ordinary.signerOrigin.isEmpty)
+        let unrouted = OnboardingExecutor.memberProofOperation(ordinary, groupPublicKey: group)
+        #expect(unrouted["method"] as? String == "", "a key that is not behind a page must not be sent to one")
     }
 }
 

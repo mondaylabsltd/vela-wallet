@@ -331,8 +331,21 @@ final class OnboardingExecutor {
                     network: false
                 )
             }
+            let bytes = try fromHex(s: Self.stripHex(memberChallenge))
+            // Spec 075: a member that lives behind a signer page signs there,
+            // on the page the CORE named for it — never on whichever page
+            // Settings happens to hold, and never on a platform sheet that
+            // cannot see the key. `member.signer_origin` is the whole answer;
+            // this end does not look the key up.
+            if let answer = try await onTheClearSigner(
+                Self.memberProofOperation(member, groupPublicKey: groupPublicKey),
+                memberChallenge: bytes
+            ) {
+                proven.append(ProvenMember(member: member, proof: try Self.memberProof(answer)))
+                continue
+            }
             let assertion = try await passkey.assert(
-                challenge: try fromHex(s: Self.stripHex(memberChallenge)),
+                challenge: bytes,
                 credentialIdHex: member.credentialIdHex,
                 method: method
             )
@@ -404,6 +417,28 @@ final class OnboardingExecutor {
         case .failed(let kind, let message):
             throw PasskeyFailure(kind: kind, message: message ?? "")
         }
+    }
+
+    /// A `sign_member_proof` for one publish member, in the wire shape
+    /// `clear_signer::ceremony` reads — the page then asks the registry for
+    /// the challenge these same inputs bind, and the core demands it match the
+    /// one the wallet fetched.
+    ///
+    /// `method` is the member's own route rather than the publish's: a set can
+    /// mix, and only a member the core named a page for goes to a page.
+    static func memberProofOperation(
+        _ member: PublishMember, groupPublicKey: String
+    ) -> [String: Any] {
+        [
+            "type": "sign_member_proof",
+            "credential_id": member.credentialIdHex,
+            "public_key_hex": member.publicKeyHex,
+            "attestation_hex": member.attestationHex,
+            "transports": member.transports,
+            "method": member.signerOrigin.isEmpty ? "" : "clear_signer",
+            "group_public_key_hex": groupPublicKey,
+            "signer_origin": member.signerOrigin,
+        ]
     }
 
     /// The core's `Assertion` JSON, as the registry proof the machine wants.

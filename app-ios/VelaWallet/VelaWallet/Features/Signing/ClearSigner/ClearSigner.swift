@@ -160,6 +160,10 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
     /// One request at a time: the sheet is modal, so a second can only come
     /// from a machine, and stacking a page on a page is never the answer.
     private var busy = false
+    /// The person pressed cancel while no question was pending — during the
+    /// pairing wait, say. Without it, a cancelled pairing came back as "the
+    /// relay could not be reached", which blames the relay for a decision.
+    private var declined = false
 
     init(
         loc: Loc,
@@ -245,6 +249,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
         }
         guard !busy else { return .outcome(.refused(refusal: .declined)) }
         busy = true
+        declined = false
         defer { busy = false }
 
         let wanted = page.flatMap { $0.isEmpty ? nil : $0 } ?? signerUrl() ?? clearSignerDefaultUrl()
@@ -277,6 +282,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
             if let ending = await onAnotherDevice(ask, page: wanted, model: model) {
                 return ending
             }
+            if declined { return .outcome(.refused(refusal: .declined)) }
             // The relay would not come up. The choice is offered again with
             // the reason under it, rather than dying on a spinner.
             model.stage = .relayDown
@@ -362,6 +368,7 @@ final class ClearSigner: NSObject, ClearSignerPort, ClearSignerCeremonyPort, SFS
 
     /// Declined — the request stays open, as after a cancelled passkey sheet.
     func cancel() {
+        declined = true
         channel?.cancel()
         relay?.cancel()
     }

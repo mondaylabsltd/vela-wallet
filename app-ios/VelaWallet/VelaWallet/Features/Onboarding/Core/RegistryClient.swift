@@ -60,6 +60,11 @@ struct PublishMember {
     /// The proof collected AT CREATION. Absent on the login re-publish, whose
     /// executor signs the member live.
     let proof: [String: Any]?
+    /// Spec 075: the Clear Signer page this member lives behind, when it does.
+    /// The core fills it (from the account's key on a re-publish, from the
+    /// draft on a create) so a live signature reaches the page HOLDING the key
+    /// rather than whichever page Settings names. Empty for every other route.
+    let signerOrigin: String
 
     init(json: [String: Any]) {
         credentialIdHex = json["credential_id"] as? String ?? ""
@@ -68,6 +73,7 @@ struct PublishMember {
         authenticatorAttachment = json["authenticator_attachment"] as? String ?? ""
         transports = json["transports"] as? String ?? ""
         proof = json["proof"] as? [String: Any]
+        signerOrigin = json["signer_origin"] as? String ?? ""
     }
 }
 

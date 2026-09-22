@@ -126,7 +126,10 @@ struct ClearSignerSheet: View {
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgSubtle)
                 .fixedSize(horizontal: false, vertical: true)
-            if let matrix = cableQrMatrix(text: model.link) {
+            // The core's own encoder — `QrCode`'s, the one the receive screen
+            // and the caBLE code draw with — and `nil` draws NO code rather
+            // than a demo pattern somebody would try to scan.
+            if let matrix = qrMatrix(text: model.link) {
                 ClearSignerQrView(matrix: matrix)
                     .aspectRatio(1, contentMode: .fit)
                     .frame(maxWidth: 220)

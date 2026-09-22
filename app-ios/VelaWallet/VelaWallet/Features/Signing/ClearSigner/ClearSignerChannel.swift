@@ -20,14 +20,16 @@
 //  `ws://127.0.0.1:<port>` — never `localhost` — so there is no IPv6 twin to
 //  open either.
 //
-//  ## One ceremony, then nothing
+//  ## One flow, then nothing
 //
-//  A fresh listener per request and a fresh conversation per accepted socket.
-//  A socket that never proves itself (another page found the port, a stale
-//  tab) is closed and the listener keeps waiting, which is also what makes
-//  "open the page again" work: a new socket, the same port, the same token.
-//  At the first outcome — or a cancel, or five minutes — the listener and
-//  every socket close.
+//  A fresh listener per FLOW, and a fresh conversation per accepted socket
+//  until one of them answers. A socket that never proves itself (another page
+//  found the port, a stale tab) is closed and the listener keeps waiting,
+//  which is also what makes "open the page again" work: a new socket, the same
+//  port, the same token. Once a socket has answered it holds the session and
+//  every other one is dropped — a second conversation replaying the opening
+//  request would put the same ceremony twice. At `end()` — or a cancel, or
+//  five idle minutes — the listener and every socket close.
 //
 //  Runs on the main queue: per message the core frames a few bytes and checks
 //  at most one signature, and one queue is what keeps this bookkeeping free of
@@ -86,17 +88,6 @@ final class ClearSignerChannel: ClearSignerConversation {
         case timedOut
         /// The loopback listener could not be opened, or broke under us.
         case unavailable
-
-        /// Every ending as a refusal, for a caller that only needs to know
-        /// that nothing was signed. `nil` when something was.
-        var refusal: ClearSignerRefusal? {
-            switch self {
-            case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted): nil
-            case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)): refusal
-            case .timedOut: nil
-            case .unavailable: .malformed(detail: "the Clear Signer could not be opened")
-            }
-        }
     }
 
     /// The contract's five minutes — idle, so a session of several requests
@@ -113,6 +104,10 @@ final class ClearSignerChannel: ClearSignerConversation {
     /// The session's opening request — replayed to a page that reconnects
     /// before anything has been answered ("open the page again").
     private let first: ClearSignerAsk
+    /// The request in flight. A refusal is shaped like the request that earned
+    /// it, so a ceremony's decline never arrives as a signing verdict (and the
+    /// spine never reads one as a shell bug).
+    private var current: ClearSignerAsk
     private let timeout: TimeInterval
 
     private var listener: NWListener?
@@ -142,6 +137,7 @@ final class ClearSignerChannel: ClearSignerConversation {
     ) {
         self.signerUrl = signerUrl
         self.first = first
+        self.current = first
         self.timeout = timeout
         self.token = Self.freshToken()
         self.id = UUID().uuidString.lowercased()
@@ -271,7 +267,14 @@ final class ClearSignerChannel: ClearSignerConversation {
 
     /// The session's next request, on the socket that answered the last one.
     func send(_ ask: ClearSignerAsk) async -> Ending {
-        guard !stopped, let key = active, let held = sockets[key] else { return .unavailable }
+        guard !stopped else { return .unavailable }
+        // The page went away BETWEEN requests — it answered the last one and
+        // then closed. That is a page closed without signing this one, not a
+        // channel that could not be opened, and the two get different
+        // sentences on screen.
+        guard let key = active, let held = sockets[key] else {
+            return Self.declined(for: ask)
+        }
         let next = UUID().uuidString.lowercased()
         let step: ClearSignerStep
         do {
@@ -293,9 +296,27 @@ final class ClearSignerChannel: ClearSignerConversation {
         // no answer yet, or the conversation is over.
         guard !step.write.isEmpty else { return .unavailable }
         id = next
+        current = ask
         write(step.write, to: held.socket, thenClose: step.close)
         armDeadline()
         return await ending()
+    }
+
+    /// A refusal shaped like the request that earned it.
+    static func declined(for ask: ClearSignerAsk) -> Ending {
+        refused(.declined, for: ask)
+    }
+
+    static func refused(_ refusal: ClearSignerRefusal, for ask: ClearSignerAsk) -> Ending {
+        switch ask {
+        case .ceremony: .ceremony(.refused(refusal: refusal))
+        case .signature: .outcome(.refused(refusal: refusal))
+        }
+    }
+
+    /// The same, for the request in flight.
+    private func refused(_ refusal: ClearSignerRefusal) -> Ending {
+        Self.refused(refusal, for: current)
     }
 
     /// The flow is done: `bye` on the wire, then everything closes. The page
@@ -317,7 +338,7 @@ final class ClearSignerChannel: ClearSignerConversation {
 
     /// The waiting sheet's cancel: the person declined (contract §2).
     func cancel() {
-        finish(.outcome(.refused(refusal: .declined)))
+        finish(refused(.declined))
     }
 
     /// The person closed the tab. WebKit does not always close a dismissed
@@ -438,7 +459,7 @@ final class ClearSignerChannel: ClearSignerConversation {
         socket.cancel()
         if active == key { active = nil }
         if let refusal = conversation.closed() {
-            deliver(.outcome(.refused(refusal: refusal)))
+            deliver(refused(refusal))
         }
     }
 
