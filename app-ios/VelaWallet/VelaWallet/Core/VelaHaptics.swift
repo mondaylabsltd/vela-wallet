@@ -33,6 +33,9 @@ enum VelaHaptic {
     /// Perform it. Silent on any platform refusal: a wallet that crashed
     /// because a phone would not buzz has its priorities wrong.
     func play() {
+        #if DEBUG
+        Self.recorded?.append(self)
+        #endif
         switch self {
         case .press:
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -49,6 +52,28 @@ enum VelaHaptic {
         }
     }
 }
+
+#if DEBUG
+extension VelaHaptic {
+    /// The test seam. A simulator cannot vibrate, so what a unit test can pin
+    /// is the CALL: which haptics a gesture played, in order. `nil` outside a
+    /// `recording` block, so a debug build does not keep a growing list.
+    private(set) static var recorded: [VelaHaptic]?
+
+    /// Runs `body` and returns every haptic it played, in order.
+    ///
+    /// `VelaHaptic` is main-actor isolated and `body` is synchronous, so no
+    /// other test's haptic can land between the start and the read — Swift
+    /// Testing runs suites in parallel, and a free-standing log would collect
+    /// their buzzes too.
+    static func recording(_ body: () throws -> Void) rethrows -> [VelaHaptic] {
+        recorded = []
+        defer { recorded = nil }
+        try body()
+        return recorded ?? []
+    }
+}
+#endif
 
 /// Copy something, and say so with the one haptic a copy is allowed.
 ///
