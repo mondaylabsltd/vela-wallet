@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The one badge every settings screen uses. Latency, reachability, provider
 /// state and compatibility are all this object in the mocks, differing only in
@@ -259,7 +260,7 @@ struct SettingsUrlField: View {
 }
 
 /// The product's ONE segmented control (design review 2026-07): three-up for
-/// the theme picker, two-up for the avatar style.
+/// the theme picker. (Its two-up avatar-style use was retired in spec 074.)
 struct SettingsSegmentedControl: View {
     @Environment(\.theme) private var theme
     let model: SegmentedModel
@@ -292,7 +293,11 @@ struct SettingsSegmentedControl: View {
                 // strokeBorder leaves the fill untouched, so the whole cell has
                 // to be made hittable explicitly (button-feedback rule).
                 .contentShape(Rectangle())
-                .onTapGesture { onSelect(segment.id) }
+                // A pick that takes effect: Select, as Android's segments.
+                .onTapGesture {
+                    VelaHaptic.select.play()
+                    onSelect(segment.id)
+                }
             }
         }
         .padding(Tokens.Space.s4)
@@ -309,35 +314,37 @@ struct SettingsSegmentedControl: View {
 }
 
 /// A ——●—— A. The tick row plus the two glyph ends, sized to what they promise.
-/// A picture of the control: spec 023 is UI only, so nothing moves yet.
+///
+/// A real slider (the founder, 2026-09: 没有滑动的感觉 — it was a row of six
+/// tap targets): dragged or tapped, the thumb goes to the stop under the
+/// finger, one `detent` per stop crossed, and the size is committed when the
+/// finger lifts — Android's `VelaTextScaleSlider` and the web's range input.
+/// The thumb follows the finger on local state; committing per stop would
+/// re-lay the whole app out under the drag.
 struct TextScaleSlider: View {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: TextScaleModel
     /// Which stop was chosen. Absent in the gallery, where the slider is a
-    /// picture of a size already set.
+    /// picture of a size already set — it takes no touch and plays nothing.
     var onSelect: ((Int) -> Void)?
+
+    @State private var drag = TextScaleDrag()
+
+    /// The web's `--icon-lg` thumb over `--space-sm` ticks, Android's 20dp / 4dp.
+    private static let thumb: CGFloat = 20
+    private static let tick: CGFloat = Tokens.Space.s4
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
             Text("A")
                 .font(.system(size: Tokens.TextSize.t13, weight: .bold))
                 .foregroundStyle(theme.fgBase)
-            HStack {
-                ForEach(0..<model.steps, id: \.self) { index in
-                    Circle()
-                        .fill(index == model.index ? theme.fgMuted : theme.borderStrong)
-                        .frame(width: index == model.index ? 18 : 4,
-                               height: index == model.index ? 18 : 4)
-                        // A 4pt dot is not a target. The tappable area is the
-                        // whole stop's share of the track, which is what a
-                        // finger aims at anyway.
-                        .frame(minWidth: Tokens.Layout.hitTarget,
-                               minHeight: Tokens.Layout.hitTarget)
-                        .contentShape(Rectangle())
-                        .onTapGesture { onSelect?(index) }
-                    if index < model.steps - 1 { Spacer() }
-                }
+            GeometryReader { geo in
+                track(width: geo.size.width, height: geo.size.height)
             }
+            // The whole row's height is the target, not the 4pt dots.
+            .frame(height: Tokens.Layout.hitTarget)
             Text("A")
                 .font(.system(size: Tokens.TextSize.t20, weight: .bold))
                 .foregroundStyle(theme.fgBase)
@@ -345,13 +352,169 @@ struct TextScaleSlider: View {
         .padding(.vertical, Tokens.Space.s12)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(model.label)
+        .accessibilityIdentifier("text-scale-slider")
         // The stop, spoken and adjustable — a slider that only sighted fingers
         // can move is not a slider.
-        .accessibilityValue(Text(verbatim: String(model.index + 1)))
+        .accessibilityValue(Text(verbatim: String(shown + 1)))
         .accessibilityAdjustableAction { direction in
+            guard onSelect != nil else { return }
             let next = direction == .increment ? model.index + 1 : model.index - 1
             guard next >= 0, next < model.steps else { return }
-            onSelect?(next)
+            drag.move(to: next, committed: model.index)
+            commit()
+        }
+    }
+
+    /// The stop the thumb sits on: under the finger while it is down, the
+    /// stored size otherwise.
+    private var shown: Int { drag.shown ?? model.index }
+
+    private func track(width: CGFloat, height: CGFloat) -> some View {
+        let inset = Self.thumb / 2
+        let center = { (stop: Int) in
+            TextScaleTrack.center(of: stop, width: width, steps: model.steps, inset: inset)
+        }
+        return ZStack {
+            ForEach(0..<model.steps, id: \.self) { stop in
+                Circle()
+                    .fill(theme.borderStrong)
+                    .frame(width: Self.tick, height: Self.tick)
+                    .position(x: center(stop), y: height / 2)
+            }
+            Circle()
+                .fill(theme.fgMuted)
+                .frame(width: Self.thumb, height: Self.thumb)
+                .position(x: center(shown), y: height / 2)
+                // Glides stop to stop instead of blinking between them.
+                .animation(reduceMotion ? nil : .interactiveSpring(response: 0.18, dampingFraction: 0.82),
+                           value: shown)
+        }
+        .overlay {
+            if onSelect != nil {
+                TextScaleTouchSurface(
+                    onDrag: { x in
+                        drag.move(to: stop(at: x, width: width), committed: model.index)
+                    },
+                    onRelease: { commit() },
+                    onTap: { x in
+                        drag.move(to: stop(at: x, width: width), committed: model.index)
+                        commit()
+                    }
+                )
+            }
+        }
+    }
+
+    private func stop(at x: CGFloat, width: CGFloat) -> Int {
+        TextScaleTrack.stop(at: x, width: width, steps: model.steps, inset: Self.thumb / 2)
+    }
+
+    private func commit() {
+        if let next = drag.release(committed: model.index) { onSelect?(next) }
+    }
+}
+
+/// Where the text-size stops sit on the track: evenly spaced between one
+/// thumb-radius in from each end, so the thumb on the last stop is still
+/// inside the track. Pure, so the arithmetic is tested without a finger.
+enum TextScaleTrack {
+    /// The stop nearest `x` — Android's `stepAt`, on the stops as drawn.
+    static func stop(at x: CGFloat, width: CGFloat, steps: Int, inset: CGFloat) -> Int {
+        guard steps > 1, width > inset * 2 else { return 0 }
+        let pitch = (width - inset * 2) / CGFloat(steps - 1)
+        let nearest = Int(((x - inset) / pitch).rounded())
+        return min(steps - 1, max(0, nearest))
+    }
+
+    /// The x of a stop's centre.
+    static func center(of stop: Int, width: CGFloat, steps: Int, inset: CGFloat) -> CGFloat {
+        guard steps > 1, width > inset * 2 else { return width / 2 }
+        return inset + (width - inset * 2) * CGFloat(stop) / CGFloat(steps - 1)
+    }
+}
+
+/// One gesture on the text-size slider: the stop under the finger, and the
+/// detent each new stop earns. Apart from the view so a test can run a finger
+/// across it.
+struct TextScaleDrag {
+    /// The stop under the finger while it is down; `nil` at rest.
+    private(set) var shown: Int?
+
+    /// The finger is over `stop`. A stop it was not already on is a detent —
+    /// one per stop, however the finger got there; wobbling inside a stop
+    /// plays nothing.
+    mutating func move(to stop: Int, committed: Int) {
+        let from = shown ?? committed
+        shown = stop
+        if stop != from { VelaHaptic.detent.play() }
+    }
+
+    /// The finger lifted: the stop to store, when it is not the stored one.
+    mutating func release(committed: Int) -> Int? {
+        defer { self.shown = nil }
+        guard let stop = shown, stop != committed else { return nil }
+        return stop
+    }
+}
+
+/// The slider's touch, in UIKit because SwiftUI cannot say "horizontal only".
+///
+/// Settings is a scroll view, and the slider is a full-width row in it. A
+/// SwiftUI drag that began on the row either took every vertical scroll that
+/// started there — moving the text size of somebody who only meant to scroll
+/// past it — or shared the touch with the scroll view and wobbled the page
+/// under a sideways drag. A pan that begins only when the finger moves more
+/// sideways than up or down is what Android's `detectHorizontalDragGestures`
+/// is; vertical movement is left to the page.
+private struct TextScaleTouchSurface: UIViewRepresentable {
+    var onDrag: (CGFloat) -> Void
+    var onRelease: () -> Void
+    var onTap: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pan(_:)))
+        pan.delegate = context.coordinator
+        view.addGestureRecognizer(pan)
+        view.addGestureRecognizer(
+            UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tap(_:)))
+        )
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.surface = self
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var surface: TextScaleTouchSurface
+
+        init(_ surface: TextScaleTouchSurface) { self.surface = surface }
+
+        @objc func pan(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .began, .changed:
+                surface.onDrag(recognizer.location(in: recognizer.view).x)
+            case .ended, .cancelled, .failed:
+                surface.onRelease()
+            default:
+                break
+            }
+        }
+
+        @objc func tap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended else { return }
+            surface.onTap(recognizer.location(in: recognizer.view).x)
+        }
+
+        func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
+            let moved = pan.translation(in: pan.view)
+            let sideways = moved == .zero ? pan.velocity(in: pan.view) : moved
+            return abs(sideways.x) > abs(sideways.y)
         }
     }
 }

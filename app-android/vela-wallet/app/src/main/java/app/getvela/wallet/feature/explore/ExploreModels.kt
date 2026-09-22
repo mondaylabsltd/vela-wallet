@@ -91,7 +91,6 @@ data class BrowserModel(
     val canBack: Boolean,
     val canForward: Boolean,
     val bookmarked: Boolean,
-    val accountName: String,
     val accountSeed: String,
     val tabCount: Int,
     val page: DemoPageModel,

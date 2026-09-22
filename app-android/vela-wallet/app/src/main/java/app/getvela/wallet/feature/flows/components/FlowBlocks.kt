@@ -116,7 +116,7 @@ fun AddressCard(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar, name = account.name)
+        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -826,7 +826,7 @@ fun RecipientField(
                 .padding(VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2, name = field.name)
+            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
                 if (onValueChange != null && field.raw != null) {

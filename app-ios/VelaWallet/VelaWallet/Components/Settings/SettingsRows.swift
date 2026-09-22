@@ -86,7 +86,7 @@ struct SettingsAccountRow: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tokens.Space.s12) {
-                IdenticonAvatar(seed: account.addressFull, size: 40, name: account.name)
+                IdenticonAvatar(seed: account.addressFull, size: 40)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(account.name)
                         .typeRole(Typography.title)

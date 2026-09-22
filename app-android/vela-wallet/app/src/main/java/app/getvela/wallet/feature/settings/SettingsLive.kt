@@ -543,8 +543,8 @@ object SettingsLive {
     )
 
     /**
-     * Language, the three formats, the text scale and the avatar style, from
-     * the person's preferences: the rows say the choice, the sheets tick it,
+     * Language, the three formats and the text scale, from the person's
+     * preferences: the rows say the choice, the sheets tick it,
      * the controls sit on it. `system` shows the resolved language beside it.
      */
     fun withPreferences(
@@ -588,7 +588,6 @@ object SettingsLive {
             dateSheet = dateSheet,
             timeSheet = timeSheet,
             theme = model.theme.copy(selected = theme),
-            avatar = model.avatar.copy(selected = prefs.avatarStyle),
             textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
         )
     }

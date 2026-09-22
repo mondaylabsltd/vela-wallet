@@ -166,7 +166,6 @@ struct PreferencesTests {
         #expect(VelaStore.Key.theme == "vela.theme")
         #expect(VelaStore.Key.language == "vela.language")
         #expect(VelaStore.Key.localePrefs == "vela.localePrefs")
-        #expect(VelaStore.Key.avatarStyle == "vela.avatarStyle")
         #expect(VelaStore.Key.textScale == "vela.textScale")
     }
 
@@ -183,7 +182,6 @@ struct PreferencesTests {
         first.setDateFormat(.iso)
         first.setTextScale(.large)
         first.setLanguage("zh")
-        first.setAvatarStyle(.initials)
 
         let second = Preferences(store: store)
         second.boot()
@@ -193,7 +191,6 @@ struct PreferencesTests {
         #expect(second.timeFormat == .auto, "the one nobody chose stays auto")
         #expect(second.textScale == .large)
         #expect(second.language == "zh")
-        #expect(second.avatarStyle == .initials)
     }
 
     /// All three formats share ONE record, so writing one must not drop the

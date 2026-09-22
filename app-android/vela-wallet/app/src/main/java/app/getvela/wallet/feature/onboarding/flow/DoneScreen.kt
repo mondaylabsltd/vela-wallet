@@ -144,7 +144,7 @@ fun ColumnScope.DoneScreen(
             verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IdenticonImage(seed = address, size = VelaSizing.doneAvatar, name = walletName)
+                IdenticonImage(seed = address, size = VelaSizing.doneAvatar)
                 Spacer(modifier = Modifier.size(VelaSpacing.lg))
                 Text(
                     text = walletName,

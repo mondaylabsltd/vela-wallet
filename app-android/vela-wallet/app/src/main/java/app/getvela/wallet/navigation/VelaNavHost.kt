@@ -339,8 +339,8 @@ fun VelaNavHost(
     // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
     // address opens it (see IdenticonImage.tappable), so twelve screens do not
     // each carry a sheet of their own.
-    var identiconViewer by remember { mutableStateOf<Pair<String, String?>?>(null) }
-    CompositionLocalProvider(LocalIdenticonViewer provides { seed, name -> identiconViewer = seed to name }) {
+    var identiconViewer by remember { mutableStateOf<String?>(null) }
+    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
         NavHost(navController = navController, startDestination = startDestination) {
             composable(VelaDestinations.WELCOME) {
                 val welcome: WelcomeViewModel = viewModel()
@@ -1771,7 +1771,6 @@ fun VelaNavHost(
                         onSegment = { group, id ->
                             when (group) {
                                 "theme" -> onThemeSelected(when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto })
-                                "avatar" -> application.container.preferences.setAvatarStyle(id)
                             }
                         },
                         onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
@@ -1964,8 +1963,8 @@ fun VelaNavHost(
             }
         }
     }
-    identiconViewer?.let { (seed, name) ->
-        IdenticonViewerSheet(address = seed, name = name, onDismiss = { identiconViewer = null })
+    identiconViewer?.let { seed ->
+        IdenticonViewerSheet(address = seed, onDismiss = { identiconViewer = null })
     }
 
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either

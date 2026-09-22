@@ -32,14 +32,11 @@ struct VelaButton: View {
     var loading: Bool = false
     let action: () -> Void
 
-    /// Bumped on every accepted press purely to drive the haptic — a press
-    /// whose visible result is a system sheet several hundred ms away needs an
-    /// answer in the same instant the finger lands.
-    @State private var presses = 0
-
     var body: some View {
         Button {
-            presses &+= 1
+            // A press whose visible result is a system sheet several hundred
+            // ms away needs an answer in the same instant the finger lands.
+            VelaHaptic.press.play()
             action()
         } label: {
             Text(title).typeRole(Typography.button)
@@ -51,7 +48,6 @@ struct VelaButton: View {
         // The label is hidden behind the spinner while busy; the button still
         // answers to its own name.
         .accessibilityLabel(title)
-        .sensoryFeedback(.impact(weight: .light, intensity: Interaction.pressHapticIntensity), trigger: presses)
     }
 }
 
@@ -121,8 +117,6 @@ enum Interaction {
     /// Never a timing curve for interactive feedback — always a spring
     /// (docs/design-system.md). The damping mirrors Android's `VelaMotion.pressSpring`.
     static let pressSpring: Animation = .interactiveSpring(response: 0.2, dampingFraction: 0.75)
-    /// A confirmation, not a jolt: the CTA is a tap, not a transaction.
-    static let pressHapticIntensity: Double = 0.7
     /// How long the address strip's 已复制 confirmation stays visible
     /// (spec 014 — copy feedback is the one sanctioned timed visual).
     static let copiedFeedbackSeconds: Double = 1.5

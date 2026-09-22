@@ -506,7 +506,6 @@ object SendLive {
         label = ctx.strings.t(I18nKeys.Flows.RECIPIENT_LABEL),
         lines = addressLines(view.recipient),
         identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
-        name = view.recipient_identity?.name,
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
         scanLabel = null,
         note = recipientNote(view, ctx),
@@ -880,7 +879,7 @@ object SendLive {
             amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             facts = listOf(
-                FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress, ctx.fromName.ifBlank { null })),
+                FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress)),
                 // SD3b (spec 038 #D2): a split names its count here and every
                 // one of its people below, so what is signed can be read in full.
                 if (split) {
@@ -892,7 +891,7 @@ object SendLive {
                     FactRowModel(
                         label = s.t(I18nKeys.Flows.TO_LABEL),
                         value = recipientName?.let { "$it · ${shortAddress(view.recipient)}" } ?: shortAddress(view.recipient),
-                        lead = FactLead.Identicon(view.recipient, recipientName),
+                        lead = FactLead.Identicon(view.recipient),
                         mono = recipientName == null,
                     )
                 },

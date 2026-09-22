@@ -16,12 +16,14 @@ import uniffi.vela_core_uniffi.prefsRead
 
 /**
  * The person's preferences that have no machine (spec 028's ruling, kept in
- * 047): language, the three format presets, the text scale, the avatar
- * style. The record format is the core's (`vela_core::prefs`, spec 072):
- * `vela.language` a tag or `auto`, `vela.localePrefs` the three formats,
- * `vela.textScale` and `vela.avatarStyle` bare strings — the same record on
- * every Vela. This shell once wrote `system` and kept the text size inside
- * `vela.localePrefs`; the core reads that and [load] rewrites it once.
+ * 047): language, the three format presets, the text scale. The record
+ * format is the core's (`vela_core::prefs`, spec 072): `vela.language` a tag
+ * or `auto`, `vela.localePrefs` the three formats, `vela.textScale` a bare
+ * string — the same record on every Vela. This shell once wrote `system` and
+ * kept the text size inside `vela.localePrefs`; the core reads that and
+ * [load] rewrites it once. The avatar style is retired (spec 074: every avatar
+ * is the identicon); [load] hands the core a stored `vela.avatarStyle` so its
+ * migrations remove it.
  */
 data class PrefsView(
     /** `auto` follows the device's languages; otherwise a shipped tag. */
@@ -30,7 +32,6 @@ data class PrefsView(
     val dateFormat: DateFormatKey = DateFormatKey.Auto,
     val timeFormat: TimeFormatKey = TimeFormatKey.Auto,
     val textScale: TextScaleLevel = TextScaleLevel.Standard,
-    val avatarStyle: String = "identicon",
     val loaded: Boolean = false,
 )
 
@@ -63,7 +64,6 @@ class Preferences(
                     dateFormat = DateFormatKey.of(read.dateFormat),
                     timeFormat = TimeFormatKey.of(read.timeFormat),
                     textScale = TextScaleLevel.of(read.textScale),
-                    avatarStyle = read.avatarStyle,
                     loaded = true,
                 ),
             )
@@ -79,8 +79,6 @@ class Preferences(
     fun setTimeFormat(key: TimeFormatKey) = update(_view.value.copy(timeFormat = key)) { writeLocalePrefs(it) }
 
     fun setTextScale(level: TextScaleLevel) = update(_view.value.copy(textScale = level)) { store.write(KEY_TEXT_SCALE, level.wire) }
-
-    fun setAvatarStyle(style: String) = update(_view.value.copy(avatarStyle = style)) { store.write(KEY_AVATAR_STYLE, style) }
 
     private fun update(next: PrefsView, persist: suspend (PrefsView) -> Unit) {
         publish(next)
@@ -101,13 +99,15 @@ class Preferences(
     companion object {
         const val KEY_LANGUAGE = "vela.language"
         const val KEY_LOCALE_PREFS = "vela.localePrefs"
-        const val KEY_AVATAR_STYLE = "vela.avatarStyle"
         const val KEY_TEXT_SCALE = "vela.textScale"
+
+        /** Retired (spec 074): read only so the core's migrations can remove it. */
+        private const val RETIRED_AVATAR_STYLE = "vela.avatarStyle"
 
         /** "Follow the device's languages" — the shared word (it was `system` here). */
         const val AUTO_LANGUAGE = "auto"
 
-        /** What the core's codec reads, including the desktop's old `vela.formats`. */
-        private val READ_KEYS = listOf(KEY_LANGUAGE, KEY_LOCALE_PREFS, KEY_AVATAR_STYLE, KEY_TEXT_SCALE, "vela.formats")
+        /** What the core's codec reads, including the desktop's old `vela.formats` and the retired avatar style. */
+        private val READ_KEYS = listOf(KEY_LANGUAGE, KEY_LOCALE_PREFS, KEY_TEXT_SCALE, "vela.formats", RETIRED_AVATAR_STYLE)
     }
 }

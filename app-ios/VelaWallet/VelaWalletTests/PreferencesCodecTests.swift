@@ -4,7 +4,7 @@
 //
 //  One preference, one meaning (spec 072 T031, T034).
 //
-//  The five display choices are read through the core's codec (`prefsRead`)
+//  The display choices are read through the core's codec (`prefsRead`)
 //  and an older shell's spellings are rewritten once at launch
 //  (`prefsMigrations`). And the theme's "follow the system" is a choice a
 //  person can make again after picking Light or Dark — it could not be.
@@ -101,6 +101,21 @@ struct PreferencesCodecTests {
         let prefs = booted(store)
         #expect(prefs.theme == .system)
         #expect(prefs.textScale == .standard)
+    }
+
+    /// The avatar style is retired (spec 074): every avatar is the identicon.
+    /// A stored choice goes at the first launch, whatever it held, and
+    /// nothing else in the store moves.
+    @Test func aStoredAvatarStyleIsRemoved() {
+        let (defaults, store) = fresh()
+        store.writeString(VelaStore.Key.retiredAvatarStyle, "initials")
+        store.writeString(VelaStore.Key.theme, "dark")
+
+        Preferences.migrate(store)
+
+        #expect(defaults.object(forKey: "vela.avatarStyle") == nil)
+        #expect(defaults.string(forKey: VelaStore.Key.theme) == "dark")
+        #expect(booted(store).theme == .dark)
     }
 
     /// The formats record is written as the core writes it, three fields and

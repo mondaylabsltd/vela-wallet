@@ -21,6 +21,9 @@ pub mod keys {
     pub const THEME: &str = "vela.theme";
     pub const LANGUAGE: &str = "vela.language";
     pub const LOCALE_PREFS: &str = "vela.localePrefs";
+    /// Retired (spec 074): every account and contact avatar is the
+    /// identicon, so there is no style to choose. [`migrations`](super::migrations)
+    /// removes what an older build stored here.
     pub const AVATAR_STYLE: &str = "vela.avatarStyle";
     pub const TEXT_SCALE: &str = "vela.textScale";
     /// The desktop's old spelling of `vela.localePrefs` (`{number,date,time}`).
@@ -29,7 +32,6 @@ pub mod keys {
 
 /// `system` follows the device; the others pin it.
 pub const THEMES: [&str; 3] = ["system", "light", "dark"];
-pub const AVATAR_STYLES: [&str; 2] = ["initials", "identicon"];
 pub const NUMBER_FORMATS: [&str; 5] = ["auto", "comma_dot", "dot_comma", "space_comma", "indian"];
 pub const DATE_FORMATS: [&str; 6] = [
     "auto",
@@ -53,7 +55,6 @@ pub const TEXT_SCALE_LEVELS: [(&str, f64); 6] = [
 ];
 
 pub const DEFAULT_THEME: &str = "system";
-pub const DEFAULT_AVATAR_STYLE: &str = "identicon";
 pub const DEFAULT_TEXT_SCALE: &str = "standard";
 /// "Follow the device's language."
 pub const AUTO_LANGUAGE: &str = "auto";
@@ -64,7 +65,6 @@ pub struct Prefs {
     pub theme: &'static str,
     /// `auto`, or a locale tag as stored.
     pub language: String,
-    pub avatar_style: &'static str,
     pub text_scale: &'static str,
     pub number_format: &'static str,
     pub date_format: &'static str,
@@ -153,11 +153,6 @@ pub fn read(entries: &[(String, String)]) -> Prefs {
     Prefs {
         theme: theme(get(keys::THEME)),
         language: language(get(keys::LANGUAGE)),
-        avatar_style: one_of(
-            get(keys::AVATAR_STYLE),
-            &AVATAR_STYLES,
-            DEFAULT_AVATAR_STYLE,
-        ),
         text_scale: text_scale(scale.as_deref()),
         number_format: one_of(
             field("numberFormat", "number").as_deref(),
@@ -188,6 +183,7 @@ pub fn locale_prefs_json(number_format: &str, date_format: &str, time_format: &s
 /// spelling of what an older shell wrote. Only the KNOWN legacy spellings are
 /// rewritten — a value this build does not ship reads as the default but is
 /// left alone, so a newer build's choice survives a trip through this one.
+/// A retired key ([`keys::AVATAR_STYLE`]) is removed whatever it holds.
 /// Empty for a store that already agrees, so it is safe at every launch.
 #[must_use]
 pub fn migrations(entries: &[(String, String)]) -> Vec<(String, Option<String>)> {
@@ -233,6 +229,11 @@ pub fn migrations(entries: &[(String, String)]) -> Vec<(String, Option<String>)>
     if legacy {
         writes.push((keys::LEGACY_FORMATS.to_owned(), None));
     }
+    // The avatar style was a choice between initials and the identicon;
+    // the identicon is now the only avatar, and the stored choice goes.
+    if get(keys::AVATAR_STYLE).is_some() {
+        writes.push((keys::AVATAR_STYLE.to_owned(), None));
+    }
     writes
 }
 
@@ -252,7 +253,6 @@ mod tests {
         let prefs = read(&[]);
         assert_eq!(prefs.theme, "system");
         assert_eq!(prefs.language, "auto");
-        assert_eq!(prefs.avatar_style, "identicon");
         assert_eq!(prefs.text_scale, "standard");
         assert_eq!(
             (prefs.number_format, prefs.date_format, prefs.time_format),
@@ -315,24 +315,35 @@ mod tests {
 
     #[test]
     fn a_value_this_build_does_not_ship_reads_as_the_default_and_is_left_alone() {
-        let stored = entries(&[
-            ("vela.theme", "sepia"),
-            ("vela.textScale", "huge"),
-            ("vela.avatarStyle", "photo"),
-        ]);
+        let stored = entries(&[("vela.theme", "sepia"), ("vela.textScale", "huge")]);
         assert!(
             migrations(&stored).is_empty(),
             "a newer build's value is not overwritten"
         );
         let prefs = read(&stored);
-        assert_eq!(
-            (prefs.theme, prefs.text_scale, prefs.avatar_style),
-            ("system", "standard", "identicon")
-        );
+        assert_eq!((prefs.theme, prefs.text_scale), ("system", "standard"));
         assert_eq!(text_scale_factor("xlarge"), 1.35);
         assert_eq!(
             read(&entries(&[("vela.language", "zh-TW")])).language,
             "zh-TW"
         );
+    }
+
+    #[test]
+    fn a_stored_avatar_style_is_removed_and_changes_nothing() {
+        let stored = entries(&[("vela.avatarStyle", "initials"), ("vela.theme", "dark")]);
+        assert_eq!(
+            migrations(&stored),
+            vec![("vela.avatarStyle".to_owned(), None)]
+        );
+        // Whatever it holds — even a value no build shipped — it goes.
+        assert_eq!(
+            migrations(&entries(&[("vela.avatarStyle", "photo")])),
+            vec![("vela.avatarStyle".to_owned(), None)]
+        );
+        // It is not read: the preferences are what they would be without it.
+        assert_eq!(read(&stored), read(&entries(&[("vela.theme", "dark")])));
+        // Once removed, nothing more to do.
+        assert!(migrations(&entries(&[("vela.theme", "dark")])).is_empty());
     }
 }

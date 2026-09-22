@@ -40,9 +40,6 @@ const SAMPLE: f64 = 1234.56;
 /// Follow System. The words are the stored ones (`vela.theme`).
 pub const THEME_SEGMENTS: [&str; 3] = ["light", "dark", "system"];
 
-/// The avatar control's cells: Initials, Identicon (`vela.avatarStyle`).
-pub const AVATAR_SEGMENTS: [&str; 2] = ["initials", "identicon"];
-
 /// Which cell a stored word selects — the first when the word is not one of
 /// them, which the core's reader never hands out.
 #[must_use]
@@ -1640,10 +1637,9 @@ mod parity_tests {
 
     /// The stored words and the drawn cells agree.
     #[test]
-    fn the_theme_and_avatar_cells_are_the_stored_words() {
+    fn the_theme_cells_are_the_stored_words() {
         assert_eq!(segment_of(&THEME_SEGMENTS, "system"), 2);
         assert_eq!(segment_of(&THEME_SEGMENTS, "light"), 0);
-        assert_eq!(segment_of(&AVATAR_SEGMENTS, "identicon"), 1);
         for word in THEME_SEGMENTS {
             assert!(vela_core::prefs::THEMES.contains(&word));
         }

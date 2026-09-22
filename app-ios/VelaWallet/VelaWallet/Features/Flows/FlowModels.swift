@@ -159,6 +159,11 @@ struct ReceiveListModel {
     /// Shown in place of the rows when the search matches nothing.
     let emptyText: String
     var rows: [NetworkRowModel]
+    /// The one address every row shows shortened — what each row's copy
+    /// button puts on the clipboard. Only ever the person's own (set by
+    /// `FlowsLive.receiveList`): the fixture leaves it empty, so a drawn
+    /// board copies nothing rather than somebody else's address.
+    var address = ""
 }
 
 /// The account card that sits above every QR: whose address this is.

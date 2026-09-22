@@ -740,9 +740,6 @@ object I18nKeys {
         const val THEME_LIGHT = "settings.appearance.themeLight"
         const val THEME_DARK = "settings.appearance.themeDark"
         const val THEME_AUTO = "settings.appearance.themeAuto"
-        const val AVATAR_TITLE = "settings.appearance.avatarTitle"
-        const val AVATAR_INITIALS = "settings.appearance.avatarInitials"
-        const val AVATAR_IDENTICON = "settings.appearance.avatarIdenticon"
         const val TEXT_SCALE = "settings.appearance.textScale"
 
         // Language picker.

@@ -862,8 +862,8 @@ function liveTextScale<T extends { steps: number; index: number }>(scale: T): T 
 /**
  * The preference rows, wired to what is actually stored (spec 028 T432).
  *
- * Everything here was drawn in 023 and inert until now: the theme and avatar
- * segments showed a fixed selection, and the three format sheets showed five
+ * Everything here was drawn in 023 and inert until now: the theme segments
+ * showed a fixed selection, and the three format sheets showed five
  * canon strings with the first one ticked no matter what the app did. This
  * overlay makes each of them show — and offer — the truth.
  */
@@ -891,7 +891,6 @@ export function withLivePreferences(
 		appearance: {
 			...model.appearance,
 			theme: { ...model.appearance.theme, selected: THEME_ID[preferences.theme] },
-			avatar: { ...model.appearance.avatar, selected: preferences.avatarStyle },
 			textScale: liveTextScale(model.appearance.textScale)
 		},
 		languageSheet: {
@@ -947,13 +946,6 @@ export function withLivePreferencesDesktop(
 			theme: {
 				...model.appearance.theme,
 				segmented: { ...model.appearance.theme.segmented, selected: THEME_ID[preferences.theme] }
-			},
-			avatar: {
-				...model.appearance.avatar,
-				segmented: {
-					...model.appearance.avatar.segmented,
-					selected: preferences.avatarStyle
-				}
 			}
 		},
 		localization: {
@@ -1002,7 +994,7 @@ export interface LiveAccountsInput {
 	/** Per-account totals in USD by lowercased address — the balance core's switcher cache. */
 	balances: ReadonlyMap<string, number>;
 	currency: CurrencyView;
-	identicon: (address: string, name: string) => string;
+	identicon: (address: string) => string;
 }
 
 function liveAccountRows(input: LiveAccountsInput) {
@@ -1012,7 +1004,7 @@ function liveAccountRows(input: LiveAccountsInput) {
 			name: row.account.name,
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
-			identiconSvg: input.identicon(row.account.address, row.account.name),
+			identiconSvg: input.identicon(row.account.address),
 			// No cached total yet: an empty cell, never a mocked figure.
 			amount: usd === undefined ? '' : moneyText(usd, input.currency),
 			selected: position === input.activeIndex

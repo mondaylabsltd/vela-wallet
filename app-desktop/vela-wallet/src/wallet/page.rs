@@ -105,8 +105,8 @@ use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
 
 use super::WalletStrings;
 use super::components::{
-    action_pill, activity_row, asset_row, avatar, balance_display, chain_row, empty_state,
-    icon_img, identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
+    action_pill, activity_row, asset_row, balance_display, chain_row, empty_state, icon_img,
+    identicon_avatar, nav_row, qr_placeholder, section_header, section_header_parts,
     section_header_row, sidebar_search, skeleton_row, token_icon, token_icon_logos, wallet_header,
 };
 use super::fixtures::{self, ADDRESS_FULL, IDENTICON_BOARD_SEEDS, WALLET_NAME};
@@ -3505,10 +3505,9 @@ impl WalletPage {
             .flex()
             .items_center()
             .gap(px(14.))
-            .child(avatar(
+            .child(identicon_avatar(
                 &mut self.identicons,
                 model.seed.as_ref(),
-                &model.name,
                 CONTACTS_HERO_AVATAR,
             ))
             .child(
@@ -6319,12 +6318,7 @@ impl WalletPage {
                 .items_center()
                 .gap(px(12.))
                 .py(px(12.))
-                .child(avatar(
-                    &mut self.identicons,
-                    &address,
-                    &row.account.name,
-                    40.,
-                ))
+                .child(identicon_avatar(&mut self.identicons, &address, 40.))
                 .child(
                     div()
                         .flex_1()
@@ -7225,7 +7219,8 @@ impl WalletPage {
             ))
     }
 
-    /// DST2 — language, text size, theme, avatar style.
+    /// DST2 — language, text size, theme. (The avatar style is retired, spec
+    /// 074: every avatar is the identicon.)
     ///
     /// Live since 072: each control stores its choice under the key every
     /// Vela shares and puts it in force on the next frame. The design
@@ -7236,15 +7231,10 @@ impl WalletPage {
         let language = s.language.clone();
         let scale_label = s.text_scale.clone();
         let theme_label = s.theme_title.clone();
-        let avatar_label = s.avatar_title.clone();
         let themes = [
             (Some(Icon::Sun), s.theme_light.clone()),
             (Some(Icon::Moon), s.theme_dark.clone()),
             (Some(Icon::Monitor), s.theme_auto.clone()),
-        ];
-        let avatars = [
-            (None, s.avatar_initials.clone()),
-            (None, s.avatar_identicon.clone()),
         ];
 
         if self.identity.is_none() {
@@ -7259,14 +7249,12 @@ impl WalletPage {
             let language_control = dropdown_trigger(theme, &mut self.icons, language_value);
             let scale_control = text_scale(theme, 7, 3);
             let theme_control = segmented(theme, &mut self.icons, &themes, theme_index);
-            let avatar_control = segmented(theme, &mut self.icons, &avatars, 1);
             return div()
                 .flex()
                 .flex_col()
                 .child(form_row(theme, language, language_control))
                 .child(form_row(theme, scale_label, scale_control))
-                .child(form_row(theme, theme_label, theme_control))
-                .child(form_row(theme, avatar_label, avatar_control));
+                .child(form_row(theme, theme_label, theme_control));
         }
 
         let prefs = crate::executor::preferences::current();
@@ -7335,30 +7323,14 @@ impl WalletPage {
             &mut self.icons,
             &themes,
             settings_live::segment_of(&settings_live::THEME_SEGMENTS, prefs.theme),
-            {
-                let page = page.clone();
-                move |index, window, cx| {
-                    crate::executor::preferences::set_theme(settings_live::THEME_SEGMENTS[index]);
-                    // "Follow System" reads the window's appearance again.
-                    let mode = ThemeMode::detect(window);
-                    page.update(cx, |this, cx| {
-                        this.mode = mode;
-                        cx.notify();
-                    });
-                }
-            },
-        );
-        let avatar_control = segmented_picks(
-            "settings-avatar",
-            theme,
-            &mut self.icons,
-            &avatars,
-            settings_live::segment_of(&settings_live::AVATAR_SEGMENTS, prefs.avatar_style),
-            move |index, _, cx| {
-                crate::executor::preferences::set_avatar_style(
-                    settings_live::AVATAR_SEGMENTS[index],
-                );
-                page.update(cx, |_, cx| cx.notify());
+            move |index, window, cx| {
+                crate::executor::preferences::set_theme(settings_live::THEME_SEGMENTS[index]);
+                // "Follow System" reads the window's appearance again.
+                let mode = ThemeMode::detect(window);
+                page.update(cx, |this, cx| {
+                    this.mode = mode;
+                    cx.notify();
+                });
             },
         );
 
@@ -7368,7 +7340,6 @@ impl WalletPage {
             .child(form_row(theme, language, language_control))
             .child(form_row(theme, scale_label, scale_control))
             .child(form_row(theme, theme_label, theme_control))
-            .child(form_row(theme, avatar_label, avatar_control))
     }
 
     /// What the 货币 row shows — the core's committed currency for a real

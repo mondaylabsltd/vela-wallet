@@ -4293,8 +4293,8 @@ export function prefsMigrations(entries_json) {
 }
 
 /**
- * `{key: rawValue}` → `{theme, language, avatarStyle, textScale,
- * textScaleFactor, numberFormat, dateFormat, timeFormat}`.
+ * `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
+ * numberFormat, dateFormat, timeFormat}`.
  * @param {string} entries_json
  * @returns {string}
  */

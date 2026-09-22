@@ -20,15 +20,14 @@ fn entries_of(entries_json: &str) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-/// `{key: rawValue}` → `{theme, language, avatarStyle, textScale,
-/// textScaleFactor, numberFormat, dateFormat, timeFormat}`.
+/// `{key: rawValue}` → `{theme, language, textScale, textScaleFactor,
+/// numberFormat, dateFormat, timeFormat}`.
 #[wasm_bindgen(js_name = prefsRead)]
 pub fn prefs_read(entries_json: &str) -> String {
     let read = prefs::read(&entries_of(entries_json));
     json!({
         "theme": read.theme,
         "language": read.language,
-        "avatarStyle": read.avatar_style,
         "textScale": read.text_scale,
         "textScaleFactor": prefs::text_scale_factor(read.text_scale),
         "numberFormat": read.number_format,

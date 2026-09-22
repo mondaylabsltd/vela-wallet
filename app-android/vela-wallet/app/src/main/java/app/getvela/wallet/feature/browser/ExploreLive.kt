@@ -130,7 +130,6 @@ object ExploreLive {
                 bookmarked = bookmarked,
                 tabCount = tabs.size,
                 connected = connected,
-                accountName = identity.accountName.ifBlank { fallback.browser.accountName },
                 accountSeed = identity.accountAddress.ifBlank { fallback.browser.accountSeed },
                 loading = engine?.loading ?: false,
                 progress = engine?.progress ?: 100,

@@ -31,10 +31,9 @@ struct SettingsEndpointActions {
     var onOpenProviders: () -> Void = {}
 }
 
-/// The three appearance controls' live half.
+/// The two appearance controls' live half.
 struct SettingsAppearanceActions {
     var onTheme: ((String) -> Void)?
-    var onAvatar: ((String) -> Void)?
     var onTextScale: ((Int) -> Void)?
 }
 
@@ -370,13 +369,11 @@ struct SettingsScreen: View {
                     SettingsRow(row: row, divider: index < section.rows.count - 1, onTap: select)
                 }
             }
-            // The three appearance controls are not rows: they are the control
+            // The two appearance controls are not rows: they are the control
             // itself, shown inline under 语言 (ST1).
             if section.appearanceControls {
                 TextScaleSlider(model: model.textScale, onSelect: appearance.onTextScale)
                 SettingsSegmentedControl(model: model.theme, onSelect: { appearance.onTheme?($0) })
-                    .padding(.bottom, Tokens.Space.s12)
-                SettingsSegmentedControl(model: model.avatar, onSelect: { appearance.onAvatar?($0) })
             }
         }
 
