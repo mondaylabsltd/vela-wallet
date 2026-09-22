@@ -17,6 +17,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The endpoints and providers pages' live half (spec 056 US2). Eleven events
 /// the executor has answered since 050 and nothing had ever sent.
@@ -142,6 +143,13 @@ struct SettingsScreen: View {
                     .padding(.horizontal, Tokens.Space.s24)
                     .padding(.bottom, Tokens.Space.s32)
                 }
+                // A URL field saves when it loses focus, so there has to be a
+                // way to lose focus. Dragging the page is the one every iOS
+                // app has; without it a person who typed an endpoint and
+                // reached for the tab bar lost what they typed, because the
+                // page never blurred and the core was never told. Measured on
+                // an iPhone: `https://index.invalid`, typed, gone.
+                .scrollDismissesKeyboard(.interactively)
                 WalletTabBar(
                     tabs: model.tabs,
                     selected: model.rescue ? .wallet : .settings,
@@ -538,11 +546,16 @@ private struct AddNetworkBody: View {
                 // one, racing the first.
                 .onChange(of: query) { _, value in actions.onSearch(value) }
                 ForEach(panel.results) { row in
-                    SettingsNetworkRow(row: row)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if let chainId = row.chainId { actions.onSelectChain(chainId) }
-                        }
+                    // Through the row's OWN `onTap`, not an outer gesture.
+                    // `SettingsNetworkRow` carries a `.contentShape` plus an
+                    // `.onTapGesture` that defaults to a no-op; the inner
+                    // gesture wins, so wrapping the row swallowed every tap and
+                    // a searched chain could not be opened at all. Found on a
+                    // device: six different tap shapes, none of them worked.
+                    // The Networks list has always passed `onTap` and works.
+                    SettingsNetworkRow(row: row) { _ in
+                        if let chainId = row.chainId { actions.onSelectChain(chainId) }
+                    }
                 }
             }
         }
@@ -584,6 +597,10 @@ private struct RpcProvidersBody: View {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
+                // Same as the endpoints page: a provider key is saved on blur,
+                // so tapping the page has to blur.
+                .contentShape(Rectangle())
+                .onTapGesture { SettingsFocus.release() }
             ForEach(panel.providers) { provider in
                 VStack(alignment: .leading, spacing: Tokens.Space.s12) {
                     HStack {
@@ -633,6 +650,20 @@ private struct RpcProvidersBody: View {
     }
 }
 
+/// Blur whatever is being typed into, so the field commits.
+///
+/// The fields keep their own `@FocusState` inside `SettingsUrlField`, and
+/// hoisting it into every page that holds one would thread a binding through
+/// four bodies to say one thing. Resigning first responder says it once, and
+/// the field's own `onChange(of: focused)` does the committing.
+enum SettingsFocus {
+    static func release() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+    }
+}
+
 private struct EndpointsBody: View {
     @Environment(\.theme) private var theme
     let panel: EndpointsModel
@@ -645,6 +676,13 @@ private struct EndpointsBody: View {
             Text(panel.description)
                 .typeRole(Typography.flowCaption)
                 .foregroundStyle(theme.fgMuted)
+                // The other half of the same problem: tapping the page's own
+                // words is the obvious way to say "I'm done typing", and it
+                // did nothing at all. The fields and the button are children
+                // with gestures of their own, so this only catches the taps
+                // that would otherwise land nowhere.
+                .contentShape(Rectangle())
+                .onTapGesture { SettingsFocus.release() }
             ForEach(panel.fields) { field in
                 SettingsUrlField(
                     field: field,
