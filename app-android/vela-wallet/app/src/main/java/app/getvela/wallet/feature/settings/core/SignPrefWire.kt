@@ -28,6 +28,12 @@ data class SignPrefView(
     val signer_url_error: String? = null,
     /** A page off `getvela.app` can show a request but cannot use this wallet's passkeys. */
     val signer_uses_wallet_passkeys: Boolean = true,
+    /** Spec 075: the relay a cross-device pairing goes through. Always usable. */
+    val relay_url: String = "wss://relay.getvela.app",
+    /** `true` ⇒ the official relay. */
+    val relay_url_is_default: Boolean = true,
+    /** `invalid` | `insecure`: the last relay typed was refused, nothing stored. */
+    val relay_url_error: String? = null,
 )
 
 @Serializable
@@ -48,11 +54,21 @@ sealed class SignPrefEvent {
     @Serializable
     @SerialName("signer_url_reset")
     data object SignerUrlReset : SignPrefEvent()
+
+    /** Spec 075 — Settings: the relay a pairing goes through, as typed. */
+    @Serializable
+    @SerialName("relay_url_submitted")
+    data class RelayUrlSubmitted(val text: String) : SignPrefEvent()
+
+    /** Spec 075 — Settings: back to the official relay. */
+    @Serializable
+    @SerialName("relay_url_reset")
+    data object RelayUrlReset : SignPrefEvent()
 }
 
 @Serializable
 sealed class SignPrefOperation {
-    /** Read `vela.signMethod` and `vela.clearSignerUrl`, raw. */
+    /** Read `vela.signMethod`, `vela.clearSignerUrl` and `vela.clearSignerRelay`, raw. */
     @Serializable
     @SerialName("read_stored")
     data object ReadStored : SignPrefOperation()
@@ -65,6 +81,11 @@ sealed class SignPrefOperation {
     @Serializable
     @SerialName("write_signer_url")
     data class WriteSignerUrl(val url: String? = null) : SignPrefOperation()
+
+    /** Spec 075: `null` removes the key — the official relay. */
+    @Serializable
+    @SerialName("write_relay_url")
+    data class WriteRelayUrl(val url: String? = null) : SignPrefOperation()
 }
 
 /** Stored values go back RAW — whether they are usable is the core's call. */
@@ -72,7 +93,12 @@ sealed class SignPrefOperation {
 sealed class SignPrefShellResult {
     @Serializable
     @SerialName("stored")
-    data class Stored(val method: String? = null, val signer_url: String? = null) : SignPrefShellResult()
+    data class Stored(
+        val method: String? = null,
+        val signer_url: String? = null,
+        /** Spec 075; absent from a shell that predates the relay. */
+        val relay_url: String? = null,
+    ) : SignPrefShellResult()
 
     @Serializable
     @SerialName("written")

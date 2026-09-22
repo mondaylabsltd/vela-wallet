@@ -68,7 +68,13 @@ fun progressFor(status: StatusKey?): ProgressPosition? = when (status) {
     else -> null
 }
 
-/** A method's title and caption in the add-key picker. */
+/**
+ * A method's title and caption in the add-key picker.
+ *
+ * Spec 075: the Clear Signer is the fourth, from the signing corpus rather than
+ * the create corpus — it is the same option the signing sheet and Settings
+ * offer, so it must read the same in all three places.
+ */
 fun methodCopy(method: KeyMethod): Pair<String, String> = when (method) {
     KeyMethod.Platform ->
         I18nKeys.Create.METHOD_PLATFORM_TITLE to I18nKeys.Create.METHOD_PLATFORM_BODY
@@ -76,7 +82,12 @@ fun methodCopy(method: KeyMethod): Pair<String, String> = when (method) {
         I18nKeys.Create.METHOD_HYBRID_TITLE to I18nKeys.Create.METHOD_HYBRID_BODY
     KeyMethod.SecurityKey ->
         I18nKeys.Create.METHOD_SECURITY_KEY_TITLE to I18nKeys.Create.METHOD_SECURITY_KEY_BODY
+    KeyMethod.ClearSigner -> CLEAR_SIGNER_TITLE to CLEAR_SIGNER_BODY
 }
+
+/** The Clear Signer's own words (`componentsUi.signing.*`), one spelling. */
+const val CLEAR_SIGNER_TITLE = "componentsUi.signing.clearSignerTitle"
+const val CLEAR_SIGNER_BODY = "componentsUi.signing.clearSignerBody"
 
 /**
  * The provider line under a key's name.
@@ -93,6 +104,9 @@ fun providerLineFor(method: KeyMethod): String = when (method) {
     KeyMethod.Platform -> I18nKeys.Create.PROVIDER_PLATFORM
     KeyMethod.Hybrid -> I18nKeys.Create.PROVIDER_GENERIC
     KeyMethod.SecurityKey -> I18nKeys.Create.PROVIDER_SECURITY_KEY
+    // The page is what holds it — the row says so rather than naming a vault
+    // this device cannot see.
+    KeyMethod.ClearSigner -> CLEAR_SIGNER_TITLE
 }
 
 /**

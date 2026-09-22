@@ -11,13 +11,17 @@ import app.getvela.wallet.feature.settings.core.SignPrefExecutor
 import app.getvela.wallet.feature.settings.core.SignPrefOperation
 import app.getvela.wallet.feature.settings.core.SignPrefShellResult
 import app.getvela.wallet.feature.settings.core.SignPrefView
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerAnswer
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerAsk
 import app.getvela.wallet.feature.signing.clearsigner.ClearSignerChannel
+import app.getvela.wallet.feature.signing.clearsigner.ClearSignerLoopback
 import app.getvela.wallet.feature.signing.core.SigningController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -26,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import uniffi.vela_core_uniffi.ClearSignerOutcome
 import uniffi.vela_core_uniffi.SignPrefCore
 import uniffi.vela_core_uniffi.WalletKeyRecord
 import java.io.InputStream
@@ -34,6 +39,7 @@ import java.net.Socket
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.security.Signature
 import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
@@ -68,44 +74,59 @@ class ClearSignerChannelTest {
         timeoutMs = timeoutMs,
     )
 
+    /**
+     * Spec 075 asks WHERE the signer is before anything opens. Every test that
+     * drives a whole request answers "on this device" the moment the sheet is
+     * up, which is what a person tapping the first row does.
+     */
+    private fun <T> onThisDevice(channel: ClearSignerChannel, block: suspend () -> T): T = runBlocking {
+        val answering = launch(Dispatchers.Default) {
+            channel.state.first { it is ClearSignerChannel.State.Where }
+            channel.chooseWhere(thisDevice = true)
+        }
+        try {
+            block()
+        } finally {
+            answering.cancel()
+        }
+    }
+
     @Test
     fun `a page that proves itself and signs this digest with this wallet's key is accepted`() {
-        val assertion = runBlocking {
-            channel { port, token ->
-                Page(port).use { page ->
-                    assertTrue(page.upgrade().startsWith("HTTP/1.1 101"))
-                    page.send("""{"v":1,"t":"hello","token":"$token"}""")
-                    val intent = JSONObject(page.receive())
-                    assertEquals("intent", intent.getString("t"))
-                    assertEquals("personal_sign", intent.getJSONObject("intent").getString("method"))
-                    page.send(JSONObject().put("v", 1).put("t", "result").put("id", intent.getString("id")).put("result", answer(signer)).toString())
-                    page.drain()
-                }
-            }.sign(request, digest, keys)
+        val channel = channel { port, token ->
+            Page(port).use { page ->
+                assertTrue(page.upgrade().startsWith("HTTP/1.1 101"))
+                page.send("""{"v":1,"t":"hello","token":"$token"}""")
+                val intent = JSONObject(page.receive())
+                assertEquals("intent", intent.getString("t"))
+                assertEquals("personal_sign", intent.getJSONObject("intent").getString("method"))
+                page.send(JSONObject().put("v", 1).put("t", "result").put("id", intent.getString("id")).put("result", answer(signer)).toString())
+                page.drain()
+            }
         }
+        val assertion = onThisDevice(channel) { channel.sign(request, digest, keys) }
         assertEquals("112233", assertion.credentialIdHex)
         assertTrue("DER, as the Safe envelope takes", assertion.signatureDerHex.startsWith("30"))
     }
 
     @Test
     fun `a stranger is turned away and the real page still gets through`() {
-        val assertion = runBlocking {
-            channel { port, token ->
-                Page(port).use { stranger -> assertTrue(stranger.upgrade(origin = "https://evil.example").startsWith("HTTP/1.1 403")) }
-                Page(port).use { spent ->
-                    spent.upgrade()
-                    spent.send("""{"v":1,"t":"hello","token":"not-it"}""")
-                    spent.drain()
-                }
-                Page(port).use { page ->
-                    page.upgrade()
-                    page.send("""{"v":1,"t":"hello","token":"$token"}""")
-                    val id = JSONObject(page.receive()).getString("id")
-                    page.send(JSONObject().put("v", 1).put("t", "result").put("id", id).put("result", answer(signer)).toString())
-                    page.drain()
-                }
-            }.sign(request, digest, keys)
+        val channel = channel { port, token ->
+            Page(port).use { stranger -> assertTrue(stranger.upgrade(origin = "https://evil.example").startsWith("HTTP/1.1 403")) }
+            Page(port).use { spent ->
+                spent.upgrade()
+                spent.send("""{"v":1,"t":"hello","token":"not-it"}""")
+                spent.drain()
+            }
+            Page(port).use { page ->
+                page.upgrade()
+                page.send("""{"v":1,"t":"hello","token":"$token"}""")
+                val id = JSONObject(page.receive()).getString("id")
+                page.send(JSONObject().put("v", 1).put("t", "result").put("id", id).put("result", answer(signer)).toString())
+                page.drain()
+            }
         }
+        val assertion = onThisDevice(channel) { channel.sign(request, digest, keys) }
         assertEquals("112233", assertion.credentialIdHex)
     }
 
@@ -118,7 +139,7 @@ class ClearSignerChannelTest {
                 page.receive()
             }
         }
-        val failure = failureOf { channel.sign(request, digest, keys) }
+        val failure = failureOf(channel) { channel.sign(request, digest, keys) }
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("closed", channel.notice.value)
     }
@@ -135,7 +156,7 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        val failure = failureOf { channel.sign(request, digest, keys) }
+        val failure = failureOf(channel) { channel.sign(request, digest, keys) }
         // The request stays open (contract §5): a cancelled ceremony, the reason on the notice.
         assertEquals(FailureKind.Cancelled, failure.kind)
         assertEquals("mismatch", channel.notice.value)
@@ -152,18 +173,123 @@ class ClearSignerChannelTest {
                 page.drain()
             }
         }
-        assertEquals("refused", failureOf { channel.sign(request, digest, keys) }.message)
+        assertEquals("refused", failureOf(channel) { channel.sign(request, digest, keys) }.message)
     }
 
     @Test
     fun `cancel and the five-minute clock both end the wait`() {
         lateinit var cancelling: ClearSignerChannel
         cancelling = channel { _, _ -> Thread.sleep(200); cancelling.cancel() }
-        assertEquals(FailureKind.Cancelled, failureOf { cancelling.sign(request, digest, keys) }.kind)
+        assertEquals(FailureKind.Cancelled, failureOf(cancelling) { cancelling.sign(request, digest, keys) }.kind)
         assertEquals(ClearSignerChannel.State.Idle, cancelling.state.value)
 
         val waiting = channel(timeoutMs = 300L) { _, _ -> }
-        assertEquals("timeout", failureOf { waiting.sign(request, digest, keys) }.message)
+        assertEquals("timeout", failureOf(waiting) { waiting.sign(request, digest, keys) }.message)
+    }
+
+    // --- spec 075: one page visit, several requests ---------------------------
+
+    @Test
+    fun `a flow puts several requests down one socket and ends it with bye`() {
+        val second = ByteArray(32) { 0xcd.toByte() }
+        val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
+        lateinit var wire: ClearSignerLoopback
+        wire = ClearSignerLoopback(
+            base = "https://sign.getvela.app/",
+            openPage = { url ->
+                val fragment = url.substringAfter('#').split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
+                thread {
+                    Page(fragment.getValue("p").toInt()).use { page ->
+                        page.upgrade()
+                        page.send("""{"v":1,"t":"hello","token":"${fragment.getValue("t")}"}""")
+                        repeat(2) { index ->
+                            val intent = JSONObject(page.receive())
+                            seen += intent.getString("id")
+                            val over = if (index == 0) digest else second
+                            page.send(
+                                JSONObject().put("v", 1).put("t", "result")
+                                    .put("id", intent.getString("id"))
+                                    .put("result", answer(signer, over)).toString(),
+                            )
+                        }
+                        // The flow's end, on the same socket.
+                        seen += JSONObject(page.receive()).getString("t")
+                        page.drain()
+                    }
+                }
+                true
+            },
+            timeoutMs = 20_000L,
+            random = SecureRandom(),
+        )
+        val outcomes = runBlocking {
+            val first = wire.ask(ClearSignerAsk.Signature(request, digest, keys))
+            val next = wire.ask(ClearSignerAsk.Signature(request, second, keys))
+            first to next
+        }
+        wire.end()
+        listOf(outcomes.first, outcomes.second).forEach { answer ->
+            val outcome = (answer as ClearSignerAnswer.Signed).outcome
+            assertTrue("both requests were answered on the one session", outcome is ClearSignerOutcome.Accepted)
+        }
+        // Two distinct request ids, then the session's own goodbye — one
+        // listener, one page visit (contract §1.5).
+        runBlocking { withTimeout(5_000L) { while (seen.size < 3) kotlinx.coroutines.delay(20) } }
+        assertEquals(3, seen.size)
+        assertTrue("each request has its own id", seen[0] != seen[1])
+        assertEquals("bye", seen[2])
+    }
+
+    @Test
+    fun `a page that closes between requests ends the flow rather than hanging the next one`() {
+        lateinit var wire: ClearSignerLoopback
+        wire = ClearSignerLoopback(
+            base = "https://sign.getvela.app/",
+            openPage = { url ->
+                val fragment = url.substringAfter('#').split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
+                thread {
+                    Page(fragment.getValue("p").toInt()).use { page ->
+                        page.upgrade()
+                        page.send("""{"v":1,"t":"hello","token":"${fragment.getValue("t")}"}""")
+                        val intent = JSONObject(page.receive())
+                        page.send(
+                            JSONObject().put("v", 1).put("t", "result")
+                                .put("id", intent.getString("id"))
+                                .put("result", answer(signer)).toString(),
+                        )
+                    }
+                }
+                true
+            },
+            timeoutMs = 20_000L,
+            random = SecureRandom(),
+        )
+        val second = runBlocking {
+            wire.ask(ClearSignerAsk.Signature(request, digest, keys))
+            // The page is gone; the next request must not wait out the clock.
+            withTimeout(20_000L) { wire.ask(ClearSignerAsk.Signature(request, digest, keys)) }
+        }
+        assertEquals(ClearSignerAnswer.Cancelled, second)
+    }
+
+    @Test
+    fun `nothing opens until the person says where the signer is`() {
+        var opened = 0
+        val channel = channel { _, _ -> opened += 1 }
+        val failure = runBlocking {
+            val cancelling = launch(Dispatchers.Default) {
+                channel.state.first { it is ClearSignerChannel.State.Where }
+                channel.cancel()
+            }
+            try {
+                runCatching { channel.sign(request, digest, keys) }.exceptionOrNull()
+            } finally {
+                cancelling.cancel()
+            }
+        }
+        assertEquals(0, opened)
+        assertEquals(FailureKind.Cancelled, (failure as PasskeyFailure).kind)
+        assertEquals(ClearSignerChannel.State.Idle, channel.state.value)
     }
 
     // --- the preference ------------------------------------------------------
@@ -286,9 +412,9 @@ class ClearSignerChannelTest {
 
     // --- WebAuthn, by hand ----------------------------------------------------
 
-    private fun answer(pair: KeyPair): JSONObject {
+    private fun answer(pair: KeyPair, over: ByteArray = digest): JSONObject {
         val authenticatorData = sha256("getvela.app".toByteArray()) + byteArrayOf(0x05, 0, 0, 0, 7)
-        val client = """{"type":"webauthn.get","challenge":"${b64url(digest)}","origin":"https://sign.getvela.app","crossOrigin":false}"""
+        val client = """{"type":"webauthn.get","challenge":"${b64url(over)}","origin":"https://sign.getvela.app","crossOrigin":false}"""
         val der = Signature.getInstance("SHA256withECDSA").run {
             initSign(pair.private)
             update(authenticatorData + sha256(client.toByteArray()))
@@ -316,9 +442,9 @@ class ClearSignerChannelTest {
         return integer() + integer()
     }
 
-    private fun failureOf(block: suspend () -> Unit): PasskeyFailure {
+    private fun failureOf(channel: ClearSignerChannel, block: suspend () -> Unit): PasskeyFailure {
         try {
-            runBlocking { block() }
+            onThisDevice(channel) { block() }
         } catch (failure: PasskeyFailure) {
             return failure
         }

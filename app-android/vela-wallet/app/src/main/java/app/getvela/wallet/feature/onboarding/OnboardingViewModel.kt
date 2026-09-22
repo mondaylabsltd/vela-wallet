@@ -385,6 +385,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * the finished machine.
      */
     fun beginSignIn(method: KeyMethod = KeyMethod.Platform) {
+        // Spec 075: a new attempt is a new flow. A previous one that ended in
+        // a failure the person read and dismissed may still hold a page open;
+        // this attempt opens its own.
+        container.clearSigner.endFlow()
         startLogin()
         signIn(method)
     }
@@ -429,11 +433,16 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
         createDriver?.dispose()
         createDriver = null
         createView = null
+        // Spec 075: one page visit per flow — and the flow is over, however it
+        // ended. A session left open would hold a socket and a tab the person
+        // has walked away from.
+        container.clearSigner.endFlow()
     }
 
     fun disposeLogin() {
         loginDriver?.dispose()
         loginDriver = null
+        container.clearSigner.endFlow()
     }
 
     fun consumeFinished() {
@@ -476,6 +485,19 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                     loginView = LoginView(busy = false, endpointUnreachable = false)
                     disposeLogin()
                 }
+
+                /**
+                 * Spec 075: what the Clear Signer's card says the key is for.
+                 * The create machine holds the name the person typed; a
+                 * sign-in has none yet, which is the honest answer.
+                 */
+                override fun walletName(): String = createView?.name.orEmpty()
+            },
+            // Spec 075: a `clear_signer` ceremony runs on the page, not on the
+            // platform's sheet. The channel throws a PasskeyFailure for every
+            // refusal, which the executor's failure contract already answers.
+            clearSigner = { requestJson, operationJson, expected, signerOrigin ->
+                container.clearSigner.ceremony(requestJson, operationJson, expected, signerOrigin)
             },
         )
     }

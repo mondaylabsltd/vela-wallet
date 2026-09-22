@@ -284,6 +284,8 @@ private fun KeyRow(
                 Icon(
                     imageVector = when (key.method) {
                         KeyMethod.SecurityKey -> VelaIcons.Link2
+                        // Spec 075: a page you read — the web's lucide `eye`.
+                        KeyMethod.ClearSigner -> VelaIcons.Eye
                         else -> VelaIcons.Wallet
                     },
                     contentDescription = null,
@@ -367,15 +369,17 @@ private fun KeyBadge(synced: Boolean) {
 }
 
 /**
- * The three ways to mint a founding key.
+ * The four ways to mint a founding key.
  *
  * Unlike the browser, this client OWNS the picker — Credential Manager shows the
  * providers it knows about, not a this-device / nearby-device / security-key
  * choice — so the person's selection here is honoured at the ceremony rather
  * than merely recorded.
  *
- * All three routes are live now: platform (this device), scan (mint the key on
- * a phone over caBLE), and a security key.
+ * All four routes are live: platform (this device), scan (mint the key on a
+ * phone over caBLE), a security key, and — spec 075 — the Clear Signer, a page
+ * the person reads which runs the ceremony itself. The list IS `KeyMethod`, so
+ * a route the core gains appears here without a second list to keep in step.
  */
 @Composable
 private fun AddMethodPicker(onPick: (KeyMethod) -> Unit) {
