@@ -11,6 +11,10 @@ members = [
   "crates/vela-relay",
   "crates/vela-relay-server",
 ]
+# The relay's Cloudflare Worker targets wasm32-unknown-unknown through
+# worker-build, so it is its own workspace (own lockfile, own target/) and
+# `cargo test --workspace` never tries to build it.
+exclude = ["crates/vela-relay-worker"]
 
 [workspace.package]
 version = "0.1.0"
