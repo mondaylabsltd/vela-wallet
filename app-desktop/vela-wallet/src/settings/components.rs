@@ -348,8 +348,8 @@ fn menu_of(
 // -- SegmentedControl ---------------------------------------------------------
 
 /// The product's ONE segmented control (design review 2026-07). Three-up for
-/// the theme picker, two-up for the avatar style; the desktop reuses the same
-/// component the phone does.
+/// the theme picker (its two-up avatar-style use was retired in spec 074); the
+/// desktop reuses the same component the phone does.
 pub fn segmented(
     theme: &Theme,
     icons: &mut IconCache,
