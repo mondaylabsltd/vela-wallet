@@ -9,6 +9,7 @@ members = [
   # The Clear Signer's cross-device relay (spec 075): the room rules, and the
   # native host that runs them under Docker.
   "crates/vela-relay",
+  "crates/vela-relay-server",
 ]
 
 [workspace.package]
